@@ -146,10 +146,10 @@ describe('allowlist secrets remove', () => {
   });
 
   it(
-    // No entry to seed a success case with: `add` needs a real TTY the harness can't provide
-    // (see the `add` describe block), so this exercises the one path reachable here — the real
-    // binary's own "not found" exit — which still proves the key and exit code are forwarded
-    // correctly end-to-end.
+    // No entry to seed a success case with: `add` (CLI-1185, #923) has a TTY gate the harness
+    // can never satisfy, so this exercises the one path reachable here — the real binary's own
+    // "not found" exit — which still proves the key and exit code are forwarded correctly
+    // end-to-end.
     'forwards the exit code when the binary reports the key was not found',
     async () => {
       harness.state().withSecretsBinaryInstalled();
@@ -188,15 +188,14 @@ describe('allowlist secrets clear', () => {
   );
 
   it(
-    // Seeds one real entry via the fixture binary directly (bypassing our own `add`, whose TTY
-    // gate the harness can never satisfy) so this exercises the security-relevant case: the
-    // binary's own confirm-or-force gate refusing a non-interactive `clear` when there is
-    // something to lose. No code of ours is involved in that refusal — inherited stdio means
-    // this exact wording is sonar-secrets-cli's own output.
+    // Seeds one real entry via the fixture binary directly (bypassing our own `add`, which has
+    // a TTY gate the harness can never satisfy — CLI-1185, #923) so this exercises the
+    // security-relevant case: the binary's own confirm-or-force gate refusing a non-interactive
+    // `clear` when there is something to lose. No code of ours is involved in that refusal —
+    // inherited stdio means this exact wording is sonar-secrets-cli's own output.
     'without --force, lets the binary refuse non-interactively when entries exist',
     async () => {
       harness.state().withSecretsBinaryInstalled();
-      await harness.run('allowlist secrets show'); // triggers the lazy binary install
       await seedAllowlistEntry(harness, 'seed-key', 'seed-secret-value');
 
       const result = await harness.run('allowlist secrets clear');
@@ -208,15 +207,23 @@ describe('allowlist secrets clear', () => {
   );
 });
 
-/** Adds one entry to the allowlist by invoking the real fixture binary directly, bypassing our
- * own `add` (whose TTY gate the test harness can never satisfy — see the `add` describe block). */
+/**
+ * Adds one entry to the allowlist by invoking the real fixture binary directly, bypassing our
+ * own `add` (which has a TTY gate the test harness can never satisfy — CLI-1185, #923). Spawns
+ * with the harness's own composed environment, not the test runner's ambient one, so it writes
+ * to the exact same isolated allowlist the CLI-under-test will read via `harness.run(...)`.
+ * `harness.env()` also performs the harness's lazy setup (writing state.json and copying the
+ * fixture binary into place), so no separate throwaway CLI call is needed to trigger it first.
+ */
 async function seedAllowlistEntry(
   harness: TestHarness,
   key: string,
   secret: string,
 ): Promise<void> {
+  const env = harness.env();
   const binaryPath = harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).path;
   const proc = Bun.spawn([binaryPath, 'allowlist', 'add', '--key', key], {
+    env,
     stdin: 'pipe',
     stdout: 'ignore',
     stderr: 'ignore',
