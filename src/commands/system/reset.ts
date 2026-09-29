@@ -67,7 +67,7 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, the local stats database, and CLI settings. Telemetry settings are preserved.
+ * cached files, the local stats database, and CLI settings. Telemetry and stats settings are preserved.
  */
 export async function systemReset(
   options: SystemResetOptions,
