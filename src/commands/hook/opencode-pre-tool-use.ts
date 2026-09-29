@@ -102,7 +102,10 @@ export async function opencodePreToolUse(
     }
   } catch (err) {
     logger.debug(`opencode-pre-tool-use secrets scan failed: ${(err as Error).message}`);
-    writeDecision({ block: false });
+    writeDecision({
+      block: true,
+      reason: `SonarQube secret scanning failed unexpectedly: ${(err as Error).message}`,
+    });
     return { agentSessionId };
   }
 

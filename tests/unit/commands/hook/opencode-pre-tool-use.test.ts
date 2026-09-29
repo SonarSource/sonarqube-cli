@@ -169,11 +169,13 @@ describe('opencodePreToolUse', () => {
     expect(lastDecision(stdoutSpy)).toEqual({ block: false });
   });
 
-  it('allows when the scan itself throws', async () => {
+  it('blocks with the error message when the scan itself throws unexpectedly', async () => {
     scanFilesSpy.mockRejectedValue(new Error('scanner crashed'));
 
     await opencodePreToolUse(makeCtx());
 
-    expect(lastDecision(stdoutSpy)).toEqual({ block: false });
+    const decision = lastDecision(stdoutSpy);
+    expect(decision.block).toBe(true);
+    expect(decision.reason).toContain('scanner crashed');
   });
 });
