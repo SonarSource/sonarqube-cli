@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { Writable } from 'node:stream';
+
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -27,7 +29,7 @@ import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { SpawnResult } from '@/core/process/process.ts';
 
 import type { SecretsJsonIssue } from '../analyze/secrets.ts';
-import { runSecretsBinary, runSecretsBinaryOnBatch, warnScanErrors } from '../analyze/secrets.ts';
+import { runSecretsBinary, runSecretsBinaryOnStream, warnScanErrors } from '../analyze/secrets.ts';
 import {
   handleScanError,
   MissingDependenciesError,
@@ -64,15 +66,15 @@ export async function runSecretsStage(
 }
 
 /**
- * Scans one encoded batch. Returns its findings, or `null` when the scan itself could not run — which is reported and
- * then allowed through, matching how the hook has always treated an analyzer failure.
+ * Scans a whole push in one analyzer call, the caller writing one `scan` per commit. Returns `null` when the scan
+ * could not run — reported, then allowed through, as the hook has always treated an analyzer failure.
  */
-export async function scanBatch(
-  batch: Buffer,
+export async function scanCommitScans(
+  writeScans: (stdin: Writable) => Promise<void>,
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<BatchScanOutcome | null> {
-  return runScan((binaryPath) => runSecretsBinaryOnBatch(binaryPath, batch, auth), auth, ctx);
+  return runScan((binaryPath) => runSecretsBinaryOnStream(binaryPath, writeScans, auth), auth, ctx);
 }
 
 async function runScan(
