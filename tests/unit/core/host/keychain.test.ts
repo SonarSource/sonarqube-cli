@@ -313,13 +313,13 @@ describe('config secrets', () => {
   it('removes a secret on deleteConfigSecret', async () => {
     await saveConfigSecret('network.proxy', 'http://proxy:8080');
 
-    await deleteConfigSecret('network.proxy');
+    expect(await deleteConfigSecret('network.proxy')).toBe(true);
 
     expect(await getConfigSecret('network.proxy')).toBeNull();
   });
 
-  it('silently succeeds when deleting a non-existent secret', async () => {
-    expect(await deleteConfigSecret('ghost.key')).toBeUndefined();
+  it('reports false when deleting a non-existent secret', async () => {
+    expect(await deleteConfigSecret('ghost.key')).toBe(false);
   });
 
   it('does not collide with a token for a server whose hostname equals the config key', async () => {
