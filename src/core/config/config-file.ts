@@ -19,15 +19,11 @@
  */
 
 import fs from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { getCliDir } from '@/core/config-constants.ts';
+import { getConfigFile } from '@/core/config-constants.ts';
 import { parseProperties, setProperty } from '@/core/io/properties.ts';
-
-function getConfigFile(): string {
-  return join(getCliDir(), 'config.properties');
-}
 
 function readConfigContent(): string {
   const configFile = getConfigFile();
