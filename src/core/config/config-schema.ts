@@ -34,7 +34,7 @@ export interface ConfigKeyDefinition {
 
 const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
 
-export const CONFIG_KEY_ALLOWLIST = [
+export const CONFIG_KEY_DEFINITIONS = [
   { key: 'network.proxy.https', sensitive: true },
   { key: 'network.proxy.http', sensitive: true },
   { key: 'network.tls.caCert', sensitive: false },
@@ -50,10 +50,10 @@ export const CONFIG_KEY_ALLOWLIST = [
   { key: 'stats.enabled', sensitive: false, allowedValues: BOOLEAN_ALLOWED_VALUES },
 ] as const satisfies readonly ConfigKeyDefinition[];
 
-export type ConfigKey = (typeof CONFIG_KEY_ALLOWLIST)[number]['key'];
+export type ConfigKey = (typeof CONFIG_KEY_DEFINITIONS)[number]['key'];
 
 export const CONFIG_KEY_BY_NAME: ReadonlyMap<ConfigKey, ConfigKeyDefinition> = new Map(
-  CONFIG_KEY_ALLOWLIST.map((definition) => [definition.key, definition]),
+  CONFIG_KEY_DEFINITIONS.map((definition) => [definition.key, definition]),
 );
 
 /** Whether `raw` is an accepted value for `definition` (any string when `allowedValues` is absent). */
