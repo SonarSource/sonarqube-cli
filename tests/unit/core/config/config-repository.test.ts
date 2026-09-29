@@ -40,7 +40,7 @@ let testConfigFile: string;
 
 beforeEach(async () => {
   testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-config-repository-test-'));
-  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'config.properties');
+  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'cli-config.properties');
   process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
   keychain.setup();
 });
@@ -97,5 +97,12 @@ describe('config repository', () => {
     expect(setError).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
     expect(await getConfigSecret(unknownKey)).toBeNull();
+  });
+
+  it('rejects a value outside the allowed values without writing anything', async () => {
+    const error = await setConfigValue('log.level', 'VERBOSE').catch((error: unknown) => error);
+
+    expect(error).toBeInstanceOf(InvalidOptionError);
+    expect(existsSync(testConfigFile)).toBe(false);
   });
 });
