@@ -25,7 +25,7 @@
  * independently of the in-memory cache.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,11 +33,14 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
-  clearTokenCache,
+  clearSecretCache,
+  deleteConfigSecret,
   deleteStaleTokens,
   deleteToken,
   generateKeychainAccount,
+  getConfigSecret,
   getToken,
+  saveConfigSecret,
   saveToken,
 } from '@/core/host/keychain.ts';
 
@@ -54,7 +57,7 @@ function useFileBackend() {
     savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = keychainFile;
 
-    clearTokenCache();
+    clearSecretCache();
   });
 
   afterEach(() => {
@@ -66,7 +69,7 @@ function useFileBackend() {
       process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
     }
 
-    clearTokenCache();
+    clearSecretCache();
   });
 
   return {
@@ -113,7 +116,7 @@ describe('token caching', () => {
     expect(await getToken('https://sonarcloud.io', 'myorg')).toBeNull();
   });
 
-  it('clearTokenCache forces re-read from backend', async () => {
+  it('clearSecretCache forces re-read from backend', async () => {
     await saveToken('https://sonarcloud.io', 'original', 'myorg');
     expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('original');
 
@@ -121,7 +124,7 @@ describe('token caching', () => {
       getKeychainFile(),
       JSON.stringify({ tokens: { 'sonarcloud.io:myorg': 'updated' } }),
     );
-    clearTokenCache();
+    clearSecretCache();
 
     expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('updated');
   });
@@ -147,7 +150,7 @@ describe('deleteToken', () => {
     await saveToken('https://sonarcloud.io', 'token2', 'org2');
 
     await deleteToken('https://sonarcloud.io', 'org1');
-    clearTokenCache();
+    clearSecretCache();
 
     expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
     expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token2');
@@ -178,7 +181,7 @@ describe('account key generation', () => {
   it('isolates tokens by org on the same server', async () => {
     await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
     await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
-    clearTokenCache();
+    clearSecretCache();
 
     expect(await getToken('https://sonarcloud.io', 'org1')).toBe('token-org1');
     expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
@@ -208,7 +211,7 @@ describe('deleteStaleTokens', () => {
 
   it('deletes token for a replaced connection', async () => {
     await saveToken('https://sonarcloud.io', 'old-token', 'org-old');
-    clearTokenCache();
+    clearSecretCache();
 
     const oldConnections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'org-old' }];
     await deleteStaleTokens(oldConnections, 'https://sonar.company.com');
@@ -218,7 +221,7 @@ describe('deleteStaleTokens', () => {
 
   it('preserves token when re-logging into the same server/org', async () => {
     await saveToken('https://sonarcloud.io', 'my-token', 'my-org');
-    clearTokenCache();
+    clearSecretCache();
 
     const connections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'my-org' }];
     await deleteStaleTokens(connections, 'https://sonarcloud.io', 'my-org');
@@ -228,7 +231,7 @@ describe('deleteStaleTokens', () => {
 
   it('is a no-op when connections array is empty', async () => {
     await saveToken('https://sonarcloud.io', 'tok', 'org1');
-    clearTokenCache();
+    clearSecretCache();
 
     await deleteStaleTokens([], 'https://other.example.com');
 
@@ -238,7 +241,7 @@ describe('deleteStaleTokens', () => {
   it('only deletes the stale connection, not the matching one', async () => {
     await saveToken('https://sonarcloud.io', 'cloud-tok', 'org1');
     await saveToken('https://sonar.internal.com', 'onprem-tok');
-    clearTokenCache();
+    clearSecretCache();
 
     const connections = [
       { serverUrl: 'https://sonarcloud.io', orgKey: 'org1' },
@@ -255,13 +258,13 @@ describe('file backend edge cases', () => {
   useFileBackend();
 
   it('getToken returns null for non-existent token without cache', async () => {
-    clearTokenCache();
+    clearSecretCache();
     expect(await getToken('https://nonexistent.example.com')).toBeNull();
   });
 
   it('saveToken creates keychain file if it does not exist', async () => {
     await saveToken('https://sonar.example.com', 'new-token');
-    clearTokenCache();
+    clearSecretCache();
     expect(await getToken('https://sonar.example.com')).toBe('new-token');
   });
 
@@ -281,11 +284,66 @@ describe('file backend edge cases', () => {
     writeFileSync(altFile, JSON.stringify({ tokens: { 'sonarcloud.io:org1': 'tok-alt' } }));
 
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = altFile;
-    clearTokenCache();
+    clearSecretCache();
 
     expect(await getToken('https://sonarcloud.io', 'org1')).toBe('tok-alt');
 
     rmSync(altDir, { recursive: true, force: true });
+  });
+});
+
+describe('config secrets', () => {
+  const { getKeychainFile } = useFileBackend();
+
+  it('returns a saved secret stored under a config/ account', async () => {
+    await saveConfigSecret('network.proxy', 'http://user:pass@proxy:8080');
+    clearSecretCache();
+
+    expect(await getConfigSecret('network.proxy')).toBe('http://user:pass@proxy:8080');
+    const store = JSON.parse(readFileSync(getKeychainFile(), 'utf-8')) as {
+      tokens: Record<string, string>;
+    };
+    expect(store.tokens).toEqual({ 'config/network.proxy': 'http://user:pass@proxy:8080' });
+  });
+
+  it('returns null for an unknown key', async () => {
+    expect(await getConfigSecret('missing.key')).toBeNull();
+  });
+
+  it('removes a secret on deleteConfigSecret', async () => {
+    await saveConfigSecret('network.proxy', 'http://proxy:8080');
+
+    await deleteConfigSecret('network.proxy');
+
+    expect(await getConfigSecret('network.proxy')).toBeNull();
+  });
+
+  it('silently succeeds when deleting a non-existent secret', async () => {
+    expect(await deleteConfigSecret('ghost.key')).toBeUndefined();
+  });
+
+  it('does not collide with a token for a server whose hostname equals the config key', async () => {
+    const key = 'network.proxy';
+    const serverUrl = `https://${key}`;
+    const token = 'server-token';
+    const secret = 'http://proxy:8080';
+    await saveToken(serverUrl, token);
+    // A shared account would make this overwrite the token
+    await saveConfigSecret(key, secret);
+    clearSecretCache();
+
+    expect(await getToken(serverUrl)).toBe(token);
+    expect(await getConfigSecret(key)).toBe(secret);
+
+    // Deleting either one must leave the other intact
+    await deleteConfigSecret(key);
+    clearSecretCache();
+    expect(await getToken(serverUrl)).toBe(token);
+
+    await saveConfigSecret(key, secret);
+    await deleteToken(serverUrl);
+    clearSecretCache();
+    expect(await getConfigSecret(key)).toBe(secret);
   });
 });
 
@@ -295,14 +353,14 @@ describe('OS keychain unavailable (Bun.secrets backend)', () => {
   beforeEach(() => {
     savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
-    clearTokenCache();
+    clearSecretCache();
   });
 
   afterEach(() => {
     if (savedKeychainFile !== undefined) {
       process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
     }
-    clearTokenCache();
+    clearSecretCache();
   });
 
   it('surfaces a remediation hint mentioning env var auth when the OS keychain is unreachable', async () => {

@@ -36,7 +36,7 @@ interface KeychainBackend {
   deletePassword(service: string, account: string): Promise<boolean>;
 }
 
-const tokenCache = new Map<string, string | null>();
+const secretCache = new Map<string, string | null>();
 
 const KEYCHAIN_UNAVAILABLE_MESSAGE = 'Failed to access the system keychain.';
 const KEYCHAIN_UNAVAILABLE_HINT =
@@ -107,8 +107,8 @@ function createFileBackend(filePath: string): KeychainBackend {
   };
 }
 
-export function clearTokenCache(): void {
-  tokenCache.clear();
+export function clearSecretCache(): void {
+  secretCache.clear();
 }
 
 let cachedFileBackend: { path: string; backend: KeychainBackend } | null = null;
@@ -152,26 +152,37 @@ export function generateKeychainAccount(serverURL: string, org?: string): string
   }
 }
 
+async function readSecret(account: string): Promise<string | null> {
+  // Check cache first (avoids multiple keychain prompts)
+  if (secretCache.has(account)) {
+    return secretCache.get(account) ?? null;
+  }
+
+  const secret = await getBackend().getPassword(getServiceName(), account);
+
+  // Cache the result (including null for "not found")
+  secretCache.set(account, secret);
+  return secret;
+}
+
+async function writeSecret(account: string, value: string): Promise<void> {
+  await getBackend().setPassword(getServiceName(), account, value);
+  secretCache.set(account, value);
+}
+
+async function removeSecret(account: string): Promise<void> {
+  await getBackend().deletePassword(getServiceName(), account);
+  secretCache.delete(account);
+}
+
 /**
  * Get token from system keychain
  * For SonarQube Cloud: pass org parameter
  * For SonarQube Server: org parameter is ignored
  * Uses in-memory cache to avoid repeated keychain prompts
  */
-export async function getToken(serverURL: string, org?: string): Promise<string | null> {
-  const account = generateKeychainAccount(serverURL, org);
-
-  // Check cache first (avoids multiple keychain prompts)
-  if (tokenCache.has(account)) {
-    return tokenCache.get(account) ?? null;
-  }
-
-  const backend = getBackend();
-  const token = await backend.getPassword(getServiceName(), account);
-
-  // Cache the result (including null for "not found")
-  tokenCache.set(account, token);
-  return token;
+export function getToken(serverURL: string, org?: string): Promise<string | null> {
+  return readSecret(generateKeychainAccount(serverURL, org));
 }
 
 /**
@@ -180,11 +191,8 @@ export async function getToken(serverURL: string, org?: string): Promise<string 
  * For SonarQube Server: org parameter is ignored
  * Updates in-memory cache
  */
-export async function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
-  const account = generateKeychainAccount(serverURL, org);
-  const backend = getBackend();
-  await backend.setPassword(getServiceName(), account, token);
-  tokenCache.set(account, token);
+export function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
+  return writeSecret(generateKeychainAccount(serverURL, org), token);
 }
 
 /**
@@ -198,13 +206,10 @@ export async function deleteStaleTokens(
   newOrg?: string,
 ): Promise<void> {
   const newAccount = generateKeychainAccount(newServerURL, newOrg);
-  const backend = getBackend();
-  const service = getServiceName();
   for (const conn of connections) {
     const account = generateKeychainAccount(conn.serverUrl, conn.orgKey);
     if (account !== newAccount) {
-      await backend.deletePassword(service, account);
-      tokenCache.delete(account);
+      await removeSecret(account);
     }
   }
 }
@@ -215,9 +220,22 @@ export async function deleteStaleTokens(
  * For SonarQube Server: org parameter is ignored
  * Removes from cache
  */
-export async function deleteToken(serverURL: string, org?: string): Promise<void> {
-  const account = generateKeychainAccount(serverURL, org);
-  const backend = getBackend();
-  await backend.deletePassword(getServiceName(), account);
-  tokenCache.delete(account);
+export function deleteToken(serverURL: string, org?: string): Promise<void> {
+  return removeSecret(generateKeychainAccount(serverURL, org));
+}
+
+function generateConfigKeychainAccount(key: string): string {
+  return `config/${key}`;
+}
+
+export function getConfigSecret(key: string): Promise<string | null> {
+  return readSecret(generateConfigKeychainAccount(key));
+}
+
+export function saveConfigSecret(key: string, value: string): Promise<void> {
+  return writeSecret(generateConfigKeychainAccount(key), value);
+}
+
+export function deleteConfigSecret(key: string): Promise<void> {
+  return removeSecret(generateConfigKeychainAccount(key));
 }
