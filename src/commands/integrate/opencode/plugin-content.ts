@@ -18,24 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createIntegrationRegistry } from '@/core/framework/features';
+export const OPENCODE_PLUGIN_MANAGED_MARKER = 'Managed by `sonar integrate opencode`';
 
-import { antigravityIntegration } from './antigravity/declaration.ts';
-import { claudeIntegration } from './claude/declaration.ts';
-import { codexIntegration } from './codex/declaration.ts';
-import { copilotIntegration } from './copilot/declaration.ts';
-import { cursorIntegration } from './cursor/declaration.ts';
-import { GIT_INTEGRATIONS } from './git/tools';
-import { openCodeIntegration } from './opencode/declaration.ts';
+export const OPENCODE_PLUGIN_CONTENT = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.
+import type { Plugin } from '@opencode-ai/plugin';
 
-export const ALL_INTEGRATIONS = [
-  antigravityIntegration,
-  claudeIntegration,
-  copilotIntegration,
-  codexIntegration,
-  cursorIntegration,
-  openCodeIntegration,
-  ...GIT_INTEGRATIONS,
-] as const;
-
-export const supportedIntegrations = createIntegrationRegistry(ALL_INTEGRATIONS);
+export const SonarPlugin: Plugin = async () => {
+  return {};
+};
+`;

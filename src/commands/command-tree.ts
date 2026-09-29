@@ -118,6 +118,7 @@ import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
+import { integrateOpenCode } from './integrate/opencode';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -561,6 +562,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate cursor' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
+
+  integrateCommand
+    .command('opencode')
+    .description(
+      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks.',
+    )
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Backwards compatibility; integrations are installed globally by default',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate opencode' })),
+    )
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
