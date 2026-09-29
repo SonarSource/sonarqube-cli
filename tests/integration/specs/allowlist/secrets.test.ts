@@ -96,7 +96,7 @@ describe('allowlist secrets add', () => {
     // harness.run() gives the child process no stdin at all, so this exercises the real,
     // unmocked non-TTY path — the only one reachable this way. The TTY-allowed path cannot be
     // driven through this harness (runInteractive() pipes stdin too, never a real pty), so it
-    // is covered by a unit test instead (spawn-secrets-add.test.ts).
+    // is covered by a unit test instead (tests/unit/commands/allowlist/secrets/add.test.ts).
     'refuses to run without a real interactive terminal, and never installs or invokes the binary',
     async () => {
       const result = await harness.run('allowlist secrets add');
