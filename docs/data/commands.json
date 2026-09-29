@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
+  "version": "1.9.0",
   "commands": [
     {
       "id": "sonar",
@@ -20,6 +20,7 @@
         "sonar-auth",
         "sonar-list",
         "sonar-quality-gate",
+        "sonar-import",
         "sonar-api",
         "sonar-integrate",
         "sonar-context",
@@ -57,7 +58,7 @@
       "name": "login",
       "fullName": "sonar auth login",
       "aliases": [],
-      "description": "Authenticate via browser and save credentials in the system keychain. Must be run manually — agents cannot authenticate themselves. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables",
+      "description": "Authenticate via browser or an existing token and save credentials in the system keychain. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -80,6 +81,13 @@
           "short": "-o",
           "description": "SonarQube Cloud organization key (required for SonarQube Cloud)",
           "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--with-token",
+          "long": "--with-token",
+          "description": "Read an existing token from standard input",
+          "type": "boolean",
           "required": false
         }
       ],
@@ -130,7 +138,20 @@
       "depth": 2,
       "parentId": "sonar-auth",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
+        }
+      ],
       "examples": [
         {
           "command": "sonar auth status",
@@ -179,7 +200,7 @@
           "short": "-p",
           "description": "Project key",
           "type": "string",
-          "required": true
+          "required": false
         },
         {
           "flags": "--statuses <statuses>",
@@ -212,14 +233,14 @@
         {
           "flags": "--branch <branch>",
           "long": "--branch",
-          "description": "Branch name",
+          "description": "Branch name. Cannot be combined with --pull-request.",
           "type": "string",
           "required": false
         },
         {
           "flags": "--pull-request <pull-request>",
           "long": "--pull-request",
-          "description": "Pull request ID",
+          "description": "Pull request ID. Cannot be combined with --branch.",
           "type": "string",
           "required": false
         },
@@ -228,6 +249,13 @@
           "long": "--file",
           "description": "Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one",
           "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--new-code",
+          "long": "--new-code",
+          "description": "Only show issues on new code (the leak period)",
+          "type": "boolean",
           "required": false
         },
         {
@@ -280,6 +308,18 @@
           "description": "Search query to filter projects by name or key",
           "type": "string",
           "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "json",
+          "allowedValues": [
+            "json",
+            "table"
+          ]
         },
         {
           "flags": "--page <page>",
@@ -417,6 +457,53 @@
       "children": []
     },
     {
+      "id": "sonar-import",
+      "name": "import",
+      "fullName": "sonar import",
+      "aliases": [],
+      "description": "Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only)",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "beta",
+      "requiresAuth": true,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--repo <slug>",
+          "long": "--repo",
+          "description": "DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.",
+          "type": "object",
+          "required": false,
+          "defaultValue": []
+        },
+        {
+          "flags": "--all",
+          "long": "--all",
+          "description": "Import every eligible repository in the organization (not already imported, and allowed by its project visibility settings). Cannot be combined with --repo or --regex.",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--regex <regex>",
+          "long": "--regex",
+          "description": "Import only eligible repositories whose DevOps platform name (not slug) matches this regular expression.\n\n                   Case-sensitive by default; wrap as /pattern/flags to add flags like case-insensitive matching. Cannot be combined with --repo or --all.\n                   Examples:\n                       --regex \"^test-\"\n                       --regex \"/^archived-/i\"\n",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Skip all prompts; require explicit flags",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-api",
       "name": "api",
       "fullName": "sonar api",
@@ -497,7 +584,7 @@
       "name": "integrate",
       "fullName": "sonar integrate",
       "aliases": [],
-      "description": "Setup SonarQube integration for AI coding agents, git and others.",
+      "description": "Setup SonarQube integration for AI coding agents, git and others",
       "isGroup": true,
       "isRoot": false,
       "stage": "stable",
@@ -507,18 +594,9 @@
       "arguments": [],
       "options": [
         {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Mutually exclusive with --global.",
-          "type": "string",
-          "required": false
-        },
-        {
-          "flags": "-g, --global",
-          "long": "--global",
-          "short": "-g",
-          "description": "Install integrations globally.",
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts); requires an explicit agent",
           "type": "boolean",
           "required": false
         }
@@ -578,26 +656,24 @@
           "required": false
         },
         {
-          "flags": "--global",
+          "flags": "--local",
+          "long": "--local",
+          "description": "Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
           "long": "--global",
-          "description": "Install hook globally for all repositories (sets git config --global core.hooksPath)",
+          "short": "-g",
+          "description": "Backwards compatibility; the hook is installed globally by default",
           "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--dependency-risks",
-          "long": "--dependency-risks",
-          "description": "Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key baked into the dependency-risks hook (required with --dependency-risks)",
-          "type": "string",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate git"
+          }
         }
       ],
       "examples": [
@@ -635,14 +711,6 @@
       "arguments": [],
       "options": [
         {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Ignored when --global is used.",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
@@ -653,9 +721,14 @@
           "flags": "-g, --global",
           "long": "--global",
           "short": "-g",
-          "description": "Install hooks and config globally to ~/.claude instead of project directory",
+          "description": "Backwards compatibility; integrations are installed globally by default",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate claude"
+          }
         }
       ],
       "examples": [],
@@ -676,27 +749,24 @@
       "arguments": [],
       "options": [
         {
-          "flags": "-g, --global",
-          "long": "--global",
-          "short": "-g",
-          "description": "Install hooks and config globally to ~/.copilot instead of project directory",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Mutually exclusive with --global.",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Backwards compatibility; integrations are installed globally by default",
+          "type": "boolean",
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate copilot"
+          }
         }
       ],
       "examples": [],
@@ -717,27 +787,24 @@
       "arguments": [],
       "options": [
         {
-          "flags": "-g, --global",
-          "long": "--global",
-          "short": "-g",
-          "description": "Install hook and config globally to ~/.codex instead of project directory",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Mutually exclusive with --global.",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Backwards compatibility; integrations are installed globally by default",
+          "type": "boolean",
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate codex"
+          }
         }
       ],
       "examples": [],
@@ -758,14 +825,6 @@
       "arguments": [],
       "options": [
         {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Mutually exclusive with --global.",
-          "type": "string",
-          "required": false
-        },
-        {
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Non-interactive mode (no prompts)",
@@ -776,9 +835,14 @@
           "flags": "-g, --global",
           "long": "--global",
           "short": "-g",
-          "description": "Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory",
+          "description": "Backwards compatibility; integrations are installed globally by default",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate antigravity"
+          }
         }
       ],
       "examples": [],
@@ -789,7 +853,7 @@
       "name": "cursor",
       "fullName": "sonar integrate cursor",
       "aliases": [],
-      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.",
+      "description": "Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -798,14 +862,6 @@
       "parentId": "sonar-integrate",
       "arguments": [],
       "options": [
-        {
-          "flags": "-p, --project <project>",
-          "long": "--project",
-          "short": "-p",
-          "description": "Project key. Mutually exclusive with --global.",
-          "type": "string",
-          "required": false
-        },
         {
           "flags": "--non-interactive",
           "long": "--non-interactive",
@@ -817,9 +873,14 @@
           "flags": "-g, --global",
           "long": "--global",
           "short": "-g",
-          "description": "Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
+          "description": "Backwards compatibility; integrations are installed globally by default",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate cursor"
+          }
         }
       ],
       "examples": [],
@@ -1040,7 +1101,7 @@
       "name": "agentic",
       "fullName": "sonar analyze agentic",
       "aliases": [],
-      "description": "Run server-side Vortex analysis. Limitations apply.",
+      "description": "Run server-side Vortex analysis. Limitations apply",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -1201,7 +1262,8 @@
       "options": [],
       "examples": [],
       "children": [
-        "sonar-config-telemetry"
+        "sonar-config-telemetry",
+        "sonar-config-stats"
       ]
     },
     {
@@ -1246,11 +1308,43 @@
       "children": []
     },
     {
+      "id": "sonar-config-stats",
+      "name": "stats",
+      "fullName": "sonar config stats",
+      "aliases": [],
+      "description": "Configure local stats collection settings",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-config",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--enabled",
+          "long": "--enabled",
+          "description": "Enable local stats collection",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--disabled",
+          "long": "--disabled",
+          "description": "Disable local stats collection",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-system",
       "name": "system",
       "fullName": "sonar system",
       "aliases": [],
-      "description": "System diagnostics and maintenance commands for the SonarQube CLI installation.",
+      "description": "System diagnostics and maintenance commands for the SonarQube CLI installation",
       "isGroup": true,
       "isRoot": false,
       "stage": "stable",
@@ -1280,11 +1374,28 @@
       "arguments": [],
       "options": [
         {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
+        },
+        {
           "flags": "--json",
           "long": "--json",
           "description": "Output as JSON for machine consumption",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9",
+            "replacement": "--format json"
+          }
         }
       ],
       "examples": [],
@@ -1295,7 +1406,7 @@
       "name": "reset",
       "fullName": "sonar system reset",
       "aliases": [],
-      "description": "Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. Telemetry settings are preserved.",
+      "description": "Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Telemetry settings are preserved.",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -1321,7 +1432,7 @@
       "fullName": "sonar update",
       "aliases": [],
       "description": "Update SonarQube CLI to the latest version",
-      "isGroup": false,
+      "isGroup": true,
       "isRoot": false,
       "stage": "stable",
       "requiresAuth": false,
@@ -1334,7 +1445,12 @@
           "long": "--status",
           "description": "Check for a newer version without installing",
           "type": "boolean",
-          "required": false
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9",
+            "replacement": "sonar update status"
+          }
         },
         {
           "flags": "--force",
@@ -1342,6 +1458,38 @@
           "description": "Install the latest version even if already up to date",
           "type": "boolean",
           "required": false
+        }
+      ],
+      "examples": [],
+      "children": [
+        "sonar-update-status"
+      ]
+    },
+    {
+      "id": "sonar-update-status",
+      "name": "status",
+      "fullName": "sonar update status",
+      "aliases": [],
+      "description": "Check for a newer version without installing",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-update",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
         }
       ],
       "examples": [],
