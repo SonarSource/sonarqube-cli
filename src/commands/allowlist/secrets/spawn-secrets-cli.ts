@@ -33,11 +33,18 @@ export async function runSecretsAllowlistCommand(
   console: Console,
 ): Promise<void> {
   const binaryPath = await installSecretsBinary(console);
-  const result = await spawnProcess(binaryPath, ['allowlist', ...subcommandArgs], {
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
+  let result;
+  try {
+    result = await spawnProcess(binaryPath, ['allowlist', ...subcommandArgs], {
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+  } catch (err) {
+    throw new CommandFailedError(`Failed to run sonar-secrets: ${(err as Error).message}`, {
+      remediationHint: `Check that ${binaryPath} is executable, or run 'sonar update' to reinstall it.`,
+    });
+  }
 
   const exitCode = result.exitCode ?? 1;
   if (exitCode !== 0) {
