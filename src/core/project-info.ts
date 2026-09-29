@@ -52,6 +52,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
 import { canonicalizePath } from './io/fs-utils.ts';
+import { parseProperties } from './io/properties.ts';
 import logger from './observability/logger.ts';
 
 export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
@@ -539,33 +540,12 @@ function formatConfigFields(
     .join(', ');
 }
 
-function parsePropertyLine(line: string, props: Partial<SonarProperties>): void {
-  const trimmed = line.trim();
-
-  if (!trimmed || trimmed.startsWith('#')) {
-    return;
-  }
-
-  // Split only on the first '=' to allow '=' in values
-  const eqIndex = trimmed.indexOf('=');
-  if (eqIndex === -1) {
-    return;
-  }
-
-  const key = trimmed.slice(0, eqIndex).trim();
-  const value = trimmed.slice(eqIndex + 1).trim();
-
-  const propertyMap: Record<string, keyof SonarProperties> = {
-    'sonar.host.url': 'hostURL',
-    'sonar.projectKey': 'projectKey',
-    'sonar.projectName': 'projectName',
-    'sonar.organization': 'organization',
-  };
-
-  if (key in propertyMap) {
-    props[propertyMap[key]] = value;
-  }
-}
+const SONAR_PROPERTY_FIELDS = new Map<string, keyof SonarProperties>([
+  ['sonar.host.url', 'hostURL'],
+  ['sonar.projectKey', 'projectKey'],
+  ['sonar.projectName', 'projectName'],
+  ['sonar.organization', 'organization'],
+]);
 
 async function loadSonarProperties(projectRoot: string): Promise<SonarProperties | null> {
   const propPath = join(projectRoot, 'sonar-project.properties');
@@ -579,8 +559,11 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
 
   const props: Partial<SonarProperties> = {};
 
-  for (const line of content.split('\n')) {
-    parsePropertyLine(line, props);
+  for (const [key, value] of parseProperties(content)) {
+    const field = SONAR_PROPERTY_FIELDS.get(key);
+    if (field) {
+      props[field] = value;
+    }
   }
 
   if (!props.hostURL && !props.projectKey) {
