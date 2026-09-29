@@ -19,10 +19,12 @@
  */
 
 // chat.message callback handler for OpenCode — scans one message part's text for secrets and,
-// if any are found, returns the text with each secret masked in place so the plugin can swap it
-// into the part before the message is sent. Unlike `opencode-pre-tool-use`, a found secret here
-// does not block anything: the message still gets sent, just redacted (the plugin also appends a
-// synthetic reminder part so the model tells the user what was masked).
+// if every finding can be masked, returns the text with each secret masked in place so the
+// plugin can swap it into the part before the message is sent (the plugin also appends a
+// synthetic reminder part so the model tells the user what was masked). Unlike
+// `opencode-pre-tool-use`, this does not block on a well-formed finding — but if any finding
+// can't be masked (missing location/mask, or an unparseable scan result), it fails closed and
+// blocks the message rather than letting an unmasked secret through.
 //
 // Same explicit-JSON-always contract as `opencode-pre-tool-use` (see that file's comment).
 
@@ -56,46 +58,39 @@ function writeDecision(decision: OpenCodeChatMessageDecision): void {
   process.stdout.write(JSON.stringify(decision) + '\n');
 }
 
-/** Replaces each finding's span with its masked replacement, line by line, right-to-left per line
- * so earlier column offsets on the same line stay valid as later ones are spliced in. */
-interface MaskableIssue {
-  startLine: number;
-  startColumn: number;
-  endColumn: number;
+interface MaskableSpan {
+  start: number;
+  end: number;
   maskedSecret: string;
 }
 
-function toMaskableIssue(issue: SecretsJsonIssue): MaskableIssue | undefined {
+function toMaskableIssue(issue: SecretsJsonIssue, lineStarts: number[]): MaskableSpan | undefined {
   if (!issue.location || !issue.maskedSecret) return undefined;
   return {
-    startLine: issue.location.startLine,
-    startColumn: issue.location.startColumn,
-    endColumn: issue.location.endColumn,
+    start: lineStarts[issue.location.startLine - 1] + issue.location.startColumn,
+    end: lineStarts[issue.location.endLine - 1] + issue.location.endColumn,
     maskedSecret: issue.maskedSecret,
   };
 }
 
-function redactSecrets(text: string, issues: SecretsJsonIssue[]): string {
-  const lines = text.split('\n');
-  const issuesByLine = new Map<number, MaskableIssue[]>();
-  for (const issue of issues) {
-    const maskable = toMaskableIssue(issue);
-    if (!maskable) continue;
-    const lineIndex = maskable.startLine - 1;
-    const forLine = issuesByLine.get(lineIndex) ?? [];
-    forLine.push(maskable);
-    issuesByLine.set(lineIndex, forLine);
+function lineStartOffsets(text: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') starts.push(i + 1);
   }
+  return starts;
+}
 
-  for (const [lineIndex, lineIssues] of issuesByLine) {
-    let line = lines[lineIndex];
-    const rightToLeft = [...lineIssues].sort((a, b) => b.startColumn - a.startColumn);
-    for (const { startColumn, endColumn, maskedSecret } of rightToLeft) {
-      line = line.slice(0, startColumn) + maskedSecret + line.slice(endColumn);
-    }
-    lines[lineIndex] = line;
+/** Replaces each finding's span with its masked replacement, right-to-left by absolute offset
+ * into the full text, so a multi-line secret (e.g. a PEM key) is masked across all of its lines
+ * and earlier spans stay valid as later ones are spliced in. */
+function redactSecrets(text: string, issues: MaskableSpan[]): string {
+  const rightToLeft = [...issues].sort((a, b) => b.start - a.start);
+  let out = text;
+  for (const { start, end, maskedSecret } of rightToLeft) {
+    out = out.slice(0, start) + maskedSecret + out.slice(end);
   }
-  return lines.join('\n');
+  return out;
 }
 
 export async function opencodeChatMessage(
@@ -135,10 +130,21 @@ export async function opencodeChatMessage(
       text,
       ctx,
     );
-    if (exitCode === EXIT_CODE_SECRETS_FOUND && issues.length > 0) {
+    if (exitCode === EXIT_CODE_SECRETS_FOUND) {
+      const lineStarts = lineStartOffsets(text);
+      const maskable = issues
+        .map((issue) => toMaskableIssue(issue, lineStarts))
+        .filter((span): span is MaskableSpan => span !== undefined);
+      if (issues.length === 0 || maskable.length !== issues.length) {
+        writeDecision({
+          block: true,
+          reason: 'Sonar detected secrets in this message but could not mask all of them.',
+        });
+        return { agentSessionId };
+      }
       writeDecision({
         block: false,
-        redactedText: redactSecrets(text, issues),
+        redactedText: redactSecrets(text, maskable),
         secretsFound: issues.length,
       });
       return { agentSessionId };

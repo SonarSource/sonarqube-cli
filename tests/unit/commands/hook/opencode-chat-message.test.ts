@@ -161,6 +161,54 @@ describe('opencodeChatMessage', () => {
     expect(lastDecision(stdoutSpy).redactedText).toBe('AAA BBB');
   });
 
+  it('masks a secret spanning multiple lines across all of its lines', async () => {
+    scanTextSpy.mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: JSON.stringify({
+        issues: [
+          {
+            ruleKey: 'secrets:S1',
+            description: 'PEM key',
+            location: { startLine: 1, startColumn: 6, endLine: 3, endColumn: 17 },
+            maskedSecret: '***MASKED***',
+          },
+        ],
+      }),
+      stderr: '',
+    });
+    readStdinJsonSpy.mockResolvedValue({
+      text: 'key = -----BEGIN KEY-----\nabcdef\n-----END KEY----- end',
+      sessionID: 'session-1',
+    });
+
+    await opencodeChatMessage(makeCtx());
+
+    const decision = lastDecision(stdoutSpy);
+    expect(decision.block).toBe(false);
+    expect(decision.redactedText).toBe('key = ***MASKED*** end');
+  });
+
+  it('blocks when a reported secret has no location or mask to redact it with', async () => {
+    scanTextSpy.mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: JSON.stringify({
+        issues: [
+          {
+            ruleKey: 'secrets:S1',
+            description: 'unmaskable finding',
+          },
+        ],
+      }),
+      stderr: '',
+    });
+
+    await opencodeChatMessage(makeCtx());
+
+    const decision = lastDecision(stdoutSpy);
+    expect(decision.block).toBe(true);
+    expect(decision.redactedText).toBeUndefined();
+  });
+
   it('allows without scanning when text is empty', async () => {
     readStdinJsonSpy.mockResolvedValue({ text: '', sessionID: 'session-1' });
 
