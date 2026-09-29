@@ -143,11 +143,24 @@ describe('initSentry', () => {
       expect(initSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('passes sendDefaultPii: false', () => {
+    it('preserves the restrictive data collection settings', () => {
       initSentry(getDefaultState('1.0.0'));
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
-      expect(options.sendDefaultPii).toBe(false);
+      expect(options.dataCollection).toEqual({
+        userInfo: false,
+        cookies: false,
+        httpHeaders: {
+          request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+          response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+        },
+        httpBodies: [],
+        urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+        queues: false,
+        graphQL: { document: false, variables: false },
+      });
     });
 
     it('sets environment to "production" when SONARSOURCE_DOGFOODING is not set', () => {
