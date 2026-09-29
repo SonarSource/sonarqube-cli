@@ -37,6 +37,7 @@ const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
 export const CONFIG_KEY_DEFINITIONS = [
   { key: 'network.proxy.https', sensitive: true },
   { key: 'network.proxy.http', sensitive: true },
+  { key: 'network.proxy.noProxy', sensitive: false },
   { key: 'network.tls.caCert', sensitive: false },
   { key: 'network.tls.clientCert', sensitive: false },
   { key: 'network.tls.clientKey', sensitive: false },
