@@ -493,6 +493,50 @@ describe('system reset --force', () => {
   );
 
   it(
+    'removes the CLI settings file',
+    async () => {
+      harness.cliHome.writeFile('config.properties', 'log.level=DEBUG\n');
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
+      expect(harness.cliHome.exists('config.properties')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes sensitive CLI settings from the keychain',
+    async () => {
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
+      expect(
+        readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https'],
+      ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports nothing to clear when no CLI settings exist',
+    async () => {
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Nothing to clear/);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports cleared size for nested cache directories with large files',
     async () => {
       const logDir = join(harness.cliHome.path, 'logs');

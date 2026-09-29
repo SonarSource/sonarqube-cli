@@ -28,6 +28,7 @@ import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
+import { clearConfig } from './reset-config.ts';
 import { clearFilesystem } from './reset-filesystem.ts';
 import { removeAllIntegrations } from './reset-integrations.ts';
 import { clearStats } from './reset-stats.ts';
@@ -66,7 +67,7 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, and the local stats database. Telemetry settings are preserved.
+ * cached files, the local stats database, and CLI settings. Telemetry settings are preserved.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -111,6 +112,9 @@ export async function systemReset(
 
     const statsResult = clearStats();
     results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
+
+    const configResult = await clearConfig();
+    results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
   } finally {
     if (results.length > 0) {
       console.phase(
