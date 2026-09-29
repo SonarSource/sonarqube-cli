@@ -74,6 +74,27 @@ describe('OPENCODE_PLUGIN_CONTENT', () => {
     expect(OPENCODE_PLUGIN_CONTENT).toContain('opencode-pre-tool-use');
   });
 
+  it('wires chat.message to the opencode-chat-message hook subcommand', () => {
+    expect(OPENCODE_PLUGIN_CONTENT).toContain("'chat.message'");
+    expect(OPENCODE_PLUGIN_CONTENT).toContain('opencode-chat-message');
+  });
+
+  it('never throws from chat.message — a blocked/failed scan rewrites the message text instead', () => {
+    const chatMessageBody = OPENCODE_PLUGIN_CONTENT.slice(
+      OPENCODE_PLUGIN_CONTENT.indexOf("'chat.message'"),
+    );
+    expect(chatMessageBody).not.toContain('throw new Error');
+    expect(chatMessageBody).toContain('part.text =');
+  });
+
+  it('does throw from tool.execute.before on a blocked/failed scan', () => {
+    const preToolUseBody = OPENCODE_PLUGIN_CONTENT.slice(
+      OPENCODE_PLUGIN_CONTENT.indexOf("'tool.execute.before'"),
+      OPENCODE_PLUGIN_CONTENT.indexOf("'chat.message'"),
+    );
+    expect(preToolUseBody).toContain('throw new Error');
+  });
+
   it('is valid, parseable TypeScript', () => {
     const transpiler = new Bun.Transpiler({ loader: 'ts' });
     expect(() => transpiler.transformSync(OPENCODE_PLUGIN_CONTENT)).not.toThrow();
