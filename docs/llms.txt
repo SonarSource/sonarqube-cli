@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.8.0
+- Version: 1.9.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -25,12 +25,13 @@ Aliases are shown next to a command name as `name|alias`.
 Manage authentication tokens and credentials
 
 ### sonar auth login
-Authenticate via browser and save credentials in the system keychain. Must be run manually — agents cannot authenticate themselves. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables
-Usage: sonar auth login [-s <value>] [-o <value>]
+Authenticate via browser or an existing token and save credentials in the system keychain. For CI and automation, use environment variables instead: https://docs.sonarsource.com/sonarqube-cli/using-sonarqube-cli/environment-variables
+Usage: sonar auth login [-s <value>] [-o <value>] [--with-token]
 
 Options:
   --server, -s  <string>   SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.
   --org, -o  <string>   SonarQube Cloud organization key (required for SonarQube Cloud)
+  --with-token   Read an existing token from standard input
 
 Examples:
   sonar auth login
@@ -45,7 +46,10 @@ Examples:
 
 ### sonar auth status
 Show active authentication connection with token verification
-Usage: sonar auth status
+Usage: sonar auth status [--format <value>]
+
+Options:
+  --format  <string>   Output format
 
 Examples:
   sonar auth status
@@ -55,16 +59,17 @@ List issues and projects from SonarQube Cloud or Server
 
 ### sonar list issues *
 Search for issues in SonarQube
-Usage: sonar list issues [-p <value>] [--statuses <value>] [--severities <value>] [--format <value>] [--branch <value>] [--pull-request <value>] [--file <value>] [--page-size <value>] [--page <value>]
+Usage: sonar list issues [-p <value>] [--statuses <value>] [--severities <value>] [--format <value>] [--branch <value>] [--pull-request <value>] [--file <value>] [--new-code] [--page-size <value>] [--page <value>]
 
 Options:
   --project, -p  <string>   Project key
   --statuses  <string>   Filter by status (comma-separated list of: OPEN, CONFIRMED, FALSE_POSITIVE, ACCEPTED, FIXED). Defaults to OPEN, CONFIRMED.
   --severities  <string>   Filter by severity. Valid values depend on server mode — Multi-Quality Rule (MQR) mode: INFO, LOW, MEDIUM, HIGH, BLOCKER; Standard Experience mode: INFO, MINOR, MAJOR, CRITICAL, BLOCKER.
   --format  <string>   Output format
-  --branch  <string>   Branch name
-  --pull-request  <string>   Pull request ID
+  --branch  <string>   Branch name. Cannot be combined with --pull-request.
+  --pull-request  <string>   Pull request ID. Cannot be combined with --branch.
   --file  <string>   Limit results to one file, or to a directory's own files (not its subdirectories): a full path from the project root, or just a name if it matches only one
+  --new-code   Only show issues on new code (the leak period)
   --page-size  <number>   Page size (1-500)
   --page  <number>   Page number
 
@@ -74,10 +79,11 @@ Examples:
 
 ### sonar list projects *
 Search for projects in SonarQube
-Usage: sonar list projects [-q <value>] [--page <value>] [--page-size <value>]
+Usage: sonar list projects [-q <value>] [--format <value>] [--page <value>] [--page-size <value>]
 
 Options:
   --query, -q  <string>   Search query to filter projects by name or key
+  --format  <string>   Output format
   --page  <number>   Page number
   --page-size  <number>   Page size (1-500)
 
@@ -102,6 +108,22 @@ Options:
   --category  <string>   Only show the breakdown for one category of failing conditions
   --top  <number>   Number of entries to include in the breakdown, per condition
 
+### sonar import *
+Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only) [BETA]
+Usage: sonar import [--repo <value>] [--all] [--regex <value>] [--non-interactive]
+
+Options:
+  --repo  <object>   DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.
+  --all   Import every eligible repository in the organization (not already imported, and allowed by its project visibility settings). Cannot be combined with --repo or --regex.
+  --regex  <string>   Import only eligible repositories whose DevOps platform name (not slug) matches this regular expression.
+
+                   Case-sensitive by default; wrap as /pattern/flags to add flags like case-insensitive matching. Cannot be combined with --repo or --all.
+                   Examples:
+                       --regex "^test-"
+                       --regex "/^archived-/i"
+
+  --non-interactive   Skip all prompts; require explicit flags
+
 ### sonar api *
 Make authenticated API requests to SonarQube
 Usage: sonar api [-d <value>] [--verbose] <method> <endpoint>
@@ -120,7 +142,7 @@ Examples:
   sonar api post "/api/user_tokens/revoke" --data '{"name":"my-token"}'
 
 ### sonar integrate *
-Setup SonarQube integration for AI coding agents, git and others.
+Setup SonarQube integration for AI coding agents, git and others
 
 Examples:
   sonar integrate claude -s https://sonarcloud.io -p my-project
@@ -128,15 +150,14 @@ Examples:
 
 ### sonar integrate git *
 Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
-Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--global] [--dependency-risks] [-p <value>]
+Usage: sonar integrate git [--hook <value>] [--force] [--non-interactive] [--local] [--global]
 
 Options:
   --hook  <string>   Hook to install: pre-commit (scan staged files) or pre-push (scan files in unpushed commits)
   --force   Overwrite existing hook if it is not from sonar integrate git
   --non-interactive   Non-interactive mode (no prompts)
-  --global   Install hook globally for all repositories (sets git config --global core.hooksPath)
-  --dependency-risks   Also install a pre-commit dependency-risks scan (requires -p, not supported with --global)
-  --project, -p  <string>   Project key baked into the dependency-risks hook (required with --dependency-risks)
+  --local   Install the hook for this repository only, instead of globally (workaround for setups where a global hook does not fit, e.g. Husky)
+  --global, -g   Backwards compatibility; the hook is installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate git' instead.
 
 Examples:
   sonar integrate git
@@ -146,48 +167,43 @@ Examples:
 
 ### sonar integrate claude *
 Setup SonarQube integration for Claude Code. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.
-Usage: sonar integrate claude [-p <value>] [--non-interactive] [--global]
+Usage: sonar integrate claude [--non-interactive] [--global]
 
 Options:
-  --project, -p  <string>   Project key. Ignored when --global is used.
   --non-interactive   Non-interactive mode (no prompts)
-  --global, -g   Install hooks and config globally to ~/.claude instead of project directory
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate claude' instead.
 
 ### sonar integrate copilot *
 Setup SonarQube integration for GitHub Copilot CLI. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.
-Usage: sonar integrate copilot [--global] [-p <value>] [--non-interactive]
+Usage: sonar integrate copilot [--non-interactive] [--global]
 
 Options:
-  --global, -g   Install hooks and config globally to ~/.copilot instead of project directory
-  --project, -p  <string>   Project key. Mutually exclusive with --global.
   --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate copilot' instead.
 
 ### sonar integrate codex *
 Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.
-Usage: sonar integrate codex [--global] [-p <value>] [--non-interactive]
+Usage: sonar integrate codex [--non-interactive] [--global]
 
 Options:
-  --global, -g   Install hook and config globally to ~/.codex instead of project directory
-  --project, -p  <string>   Project key. Mutually exclusive with --global.
   --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate codex' instead.
 
 ### sonar integrate antigravity *
 Setup SonarQube integration for Antigravity. Installs secrets scanning hooks, prompt-secrets instructions, and Vortex Context.
-Usage: sonar integrate antigravity [-p <value>] [--non-interactive] [--global]
+Usage: sonar integrate antigravity [--non-interactive] [--global]
 
 Options:
-  --project, -p  <string>   Project key. Mutually exclusive with --global.
   --non-interactive   Non-interactive mode (no prompts)
-  --global, -g   Install hooks and config globally under ~/.gemini/config instead of the project .agents/ directory
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate antigravity' instead.
 
 ### sonar integrate cursor *
-Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis.
-Usage: sonar integrate cursor [-p <value>] [--non-interactive] [--global]
+Setup SonarQube integration for Cursor. This will configure the SonarQube MCP Server, install secrets scanning hooks, and configure Vortex analysis. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.
+Usage: sonar integrate cursor [--non-interactive] [--global]
 
 Options:
-  --project, -p  <string>   Project key. Mutually exclusive with --global.
   --non-interactive   Non-interactive mode (no prompts)
-  --global, -g   Install config globally to ~/.cursor instead of project directory. Note: Cursor's cloud/background agents only pick up project-level hooks, not global ones.
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate cursor' instead.
 
 ### sonar context
 Augment AI agents with context from your codebase
@@ -233,7 +249,7 @@ Examples:
   --min-severity  <string>   Minimum severity level to include. Allowed values: BLOCKER, HIGH, MEDIUM, LOW, INFO (default: all severities)
 
 ### sonar analyze agentic *
-Run server-side Vortex analysis. Limitations apply.
+Run server-side Vortex analysis. Limitations apply
 Usage: sonar analyze agentic [--file <value>] [--staged] [--base <value>] [-p <value>] [--force] [--depth <value>] [--format <value>] [--branch <value>]
 
 Options:
@@ -276,18 +292,27 @@ Examples:
   sonar config telemetry --enabled
   sonar config telemetry --disabled
 
+### sonar config stats
+Configure local stats collection settings
+Usage: sonar config stats [--enabled] [--disabled]
+
+Options:
+  --enabled   Enable local stats collection
+  --disabled   Disable local stats collection
+
 ### sonar system
-System diagnostics and maintenance commands for the SonarQube CLI installation.
+System diagnostics and maintenance commands for the SonarQube CLI installation
 
 ### sonar system status
 Show overall system status: authentication, installed binaries, and integrations
-Usage: sonar system status [--json]
+Usage: sonar system status [--format <value>] [--json]
 
 Options:
-  --json   Output as JSON for machine consumption
+  --format  <string>   Output format
+  --json   Output as JSON for machine consumption [DEPRECATED] This option is deprecated since 1.9 and will be removed in a future version. Use '--format json' instead.
 
 ### sonar system reset
-Reset the CLI to factory defaults: remove tokens, binaries, integrations, and cached files. Telemetry settings are preserved.
+Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Telemetry settings are preserved.
 Usage: sonar system reset [--force]
 
 Options:
@@ -295,9 +320,11 @@ Options:
 
 ### sonar update
 Update SonarQube CLI to the latest version
-Usage: sonar update [--status] [--force]
+
+### sonar update status
+Check for a newer version without installing
+Usage: sonar update status [--format <value>]
 
 Options:
-  --status   Check for a newer version without installing
-  --force   Install the latest version even if already up to date
+  --format  <string>   Output format
 
