@@ -26,7 +26,7 @@ import { getCliDir } from '@/core/config-constants.ts';
 import { parseProperties, setProperty } from '@/core/io/properties.ts';
 
 function getConfigFile(): string {
-  return join(getCliDir(), 'config.properties');
+  return join(getCliDir(), 'cli-config.properties');
 }
 
 function readConfigContent(): string {

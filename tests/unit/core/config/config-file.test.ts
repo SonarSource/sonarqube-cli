@@ -36,7 +36,7 @@ let testConfigFile: string;
 
 beforeEach(async () => {
   testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-config-file-test-'));
-  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'config.properties');
+  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'cli-config.properties');
   process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
 });
 

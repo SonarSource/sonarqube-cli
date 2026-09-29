@@ -22,7 +22,12 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
 
 import { getConfigFileValue, setConfigFileValue } from './config-file.ts';
-import { CONFIG_KEY_BY_NAME, type ConfigKey, type ConfigKeyDefinition } from './config-schema.ts';
+import {
+  CONFIG_KEY_BY_NAME,
+  type ConfigKey,
+  type ConfigKeyDefinition,
+  isValidConfigValue,
+} from './config-schema.ts';
 
 function getKeyDefinition(key: ConfigKey): ConfigKeyDefinition {
   const definition = CONFIG_KEY_BY_NAME.get(key);
@@ -42,9 +47,15 @@ export async function getConfigValue(key: ConfigKey): Promise<string | undefined
 
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
+  const trimmedValue = value.trim();
+  if (!isValidConfigValue(definition, trimmedValue)) {
+    throw new InvalidOptionError(
+      `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
+    );
+  }
   if (definition.sensitive) {
-    await saveConfigSecret(key, value);
+    await saveConfigSecret(key, trimmedValue);
     return;
   }
-  setConfigFileValue(key, value);
+  setConfigFileValue(key, trimmedValue);
 }
