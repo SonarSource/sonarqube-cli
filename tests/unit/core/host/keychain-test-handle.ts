@@ -29,7 +29,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { clearTokenCache, saveToken as realSaveToken } from '@/core/host/keychain.ts';
+import { clearSecretCache, saveToken as realSaveToken } from '@/core/host/keychain.ts';
 
 export interface KeychainTestHandle {
   /**
@@ -52,7 +52,7 @@ export function createKeychainTestHandle(): KeychainTestHandle {
   return {
     async seedToken(serverUrl: string, token: string, org?: string) {
       await realSaveToken(serverUrl, token, org);
-      clearTokenCache();
+      clearSecretCache();
     },
 
     async saveToken(serverUrl: string, token: string, org?: string) {
@@ -66,7 +66,7 @@ export function createKeychainTestHandle(): KeychainTestHandle {
       savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
       process.env.SONARQUBE_CLI_KEYCHAIN_FILE = join(testDir, 'keychain.json');
 
-      clearTokenCache();
+      clearSecretCache();
     },
 
     teardown() {
@@ -78,7 +78,7 @@ export function createKeychainTestHandle(): KeychainTestHandle {
         process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
       }
 
-      clearTokenCache();
+      clearSecretCache();
     },
   };
 }
