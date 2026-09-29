@@ -80,3 +80,35 @@ describe('allowlist secrets show', () => {
     { timeout: 15000 },
   );
 });
+
+describe('allowlist secrets add', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    // harness.run() gives the child process no stdin at all, so this exercises the real,
+    // unmocked non-TTY path — the only one reachable this way. The TTY-allowed path cannot be
+    // driven through this harness (runInteractive() pipes stdin too, never a real pty), so it
+    // is covered by a unit test instead (spawn-secrets-add.test.ts).
+    'refuses to run without a real interactive terminal, and never installs or invokes the binary',
+    async () => {
+      const result = await harness.run('allowlist secrets add');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'sonar allowlist secrets add requires a human at an interactive terminal; it cannot be run by an agent or script.',
+      );
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
+    },
+    { timeout: 15000 },
+  );
+});
