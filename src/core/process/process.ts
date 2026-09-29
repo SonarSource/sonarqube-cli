@@ -23,6 +23,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import type { Writable } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
@@ -92,16 +93,19 @@ export async function spawnProcess(
 
     let stdout = '';
     let stderr = '';
+    // A character's bytes can straddle two chunks, so the decoder holds the remainder until the next one arrives.
+    const stdoutDecoder = new StringDecoder('utf-8');
+    const stderrDecoder = new StringDecoder('utf-8');
 
     if (proc.stdout) {
       proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        stdout += stdoutDecoder.write(data);
       });
     }
 
     if (proc.stderr) {
       proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        stderr += stderrDecoder.write(data);
       });
     }
 
@@ -116,8 +120,8 @@ export async function spawnProcess(
     proc.on('exit', (code) => {
       resolve({
         exitCode: code,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        stdout: (stdout + stdoutDecoder.end()).trim(),
+        stderr: (stderr + stderrDecoder.end()).trim(),
       });
     });
   });
@@ -178,11 +182,12 @@ export async function spawnProcessCapturingBytes(
 
     const stdout: Buffer[] = [];
     let stderr = '';
+    const stderrDecoder = new StringDecoder('utf-8');
     proc.stdout?.on('data', (data: Buffer) => {
       stdout.push(data);
     });
     proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      stderr += stderrDecoder.write(data);
     });
 
     if (options.stdinData !== undefined && proc.stdin) {
@@ -192,7 +197,11 @@ export async function spawnProcessCapturingBytes(
 
     proc.on('error', reject);
     proc.on('close', (code) => {
-      resolve({ exitCode: code, stdout: Buffer.concat(stdout), stderr: stderr.trim() });
+      resolve({
+        exitCode: code,
+        stdout: Buffer.concat(stdout),
+        stderr: (stderr + stderrDecoder.end()).trim(),
+      });
     });
   });
 }
