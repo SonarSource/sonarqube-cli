@@ -21,14 +21,23 @@
 // Process management helpers
 
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import type { Writable } from 'node:stream';
 
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
+
+/** Resolves once the chunk is accepted, waiting for `drain` when the pipe is full. */
+export async function writeChunk(stream: Writable, chunk: Buffer): Promise<void> {
+  if (!stream.write(chunk)) await once(stream, 'drain');
+}
 
 export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
   stdinData?: string | Buffer;
+  /** Feeds stdin incrementally, so a large input never has to be held whole. Takes precedence over `stdinData`. */
+  stdinWriter?: (stdin: Writable) => Promise<void>;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -40,6 +49,28 @@ export interface SpawnResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
+}
+
+function feedStdin(
+  stdin: Writable,
+  options: SpawnOptions,
+  onWriteFailed: (err: Error) => void,
+  killChild: () => void,
+): void {
+  if (options.stdinWriter) {
+    void options.stdinWriter(stdin).then(
+      () => stdin.end(),
+      (err: unknown) => {
+        killChild();
+        onWriteFailed(err as Error);
+      },
+    );
+    return;
+  }
+  if (options.stdinData !== undefined) {
+    stdin.write(options.stdinData);
+    stdin.end();
+  }
 }
 
 /**
@@ -74,9 +105,10 @@ export async function spawnProcess(
       });
     }
 
-    if (options.stdinData !== undefined && proc.stdin) {
-      proc.stdin.write(options.stdinData);
-      proc.stdin.end();
+    if (proc.stdin) {
+      // The child may exit before we finish writing; its exit code reports that better than a broken pipe does.
+      proc.stdin.on('error', () => undefined);
+      feedStdin(proc.stdin, options, reject, () => proc.kill());
     }
 
     proc.on('error', reject);
