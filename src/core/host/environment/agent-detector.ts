@@ -23,7 +23,7 @@
  * Best-effort: hook subprocesses often omit variables present in the agent's integrated terminal.
  */
 
-export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity';
+export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -61,7 +61,16 @@ export function isCodexAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Precedence: Codex > Copilot CLI > Antigravity > Claude Code > Cursor.
+ * OpenCode marker. The CLI sets `OPENCODE` in the process env for its entire lifetime (its own
+ * middleware sets it, alongside a generic `AGENT` flag too easily set by unrelated tools to be a
+ * reliable marker on its own).
+ */
+export function isOpenCodeAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.OPENCODE);
+}
+
+/**
+ * Precedence: Codex > Copilot CLI > Antigravity > Claude Code > Cursor > OpenCode.
  * Antigravity sets Claude-compat env vars, so it must be checked before Claude.
  *
  * @param env - Defaults to `process.env`; inject a custom object for tests.
@@ -72,5 +81,6 @@ export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerA
   if (isAntigravityAgentEnv(env)) return 'antigravity';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
+  if (isOpenCodeAgentEnv(env)) return 'opencode';
   return null;
 }
