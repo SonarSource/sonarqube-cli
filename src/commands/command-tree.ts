@@ -148,6 +148,7 @@ import {
   type SystemStatusOptions,
   VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS,
 } from './system/status.ts';
+import { runTui } from './tui';
 import {
   updateStatus,
   type UpdateStatusOptions,
@@ -495,7 +496,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCopilot(options, ctx));
 
-  // `sonar context` — passthrough wrapper for sonar-context-augmentation.
+  COMMAND_TREE.command('tui')
+    .description('Explore SonarQube in your terminal')
+    .rootHelp({ category: 'core' })
+    .addHelpText(
+      'after',
+      '\nSet SONAR_TUI_BINARY to a locally built Rust executable; otherwise sonar-tui is resolved on PATH.\nRequires an interactive terminal. No automatic build or download is performed.',
+    )
+    .authenticatedAction((ctx) => runTui(ctx));
+
+  // `sonar context`: passthrough wrapper for sonar-context-augmentation.
   // Forwards arguments verbatim to the locally-installed CAG binary; install via
   // `sonar integrate claude` or `sonar integrate copilot`.
   COMMAND_TREE.command('context')
