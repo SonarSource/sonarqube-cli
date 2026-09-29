@@ -197,8 +197,16 @@ describe('agent-detector', () => {
       expect(detectCallerAgent(env({ OPENCODE: '1' }))).toBe('opencode');
     });
 
-    it('prefers cursor over opencode when both markers are set', () => {
-      expect(detectCallerAgent(env({ OPENCODE: '1', CURSOR_TRACE_ID: 't' }))).toBe('cursor');
+    it('prefers opencode over cursor when both markers are set (opencode launched from a Cursor terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CURSOR_TRACE_ID: 't' }))).toBe('opencode');
+    });
+
+    it('prefers opencode over claude when both markers are set (opencode launched from a Claude Code terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CLAUDECODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers antigravity over opencode when both markers are set', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', ANTIGRAVITY_AGENT: '1' }))).toBe('antigravity');
     });
 
     it('prefers antigravity over claude and cursor when Antigravity and Claude markers are set', () => {
