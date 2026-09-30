@@ -60,6 +60,32 @@ export async function readBlobContents(
 }
 
 /**
+ * Asks git for every blob's size without its content. Returns `null` when git failed, leaving a caller to send the
+ * content unfiltered rather than refuse a push over a size check.
+ */
+export async function readBlobSizes(
+  blobs: GitBlobRef[],
+  cwd: string,
+): Promise<Map<string, number> | null> {
+  if (blobs.length === 0) return new Map();
+  const result = await spawnProcessCapturingBytes('git', ['cat-file', '--batch-check'], {
+    cwd,
+    stdin: 'pipe',
+    stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
+  });
+  if (result.exitCode !== 0) return null;
+
+  const sizes = new Map<string, number>();
+  for (const line of result.stdout.toString('utf-8').split('\n')) {
+    // An object git does not have prints `<oid> missing`, which has no size and so never gets an entry.
+    const [oid, , size] = line.split(' ');
+    const byteCount = Number(size);
+    if (oid && Number.isInteger(byteCount) && byteCount >= 0) sizes.set(oid, byteCount);
+  }
+  return sizes;
+}
+
+/**
  * Encodes one scan: a `scan <id>` line, then `<byteCount> <path>` and a newline, that many bytes, and a newline per
  * file. The count precedes the content so a path needs no quoting and the bytes need no escaping.
  */
