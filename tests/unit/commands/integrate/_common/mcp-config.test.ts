@@ -113,6 +113,31 @@ describe('integration remove helpers', () => {
     expect(result.inputs).toEqual([{ type: 'promptString', id: 'token' }]);
   });
 
+  it('upsertMcpServer writes under the mcp key for the opencode format', () => {
+    const entry = { type: 'local', command: ['sonar', 'run', 'mcp'], enabled: true };
+
+    const result = upsertMcpServer(
+      { $schema: 'https://opencode.ai/config.json', mcp: { other: { type: 'local' } } },
+      entry,
+      'opencode',
+    );
+
+    expect(result).toEqual({
+      $schema: 'https://opencode.ai/config.json',
+      mcp: { other: { type: 'local' }, sonarqube: entry },
+    });
+    expect(result.mcpServers).toBeUndefined();
+  });
+
+  it('removeMcpServer removes only the sonarqube entry for the opencode format', () => {
+    const result = removeMcpServer(
+      { mcp: { sonarqube: { type: 'local' }, other: { type: 'local' } }, theme: 'dark' },
+      'opencode',
+    );
+
+    expect(result).toEqual({ mcp: { other: { type: 'local' } }, theme: 'dark' });
+  });
+
   it('upsertMcpServer handles a non-object document gracefully', () => {
     expect(upsertMcpServer(null, { command: 'sonar' }).mcpServers).toEqual({
       sonarqube: { command: 'sonar' },

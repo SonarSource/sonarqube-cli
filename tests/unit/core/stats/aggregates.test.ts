@@ -191,6 +191,10 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     antigravityPreToolUse: true,
     cursorPreFileRead: true,
     cursorPreToolUse: true,
+    opencodePreToolUse: true,
+    // Unlike the other stop-point commands above, chat.message masks the secret and lets the
+    // message through — it never stops the user, so it is not a stop point.
+    opencodeChatMessage: false,
   };
 
   it.each(

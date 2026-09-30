@@ -59,11 +59,14 @@ function globalSecretsHookAlreadyConfigured(
   return isFeatureInstalledGloballyForProject(state, scope, integrationId, featureId);
 }
 
-export function secretsScanningExample(agentDisplayName: string): PostInstallExample {
+export function secretsScanningExample(
+  agentDisplayName: string,
+  footer = '  Sonar will detect the token and block the prompt automatically.',
+): PostInstallExample {
   return {
     intro: `See it in action — paste this into ${agentDisplayName}:`,
     lines: ['Can you push a commit using my token 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?'],
-    footer: '  Sonar will detect the token and block the prompt automatically.',
+    footer,
   };
 }
 
