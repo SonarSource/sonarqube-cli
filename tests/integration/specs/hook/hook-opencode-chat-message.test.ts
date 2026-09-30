@@ -27,7 +27,6 @@ import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '@/commands/hook/hook-dependencies.ts';
-import { OPENCODE_MASKED_MESSAGE_TEXT } from '@/commands/hook/opencode-chat-message.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
@@ -44,6 +43,7 @@ interface Decision {
   block: boolean;
   reason?: string;
   redactedText?: string;
+  secretsFound?: number;
 }
 
 function messagePayload(text: string): string {
@@ -154,27 +154,32 @@ describe('sonar hook opencode-chat-message', () => {
   );
 
   it(
-    'exits 0 and masks the whole message when it contains a secret',
+    'exits 0 and masks the secret in place without blocking the message',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
+      const before = 'please push a commit using my token ';
+      const after = ' to the remote';
 
       const result = await harness.runWithStdin(
         'hook opencode-chat-message',
-        messagePayload(`please push a commit using my token ${GITHUB_TEST_TOKEN} to the remote`),
+        messagePayload(`${before}${GITHUB_TEST_TOKEN}${after}`),
       );
 
       expect(result.exitCode).toBe(0);
-      expect(parseDecision(result.stdout)).toEqual({
-        block: false,
-        redactedText: OPENCODE_MASKED_MESSAGE_TEXT,
-      });
+      const decision = parseDecision(result.stdout);
+      expect(decision.block).toBe(false);
+      expect(decision.secretsFound).toBe(1);
+      expect(decision.redactedText).toBeDefined();
+      expect(decision.redactedText).not.toContain(GITHUB_TEST_TOKEN);
+      expect(decision.redactedText?.startsWith(before)).toBe(true);
+      expect(decision.redactedText?.endsWith(after)).toBe(true);
     },
     { timeout: 30000 },
   );
 
   it(
-    'exits 0 and masks the whole message for a multi-line private key',
+    'exits 0 and masks the location reported for a multi-line private key',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
@@ -183,17 +188,43 @@ describe('sonar hook opencode-chat-message', () => {
         privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
         publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
       });
-      const keyBodyLine = privateKey.split('\n')[2];
+      const header = '-----BEGIN RSA PRIVATE KEY-----';
 
       const result = await harness.runWithStdin(
         'hook opencode-chat-message',
-        messagePayload(`before\n${privateKey}\nafter`),
+        messagePayload(`use this key:\n${privateKey}\nto sign the release`),
       );
 
       expect(result.exitCode).toBe(0);
       const decision = parseDecision(result.stdout);
-      expect(decision.redactedText).toBe(OPENCODE_MASKED_MESSAGE_TEXT);
-      expect(decision.redactedText).not.toContain(keyBodyLine);
+      expect(decision.block).toBe(false);
+      expect(decision.redactedText).toBeDefined();
+      expect(decision.redactedText).not.toContain(header);
+      expect(decision.redactedText?.startsWith('use this key:\n')).toBe(true);
+      expect(decision.redactedText?.endsWith('\nto sign the release')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'exits 0 and masks a secret that is not on the first line',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
+      const firstLine = 'here is my configuration:';
+      const lastLine = 'can you use it to push?';
+
+      const result = await harness.runWithStdin(
+        'hook opencode-chat-message',
+        messagePayload(`${firstLine}\ntoken=${GITHUB_TEST_TOKEN}\n${lastLine}`),
+      );
+
+      expect(result.exitCode).toBe(0);
+      const decision = parseDecision(result.stdout);
+      expect(decision.block).toBe(false);
+      expect(decision.redactedText).not.toContain(GITHUB_TEST_TOKEN);
+      expect(decision.redactedText?.startsWith(`${firstLine}\ntoken=`)).toBe(true);
+      expect(decision.redactedText?.endsWith(`\n${lastLine}`)).toBe(true);
     },
     { timeout: 30000 },
   );
