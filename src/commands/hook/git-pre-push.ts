@@ -22,6 +22,7 @@
 // call, one scan per commit, so a finding still names the commit that introduced it.
 
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
+import { MAX_SCANNED_FILE_SIZE } from '@/commands/analyze/secrets.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -30,7 +31,7 @@ import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
 import { writeChunk } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
-import { isEncodablePath, readBlobContents, scanChunks } from './git-blob-batch.ts';
+import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
 import type { BatchScanOutcome } from './git-pre-push-secrets.ts';
 import { runSecretsStage, scanCommitScans } from './git-pre-push-secrets.ts';
 import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
@@ -84,10 +85,30 @@ export async function gitPrePush(
   if (refs.length === 0) return;
 
   const remotesExclusion = await resolveRemotesExclusion(options.remoteName);
-  const commits = await getPushedCommitBlobs(refs, remotesExclusion);
+  const pushed = await getPushedCommitBlobs(refs, remotesExclusion);
+  const commits = await dropOversizeBlobs(pushed);
   if (commits.length === 0) return;
 
   await scanCommits(commits, await resolveAuth(ctx), ctx);
+}
+
+/**
+ * Leaves out content the analyzer would have skipped for its size anyway, so a large blob is never read into memory.
+ * A blob whose size git did not report is kept, leaving the read to refuse the push rather than pass it over.
+ */
+async function dropOversizeBlobs(commits: CommitBlobs[]): Promise<CommitBlobs[]> {
+  const sizes = await readBlobSizes(
+    commits.flatMap((commit) => commit.blobs),
+    process.cwd(),
+  );
+  if (sizes === null) return commits;
+
+  const withinLimit: CommitBlobs[] = [];
+  for (const { commit, blobs } of commits) {
+    const kept = blobs.filter((blob) => (sizes.get(blob.oid) ?? 0) <= MAX_SCANNED_FILE_SIZE);
+    if (kept.length > 0) withinLimit.push({ commit, blobs: kept });
+  }
+  return withinLimit;
 }
 
 async function scanCommits(

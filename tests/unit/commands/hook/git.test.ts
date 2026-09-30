@@ -22,6 +22,7 @@ import { Writable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { MAX_SCANNED_FILE_SIZE } from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -315,6 +316,22 @@ describe('gitPrePush', () => {
     );
   }
 
+  /** The object names a `git cat-file` call asked about, in request order. */
+  function requestedOids(options: { stdinData?: string | Buffer }): string[] {
+    return String(options.stdinData ?? '')
+      .split('\n')
+      .filter(Boolean);
+  }
+
+  /** `git cat-file --batch-check` output: one `<oid> blob <size>` line per request, with no content. */
+  function batchCheckOutput(oids: string[]): Buffer {
+    return Buffer.from(
+      oids
+        .map((oid) => `${oid} blob ${String(blobSizes.get(oid) ?? DEFAULT_BLOB_SIZE)}\n`)
+        .join(''),
+    );
+  }
+
   /** Everything the hook wrote to the analyzer's stdin, across every scan of the push. */
   function writtenBatch(): string {
     return Buffer.concat(written).toString('utf-8');
@@ -358,9 +375,13 @@ describe('gitPrePush', () => {
   const ONE_COMMIT = logOutput({ commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'src/foo.ts' }] });
 
   let written: Buffer[] = [];
+  /** Size git reports per blob; an oid with no entry takes {@link DEFAULT_BLOB_SIZE}. */
+  let blobSizes: Map<string, number>;
+  const DEFAULT_BLOB_SIZE = 12;
 
   beforeEach(() => {
     written = [];
+    blobSizes = new Map();
     fake = new FakeConsole();
     const mocked = mockAuthResolver(FAKE_AUTH);
     runtime = mocked.runtime;
@@ -370,11 +391,14 @@ describe('gitPrePush', () => {
       stdout: ONE_COMMIT,
       stderr: '',
     });
-    catFileSpy = spyOn(processLib, 'spawnProcessCapturingBytes').mockResolvedValue({
-      exitCode: 0,
-      stdout: catFileOutput('const a = 1;'),
-      stderr: '',
-    });
+    catFileSpy = spyOn(processLib, 'spawnProcessCapturingBytes').mockImplementation(
+      (_command: string, args: string[], options?: processLib.SpawnOptions) =>
+        Promise.resolve(
+          args.includes('--batch-check')
+            ? { exitCode: 0, stdout: batchCheckOutput(requestedOids(options ?? {})), stderr: '' }
+            : { exitCode: 0, stdout: catFileOutput('const a = 1;'), stderr: '' },
+        ),
+    );
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/usr/bin/sonar-secrets',
     );
@@ -399,14 +423,85 @@ describe('gitPrePush', () => {
     expect(writtenBatch()).toBe(SCAN_A + '12 src/foo.ts\nconst a = 1;\n');
   });
 
-  it('reads blob content out of git rather than the working tree', async () => {
+  it('reads blob content out of git rather than the working tree, sizes first', async () => {
     await gitPrePush({}, [], makeCtx());
 
-    const [command, args] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
-    expect(command).toBe('git');
-    expect(args).toEqual(['cat-file', '--batch']);
-    const [, , options] = catFileSpy.mock.calls[0] as [string, string[], { stdinData: string }];
-    expect(options.stdinData).toBe(`${BLOB_A}\n`);
+    const calls = catFileSpy.mock.calls as unknown as Array<
+      [string, string[], { stdinData: string }]
+    >;
+    expect(calls.map(([command, args]) => [command, ...args])).toEqual([
+      ['git', 'cat-file', '--batch-check'],
+      ['git', 'cat-file', '--batch'],
+    ]);
+    for (const [, , options] of calls) expect(options.stdinData).toBe(`${BLOB_A}\n`);
+  });
+
+  it('leaves out a blob larger than the analyzer would scan', async () => {
+    spawnProcessSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: logOutput({
+        commit: COMMIT_A,
+        blobs: [
+          { oid: BLOB_A, path: 'huge.bin' },
+          { oid: BLOB_B, path: 'src/foo.ts' },
+        ],
+      }),
+      stderr: '',
+    });
+    blobSizes.set(BLOB_A, MAX_SCANNED_FILE_SIZE + 1);
+
+    await gitPrePush({}, [], makeCtx());
+
+    const [, , options] = catFileSpy.mock.calls[1] as [string, string[], { stdinData: string }];
+    expect(options.stdinData).toBe(`${BLOB_B}\n`);
+    expect(writtenBatch()).toBe(SCAN_A + '12 src/foo.ts\nconst a = 1;\n');
+  });
+
+  it('keeps a blob exactly at the size the analyzer will scan', async () => {
+    blobSizes.set(BLOB_A, MAX_SCANNED_FILE_SIZE);
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(writtenBatch()).toBe(SCAN_A + '12 src/foo.ts\nconst a = 1;\n');
+  });
+
+  it('does not scan a commit whose every blob is too large', async () => {
+    blobSizes.set(BLOB_A, MAX_SCANNED_FILE_SIZE + 1);
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
+    expect(catFileSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses the push for a blob whose size git does not report', async () => {
+    // `missing` is what git answers for an object it does not have, to both forms of the call.
+    const missing = { exitCode: 0, stdout: Buffer.from(`${BLOB_A} missing\n`), stderr: '' };
+    catFileSpy.mockResolvedValue(missing);
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (e) {
+      thrown = e;
+    }
+
+    // Dropping it for having no size would pass the push over content nothing ever checked.
+    expect((thrown as CommandFailedError).message).toContain('was not scanned');
+  });
+
+  it('sends everything when the size check itself fails', async () => {
+    catFileSpy.mockImplementation((_command: string, args: string[]) =>
+      Promise.resolve(
+        args.includes('--batch-check')
+          ? { exitCode: 128, stdout: Buffer.alloc(0), stderr: 'fatal' }
+          : { exitCode: 0, stdout: catFileOutput('const a = 1;'), stderr: '' },
+      ),
+    );
+
+    await gitPrePush({}, [], makeCtx());
+
+    expect(writtenBatch()).toBe(SCAN_A + '12 src/foo.ts\nconst a = 1;\n');
   });
 
   it('throws CommandFailedError naming the offending commit when secrets are found', async () => {
