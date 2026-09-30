@@ -78,18 +78,24 @@ const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
 const PROXY_SOURCE_LABELS: Record<ConfigSource, string> = {
   'sonar-env': 'SONAR_HTTPS_PROXY_URL, SONAR_HTTP_PROXY_URL, SONAR_NO_PROXY environment variables',
-  'stored-config': 'sonar config',
+  'stored-config':
+    'network.proxy.https, network.proxy.http, network.proxy.noProxy sonar config keys',
   'generic-env': 'HTTPS_PROXY, HTTP_PROXY, NO_PROXY environment variables',
 };
 
 const CA_CERT_SOURCE_LABELS: Record<ConfigSource, string> = {
   'sonar-env': 'SONAR_CA_CERT environment variable',
-  'stored-config': 'sonar config',
+  'stored-config': 'network.tls.caCert sonar config key',
   'generic-env': 'NODE_EXTRA_CA_CERTS environment variable',
 };
 
-const CLIENT_CERT_SOURCE_LABEL =
-  'SONAR_TLS_CLIENT_CERT, SONAR_TLS_CLIENT_KEY_FILE, SONAR_TLS_CLIENT_PASSPHRASE environment variables';
+const CLIENT_CERT_SOURCE_LABELS: Record<ConfigSource, string> = {
+  'sonar-env':
+    'SONAR_TLS_CLIENT_CERT, SONAR_TLS_CLIENT_KEY_FILE, SONAR_TLS_CLIENT_PASSPHRASE environment variables',
+  'stored-config':
+    'network.tls.clientCert, network.tls.clientKey, network.tls.clientPassphrase sonar config keys',
+  'generic-env': 'environment variables',
+};
 
 const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
@@ -578,7 +584,7 @@ function tokenStatusLabel(tokenStatus: TokenCheckResult | null): string {
 function buildClientCertJson(network: ResolvedNetworkConfig) {
   if (network.clientCert) {
     return {
-      source: CLIENT_CERT_SOURCE_LABEL,
+      source: CLIENT_CERT_SOURCE_LABELS[network.clientCert.source],
       certPath: network.clientCert.certPath,
       ...(network.clientCert.keyPath !== null && { keyPath: network.clientCert.keyPath }),
       passphraseSet: Boolean(network.clientCert.passphrase),
@@ -776,14 +782,15 @@ function renderClientCertSubsection(
   console: Console,
 ): void {
   console.blank();
-  console.text(`  Client Certificate (${CLIENT_CERT_SOURCE_LABEL}):`);
   if (clientCert) {
+    console.text(`  Client Certificate (${CLIENT_CERT_SOURCE_LABELS[clientCert.source]}):`);
     console.text(`    • Certificate: ${clientCert.certPath}`);
     if (clientCert.keyPath !== null) {
       console.text(`    • Key:         ${clientCert.keyPath}`);
     }
     console.text(`    • Passphrase:  ${clientCert.passphrase ? 'Set' : 'Not set'}`);
   } else {
+    console.text('  Client Certificate:');
     console.warn(`    ✗ ${error}`);
   }
 }

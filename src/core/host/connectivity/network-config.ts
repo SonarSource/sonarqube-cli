@@ -123,7 +123,7 @@ async function resolveProxyGroup(env: NodeJS.ProcessEnv): Promise<ProxyGroup | n
       explicit,
       proxyHttps: httpsVal ? createRedactedUrl(httpsVal) : null,
       proxyHttp: httpVal ? createRedactedUrl(httpVal) : null,
-      noProxy: (await lookup(env, noProxyVar)) ?? null,
+      noProxy: (await lookup(env, noProxyVar)) ?? null, // NOSONAR: sequential by design, stops at the highest-priority source to avoid needless keychain reads
     };
   }
   return null;
