@@ -802,7 +802,7 @@ describe('flushTelemetryEvents()', () => {
     it('sends through the resolved proxy and TLS options', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
-      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockResolvedValue({
         proxy: 'http://proxy.internal:3128',
       });
       const fetchSpy = mockFetch();
@@ -821,7 +821,7 @@ describe('flushTelemetryEvents()', () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
-      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({});
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockResolvedValue({});
       const fetchSpy = mockFetch();
       try {
         await flushTelemetryEvents(Date.now() + 60_000);

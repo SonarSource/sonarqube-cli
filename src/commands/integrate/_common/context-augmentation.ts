@@ -121,7 +121,7 @@ export async function runToolIntegrateCommand(
   const console = p.console;
   console.text('     Installing Vortex Context...');
 
-  const initEnv = buildContextAugmentationEnv({
+  const initEnv = await buildContextAugmentationEnv({
     organization: p.auth.orgKey,
     projectKey: p.projectKey,
     serverUrl: p.auth.serverUrl,
@@ -154,7 +154,7 @@ export async function printSessionStartContext(
   return runCagSubprocess(
     p.binaryPath,
     ['tool', 'print-session-start-context', `--sca-enabled=${p.scaEnabled ? 'true' : 'false'}`],
-    { projectRoot: p.context.workspaceDir!, env: buildContextAugmentationEnv(p.context) },
+    { projectRoot: p.context.workspaceDir!, env: await buildContextAugmentationEnv(p.context) },
   );
 }
 
@@ -183,7 +183,7 @@ async function runCagStepOrThrow(
   args: string[],
   projectRoot: string,
   console: Console,
-  env: NodeJS.ProcessEnv = buildContextAugmentationEnv(),
+  env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   if (process.stdout.isTTY) {
     try {
@@ -221,13 +221,14 @@ async function runCagSubprocess(
   args: string[],
   options: CagSubprocessOptions,
 ): Promise<CagSubprocessResult> {
+  const env = options.env ?? (await buildContextAugmentationEnv());
   return new Promise<CagSubprocessResult>((resolve) => {
     let child;
     try {
       child = spawn(binaryPath, args, {
         cwd: options.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'],
-        env: options.env ?? buildContextAugmentationEnv(),
+        env,
       });
     } catch (error) {
       resolve({

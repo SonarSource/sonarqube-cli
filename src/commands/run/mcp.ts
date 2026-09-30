@@ -61,7 +61,7 @@ export async function runMcp(
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
   try {
-    resolvedNetwork = network ?? getNetworkConfigOrThrow();
+    resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const authResult = await ctx.resolveAuth();
     if (authResult.isErr()) {
       await failStartup(authResult.error);
