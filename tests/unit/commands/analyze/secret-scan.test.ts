@@ -29,13 +29,13 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   analyzeSecrets,
-  MAX_SCANNED_FILE_SIZE,
   runSecretsBinaryOnStream,
   runSecretsBinaryOnText,
 } from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
