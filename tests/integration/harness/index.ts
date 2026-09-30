@@ -29,7 +29,7 @@ import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-co
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
-import { getCliBinaryPath, runCliWithRealTty } from './cli-runner.js';
+import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -235,17 +235,15 @@ export class TestHarness {
     }
   }
 
-  /**
-   * Runs the CLI attached to a real pty (via the Unix `script` utility), so
-   * `process.stdin.isTTY` is genuinely true in the CLI process — the one thing `run()` and
-   * `runInteractive()` can never provide (both give the child a pipe, not a terminal). Use
-   * this only when a test needs to exercise a real TTY-gated branch end-to-end; unsupported on
-   * Windows, so guard call sites with `it.skipIf(IS_WINDOWS)`.
-   */
-  async runWithRealTty(command: string, options?: RunOptions): Promise<CliResult> {
+  /** Runs the CLI on a real pty so `process.stdin.isTTY` is true; guard with `it.skipIf(IS_WINDOWS)`. */
+  async runWithRealTty(
+    command: string,
+    options?: RunOptions & { responses?: TtyResponse[] },
+  ): Promise<CliResult> {
     return runCliWithRealTty(command, this.env(options), {
       cwd: options?.cwd ?? this.cwd.path,
       timeoutMs: options?.timeoutMs,
+      responses: options?.responses,
     });
   }
 

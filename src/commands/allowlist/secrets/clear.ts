@@ -18,26 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { runSecretsAllowlistCommand } from './spawn-secrets-cli.ts';
 
+export interface AllowlistSecretsClearOptions {
+  force?: boolean;
+}
+
 /**
- * Refuses to run outside a real interactive terminal, with no bypass flag. This is the one
- * deliberate safety gate in `sonar allowlist secrets`: it stops an agent from silently
- * "resolving" its own secrets-detection block by piping a flagged value into `add` without a
- * human ever reviewing the exposure.
+ * `sonar-secrets allowlist clear` already has its own native confirm-or-force gate; this
+ * wrapper only forwards `--force` when passed and never adds a confirmation step of its own.
  */
-export async function allowlistSecretsAdd(ctx: CommandInvocationContext): Promise<void> {
-  if (!process.stdin.isTTY) {
-    throw new CommandFailedError(
-      'sonar allowlist secrets add requires a human at an interactive terminal; it cannot be run by an agent or script.',
-      {
-        remediationHint:
-          'Open a terminal and run this command there. Coding agents cannot add allowlist entries on your behalf.',
-      },
-    );
-  }
-  await runSecretsAllowlistCommand(['add'], ctx.console);
+export async function allowlistSecretsClear(
+  options: AllowlistSecretsClearOptions,
+  ctx: CommandInvocationContext,
+): Promise<void> {
+  const args = ['clear', ...(options.force ? ['--force'] : [])];
+  await runSecretsAllowlistCommand(args, ctx.console);
 }
