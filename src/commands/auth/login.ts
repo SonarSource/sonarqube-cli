@@ -50,6 +50,7 @@ import {
   type OrganizationAccess,
   OrganizationsClient,
 } from '@/core/server/organizations.ts';
+import type { Paging } from '@/core/server/paging.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
@@ -422,9 +423,9 @@ async function promptForOrganizationKey(
 
 function listMemberOrganizations(
   client: OrganizationsClient,
-): Promise<{ organizations: Organization[]; total: number }> {
+): Promise<{ organizations: Organization[]; paging: Paging }> {
   return client.listUserOrganizations().match(
-    (result: { organizations: Organization[]; total: number }) => result,
+    (result: { organizations: Organization[]; paging: Paging }) => result,
     (error: HttpClientError) => {
       throw new CommandFailedError(`Could not list your organizations: ${error.message}`, {
         remediationHint:
@@ -439,7 +440,10 @@ async function getUserSelectedOrganization(
   console: Console,
 ): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
-  const { organizations: memberOrgs, total: orgTotal } = await listMemberOrganizations(client);
+  const {
+    organizations: memberOrgs,
+    paging: { total: orgTotal },
+  } = await listMemberOrganizations(client);
   if (memberOrgs.length === 1 && orgTotal === 1) {
     const singleOrg = memberOrgs[0].key;
     console.print(`Using organization (only member): ${singleOrg}`);

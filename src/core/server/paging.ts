@@ -18,17 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
-import { InvalidArgumentError } from 'commander';
+export interface Paging {
+  pageIndex: number;
+  pageSize: number;
+  total: number;
+}
 
-import { parseInteger } from '@/core/commands/parsing.ts';
+export interface EnrichedPaging extends Paging {
+  hasNextPage: boolean;
+}
 
-describe('CLI option parsing', () => {
-  it('should throw if not a valid number', () => {
-    expect(() => parseInteger('x')).toThrow(new InvalidArgumentError('Not a number.'));
-  });
+export function hasNextPage({ pageIndex, pageSize, total }: Paging): boolean {
+  return pageIndex * pageSize < total;
+}
 
-  it('should successfully parse a valid number', () => {
-    expect(parseInteger('42')).toBe(42);
-  });
-});
+export function toEnrichedPaging(paging: Paging): EnrichedPaging {
+  return { ...paging, hasNextPage: hasNextPage(paging) };
+}

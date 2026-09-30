@@ -28,7 +28,7 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
 import { CLI_DIR, GLOBAL_HOOKS_DIR, LOG_DIR } from '@/core/config-constants.ts';
 import { recordedFeatureResources } from '@/core/framework/features';

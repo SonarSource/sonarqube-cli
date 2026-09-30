@@ -24,7 +24,7 @@ import { encode as encodeToToon } from '@toon-format/toon';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
@@ -160,17 +160,16 @@ export async function listIssues(
     throw new InvalidOptionError('--branch and --pull-request cannot be used together.');
   }
 
-  const ps = options.pageSize;
-  if (ps < 1 || ps > MAX_PAGE_SIZE) {
-    throw new InvalidOptionError(
-      `Invalid --page-size option: '${ps}'. Must be an integer between 1 and 500`,
-    );
-  }
-
-  const page = options.page;
-  if (page < 1) {
-    throw new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`);
-  }
+  const { pageSize: ps, page } = resolvePageOptions(
+    options.pageSize,
+    options.page,
+    MAX_PAGE_SIZE,
+  ).match(
+    (value) => value,
+    (error) => {
+      throw error;
+    },
+  );
 
   const normalizedStatuses = resolveStatuses(options.statuses);
   validateSeveritiesOption(options.severities);
@@ -228,7 +227,7 @@ export async function listIssues(
     pullRequest,
     resolved: options.resolved,
     sinceLeakPeriod: options.newCode,
-    ps: options.pageSize,
+    ps,
     p: page,
   };
 
