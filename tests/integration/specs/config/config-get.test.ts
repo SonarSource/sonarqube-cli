@@ -71,4 +71,43 @@ describe('config get', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'prints a JSON object with set: false for an unset key with --format json',
+    async () => {
+      const result = await harness.run('config get log.level --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ key: 'log.level', sensitive: false, set: false });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports set: false without a value in JSON output for an unset, sensitive key',
+    async () => {
+      const result = await harness.run('config get network.tls.clientPassphrase --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        key: 'network.tls.clientPassphrase',
+        sensitive: true,
+        set: false,
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 for an invalid --format value',
+    async () => {
+      const result = await harness.run('config get log.level --format xml');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "option '--format <format>' argument 'xml' is invalid",
+      );
+    },
+    { timeout: 15000 },
+  );
 });
