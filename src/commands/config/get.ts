@@ -39,7 +39,7 @@ interface ConfigGetJson {
   value?: string;
 }
 
-const NOT_SET_MESSAGE = 'Not set.';
+const NOT_SET_MESSAGE = '(not set)';
 
 function printJson(console: Console, payload: ConfigGetJson): void {
   console.print(JSON.stringify(payload, null, 2));
@@ -69,7 +69,7 @@ export async function getConfig(
   }
 
   if (definition.sensitive) {
-    console.print(isSet ? 'Set (value hidden).' : NOT_SET_MESSAGE);
+    console.print(isSet ? '(hidden)' : NOT_SET_MESSAGE);
     return;
   }
 
