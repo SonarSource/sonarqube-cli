@@ -131,10 +131,11 @@ export async function runCliWithRealTty(
   const answering = pending.length > 0;
   // BSD `script` rejects socket stdin (Bun's pipes, and FIFOs on macOS), so `cat` relays into a
   // real pipe. It is backgrounded so sh exits with `script`, and stdin stays open until then,
-  // since EOF makes `script` send ^D ahead of queued input. `<&0`: sh would otherwise give a
-  // background job /dev/null; `2>/dev/null`: keeps it off our stderr pipe.
+  // since EOF makes `script` send ^D ahead of queued input. stdin is saved on fd 3 first because
+  // dash (Linux `sh`) points a background job's fd 0 at /dev/null before applying `<&0`;
+  // `2>/dev/null` keeps cat off our stderr pipe.
   const argv = answering
-    ? ['sh', '-c', `{ cat <&0 2>/dev/null & } | ${shellJoin(scriptArgv)}`]
+    ? ['sh', '-c', `exec 3<&0; { cat <&3 3<&- 2>/dev/null & } | ${shellJoin(scriptArgv)}`]
     : scriptArgv;
   const proc = Bun.spawn(argv, {
     env: spawnEnv,
