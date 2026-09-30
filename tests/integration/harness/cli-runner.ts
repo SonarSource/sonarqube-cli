@@ -116,15 +116,25 @@ export async function runCliWithRealTty(
   const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
   const binaryPath = getBinaryPath(coverageMode);
   const args = tokenize(command);
+  // -e/--return: without it, util-linux `script` always exits 0 on a successful run of the
+  // wrapper itself, regardless of the wrapped command's real exit code. BSD (macOS) `script`
+  // has no such flag because it never had the problem — it exits with the child's status by
+  // default.
   const scriptArgv =
     process.platform === 'darwin'
       ? ['script', '-q', '/dev/null', binaryPath, ...args]
-      : ['script', '-qc', shellJoin([binaryPath, ...args]), '/dev/null'];
+      : ['script', '-qec', shellJoin([binaryPath, ...args]), '/dev/null'];
 
   const startedAt = Date.now();
   mkdirSync(options.cwd, { recursive: true });
+  const spawnEnv = applyIsolatedSpawnEnv(env);
+  if (coverageMode) {
+    mkdirSync(COVERAGE_RAW_DIR, { recursive: true });
+    const unique = `${Date.now()}-${crypto.randomUUID()}`;
+    spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
+  }
   const proc = Bun.spawn(scriptArgv, {
-    env: applyIsolatedSpawnEnv(env),
+    env: spawnEnv,
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: 'ignore',
