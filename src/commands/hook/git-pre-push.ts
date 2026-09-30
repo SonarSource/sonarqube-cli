@@ -93,8 +93,8 @@ export async function gitPrePush(
 }
 
 /**
- * Leaves out content the analyzer would have skipped for its size anyway, so a large blob is never read into memory.
- * A blob whose size git did not report is kept, leaving the read to refuse the push rather than pass it over.
+ * Leaves out content the analyzer would skip for its size, so a large blob is never read into memory. A blob with no
+ * reported size is kept, so the read refuses the push rather than passing over it.
  */
 async function dropOversizeBlobs(commits: CommitBlobs[]): Promise<CommitBlobs[]> {
   const sizes = await readBlobSizes(
@@ -163,7 +163,7 @@ function reportFindings(
     offending.push(commit);
   }
 
-  // A finding no pushed commit claims is still a finding, so print it rather than drop it.
+  // A finding no pushed commit claims still blocks, so print it rather than drop it.
   const unattributed = [...byScan.values()].flat();
   if (unattributed.length > 0 || offending.length === 0) {
     printSecretsFindingsOrStderr(unattributed, outcome.stderr, ctx.console);
@@ -208,7 +208,7 @@ async function resolveRemotesExclusion(remoteName: string | undefined): Promise<
 
 /**
  * Groups the blobs the push would transfer by the commit that introduced them, oldest first. One walk over every
- * pushed ref, so a commit two refs share is scanned once. `-c` also catches content a merge introduced itself.
+ * pushed ref, so a commit two refs share is scanned once; `-c` catches content a merge introduced itself.
  */
 async function getPushedCommitBlobs(
   refs: PushRef[],

@@ -119,10 +119,7 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
 
-/**
- * Stated to the analyzer rather than left to its default, so a caller filtering oversize content before sending it
- * filters on the same threshold the analyzer would have applied.
- */
+/** Stated to the analyzer explicitly, so a caller filtering oversize content first uses the same threshold. */
 export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
 
 /**
@@ -172,10 +169,7 @@ export async function runSecretsBinaryOnText(
   );
 }
 
-/**
- * Scans a batch of files handed over on stdin, each carrying its own path. The caller encodes the batch; this layer
- * only needs to know that the analyzer reads it from stdin.
- */
+/** Scans a batch of files handed over on stdin, each carrying its own path. */
 export async function runSecretsBinaryOnStream(
   binaryPath: string,
   writeStdin: (stdin: Writable) => Promise<void>,
