@@ -27,10 +27,15 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { analyzeSecrets, runSecretsBinaryOnText } from '@/commands/analyze/secrets.ts';
+import {
+  analyzeSecrets,
+  runSecretsBinaryOnStream,
+  runSecretsBinaryOnText,
+} from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -604,6 +609,33 @@ describe('runSecretsBinaryOnText', () => {
     await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'text', FAKE_AUTH);
     expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_AUTH_URL']).toBe(SONARCLOUD_URL);
     expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_TOKEN']).toBe(TEST_TOKEN);
+  });
+});
+
+describe('runSecretsBinaryOnStream', () => {
+  it('states the size limit rather than relying on the analyzer default', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', () => Promise.resolve(), FAKE_AUTH);
+
+    // A caller that drops oversize content before sending it has to filter on the same threshold.
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      String(MAX_SCANNED_FILE_SIZE),
+    ]);
+  });
+
+  it('hands the writer to the process as its stdin feed', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    const writer = () => Promise.resolve();
+
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', writer, FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][2].stdinWriter).toBe(writer);
+    expect(spawnSpy.mock.calls[0][2].stdinData).toBeUndefined();
   });
 });
 
