@@ -69,7 +69,7 @@ describe('getConfig', () => {
   it('states it is not set for an unset, non-sensitive key', async () => {
     await getConfig('log.level', {}, ctx);
 
-    expect(fake.findCall('print', 'Not set.')).toBeDefined();
+    expect(fake.findCall('print', '(not set)')).toBeDefined();
   });
 
   it('never prints the real value for a set, sensitive key', async () => {
@@ -77,14 +77,14 @@ describe('getConfig', () => {
 
     await getConfig('network.tls.clientPassphrase', {}, ctx);
 
-    expect(fake.findCall('print', 'Set (value hidden).')).toBeDefined();
+    expect(fake.findCall('print', '(hidden)')).toBeDefined();
     expect(fake.calls.some((call) => String(call.args[0]).includes('super-secret'))).toBe(false);
   });
 
   it('states it is not set for an unset, sensitive key without touching the keychain value', async () => {
     await getConfig('network.tls.clientPassphrase', {}, ctx);
 
-    expect(fake.findCall('print', 'Not set.')).toBeDefined();
+    expect(fake.findCall('print', '(not set)')).toBeDefined();
   });
 
   it('fails with an error for an unknown key', async () => {
