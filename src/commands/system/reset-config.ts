@@ -18,12 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 
-import { CONFIG_KEY_DEFINITIONS, type ConfigKey } from '@/core/config/config-schema.ts';
+import { CONFIG_KEY_DEFINITIONS } from '@/core/config/config-schema.ts';
 import { getCliDir, getConfigFile } from '@/core/config-constants.ts';
 import { deleteConfigSecret } from '@/core/host/keychain.ts';
-import { parseProperties } from '@/core/io/properties.ts';
 import { type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
 import { resolveSafePath } from './safe-path.ts';
@@ -36,12 +35,6 @@ const SENSITIVE_CONFIG_KEYS = CONFIG_KEY_DEFINITIONS.filter(
   (definition) => definition.sensitive,
 ).map((definition) => definition.key);
 
-// Telemetry and stats opt-outs survive a reset, matching the preserved telemetry state.
-const PRESERVED_CONFIG_KEYS: ReadonlySet<string> = new Set<ConfigKey>([
-  'telemetry.enabled',
-  'stats.enabled',
-]);
-
 function removeConfigFile(): boolean {
   const configFile = resolveSafePath(getConfigFile(), [getCliDir()]);
   if (!configFile) {
@@ -50,17 +43,7 @@ function removeConfigFile(): boolean {
   if (!existsSync(configFile)) {
     return false;
   }
-
-  const properties = [...parseProperties(readFileSync(configFile, 'utf-8'))];
-  const preserved = properties.filter(([key]) => PRESERVED_CONFIG_KEYS.has(key));
-  if (preserved.length === 0) {
-    rmSync(configFile, { force: true });
-    return true;
-  }
-  if (preserved.length === properties.length) {
-    return false;
-  }
-  writeFileSync(configFile, preserved.map(([key, value]) => `${key}=${value}\n`).join(''), 'utf-8');
+  rmSync(configFile, { force: true });
   return true;
 }
 
@@ -91,11 +74,15 @@ export async function clearConfig(): Promise<ConfigResetResult> {
 
   if (failures.length > 0) {
     return {
-      item: phaseItem('Config', 'warn', `Failed to remove CLI settings: ${failures.join('; ')}`),
+      item: phaseItem(
+        'Config',
+        'warn',
+        `Failed to remove CLI configuration: ${failures.join('; ')}`,
+      ),
     };
   }
   if (!removedAny) {
     return { item: phaseItem('Config', 'info', 'Nothing to clear.') };
   }
-  return { item: phaseItem('Config', 'done', 'Removed CLI settings.') };
+  return { item: phaseItem('Config', 'done', 'Removed CLI configuration.') };
 }

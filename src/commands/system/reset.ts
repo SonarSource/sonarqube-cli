@@ -35,6 +35,7 @@ import { clearStats } from './reset-stats.ts';
 
 export interface SystemResetOptions {
   force?: boolean;
+  all?: boolean;
 }
 
 interface CleanedFields {
@@ -67,7 +68,8 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, the local stats database, and CLI settings. Telemetry and stats settings are preserved.
+ * cached files, and the local stats database. With `all`, `sonar config` configuration
+ * is removed as well.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -113,8 +115,10 @@ export async function systemReset(
     const statsResult = clearStats();
     results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
 
-    const configResult = await clearConfig();
-    results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
+    if (options.all) {
+      const configResult = await clearConfig();
+      results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
+    }
   } finally {
     if (results.length > 0) {
       console.phase(

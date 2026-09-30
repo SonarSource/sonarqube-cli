@@ -493,41 +493,9 @@ describe('system reset --force', () => {
   );
 
   it(
-    'removes the CLI settings file',
+    'keeps CLI configuration without --all',
     async () => {
       harness.cliHome.writeFile('cli-config.properties', 'log.level=DEBUG\n');
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
-      expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'keeps telemetry and stats settings in the CLI settings file',
-    async () => {
-      harness.cliHome.writeFile(
-        'cli-config.properties',
-        'log.level=DEBUG\ntelemetry.enabled=false\nstats.enabled=false\n',
-      );
-
-      const result = await harness.run('system reset --force');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
-      expect(harness.cliHome.file('cli-config.properties').asText()).toBe(
-        'telemetry.enabled=false\nstats.enabled=false\n',
-      );
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'removes sensitive CLI settings from the keychain',
-    async () => {
       harness.cliHome.writeFile(
         'keychain.json',
         JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
@@ -536,7 +504,44 @@ describe('system reset --force', () => {
       const result = await harness.run('system reset --force');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/Config:.*Removed CLI settings/);
+      expect(result.stdout).not.toMatch(/Config:/);
+      expect(harness.cliHome.file('cli-config.properties').asText()).toBe('log.level=DEBUG\n');
+      expect(readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https']).toBe(
+        'http://user:secret@proxy',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes the CLI configuration file with --all',
+    async () => {
+      harness.cliHome.writeFile(
+        'cli-config.properties',
+        'log.level=DEBUG\ntelemetry.enabled=false\nstats.enabled=false\n',
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
+      expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes sensitive CLI configuration from the keychain with --all',
+    async () => {
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
       expect(
         readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https'],
       ).toBeUndefined();
@@ -545,9 +550,9 @@ describe('system reset --force', () => {
   );
 
   it(
-    'reports nothing to clear when no CLI settings exist',
+    'reports nothing to clear when no CLI configuration exists with --all',
     async () => {
-      const result = await harness.run('system reset --force');
+      const result = await harness.run('system reset --force --all');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toMatch(/Config:.*Nothing to clear/);
