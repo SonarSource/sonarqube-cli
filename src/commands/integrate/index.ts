@@ -26,6 +26,7 @@ import { codexIntegration } from './codex/declaration.ts';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { cursorIntegration } from './cursor/declaration.ts';
 import { GIT_INTEGRATIONS } from './git/tools';
+import { openCodeIntegration } from './opencode/declaration.ts';
 
 export const ALL_INTEGRATIONS = [
   antigravityIntegration,
@@ -33,6 +34,7 @@ export const ALL_INTEGRATIONS = [
   copilotIntegration,
   codexIntegration,
   cursorIntegration,
+  openCodeIntegration,
   ...GIT_INTEGRATIONS,
 ] as const;
 
