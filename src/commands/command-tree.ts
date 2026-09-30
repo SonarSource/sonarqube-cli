@@ -93,6 +93,7 @@ import {
   getConfig,
   VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
 } from './config/get.ts';
+import { setConfig } from './config/set.ts';
 import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
@@ -727,6 +728,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .argument('<key>', 'Config key to read')
     .addOption(formatOption(CONFIG_GET_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, key: string, options: ConfigGetOptions) => getConfig(key, options, ctx));
+
+  configure
+    .command('set')
+    .description('Store a sonar config value')
+    .argument('<key>', 'Config key to set')
+    .argument('<value>', 'Value to store')
+    .anonymousAction((ctx, key: string, value: string) => setConfig(key, value, ctx));
 
   configure
     .command('telemetry')

@@ -22,11 +22,11 @@ import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { getCliDir } from '@/core/config-constants.ts';
+import { CLI_CONFIG_FILE_NAME, getCliDir } from '@/core/config-constants.ts';
 import { parseProperties, setProperty } from '@/core/io/properties.ts';
 
 function getConfigFile(): string {
-  return join(getCliDir(), 'cli-config.properties');
+  return join(getCliDir(), CLI_CONFIG_FILE_NAME);
 }
 
 function readConfigContent(): string {
