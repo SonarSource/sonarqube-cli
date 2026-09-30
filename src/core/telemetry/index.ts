@@ -86,8 +86,12 @@ function spawnFlushWorker() {
     ? [process.execPath, process.argv[1], 'flush-telemetry']
     : [process.execPath, 'flush-telemetry'];
 
-  const proc = Bun.spawn(cmd, { env, stdio: ['ignore', 'ignore', 'ignore'], detached: true });
-  proc.unref();
+  try {
+    const proc = Bun.spawn(cmd, { env, stdio: ['ignore', 'ignore', 'ignore'], detached: true });
+    proc.unref();
+  } catch {
+    // A telemetry worker failure must not fail the command that recorded the event.
+  }
 }
 
 const FLUSH_TIMEOUT_MS = 60_000;
