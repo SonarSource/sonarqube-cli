@@ -170,9 +170,10 @@ async function writeSecret(account: string, value: string): Promise<void> {
   secretCache.set(account, value);
 }
 
-async function removeSecret(account: string): Promise<void> {
-  await getBackend().deletePassword(getServiceName(), account);
+async function removeSecret(account: string): Promise<boolean> {
+  const removed = await getBackend().deletePassword(getServiceName(), account);
   secretCache.delete(account);
+  return removed;
 }
 
 /**
@@ -220,8 +221,8 @@ export async function deleteStaleTokens(
  * For SonarQube Server: org parameter is ignored
  * Removes from cache
  */
-export function deleteToken(serverURL: string, org?: string): Promise<void> {
-  return removeSecret(generateKeychainAccount(serverURL, org));
+export async function deleteToken(serverURL: string, org?: string): Promise<void> {
+  await removeSecret(generateKeychainAccount(serverURL, org));
 }
 
 function generateConfigKeychainAccount(key: string): string {
@@ -236,6 +237,6 @@ export function saveConfigSecret(key: string, value: string): Promise<void> {
   return writeSecret(generateConfigKeychainAccount(key), value);
 }
 
-export function deleteConfigSecret(key: string): Promise<void> {
+export function deleteConfigSecret(key: string): Promise<boolean> {
   return removeSecret(generateConfigKeychainAccount(key));
 }

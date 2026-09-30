@@ -28,12 +28,14 @@ import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
+import { clearConfig } from './reset-config.ts';
 import { clearFilesystem } from './reset-filesystem.ts';
 import { removeAllIntegrations } from './reset-integrations.ts';
 import { clearStats } from './reset-stats.ts';
 
 export interface SystemResetOptions {
   force?: boolean;
+  all?: boolean;
 }
 
 interface CleanedFields {
@@ -66,7 +68,8 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, and the local stats database. Telemetry settings are preserved.
+ * cached files, and the local stats database. With `all`, `sonar config` configuration
+ * is removed as well.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -111,6 +114,11 @@ export async function systemReset(
 
     const statsResult = clearStats();
     results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
+
+    if (options.all) {
+      const configResult = await clearConfig();
+      results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
+    }
   } finally {
     if (results.length > 0) {
       console.phase(
