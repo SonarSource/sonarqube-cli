@@ -26,6 +26,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,
+  MAX_SCANNED_FILE_SIZE,
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
 } from '@/core/config-constants.ts';
@@ -120,7 +121,6 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 const SCAN_TIMEOUT_MS = 30000;
 
 /** Stated to the analyzer explicitly, so a caller filtering oversize content first uses the same threshold. */
-export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
 
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
