@@ -93,10 +93,10 @@ describe('allowlist secrets remove', () => {
   });
 
   it(
-    // No entry to seed a success case with: `add` (CLI-1185, #923) has a TTY gate the harness
-    // can never satisfy, so this exercises the one path reachable here — the real binary's own
-    // "not found" exit — which still proves the key and exit code are forwarded correctly
-    // end-to-end.
+    // This exercises the one path reachable in the harness: the real binary's own "not found"
+    // exit for a key that doesn't exist, which proves the key and exit code are forwarded
+    // correctly end-to-end. (Adding a real entry requires interactive TTY, so that scenario
+    // is tested in the `clear` test suite instead, where it's security-critical.)
     'forwards the exit code when the binary reports the key was not found',
     async () => {
       harness.state().withSecretsBinaryInstalled();
@@ -135,11 +135,10 @@ describe('allowlist secrets clear', () => {
   );
 
   it(
-    // Seeds one real entry via the fixture binary directly (bypassing our own `add`, which has
-    // a TTY gate the harness can never satisfy — CLI-1185, #923) so this exercises the
-    // security-relevant case: the binary's own confirm-or-force gate refusing a non-interactive
-    // `clear` when there is something to lose. No code of ours is involved in that refusal —
-    // inherited stdio means this exact wording is sonar-secrets-cli's own output.
+    // Seeds one real entry via the fixture binary directly to exercise the security-relevant
+    // case: the binary's own confirm-or-force gate refusing a non-interactive clear when
+    // there is something to lose. This is a critical security check that must pass even when
+    // our wrapper isn't involved. Inherited stdio means the output is sonar-secrets-cli's own.
     'without --force, lets the binary refuse non-interactively when entries exist',
     async () => {
       harness.state().withSecretsBinaryInstalled();
@@ -155,12 +154,11 @@ describe('allowlist secrets clear', () => {
 });
 
 /**
- * Adds one entry to the allowlist by invoking the real fixture binary directly, bypassing our
- * own `add` (which has a TTY gate the test harness can never satisfy — CLI-1185, #923). Spawns
- * with the harness's own composed environment, not the test runner's ambient one, so it writes
- * to the exact same isolated allowlist the CLI-under-test will read via `harness.run(...)`.
- * `harness.env()` also performs the harness's lazy setup (writing state.json and copying the
- * fixture binary into place), so no separate throwaway CLI call is needed to trigger it first.
+ * Adds one entry to the allowlist by invoking the real fixture binary directly.
+ * Spawns with the harness's own composed environment (via `harness.env()`) so the entry
+ * lands in the exact same isolated allowlist the CLI-under-test will read via `harness.run(...)`.
+ * `harness.env()` also performs lazy setup (writing state.json, copying the fixture binary),
+ * so no separate throwaway CLI call is needed to trigger it first.
  */
 async function seedAllowlistEntry(
   harness: TestHarness,
