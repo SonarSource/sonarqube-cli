@@ -45,7 +45,7 @@ describe('config get', () => {
       const result = await harness.run('config get log.level');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Not set.');
+      expect(result.stdout + result.stderr).toContain('(not set)');
     },
     { timeout: 15000 },
   );
@@ -56,7 +56,7 @@ describe('config get', () => {
       const result = await harness.run('config get network.tls.clientPassphrase');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Not set.');
+      expect(result.stdout + result.stderr).toContain('(not set)');
     },
     { timeout: 15000 },
   );
