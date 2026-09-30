@@ -78,7 +78,7 @@ export async function systemReset(
   const { console } = ctx;
   if (!options.force) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar system reset --force');
-    if (!(await confirmDestructiveAction(console))) {
+    if (!(await confirmDestructiveAction(console, options.all === true))) {
       return;
     }
   }
@@ -147,13 +147,15 @@ export async function systemReset(
   console.success('CLI has been successfully reset to factory settings.');
 }
 
-async function confirmDestructiveAction(console: Console): Promise<boolean> {
+async function confirmDestructiveAction(console: Console, all: boolean): Promise<boolean> {
   if (!process.stdin.isTTY) {
     console.print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
     return false;
   }
   console.warn(
-    'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
+    all
+      ? 'This will remove all local credentials, `sonar config` settings, uninstall Sonar binaries, and break active tool integrations.'
+      : 'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
   );
   const answer = await console.textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {
