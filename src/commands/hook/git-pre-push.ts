@@ -22,10 +22,10 @@
 // call, one scan per commit, so a finding still names the commit that introduced it.
 
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
-import { MAX_SCANNED_FILE_SIZE } from '@/commands/analyze/secrets.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
 import { writeChunk } from '@/core/process/process.ts';
