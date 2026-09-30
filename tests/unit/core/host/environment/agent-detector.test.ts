@@ -27,6 +27,7 @@ import {
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
+  isOpenCodeAgentEnv,
 } from '@/core/host/environment/agent-detector.ts';
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
@@ -169,9 +170,43 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isOpenCodeAgentEnv', () => {
+    it('is true when OPENCODE is set, regardless of value', () => {
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: '1' }))).toBe(true);
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: 'true' }))).toBe(true);
+    });
+
+    it('is false when OPENCODE is absent or empty', () => {
+      expect(isOpenCodeAgentEnv(env({}))).toBe(false);
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('OPENCODE', '1', () => {
+        expect(isOpenCodeAgentEnv()).toBe(true);
+      });
+    });
+  });
+
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
+    });
+
+    it('detects opencode when only its marker is set', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers opencode over cursor when both markers are set (opencode launched from a Cursor terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CURSOR_TRACE_ID: 't' }))).toBe('opencode');
+    });
+
+    it('prefers opencode over claude when both markers are set (opencode launched from a Claude Code terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CLAUDECODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers antigravity over opencode when both markers are set', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', ANTIGRAVITY_AGENT: '1' }))).toBe('antigravity');
     });
 
     it('prefers antigravity over claude and cursor when Antigravity and Claude markers are set', () => {
