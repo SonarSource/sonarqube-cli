@@ -93,10 +93,6 @@ describe('allowlist secrets remove', () => {
   });
 
   it(
-    // This exercises the one path reachable in the harness: the real binary's own "not found"
-    // exit for a key that doesn't exist, which proves the key and exit code are forwarded
-    // correctly end-to-end. (Adding a real entry requires interactive TTY, so that scenario
-    // is tested in the `clear` test suite instead, where it's security-critical.)
     'forwards the exit code when the binary reports the key was not found',
     async () => {
       harness.state().withSecretsBinaryInstalled();
@@ -105,6 +101,26 @@ describe('allowlist secrets remove', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('No entry found with key: nonexistent-key');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    // Full round trip against a real, seeded entry: proves `remove` actually removes it from
+    // the allowlist the binary reads, not just that the CLI forwards a key string.
+    'removes a real, seeded entry, and it no longer shows up in the allowlist afterward',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'roundtrip-key', 'roundtrip-secret-value');
+
+      const removeResult = await harness.run('allowlist secrets remove roundtrip-key');
+      expect(removeResult.exitCode).toBe(0);
+      expect(removeResult.stdout + removeResult.stderr).toContain(
+        'Removed entry with key: roundtrip-key',
+      );
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
     },
     { timeout: 15000 },
   );
@@ -148,6 +164,24 @@ describe('allowlist secrets clear', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('use --force to skip');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    // Full round trip against a real, seeded entry: proves `clear --force` actually empties
+    // the allowlist the binary reads, not just that the CLI forwards the flag.
+    'clears a real, seeded entry with --force, and the allowlist is empty afterward',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'roundtrip-key', 'roundtrip-secret-value');
+
+      const clearResult = await harness.run('allowlist secrets clear --force');
+      expect(clearResult.exitCode).toBe(0);
+      expect(clearResult.stdout + clearResult.stderr).toContain('Cleared 1 entry from allowlist');
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
     },
     { timeout: 15000 },
   );
