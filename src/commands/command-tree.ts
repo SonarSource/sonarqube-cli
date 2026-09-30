@@ -144,6 +144,11 @@ import {
   VALID_STATUSES,
 } from './list/issues.ts';
 import {
+  listOrganizations,
+  type ListOrgOptions,
+  VALID_FORMATS as ORG_VALID_FORMATS,
+} from './list/org.ts';
+import {
   listProjects,
   type ListProjectsOptions,
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
@@ -299,7 +304,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
-    .description('List issues and projects from SonarQube Cloud or Server')
+    .description('List issues, projects and organizations from SonarQube Cloud or Server')
     .rootHelp({
       category: 'data',
     });
@@ -346,6 +351,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
+
+  const listOrgFormatOption = formatOption(ORG_VALID_FORMATS, 'table');
+  list
+    .command('orgs')
+    .alias('org')
+    .description('List organizations you have access to (SonarQube Cloud only)')
+    .showUpdateNotification(isTableFormatOption)
+    .addOption(listOrgFormatOption)
+    .addOption(pageOption)
+    .addOption(pageSizeOption)
+    .authenticatedAction((ctx, options: ListOrgOptions) => listOrganizations(options, ctx));
 
   const qualityGate = COMMAND_TREE.command('quality-gate')
     .alias('qg')
