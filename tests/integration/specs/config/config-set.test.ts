@@ -93,4 +93,37 @@ describe('config set', () => {
     },
     { timeout: 15000 },
   );
+
+  it(
+    'prompts for the value interactively, without echoing it, when omitted',
+    async () => {
+      const session = harness.runInteractive('config set network.tls.clientPassphrase', {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+      await session.waitText("Value for 'network.tls.clientPassphrase'");
+      session.write('super-secret-passphrase');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('super-secret-passphrase');
+      const keychain = JSON.parse(readFileSync(harness.keychainJsonFile, 'utf-8'));
+      expect(keychain.tokens['config/network.tls.clientPassphrase']).toBe(
+        'super-secret-passphrase',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 and writes nothing when the value is omitted on a non-interactive terminal',
+    async () => {
+      const result = await harness.run('config set network.tls.clientPassphrase');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Non-interactive mode requires a value.');
+      expect(existsSync(harness.keychainJsonFile)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
 });

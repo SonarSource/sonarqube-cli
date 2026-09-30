@@ -19,20 +19,41 @@
  */
 // Store a sonar config value
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getKeyDefinition, setConfigValue } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
+import type { Console } from '@/core/ui/console.ts';
+
+function canPrompt(): boolean {
+  return process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
+}
+
+/** Prompts for the value with a masked, non-echoing input when the terminal is interactive. */
+async function promptForValue(console: Console, key: ConfigKey): Promise<string> {
+  if (!canPrompt()) {
+    throw new CommandFailedError(`Non-interactive mode requires a value.`, {
+      remediationHint: `Run 'sonar config set ${key} <value>'.`,
+    });
+  }
+  const value = await console.passwordPrompt(`Value for '${key}':`);
+  if (value === null) {
+    throw new CommandFailedError(`Aborted: no value provided for '${key}'.`);
+  }
+  return value;
+}
 
 export async function setConfig(
   key: string,
-  value: string,
+  value: string | undefined,
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   const configKey = key as ConfigKey;
   // Throws InvalidOptionError for an unknown key before any store is written to.
   const definition = getKeyDefinition(configKey);
-  await setConfigValue(configKey, value);
+  const resolvedValue = value ?? (await promptForValue(console, configKey));
+  await setConfigValue(configKey, resolvedValue);
   console.success(
     definition.sensitive ? `Saved '${configKey}' to the system keychain.` : `Saved '${configKey}'.`,
   );
