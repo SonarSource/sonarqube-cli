@@ -94,6 +94,60 @@ export function spawnCliProcess(
   return { proc, timeoutMs, startedAt };
 }
 
+/**
+ * Runs the CLI attached to a real pty via the Unix `script` utility, so `process.stdin.isTTY`
+ * is genuinely true in the CLI process — something no other harness method can provide.
+ * `run()`/`runInteractive()` always give the child a pipe (`run()` no stdin at all,
+ * `runInteractive()` a piped one), never a real terminal.
+ *
+ * macOS (BSD) and Linux (util-linux) `script` take different arguments, so this branches on
+ * `process.platform`. Not supported on Windows, which has no equivalent without extra tooling —
+ * callers must guard with `it.skipIf(IS_WINDOWS)`.
+ */
+export async function runCliWithRealTty(
+  command: string,
+  env: Record<string, string>,
+  options: { cwd: string; timeoutMs?: number },
+): Promise<{ exitCode: number; stdout: string; stderr: string; durationMs: number }> {
+  if (IS_WINDOWS) {
+    throw new Error('runCliWithRealTty is not supported on Windows; guard callers with skipIf.');
+  }
+
+  const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
+  const binaryPath = getBinaryPath(coverageMode);
+  const args = tokenize(command);
+  const scriptArgv =
+    process.platform === 'darwin'
+      ? ['script', '-q', '/dev/null', binaryPath, ...args]
+      : ['script', '-qc', shellJoin([binaryPath, ...args]), '/dev/null'];
+
+  const startedAt = Date.now();
+  mkdirSync(options.cwd, { recursive: true });
+  const proc = Bun.spawn(scriptArgv, {
+    env: applyIsolatedSpawnEnv(env),
+    stdout: 'pipe',
+    stderr: 'pipe',
+    stdin: 'ignore',
+    cwd: options.cwd,
+  });
+
+  const timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
+  const timer = setTimeout(() => proc.kill(), timeoutMs);
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  clearTimeout(timer);
+
+  return { exitCode, stdout, stderr, durationMs: Date.now() - startedAt };
+}
+
+/** Quotes each argument for a POSIX shell `-c` string (single-quote, escaping embedded ones). */
+function shellJoin(args: string[]): string {
+  return args.map((arg) => `'${arg.replaceAll("'", "'\\''")}'`).join(' ');
+}
+
 function wrapSpawnedProcess(proc: ReturnType<typeof Bun.spawn>): InteractiveProcessHandle {
   return {
     stdin: isSessionStdin(proc.stdin) ? proc.stdin : null,
