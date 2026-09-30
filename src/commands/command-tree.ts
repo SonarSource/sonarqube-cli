@@ -88,6 +88,7 @@ import {
   type AuthStatusOptions,
   VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
 } from './auth/status.ts';
+import { getConfig } from './config/get.ts';
 import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
@@ -732,6 +733,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   configure.rootHelp({
     category: 'cli-management',
   });
+
+  configure
+    .command('get')
+    .description('Print a stored sonar config value')
+    .argument('<key>', 'Config key to read')
+    .anonymousAction((ctx, key: string) => getConfig(key, ctx));
 
   configure
     .command('telemetry')
