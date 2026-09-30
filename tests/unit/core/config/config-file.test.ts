@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getConfigFileValue, setConfigFileValue } from '@/core/config/config-file.ts';
-import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { CLI_CONFIG_FILE_NAME, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 
 const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
 let testSonarUserHome: string;
@@ -36,7 +36,7 @@ let testConfigFile: string;
 
 beforeEach(async () => {
   testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-config-file-test-'));
-  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'cli-config.properties');
+  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', CLI_CONFIG_FILE_NAME);
   process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
 });
 
