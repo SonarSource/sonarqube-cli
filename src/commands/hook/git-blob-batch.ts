@@ -19,7 +19,6 @@
  */
 
 // Reads blob contents out of git and encodes them as the analyzer's batched-stdin contract.
-// Git's own framing never reaches the analyzer: this module is the boundary between the two.
 
 import { spawnProcessCapturingBytes } from '@/core/process/process.ts';
 
@@ -38,8 +37,8 @@ const LINE_FEED = 0x0a;
 const RECORD_TERMINATOR = Buffer.from('\n');
 
 /**
- * Reads every blob's exact bytes. Returns `null` when git failed or answered with anything other than one blob per
- * request, so a caller can refuse to report a clean scan of content it never read.
+ * Reads every blob's exact bytes. `null` when git failed or answered with anything other than one blob per request,
+ * so a caller can refuse to report a clean scan of content it never read.
  */
 export async function readBlobContents(
   blobs: GitBlobRef[],
@@ -54,15 +53,11 @@ export async function readBlobContents(
   if (result.exitCode !== 0) return null;
 
   const contents = parseBatchOutput(result.stdout);
-  // A short or unparseable answer means we did not read what we asked for, so refuse rather than under-report.
   if (contents?.length !== blobs.length) return null;
   return blobs.map((blob, index) => ({ blob, content: contents[index] }));
 }
 
-/**
- * Asks git for every blob's size without its content. Returns `null` when git failed, leaving a caller to send the
- * content unfiltered rather than refuse a push over a size check.
- */
+/** Asks git for sizes without content. `null` when git failed, so a caller can send everything unfiltered. */
 export async function readBlobSizes(
   blobs: GitBlobRef[],
   cwd: string,
@@ -77,7 +72,7 @@ export async function readBlobSizes(
 
   const sizes = new Map<string, number>();
   for (const line of result.stdout.toString('utf-8').split('\n')) {
-    // An object git does not have prints `<oid> missing`, which has no size and so never gets an entry.
+    // git prints `<oid> missing` for an object it does not have, with no size to record.
     const [oid, , size] = line.split(' ');
     const byteCount = Number(size);
     if (oid && Number.isInteger(byteCount) && byteCount >= 0) sizes.set(oid, byteCount);
@@ -113,7 +108,7 @@ function parseBatchOutput(stdout: Buffer): Buffer[] | null {
   while (offset < stdout.length) {
     const headerEnd = stdout.indexOf(LINE_FEED, offset);
     if (headerEnd < 0) return null;
-    // A requested object git does not have prints `<oid> missing`, which has no size and no content.
+    // git prints `<oid> missing` for an object it does not have, with no size and no content.
     const size = Number(stdout.toString('ascii', offset, headerEnd).split(' ')[2]);
     if (!Number.isInteger(size) || size < 0) return null;
     const start = headerEnd + 1;
