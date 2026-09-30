@@ -94,11 +94,17 @@ export function spawnCliProcess(
   return { proc, timeoutMs, startedAt };
 }
 
+/** Text to type into the pty once `waitFor` appears in the output. */
+export interface TtyResponse {
+  waitFor: string;
+  send: string;
+}
+
 /** Runs the CLI on a real pty via `script(1)` so `process.stdin.isTTY` is true; Unix only. */
 export async function runCliWithRealTty(
   command: string,
   env: Record<string, string>,
-  options: { cwd: string; timeoutMs?: number },
+  options: { cwd: string; timeoutMs?: number; responses?: TtyResponse[] },
 ): Promise<{ exitCode: number; stdout: string; stderr: string; durationMs: number }> {
   if (IS_WINDOWS) {
     throw new Error('runCliWithRealTty is not supported on Windows; guard callers with skipIf.');
@@ -121,24 +127,58 @@ export async function runCliWithRealTty(
     const unique = `${Date.now()}-${crypto.randomUUID()}`;
     spawnEnv.COVERAGE_OUTPUT_FILE = join(COVERAGE_RAW_DIR, `coverage-${unique}.json`);
   }
-  const proc = Bun.spawn(scriptArgv, {
+  const pending = [...(options.responses ?? [])];
+  const answering = pending.length > 0;
+  // BSD `script` rejects socket stdin (Bun's pipes, and FIFOs on macOS), so `cat` relays into a
+  // real pipe. It is backgrounded so sh exits with `script`, and stdin stays open until then,
+  // since EOF makes `script` send ^D ahead of queued input. `<&0`: sh would otherwise give a
+  // background job /dev/null; `2>/dev/null`: keeps it off our stderr pipe.
+  const argv = answering
+    ? ['sh', '-c', `{ cat <&0 2>/dev/null & } | ${shellJoin(scriptArgv)}`]
+    : scriptArgv;
+  const proc = Bun.spawn(argv, {
     env: spawnEnv,
     stdout: 'pipe',
     stderr: 'pipe',
-    stdin: 'ignore',
+    // Kept as 'ignore' without responses: an immediate EOF is what makes unanswered prompts fail fast.
+    stdin: answering ? 'pipe' : 'ignore',
     cwd: options.cwd,
   });
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
   const timer = setTimeout(() => proc.kill(), timeoutMs);
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
+    answerPrompts(requirePipedStream(proc.stdout, 'stdout'), proc.stdin, pending),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
   clearTimeout(timer);
+  if (isSessionStdin(proc.stdin)) void proc.stdin.end();
 
   return { exitCode, stdout, stderr, durationMs: Date.now() - startedAt };
+}
+
+async function answerPrompts(
+  output: ReadableStream<Uint8Array>,
+  stdin: unknown,
+  pending: TtyResponse[],
+): Promise<string> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let text = '';
+  let searchFrom = 0;
+  for await (const chunk of output) {
+    text += decoder.decode(chunk, { stream: true });
+    while (pending.length > 0 && isSessionStdin(stdin)) {
+      const next = pending[0];
+      const at = text.indexOf(next.waitFor, searchFrom);
+      if (at === -1) break;
+      searchFrom = at + next.waitFor.length;
+      pending.shift();
+      stdin.write(encoder.encode(next.send));
+    }
+  }
+  return text + decoder.decode();
 }
 
 /** Quotes each argument for a POSIX shell `-c` string (single-quote, escaping embedded ones). */

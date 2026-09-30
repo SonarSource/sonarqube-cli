@@ -215,6 +215,27 @@ describe('allowlist secrets clear', () => {
     { timeout: 15000 },
   );
 
+  it.skipIf(IS_WINDOWS)(
+    'without --force at a real terminal, shows exactly one confirmation prompt and clears on "y"',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'prompt-key', 'prompt-secret-value');
+
+      const result = await harness.runWithRealTty('allowlist secrets clear', {
+        responses: [{ waitFor: 'Are you sure?', send: 'y\n' }],
+      });
+
+      const output = result.stdout + result.stderr;
+      expect(output.split('Are you sure?')).toHaveLength(2);
+      expect(output).toContain('Cleared 1 entry from allowlist');
+      expect(result.exitCode).toBe(0);
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
+    },
+    { timeout: 15000 },
+  );
+
   it(
     // Full round trip against a real, seeded entry: proves `clear --force` actually empties
     // the allowlist the binary reads, not just that the CLI forwards the flag.
