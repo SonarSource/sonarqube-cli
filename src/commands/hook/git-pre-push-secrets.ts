@@ -66,8 +66,8 @@ export async function runSecretsStage(
 }
 
 /**
- * Scans a whole push in one analyzer call, the caller writing one `scan` per commit. Returns `null` when the scan
- * could not run — reported, then allowed through, as the hook has always treated an analyzer failure.
+ * Scans a whole push in one analyzer call, the caller writing one `scan` per commit. `null` when the scan could not
+ * run — reported, then allowed through, as the hook has always treated an analyzer failure.
  */
 export async function scanCommitScans(
   writeScans: (stdin: Writable) => Promise<void>,

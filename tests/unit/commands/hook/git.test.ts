@@ -337,7 +337,7 @@ describe('gitPrePush', () => {
     return Buffer.concat(written).toString('utf-8');
   }
 
-  /** Drives the writer the hook hands the analyzer, so the batch is built exactly as it would be in production. */
+  /** Drives the writer the hook hands the analyzer, so the batch is built as it is in production. */
   function analyzerReturns(result: { exitCode: number; stdout: string; stderr: string }): void {
     runSecretsBinaryOnStreamSpy.mockImplementation(
       async (_binaryPath: string, writeStdin: (stdin: Writable) => Promise<void>) => {
@@ -673,7 +673,7 @@ describe('gitPrePush', () => {
     }
     expect(thrown).toBeInstanceOf(CommandFailedError);
     expect((thrown as CommandFailedError).message).toContain('was not scanned');
-    // The analyzer is already running by then; what matters is that it was sent nothing to report on.
+    // The analyzer is already running by then; what matters is that it got nothing to report on.
     expect(writtenBatch()).toBe('');
   });
 
