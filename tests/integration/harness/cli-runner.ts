@@ -146,7 +146,11 @@ export async function runCliWithRealTty(
   });
 
   const timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
-  const timer = setTimeout(() => proc.kill(), timeoutMs);
+  const timer = setTimeout(() => {
+    // Ending stdin first lets `cat` exit and `script` pass EOF on, so the chain unwinds instead of orphaning.
+    if (isSessionStdin(proc.stdin)) void proc.stdin.end();
+    proc.kill();
+  }, timeoutMs);
   const [stdout, stderr, exitCode] = await Promise.all([
     answerPrompts(requirePipedStream(proc.stdout, 'stdout'), proc.stdin, pending),
     new Response(proc.stderr).text(),
