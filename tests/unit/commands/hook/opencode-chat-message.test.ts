@@ -142,13 +142,13 @@ describe('opencodeChatMessage', () => {
             ruleKey: 'secrets:S1',
             description: 'first',
             location: { startLine: 1, startColumn: 0, endLine: 1, endColumn: 3 },
-            maskedSecret: 'AAA',
+            maskedSecret: 'X',
           },
           {
             ruleKey: 'secrets:S2',
             description: 'second',
             location: { startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 },
-            maskedSecret: 'BBB',
+            maskedSecret: 'YYYYY',
           },
         ],
       }),
@@ -158,7 +158,7 @@ describe('opencodeChatMessage', () => {
 
     await opencodeChatMessage(makeCtx());
 
-    expect(lastDecision(stdoutSpy).redactedText).toBe('AAA BBB');
+    expect(lastDecision(stdoutSpy).redactedText).toBe('X YYYYY');
   });
 
   it('masks a secret spanning multiple lines across all of its lines', async () => {
