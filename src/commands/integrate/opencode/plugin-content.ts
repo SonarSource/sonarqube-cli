@@ -32,7 +32,6 @@ interface ChatMessageDecision {
   block: boolean;
   reason?: string;
   redactedText?: string;
-  secretsFound?: number;
 }
 
 // Unlike the other agents' shell hooks (which fail OPEN — skip scanning — when the \`sonar\`
@@ -89,7 +88,7 @@ export const SonarPlugin: Plugin = async ({ $ }) => {
       // output.parts while iterating it would make the for-of visit the new
       // (synthetic) part too, since array iterators re-check .length live.
       const newParts: any[] = [];
-      let totalSecretsFound = 0;
+      let secretsMasked = false;
       const blockedReasons: string[] = [];
 
       // Unlike tool.execute.before, a thrown Error here is NOT surfaced usefully to the user —
@@ -123,7 +122,7 @@ export const SonarPlugin: Plugin = async ({ $ }) => {
 
         if (decision.redactedText !== undefined) {
           part.text = decision.redactedText;
-          totalSecretsFound += decision.secretsFound ?? 0;
+          secretsMasked = true;
         }
       }
 
@@ -134,11 +133,11 @@ export const SonarPlugin: Plugin = async ({ $ }) => {
             \`<system-reminder>\\nSonar Vortex: this message could not be verified for secrets (\${blockedReasons.join('; ')}) and was replaced with a placeholder — it was NOT sent as originally written. Tell the user their message was blocked and why, and ask them to retry once the issue is resolved.\\n</system-reminder>\`,
           ),
         );
-      } else if (totalSecretsFound > 0) {
+      } else if (secretsMasked) {
         newParts.push(
           makeSyntheticPart(
             output,
-            \`<system-reminder>\\nSonar Vortex: \${totalSecretsFound} secret(s) were detected in this message and masked before being sent. Tell the user which secret(s) were found and masked, and remind them to rotate any real credentials.\\n</system-reminder>\`,
+            \`<system-reminder>\\nSonar Vortex: secrets were detected in this message, so it was entirely masked and was NOT sent as originally written. Tell the user, remind them to rotate any real credentials, and ask them to resend the message without the secret.\\n</system-reminder>\`,
           ),
         );
       }

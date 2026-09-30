@@ -32,7 +32,10 @@ import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '../../../../src/commands/hook/hook-dependencies.ts';
-import { opencodeChatMessage } from '../../../../src/commands/hook/opencode-chat-message.ts';
+import {
+  OPENCODE_MASKED_MESSAGE_TEXT,
+  opencodeChatMessage,
+} from '../../../../src/commands/hook/opencode-chat-message.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
@@ -57,13 +60,11 @@ function lastDecision(stdoutSpy: ReturnType<typeof spyOn>): {
   block: boolean;
   reason?: string;
   redactedText?: string;
-  secretsFound?: number;
 } {
   return JSON.parse((stdoutSpy.mock.calls[0][0] as string).trim()) as {
     block: boolean;
     reason?: string;
     redactedText?: string;
-    secretsFound?: number;
   };
 }
 
@@ -109,7 +110,7 @@ describe('opencodeChatMessage', () => {
     expect(result.agentSessionId).toBe('session-1');
   });
 
-  it('returns the masked text and count when secrets are found', async () => {
+  it('replaces the whole message with the masked text when secrets are found', async () => {
     scanTextSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: JSON.stringify({
@@ -127,50 +128,22 @@ describe('opencodeChatMessage', () => {
 
     await opencodeChatMessage(makeCtx());
 
-    const decision = lastDecision(stdoutSpy);
-    expect(decision.block).toBe(false);
-    expect(decision.secretsFound).toBe(1);
-    expect(decision.redactedText).toBe('my token is ***MASKED***, use it');
-  });
-
-  it('masks multiple secrets on the same line right-to-left without shifting earlier columns', async () => {
-    scanTextSpy.mockResolvedValue({
-      exitCode: EXIT_CODE_SECRETS_FOUND,
-      stdout: JSON.stringify({
-        issues: [
-          {
-            ruleKey: 'secrets:S1',
-            description: 'first',
-            location: { startLine: 1, startColumn: 0, endLine: 1, endColumn: 3 },
-            maskedSecret: 'AAA',
-          },
-          {
-            ruleKey: 'secrets:S2',
-            description: 'second',
-            location: { startLine: 1, startColumn: 4, endLine: 1, endColumn: 7 },
-            maskedSecret: 'BBB',
-          },
-        ],
-      }),
-      stderr: '',
+    expect(lastDecision(stdoutSpy)).toEqual({
+      block: false,
+      redactedText: OPENCODE_MASKED_MESSAGE_TEXT,
     });
-    readStdinJsonSpy.mockResolvedValue({ text: 'foo bar', sessionID: 'session-1' });
-
-    await opencodeChatMessage(makeCtx());
-
-    expect(lastDecision(stdoutSpy).redactedText).toBe('AAA BBB');
   });
 
-  it('masks a secret spanning multiple lines across all of its lines', async () => {
+  it('masks the whole message even when the reported location covers only part of the secret', async () => {
     scanTextSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
       stdout: JSON.stringify({
         issues: [
           {
-            ruleKey: 'secrets:S1',
-            description: 'PEM key',
-            location: { startLine: 1, startColumn: 6, endLine: 3, endColumn: 17 },
-            maskedSecret: '***MASKED***',
+            ruleKey: 'secrets:S6706',
+            description: 'RSA Private Key',
+            location: { startLine: 1, startColumn: 6, endLine: 1, endColumn: 31 },
+            maskedSecret: '---****************************',
           },
         ],
       }),
@@ -184,29 +157,23 @@ describe('opencodeChatMessage', () => {
     await opencodeChatMessage(makeCtx());
 
     const decision = lastDecision(stdoutSpy);
-    expect(decision.block).toBe(false);
-    expect(decision.redactedText).toBe('key = ***MASKED*** end');
+    expect(decision.redactedText).toBe(OPENCODE_MASKED_MESSAGE_TEXT);
+    expect(decision.redactedText).not.toContain('abcdef');
   });
 
-  it('blocks when a reported secret has no location or mask to redact it with', async () => {
+  it('masks the whole message when secrets are found but no issue could be parsed', async () => {
     scanTextSpy.mockResolvedValue({
       exitCode: EXIT_CODE_SECRETS_FOUND,
-      stdout: JSON.stringify({
-        issues: [
-          {
-            ruleKey: 'secrets:S1',
-            description: 'unmaskable finding',
-          },
-        ],
-      }),
+      stdout: 'not json',
       stderr: '',
     });
 
     await opencodeChatMessage(makeCtx());
 
-    const decision = lastDecision(stdoutSpy);
-    expect(decision.block).toBe(true);
-    expect(decision.redactedText).toBeUndefined();
+    expect(lastDecision(stdoutSpy)).toEqual({
+      block: false,
+      redactedText: OPENCODE_MASKED_MESSAGE_TEXT,
+    });
   });
 
   it('allows without scanning when text is empty', async () => {

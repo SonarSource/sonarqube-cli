@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { generateKeyPairSync } from 'node:crypto';
 import { chmodSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -26,6 +27,7 @@ import {
   SECRETS_INACTIVE_BINARY_MISSING,
   SECRETS_INACTIVE_UNAUTHENTICATED,
 } from '@/commands/hook/hook-dependencies.ts';
+import { OPENCODE_MASKED_MESSAGE_TEXT } from '@/commands/hook/opencode-chat-message.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
@@ -42,7 +44,6 @@ interface Decision {
   block: boolean;
   reason?: string;
   redactedText?: string;
-  secretsFound?: number;
 }
 
 function messagePayload(text: string): string {
@@ -153,49 +154,46 @@ describe('sonar hook opencode-chat-message', () => {
   );
 
   it(
-    'exits 0 and masks the secret in place without blocking the message',
+    'exits 0 and masks the whole message when it contains a secret',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
-      const before = 'please push a commit using my token ';
-      const after = ' to the remote';
 
       const result = await harness.runWithStdin(
         'hook opencode-chat-message',
-        messagePayload(`${before}${GITHUB_TEST_TOKEN}${after}`),
+        messagePayload(`please push a commit using my token ${GITHUB_TEST_TOKEN} to the remote`),
       );
 
       expect(result.exitCode).toBe(0);
-      const decision = parseDecision(result.stdout);
-      expect(decision.block).toBe(false);
-      expect(decision.secretsFound).toBe(1);
-      expect(decision.redactedText).toBeDefined();
-      expect(decision.redactedText).not.toContain(GITHUB_TEST_TOKEN);
-      expect(decision.redactedText?.startsWith(before)).toBe(true);
-      expect(decision.redactedText?.endsWith(after)).toBe(true);
+      expect(parseDecision(result.stdout)).toEqual({
+        block: false,
+        redactedText: OPENCODE_MASKED_MESSAGE_TEXT,
+      });
     },
     { timeout: 30000 },
   );
 
   it(
-    'exits 0 and masks a secret that is not on the first line',
+    'exits 0 and masks the whole message for a multi-line private key',
     async () => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
-      const firstLine = 'here is my configuration:';
-      const lastLine = 'can you use it to push?';
+      const { privateKey } = generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
+        publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
+      });
+      const keyBodyLine = privateKey.split('\n')[2];
 
       const result = await harness.runWithStdin(
         'hook opencode-chat-message',
-        messagePayload(`${firstLine}\ntoken=${GITHUB_TEST_TOKEN}\n${lastLine}`),
+        messagePayload(`before\n${privateKey}\nafter`),
       );
 
       expect(result.exitCode).toBe(0);
       const decision = parseDecision(result.stdout);
-      expect(decision.block).toBe(false);
-      expect(decision.redactedText).not.toContain(GITHUB_TEST_TOKEN);
-      expect(decision.redactedText?.startsWith(`${firstLine}\ntoken=`)).toBe(true);
-      expect(decision.redactedText?.endsWith(`\n${lastLine}`)).toBe(true);
+      expect(decision.redactedText).toBe(OPENCODE_MASKED_MESSAGE_TEXT);
+      expect(decision.redactedText).not.toContain(keyBodyLine);
     },
     { timeout: 30000 },
   );

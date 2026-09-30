@@ -31,11 +31,7 @@ import type { SecretsCallerCommand } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  runSecretsBinary,
-  runSecretsBinaryOnText,
-  type SecretsJsonIssue,
-} from '../analyze/secrets.ts';
+import { runSecretsBinary, runSecretsBinaryOnText } from '../analyze/secrets.ts';
 
 export interface HookDependencies {
   auth: ResolvedAuth;
@@ -108,29 +104,14 @@ export async function runAndEmitTextSecretsScan(
   text: string,
   ctx: CommandInvocationContext,
 ): Promise<number> {
-  const { exitCode } = await runAndEmitTextSecretsScanWithIssues(callerCommand, deps, text, ctx);
-  return exitCode;
-}
-
-/**
- * Same scan as {@link runAndEmitTextSecretsScan}, but also returns the parsed issues (location +
- * masked replacement per finding) instead of discarding them — needed by callers that redact the
- * text in place rather than only deciding whether to block (e.g. OpenCode's `chat.message` hook).
- */
-export async function runAndEmitTextSecretsScanWithIssues(
-  callerCommand: SecretsCallerCommand,
-  deps: HookDependencies,
-  text: string,
-  ctx: CommandInvocationContext,
-): Promise<{ exitCode: number; issues: SecretsJsonIssue[] }> {
   // Hash, not the raw text, so prompt content never lands in the ledger.
   const source = createHash('sha256').update(text).digest('hex');
-  const { result, parsed } = await scanAndEmitSecrets(
+  const { result } = await scanAndEmitSecrets(
     callerCommand,
     deps.auth,
     () => runSecretsBinaryOnText(deps.binaryPath, text, deps.auth),
     ctx,
     source,
   );
-  return { exitCode: result.exitCode ?? 1, issues: parsed.issues };
+  return result.exitCode ?? 1;
 }
