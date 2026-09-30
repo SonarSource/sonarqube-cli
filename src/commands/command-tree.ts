@@ -788,7 +788,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('secrets')
     .description(
       'Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)',
-    );
+    )
+    .helpCommand(false);
 
   allowlistSecretsCmd
     .command('show')
