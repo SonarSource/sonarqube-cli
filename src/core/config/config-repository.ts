@@ -29,7 +29,7 @@ import {
   isValidConfigValue,
 } from './config-schema.ts';
 
-function getKeyDefinition(key: ConfigKey): ConfigKeyDefinition {
+export function getKeyDefinition(key: ConfigKey): ConfigKeyDefinition {
   const definition = CONFIG_KEY_BY_NAME.get(key);
   if (!definition) {
     throw new InvalidOptionError(`Unknown config key '${key}'.`);
