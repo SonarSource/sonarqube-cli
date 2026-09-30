@@ -235,13 +235,7 @@ export class TestHarness {
     }
   }
 
-  /**
-   * Runs the CLI attached to a real pty (via the Unix `script` utility), so
-   * `process.stdin.isTTY` is genuinely true in the CLI process — the one thing `run()` and
-   * `runInteractive()` can never provide (both give the child a pipe, not a terminal). Use
-   * this only when a test needs to exercise a real TTY-gated branch end-to-end; unsupported on
-   * Windows, so guard call sites with `it.skipIf(IS_WINDOWS)`.
-   */
+  /** Runs the CLI on a real pty so `process.stdin.isTTY` is true; guard with `it.skipIf(IS_WINDOWS)`. */
   async runWithRealTty(command: string, options?: RunOptions): Promise<CliResult> {
     return runCliWithRealTty(command, this.env(options), {
       cwd: options?.cwd ?? this.cwd.path,

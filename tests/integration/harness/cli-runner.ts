@@ -94,16 +94,7 @@ export function spawnCliProcess(
   return { proc, timeoutMs, startedAt };
 }
 
-/**
- * Runs the CLI attached to a real pty via the Unix `script` utility, so `process.stdin.isTTY`
- * is genuinely true in the CLI process — something no other harness method can provide.
- * `run()`/`runInteractive()` always give the child a pipe (`run()` no stdin at all,
- * `runInteractive()` a piped one), never a real terminal.
- *
- * macOS (BSD) and Linux (util-linux) `script` take different arguments, so this branches on
- * `process.platform`. Not supported on Windows, which has no equivalent without extra tooling —
- * callers must guard with `it.skipIf(IS_WINDOWS)`.
- */
+/** Runs the CLI on a real pty via `script(1)` so `process.stdin.isTTY` is true; Unix only. */
 export async function runCliWithRealTty(
   command: string,
   env: Record<string, string>,
@@ -116,10 +107,7 @@ export async function runCliWithRealTty(
   const coverageMode = process.env.SONARQUBE_CLI_USE_COVERAGE === '1';
   const binaryPath = getBinaryPath(coverageMode);
   const args = tokenize(command);
-  // -e/--return: without it, util-linux `script` always exits 0 on a successful run of the
-  // wrapper itself, regardless of the wrapped command's real exit code. BSD (macOS) `script`
-  // has no such flag because it never had the problem — it exits with the child's status by
-  // default.
+  // util-linux `script` exits 0 regardless of the child unless given -e; BSD `script` needs no flag.
   const scriptArgv =
     process.platform === 'darwin'
       ? ['script', '-q', '/dev/null', binaryPath, ...args]
