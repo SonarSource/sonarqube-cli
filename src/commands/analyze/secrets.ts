@@ -120,6 +120,12 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 const SCAN_TIMEOUT_MS = 30000;
 
 /**
+ * Stated to the analyzer rather than left to its default, so a caller filtering oversize content before sending it
+ * filters on the same threshold the analyzer would have applied.
+ */
+export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
+
+/**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
  */
@@ -177,7 +183,13 @@ export async function runSecretsBinaryOnStream(
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
     binaryPath,
-    ['--non-interactive', '--json', '--input-batch'],
+    [
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      String(MAX_SCANNED_FILE_SIZE),
+    ],
     {
       stdin: 'pipe',
       stdinWriter: writeStdin,
