@@ -61,13 +61,13 @@ describe('getConfig', () => {
   it('prints the stored value for a set, non-sensitive key', async () => {
     await setConfigValue('log.level', 'DEBUG');
 
-    await getConfig('log.level', ctx);
+    await getConfig('log.level', {}, ctx);
 
     expect(fake.findCall('print', 'DEBUG')).toBeDefined();
   });
 
   it('states it is not set for an unset, non-sensitive key', async () => {
-    await getConfig('log.level', ctx);
+    await getConfig('log.level', {}, ctx);
 
     expect(fake.findCall('print', 'Not set.')).toBeDefined();
   });
@@ -75,21 +75,74 @@ describe('getConfig', () => {
   it('never prints the real value for a set, sensitive key', async () => {
     await setConfigValue('network.tls.clientPassphrase', 'super-secret');
 
-    await getConfig('network.tls.clientPassphrase', ctx);
+    await getConfig('network.tls.clientPassphrase', {}, ctx);
 
     expect(fake.findCall('print', 'Set (value hidden).')).toBeDefined();
     expect(fake.calls.some((call) => String(call.args[0]).includes('super-secret'))).toBe(false);
   });
 
   it('states it is not set for an unset, sensitive key without touching the keychain value', async () => {
-    await getConfig('network.tls.clientPassphrase', ctx);
+    await getConfig('network.tls.clientPassphrase', {}, ctx);
 
     expect(fake.findCall('print', 'Not set.')).toBeDefined();
   });
 
   it('fails with an error for an unknown key', async () => {
-    const error = await getConfig('unknown.key', ctx).catch((err: unknown) => err);
+    const error = await getConfig('unknown.key', {}, ctx).catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(InvalidOptionError);
+  });
+
+  describe('--format json', () => {
+    it('includes the value for a set, non-sensitive key', async () => {
+      await setConfigValue('log.level', 'DEBUG');
+
+      await getConfig('log.level', { format: 'json' }, ctx);
+
+      const call = fake.findCall('print', '"key"');
+      expect(call).toBeDefined();
+      expect(JSON.parse(call!.args[0] as string)).toEqual({
+        key: 'log.level',
+        sensitive: false,
+        set: true,
+        value: 'DEBUG',
+      });
+    });
+
+    it('omits value and reports set: false for an unset, non-sensitive key', async () => {
+      await getConfig('log.level', { format: 'json' }, ctx);
+
+      const call = fake.findCall('print', '"key"');
+      expect(JSON.parse(call!.args[0] as string)).toEqual({
+        key: 'log.level',
+        sensitive: false,
+        set: false,
+      });
+    });
+
+    it('never includes a value for a set, sensitive key', async () => {
+      await setConfigValue('network.tls.clientPassphrase', 'super-secret');
+
+      await getConfig('network.tls.clientPassphrase', { format: 'json' }, ctx);
+
+      const call = fake.findCall('print', '"key"');
+      expect(JSON.parse(call!.args[0] as string)).toEqual({
+        key: 'network.tls.clientPassphrase',
+        sensitive: true,
+        set: true,
+      });
+      expect(call!.args[0]).not.toContain('super-secret');
+    });
+
+    it('reports set: false for an unset, sensitive key', async () => {
+      await getConfig('network.tls.clientPassphrase', { format: 'json' }, ctx);
+
+      const call = fake.findCall('print', '"key"');
+      expect(JSON.parse(call!.args[0] as string)).toEqual({
+        key: 'network.tls.clientPassphrase',
+        sensitive: true,
+        set: false,
+      });
+    });
   });
 });
