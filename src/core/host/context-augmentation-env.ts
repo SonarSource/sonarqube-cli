@@ -54,10 +54,10 @@ type ContextAugmentationEnvKey =
  * so the CAG client forwards it to the daemon (x-sonar-invocation-id header)
  * and telemetry can correlate CLI and daemon-side events.
  */
-export function buildContextAugmentationEnv(
+export async function buildContextAugmentationEnv(
   context?: ContextAugmentationEnvContext,
-): NodeJS.ProcessEnv {
-  const env = { ...process.env, ...buildSubprocessNetworkEnv() };
+): Promise<NodeJS.ProcessEnv> {
+  const env = { ...process.env, ...(await buildSubprocessNetworkEnv()) };
   env.SONAR_CONTEXT_INVOCATION_ID = INVOCATION_ID;
   if (context === undefined) {
     return env;
