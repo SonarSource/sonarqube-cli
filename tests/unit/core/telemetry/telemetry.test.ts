@@ -765,6 +765,17 @@ describe('CliCommandExecuted', () => {
   });
 
   describe('flush worker', () => {
+    it('keeps a recorded event when the flush worker cannot start', async () => {
+      spawnSpy.mockImplementation(() => {
+        throw new Error('ENOENT');
+      });
+
+      await commitCommandExecuted(makeCommand('auth login'));
+
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+      expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
+
     it('spawns a flush worker process after storing the event', async () => {
       await commitCommandExecuted(makeCommand('auth login'));
       expect(spawnSpy).toHaveBeenCalledTimes(1);
