@@ -18,13 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// This is a unit test because the integration harness runs non-TTY: `process.stdin.isTTY` is
-// always false there (`run()` gives no stdin, `runInteractive()` pipes it, never a real pty), so
-// the TTY-allowed branch is unreachable through it. See
-// tests/unit/commands/auth/login-stdin-release.test.ts for the same reasoning elsewhere.
-//
-// Everything is stubbed with `spyOn`, never `mock.module`: the coverage run shares one process
-// across files, and a module mock has no teardown, so it would leak into every later file.
+// spyOn, never mock.module: the coverage run shares one process and a module mock has no teardown.
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -60,6 +54,9 @@ describe('allowlistSecretsAdd', () => {
     expect(error).toBeInstanceOf(CommandFailedError);
     expect((error as Error).message).toBe(
       'sonar allowlist secrets add requires a human at an interactive terminal; it cannot be run by an agent or script.',
+    );
+    expect((error as CommandFailedError).remediationHint).toBe(
+      'Open a terminal and run this command there. Coding agents cannot add allowlist entries on your behalf.',
     );
     expect(runSpy).not.toHaveBeenCalled();
   });

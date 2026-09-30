@@ -33,6 +33,10 @@ export async function allowlistSecretsAdd(ctx: CommandInvocationContext): Promis
   if (!process.stdin.isTTY) {
     throw new CommandFailedError(
       'sonar allowlist secrets add requires a human at an interactive terminal; it cannot be run by an agent or script.',
+      {
+        remediationHint:
+          'Open a terminal and run this command there. Coding agents cannot add allowlist entries on your behalf.',
+      },
     );
   }
   await runSecretsAllowlistCommand(['add'], ctx.console);

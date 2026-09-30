@@ -93,9 +93,6 @@ describe('allowlist secrets add', () => {
   });
 
   it(
-    // harness.run() gives the child process no stdin at all, so this exercises the real,
-    // unmocked non-TTY path. The TTY-allowed path is covered separately below via a real pty
-    // (also unit-tested directly in tests/unit/commands/allowlist/secrets/add.test.ts).
     'refuses to run without a real interactive terminal, and never installs or invokes the binary',
     async () => {
       const result = await harness.run('allowlist secrets add');
@@ -103,6 +100,9 @@ describe('allowlist secrets add', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
         'sonar allowlist secrets add requires a human at an interactive terminal; it cannot be run by an agent or script.',
+      );
+      expect(result.stdout + result.stderr).toContain(
+        'Coding agents cannot add allowlist entries on your behalf.',
       );
       expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
         false,
@@ -112,13 +112,7 @@ describe('allowlist secrets add', () => {
   );
 
   it.skipIf(IS_WINDOWS)(
-    // Real pty via harness.runWithRealTty() (script(1) — no Windows equivalent, hence the
-    // skip). Proves the TTY gate genuinely passes control to the real binary end-to-end, not
-    // just that our own code would call it (that part is what the unit test mocks and checks).
-    // Empty stdin makes the real binary's own prompt fail deterministically, which is enough to
-    // prove it was reached: the refusal test above proves what happens when it is NOT reached,
-    // so seeing sonar-secrets-cli's own prompt text here — not our refusal message — is the
-    // proof this test exists for.
+    // Empty stdin fails the binary's own prompt, so seeing that prompt is proof the gate let it run.
     'with a real TTY, passes the gate and lets the real binary run interactively',
     async () => {
       harness.state().withSecretsBinaryInstalled();
