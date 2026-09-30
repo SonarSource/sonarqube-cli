@@ -57,7 +57,6 @@ import {
   type OnboardCiGitlabOptions,
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
-import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
 import {
   allowlistSecretsClear,
   type AllowlistSecretsClearOptions,
@@ -794,20 +793,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('secrets')
     .description(
       'Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)',
-    )
-    .helpCommand(false);
+    );
 
   allowlistSecretsCmd
     .command('show')
     .description('List entries in the sonar-secrets allowlist')
     .anonymousAction((ctx) => allowlistSecretsShow(ctx));
-
-  allowlistSecretsCmd
-    .command('add')
-    .description(
-      'Add a secret value to the sonar-secrets allowlist (interactive; requires a real terminal, not usable by agents or scripts)',
-    )
-    .anonymousAction((ctx) => allowlistSecretsAdd(ctx));
 
   allowlistSecretsCmd
     .command('remove')
