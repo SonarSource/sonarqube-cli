@@ -105,6 +105,8 @@ import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts
 import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
+import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
+import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
 import { supportedIntegrations } from './integrate';
@@ -118,6 +120,7 @@ import { integrateCursor } from './integrate/cursor';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
+import { integrateOpenCode } from './integrate/opencode';
 import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
@@ -562,6 +565,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
 
+  integrateCommand
+    .command('opencode')
+    .description(
+      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks.',
+    )
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Backwards compatibility; integrations are installed globally by default',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate opencode' })),
+    )
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
+
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
     .description('Analyze code for quality and security issues')
@@ -899,6 +916,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('cursor-pre-tool-use')
     .description('Cursor preToolUse handler: scan Read tool targets for secrets before execution')
     .anonymousAction(handleHookInvocation(cursorPreToolUse));
+
+  hookCommand
+    .command('opencode-pre-tool-use')
+    .description(
+      'OpenCode tool.execute.before handler: scan files for secrets before agent reads them',
+    )
+    .anonymousAction(handleHookInvocation(opencodePreToolUse));
+
+  hookCommand
+    .command('opencode-chat-message')
+    .description('OpenCode chat.message handler: mask secrets in a message before it is sent')
+    .anonymousAction(handleHookInvocation(opencodeChatMessage));
 
   hookCommand
     .command('claude-post-tool-use')
