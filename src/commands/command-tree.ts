@@ -24,7 +24,7 @@ import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { parseInteger } from '@/core/commands/parsing.ts';
+import { parseInteger } from '@/core/commands/params.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   isAlphaEnabledFromEnv,
