@@ -771,8 +771,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('set')
     .description('Store a sonar config value')
     .argument('<key>', 'Config key to set')
-    .argument('<value>', 'Value to store')
-    .anonymousAction((ctx, key: string, value: string) => setConfig(key, value, ctx));
+    .argument('[value]', 'Value to store; omit to enter it interactively without echoing')
+    .anonymousAction((ctx, key: string, value: string | undefined) => setConfig(key, value, ctx));
 
   configure
     .command('telemetry')
