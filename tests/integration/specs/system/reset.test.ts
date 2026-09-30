@@ -493,6 +493,74 @@ describe('system reset --force', () => {
   );
 
   it(
+    'keeps CLI configuration without --all',
+    async () => {
+      harness.cliHome.writeFile('cli-config.properties', 'log.level=DEBUG\n');
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toMatch(/Config:/);
+      expect(harness.cliHome.file('cli-config.properties').asText()).toBe('log.level=DEBUG\n');
+      expect(readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https']).toBe(
+        'http://user:secret@proxy',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes the CLI configuration file with --all',
+    async () => {
+      harness.cliHome.writeFile(
+        'cli-config.properties',
+        'log.level=DEBUG\ntelemetry.enabled=false\nstats.enabled=false\n',
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
+      expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes sensitive CLI configuration from the keychain with --all',
+    async () => {
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
+      expect(
+        readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https'],
+      ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports nothing to clear when no CLI configuration exists with --all',
+    async () => {
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Nothing to clear/);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports cleared size for nested cache directories with large files',
     async () => {
       const logDir = join(harness.cliHome.path, 'logs');
