@@ -64,13 +64,22 @@ interface MaskableSpan {
   maskedSecret: string;
 }
 
-function toMaskableIssue(issue: SecretsJsonIssue, lineStarts: number[]): MaskableSpan | undefined {
+function toMaskableIssue(
+  issue: SecretsJsonIssue,
+  lineStarts: number[],
+  textLength: number,
+): MaskableSpan | undefined {
   if (!issue.location || !issue.maskedSecret) return undefined;
-  return {
-    start: lineStarts[issue.location.startLine - 1] + issue.location.startColumn,
-    end: lineStarts[issue.location.endLine - 1] + issue.location.endColumn,
-    maskedSecret: issue.maskedSecret,
-  };
+  const { startLine, endLine } = issue.location;
+  if (startLine < 1 || startLine > lineStarts.length) return undefined;
+  if (endLine < 1 || endLine > lineStarts.length) return undefined;
+  const startLineOffset = lineStarts[startLine - 1];
+  const endLineOffset = lineStarts[endLine - 1];
+  const start = startLineOffset + issue.location.startColumn;
+  const end = endLineOffset + issue.location.endColumn;
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return undefined;
+  if (start < 0 || end < start || end > textLength) return undefined;
+  return { start, end, maskedSecret: issue.maskedSecret };
 }
 
 function lineStartOffsets(text: string): number[] {
@@ -133,7 +142,7 @@ export async function opencodeChatMessage(
     if (exitCode === EXIT_CODE_SECRETS_FOUND) {
       const lineStarts = lineStartOffsets(text);
       const maskable = issues
-        .map((issue) => toMaskableIssue(issue, lineStarts))
+        .map((issue) => toMaskableIssue(issue, lineStarts, text.length))
         .filter((span): span is MaskableSpan => span !== undefined);
       if (issues.length === 0 || maskable.length !== issues.length) {
         writeDecision({

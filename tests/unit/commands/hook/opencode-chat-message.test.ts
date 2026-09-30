@@ -209,6 +209,32 @@ describe('opencodeChatMessage', () => {
     expect(decision.redactedText).toBeUndefined();
   });
 
+  it.each([
+    ['a line that does not exist', { startLine: 5, startColumn: 0, endLine: 5, endColumn: 3 }],
+    [
+      'an end column past the end of the text',
+      { startLine: 1, startColumn: 0, endLine: 1, endColumn: 99 },
+    ],
+    ['an end before its start', { startLine: 1, startColumn: 5, endLine: 1, endColumn: 2 }],
+  ])('blocks when a reported secret has %s', async (_name, location) => {
+    scanTextSpy.mockResolvedValue({
+      exitCode: EXIT_CODE_SECRETS_FOUND,
+      stdout: JSON.stringify({
+        issues: [
+          { ruleKey: 'secrets:S1', description: 'bad location', location, maskedSecret: '***' },
+        ],
+      }),
+      stderr: '',
+    });
+    readStdinJsonSpy.mockResolvedValue({ text: 'foo bar', sessionID: 'session-1' });
+
+    await opencodeChatMessage(makeCtx());
+
+    const decision = lastDecision(stdoutSpy);
+    expect(decision.block).toBe(true);
+    expect(decision.redactedText).toBeUndefined();
+  });
+
   it('allows without scanning when text is empty', async () => {
     readStdinJsonSpy.mockResolvedValue({ text: '', sessionID: 'session-1' });
 
