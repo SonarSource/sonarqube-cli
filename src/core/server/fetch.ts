@@ -54,7 +54,7 @@ export function buildRequest(
  */
 async function sendRequest(url: string, init: RequestInit): Promise<Response> {
   const { proxy: _proxy, tls: _tls, ...rest } = init as RequestInit & Partial<FetchNetworkOptions>;
-  return fetch(url, { ...rest, ...buildFetchNetworkOptions(url) });
+  return fetch(url, { ...rest, ...(await buildFetchNetworkOptions(url)) });
 }
 
 const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie', 'private-token', 'x-api-key']);

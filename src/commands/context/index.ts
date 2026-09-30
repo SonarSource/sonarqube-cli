@@ -147,7 +147,7 @@ export async function runContextPassthrough(
 
   let env: NodeJS.ProcessEnv;
   if (isHelp) {
-    env = buildContextAugmentationEnv();
+    env = await buildContextAugmentationEnv();
   } else {
     const authResult = await options.ctx.resolveAuth();
     if (authResult.isErr()) {
@@ -166,7 +166,7 @@ export async function runContextPassthrough(
     );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
-    env = buildContextAugmentationEnv({
+    env = await buildContextAugmentationEnv({
       organization,
       projectKey: recordedConfig.projectKey,
       serverUrl,
