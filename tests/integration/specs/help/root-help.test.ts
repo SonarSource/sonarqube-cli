@@ -53,7 +53,7 @@ function getExpectedRootHelp(): string {
     '    remediate                                                         Trigger AI agent remediation for eligible issues (SonarQube Cloud only)',
     '    link                                                              Link a project to the active connection in .sonar-config.json',
     '',
-    '    list <issues|projects>                                            List issues and projects from SonarQube Cloud or Server',
+    '    list <issues|projects|orgs>                                       List issues and projects from SonarQube Cloud or Server',
     '    quality-gate|qg <status>                                          Fetch quality gate status from SonarQube Cloud or Server',
     '    api <method> <endpoint>                                           Make authenticated API requests to SonarQube',
     '    context [action] [args...]                                        Augment AI agents with context from your codebase',
