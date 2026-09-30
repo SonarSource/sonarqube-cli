@@ -206,12 +206,10 @@ export async function deleteStaleTokens(
   newOrg?: string,
 ): Promise<void> {
   const newAccount = generateKeychainAccount(newServerURL, newOrg);
-  for (const conn of connections) {
-    const account = generateKeychainAccount(conn.serverUrl, conn.orgKey);
-    if (account !== newAccount) {
-      await removeSecret(account);
-    }
-  }
+  const staleAccounts = connections
+    .map((conn) => generateKeychainAccount(conn.serverUrl, conn.orgKey))
+    .filter((account) => account !== newAccount);
+  await Promise.all(staleAccounts.map((account) => removeSecret(account)));
 }
 
 /**

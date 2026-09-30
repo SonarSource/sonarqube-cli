@@ -44,17 +44,17 @@ export async function commitTelemetryFacts(
 ): Promise<void> {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
 
-  for (const fact of facts) {
-    try {
-      await emitTelemetryEvent(fact.name, fact.payload as object, {
+  await Promise.all(
+    facts.map((fact) =>
+      emitTelemetryEvent(fact.name, fact.payload as object, {
         eventTimestampMs: fact.timestamp,
         agentSessionId: options?.agentSessionId,
         auth: fact.auth ?? options?.auth,
-      });
-    } catch {
-      // Telemetry is strictly fire-and-forget.
-    }
-  }
+      }).catch(() => {
+        // Telemetry is strictly fire-and-forget.
+      }),
+    ),
+  );
 
   scheduleTelemetryFlush();
 }

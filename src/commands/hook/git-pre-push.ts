@@ -96,11 +96,13 @@ async function collectFilesForRefs(
   refs: PushRef[],
   remotesExclusion: string,
 ): Promise<Map<PushRef, string[]>> {
-  const out = new Map<PushRef, string[]>();
-  for (const ref of refs) {
-    out.set(ref, await getFilesForRef(ref, remotesExclusion));
-  }
-  return out;
+  const entries = await Promise.all(
+    refs.map(async (ref): Promise<[PushRef, string[]]> => [
+      ref,
+      await getFilesForRef(ref, remotesExclusion),
+    ]),
+  );
+  return new Map(entries);
 }
 
 /** Files the push would transfer; `-c` also catches content a merge introduced itself. */

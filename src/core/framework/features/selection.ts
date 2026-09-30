@@ -97,20 +97,61 @@ export async function selectFeaturesForInvocation<TOptions>(
   const toRemove: FeatureApplication<TOptions>[] = [];
   const declined: string[] = [];
 
-  for (const application of applications) {
-    const feature = application.feature;
-    const installed = isFeatureInstalled(integration, invocation, application);
-    const outcome = await shouldInstallFeature(feature, invocation, console, installed);
+  const evaluations = evaluateApplications(
+    integration,
+    invocation,
+    applications,
+    declined,
+    console,
+  );
+  for await (const { application, outcome, installed } of evaluations) {
     if (outcome === 'install') {
-      toInstall.push(await materializeApplication(application, invocation, declined, console));
+      toInstall.push(application);
     } else if (outcome === 'uninstall' && installed) {
       toRemove.push(application);
     } else if (outcome === 'declined') {
-      declined.push(feature.id);
+      declined.push(application.feature.id);
     }
   }
 
   return { toInstall, toRemove, declined };
+}
+
+interface ApplicationEvaluation<TOptions> {
+  application: FeatureApplication<TOptions>;
+  outcome: FeatureSelectionOutcome;
+  installed: boolean;
+}
+
+/**
+ * Evaluates applications one at a time: prompts are interactive and must not overlap.
+ */
+async function* evaluateApplications<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+  applications: FeatureApplication<TOptions>[],
+  declined: string[],
+  console: Console,
+): AsyncGenerator<ApplicationEvaluation<TOptions>> {
+  for (const application of applications) {
+    yield evaluateApplication(integration, invocation, application, declined, console);
+  }
+}
+
+async function evaluateApplication<TOptions>(
+  integration: IntegrationDeclaration<TOptions>,
+  invocation: IntegrationInvocation<TOptions>,
+  application: FeatureApplication<TOptions>,
+  declined: string[],
+  console: Console,
+): Promise<ApplicationEvaluation<TOptions>> {
+  const installed = isFeatureInstalled(integration, invocation, application);
+  const outcome = await shouldInstallFeature(application.feature, invocation, console, installed);
+  if (outcome !== 'install') {
+    return { application, outcome, installed };
+  }
+  const materialized = await materializeApplication(application, invocation, declined, console);
+  return { application: materialized, outcome, installed };
 }
 
 function isFeatureInstalled<TOptions>(
@@ -199,14 +240,16 @@ async function selectActiveSubfeatures<TOptions>(
   console: Console,
 ): Promise<FeatureContainer<TOptions>> {
   const active: SubfeatureDeclaration<TOptions>[] = [];
-  for (const subfeature of container.subfeatures) {
+  // Chain decisions so interactive prompts stay sequential and ordered.
+  await container.subfeatures.reduce(async (previous, subfeature) => {
+    await previous;
     const outcome = await shouldInstallFeature(subfeature, invocation, console);
     if (outcome === 'install') {
       active.push(subfeature);
     } else if (outcome === 'declined') {
       declined.push(subfeature.id);
     }
-  }
+  }, Promise.resolve());
   return { ...container, subfeatures: active };
 }
 

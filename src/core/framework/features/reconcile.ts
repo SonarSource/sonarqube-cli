@@ -47,15 +47,11 @@ export async function reconcileInstalledIntegrations(
   registry: IntegrationRegistry,
   console: Console,
 ): Promise<boolean> {
-  let stateChanged = false;
+  const results = await Promise.all(
+    registry.list().map((integration) => reconcileIntegration(state, integration, console)),
+  );
 
-  for (const integration of registry.list()) {
-    if (await reconcileIntegration(state, integration, console)) {
-      stateChanged = true;
-    }
-  }
-
-  return stateChanged;
+  return results.some(Boolean);
 }
 
 async function reconcileIntegration(

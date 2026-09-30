@@ -55,23 +55,22 @@ const MAX_RETRIES = 5;
 const DEFAULT_RETRY_AFTER_S = 5;
 
 // Only used for idempotent GET requests — writes are issued once without retry.
-async function callWithRetry(fn: () => Promise<Response>): Promise<Response> {
-  for (let attempt = 0; ; attempt++) {
-    const response = await fn();
-    const retryable =
-      response.status === HTTP_STATUS_TOO_MANY_REQUESTS ||
-      response.status === HTTP_STATUS_BAD_GATEWAY ||
-      response.status === HTTP_STATUS_SERVICE_UNAVAILABLE ||
-      response.status === HTTP_STATUS_GATEWAY_TIMEOUT;
-    if (!retryable || attempt >= MAX_RETRIES) return response;
-    const parsed = Number.parseInt(response.headers.get('Retry-After') ?? '', 10);
-    const retryAfterS = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_RETRY_AFTER_S;
-    const delayMs =
-      response.status === HTTP_STATUS_TOO_MANY_REQUESTS
-        ? (retryAfterS + 1) * 1000
-        : RETRY_5XX_DELAY_MS;
-    await new Promise<void>((r) => setTimeout(r, delayMs));
-  }
+async function callWithRetry(fn: () => Promise<Response>, attempt = 0): Promise<Response> {
+  const response = await fn();
+  const retryable =
+    response.status === HTTP_STATUS_TOO_MANY_REQUESTS ||
+    response.status === HTTP_STATUS_BAD_GATEWAY ||
+    response.status === HTTP_STATUS_SERVICE_UNAVAILABLE ||
+    response.status === HTTP_STATUS_GATEWAY_TIMEOUT;
+  if (!retryable || attempt >= MAX_RETRIES) return response;
+  const parsed = Number.parseInt(response.headers.get('Retry-After') ?? '', 10);
+  const retryAfterS = Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_RETRY_AFTER_S;
+  const delayMs =
+    response.status === HTTP_STATUS_TOO_MANY_REQUESTS
+      ? (retryAfterS + 1) * 1000
+      : RETRY_5XX_DELAY_MS;
+  await new Promise<void>((r) => setTimeout(r, delayMs));
+  return callWithRetry(fn, attempt + 1);
 }
 
 export class GitLabApiError extends Error {

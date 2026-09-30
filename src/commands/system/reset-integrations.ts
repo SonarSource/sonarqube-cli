@@ -68,30 +68,41 @@ async function removeDeclarativeIntegrations(
   const failed: string[] = [];
   let removedFeatures = 0;
 
+  const tasks: Array<() => Promise<FeatureRemoveOutcome>> = [];
   for (const installed of state.integrations.installed) {
     const declaration = supportedIntegrations.get(installed.integrationId);
     if (!declaration) {
-      failed.push(`${installed.integrationId}: unknown integration`);
+      tasks.push(() =>
+        Promise.resolve<FeatureRemoveOutcome>({
+          status: 'failed',
+          message: `${installed.integrationId}: unknown integration`,
+        }),
+      );
       continue;
     }
 
     for (const installedFeature of installed.features) {
-      const outcome = await tryRemoveInstalledFeature(
-        state,
-        installed,
-        installedFeature,
-        declaration,
-        console,
+      tasks.push(() =>
+        tryRemoveInstalledFeature(state, installed, installedFeature, declaration, console),
       );
-      if (outcome.status === 'removed') {
-        integrationFeatures.push({
-          integrationStateId: outcome.integrationStateId,
-          featureId: outcome.featureId,
-        });
-        removedFeatures += 1;
-      } else {
-        failed.push(outcome.message);
-      }
+    }
+  }
+
+  // Removals run sequentially because features may edit the same files on disk.
+  const outcomes = await tasks.reduce<Promise<FeatureRemoveOutcome[]>>(
+    async (previous, task) => [...(await previous), await task()],
+    Promise.resolve([]),
+  );
+
+  for (const outcome of outcomes) {
+    if (outcome.status === 'removed') {
+      integrationFeatures.push({
+        integrationStateId: outcome.integrationStateId,
+        featureId: outcome.featureId,
+      });
+      removedFeatures += 1;
+    } else {
+      failed.push(outcome.message);
     }
   }
 

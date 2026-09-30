@@ -200,24 +200,24 @@ async function with503Retry<T>(
   attemptRequest: () => Promise<T>,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<T> {
-  let lastServiceError: ServiceUnavailableError | undefined;
-  for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
+  const tryAttempt = async (attempt: number): Promise<T> => {
     try {
       return await attemptRequest();
     } catch (err) {
       if (!(err instanceof ServiceUnavailableError)) {
         throw err;
       }
-      lastServiceError = err;
-      if (attempt <= MAX_503_RETRIES) {
-        await waitBeforeRetry(attempt, onRetry);
+      if (attempt > MAX_503_RETRIES) {
+        throw new CommandFailedError(
+          `Vortex analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
+          { cause: err },
+        );
       }
+      await waitBeforeRetry(attempt, onRetry);
+      return tryAttempt(attempt + 1);
     }
-  }
-  throw new CommandFailedError(
-    `Vortex analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
-    { cause: lastServiceError },
-  );
+  };
+  return tryAttempt(1);
 }
 
 export interface FetchSqaaRetryOptions {
@@ -356,33 +356,33 @@ async function fetchSplitParts(
   onPayloadSplit?: () => void,
   analysisDepth?: SqaaDeepWireDepth,
 ): Promise<SqaaChunkFetchResult> {
-  const parts: SqaaChunkPart[] = [];
-  const groupErrors: SqaaChunkGroupError[] = [];
-  for (const group of partGroups) {
-    try {
-      const result = await fetchChunkWith413Split(
-        connection,
-        projectKey,
-        group,
-        branch,
-        onRetry,
-        onPayloadSplit,
-        analysisDepth,
-      );
-      parts.push(...result.parts);
-      groupErrors.push(...result.groupErrors);
-    } catch (err) {
-      if (isGlobalSqaaError(err)) {
-        throw err;
+  const results = await Promise.all(
+    partGroups.map(async (group): Promise<SqaaChunkFetchResult> => {
+      try {
+        return await fetchChunkWith413Split(
+          connection,
+          projectKey,
+          group,
+          branch,
+          onRetry,
+          onPayloadSplit,
+          analysisDepth,
+        );
+      } catch (err) {
+        if (isGlobalSqaaError(err)) {
+          throw err;
+        }
+        return { parts: [], groupErrors: [{ files: group, error: err as Error }] };
       }
-      groupErrors.push({ files: group, error: err as Error });
-    }
-  }
+    }),
+  );
+  const parts: SqaaChunkPart[] = results.flatMap((result) => result.parts);
+  const groupErrors: SqaaChunkGroupError[] = results.flatMap((result) => result.groupErrors);
   return { parts, groupErrors };
 }
 
 /**
- * Send a chunk with 503 retry; on 413 split the chunk and retry sub-chunks sequentially.
+ * Send a chunk with 503 retry; on 413 split the chunk and retry sub-chunks concurrently.
  * Returns partial successes when only some sub-chunks fail after splitting.
  */
 export async function fetchChunkWith413Split(

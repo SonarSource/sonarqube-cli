@@ -92,16 +92,24 @@ export async function migrateAgentIntegrationsToGlobalScope(
   deps.console.info(
     'Removing your project-level agent integrations and reinstalling them globally...',
   );
-  let anyFailed = false;
+  // Migrations run one after another: each one reads and rewrites the shared state file.
+  const allMigrated = await agentMigrations.reduce<Promise<boolean>>(
+    async (previousMigrated, agentMigration) => {
+      const previousSucceeded = await previousMigrated;
+      const migrated = agentMigration.skipGlobalInstall
+        ? await removeProjectIntegrations(agentMigration, quietConsole, deps)
+        : await removeProjectIntegrationsAndInstallGlobally(
+            agentMigration,
+            auth,
+            quietConsole,
+            deps,
+          );
+      return previousSucceeded && migrated;
+    },
+    Promise.resolve(true),
+  );
 
-  for (const agentMigration of agentMigrations) {
-    const migrated = agentMigration.skipGlobalInstall
-      ? await removeProjectIntegrations(agentMigration, quietConsole, deps)
-      : await removeProjectIntegrationsAndInstallGlobally(agentMigration, auth, quietConsole, deps);
-    anyFailed = anyFailed || !migrated;
-  }
-
-  if (anyFailed) {
+  if (!allMigrated) {
     deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
     return;
   }
@@ -219,24 +227,31 @@ async function uninstallProjectScopedArtifacts(
   quietConsole: Console,
 ): Promise<void> {
   const state = loadState();
-  for (const targetRoot of agentMigration.integrationTargets) {
-    if (!existsSync(targetRoot)) {
-      continue;
-    }
-    for (const feature of agentMigration.declaration.features) {
-      const context = makeContext(
-        state, // unused by removeFeature
-        targetRoot,
-        'project',
-        'install', // execution mode, unused by removeFeature
-        undefined, // auth, unused by removeFeature
-        true, // force, unused by removeFeature
-        undefined, // attrs, unused by every agent remover
-        quietConsole,
-      );
-      await integrationInstaller.removeFeature(context, feature);
-    }
-  }
+  const existingTargets = agentMigration.integrationTargets.filter((targetRoot) =>
+    existsSync(targetRoot),
+  );
+  await Promise.all(
+    existingTargets.map((targetRoot) =>
+      // Features of one target may share files, so they are removed sequentially.
+      agentMigration.declaration.features.reduce(
+        (previous, feature) =>
+          previous.then(() => {
+            const context = makeContext(
+              state, // unused by removeFeature
+              targetRoot,
+              'project',
+              'install', // execution mode, unused by removeFeature
+              undefined, // auth, unused by removeFeature
+              true, // force, unused by removeFeature
+              undefined, // attrs, unused by every agent remover
+              quietConsole,
+            );
+            return integrationInstaller.removeFeature(context, feature);
+          }),
+        Promise.resolve(),
+      ),
+    ),
+  );
 }
 
 function installIntegrationAtGlobalScope(

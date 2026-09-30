@@ -112,10 +112,14 @@ export async function purgeAuth(state: CliState, console: Console): Promise<Auth
   // unsynchronized read-modify-write of a single JSON store, so concurrent
   // deletions race and can clobber each other. Server-side revocation still
   // fails fast via its own 10s timeout.
-  const outcomes: ConnectionOutcome[] = [];
-  for (const conn of state.auth.connections) {
-    outcomes.push(await purgeConnectionAuth(conn, console));
-  }
+  const outcomes = await state.auth.connections.reduce<Promise<ConnectionOutcome[]>>(
+    async (previous, conn) => {
+      const done = await previous;
+      done.push(await purgeConnectionAuth(conn, console));
+      return done;
+    },
+    Promise.resolve([]),
+  );
 
   const authConnectionIds = outcomes.map((outcome) => outcome.connectionId);
   const keychainWarnings = outcomes.flatMap((outcome) => outcome.keychainWarnings);

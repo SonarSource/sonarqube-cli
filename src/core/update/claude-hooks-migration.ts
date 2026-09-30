@@ -70,18 +70,20 @@ export async function migrateClaudeCodeHooks(
 
   const locations = resolveLocations(state, homedirFn);
 
-  for (const { projectRoot, globalDir } of locations) {
-    try {
-      migrateHookScripts(projectRoot, globalDir);
-      await installHooksFn(projectRoot, globalDir);
-      await removeObsoleteHookArtifacts(projectRoot);
-      logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
-    } catch (err) {
-      logger.debug(
-        `Hook migration failed for ${globalDir ?? projectRoot}: ${(err as Error).message}`,
-      );
-    }
-  }
+  await Promise.all(
+    locations.map(async ({ projectRoot, globalDir }) => {
+      try {
+        migrateHookScripts(projectRoot, globalDir);
+        await installHooksFn(projectRoot, globalDir);
+        await removeObsoleteHookArtifacts(projectRoot);
+        logger.debug(`Migrated Claude Code hooks for: ${globalDir ?? projectRoot}`);
+      } catch (err) {
+        logger.debug(
+          `Hook migration failed for ${globalDir ?? projectRoot}: ${(err as Error).message}`,
+        );
+      }
+    }),
+  );
 }
 
 type Location = { projectRoot: string; globalDir: string | undefined };
