@@ -25,6 +25,10 @@ import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
 
+const FAKE_SERVER = 'http://localhost:19999';
+const GITHUB_TEST_TOKEN = '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';
+const EXIT_CODE_SECRETS_FOUND = 51;
+
 describe('allowlist secrets show', () => {
   let harness: TestHarness;
 
@@ -223,6 +227,7 @@ describe('allowlist secrets clear', () => {
 
       const result = await harness.runWithRealTty('allowlist secrets clear', {
         responses: [{ waitFor: 'Are you sure?', send: 'y\n' }],
+        timeoutMs: 10000,
       });
 
       const output = result.stdout + result.stderr;
@@ -252,6 +257,43 @@ describe('allowlist secrets clear', () => {
       expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
     },
     { timeout: 15000 },
+  );
+});
+
+describe('allowlist secrets with analyze secrets', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it.each([
+    ['remove', 'allowlist secrets remove analysis-key'],
+    ['clear --force', 'allowlist secrets clear --force'],
+  ])(
+    'does not report an allowlisted secret, and reports it again after %s',
+    async (_label, allowlistCommand) => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      await seedAllowlistEntry(harness, 'analysis-key', GITHUB_TEST_TOKEN);
+
+      const allowlisted = await harness.run('analyze secrets secrets.js');
+      expect(allowlisted.exitCode).toBe(0);
+      expect(allowlisted.stdout + allowlisted.stderr).toContain('No secrets found');
+
+      const allowlistResult = await harness.run(allowlistCommand);
+      expect(allowlistResult.exitCode).toBe(0);
+
+      const reported = await harness.run('analyze secrets secrets.js');
+      expect(reported.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+      expect(reported.stdout + reported.stderr).toContain('GitHub Token');
+    },
+    { timeout: 30000 },
   );
 });
 
