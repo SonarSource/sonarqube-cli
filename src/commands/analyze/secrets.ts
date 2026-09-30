@@ -133,7 +133,7 @@ export async function runSecretsBinary(
       stdin,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: buildAuthEnv(auth),
+      env: await buildAuthEnv(auth),
     },
     SCAN_TIMEOUT_MS,
     `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
@@ -156,16 +156,16 @@ export async function runSecretsBinaryOnText(
       stdinData: text,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: buildAuthEnv(auth),
+      env: await buildAuthEnv(auth),
     },
     SCAN_TIMEOUT_MS,
     `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
   );
 }
 
-function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
+async function buildAuthEnv(auth: ResolvedAuth): Promise<Record<string, string>> {
   return {
-    ...buildSubprocessNetworkEnv(),
+    ...(await buildSubprocessNetworkEnv()),
     [BINARY_AUTH_URL_ENV]: auth.serverUrl,
     [BINARY_AUTH_TOKEN_ENV]: auth.token,
   };

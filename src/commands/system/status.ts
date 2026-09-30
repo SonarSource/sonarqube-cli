@@ -457,7 +457,7 @@ export async function systemStatus(
   const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
 
-  const network = getNetworkConfig();
+  const network = await getNetworkConfig();
 
   const hasIssues =
     tokenStatus === null ||
