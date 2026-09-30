@@ -133,3 +133,137 @@ describe('allowlist secrets add', () => {
     { timeout: 15000 },
   );
 });
+
+describe('allowlist secrets remove', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'forwards the exit code when the binary reports the key was not found',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+
+      const result = await harness.run('allowlist secrets remove nonexistent-key');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('No entry found with key: nonexistent-key');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    // Full round trip against a real, seeded entry: proves `remove` actually removes it from
+    // the allowlist the binary reads, not just that the CLI forwards a key string.
+    'removes a real, seeded entry, and it no longer shows up in the allowlist afterward',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'roundtrip-key', 'roundtrip-secret-value');
+
+      const removeResult = await harness.run('allowlist secrets remove roundtrip-key');
+      expect(removeResult.exitCode).toBe(0);
+      expect(removeResult.stdout + removeResult.stderr).toContain(
+        'Removed entry with key: roundtrip-key',
+      );
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('allowlist secrets clear', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it.each(['allowlist secrets clear', 'allowlist secrets clear --force'])(
+    'on an empty allowlist, exits 0 and lets the binary report it is already empty (%s)',
+    async (command) => {
+      harness.state().withSecretsBinaryInstalled();
+
+      const result = await harness.run(command);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('Allowlist is already empty');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    // Seeds one real entry via the fixture binary directly to exercise the security-relevant
+    // case: the binary's own confirm-or-force gate refusing a non-interactive clear when
+    // there is something to lose. This is a critical security check that must pass even when
+    // our wrapper isn't involved. Inherited stdio means the output is sonar-secrets-cli's own.
+    'without --force, lets the binary refuse non-interactively when entries exist',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'seed-key', 'seed-secret-value');
+
+      const result = await harness.run('allowlist secrets clear');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('use --force to skip');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    // Full round trip against a real, seeded entry: proves `clear --force` actually empties
+    // the allowlist the binary reads, not just that the CLI forwards the flag.
+    'clears a real, seeded entry with --force, and the allowlist is empty afterward',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'roundtrip-key', 'roundtrip-secret-value');
+
+      const clearResult = await harness.run('allowlist secrets clear --force');
+      expect(clearResult.exitCode).toBe(0);
+      expect(clearResult.stdout + clearResult.stderr).toContain('Cleared 1 entry from allowlist');
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
+    },
+    { timeout: 15000 },
+  );
+});
+
+/**
+ * Adds one entry to the allowlist by invoking the real fixture binary directly.
+ * Spawns with the harness's own composed environment (via `harness.env()`) so the entry
+ * lands in the exact same isolated allowlist the CLI-under-test will read via `harness.run(...)`.
+ * `harness.env()` also performs lazy setup (writing state.json, copying the fixture binary),
+ * so no separate throwaway CLI call is needed to trigger it first.
+ */
+async function seedAllowlistEntry(
+  harness: TestHarness,
+  key: string,
+  secret: string,
+): Promise<void> {
+  const env = harness.env();
+  const binaryPath = harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).path;
+  const proc = Bun.spawn([binaryPath, 'allowlist', 'add', '--key', key], {
+    env,
+    stdin: 'pipe',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  await proc.stdin.write(`${secret}\n`);
+  await proc.stdin.end();
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error(`Failed to seed allowlist entry, sonar-secrets exited with code ${exitCode}`);
+  }
+}
