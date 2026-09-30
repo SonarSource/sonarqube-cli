@@ -164,8 +164,14 @@ describe('OrganizationsClient', () => {
   describe('checkMembership', () => {
     it('checks later pages when the organization is not in the first page', async () => {
       fetchSpy = mockFetchSeq(
-        fakeResponse({ organizations: [{ key: 'other-org' }], paging: { total: 501 } }),
-        fakeResponse({ organizations: [{ key: 'my-org' }], paging: { total: 501 } }),
+        fakeResponse({
+          organizations: [{ key: 'other-org' }],
+          paging: { pageIndex: 1, pageSize: 500, total: 501 },
+        }),
+        fakeResponse({
+          organizations: [{ key: 'my-org' }],
+          paging: { pageIndex: 2, pageSize: 500, total: 501 },
+        }),
       );
 
       expect(await client.checkMembership('my-org')).toEqual({ status: 'member' });

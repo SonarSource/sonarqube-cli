@@ -1502,14 +1502,12 @@ export class FakeSonarQubeServerBuilder {
           }
           // member=true → list orgs the user belongs to
           if (query.member === 'true') {
+            const pageIndex = Number.parseInt(query.p ?? '1', 10);
+            const pageSize = Number.parseInt(query.ps ?? '10', 10);
             return new Response(
               JSON.stringify({
                 organizations: memberOrganizations,
-                paging: {
-                  pageIndex: 1,
-                  pageSize: memberOrganizations.length,
-                  total: memberOrganizationsTotal,
-                },
+                paging: { pageIndex, pageSize, total: memberOrganizationsTotal },
               }),
               { headers: { 'Content-Type': 'application/json' } },
             );
