@@ -24,7 +24,7 @@ import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { parseInteger } from '@/core/commands/parsing.ts';
+import { parseInteger } from '@/core/commands/params.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   isAlphaEnabledFromEnv,
@@ -130,6 +130,11 @@ import {
   VALID_STANDARD_SEVERITIES,
   VALID_STATUSES,
 } from './list/issues.ts';
+import {
+  listOrganizations,
+  type ListOrgOptions,
+  VALID_FORMATS as ORG_VALID_FORMATS,
+} from './list/org.ts';
 import {
   listProjects,
   type ListProjectsOptions,
@@ -333,6 +338,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
+
+  const listOrgFormatOption = formatOption(ORG_VALID_FORMATS, 'table');
+  list
+    .command('org')
+    .alias('orgs')
+    .description('List organizations you have access to (SonarQube Cloud only)')
+    .showUpdateNotification(isTableFormatOption)
+    .addOption(listOrgFormatOption)
+    .addOption(pageOption)
+    .addOption(pageSizeOption)
+    .authenticatedAction((ctx, options: ListOrgOptions) => listOrganizations(options, ctx));
 
   const qualityGate = COMMAND_TREE.command('quality-gate')
     .alias('qg')

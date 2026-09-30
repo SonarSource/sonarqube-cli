@@ -20,7 +20,7 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
