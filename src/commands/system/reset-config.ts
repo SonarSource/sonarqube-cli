@@ -48,12 +48,8 @@ function removeConfigFile(): boolean {
 }
 
 async function removeConfigSecrets(): Promise<boolean> {
-  let removedAny = false;
-  // Sequential: the file-backed keychain does an unsynchronized read-modify-write.
-  for (const key of SENSITIVE_CONFIG_KEYS) {
-    removedAny = (await deleteConfigSecret(key)) || removedAny;
-  }
-  return removedAny;
+  const removed = await Promise.all(SENSITIVE_CONFIG_KEYS.map((key) => deleteConfigSecret(key)));
+  return removed.includes(true);
 }
 
 export async function clearConfig(): Promise<ConfigResetResult> {
