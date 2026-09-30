@@ -770,11 +770,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('reset')
     .description(
       'Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, ' +
-        'and local stats data. Telemetry settings are preserved.',
+        'and local stats data. Pass --all to also remove CLI configuration (sonar config).',
     )
     .option(
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
+    )
+    .option(
+      '--all',
+      'Also remove CLI configuration (sonar config), including network and telemetry configuration',
     )
     .anonymousAction((ctx, options: SystemResetOptions) => systemReset(options, ctx));
 

@@ -28,12 +28,14 @@ import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
+import { clearConfig } from './reset-config.ts';
 import { clearFilesystem } from './reset-filesystem.ts';
 import { removeAllIntegrations } from './reset-integrations.ts';
 import { clearStats } from './reset-stats.ts';
 
 export interface SystemResetOptions {
   force?: boolean;
+  all?: boolean;
 }
 
 interface CleanedFields {
@@ -66,7 +68,8 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, and the local stats database. Telemetry settings are preserved.
+ * cached files, and the local stats database. With `all`, `sonar config` configuration
+ * is removed as well.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -75,7 +78,7 @@ export async function systemReset(
   const { console } = ctx;
   if (!options.force) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar system reset --force');
-    if (!(await confirmDestructiveAction(console))) {
+    if (!(await confirmDestructiveAction(console, options.all === true))) {
       return;
     }
   }
@@ -111,6 +114,11 @@ export async function systemReset(
 
     const statsResult = clearStats();
     results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
+
+    if (options.all) {
+      const configResult = await clearConfig();
+      results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
+    }
   } finally {
     if (results.length > 0) {
       console.phase(
@@ -139,13 +147,15 @@ export async function systemReset(
   console.success('CLI has been successfully reset to factory settings.');
 }
 
-async function confirmDestructiveAction(console: Console): Promise<boolean> {
+async function confirmDestructiveAction(console: Console, all: boolean): Promise<boolean> {
   if (!process.stdin.isTTY) {
     console.print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
     return false;
   }
   console.warn(
-    'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
+    all
+      ? 'This will remove all local credentials, `sonar config` settings, uninstall Sonar binaries, and break active tool integrations.'
+      : 'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
   );
   const answer = await console.textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {
