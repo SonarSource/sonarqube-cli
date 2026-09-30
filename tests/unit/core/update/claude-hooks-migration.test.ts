@@ -287,6 +287,17 @@ describe('migrateClaudeCodeHooks', () => {
     expect(installHooksSpy).not.toHaveBeenCalled();
   });
 
+  it('does not fall back when legacy agent state is absent', async () => {
+    const state = makeState();
+    delete (state as Partial<CliState>).agents;
+    loadStateSpy.mockReturnValue(state);
+    existsSyncSpy.mockReturnValue(true);
+
+    await migrateClaudeCodeHooks(hooks.installHooks, homedirFn);
+
+    expect(installHooksSpy).not.toHaveBeenCalled();
+  });
+
   it('continues installing remaining locations when one throws', async () => {
     const state = makeStateWithExtensions([
       makeExtension('/proj/alpha', false),
@@ -482,6 +493,26 @@ describe('removeObsoleteHookArtifacts', () => {
 });
 
 describe('cleanObsoleteFromState', () => {
+  it('removes obsolete extensions when legacy agent state is absent', () => {
+    const state = getDefaultState('test');
+    delete (state as Partial<CliState>).agents;
+    seedAgentExtension(state, {
+      id: 'a3s-ext',
+      agentId: 'claude-code',
+      projectRoot: '/some/project',
+      global: false,
+      kind: 'hook',
+      name: OBSOLETE_A3S_MARKER,
+      hookType: 'PostToolUse',
+      updatedByCliVersion: OLD_VERSION,
+      updatedAt: new Date().toISOString(),
+    });
+
+    migration.cleanObsoleteFromState(state);
+
+    expect(state.agentExtensions).toEqual([]);
+  });
+
   it('removes sonar-a3s from legacy hooks.installed', () => {
     const state = getDefaultState('test');
     state.agents['claude-code'].hooks.installed.push({

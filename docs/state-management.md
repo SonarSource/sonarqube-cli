@@ -419,6 +419,8 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.dependencies.installed'
 - **Windows**: Windows Credential Manager
 
 The keychain account key is derived from the connection's `serverUrl` and `orgKey` fields.
+Sensitive `sonar config` values use `config/<key>` accounts in the same keychain service.
+Non-sensitive ones are stored in `~/.sonar/sonarqube-cli/cli-config.properties`, where values are literal (backslashes are not escapes).
 
 ### State Modification
 

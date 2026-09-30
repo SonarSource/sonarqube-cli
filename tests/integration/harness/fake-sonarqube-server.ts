@@ -165,6 +165,7 @@ interface ProjectData {
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
+  branchNames: string[];
   unanalyzedBranch?: string;
   componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]>;
   componentTreeStatusCode?: number;
@@ -198,6 +199,7 @@ export class ProjectBuilder {
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
+  private readonly branchNames: string[] = [];
   private unanalyzedBranch?: string;
   private readonly componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]> = new Map();
   private componentTreeStatusCode?: number;
@@ -263,6 +265,12 @@ export class ProjectBuilder {
   /** No branch flagged `isMain: true` — `GET /api/project_branches/list` returns an empty array. */
   withNoDefaultBranch(): this {
     this.defaultBranchName = null;
+    return this;
+  }
+
+  /** Additional branches `GET /api/project_branches/list` returns for this project. */
+  withBranches(branchNames: string[]): this {
+    this.branchNames.push(...branchNames);
     return this;
   }
 
@@ -387,6 +395,7 @@ export class ProjectBuilder {
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
+      branchNames: this.branchNames,
       unanalyzedBranch: this.unanalyzedBranch,
       componentTreeFilesByMetric: this.componentTreeFilesByMetric,
       componentTreeStatusCode: this.componentTreeStatusCode,
@@ -1318,16 +1327,26 @@ export class FakeSonarQubeServerBuilder {
           }
           return new Response(
             JSON.stringify({
-              branches: projectData.defaultBranchName
-                ? [
-                    {
-                      name: projectData.defaultBranchName,
-                      isMain: true,
-                      type: 'LONG',
-                      status: { qualityGateStatus: 'OK' },
-                    },
-                  ]
-                : [],
+              branches: [
+                ...(projectData.defaultBranchName
+                  ? [
+                      {
+                        name: projectData.defaultBranchName,
+                        isMain: true,
+                        type: 'LONG',
+                        status: { qualityGateStatus: 'OK' },
+                      },
+                    ]
+                  : []),
+                ...projectData.branchNames
+                  .filter((branchName) => branchName !== projectData.defaultBranchName)
+                  .map((name) => ({
+                    name,
+                    isMain: false,
+                    type: 'LONG',
+                    status: { qualityGateStatus: 'OK' },
+                  })),
+              ],
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

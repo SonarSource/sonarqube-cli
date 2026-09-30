@@ -140,7 +140,9 @@ function formatScopeLine(scope: QualityGateScope): string {
   if (scope.kind === 'pullRequest') {
     return `Pull Request: ${scope.value}`;
   }
-  return `Branch:       ${scope.value}${scope.kind === 'default' ? ' (default)' : ''}`;
+  const annotation =
+    scope.kind === 'branchAuto' ? ' (auto-detected from the current git branch)' : '';
+  return `Branch:       ${scope.value}${scope.kind === 'default' ? ' (default)' : annotation}`;
 }
 
 function formatVerdictBracket(verdict: FileQualityGateVerdict): string {

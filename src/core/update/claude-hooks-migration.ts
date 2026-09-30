@@ -105,7 +105,8 @@ function resolveLocations(state: CliState, homedirFn: () => string): Location[] 
     return locations;
   }
 
-  if (state.agents['claude-code'].configured) {
+  const claude = (state as Partial<CliState>).agents?.['claude-code'];
+  if (claude?.configured) {
     // Pre-registry fallback: check for global hooks in homedir
     const globalHooksDir = join(homedirFn(), '.claude', 'hooks', 'sonar-secrets');
     if (fs.existsSync(globalHooksDir)) {
@@ -208,9 +209,10 @@ export async function removeObsoleteHookArtifacts(installDir: string): Promise<v
  * Mutates state in place — caller is responsible for saving.
  */
 export function cleanObsoleteFromState(state: CliState): void {
-  state.agents['claude-code'].hooks.installed = state.agents['claude-code'].hooks.installed.filter(
-    (h) => h.name !== OBSOLETE_A3S_MARKER,
-  );
+  const claude = (state as Partial<CliState>).agents?.['claude-code'];
+  if (claude) {
+    claude.hooks.installed = claude.hooks.installed.filter((h) => h.name !== OBSOLETE_A3S_MARKER);
+  }
   state.agentExtensions = state.agentExtensions.filter((e) => e.name !== OBSOLETE_A3S_MARKER);
 }
 

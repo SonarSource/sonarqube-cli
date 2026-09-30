@@ -57,6 +57,7 @@ import {
   type OnboardCiGitlabOptions,
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
+import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
@@ -793,6 +794,24 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .anonymousAction((ctx, options: SystemResetOptions) => systemReset(options, ctx));
 
+  // Local allowlists for SonarQube analyzers
+  const allowlist = COMMAND_TREE.command('allowlist')
+    .description('Manage local allowlists for SonarQube analyzers')
+    .rootHelp({
+      category: 'cli-management',
+    });
+
+  const allowlistSecretsCmd = allowlist
+    .command('secrets')
+    .description(
+      'Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)',
+    );
+
+  allowlistSecretsCmd
+    .command('show')
+    .description('List entries in the sonar-secrets allowlist')
+    .anonymousAction((ctx) => allowlistSecretsShow(ctx));
+
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
     // Retry surface for a global-integrations migration the post-update run could not finish.
@@ -857,7 +876,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
     .addHelpText(`after`, projectKeyExtraHelp)
-    .authenticatedAction(
+    .anonymousAction(
       (
         ctx,
         options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },

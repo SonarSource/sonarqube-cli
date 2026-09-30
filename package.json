@@ -1,7 +1,7 @@
 {
   "name": "sonarqube-cli",
   "type": "module",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "SonarQube CLI",
   "bin": {
     "sonar": "./dist/index.js"
@@ -100,20 +100,20 @@
   },
   "dependencies": {
     "@clack/core": "1.5.1",
-    "@sentry/bun": "10.75.2",
+    "@sentry/bun": "11.0.0",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
     "js-yaml": "5.4.2",
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
     "node-forge": "1.4.0",
-    "openpgp": "6.3.1",
+    "openpgp": "6.3.2",
     "picocolors": "1.1.1",
     "picomatch": "4.0.7",
     "smol-toml": "1.9.0"
   },
   "devDependencies": {
-    "@ninoseki/eslint-plugin-neverthrow": "0.3.1",
+    "@ninoseki/eslint-plugin-neverthrow": "0.3.2",
     "@sentry/cli": "3.8.0",
     "@sonar/scan": "5.0.1",
     "@types/bun": "1.4.2",
@@ -132,7 +132,7 @@
     "istanbul-lib-report": "3.0.1",
     "istanbul-reports": "3.2.0",
     "lint-staged": "16.4.0",
-    "prettier": "3.9.8",
+    "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1"
   },
