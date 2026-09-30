@@ -44,6 +44,8 @@ const PLUGIN_FILE = 'sonar.ts';
 
 export const OPENCODE_INTEGRATION_ID = 'opencode';
 const OPENCODE_DISPLAY_NAME = 'OpenCode';
+const SECRETS_EXAMPLE_FOOTER =
+  '  Sonar will detect the token and mask it before the message is sent.';
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
 export interface OpenCodeIntegrationOptions extends IntegrateAgentOptions {
@@ -80,7 +82,7 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
             )
           : askUser();
       },
-      postInstallExample: secretsScanningExample(OPENCODE_DISPLAY_NAME),
+      postInstallExample: secretsScanningExample(OPENCODE_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
         wholeFile({
