@@ -123,20 +123,20 @@ describe('config repository', () => {
     expect(existsSync(testConfigFile)).toBe(false);
   });
 
-  it('removes each value from the store matching its sensitivity', async () => {
+  it('removes each value from the store matching its sensitivity, reporting it was removed', async () => {
     await setConfigValue('log.level', 'DEBUG');
     await setConfigValue('network.proxy.https', 'http://user:secret@proxy');
 
-    await unsetConfigValue('log.level');
-    await unsetConfigValue('network.proxy.https');
+    expect(await unsetConfigValue('log.level')).toBe(true);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(true);
 
     expect(await getConfigValue('log.level')).toBeUndefined();
     expect(await getConfigValue('network.proxy.https')).toBeUndefined();
   });
 
-  it('is a no-op for a key that is not currently set', async () => {
-    await unsetConfigValue('log.level');
-    await unsetConfigValue('network.proxy.https');
+  it('is a no-op reporting nothing removed for a key that is not currently set', async () => {
+    expect(await unsetConfigValue('log.level')).toBe(false);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(false);
 
     expect(await getConfigValue('log.level')).toBeUndefined();
     expect(await getConfigValue('network.proxy.https')).toBeUndefined();
