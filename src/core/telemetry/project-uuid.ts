@@ -124,7 +124,7 @@ export async function resolveProjectUuid(
 ): Promise<string | null> {
   try {
     const state = tryLoadState();
-    if (!state || !isTelemetryEnabled(state)) return null;
+    if (!state || !isTelemetryEnabled()) return null;
 
     const entryKey = cacheKey(auth.serverUrl, projectKey);
     const diskCache = readDiskCache();

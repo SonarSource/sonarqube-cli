@@ -18,20 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { homedir } from 'node:os';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { ErrorEvent, EventHint } from '@sentry/bun';
 import * as Sentry from '@sentry/bun';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { flushSentry, initSentry } from '@/core/observability/sentry.ts';
 import * as fetchModule from '@/core/server/fetch.ts';
-import { getDefaultState } from '@/core/state/state.ts';
 import { ENV_TELEMETRY_EGRESS } from '@/core/telemetry/egress.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { disableTelemetryInConfigFile } from '../../../_common/telemetry-helpers.ts';
 
 function makeErrorEvent(
   filenames: (string | undefined)[][],
@@ -70,8 +72,13 @@ let flushSpy: ReturnType<typeof spyOn>;
 let getClientSpy: ReturnType<typeof spyOn>;
 let fetchAuthenticatedSpy: ReturnType<typeof spyOn>;
 let savedEgress: string | undefined;
+let savedSonarUserHome: string | undefined;
+let testDir: string;
 
 beforeEach(() => {
+  savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+  testDir = mkdtempSync(join(tmpdir(), 'sentry-test-'));
+  process.env[ENV_SONAR_USER_HOME] = testDir;
   // Cleared so the init path runs; Sentry.init is mocked below.
   savedEgress = process.env[ENV_TELEMETRY_EGRESS];
   delete process.env[ENV_TELEMETRY_EGRESS];
@@ -103,34 +110,32 @@ afterEach(() => {
   delete process.env['SONARSOURCE_DOGFOODING'];
   process.env[ENV_DO_NOT_TRACK] = '1';
   restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
+  restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+  rmSync(testDir, { recursive: true, force: true });
 });
 
 describe('initSentry', () => {
   describe('when telemetry is disabled', () => {
     it('does not call Sentry.init', () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
+      disableTelemetryInConfigFile();
 
-      initSentry(state);
+      initSentry();
 
       expect(initSpy).not.toHaveBeenCalled();
     });
 
     it('does not call Sentry.setUser', () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
+      disableTelemetryInConfigFile();
 
-      initSentry(state);
+      initSentry();
 
       expect(setUserSpy).not.toHaveBeenCalled();
     });
 
     it('does not call Sentry.init when DO_NOT_TRACK is set', () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = true;
       process.env[ENV_DO_NOT_TRACK] = '1';
 
-      initSentry(state);
+      initSentry();
 
       expect(initSpy).not.toHaveBeenCalled();
     });
@@ -138,13 +143,13 @@ describe('initSentry', () => {
 
   describe('when telemetry is enabled', () => {
     it('calls Sentry.init', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       expect(initSpy).toHaveBeenCalledTimes(1);
     });
 
     it('preserves the restrictive data collection settings', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       expect(options.dataCollection).toEqual({
@@ -166,7 +171,7 @@ describe('initSentry', () => {
     it('sets environment to "production" when SONARSOURCE_DOGFOODING is not set', () => {
       delete process.env['SONARSOURCE_DOGFOODING'];
 
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       expect(options.environment).toBe('production');
@@ -175,7 +180,7 @@ describe('initSentry', () => {
     it('sets environment to "dogfood" when SONARSOURCE_DOGFOODING=1', () => {
       process.env['SONARSOURCE_DOGFOODING'] = '1';
 
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       expect(options.environment).toBe('dogfood');
@@ -184,7 +189,7 @@ describe('initSentry', () => {
     it('sets environment to "production" when SONARSOURCE_DOGFOODING is not "1"', () => {
       process.env['SONARSOURCE_DOGFOODING'] = '0';
 
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       expect(options.environment).toBe('production');
@@ -193,13 +198,13 @@ describe('initSentry', () => {
     it('sets the user ID from getOrCreateUserId', () => {
       getUserIdSpy.mockReturnValue('my-machine-id');
 
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       expect(setUserSpy).toHaveBeenCalledWith({ id: 'my-machine-id' });
     });
 
     it('sends envelopes through the authenticated fetch wrapper', async () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
 
       const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
       if (!options.transport) {
@@ -257,7 +262,7 @@ describe('flushSentry', () => {
 
 describe('scrubPii', () => {
   it('replaces the home directory with ~ in a frame filename', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     const event = makeErrorEvent([[`${homedir()}/project/src/index.ts`]]);
@@ -269,7 +274,7 @@ describe('scrubPii', () => {
   });
 
   it('replaces multiple occurrences of the home directory in the same filename', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     const home = homedir();
@@ -280,7 +285,7 @@ describe('scrubPii', () => {
   });
 
   it('scrubs all frames across multiple exceptions', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     const home = homedir();
@@ -293,7 +298,7 @@ describe('scrubPii', () => {
   });
 
   it('leaves filenames that do not contain the home directory unchanged', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     const event = makeErrorEvent([['/usr/local/lib/node_modules/foo/index.js']]);
@@ -305,7 +310,7 @@ describe('scrubPii', () => {
   });
 
   it('handles frames with no filename without throwing', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     const event = makeErrorEvent([[undefined]]);
@@ -314,7 +319,7 @@ describe('scrubPii', () => {
   });
 
   it('handles events with no exceptions without throwing', () => {
-    initSentry(getDefaultState('1.0.0'));
+    initSentry();
     const beforeSend = captureBeforeSend();
 
     expect(() => beforeSend({ type: undefined }, {})).not.toThrow();
@@ -322,7 +327,7 @@ describe('scrubPii', () => {
 
   describe('generic recursive scrubbing', () => {
     it('scrubs strings in arbitrary nested objects not part of the known event structure', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const home = homedir();
@@ -337,7 +342,7 @@ describe('scrubPii', () => {
     });
 
     it('scrubs strings inside arrays', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const home = homedir();
@@ -351,7 +356,7 @@ describe('scrubPii', () => {
     });
 
     it('scrubs a realistic production event across all string fields', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const home = homedir();
@@ -385,7 +390,7 @@ describe('scrubPii', () => {
 
   describe('exception.value scrubbing', () => {
     it('replaces the home directory with ~ in the exception message', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const event = makeErrorEvent([[]], [`ENOENT: no such file or directory '${homedir()}/foo'`]);
@@ -395,7 +400,7 @@ describe('scrubPii', () => {
     });
 
     it('leaves exception messages without the home directory unchanged', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const event = makeErrorEvent([[]], ['something went wrong']);
@@ -405,7 +410,7 @@ describe('scrubPii', () => {
     });
 
     it('handles exceptions with no value without throwing', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const event = makeErrorEvent([[]], [undefined]);
@@ -416,7 +421,7 @@ describe('scrubPii', () => {
 
   describe('breadcrumb scrubbing', () => {
     it('replaces the home directory with ~ in breadcrumb messages', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const event = makeEventWithBreadcrumbs([`read file ${homedir()}/config.json`]);
@@ -426,7 +431,7 @@ describe('scrubPii', () => {
     });
 
     it('scrubs all breadcrumbs in the event', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const home = homedir();
@@ -438,7 +443,7 @@ describe('scrubPii', () => {
     });
 
     it('handles breadcrumbs with no message without throwing', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       const event = makeEventWithBreadcrumbs([undefined]);
@@ -447,7 +452,7 @@ describe('scrubPii', () => {
     });
 
     it('handles events with no breadcrumbs without throwing', () => {
-      initSentry(getDefaultState('1.0.0'));
+      initSentry();
       const beforeSend = captureBeforeSend();
 
       expect(() => beforeSend({ type: undefined }, {})).not.toThrow();

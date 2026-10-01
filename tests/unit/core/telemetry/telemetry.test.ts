@@ -54,6 +54,7 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers.ts';
 import {
+  disableTelemetryInConfigFile,
   readCommandEvents,
   readTelemetryEvents,
   writeTelemetryEvent,
@@ -196,10 +197,8 @@ describe('CliCommandExecuted', () => {
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
-    it('does nothing when telemetry is disabled in state', async () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
-      loadStateSpy.mockReturnValue(state);
+    it('does nothing when telemetry is disabled', async () => {
+      disableTelemetryInConfigFile();
 
       await commitCommandExecuted(makeCommand('auth login'));
 
@@ -794,9 +793,7 @@ describe('CliCommandExecuted', () => {
 describe('flushTelemetry', () => {
   describe('no-op conditions', () => {
     it('does nothing when telemetry is disabled', async () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
-      loadStateSpy.mockReturnValue(state);
+      disableTelemetryInConfigFile();
       writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();

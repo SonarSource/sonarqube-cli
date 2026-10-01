@@ -66,7 +66,7 @@ export async function commitTelemetryFacts(
 function scheduleTelemetryFlush(): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) return;
+  if (!state || !isTelemetryEnabled()) return;
   if (resolveTelemetryEgress().kind !== 'off') {
     spawnFlushWorker();
   }
@@ -98,7 +98,7 @@ const FLUSH_TIMEOUT_MS = 60_000;
  */
 export async function flushTelemetry(): Promise<void> {
   const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) {
+  if (!state || !isTelemetryEnabled()) {
     return;
   }
   // Guarded here rather than inside flushTelemetryEvents, which stays an unconditional

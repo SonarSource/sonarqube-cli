@@ -45,7 +45,11 @@ import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
-import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
+import {
+  disableTelemetryInConfigFile,
+  makeTelemetryState,
+  readAnalysisEvents,
+} from '../../../_common/telemetry-helpers.ts';
 
 const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
@@ -320,7 +324,7 @@ describe('recordSqaaAnalysisTelemetry()', () => {
   });
 
   it('does not write when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitSqaaAnalysisTelemetry(
       SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
