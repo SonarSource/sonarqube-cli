@@ -19,12 +19,6 @@
  */
 
 import { getBooleanConfigValue } from '@/core/config/config-repository.ts';
-import type { CliState } from '@/core/state/state.ts';
-
-/** Defaults to enabled: an absent `stats` field means the user hasn't opted out. */
-export function isStatsEnabled(state: CliState): boolean {
-  return state.stats?.enabled ?? true;
-}
 
 /** Whether local stats collection should run for this invocation. */
 export function isStatsCollectionEnabled(): boolean {
@@ -33,8 +27,4 @@ export function isStatsCollectionEnabled(): boolean {
   } catch {
     return false;
   }
-}
-
-export function describeStatsStatus(state: CliState): string {
-  return `Stats collection is currently ${isStatsEnabled(state) ? 'enabled' : 'disabled'}.`;
 }

@@ -20,7 +20,6 @@
 
 import { getBooleanConfigValue } from '../config/config-repository.ts';
 import { ENV_DO_NOT_TRACK } from '../config-constants.ts';
-import type { CliState } from '../state/state.ts';
 
 /** True when DO_NOT_TRACK is set to 1 */
 export function isDoNotTrackRequested(): boolean {
@@ -34,11 +33,4 @@ export function isTelemetryEnabled(): boolean {
   } catch {
     return false;
   }
-}
-
-export function describeTelemetryStatus(state: CliState): string {
-  if (isDoNotTrackRequested()) {
-    return 'Telemetry is currently disabled (DO_NOT_TRACK is set).';
-  }
-  return `Telemetry is currently ${state.telemetry.enabled ? 'enabled' : 'disabled'}.`;
 }
