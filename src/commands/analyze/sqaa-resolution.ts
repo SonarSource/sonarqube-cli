@@ -32,7 +32,7 @@ const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
   '  --staged          analyze only staged files\n' +
   '  --base <ref>      analyze files changed vs a branch (e.g. --base main)\n' +
-  '  --file <path>     analyze specific file(s) — repeat for multiple files\n' +
+  '  --file <path>     analyze specific file(s); repeat for multiple files\n' +
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
 /**

@@ -1988,7 +1988,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       // Binary file shown as IGNORED — no files to analyze
-      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
+      expect(result.stdout + result.stderr).toContain('All change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
@@ -2019,7 +2019,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       // Oversized file shown as IGNORED — no files to analyze
-      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
+      expect(result.stdout + result.stderr).toContain('All change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');

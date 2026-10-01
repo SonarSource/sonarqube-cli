@@ -176,7 +176,7 @@ export function formatSqaaErrorLinePlain(err: { code: string; message: string })
 function formatCleanCollapsedRow(count: number, colored: boolean): string {
   const icon = colored ? green('✓') : '✓';
   const countLabel = colored ? bold(String(count)) : String(count);
-  const suffix = colored ? dim(' — no issues') : ' — no issues';
+  const suffix = colored ? dim(': no issues') : ': no issues';
   return `  ${icon}  ${countLabel} files${suffix}`;
 }
 
