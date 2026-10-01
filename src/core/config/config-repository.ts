@@ -63,12 +63,16 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
   setConfigFileValue(key, trimmedValue);
 }
 
-/** No-op when `key` is not currently set — mirrors shell `unset` on an unset variable. */
-export async function unsetConfigValue(key: ConfigKey): Promise<void> {
+/**
+ * Returns whether a value was actually removed. No-op (false) when `key` is not
+ * currently set — mirrors shell `unset` on an unset variable — so the caller can
+ * tell "removed" apart from "there was nothing to remove" instead of reporting
+ * success regardless.
+ */
+export async function unsetConfigValue(key: ConfigKey): Promise<boolean> {
   const definition = getKeyDefinition(key);
   if (definition.sensitive) {
-    await deleteConfigSecret(key);
-    return;
+    return await deleteConfigSecret(key);
   }
-  removeConfigFileValue(key);
+  return removeConfigFileValue(key);
 }
