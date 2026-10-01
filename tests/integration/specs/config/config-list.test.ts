@@ -203,6 +203,50 @@ describe('config list', () => {
   );
 
   it(
+    '--only-set shows only keys that currently have a value',
+    async () => {
+      const set = await harness.run('config set log.level DEBUG');
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config list --only-set');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('log.level=DEBUG');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    '--only-set with --format json includes only set keys',
+    async () => {
+      const set = await harness.run(
+        'config set network.tls.clientPassphrase super-secret-passphrase',
+      );
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config list --only-set --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual([
+        { key: 'network.tls.clientPassphrase', sensitive: true, set: true },
+      ]);
+      expect(result.stdout).not.toContain('super-secret-passphrase');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    '--only-set prints a message instead of an empty list when nothing is set',
+    async () => {
+      const result = await harness.run('config list --only-set');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('No config values are set.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 for an invalid --format value',
     async () => {
       const result = await harness.run('config list --format xml');
