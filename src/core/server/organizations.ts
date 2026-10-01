@@ -24,6 +24,7 @@ import logger from '../observability/logger.ts';
 import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
+import { hasNextPage, type Paging } from './paging.ts';
 
 const MAX_ORGANIZATIONS_PER_PAGE = 500;
 
@@ -135,13 +136,11 @@ export class OrganizationsClient {
   listUserOrganizations(
     page = 1,
     ps = 10,
-  ): ResultAsync<{ organizations: Organization[]; total: number }, HttpClientError> {
-    return this.client
-      .get<{
-        organizations: Organization[];
-        paging: { total: number };
-      }>('/api/organizations/search', { member: true, ps, p: page })
-      .map((result) => ({ organizations: result.organizations, total: result.paging.total }));
+  ): ResultAsync<{ organizations: Organization[]; paging: Paging }, HttpClientError> {
+    return this.client.get<{ organizations: Organization[]; paging: Paging }>(
+      '/api/organizations/search',
+      { member: true, ps, p: page },
+    );
   }
 
   /**
@@ -156,11 +155,11 @@ export class OrganizationsClient {
       const result = await this.listUserOrganizations(page, MAX_ORGANIZATIONS_PER_PAGE);
       if (result.isErr()) return { status: 'check_failed', reason: result.error.message };
 
-      const { organizations, total } = result.value;
+      const { organizations, paging } = result.value;
       if (organizations.some((organization) => organization.key === organizationKey)) {
         return { status: 'member' };
       }
-      if (organizations.length === 0 || page * MAX_ORGANIZATIONS_PER_PAGE >= total) {
+      if (organizations.length === 0 || !hasNextPage(paging)) {
         return { status: 'not_member' };
       }
     }
