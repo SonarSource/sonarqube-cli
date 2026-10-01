@@ -70,7 +70,7 @@ async function buildIdentityBase(
   identityOptions?: IdentityEmitOptions,
 ): Promise<TelemetryEventIdentityPayload | null> {
   const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) return null;
+  if (!state || !isTelemetryEnabled()) return null;
   const installationId = state.telemetry.installationId;
   if (!installationId) return null;
 

@@ -45,6 +45,11 @@ export async function getConfigValue(key: ConfigKey): Promise<string | undefined
   return getConfigFileValue(key);
 }
 
+export function getBooleanConfigValue(key: ConfigKey, defaultValue: boolean): boolean {
+  const value = getConfigFileValue(key);
+  return value === undefined ? defaultValue : value === 'true';
+}
+
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
