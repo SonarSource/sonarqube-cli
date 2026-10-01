@@ -96,6 +96,7 @@ import {
 import { setConfig } from './config/set.ts';
 import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
+import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
@@ -752,6 +753,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .argument('<key>', 'Config key to set')
     .argument('[value]', 'Value to store; omit to enter it interactively without echoing')
     .anonymousAction((ctx, key: string, value: string | undefined) => setConfig(key, value, ctx));
+
+  configure
+    .command('unset')
+    .description('Remove a stored sonar config value')
+    .argument('<key>', 'Config key to unset')
+    .anonymousAction((ctx, key: string) => unsetConfig(key, ctx));
 
   configure
     .command('telemetry')
