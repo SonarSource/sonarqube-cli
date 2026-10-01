@@ -58,6 +58,11 @@ import {
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
 import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
+import {
+  allowlistSecretsClear,
+  type AllowlistSecretsClearOptions,
+} from './allowlist/secrets/clear.ts';
+import { allowlistSecretsRemove } from './allowlist/secrets/remove.ts';
 import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
@@ -823,6 +828,23 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Add a secret value to the sonar-secrets allowlist (interactive; requires a real terminal, not usable by agents or scripts)',
     )
     .anonymousAction((ctx) => allowlistSecretsAdd(ctx));
+
+  allowlistSecretsCmd
+    .command('remove')
+    .description('Remove an entry from the sonar-secrets allowlist by key')
+    .argument('<key>', 'Unique key of the allowlist entry to remove')
+    .anonymousAction((ctx, key: string) => allowlistSecretsRemove(key, ctx));
+
+  allowlistSecretsCmd
+    .command('clear')
+    .description('Remove all entries from the sonar-secrets allowlist')
+    .option(
+      '--force',
+      'Skip the interactive confirmation prompt (required for non-interactive use)',
+    )
+    .anonymousAction((ctx, options: AllowlistSecretsClearOptions) =>
+      allowlistSecretsClear(options, ctx),
+    );
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
