@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { Writable } from 'node:stream';
-
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
@@ -70,7 +68,7 @@ export async function runSecretsStage(
  * run — reported, then allowed through, as the hook has always treated an analyzer failure.
  */
 export async function scanCommitScans(
-  batch: (stdin: Writable) => AsyncIterable<Buffer>,
+  batch: AsyncIterable<Buffer>,
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<BatchScanOutcome | null> {
