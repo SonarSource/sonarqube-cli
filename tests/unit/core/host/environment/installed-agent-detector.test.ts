@@ -73,6 +73,12 @@ describe('detectInstalledAgents', () => {
     expect(detectInstalledAgents(home)).toEqual(['antigravity']);
   });
 
+  it('detects OpenCode from its own global config directory', () => {
+    mkdirSync(join(home, '.config', 'opencode'), { recursive: true });
+
+    expect(detectInstalledAgents(home)).toEqual(['opencode']);
+  });
+
   it('defaults to the real user home directory when none is given', () => {
     expect(Array.isArray(detectInstalledAgents())).toBe(true);
   });
@@ -91,6 +97,7 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('codex')).toBe('Codex');
     expect(agentDisplayName('copilot')).toBe('Copilot');
     expect(agentDisplayName('antigravity')).toBe('Antigravity');
+    expect(agentDisplayName('opencode')).toBe('OpenCode');
   });
 });
 
