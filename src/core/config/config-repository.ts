@@ -29,7 +29,7 @@ import {
   isValidConfigValue,
 } from './config-schema.ts';
 
-function getKeyDefinition(key: ConfigKey): ConfigKeyDefinition {
+export function getKeyDefinition(key: ConfigKey): ConfigKeyDefinition {
   const definition = CONFIG_KEY_BY_NAME.get(key);
   if (!definition) {
     throw new InvalidOptionError(`Unknown config key '${key}'.`);
@@ -48,6 +48,9 @@ export async function getConfigValue(key: ConfigKey): Promise<string | undefined
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    throw new InvalidOptionError(`Value for config key '${key}' must not be empty.`);
+  }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
       `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
