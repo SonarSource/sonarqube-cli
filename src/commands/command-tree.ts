@@ -1076,6 +1076,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
+  COMMAND_TREE.hook('preAction', async () => {
+    // Safely: a throw from a Commander hook would abort the user's command.
+    // Before Sentry init, which reads the telemetry opt-out this migrates.
+    await runPostUpdateActionsSafely(postUpdateDeps);
+  });
+
   // Defer Sentry initialization until a command action is about to run, so that
   // --help and --version don't pay for it (unknown commands do reach the root
   // action). The guard avoids re-loading state and re-initializing on nested commands.
@@ -1084,12 +1090,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     if (sentryInitialized) return;
     sentryInitialized = true;
     const state = tryLoadState();
-    if (state) initSentry(state);
-  });
-
-  COMMAND_TREE.hook('preAction', async () => {
-    // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    if (state) initSentry();
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

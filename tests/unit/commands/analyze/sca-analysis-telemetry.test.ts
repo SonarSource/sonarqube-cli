@@ -49,7 +49,11 @@ import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { readStatsEvents, removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
-import { makeTelemetryState, readAnalysisEvents } from '../../../_common/telemetry-helpers.ts';
+import {
+  disableTelemetryInConfigFile,
+  makeTelemetryState,
+  readAnalysisEvents,
+} from '../../../_common/telemetry-helpers.ts';
 
 const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
@@ -305,7 +309,7 @@ describe('recordScaAnalysisTelemetry()', () => {
   });
 
   it('does not write when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitScaAnalysisTelemetry(
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
