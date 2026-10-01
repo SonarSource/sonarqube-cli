@@ -119,8 +119,6 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
 
-/** Stated to the analyzer explicitly, so a caller filtering oversize content first uses the same threshold. */
-
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
