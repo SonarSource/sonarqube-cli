@@ -44,6 +44,7 @@ export function initSentry(state: CliState): void {
   Sentry.init({
     dsn: SENTRY_DSN,
     environment,
+    release: process.env.SONARQUBE_CLI_VERSION,
     dataCollection: {
       userInfo: false,
       cookies: false,
