@@ -41,6 +41,7 @@ import {
   resolveProjectUuid,
 } from '@/core/telemetry/project-uuid.ts';
 
+import { disableTelemetryInConfigFile } from '../../../_common/telemetry-helpers.ts';
 import { mockProjectUuidGetSafe } from './project-uuid-api-mock.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -268,7 +269,7 @@ describe('resolveProjectUuid()', () => {
   });
 
   it('skips the cache lookup and the API call entirely when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue({ ...getDefaultState('1.0.0'), telemetry: { enabled: false } });
+    disableTelemetryInConfigFile();
     const getSafeSpy = mockProjectUuidGetSafe({
       component: [{ ok: true, id: 'AV-should-not-be-fetched' }],
     });
