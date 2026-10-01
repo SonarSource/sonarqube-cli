@@ -65,9 +65,13 @@ function ensureLogDir(): void {
   }
 }
 
+export function isLogLevel(value: string): value is LogLevel {
+  return value in LOG_LEVELS;
+}
+
 function getLogLevel(): LogLevel {
-  const envLevel = process.env.LOG_LEVEL as LogLevel | undefined;
-  if (envLevel && envLevel in LOG_LEVELS) return envLevel;
+  const envLevel = process.env.LOG_LEVEL;
+  if (envLevel && isLogLevel(envLevel)) return envLevel;
   return config.level;
 }
 
