@@ -25,6 +25,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,
+  MAX_SCANNED_FILE_SIZE,
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
 } from '@/core/config-constants.ts';
@@ -49,6 +50,8 @@ export interface AnalyzeSecretsOptions {
 export interface SecretsJsonIssue {
   ruleKey: string;
   description: string;
+  /** Identifies the `--input-batch` scan this came from. Absent for input sent without a `scan` boundary. */
+  scanId?: string;
   file?: string;
   location?: {
     startLine: number;
@@ -116,6 +119,8 @@ const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
 const SCAN_TIMEOUT_MS = 30000;
 
+/** Stated to the analyzer explicitly, so a caller filtering oversize content first uses the same threshold. */
+
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
@@ -154,6 +159,33 @@ export async function runSecretsBinaryOnText(
     {
       stdin: 'pipe',
       stdinData: text,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: buildAuthEnv(auth),
+    },
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+  );
+}
+
+/** Scans a batch of files handed over on stdin, each carrying its own path. */
+export async function runSecretsBinaryOnStream(
+  binaryPath: string,
+  batch: AsyncIterable<Buffer>,
+  auth: ResolvedAuth,
+): Promise<SpawnResult> {
+  return spawnProcessWithTimeout(
+    binaryPath,
+    [
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      String(MAX_SCANNED_FILE_SIZE),
+    ],
+    {
+      stdin: 'pipe',
+      stdinData: batch,
       stdout: 'pipe',
       stderr: 'pipe',
       env: buildAuthEnv(auth),
