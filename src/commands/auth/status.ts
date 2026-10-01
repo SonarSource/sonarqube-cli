@@ -29,7 +29,7 @@ import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';

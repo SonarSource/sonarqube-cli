@@ -19,6 +19,8 @@
  */
 import { InvalidArgumentError } from 'commander';
 
+import { err, ok, type Result } from '@/core/result.ts';
+
 import { InvalidOptionError } from './command-error.ts';
 
 export function parseInteger(value: string): number {
@@ -49,4 +51,33 @@ export function resolveFormatOption<Format extends string>(
     );
   }
   return format;
+}
+
+export function resolvePageSizeOption(
+  pageSize: number,
+  maxPageSize: number,
+): Result<number, InvalidOptionError> {
+  if (pageSize < 1 || pageSize > maxPageSize) {
+    return err(
+      new InvalidOptionError(
+        `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and ${maxPageSize}`,
+      ),
+    );
+  }
+  return ok(pageSize);
+}
+
+export function resolvePageOptions(
+  pageSize: number,
+  page: number,
+  maxPageSize: number,
+): Result<{ pageSize: number; page: number }, InvalidOptionError> {
+  return resolvePageSizeOption(pageSize, maxPageSize).andThen((resolvedPageSize) => {
+    if (page < 1) {
+      return err(
+        new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`),
+      );
+    }
+    return ok({ pageSize: resolvedPageSize, page });
+  });
 }
