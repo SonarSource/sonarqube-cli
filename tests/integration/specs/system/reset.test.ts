@@ -493,6 +493,8 @@ describe('system reset --force', () => {
   it(
     'keeps CLI configuration without --all',
     async () => {
+      // Telemetry enabled so the harness leaves cli-config.properties as written here.
+      harness.state().withTelemetryEnabled();
       harness.cliHome.writeFile('cli-config.properties', 'log.level=DEBUG\n');
       harness.cliHome.writeFile(
         'keychain.json',
@@ -531,6 +533,8 @@ describe('system reset --force', () => {
   it(
     'removes sensitive CLI configuration from the keychain with --all',
     async () => {
+      // Telemetry enabled so the harness does not create cli-config.properties.
+      harness.state().withTelemetryEnabled();
       harness.cliHome.writeFile(
         'keychain.json',
         JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
@@ -550,6 +554,8 @@ describe('system reset --force', () => {
   it(
     'reports nothing to clear when no CLI configuration exists with --all',
     async () => {
+      // Telemetry enabled so the harness does not create cli-config.properties.
+      harness.state().withTelemetryEnabled();
       const result = await harness.run('system reset --force --all');
 
       expect(result.exitCode).toBe(0);
