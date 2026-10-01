@@ -61,6 +61,16 @@ export async function spawnProcess(
 
     let stdout = '';
     let stderr = '';
+    let stdinBroken = false;
+
+    proc.on('error', reject);
+    proc.stdin?.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPIPE') {
+        stdinBroken = true;
+      } else {
+        reject(error);
+      }
+    });
 
     if (proc.stdout) {
       proc.stdout.on('data', (data: Buffer) => {
@@ -79,11 +89,9 @@ export async function spawnProcess(
       proc.stdin.end();
     }
 
-    proc.on('error', reject);
-
-    proc.on('exit', (code) => {
+    proc.on('close', (code) => {
       resolve({
-        exitCode: code,
+        exitCode: stdinBroken ? code || 1 : code,
         stdout: stdout.trim(),
         stderr: stderr.trim(),
       });

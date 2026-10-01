@@ -26,6 +26,15 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
+function ignoreBrokenPipe(error: NodeJS.ErrnoException): void {
+  if (error.code !== 'EPIPE') {
+    throw error;
+  }
+}
+
+process.stdout.on('error', ignoreBrokenPipe);
+process.stderr.on('error', ignoreBrokenPipe);
+
 function argvRequestsFormattedOutput(): boolean {
   return process.argv.some(
     (a, i) =>
