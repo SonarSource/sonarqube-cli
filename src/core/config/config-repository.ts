@@ -19,9 +19,9 @@
  */
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
+import { deleteConfigSecret, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
 
-import { getConfigFileValue, setConfigFileValue } from './config-file.ts';
+import { getConfigFileValue, removeConfigFileValue, setConfigFileValue } from './config-file.ts';
 import {
   CONFIG_KEY_BY_NAME,
   type ConfigKey,
@@ -61,4 +61,14 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
     return;
   }
   setConfigFileValue(key, trimmedValue);
+}
+
+/** No-op when `key` is not currently set — mirrors shell `unset` on an unset variable. */
+export async function unsetConfigValue(key: ConfigKey): Promise<void> {
+  const definition = getKeyDefinition(key);
+  if (definition.sensitive) {
+    await deleteConfigSecret(key);
+    return;
+  }
+  removeConfigFileValue(key);
 }
