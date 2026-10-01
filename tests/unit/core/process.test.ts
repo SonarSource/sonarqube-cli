@@ -63,7 +63,7 @@ describe('spawnProcess stdin source', () => {
 
     const result = await spawnProcess(process.execPath, ['-e', counter], {
       stdin: 'pipe',
-      stdinSource: () => chunks(200, produced),
+      stdinData: chunks(200, produced),
     });
 
     expect(result.stdout).toBe(String(200 * CHUNK));
@@ -75,7 +75,7 @@ describe('spawnProcess stdin source', () => {
 
     await spawnProcess(process.execPath, ['-e', 'process.exit(0)'], {
       stdin: 'pipe',
-      stdinSource: () => chunks(5000, produced),
+      stdinData: chunks(5000, produced),
     }).catch(() => undefined);
 
     // Without backpressure every chunk would be produced and buffered in memory.

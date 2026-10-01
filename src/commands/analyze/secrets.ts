@@ -19,7 +19,6 @@
  */
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import type { Writable } from 'node:stream';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -172,7 +171,7 @@ export async function runSecretsBinaryOnText(
 /** Scans a batch of files handed over on stdin, each carrying its own path. */
 export async function runSecretsBinaryOnStream(
   binaryPath: string,
-  batch: (stdin: Writable) => AsyncIterable<Buffer>,
+  batch: AsyncIterable<Buffer>,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
@@ -186,7 +185,7 @@ export async function runSecretsBinaryOnStream(
     ],
     {
       stdin: 'pipe',
-      stdinSource: batch,
+      stdinData: batch,
       stdout: 'pipe',
       stderr: 'pipe',
       env: buildAuthEnv(auth),

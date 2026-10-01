@@ -21,8 +21,6 @@
 // git pre-push callback handler — scans the content the push would transfer for secrets in a single analyzer
 // call, one scan per commit, so a finding still names the commit that introduced it.
 
-import type { Writable } from 'node:stream';
-
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -117,17 +115,15 @@ async function scanCommits(
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const outcome = await scanCommitScans((stdin) => batchOf(commits, stdin), auth, ctx);
+  const outcome = await scanCommitScans(batchOf(commits), auth, ctx);
 
   if (!outcome?.secretsFound) return;
   reportFindings(commits, outcome, ctx);
 }
 
 /** Yields one commit at a time, so only the commit being written is held. */
-async function* batchOf(commits: CommitBlobs[], stdin: Writable): AsyncGenerator<Buffer> {
+async function* batchOf(commits: CommitBlobs[]): AsyncGenerator<Buffer> {
   for (const { commit, blobs } of commits) {
-    // An analyzer that has gone leaves `pipeline` pulling to the end of the push, one git call per commit.
-    if (stdin.destroyed) return;
     const contents = await readBlobContents(blobs, process.cwd());
     if (contents === null) {
       // Reporting a clean push for content we never read would be worse than refusing the push.
