@@ -23,7 +23,7 @@ import type {
   CommandAuthenticatedInvocationContext,
   CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {

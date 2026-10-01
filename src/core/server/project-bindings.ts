@@ -25,6 +25,7 @@ import { okAsync, type ResultAsync } from '../result.ts';
 import type { HttpClientError } from './errors.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
+import { hasNextPage, type Paging } from './paging.ts';
 
 export class ProjectBindingsClient {
   private readonly client: SonarHttpClient;
@@ -161,7 +162,7 @@ export class ProjectBindingsClient {
 
 interface ProjectBindingsPageResponse {
   projectBindings: Array<{ projectKey: string; repository: string }>;
-  page: { total: number; pageSize: number; pageIndex: number };
+  page: Paging;
 }
 
 function mergeBindingsPage(
@@ -179,7 +180,10 @@ function isLastPage(
   pageSize: number,
 ): boolean {
   const effectivePageSize = result.page.pageSize || pageSize;
-  return result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total;
+  return (
+    result.projectBindings.length === 0 ||
+    !hasNextPage({ pageIndex, pageSize: effectivePageSize, total: result.page.total })
+  );
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */
