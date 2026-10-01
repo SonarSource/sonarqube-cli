@@ -56,6 +56,16 @@ describe('config-schema', () => {
 
       expect(degenerateKeys).toEqual([]);
     });
+
+    it('gives every key a non-empty description', () => {
+      // `config list --help` lists every key by its description; a blank one
+      // would print as a silent gap instead of surfacing the authoring mistake.
+      const undocumentedKeys = CONFIG_KEY_DEFINITIONS.filter(
+        (definition: ConfigKeyDefinition) => definition.description.trim().length === 0,
+      ).map((definition) => definition.key);
+
+      expect(undocumentedKeys).toEqual([]);
+    });
   });
 
   describe('CONFIG_KEY_BY_NAME', () => {

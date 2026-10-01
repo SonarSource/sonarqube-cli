@@ -99,6 +99,7 @@ import {
   VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
 } from './config/get.ts';
 import {
+  configListExtraHelpText,
   type ConfigListOptions,
   listConfig,
   VALID_FORMATS as CONFIG_LIST_VALID_FORMATS,
@@ -778,6 +779,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Print every sonar config key with its current value')
     .addOption(formatOption(CONFIG_LIST_VALID_FORMATS, 'text'))
     .option('--only-set', 'Only show keys that currently have a value')
+    .addHelpText('after', configListExtraHelpText())
     .anonymousAction((ctx, options: ConfigListOptions) => listConfig(options, ctx));
 
   configure
