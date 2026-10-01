@@ -172,7 +172,7 @@ export async function runSecretsBinaryOnText(
 /** Scans a batch of files handed over on stdin, each carrying its own path. */
 export async function runSecretsBinaryOnStream(
   binaryPath: string,
-  writeStdin: (stdin: Writable) => Promise<void>,
+  batch: (stdin: Writable) => AsyncIterable<Buffer>,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
   return spawnProcessWithTimeout(
@@ -186,7 +186,7 @@ export async function runSecretsBinaryOnStream(
     ],
     {
       stdin: 'pipe',
-      stdinWriter: writeStdin,
+      stdinSource: batch,
       stdout: 'pipe',
       stderr: 'pipe',
       env: await buildAuthEnv(auth),

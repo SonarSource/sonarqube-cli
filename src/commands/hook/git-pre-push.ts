@@ -21,6 +21,8 @@
 // git pre-push callback handler — scans the content the push would transfer for secrets in a single analyzer
 // call, one scan per commit, so a finding still names the commit that introduced it.
 
+import type { Writable } from 'node:stream';
+
 import type { SecretsJsonIssue } from '@/commands/analyze/secrets.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -28,7 +30,6 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
-import { writeChunk } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
@@ -116,24 +117,8 @@ async function scanCommits(
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  // A holder rather than a local, so the assignment inside the writer is visible to the check after it.
   const unreadable: { commit?: string } = {};
-  const outcome = await scanCommitScans(
-    async (stdin) => {
-      for (const { commit, blobs } of commits) {
-        const contents = await readBlobContents(blobs, process.cwd());
-        if (contents === null) {
-          unreadable.commit = commit;
-          return;
-        }
-        for (const chunk of scanChunks(commit, contents)) {
-          await writeChunk(stdin, chunk);
-        }
-      }
-    },
-    auth,
-    ctx,
-  );
+  const outcome = await scanCommitScans((stdin) => batchOf(commits, unreadable, stdin), auth, ctx);
 
   if (unreadable.commit !== undefined) {
     // Reporting a clean push for content we never read would be worse than refusing the push.
@@ -144,6 +129,24 @@ async function scanCommits(
   }
   if (!outcome?.secretsFound) return;
   reportFindings(commits, outcome, ctx);
+}
+
+/** Yields one commit at a time, so only the commit being written is held. */
+async function* batchOf(
+  commits: CommitBlobs[],
+  unreadable: { commit?: string },
+  stdin: Writable,
+): AsyncGenerator<Buffer> {
+  for (const { commit, blobs } of commits) {
+    // An analyzer that has gone leaves `pipeline` pulling to the end of the push, one git call per commit.
+    if (stdin.destroyed) return;
+    const contents = await readBlobContents(blobs, process.cwd());
+    if (contents === null) {
+      unreadable.commit = commit;
+      return;
+    }
+    yield* scanChunks(commit, contents);
+  }
 }
 
 /** Attributes each finding to the commit whose scan produced it, then refuses the push. */

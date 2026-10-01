@@ -45,6 +45,44 @@ describe('spawnProcess', () => {
   });
 });
 
+describe('spawnProcess stdin source', () => {
+  const CHUNK = 64 * 1024;
+
+  // eslint-disable-next-line @typescript-eslint/require-await -- an async generator with nothing to await is still the right shape
+  async function* chunks(count: number, produced: { n: number }): AsyncGenerator<Buffer> {
+    for (let i = 0; i < count; i++) {
+      produced.n++;
+      yield Buffer.alloc(CHUNK);
+    }
+  }
+
+  it('delivers every byte to a child that reads slower than we write', async () => {
+    const produced = { n: 0 };
+    const counter =
+      'let n=0;process.stdin.on("data",c=>{n+=c.length});process.stdin.on("end",()=>{process.stdout.write(String(n))})';
+
+    const result = await spawnProcess(process.execPath, ['-e', counter], {
+      stdin: 'pipe',
+      stdinSource: () => chunks(200, produced),
+    });
+
+    expect(result.stdout).toBe(String(200 * CHUNK));
+    expect(produced.n).toBe(200);
+  });
+
+  it('stops pulling the source when the child never reads it', async () => {
+    const produced = { n: 0 };
+
+    await spawnProcess(process.execPath, ['-e', 'process.exit(0)'], {
+      stdin: 'pipe',
+      stdinSource: () => chunks(5000, produced),
+    }).catch(() => undefined);
+
+    // Without backpressure every chunk would be produced and buffered in memory.
+    expect(produced.n).toBeLessThan(100);
+  });
+});
+
 describe('spawnProcessCapturingBytes', () => {
   it('keeps a character whose bytes straddle two stderr chunks intact', async () => {
     const result = await spawnProcessCapturingBytes(process.execPath, emitTo('stderr'), {
