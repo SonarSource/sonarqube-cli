@@ -139,14 +139,4 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Scan stdin for hardcoded secrets',
     },
   ],
-  'sonar config telemetry': [
-    {
-      command: 'sonar config telemetry --enabled',
-      description: 'Enable collection of anonymous usage statistics',
-    },
-    {
-      command: 'sonar config telemetry --disabled',
-      description: 'Disable collection of anonymous usage statistics',
-    },
-  ],
 };
