@@ -827,6 +827,24 @@ describe('system status', () => {
   );
 
   it(
+    'recommends the OpenCode integrate command when the OpenCode MCP config is invalid',
+    async () => {
+      harness.userHome.writeFile(
+        join('.config', 'opencode', 'opencode.json'),
+        JSON.stringify({ mcp: { sonarqube: { type: 'local', command: 'sonar' } } }),
+      );
+      harness.state().withRawState(JSON.stringify(openCodeMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Run 'sonar integrate opencode' to reinstall MCP");
+      expect(result.stdout).not.toContain("Run 'sonar integrate claude'");
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'shows MCP invalid config when Codex TOML has malformed sonarqube entry',
     async () => {
       harness.userHome.writeFile(
