@@ -209,6 +209,7 @@ export async function runContextPassthrough(
       env,
       argv0: SONAR_CONTEXT_INVOCATION,
     });
+    let stdinBroken = false;
 
     child.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
@@ -222,12 +223,19 @@ export async function runContextPassthrough(
         reject(err);
       }
     });
-    child.on('exit', (code) => {
-      process.exitCode = code ?? 1;
+    child.on('close', (code) => {
+      process.exitCode = stdinBroken ? code || 1 : (code ?? 1);
       resolve();
     });
 
     if (stdinPayload !== undefined) {
+      child.stdin?.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EPIPE') {
+          stdinBroken = true;
+        } else {
+          reject(error);
+        }
+      });
       child.stdin?.end(stdinPayload);
     }
   });
