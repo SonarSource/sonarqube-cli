@@ -97,6 +97,11 @@ import {
   getConfig,
   VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
 } from './config/get.ts';
+import {
+  type ConfigListOptions,
+  listConfig,
+  VALID_FORMATS as CONFIG_LIST_VALID_FORMATS,
+} from './config/list.ts';
 import { setConfig } from './config/set.ts';
 import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
@@ -764,6 +769,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .argument('<key>', 'Config key to read')
     .addOption(formatOption(CONFIG_GET_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, key: string, options: ConfigGetOptions) => getConfig(key, options, ctx));
+
+  configure
+    .command('list')
+    .description('Print every sonar config key with its current value')
+    .addOption(formatOption(CONFIG_LIST_VALID_FORMATS, 'text'))
+    .anonymousAction((ctx, options: ConfigListOptions) => listConfig(options, ctx));
 
   configure
     .command('set')
