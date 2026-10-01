@@ -112,8 +112,7 @@ async function resolveProxyGroup(env: NodeJS.ProcessEnv): Promise<ProxyGroup | n
     source,
     explicit,
   } of PROXY_CONFIGS) {
-    const httpsVal = await lookup(env, httpsVar);
-    const httpVal = await lookup(env, httpVar);
+    const [httpsVal, httpVal] = await Promise.all([lookup(env, httpsVar), lookup(env, httpVar)]);
     if (!httpsVal && !httpVal) {
       continue;
     }
@@ -230,15 +229,15 @@ async function resolveClientCert(env: NodeJS.ProcessEnv): Promise<ClientCertConf
 export async function resolveNetworkConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ResolvedNetworkConfig> {
-  const proxy = await resolveProxyGroup(env);
-  const caCert = await resolveCaCert(env);
-  let clientCert: ClientCertConfig | null = null;
   let error: string | undefined;
-  try {
-    clientCert = await resolveClientCert(env);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  }
+  const [proxy, caCert, clientCert] = await Promise.all([
+    resolveProxyGroup(env),
+    resolveCaCert(env),
+    resolveClientCert(env).catch((err: unknown) => {
+      error = err instanceof Error ? err.message : `Unknown error: ${JSON.stringify(err)}`;
+      return null;
+    }),
+  ]);
   return { proxy, caCert, clientCert, error };
 }
 
