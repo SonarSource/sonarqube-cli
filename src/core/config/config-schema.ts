@@ -61,3 +61,11 @@ export const CONFIG_KEY_BY_NAME: ReadonlyMap<ConfigKey, ConfigKeyDefinition> = n
 export function isValidConfigValue(definition: ConfigKeyDefinition, raw: string): boolean {
   return definition.allowedValues === undefined || definition.allowedValues.includes(raw);
 }
+
+/** `--format json` shape for one config entry, shared by `config get` and `config list`. */
+export interface ConfigEntryJson {
+  key: string;
+  sensitive: boolean;
+  set: boolean;
+  value?: string;
+}
