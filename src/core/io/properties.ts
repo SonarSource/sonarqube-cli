@@ -81,3 +81,15 @@ export function setProperty(content: string, key: string, value: string): string
   const missingLineBreak = content === '' || content.endsWith('\n') ? '' : lineBreak;
   return `${content}${missingLineBreak}${entry}${lineBreak}`;
 }
+
+/**
+ * Drops every line holding `key` (not just the last — a stale earlier duplicate
+ * would otherwise still resolve via {@link parseProperties}'s last-wins read).
+ * No-op when the key is absent.
+ */
+export function removeProperty(content: string, key: string): string {
+  return content
+    .split('\n')
+    .filter((line) => parsePropertyLine(line)?.key !== key)
+    .join('\n');
+}
