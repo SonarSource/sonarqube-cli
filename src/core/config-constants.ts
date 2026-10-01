@@ -68,8 +68,9 @@ export const STATE_FILE = join(CLI_DIR, 'state.json');
 // Config
 // ---------------------------------------------------------------------------
 
+export const CLI_CONFIG_FILE_NAME = 'cli-config.properties';
 export function getConfigFile(): string {
-  return join(getCliDir(), 'cli-config.properties');
+  return join(getCliDir(), CLI_CONFIG_FILE_NAME);
 }
 
 // ---------------------------------------------------------------------------
