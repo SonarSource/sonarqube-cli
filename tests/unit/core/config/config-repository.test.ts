@@ -28,7 +28,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { getConfigValue, setConfigValue } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
-import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { CLI_CONFIG_FILE_NAME, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { clearSecretCache, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
 
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
@@ -40,7 +40,7 @@ let testConfigFile: string;
 
 beforeEach(async () => {
   testSonarUserHome = await mkdtemp(join(tmpdir(), 'cli-config-repository-test-'));
-  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', 'cli-config.properties');
+  testConfigFile = join(testSonarUserHome, 'sonarqube-cli', CLI_CONFIG_FILE_NAME);
   process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
   keychain.setup();
 });
@@ -103,6 +103,19 @@ describe('config repository', () => {
     const error = await setConfigValue('log.level', 'VERBOSE').catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(InvalidOptionError);
+    expect(existsSync(testConfigFile)).toBe(false);
+  });
+
+  it('rejects an empty or whitespace-only value without writing anything', async () => {
+    const emptyError = await setConfigValue('network.proxy.noProxy', '').catch(
+      (error: unknown) => error,
+    );
+    const whitespaceError = await setConfigValue('network.proxy.noProxy', '   ').catch(
+      (error: unknown) => error,
+    );
+
+    expect(emptyError).toBeInstanceOf(InvalidOptionError);
+    expect(whitespaceError).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
   });
 });
