@@ -42,6 +42,31 @@ function displayValue(sensitive: boolean, value: string | undefined): string {
   return sensitive ? '(hidden)' : value;
 }
 
+const SENSITIVE_HEADER = 'SENSITIVE';
+
+function sensitiveLabel(sensitive: boolean): string {
+  return sensitive ? 'yes' : 'no';
+}
+
+export function configListExtraHelpText(): string {
+  const keys = CONFIG_KEY_DEFINITIONS.map((definition) => definition.key);
+  const sensitiveLabels = CONFIG_KEY_DEFINITIONS.map((definition) =>
+    sensitiveLabel(definition.sensitive),
+  );
+  const [keyWidth, sensitiveWidth] = columnFormatting(
+    [keys, sensitiveLabels],
+    [0, SENSITIVE_HEADER.length],
+  );
+
+  const header = `  ${'KEY'.padEnd(keyWidth)}  ${SENSITIVE_HEADER.padEnd(sensitiveWidth)}  DESCRIPTION`;
+  const lines = CONFIG_KEY_DEFINITIONS.map(
+    (definition, i) =>
+      `  ${definition.key.padEnd(keyWidth)}  ${sensitiveLabels[i].padEnd(sensitiveWidth)}  ${definition.description}`,
+  );
+
+  return `\nConfig keys:\n${header}\n${lines.join('\n')}\n`;
+}
+
 function formatTable(rows: { key: string; display: string }[]): string {
   const [keyWidth] = columnFormatting([rows.map((row) => row.key)]);
 
