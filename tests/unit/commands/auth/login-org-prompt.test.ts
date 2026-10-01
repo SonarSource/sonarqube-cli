@@ -76,7 +76,7 @@ describe('authLogin organization prompt', () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
     listOrgsSpy = spyOn(OrganizationsClient.prototype, 'listUserOrganizations').mockReturnValue(
-      okAsync({ organizations: [], total: 0 }),
+      okAsync({ organizations: [], paging: { pageIndex: 1, pageSize: 10, total: 0 } }),
     );
     // This repository has its own sonar-project.properties; without these the discovered key
     // would short-circuit the prompt under test.
