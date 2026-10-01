@@ -105,4 +105,17 @@ describe('config repository', () => {
     expect(error).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
   });
+
+  it('rejects an empty or whitespace-only value without writing anything', async () => {
+    const emptyError = await setConfigValue('network.proxy.noProxy', '').catch(
+      (error: unknown) => error,
+    );
+    const whitespaceError = await setConfigValue('network.proxy.noProxy', '   ').catch(
+      (error: unknown) => error,
+    );
+
+    expect(emptyError).toBeInstanceOf(InvalidOptionError);
+    expect(whitespaceError).toBeInstanceOf(InvalidOptionError);
+    expect(existsSync(testConfigFile)).toBe(false);
+  });
 });
