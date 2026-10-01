@@ -686,8 +686,10 @@ export class EnvironmentBuilder {
     const configFile = join(cliHome, 'cli-config.properties');
     let content = existsSync(configFile) ? readFileSync(configFile, 'utf-8') : '';
     const existing = parseProperties(content);
-    for (const [key, value] of defaults) {
-      if (!existing.has(key)) content = setProperty(content, key, value);
+    const missing = defaults.filter(([key]) => !existing.has(key));
+    if (missing.length === 0) return;
+    for (const [key, value] of missing) {
+      content = setProperty(content, key, value);
     }
     writeFileSync(configFile, content, 'utf-8');
   }
