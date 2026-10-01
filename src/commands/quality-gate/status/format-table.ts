@@ -118,7 +118,7 @@ function formatFileTable(
 
 export function formatConditionsBlock(conditions: QualityGateConditionSummary[]): string[] {
   const [values] = padColumns(
-    [conditions.map((condition) => condition.formattedActualValue ?? '—')],
+    [conditions.map((condition) => condition.formattedActualValue ?? '-')],
     [],
     CONDITION_VALUE_GAP,
   );

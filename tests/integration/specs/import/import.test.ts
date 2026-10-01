@@ -398,9 +398,9 @@ describe('sonar import', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('How do you want to import repositories?');
         expect(result.stdout).toContain(
-          'Recommended — import all eligible repositories automatically',
+          'Recommended: import all eligible repositories automatically',
         );
-        expect(result.stdout).toContain('Manual — choose repositories yourself');
+        expect(result.stdout).toContain('Manual: choose repositories yourself');
         expect(result.stdout).not.toContain('← Back');
         expect(result.stdout).toContain('Imported 2 repositories');
         expect(result.stdout).toContain(`Projects: ${serverUrl}/organizations/my-org/projects`);
@@ -444,7 +444,7 @@ describe('sonar import', () => {
         // this time resolving to Recommended instead of Manual.
         expect(result.stdout).toContain('✗  Select repositories to import');
         expect(result.stdout).toContain(
-          '✓  How do you want to import repositories? Recommended — import all eligible repositories automatically',
+          '✓  How do you want to import repositories? Recommended: import all eligible repositories automatically',
         );
         expect(result.stdout).toContain('Imported 2 repositories');
         const recorded = server.getRecordedRequests();
@@ -2124,7 +2124,7 @@ describe('sonar import', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(
-          'By pattern — import repositories whose name matches a regex',
+          'By pattern: import repositories whose name matches a regex',
         );
         expect(result.stdout).toContain('my-org/engineering-tools');
         expect(result.stdout).not.toContain('my-org/random-notes');

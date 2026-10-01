@@ -456,9 +456,9 @@ async function resolveOnboardingMode(
     value: typeof RECOMMENDED | typeof MANUAL | typeof BY_PATTERN;
     label: string;
   }> = [
-    { value: RECOMMENDED, label: 'Recommended — import all eligible repositories automatically' },
-    { value: MANUAL, label: 'Manual — choose repositories yourself' },
-    { value: BY_PATTERN, label: 'By pattern — import repositories whose name matches a regex' },
+    { value: RECOMMENDED, label: 'Recommended: import all eligible repositories automatically' },
+    { value: MANUAL, label: 'Manual: choose repositories yourself' },
+    { value: BY_PATTERN, label: 'By pattern: import repositories whose name matches a regex' },
   ];
 
   // Cancelling the "Manual" picker or the "By pattern" prompt (below) re-shows this same menu

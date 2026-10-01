@@ -38,7 +38,7 @@ export async function updateSecretsBinaryIfNeeded(console: Console): Promise<voi
   const state = loadState();
 
   if (!hasBinaryInState(state, SECRETS_BINARY_NAME)) {
-    logger.debug('sonar-secrets not installed — skipping binary update');
+    logger.debug('sonar-secrets not installed; skipping binary update');
     return;
   }
 
@@ -53,7 +53,7 @@ export async function updateScaScannerBinaryIfNeeded(console: Console): Promise<
   const state = loadState();
 
   if (!hasBinaryInState(state, SCA_SCANNER_BINARY_NAME)) {
-    logger.debug('sca-scanner-cli not installed — skipping binary update');
+    logger.debug('sca-scanner-cli not installed; skipping binary update');
     return;
   }
 

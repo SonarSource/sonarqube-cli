@@ -191,7 +191,7 @@ async function shouldRunDependencyRiskAnalysis(
 
   if (!anyFileMatches(changedFiles, patterns)) {
     console.success(
-      'No dependency manifests changed in this commit — skipping dependency-risks scan.',
+      'No dependency manifests changed in this commit; skipping dependency-risks scan.',
     );
     return false;
   }

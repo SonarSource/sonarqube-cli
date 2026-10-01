@@ -1785,7 +1785,7 @@ describe('auth status', () => {
       // The remediation path is the actionable part of this message, and it was wrong until
       // review caught it. Assert it so the next UI change breaks a test rather than a user.
       expect(result.stdout).toContain('My Account > Access Tokens');
-      expect(result.stdout).toContain('or ask an organization administrator to add');
+      expect(result.stdout).toContain('You can also ask an organization administrator to add');
     },
     { timeout: 15000 },
   );

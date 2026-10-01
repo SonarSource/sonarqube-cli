@@ -64,7 +64,7 @@ export async function migrateClaudeCodeHooks(
   const state = loadState();
 
   if (hasInstalledDeclarativeIntegration(state)) {
-    logger.debug('Declarative Claude Code integration detected — skipping legacy hook migration');
+    logger.debug('Declarative Claude Code integration detected; skipping legacy hook migration');
     return;
   }
 

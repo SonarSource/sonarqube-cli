@@ -103,7 +103,7 @@ function createProvisionTask(
       const result = await client.provisionProject(orgKey, repo.installationKey);
       if (result.projects.length === 0) {
         throw new Error(
-          'provision_projects returned no project — the repository may already be bound, or ' +
+          'provision_projects returned no project: the repository may already be bound, or ' +
             'the installation key was rejected by the server.',
         );
       }

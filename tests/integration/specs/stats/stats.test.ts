@@ -291,7 +291,7 @@ describe('sonar stats', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(
-        'DO_NOT_TRACK is set — sonar stats is unaffected: this data never leaves your machine.',
+        'DO_NOT_TRACK is set; sonar stats is unaffected: this data never leaves your machine.',
       );
     },
     { timeout: 15000 },

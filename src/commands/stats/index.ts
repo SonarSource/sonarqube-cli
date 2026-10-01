@@ -34,7 +34,7 @@ export interface StatsOptions {
 }
 
 const DO_NOT_TRACK_DISCLAIMER =
-  'DO_NOT_TRACK is set — sonar stats is unaffected: this data never leaves your machine.';
+  'DO_NOT_TRACK is set; sonar stats is unaffected: this data never leaves your machine.';
 
 export async function stats(options: StatsOptions, ctx: CommandInvocationContext): Promise<void> {
   const since = options.since ?? '30d';
