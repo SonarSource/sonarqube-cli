@@ -608,7 +608,7 @@ The SonarQube CLI collects anonymous usage data and error reports to help improv
 Both are enabled by default and share the same opt-out toggle. To disable all data collection:
 
 ```bash
-sonar config telemetry --disabled
+sonar config set telemetry.enabled false
 ```
 
 You can also set the `DO_NOT_TRACK=1` environment variable to disable telemetry for a session without changing persisted configuration.

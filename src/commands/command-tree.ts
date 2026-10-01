@@ -99,8 +99,6 @@ import {
   VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
 } from './config/get.ts';
 import { setConfig } from './config/set.ts';
-import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
-import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
@@ -780,20 +778,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Remove a stored sonar config value')
     .argument('<key>', 'Config key to unset')
     .anonymousAction((ctx, key: string) => unsetConfig(key, ctx));
-
-  configure
-    .command('telemetry')
-    .description('Configure telemetry settings')
-    .option('--enabled', 'Enable collection of anonymous usage statistics')
-    .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
-
-  configure
-    .command('stats')
-    .description('Configure local stats collection settings')
-    .option('--enabled', 'Enable local stats collection')
-    .option('--disabled', 'Disable local stats collection')
-    .anonymousAction((ctx, options: ConfigureStatsOptions) => configureStats(options, ctx));
 
   // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
   COMMAND_TREE.command('stats')
