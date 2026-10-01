@@ -20,7 +20,7 @@
 // Print a stored sonar config value
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getConfigValue, getKeyDefinition } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 import type { Console } from '@/core/ui/console.ts';
