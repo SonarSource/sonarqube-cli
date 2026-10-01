@@ -21,24 +21,24 @@
 // Process management helpers
 
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import type { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
 
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
-
-/** Resolves once the chunk is accepted, waiting for `drain` when the pipe is full. */
-export async function writeChunk(stream: Writable, chunk: Buffer): Promise<void> {
-  if (!stream.write(chunk)) await once(stream, 'drain');
-}
 
 export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
   stdinData?: string | Buffer;
-  /** Feeds stdin incrementally, so a large input never has to be held whole. Takes precedence over `stdinData`. */
-  stdinWriter?: (stdin: Writable) => Promise<void>;
+  /**
+   * Feeds stdin from a source pulled one chunk at a time, so a large input is never held whole. Takes precedence
+   * over `stdinData`. The source is handed the stream it feeds, because a source with work to do between chunks
+   * has to notice a child that stopped reading: `pipeline` leaves its own signal unaborted on Bun, and keeps
+   * pulling until the source ends.
+   */
+  stdinSource?: (stdin: Writable) => AsyncIterable<Buffer>;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -58,14 +58,12 @@ function feedStdin(
   onWriteFailed: (err: Error) => void,
   killChild: () => void,
 ): void {
-  if (options.stdinWriter) {
-    void options.stdinWriter(stdin).then(
-      () => stdin.end(),
-      (err: unknown) => {
-        killChild();
-        onWriteFailed(err as Error);
-      },
-    );
+  if (options.stdinSource) {
+    // pipeline honours backpressure and ends the stream once the source does.
+    void pipeline(options.stdinSource(stdin), stdin).catch((err: unknown) => {
+      killChild();
+      onWriteFailed(err as Error);
+    });
     return;
   }
   if (options.stdinData !== undefined) {
