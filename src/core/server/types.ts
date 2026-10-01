@@ -20,6 +20,8 @@
 
 // Core types for sonarqube-cli
 
+import type { Paging } from './paging.ts';
+
 export interface SonarQubeIssue {
   key: string;
   rule: string;
@@ -81,11 +83,7 @@ export interface IssuesSearchResponse {
   total: number;
   p: number;
   ps: number;
-  paging: {
-    pageIndex: number;
-    pageSize: number;
-    total: number;
-  };
+  paging: Paging;
   issues: SonarQubeIssue[];
   components?: Array<{
     key: string;
@@ -114,11 +112,7 @@ export interface ProjectsSearchParams {
 }
 
 export interface ProjectsSearchResponse {
-  paging: {
-    pageIndex: number;
-    pageSize: number;
-    total: number;
-  };
+  paging: Paging;
   components: SonarQubeProject[];
 }
 
@@ -214,7 +208,7 @@ export interface ComponentTreeComponent {
 }
 
 export interface ComponentTreeResponse {
-  paging: { pageIndex: number; pageSize: number; total: number };
+  paging: Paging;
   baseComponent: ComponentTreeComponent;
   components: ComponentTreeComponent[];
 }
@@ -229,7 +223,7 @@ export interface ComponentsTreeItem {
 }
 
 export interface ComponentsTreeResponse {
-  paging: { pageIndex: number; pageSize: number; total: number };
+  paging: Paging;
   components: ComponentsTreeItem[];
 }
 
@@ -273,5 +267,5 @@ export interface ScaIssueRelease {
 
 export interface ScaIssuesReleasesResponse {
   issuesReleases: ScaIssueRelease[];
-  page: { pageIndex: number; pageSize: number; total: number };
+  page: Paging;
 }

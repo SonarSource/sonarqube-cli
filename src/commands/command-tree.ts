@@ -24,14 +24,9 @@ import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { parseInteger } from '@/core/commands/parsing.ts';
+import { parseInteger } from '@/core/commands/params.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
-import {
-  isAlphaEnabledFromEnv,
-  SonarCommand,
-  SonarOption,
-  Stage,
-} from '@/core/commands/sonar-command.ts';
+import { isAlphaEnabledFromEnv, SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
@@ -55,39 +50,23 @@ import {
   collectScannerProperty,
   onboardCiGitlab,
   type OnboardCiGitlabOptions,
-  validateOnboardCiGitlabOptions,
+  validateOnboardCiGitlabOptions
 } from './admin/onboard-ci/gitlab/index.ts';
 import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
 import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
-import {
-  analyzeDependencyRisks,
-  type AnalyzeDependencyRisksOptions,
-  VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
-} from './analyze/dependency-risks.ts';
+import { analyzeDependencyRisks, type AnalyzeDependencyRisksOptions, VALID_FORMATS as DEPENDENCY_RISKS_FORMATS } from './analyze/dependency-risks.ts';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './analyze/secrets.ts';
-import {
-  analyzeSqaa,
-  type AnalyzeSqaaOptions,
-  type AnalyzeSqaaRunOptions,
-  VALID_FORMATS as SQAA_FORMATS,
-} from './analyze/sqaa.ts';
-import {
-  SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
-  SQAA_VERIFY_CALLER_COMMAND,
-} from './analyze/sqaa-analysis-telemetry.ts';
+import { analyzeSqaa, type AnalyzeSqaaOptions, type AnalyzeSqaaRunOptions, VALID_FORMATS as SQAA_FORMATS } from './analyze/sqaa.ts';
+import { SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, SQAA_VERIFY_CALLER_COMMAND } from './analyze/sqaa-analysis-telemetry.ts';
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
-import {
-  authStatus,
-  type AuthStatusOptions,
-  VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
-} from './auth/status.ts';
+import { authStatus, type AuthStatusOptions, VALID_FORMATS as AUTH_STATUS_VALID_FORMATS } from './auth/status.ts';
 import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
 import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
@@ -121,42 +100,16 @@ import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { link, type LinkOptions } from './link';
-import {
-  DEFAULT_STATUSES,
-  listIssues,
-  type ListIssuesOptions,
-  VALID_FORMATS,
-  VALID_MQR_SEVERITIES,
-  VALID_STANDARD_SEVERITIES,
-  VALID_STATUSES,
-} from './list/issues.ts';
-import {
-  listProjects,
-  type ListProjectsOptions,
-  VALID_FORMATS as PROJECTS_VALID_FORMATS,
-} from './list/projects.ts';
-import {
-  DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
-  qualityGateStatus,
-  type QualityGateStatusOptions,
-  VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
-} from './quality-gate/status';
+import { DEFAULT_STATUSES, listIssues, type ListIssuesOptions, VALID_FORMATS, VALID_MQR_SEVERITIES, VALID_STANDARD_SEVERITIES, VALID_STATUSES } from './list/issues.ts';
+import { listOrganizations, type ListOrgOptions, VALID_FORMATS as ORG_VALID_FORMATS } from './list/org.ts';
+import { listProjects, type ListProjectsOptions, VALID_FORMATS as PROJECTS_VALID_FORMATS } from './list/projects.ts';
+import { DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP, qualityGateStatus, type QualityGateStatusOptions, VALID_FORMATS as QUALITY_GATE_VALID_FORMATS } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
 import { runMcp } from './run/mcp.ts';
 import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
-import {
-  systemStatus,
-  type SystemStatusOptions,
-  VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS,
-} from './system/status.ts';
-import {
-  updateStatus,
-  type UpdateStatusOptions,
-  updateVersion,
-  type UpdateVersionOptions,
-  VALID_FORMATS as UPDATE_STATUS_VALID_FORMATS,
-} from './update';
+import { systemStatus, type SystemStatusOptions, VALID_FORMATS as SYSTEM_STATUS_VALID_FORMATS } from './system/status.ts';
+import { updateStatus, type UpdateStatusOptions, updateVersion, type UpdateVersionOptions, VALID_FORMATS as UPDATE_STATUS_VALID_FORMATS } from './update';
 
 const DEFAULT_PAGE_SIZE = MAX_PAGE_SIZE;
 
@@ -286,7 +239,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
-    .description('List issues and projects from SonarQube Cloud or Server')
+    .description('List issues, projects and organizations from SonarQube Cloud or Server')
     .rootHelp({
       category: 'data',
     });
@@ -333,6 +286,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageOption)
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
+
+  const listOrgFormatOption = formatOption(ORG_VALID_FORMATS, 'table');
+  list
+    .command('orgs')
+    .alias('org')
+    .description('List organizations you have access to (SonarQube Cloud only)')
+    .showUpdateNotification(isTableFormatOption)
+    .addOption(listOrgFormatOption)
+    .addOption(pageOption)
+    .addOption(pageSizeOption)
+    .authenticatedAction((ctx, options: ListOrgOptions) => listOrganizations(options, ctx));
 
   const qualityGate = COMMAND_TREE.command('quality-gate')
     .alias('qg')
