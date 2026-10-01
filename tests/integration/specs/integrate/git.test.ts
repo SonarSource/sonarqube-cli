@@ -322,8 +322,8 @@ describe('integrate git (native hooks)', () => {
 
       // Both hooks installed -> a single merged verification example box.
       expect(bothHooksOutput).toContain('Verify the hooks work');
-      expect(bothHooksOutput).toContain('Pre-commit — stage and commit:');
-      expect(bothHooksOutput).toContain('Pre-push — bypass pre-commit, then push:');
+      expect(bothHooksOutput).toContain('Pre-commit - stage and commit:');
+      expect(bothHooksOutput).toContain('Pre-push - bypass pre-commit, then push:');
 
       const state = harness.stateJsonFile.asJson() as InstalledStateJson;
       const gitIntegration = getInstalledIntegration(state, 'native-git');

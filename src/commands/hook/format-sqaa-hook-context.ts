@@ -100,7 +100,7 @@ function formatNoAnalyzedContent(report: SqaaJsonReport): string {
     lines.push(`Skipped ${report.skipped.length} file(s) (analysis not completed).`);
   } else if (report.ignored.length > 0 && report.files.length === 0) {
     lines.push(
-      'Vortex analysis: no files to analyze — all change set files were excluded (binary, oversized, or outside the repository).',
+      'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository).',
     );
   } else {
     lines.push(formatSqaaRunSummaryPlain(hookSummaryFromReport(report)));
