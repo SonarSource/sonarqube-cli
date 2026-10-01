@@ -1024,9 +1024,7 @@ describe('post-update migration', () => {
         const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
 
         expect(result.exitCode).toBe(0);
-        const config = harness.cliHome.file('cli-config.properties').asText();
-        expect(config).not.toContain('telemetry.enabled');
-        expect(config).not.toContain('stats.enabled');
+        expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
         const state = harness.stateJsonFile.asJson() as CliState;
         expect(state.telemetry.enabled).toBeUndefined();
         expect(state.stats).toBeUndefined();
