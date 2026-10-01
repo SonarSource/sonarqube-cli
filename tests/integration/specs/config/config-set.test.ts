@@ -116,6 +116,45 @@ describe('config set', () => {
   );
 
   it(
+    'exits with an error and writes nothing when the interactive prompt is cancelled',
+    async () => {
+      const session = harness.runInteractive('config set network.tls.clientPassphrase', {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+      await session.waitText("Value for 'network.tls.clientPassphrase'");
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "Aborted: no value provided for 'network.tls.clientPassphrase'.",
+      );
+      expect(existsSync(harness.keychainJsonFile)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 2 and writes nothing when the prompted value is empty or whitespace-only',
+    async () => {
+      const session = harness.runInteractive('config set network.tls.clientPassphrase', {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+      await session.waitText("Value for 'network.tls.clientPassphrase'");
+      session.write('   ');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        "Value for config key 'network.tls.clientPassphrase' must not be empty.",
+      );
+      expect(existsSync(harness.keychainJsonFile)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 and writes nothing when the value is omitted on a non-interactive terminal',
     async () => {
       const result = await harness.run('config set network.tls.clientPassphrase');
