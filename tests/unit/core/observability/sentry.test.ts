@@ -74,6 +74,7 @@ let fetchAuthenticatedSpy: ReturnType<typeof spyOn>;
 let savedEgress: string | undefined;
 let savedSonarUserHome: string | undefined;
 let testDir: string;
+let savedCliVersion: string | undefined;
 
 beforeEach(() => {
   savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
@@ -81,6 +82,7 @@ beforeEach(() => {
   process.env[ENV_SONAR_USER_HOME] = testDir;
   // Cleared so the init path runs; Sentry.init is mocked below.
   savedEgress = process.env[ENV_TELEMETRY_EGRESS];
+  savedCliVersion = process.env.SONARQUBE_CLI_VERSION;
   delete process.env[ENV_TELEMETRY_EGRESS];
 
   initSpy = spyOn(Sentry, 'init').mockImplementation(() => undefined);
@@ -112,6 +114,7 @@ afterEach(() => {
   restoreEnv(ENV_TELEMETRY_EGRESS, savedEgress);
   restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
   rmSync(testDir, { recursive: true, force: true });
+  restoreEnv('SONARQUBE_CLI_VERSION', savedCliVersion);
 });
 
 describe('initSentry', () => {
@@ -142,6 +145,15 @@ describe('initSentry', () => {
   });
 
   describe('when telemetry is enabled', () => {
+    it('sets the release to the compiled CLI version', () => {
+      process.env.SONARQUBE_CLI_VERSION = '1.10.0.12345';
+
+      initSentry();
+
+      const options = initSpy.mock.calls[0][0] as Sentry.BunOptions;
+      expect(options.release).toBe('1.10.0.12345');
+    });
+
     it('calls Sentry.init', () => {
       initSentry();
 
