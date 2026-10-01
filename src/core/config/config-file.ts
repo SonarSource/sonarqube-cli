@@ -54,16 +54,20 @@ export function setConfigFileValue(key: string, value: string): void {
   }
 }
 
-/** No-op when the config file doesn't exist or doesn't hold `key`. */
-export function removeConfigFileValue(key: string): void {
+/** Returns whether a value was actually removed; no-op (false) when the config file doesn't exist or doesn't hold `key`. */
+export function removeConfigFileValue(key: string): boolean {
   const configFile = getConfigFile();
   if (!fs.existsSync(configFile)) {
-    return;
+    return false;
   }
-  const content = removeProperty(readConfigContent(), key);
+  const content = readConfigContent();
+  if (!parseProperties(content).has(key)) {
+    return false;
+  }
   try {
-    fs.writeFileSync(configFile, content, 'utf-8');
+    fs.writeFileSync(configFile, removeProperty(content, key), 'utf-8');
   } catch (error) {
     throw new CommandFailedError(`Failed to save config: ${(error as Error).message}`);
   }
+  return true;
 }

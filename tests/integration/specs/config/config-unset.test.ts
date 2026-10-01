@@ -75,12 +75,13 @@ describe('config unset', () => {
   );
 
   it(
-    'is a no-op and writes nothing for a key that is not currently set',
+    'is a no-op and writes nothing for a key that is not currently set, informing rather than claiming success',
     async () => {
       const result = await harness.run('config unset log.level');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain("Removed 'log.level'.");
+      expect(result.stdout + result.stderr).toContain("'log.level' is not set; nothing to remove.");
+      expect(result.stdout + result.stderr).not.toContain("Removed 'log.level'.");
       expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
       expect(existsSync(harness.keychainJsonFile)).toBe(false);
     },

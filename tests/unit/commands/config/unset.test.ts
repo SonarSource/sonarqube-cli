@@ -80,11 +80,21 @@ describe('unsetConfig', () => {
     ).toBeDefined();
   });
 
-  it('is a no-op for a key that is not currently set', async () => {
+  it('is a no-op for a key that is not currently set, informing rather than claiming success', async () => {
     await unsetConfig('log.level', ctx);
 
     expect(await getConfigValue('log.level')).toBeUndefined();
-    expect(fake.findCall('success', "Removed 'log.level'.")).toBeDefined();
+    expect(fake.findCall('info', "'log.level' is not set; nothing to remove.")).toBeDefined();
+    expect(fake.findCall('success', "Removed 'log.level'.")).toBeUndefined();
+  });
+
+  it('informs rather than claiming success for a sensitive key that is not currently set', async () => {
+    await unsetConfig('network.tls.clientPassphrase', ctx);
+
+    expect(
+      fake.findCall('info', "'network.tls.clientPassphrase' is not set; nothing to remove."),
+    ).toBeDefined();
+    expect(fake.calls.some((call) => call.method === 'success')).toBe(false);
   });
 
   it('fails with an error for an unknown key and writes nothing', async () => {
