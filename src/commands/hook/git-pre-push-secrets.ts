@@ -22,7 +22,7 @@ import type { Writable } from 'node:stream';
 
 import { scanAndEmitSecrets } from '@/commands/analyze/secrets-analysis-telemetry.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
@@ -96,6 +96,8 @@ async function runScan(
       ctx,
     );
   } catch (err) {
+    // A failure the CLI raised itself already says what went wrong; only the analyzer's is softened to a warning.
+    if (err instanceof CliError) throw err;
     handleScanError('Push', err as Error, auth, ctx.console);
     return null;
   }
