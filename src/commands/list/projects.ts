@@ -20,11 +20,14 @@
 
 // Projects command - search for SonarQube projects
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { type InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { errAsync, type ResultAsync } from '@/core/result.ts';
+import { toEnrichedPaging } from '@/core/server/paging.ts';
 import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
+import type { ProjectsSearchResponse } from '@/core/server/types.ts';
+import type { Console } from '@/core/ui/console.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
 const MIN_KEY_WIDTH = 20;
@@ -68,8 +71,6 @@ export function listProjects(
   options: ListProjectsOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): ResultAsync<void, Error> {
-  const { auth, console } = ctx;
-
   let format: (typeof VALID_FORMATS)[number];
   try {
     format = resolveFormatOption(options.format, VALID_FORMATS, 'json');
@@ -77,50 +78,49 @@ export function listProjects(
     return errAsync(err as InvalidOptionError);
   }
 
-  const pageSize = options.pageSize;
-  if (pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
-    return errAsync(
-      new InvalidOptionError(
-        `Invalid --page-size option: '${pageSize}'. Must be an integer between 1 and 500`,
-      ),
-    );
-  }
+  return resolvePageOptions(options.pageSize, options.page, MAX_PAGE_SIZE).asyncAndThen(
+    (pageOptions) => fetchAndPrintProjects(ctx, options.query, format, pageOptions),
+  );
+}
 
-  const page = options.page;
-  if (page < 1) {
-    return errAsync(
-      new InvalidOptionError(`Invalid --page option: '${page}'. Must be an integer >= 1`),
-    );
-  }
+function fetchAndPrintProjects(
+  ctx: CommandAuthenticatedInvocationContext,
+  query: string | undefined,
+  format: (typeof VALID_FORMATS)[number],
+  { pageSize, page }: { pageSize: number; page: number },
+): ResultAsync<void, Error> {
+  const { auth, console } = ctx;
 
   const projectsClient = new ProjectsClient(ctx.connection.httpClient);
 
   return projectsClient
     .searchProjects({
-      q: options.query,
+      q: query,
       ps: pageSize,
-      p: options.page,
+      p: page,
       organization: auth.orgKey,
     })
     .map((result) => {
-      const hasNextPage = result.paging.pageIndex * result.paging.pageSize < result.paging.total;
-      const projects = result.components.map((c) => ({ key: c.key, name: c.name }));
-
-      if (format === 'table') {
-        console.print(formatTable(projects));
-        return;
-      }
-
-      console.print(
-        JSON.stringify({
-          projects,
-          paging: {
-            pageIndex: result.paging.pageIndex,
-            pageSize: result.paging.pageSize,
-            total: result.paging.total,
-            hasNextPage,
-          },
-        }),
-      );
+      printProjects(console, format, result);
     });
+}
+
+function printProjects(
+  console: Console,
+  format: (typeof VALID_FORMATS)[number],
+  result: ProjectsSearchResponse,
+): void {
+  const projects = result.components.map((c) => ({ key: c.key, name: c.name }));
+
+  if (format === 'table') {
+    console.print(formatTable(projects));
+    return;
+  }
+
+  console.print(
+    JSON.stringify({
+      projects,
+      paging: toEnrichedPaging(result.paging),
+    }),
+  );
 }
