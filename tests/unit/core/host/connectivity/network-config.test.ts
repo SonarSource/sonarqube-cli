@@ -18,13 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rootCertificates } from 'node:tls';
 
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { setConfigValue } from '@/core/config/config-repository.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import {
   buildFetchNetworkOptions,
   buildSubprocessNetworkEnv,
@@ -32,26 +34,44 @@ import {
   resolveNetworkConfig,
 } from '@/core/host/connectivity/network-config.ts';
 
+import { restoreEnv } from '../../../../_common/isolated-cli-env.ts';
+import { createKeychainTestHandle } from '../keychain-test-handle.ts';
+
 const CLIENT_CERT_FIXTURE_DIR = join(import.meta.dir, '../../../../fixtures/client-cert');
 const CERT_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-cert.pem');
 const KEY_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-key.pem');
 const P12_PATH = join(CLIENT_CERT_FIXTURE_DIR, 'client-cert.p12');
 
+const keychain = createKeychainTestHandle();
+const previousSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+let testSonarUserHome: string;
+
+beforeEach(() => {
+  testSonarUserHome = mkdtempSync(join(tmpdir(), 'cli-network-config-test-'));
+  process.env[ENV_SONAR_USER_HOME] = testSonarUserHome;
+  keychain.setup();
+});
+
 afterEach(() => {
   clearNetworkConfigCache();
+  keychain.teardown();
+  rmSync(testSonarUserHome, { recursive: true, force: true });
+  restoreEnv(ENV_SONAR_USER_HOME, previousSonarUserHome);
 });
 
 describe('resolveNetworkConfig', () => {
-  it('returns null proxy, caCert, and clientCert when env is empty', () => {
-    const config = resolveNetworkConfig({});
+  it('returns null proxy, caCert, and clientCert when env is empty', async () => {
+    const config = await resolveNetworkConfig({});
     expect(config.proxy).toBeNull();
     expect(config.caCert).toBeNull();
     expect(config.clientCert).toBeNull();
   });
 
   describe('proxy group — tier selection', () => {
-    it('sonar-env wins when SONAR_HTTPS_PROXY_URL is set', () => {
-      const config = resolveNetworkConfig({ SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080' });
+    it('sonar-env wins when SONAR_HTTPS_PROXY_URL is set', async () => {
+      const config = await resolveNetworkConfig({
+        SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
+      });
       expect(config.proxy?.source).toBe('sonar-env');
       expect(config.proxy?.explicit).toBe(true);
       expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
@@ -59,15 +79,17 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.noProxy).toBeNull();
     });
 
-    it('sonar-env wins when SONAR_HTTP_PROXY_URL is set', () => {
-      const config = resolveNetworkConfig({ SONAR_HTTP_PROXY_URL: 'https://sonar-proxy:8080' });
+    it('sonar-env wins when SONAR_HTTP_PROXY_URL is set', async () => {
+      const config = await resolveNetworkConfig({
+        SONAR_HTTP_PROXY_URL: 'https://sonar-proxy:8080',
+      });
       expect(config.proxy?.source).toBe('sonar-env');
       expect(config.proxy?.explicit).toBe(true);
       expect(config.proxy?.proxyHttps).toBeNull();
     });
 
-    it('sonar-env with both proxy types set', () => {
-      const config = resolveNetworkConfig({
+    it('sonar-env with both proxy types set', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-https:8080',
         SONAR_HTTP_PROXY_URL: 'https://sonar-http:8080',
       });
@@ -76,8 +98,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.proxyHttp?.getUrlWithCredentials()).toBe('https://sonar-http:8080');
     });
 
-    it('noProxy comes from same group as proxy', () => {
-      const config = resolveNetworkConfig({
+    it('noProxy comes from same group as proxy', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         SONAR_NO_PROXY: 'internal.corp.com',
       });
@@ -85,15 +107,15 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.noProxy).toBe('internal.corp.com');
     });
 
-    it('generic-env used when no sonar-env proxy set', () => {
-      const config = resolveNetworkConfig({ HTTPS_PROXY: 'https://proxy:3128' });
+    it('generic-env used when no sonar-env proxy set', async () => {
+      const config = await resolveNetworkConfig({ HTTPS_PROXY: 'https://proxy:3128' });
       expect(config.proxy?.source).toBe('generic-env');
       expect(config.proxy?.explicit).toBe(false);
       expect(config.proxy?.proxyHttp).toBeNull();
     });
 
-    it('generic-env with both proxy types and NO_PROXY', () => {
-      const config = resolveNetworkConfig({
+    it('generic-env with both proxy types and NO_PROXY', async () => {
+      const config = await resolveNetworkConfig({
         HTTPS_PROXY: 'https://proxy:3128',
         HTTP_PROXY: 'https://proxy:3128',
         NO_PROXY: 'localhost',
@@ -106,8 +128,8 @@ describe('resolveNetworkConfig', () => {
   });
 
   describe('proxy group — tier precedence', () => {
-    it('sonar-env proxy wins over generic-env proxy', () => {
-      const config = resolveNetworkConfig({
+    it('sonar-env proxy wins over generic-env proxy', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         HTTPS_PROXY: 'https://generic-proxy:3128',
       });
@@ -115,8 +137,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar-proxy:8080');
     });
 
-    it('HTTPS_PROXY from generic-env is ignored when sonar-env tier wins', () => {
-      const config = resolveNetworkConfig({
+    it('HTTPS_PROXY from generic-env is ignored when sonar-env tier wins', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         HTTPS_PROXY: 'https://generic-proxy:3128',
       });
@@ -124,8 +146,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.proxyHttp).toBeNull();
     });
 
-    it('NO_PROXY not picked when sonar-env tier wins', () => {
-      const config = resolveNetworkConfig({
+    it('NO_PROXY not picked when sonar-env tier wins', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         NO_PROXY: 'localhost',
       });
@@ -133,8 +155,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.noProxy).toBeNull();
     });
 
-    it('standalone SONAR_NO_PROXY without sonar-env proxy falls through to generic-env', () => {
-      const config = resolveNetworkConfig({
+    it('standalone SONAR_NO_PROXY without sonar-env proxy falls through to generic-env', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_NO_PROXY: 'internal.corp.com',
         HTTPS_PROXY: 'https://proxy:3128',
       });
@@ -144,29 +166,29 @@ describe('resolveNetworkConfig', () => {
       expect(config.proxy?.noProxy).toBeNull();
     });
 
-    it('standalone SONAR_NO_PROXY alone results in null proxy', () => {
-      const config = resolveNetworkConfig({ SONAR_NO_PROXY: 'internal.corp.com' });
+    it('standalone SONAR_NO_PROXY alone results in null proxy', async () => {
+      const config = await resolveNetworkConfig({ SONAR_NO_PROXY: 'internal.corp.com' });
       expect(config.proxy).toBeNull();
     });
   });
 
   describe('caCert — independent resolution', () => {
-    it('resolves from SONAR_CA_CERT (sonar-env, explicit)', () => {
-      const config = resolveNetworkConfig({ SONAR_CA_CERT: '/etc/ssl/sonar-ca.pem' });
+    it('resolves from SONAR_CA_CERT (sonar-env, explicit)', async () => {
+      const config = await resolveNetworkConfig({ SONAR_CA_CERT: '/etc/ssl/sonar-ca.pem' });
       expect(config.caCert?.source).toBe('sonar-env');
       expect(config.caCert?.explicit).toBe(true);
       expect(config.caCert?.path).toBe('/etc/ssl/sonar-ca.pem');
     });
 
-    it('resolves from NODE_EXTRA_CA_CERTS (generic-env, not explicit)', () => {
-      const config = resolveNetworkConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
+    it('resolves from NODE_EXTRA_CA_CERTS (generic-env, not explicit)', async () => {
+      const config = await resolveNetworkConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
       expect(config.caCert?.source).toBe('generic-env');
       expect(config.caCert?.explicit).toBe(false);
       expect(config.caCert?.path).toBe('/etc/ssl/corp-ca.pem');
     });
 
-    it('prefers SONAR_CA_CERT over NODE_EXTRA_CA_CERTS', () => {
-      const config = resolveNetworkConfig({
+    it('prefers SONAR_CA_CERT over NODE_EXTRA_CA_CERTS', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_CA_CERT: '/etc/ssl/sonar-ca.pem',
         NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem',
       });
@@ -174,8 +196,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.caCert?.path).toBe('/etc/ssl/sonar-ca.pem');
     });
 
-    it('resolves independently of the proxy group tier', () => {
-      const config = resolveNetworkConfig({
+    it('resolves independently of the proxy group tier', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_HTTPS_PROXY_URL: 'https://sonar-proxy:8080',
         NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem',
       });
@@ -185,14 +207,14 @@ describe('resolveNetworkConfig', () => {
   });
 
   describe('fromEnv — support both lower and uppercase', () => {
-    it('resolves https_proxy (lowercase) as proxy', () => {
-      const config = resolveNetworkConfig({ https_proxy: 'https://proxy:3128' });
+    it('resolves https_proxy (lowercase) as proxy', async () => {
+      const config = await resolveNetworkConfig({ https_proxy: 'https://proxy:3128' });
       expect(config.proxy?.source).toBe('generic-env');
       expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://proxy:3128');
     });
 
-    it('lowercase takes precedence over uppercase when both are set', () => {
-      const config = resolveNetworkConfig({
+    it('lowercase takes precedence over uppercase when both are set', async () => {
+      const config = await resolveNetworkConfig({
         HTTPS_PROXY: 'https://upper:3128',
         https_proxy: 'https://lower:3128',
       });
@@ -200,8 +222,8 @@ describe('resolveNetworkConfig', () => {
     });
   });
 
-  it('proxy values are RedactedUrl instances', () => {
-    const config = resolveNetworkConfig({
+  it('proxy values are RedactedUrl instances', async () => {
+    const config = await resolveNetworkConfig({
       HTTPS_PROXY: 'https://alice:secret@proxy:3128',
     });
     expect(config.proxy?.proxyHttps?.getUrl()).toBe('https://***:***@proxy:3128/');
@@ -211,12 +233,12 @@ describe('resolveNetworkConfig', () => {
   });
 
   describe('clientCert', () => {
-    it('returns null when SONAR_TLS_CLIENT_CERT is not set', () => {
-      expect(resolveNetworkConfig({}).clientCert).toBeNull();
+    it('returns null when SONAR_TLS_CLIENT_CERT is not set', async () => {
+      expect((await resolveNetworkConfig({})).clientCert).toBeNull();
     });
 
-    it('resolves certPath, keyPath, source, explicit flag, and format for a PEM cert', () => {
-      const config = resolveNetworkConfig({
+    it('resolves certPath, keyPath, source, explicit flag, and format for a PEM cert', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
@@ -227,8 +249,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.format).toBe('pem');
     });
 
-    it('reads and stores resolved PEM content eagerly', () => {
-      const config = resolveNetworkConfig({
+    it('reads and stores resolved PEM content eagerly', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
@@ -236,8 +258,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.resolvedKeyPem).toBe(readFileSync(KEY_PATH, 'utf-8'));
     });
 
-    it('captures passphrase when SONAR_TLS_CLIENT_PASSPHRASE is set', () => {
-      const config = resolveNetworkConfig({
+    it('captures passphrase when SONAR_TLS_CLIENT_PASSPHRASE is set', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
@@ -245,22 +267,22 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.passphrase).toBe('secret');
     });
 
-    it('passphrase is undefined when SONAR_TLS_CLIENT_PASSPHRASE is not set', () => {
-      const config = resolveNetworkConfig({
+    it('passphrase is undefined when SONAR_TLS_CLIENT_PASSPHRASE is not set', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
       expect(config.clientCert?.passphrase).toBeUndefined();
     });
 
-    it('sets error when SONAR_TLS_CLIENT_KEY_FILE is missing for a PEM cert', () => {
-      const config = resolveNetworkConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH });
+    it('sets error when SONAR_TLS_CLIENT_KEY_FILE is missing for a PEM cert', async () => {
+      const config = await resolveNetworkConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH });
       expect(config.clientCert).toBeNull();
       expect(config.error).toBeDefined();
     });
 
-    it('resolves PKCS12 path without SONAR_TLS_CLIENT_KEY_FILE', () => {
-      const config = resolveNetworkConfig({
+    it('resolves PKCS12 path without SONAR_TLS_CLIENT_KEY_FILE', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: P12_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
       });
@@ -271,8 +293,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.clientCert?.resolvedKeyPem).toContain('PRIVATE KEY');
     });
 
-    it('sets error when PKCS12 passphrase is wrong', () => {
-      const config = resolveNetworkConfig({
+    it('sets error when PKCS12 passphrase is wrong', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: P12_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'wrongpassword',
       });
@@ -280,8 +302,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.error).toBeDefined();
     });
 
-    it('sets error when cert file does not exist', () => {
-      const config = resolveNetworkConfig({
+    it('sets error when cert file does not exist', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: '/nonexistent/cert.pem',
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
@@ -289,8 +311,8 @@ describe('resolveNetworkConfig', () => {
       expect(config.error).toBeDefined();
     });
 
-    it('sets error when key file does not exist', () => {
-      const config = resolveNetworkConfig({
+    it('sets error when key file does not exist', async () => {
+      const config = await resolveNetworkConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: '/nonexistent/key.pem',
       });
@@ -302,46 +324,155 @@ describe('resolveNetworkConfig', () => {
 
 // --- buildFetchNetworkOptions ---
 
-function makeConfig(env: NodeJS.ProcessEnv) {
+async function makeConfig(env: NodeJS.ProcessEnv) {
   return resolveNetworkConfig(env);
 }
 
+describe('resolveNetworkConfig — stored-config tier', () => {
+  describe('proxy group', () => {
+    it('uses the stored proxy group when no sonar-env proxy is set', async () => {
+      await setConfigValue('network.proxy.https', 'https://stored-https:8080');
+      await setConfigValue('network.proxy.http', 'http://stored-http:8080');
+      await setConfigValue('network.proxy.noProxy', 'localhost');
+
+      const config = await resolveNetworkConfig({});
+
+      expect(config.proxy?.source).toBe('stored-config');
+      expect(config.proxy?.explicit).toBe(true);
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://stored-https:8080');
+      expect(config.proxy?.proxyHttp?.getUrlWithCredentials()).toBe('http://stored-http:8080');
+      expect(config.proxy?.noProxy).toBe('localhost');
+    });
+
+    it('sonar-env proxy wins over stored proxy', async () => {
+      await setConfigValue('network.proxy.https', 'https://stored:8080');
+
+      const config = await resolveNetworkConfig({ SONAR_HTTPS_PROXY_URL: 'https://sonar:8080' });
+
+      expect(config.proxy?.source).toBe('sonar-env');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://sonar:8080');
+    });
+
+    it('stored proxy wins over generic-env proxy', async () => {
+      await setConfigValue('network.proxy.https', 'https://stored:8080');
+
+      const config = await resolveNetworkConfig({ HTTPS_PROXY: 'https://generic:8080' });
+
+      expect(config.proxy?.source).toBe('stored-config');
+      expect(config.proxy?.proxyHttps?.getUrlWithCredentials()).toBe('https://stored:8080');
+    });
+  });
+
+  describe('CA cert', () => {
+    it('uses the stored CA cert when no env CA cert is set', async () => {
+      await setConfigValue('network.tls.caCert', '/stored/ca.pem');
+
+      const config = await resolveNetworkConfig({});
+
+      expect(config.caCert?.source).toBe('stored-config');
+      expect(config.caCert?.explicit).toBe(true);
+      expect(config.caCert?.path).toBe('/stored/ca.pem');
+    });
+
+    it('sonar-env CA cert wins over stored CA cert', async () => {
+      await setConfigValue('network.tls.caCert', '/stored/ca.pem');
+
+      const config = await resolveNetworkConfig({ SONAR_CA_CERT: '/sonar/ca.pem' });
+
+      expect(config.caCert?.source).toBe('sonar-env');
+      expect(config.caCert?.path).toBe('/sonar/ca.pem');
+    });
+
+    it('stored CA cert wins over generic-env CA cert', async () => {
+      await setConfigValue('network.tls.caCert', '/stored/ca.pem');
+
+      const config = await resolveNetworkConfig({ NODE_EXTRA_CA_CERTS: '/generic/ca.pem' });
+
+      expect(config.caCert?.source).toBe('stored-config');
+      expect(config.caCert?.path).toBe('/stored/ca.pem');
+    });
+
+    it('falls through to generic-env when the stored config cannot be read', async () => {
+      mkdirSync(join(testSonarUserHome, 'sonarqube-cli', 'cli-config.properties'), {
+        recursive: true,
+      });
+
+      const config = await resolveNetworkConfig({ NODE_EXTRA_CA_CERTS: '/generic/ca.pem' });
+
+      expect(config.caCert?.source).toBe('generic-env');
+      expect(config.caCert?.path).toBe('/generic/ca.pem');
+    });
+  });
+
+  describe('client cert', () => {
+    it('resolves cert, key file, and passphrase from stored config', async () => {
+      await setConfigValue('network.tls.clientCert', CERT_PATH);
+      await setConfigValue('network.tls.clientKey', KEY_PATH);
+      await setConfigValue('network.tls.clientPassphrase', 'stored-pass');
+
+      const config = await resolveNetworkConfig({});
+
+      expect(config.clientCert?.source).toBe('stored-config');
+      expect(config.clientCert?.explicit).toBe(true);
+      expect(config.clientCert?.certPath).toBe(CERT_PATH);
+      expect(config.clientCert?.keyPath).toBe(KEY_PATH);
+      expect(config.clientCert?.passphrase).toBe('stored-pass');
+    });
+
+    it('sonar-env values win over stored ones per setting', async () => {
+      await setConfigValue('network.tls.clientCert', '/stored/cert.pem');
+      await setConfigValue('network.tls.clientKey', KEY_PATH);
+      await setConfigValue('network.tls.clientPassphrase', 'stored-pass');
+
+      const config = await resolveNetworkConfig({
+        SONAR_TLS_CLIENT_CERT: CERT_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'env-pass',
+      });
+
+      expect(config.clientCert?.source).toBe('sonar-env');
+      expect(config.clientCert?.certPath).toBe(CERT_PATH);
+      expect(config.clientCert?.keyPath).toBe(KEY_PATH);
+      expect(config.clientCert?.passphrase).toBe('env-pass');
+    });
+  });
+});
+
 describe('buildFetchNetworkOptions', () => {
-  it('returns empty object when no config', () => {
-    const opts = buildFetchNetworkOptions('https://sonar.example.com', makeConfig({}));
+  it('returns empty object when no config', async () => {
+    const opts = await buildFetchNetworkOptions('https://sonar.example.com', await makeConfig({}));
     expect(opts).toEqual({});
   });
 
   describe('proxy', () => {
-    it('sets proxy for https URL when proxyHttps is explicit', () => {
-      const config = makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('sets proxy for https URL when proxyHttps is explicit', async () => {
+      const config = await makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBe('https://proxy:8080');
     });
 
-    it('sets proxy for http URL when proxyHttp is explicit', () => {
-      const config = makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' });
+    it('sets proxy for http URL when proxyHttp is explicit', async () => {
+      const config = await makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' });
       // split to avoid S5332 — the non-TLS scheme is intentional to exercise proxyHttp selection
       const httpUrl = 'http' + '://sonar.internal/api';
-      const opts = buildFetchNetworkOptions(httpUrl, config);
+      const opts = await buildFetchNetworkOptions(httpUrl, config);
       expect(opts.proxy).toBe('https://proxy:8080');
     });
 
-    it('does not set proxy for https URL when only proxyHttp is set', () => {
-      const config = makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('does not set proxy for https URL when only proxyHttp is set', async () => {
+      const config = await makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBeUndefined();
     });
 
-    it('does not set proxy when proxyHttps is generic-env (not explicit)', () => {
-      const config = makeConfig({ HTTPS_PROXY: 'https://proxy:3128' });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('does not set proxy when proxyHttps is generic-env (not explicit)', async () => {
+      const config = await makeConfig({ HTTPS_PROXY: 'https://proxy:3128' });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBeUndefined();
     });
 
-    it('includes credentials in proxy URL', () => {
-      const config = makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://user:pass@proxy:8080' });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('includes credentials in proxy URL', async () => {
+      const config = await makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://user:pass@proxy:8080' });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBe('https://user:pass@proxy:8080');
     });
   });
@@ -356,78 +487,84 @@ describe('buildFetchNetworkOptions', () => {
       ['hostname matches suffix', 'corp.com', 'https://sonar.corp.com/api'],
       ['noProxy is wildcard *', '*', 'https://sonar.example.com/api'],
       ['* in comma-separated list', 'localhost,*', 'https://anything.example.com/api'],
-    ])('skips proxy when %s', (_, noProxy, url) => {
-      const config = makeConfig({
+    ])('skips proxy when %s', async (_, noProxy, url) => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: noProxy,
       });
-      const opts = buildFetchNetworkOptions(url, config);
+      const opts = await buildFetchNetworkOptions(url, config);
       expect(opts.proxy).toBeUndefined();
     });
 
-    it('sets proxy when hostname does not match noProxy', () => {
-      const config = makeConfig({
+    it('sets proxy when hostname does not match noProxy', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: 'other.corp.com',
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBe('https://proxy:8080');
     });
 
-    it('strips leading dot from noProxy entry — root domain matches', () => {
-      const config = makeConfig({
+    it('strips leading dot from noProxy entry — root domain matches', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: '.corp.com',
       });
       // root domain itself should match when entry has a leading dot
-      expect(buildFetchNetworkOptions('https://corp.com/api', config).proxy).toBeUndefined();
+      expect(
+        (await buildFetchNetworkOptions('https://corp.com/api', config)).proxy,
+      ).toBeUndefined();
       // subdomain should also match
-      expect(buildFetchNetworkOptions('https://sonar.corp.com/api', config).proxy).toBeUndefined();
+      expect(
+        (await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy,
+      ).toBeUndefined();
     });
 
-    it('enforces dot separator — corp.com does not match notcorp.com', () => {
-      const config = makeConfig({
+    it('enforces dot separator — corp.com does not match notcorp.com', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: 'corp.com',
       });
-      const opts = buildFetchNetworkOptions('https://notcorp.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://notcorp.com/api', config);
       expect(opts.proxy).toBe('https://proxy:8080');
     });
 
-    it('*.corp.com wildcard matches subdomains', () => {
-      const config = makeConfig({
+    it('*.corp.com wildcard matches subdomains', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: '*.corp.com',
       });
-      expect(buildFetchNetworkOptions('https://sonar.corp.com/api', config).proxy).toBeUndefined();
+      expect(
+        (await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy,
+      ).toBeUndefined();
     });
 
-    it('*.corp.com wildcard does not match the root domain corp.com', () => {
-      const config = makeConfig({
+    it('*.corp.com wildcard does not match the root domain corp.com', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: '*.corp.com',
       });
-      expect(buildFetchNetworkOptions('https://corp.com/api', config).proxy).toBe(
+      expect((await buildFetchNetworkOptions('https://corp.com/api', config)).proxy).toBe(
         'https://proxy:8080',
       );
     });
 
-    it('port-specific noProxy entry only bypasses matching port', () => {
-      const config = makeConfig({
+    it('port-specific noProxy entry only bypasses matching port', async () => {
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: 'sonar.corp.com:9000',
       });
       // port 443 (default https) — should NOT bypass (rule is for port 9000)
-      expect(buildFetchNetworkOptions('https://sonar.corp.com/api', config).proxy).toBe(
+      expect((await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy).toBe(
         'https://proxy:8080',
       );
       // port 9000 — should bypass
       expect(
-        buildFetchNetworkOptions('https://sonar.corp.com:9000/api', config).proxy,
+        (await buildFetchNetworkOptions('https://sonar.corp.com:9000/api', config)).proxy,
       ).toBeUndefined();
     });
 
-    it('matches IPv6 noProxy entries without treating colons as a port', () => {
+    it('matches IPv6 noProxy entries without treating colons as a port', async () => {
       const proxy = 'https://proxy:8080';
       for (const { noProxy, url, bypass } of [
         { noProxy: '::1', url: 'https://[::1]/api', bypass: true },
@@ -441,33 +578,35 @@ describe('buildFetchNetworkOptions', () => {
         { noProxy: '2001:0db8::1', url: 'https://[2001:db8::1]/api', bypass: true },
         { noProxy: '::ffff:192.168.1.10', url: 'https://[::ffff:192.168.1.10]/api', bypass: true },
       ]) {
-        const config = makeConfig({
+        const config = await makeConfig({
           SONAR_HTTPS_PROXY_URL: proxy,
           SONAR_NO_PROXY: noProxy,
         });
-        expect(buildFetchNetworkOptions(url, config).proxy).toBe(bypass ? undefined : proxy);
+        expect((await buildFetchNetworkOptions(url, config)).proxy).toBe(
+          bypass ? undefined : proxy,
+        );
       }
     });
 
-    it('does not bypass proxy when noProxy is from different tier than proxy', () => {
+    it('does not bypass proxy when noProxy is from different tier than proxy', async () => {
       // sonar-env proxy + generic-env NO_PROXY → bypass not applied
       // (sonar-env tier won for proxy, so noProxy is null since SONAR_NO_PROXY not set)
-      const config = makeConfig({
+      const config = await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         NO_PROXY: 'sonar.example.com',
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.proxy).toBe('https://proxy:8080');
     });
   });
 
   describe('CA cert', () => {
-    it('sets tls.ca as array of rootCertificates + BunFile when caCert is explicit', () => {
+    it('sets tls.ca as array of rootCertificates + BunFile when caCert is explicit', async () => {
       const pemPath = join(tmpdir(), 'sonar-test-ca.pem');
       writeFileSync(pemPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
-      const config = makeConfig({ SONAR_CA_CERT: pemPath });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const config = await makeConfig({ SONAR_CA_CERT: pemPath });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
 
       const ca = opts.tls?.ca as Array<unknown>;
       expect(ca).toHaveLength(rootCertificates.length + 1);
@@ -476,75 +615,75 @@ describe('buildFetchNetworkOptions', () => {
       expect(bunFile?.name).toBe(pemPath);
     });
 
-    it('does not set tls.ca when caCert is generic-env (not explicit)', () => {
-      const config = makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('does not set tls.ca when caCert is generic-env (not explicit)', async () => {
+      const config = await makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' });
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls).toBeUndefined();
     });
   });
 
-  it('sets both proxy and tls.ca when both are explicit', () => {
+  it('sets both proxy and tls.ca when both are explicit', async () => {
     const pemPath = join(tmpdir(), 'sonar-test-ca-combo.pem');
     writeFileSync(pemPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
-    const config = makeConfig({
+    const config = await makeConfig({
       SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
       SONAR_CA_CERT: pemPath,
     });
-    const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
 
     expect(opts.proxy).toBe('https://proxy:8080');
     expect(opts.tls?.ca).toBeDefined();
   });
 
   describe('client cert', () => {
-    it('sets tls.cert and tls.key as resolved PEM strings', () => {
-      const config = makeConfig({
+    it('sets tls.cert and tls.key as resolved PEM strings', async () => {
+      const config = await makeConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toBe(readFileSync(CERT_PATH, 'utf-8'));
       expect(opts.tls?.key).toBe(readFileSync(KEY_PATH, 'utf-8'));
     });
 
-    it('does not set tls.cert or tls.key when clientCert is null', () => {
-      const config = makeConfig({});
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+    it('does not set tls.cert or tls.key when clientCert is null', async () => {
+      const config = await makeConfig({});
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toBeUndefined();
       expect(opts.tls?.key).toBeUndefined();
     });
 
-    it('sets tls.cert and tls.key as PEM strings for PKCS12 source', () => {
-      const config = makeConfig({
+    it('sets tls.cert and tls.key as PEM strings for PKCS12 source', async () => {
+      const config = await makeConfig({
         SONAR_TLS_CLIENT_CERT: P12_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.cert).toContain('-----BEGIN CERTIFICATE-----');
       expect(opts.tls?.key).toContain('PRIVATE KEY');
     });
 
-    it('sets tls.passphrase when SONAR_TLS_CLIENT_PASSPHRASE is provided', () => {
-      const config = makeConfig({
+    it('sets tls.passphrase when SONAR_TLS_CLIENT_PASSPHRASE is provided', async () => {
+      const config = await makeConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'supersecret',
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
       expect(opts.tls?.passphrase).toBe('supersecret');
     });
 
-    it('sets ca, cert, and key together when both CA cert and client cert are configured', () => {
+    it('sets ca, cert, and key together when both CA cert and client cert are configured', async () => {
       const caPath = join(tmpdir(), 'sonar-test-ca-client-cert.pem');
       writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nfakecert\n-----END CERTIFICATE-----');
 
-      const config = makeConfig({
+      const config = await makeConfig({
         SONAR_CA_CERT: caPath,
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
       });
-      const opts = buildFetchNetworkOptions('https://sonar.example.com/api', config);
+      const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
 
       expect(opts.tls?.ca).toBeDefined();
       expect(opts.tls?.cert).toBeDefined();
@@ -556,29 +695,29 @@ describe('buildFetchNetworkOptions', () => {
 // --- buildSubprocessNetworkEnv ---
 
 describe('buildSubprocessNetworkEnv', () => {
-  it('returns empty object when no config', () => {
-    expect(buildSubprocessNetworkEnv(makeConfig({}))).toEqual({});
+  it('returns empty object when no config', async () => {
+    expect(await buildSubprocessNetworkEnv(await makeConfig({}))).toEqual({});
   });
 
-  it('sets SONAR_HTTPS_PROXY_URL when HTTPS proxy is configured', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
+  it('sets SONAR_HTTPS_PROXY_URL when HTTPS proxy is configured', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
     );
     expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:8080');
     expect(env.SONAR_HTTP_PROXY_URL).toBeUndefined();
   });
 
-  it('sets SONAR_HTTP_PROXY_URL when HTTP proxy is configured', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' }),
+  it('sets SONAR_HTTP_PROXY_URL when HTTP proxy is configured', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' }),
     );
     expect(env.SONAR_HTTP_PROXY_URL).toBe('https://proxy:8080');
     expect(env.SONAR_HTTPS_PROXY_URL).toBeUndefined();
   });
 
-  it('sets both proxy vars when both are configured', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({
+  it('sets both proxy vars when both are configured', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://https-proxy:8080',
         SONAR_HTTP_PROXY_URL: 'https://http-proxy:8080',
       }),
@@ -587,9 +726,9 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_HTTP_PROXY_URL).toBe('https://http-proxy:8080');
   });
 
-  it('sets SONAR_NO_PROXY when noProxy is configured', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({
+  it('sets SONAR_NO_PROXY when noProxy is configured', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: 'internal.corp.com',
       }),
@@ -597,40 +736,44 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_NO_PROXY).toBe('internal.corp.com');
   });
 
-  it('omits SONAR_NO_PROXY when noProxy is absent', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
+  it('omits SONAR_NO_PROXY when noProxy is absent', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://proxy:8080' }),
     );
     expect(env.SONAR_NO_PROXY).toBeUndefined();
   });
 
-  it('propagates proxy from generic-env source (HTTPS_PROXY)', () => {
-    const env = buildSubprocessNetworkEnv(makeConfig({ HTTPS_PROXY: 'https://proxy:3128' }));
+  it('propagates proxy from generic-env source (HTTPS_PROXY)', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ HTTPS_PROXY: 'https://proxy:3128' }),
+    );
     expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://proxy:3128');
   });
 
-  it('uses getUrlWithCredentials — credentials are not redacted', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://user:pass@proxy:8080' }),
+  it('uses getUrlWithCredentials — credentials are not redacted', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_HTTPS_PROXY_URL: 'https://user:pass@proxy:8080' }),
     );
     expect(env.SONAR_HTTPS_PROXY_URL).toBe('https://user:pass@proxy:8080');
   });
 
-  it('sets all three cert vars to the same path when CA cert is configured', () => {
-    const env = buildSubprocessNetworkEnv(makeConfig({ SONAR_CA_CERT: '/etc/ssl/corp-ca.pem' }));
-    expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
-  });
-
-  it('propagates cert vars from generic-env source (NODE_EXTRA_CA_CERTS)', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' }),
+  it('sets all three cert vars to the same path when CA cert is configured', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_CA_CERT: '/etc/ssl/corp-ca.pem' }),
     );
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
   });
 
-  it('returns all proxy and cert vars combined', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({
+  it('propagates cert vars from generic-env source (NODE_EXTRA_CA_CERTS)', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ NODE_EXTRA_CA_CERTS: '/etc/ssl/corp-ca.pem' }),
+    );
+    expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
+  });
+
+  it('returns all proxy and cert vars combined', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: 'localhost',
         SONAR_CA_CERT: '/etc/ssl/corp-ca.pem',
@@ -641,18 +784,18 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_CA_CERT).toBe('/etc/ssl/corp-ca.pem');
   });
 
-  it('sets SONAR_TLS_CLIENT_CERT and SONAR_TLS_CLIENT_KEY_FILE for PEM cert without passphrase', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH, SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH }),
+  it('sets SONAR_TLS_CLIENT_CERT and SONAR_TLS_CLIENT_KEY_FILE for PEM cert without passphrase', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({ SONAR_TLS_CLIENT_CERT: CERT_PATH, SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH }),
     );
     expect(env.SONAR_TLS_CLIENT_CERT).toBe(CERT_PATH);
     expect(env.SONAR_TLS_CLIENT_KEY_FILE).toBe(KEY_PATH);
     expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBeUndefined();
   });
 
-  it('sets SONAR_TLS_CLIENT_PASSPHRASE when passphrase is provided', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({
+  it('sets SONAR_TLS_CLIENT_PASSPHRASE when passphrase is provided', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: 'secret',
@@ -661,9 +804,9 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBe('secret');
   });
 
-  it('omits SONAR_TLS_CLIENT_PASSPHRASE for empty-string passphrase', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({
+  it('omits SONAR_TLS_CLIENT_PASSPHRASE for empty-string passphrase', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
         SONAR_TLS_CLIENT_CERT: CERT_PATH,
         SONAR_TLS_CLIENT_KEY_FILE: KEY_PATH,
         SONAR_TLS_CLIENT_PASSPHRASE: '',
@@ -672,9 +815,12 @@ describe('buildSubprocessNetworkEnv', () => {
     expect(env.SONAR_TLS_CLIENT_PASSPHRASE).toBeUndefined();
   });
 
-  it('omits SONAR_TLS_CLIENT_KEY_FILE for PKCS12 cert', () => {
-    const env = buildSubprocessNetworkEnv(
-      makeConfig({ SONAR_TLS_CLIENT_CERT: P12_PATH, SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword' }),
+  it('omits SONAR_TLS_CLIENT_KEY_FILE for PKCS12 cert', async () => {
+    const env = await buildSubprocessNetworkEnv(
+      await makeConfig({
+        SONAR_TLS_CLIENT_CERT: P12_PATH,
+        SONAR_TLS_CLIENT_PASSPHRASE: 'testpassword',
+      }),
     );
     expect(env.SONAR_TLS_CLIENT_CERT).toBe(P12_PATH);
     expect(env.SONAR_TLS_CLIENT_KEY_FILE).toBeUndefined();

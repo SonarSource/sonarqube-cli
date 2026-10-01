@@ -221,7 +221,7 @@ describe('runMcp', () => {
       });
       spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-      await runMcp(FAKE_CTX);
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
 
       // Prefer the wsl.exe call: mock.module('node:child_process') in other
       // suites (e.g. update-version) can leave earlier spawn calls on the shared mock.

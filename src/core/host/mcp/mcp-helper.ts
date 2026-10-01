@@ -23,7 +23,6 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   ClientCertConfig,
   ProxyGroup,
@@ -212,8 +211,8 @@ function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
   context: McpServerContext,
   mountSource: string | undefined,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
   certMountSources: { caCert?: string; clientCert?: string } = {},
 ): { args: string[]; env: Record<string, string> } {
   const { token, orgKey: org, serverUrl } = auth;
@@ -291,8 +290,8 @@ export function getMcpContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
   const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
@@ -307,8 +306,8 @@ function getMcpWslContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
 
@@ -363,8 +362,8 @@ export function resolveMcpContainerCommand(
   auth: ResolvedAuth,
   detection: ContainerRuntimeDetection,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   if (!detection.runtime) {
     throw new Error('resolveMcpContainerCommand requires a detected container runtime');
