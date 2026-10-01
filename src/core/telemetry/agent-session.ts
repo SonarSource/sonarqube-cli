@@ -36,7 +36,7 @@ function nonEmptyTrimmed(value: string | null | undefined): string | null {
 
 function shouldIdentifyAgentSession(): boolean {
   const state = tryLoadState();
-  return state != null && isTelemetryEnabled(state);
+  return state != null && isTelemetryEnabled();
 }
 
 function normalizeAgentSessionId(value: unknown): string | null {

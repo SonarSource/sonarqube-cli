@@ -53,6 +53,7 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatur
 import { buildDownloadUrl } from '@/core/host/install/sonarsource-releases.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { parseProperties, setProperty } from '@/core/io/properties.ts';
 import type {
   CliState,
   InstalledIntegration,
@@ -373,7 +374,7 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Enables telemetry in the generated state (off by default for integration tests).
+   * Enables telemetry in the generated config (off by default for integration tests).
    * Use when a test needs to assert telemetry side effects such as telemetry-events.ndjson.
    *
    * Safe on its own — no extra env needed. Every spawned CLI carries egress mode `off`, so
@@ -387,7 +388,7 @@ export class EnvironmentBuilder {
     return this;
   }
 
-  /** Opts out of local stats collection, equivalent to `sonar config stats --disabled`. */
+  /** Opts out of local stats collection, equivalent to `sonar config set stats.enabled false`. */
   withStatsDisabled(): this {
     this._statsDisabled = true;
     return this;
@@ -526,13 +527,6 @@ export class EnvironmentBuilder {
     // withRawState().
     const state = getDefaultState(CURRENT_CLI_VERSION);
 
-    // Telemetry is off by default for integration tests; opt in via withTelemetryEnabled().
-    state.telemetry.enabled = this._telemetryEnabled;
-
-    if (this._statsDisabled) {
-      state.stats = { enabled: false };
-    }
-
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';
       state.auth.isAuthenticated = true;
@@ -633,7 +627,7 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes state.json and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
+   * Writes state.json, the default cli-config.properties, and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
    * Leaves an existing read-only keychain in place when it already holds the
    * intended tokens, so a test can exercise delete failure.
    */
@@ -642,6 +636,7 @@ export class EnvironmentBuilder {
     const stateJson =
       this._rawStateJson ?? JSON.stringify(this.build(join(cliHome, 'bin')), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
+    this.writeConfigFile(cliHome);
 
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};
@@ -691,6 +686,21 @@ export class EnvironmentBuilder {
       writeFileSync(join(mockBinDir, 'docker'), script, { mode: EXECUTABLE_PERMS });
       this._dockerMockBinDir = mockBinDir;
     }
+  }
+
+  /** Keys a test already wrote to cli-config.properties win over these defaults. */
+  private writeConfigFile(cliHome: string): void {
+    const defaults: [string, string][] = [];
+    if (!this._telemetryEnabled) defaults.push(['telemetry.enabled', 'false']);
+    if (this._statsDisabled) defaults.push(['stats.enabled', 'false']);
+
+    const configFile = join(cliHome, 'cli-config.properties');
+    let content = existsSync(configFile) ? readFileSync(configFile, 'utf-8') : '';
+    const existing = parseProperties(content);
+    for (const [key, value] of defaults) {
+      if (!existing.has(key)) content = setProperty(content, key, value);
+    }
+    writeFileSync(configFile, content, 'utf-8');
   }
 
   /**
