@@ -184,7 +184,7 @@ export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 
 // ---------------------------------------------------------------------------
-// SonarCloud
+// SonarQube Cloud
 // ---------------------------------------------------------------------------
 
 export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
@@ -341,7 +341,7 @@ export const SENTRY_FLUSH_TIMEOUT_MS = 500;
 // ---------------------------------------------------------------------------
 // Auth loopback server
 //
-// Port range used by the SonarLint protocol. SonarQube/SonarCloud validates
+// Port range used by the SonarLint protocol. SonarQube Server and SonarQube Cloud validate
 // that the callback port falls within this range before POSTing the token.
 // Must match the range defined in SonarLint Core (EmbeddedServer.java: 64120-64130).
 // ---------------------------------------------------------------------------
