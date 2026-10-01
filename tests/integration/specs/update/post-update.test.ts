@@ -1099,7 +1099,7 @@ describe('post-update migration', () => {
     const migratingInvocations = [
       { label: 'a bare invocation', command: '', exitCode: 0 },
       { label: 'an unknown command', command: 'not-a-real-command', exitCode: 1 },
-      { label: 'a nested subcommand', command: 'config telemetry', exitCode: 0 },
+      { label: 'a nested subcommand', command: 'system status', exitCode: 0 },
     ];
     for (const { label, command, exitCode } of migratingInvocations) {
       it(
