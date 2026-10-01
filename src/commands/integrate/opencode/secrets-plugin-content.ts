@@ -20,7 +20,7 @@
 
 export const OPENCODE_PLUGIN_MANAGED_MARKER = 'Managed by `sonar integrate opencode`';
 
-export const OPENCODE_PLUGIN_CONTENT = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.
+export const OPENCODE_SECRETS_PLUGIN_CONTENT = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.
 import type { Plugin } from '@opencode-ai/plugin';
 
 interface PreToolUseDecision {
@@ -60,7 +60,7 @@ function makeSyntheticPart(output: any, text: string): any {
   };
 }
 
-export const SonarPlugin: Plugin = async ({ $ }) => {
+export const SonarSecretsPlugin: Plugin = async ({ $ }) => {
   return {
     'tool.execute.before': async (input, output) => {
       if (input.tool !== 'read') return;
