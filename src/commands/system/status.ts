@@ -20,7 +20,7 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { parse as parseToml } from 'smol-toml';
 
@@ -74,6 +74,7 @@ import {
   renderVortexSection,
 } from './status-vortex.ts';
 
+const OPENCODE_CONFIG_FILE = 'opencode.json';
 const SCA_SCANNER_CACHE_DIR = join(CLI_DIR, 'sca-scanner-cache');
 
 const PROXY_SOURCE_LABELS: Record<ConfigSource, string> = {
@@ -151,6 +152,7 @@ const INTEGRATION_TO_COMMAND: Record<string, string> = {
   codex: 'sonar integrate codex',
   cursor: 'sonar integrate cursor',
   antigravity: 'sonar integrate antigravity',
+  opencode: 'sonar integrate opencode',
 };
 
 interface McpFeatureRecord {
@@ -180,6 +182,16 @@ function findMcpFeatures(state: CliState): McpFeatureRecord[] {
   return features;
 }
 
+function checkOpenCodeMcpEntry(parsed: Record<string, unknown>): IntegrationConfigStatus {
+  const mcp = parsed.mcp as Record<string, unknown> | undefined;
+  if (!mcp || !('sonarqube' in mcp)) return 'not_configured';
+  const entry = mcp.sonarqube;
+  if (!entry || typeof entry !== 'object') return 'invalid';
+  const { command } = entry as Record<string, unknown>;
+  if (!Array.isArray(command) || command.length === 0) return 'invalid';
+  return 'configured';
+}
+
 function checkMcpConfigFile(configPath: string | undefined): IntegrationConfigStatus {
   if (!configPath || !existsSync(configPath)) return 'not_configured';
   try {
@@ -197,6 +209,9 @@ function checkMcpConfigFile(configPath: string | undefined): IntegrationConfigSt
       return 'configured';
     }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (basename(configPath) === OPENCODE_CONFIG_FILE) {
+      return checkOpenCodeMcpEntry(parsed);
+    }
     const mcpServers = parsed.mcpServers as Record<string, unknown> | undefined;
     if (!mcpServers || !('sonarqube' in mcpServers)) return 'not_configured';
     const entry = mcpServers.sonarqube;
