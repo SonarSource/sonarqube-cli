@@ -117,33 +117,24 @@ async function scanCommits(
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const unreadable: { commit?: string } = {};
-  const outcome = await scanCommitScans((stdin) => batchOf(commits, unreadable, stdin), auth, ctx);
+  const outcome = await scanCommitScans((stdin) => batchOf(commits, stdin), auth, ctx);
 
-  if (unreadable.commit !== undefined) {
-    // Reporting a clean push for content we never read would be worse than refusing the push.
-    throw new CommandFailedError(
-      `Could not read the content of commit ${shortSha(unreadable.commit)} from git, so it was not scanned.`,
-      { remediationHint: 'Check that the repository is readable, then retry the push.' },
-    );
-  }
   if (!outcome?.secretsFound) return;
   reportFindings(commits, outcome, ctx);
 }
 
 /** Yields one commit at a time, so only the commit being written is held. */
-async function* batchOf(
-  commits: CommitBlobs[],
-  unreadable: { commit?: string },
-  stdin: Writable,
-): AsyncGenerator<Buffer> {
+async function* batchOf(commits: CommitBlobs[], stdin: Writable): AsyncGenerator<Buffer> {
   for (const { commit, blobs } of commits) {
     // An analyzer that has gone leaves `pipeline` pulling to the end of the push, one git call per commit.
     if (stdin.destroyed) return;
     const contents = await readBlobContents(blobs, process.cwd());
     if (contents === null) {
-      unreadable.commit = commit;
-      return;
+      // Reporting a clean push for content we never read would be worse than refusing the push.
+      throw new CommandFailedError(
+        `Could not read the content of commit ${shortSha(commit)} from git, so it was not scanned.`,
+        { remediationHint: 'Check that the repository is readable, then retry the push.' },
+      );
     }
     yield* scanChunks(commit, contents);
   }
