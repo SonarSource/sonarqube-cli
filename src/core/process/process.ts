@@ -31,14 +31,8 @@ export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
-  stdinData?: string | Buffer;
-  /**
-   * Feeds stdin from a source pulled one chunk at a time, so a large input is never held whole. Takes precedence
-   * over `stdinData`. The source is handed the stream it feeds, because a source with work to do between chunks
-   * has to notice a child that stopped reading: `pipeline` leaves its own signal unaborted on Bun, and keeps
-   * pulling until the source ends.
-   */
-  stdinSource?: (stdin: Writable) => AsyncIterable<Buffer>;
+  /** An iterable is pulled one chunk at a time, so a large input is never held whole. */
+  stdinData?: string | Buffer | AsyncIterable<Buffer>;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -58,18 +52,17 @@ function feedStdin(
   onWriteFailed: (err: Error) => void,
   killChild: () => void,
 ): void {
-  if (options.stdinSource) {
-    // pipeline honours backpressure and ends the stream once the source does.
-    void pipeline(options.stdinSource(stdin), stdin).catch((err: unknown) => {
-      killChild();
-      onWriteFailed(err as Error);
-    });
-    return;
-  }
-  if (options.stdinData !== undefined) {
+  if (options.stdinData === undefined) return;
+  if (typeof options.stdinData === 'string' || Buffer.isBuffer(options.stdinData)) {
     stdin.write(options.stdinData);
     stdin.end();
+    return;
   }
+  // pipeline honours backpressure and ends the stream once the iterable does.
+  void pipeline(options.stdinData, stdin).catch((err: unknown) => {
+    killChild();
+    onWriteFailed(err as Error);
+  });
 }
 
 /**

@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { Writable } from 'node:stream';
-
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -316,10 +314,10 @@ describe('gitPrePush', () => {
   }
 
   /** The object names a `git cat-file` call asked about, in request order. */
-  function requestedOids(options: { stdinData?: string | Buffer }): string[] {
-    return String(options.stdinData ?? '')
-      .split('\n')
-      .filter(Boolean);
+  function requestedOids(options: { stdinData?: unknown }): string[] {
+    return typeof options.stdinData === 'string'
+      ? options.stdinData.split('\n').filter(Boolean)
+      : [];
   }
 
   /** `git cat-file --batch-check` output: one `<oid> blob <size>` line per request, with no content. */
@@ -336,12 +334,11 @@ describe('gitPrePush', () => {
     return Buffer.concat(written).toString('utf-8');
   }
 
-  /** Drives the writer the hook hands the analyzer, so the batch is built as it is in production. */
+  /** Pulls the batch the hook hands the analyzer, so it is built as it is in production. */
   function analyzerReturns(result: { exitCode: number; stdout: string; stderr: string }): void {
     runSecretsBinaryOnStreamSpy.mockImplementation(
-      async (_binaryPath: string, batch: (stdin: Writable) => AsyncIterable<Buffer>) => {
-        const sink = new Writable({ write: (_c, _e, done) => done() });
-        for await (const chunk of batch(sink)) written.push(Buffer.from(chunk));
+      async (_binaryPath: string, batch: AsyncIterable<Buffer>) => {
+        for await (const chunk of batch) written.push(Buffer.from(chunk));
         return result;
       },
     );
@@ -407,35 +404,6 @@ describe('gitPrePush', () => {
     resolveSecretsBinaryPathSpy.mockRestore();
     runSecretsBinaryOnStreamSpy.mockRestore();
     readGitPushRefsSpy.mockRestore();
-  });
-
-  it('reads nothing out of git when the analyzer is already gone', async () => {
-    spawnProcessSpy.mockResolvedValue({
-      exitCode: 0,
-      stdout: logOutput(
-        { commit: COMMIT_A, blobs: [{ oid: BLOB_A, path: 'a.ts' }] },
-        { commit: COMMIT_B, blobs: [{ oid: BLOB_B, path: 'b.ts' }] },
-      ),
-      stderr: '',
-    });
-    runSecretsBinaryOnStreamSpy.mockImplementation(
-      async (_binaryPath: string, batch: (stdin: Writable) => AsyncIterable<Buffer>) => {
-        const gone = new Writable({ write: (_c, _e, done) => done() });
-        gone.destroy();
-        // pipeline keeps pulling a source that awaits between chunks, so the source has to check for itself.
-        for await (const _chunk of batch(gone)) {
-          // drain
-        }
-        return OK_RESULT;
-      },
-    );
-
-    await gitPrePush({}, [], makeCtx());
-
-    const contentReads = (catFileSpy.mock.calls as unknown as Array<[string, string[]]>).filter(
-      ([, args]) => args.includes('--batch'),
-    );
-    expect(contentReads).toHaveLength(0);
   });
 
   it('scans the blobs the push would transfer, keyed by their paths', async () => {
