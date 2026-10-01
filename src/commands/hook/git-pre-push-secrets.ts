@@ -70,11 +70,11 @@ export async function runSecretsStage(
  * run — reported, then allowed through, as the hook has always treated an analyzer failure.
  */
 export async function scanCommitScans(
-  writeScans: (stdin: Writable) => Promise<void>,
+  batch: (stdin: Writable) => AsyncIterable<Buffer>,
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<BatchScanOutcome | null> {
-  return runScan((binaryPath) => runSecretsBinaryOnStream(binaryPath, writeScans, auth), auth, ctx);
+  return runScan((binaryPath) => runSecretsBinaryOnStream(binaryPath, batch, auth), auth, ctx);
 }
 
 async function runScan(

@@ -612,11 +612,15 @@ describe('runSecretsBinaryOnText', () => {
   });
 });
 
+async function* emptyBatch(): AsyncGenerator<Buffer> {
+  // Nothing to send; these tests only inspect how the process was started.
+}
+
 describe('runSecretsBinaryOnStream', () => {
   it('states the size limit rather than relying on the analyzer default', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
-    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', () => Promise.resolve(), FAKE_AUTH);
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', emptyBatch, FAKE_AUTH);
 
     // A caller that drops oversize content before sending it has to filter on the same threshold.
     expect(spawnSpy.mock.calls[0][1]).toEqual([
@@ -628,13 +632,13 @@ describe('runSecretsBinaryOnStream', () => {
     ]);
   });
 
-  it('hands the writer to the process as its stdin feed', async () => {
+  it('hands the batch to the process as its stdin source', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
-    const writer = () => Promise.resolve();
+    const batch = emptyBatch;
 
-    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', writer, FAKE_AUTH);
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', batch, FAKE_AUTH);
 
-    expect(spawnSpy.mock.calls[0][2].stdinWriter).toBe(writer);
+    expect(spawnSpy.mock.calls[0][2].stdinSource).toBe(batch);
     expect(spawnSpy.mock.calls[0][2].stdinData).toBeUndefined();
   });
 });
