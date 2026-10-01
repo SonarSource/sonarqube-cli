@@ -247,6 +247,28 @@ describe('config list', () => {
   );
 
   it(
+    '--help lists every allowlisted key with its sensitivity and description',
+    async () => {
+      const result = await harness.run('config list --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Config keys:');
+      expect(result.stdout).toContain('SENSITIVE');
+      for (const definition of CONFIG_KEY_DEFINITIONS) {
+        // Trailing space guards against a key that is a prefix of another
+        // (e.g. 'network.proxy.http' vs 'network.proxy.https').
+        const row = result.stdout
+          .split('\n')
+          .find((line) => line.trim().startsWith(`${definition.key} `));
+        expect(row).toBeDefined();
+        expect(row).toContain(definition.sensitive ? 'yes' : 'no');
+        expect(row).toContain(definition.description);
+      }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 for an invalid --format value',
     async () => {
       const result = await harness.run('config list --format xml');
