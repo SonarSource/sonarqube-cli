@@ -84,6 +84,32 @@ describe('config list', () => {
   );
 
   it(
+    'exits with code 0 and prints a table with every key from the allowlist with --format table',
+    async () => {
+      const set = await harness.run(
+        'config set network.tls.clientPassphrase super-secret-passphrase',
+      );
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config list --format table');
+
+      expect(result.exitCode).toBe(0);
+      const lines = result.stdout.trim().split('\n');
+      // header + separator + one row per key
+      expect(lines).toHaveLength(CONFIG_KEY_DEFINITIONS.length + 2);
+      expect(result.stdout).toContain('KEY');
+      expect(result.stdout).toContain('VALUE');
+      for (const definition of CONFIG_KEY_DEFINITIONS) {
+        expect(result.stdout).toContain(definition.key);
+      }
+      expect(result.stdout).toContain('network.tls.clientPassphrase');
+      expect(result.stdout).toContain('(hidden)');
+      expect(result.stdout).not.toContain('super-secret-passphrase');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'prints every key as a JSON array, never the real value for a set, sensitive key',
     async () => {
       const set = await harness.run(
