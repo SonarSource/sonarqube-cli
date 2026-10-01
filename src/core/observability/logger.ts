@@ -66,7 +66,7 @@ function ensureLogDir(): void {
 }
 
 export function isLogLevel(value: string): value is LogLevel {
-  return value in LOG_LEVELS;
+  return Object.hasOwn(LOG_LEVELS, value);
 }
 
 function getLogLevel(): LogLevel {
