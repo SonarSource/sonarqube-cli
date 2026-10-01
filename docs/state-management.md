@@ -12,7 +12,7 @@ The state file persists configuration across CLI invocations and stores:
 - **Declarative Integrations**: Generic records of installed integrations, features, resources, and operations
 - **Dependency Metadata**: Installed external binaries like sonar-secrets
 - **Telemetry Data**: Anonymous usage statistics and pending telemetry events
-- **Stats Data**: Consent for local-only stats collection, never transmitted
+- **Stats Data**: Legacy local-only stats consent, moved to the config store
 
 ## Location
 
@@ -34,7 +34,7 @@ The state file persists configuration across CLI invocations and stores:
 | `tools`           | ToolsState (optional) | Legacy, superseded by `dependencies`                |
 | `dependencies`    | DependenciesState     | Installed binaries shared by declarative features   |
 | `telemetry`       | TelemetryState        | Telemetry configuration and pending events          |
-| `stats`           | StatsState (optional) | Local-only stats collection consent                 |
+| `stats`           | StatsState (optional) | Legacy stats consent, moved to the config store     |
 | `agentExtensions` | AgentExtension[]      | Installed agent extensions per project/global scope |
 | `integrations`    | IntegrationsState     | Generic declarative integration install records     |
 
@@ -141,7 +141,7 @@ Legacy. Entries are folded into `dependencies.installed` on load and this list i
 
 | Field            | Type                   | Description                             |
 | ---------------- | ---------------------- | --------------------------------------- |
-| `enabled`        | boolean                | Whether telemetry collection is enabled |
+| `enabled`        | boolean                | Legacy, now the `telemetry.enabled` key |
 | `firstUseDate`   | ISO 8601 timestamp     | When the CLI was first used             |
 | `installationId` | string (optional)      | Stable installation identifier          |
 | `events`         | StoredTelemetryEvent[] | Pending telemetry events not yet sent   |
@@ -149,11 +149,11 @@ Legacy. Entries are folded into `dependencies.installed` on load and this list i
 ### Stats Section
 
 Independent of the `telemetry` section above: this data is never transmitted, and is consumed only locally.
-The whole `stats` object is absent until the user explicitly runs `sonar config stats --enabled` or `--disabled` — collection defaults to enabled either way, so most users' state files never gain this key.
+Legacy: consent now lives in the `stats.enabled` config key, and post-update moves this object there and removes it.
 
 | Field     | Type    | Description                               |
 | --------- | ------- | ----------------------------------------- |
-| `enabled` | boolean | Whether local stats collection is enabled |
+| `enabled` | boolean | Legacy, now `stats.enabled` in the config |
 
 ### Integrations Section
 
@@ -439,8 +439,8 @@ sonar integrate git --hook pre-commit
 # Check status
 sonar auth status
 
-# Inspect or change telemetry configuration
-sonar config telemetry
+# Disable telemetry
+sonar config set telemetry.enabled false
 ```
 
 ### Backward Compatibility
