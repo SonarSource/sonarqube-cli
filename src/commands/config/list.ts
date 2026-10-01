@@ -30,6 +30,7 @@ type ConfigListFormat = (typeof VALID_FORMATS)[number];
 
 export interface ConfigListOptions {
   format?: string;
+  onlySet?: boolean;
 }
 
 const NOT_SET_MESSAGE = '(not set)';
@@ -62,12 +63,20 @@ export async function listConfig(
   const { console } = ctx;
   const format: ConfigListFormat = resolveFormatOption(options.format, VALID_FORMATS, 'text');
 
-  const entries = await Promise.all(
+  const allEntries = await Promise.all(
     CONFIG_KEY_DEFINITIONS.map(async (definition) => ({
       definition,
       value: await getConfigValue(definition.key),
     })),
   );
+  const entries = options.onlySet
+    ? allEntries.filter(({ value }) => value !== undefined)
+    : allEntries;
+
+  if (entries.length === 0 && format !== 'json') {
+    console.print('No config values are set.');
+    return;
+  }
 
   if (format === 'json') {
     const payload: ConfigEntryJson[] = entries.map(({ definition, value }) => ({
