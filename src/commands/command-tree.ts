@@ -88,8 +88,6 @@ import {
   type AuthStatusOptions,
   VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
 } from './auth/status.ts';
-import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
-import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
@@ -715,20 +713,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   configure.rootHelp({
     category: 'cli-management',
   });
-
-  configure
-    .command('telemetry')
-    .description('Configure telemetry settings')
-    .option('--enabled', 'Enable collection of anonymous usage statistics')
-    .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
-
-  configure
-    .command('stats')
-    .description('Configure local stats collection settings')
-    .option('--enabled', 'Enable local stats collection')
-    .option('--disabled', 'Disable local stats collection')
-    .anonymousAction((ctx, options: ConfigureStatsOptions) => configureStats(options, ctx));
 
   // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
   COMMAND_TREE.command('stats')
