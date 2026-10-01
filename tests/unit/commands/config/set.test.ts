@@ -134,5 +134,17 @@ describe('setConfig', () => {
       expect(error).toBeInstanceOf(CommandFailedError);
       expect(await getConfigSecret('network.tls.clientPassphrase')).toBeNull();
     });
+
+    it('fails with an error and writes nothing when the prompted value is empty or whitespace-only', async () => {
+      process.env.SONARQUBE_CLI_MOCK_TTY = '1';
+      fake.queueResponse('   ');
+
+      const error = await setConfig('network.tls.clientPassphrase', undefined, ctx).catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(InvalidOptionError);
+      expect(await getConfigSecret('network.tls.clientPassphrase')).toBeNull();
+    });
   });
 });
