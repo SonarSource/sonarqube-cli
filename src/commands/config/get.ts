@@ -22,7 +22,7 @@
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getConfigValue, getKeyDefinition } from '@/core/config/config-repository.ts';
-import type { ConfigKey } from '@/core/config/config-schema.ts';
+import type { ConfigEntryJson, ConfigKey } from '@/core/config/config-schema.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -32,16 +32,9 @@ export interface ConfigGetOptions {
   format?: string;
 }
 
-interface ConfigGetJson {
-  key: string;
-  sensitive: boolean;
-  set: boolean;
-  value?: string;
-}
-
 const NOT_SET_MESSAGE = '(not set)';
 
-function printJson(console: Console, payload: ConfigGetJson): void {
+function printJson(console: Console, payload: ConfigEntryJson): void {
   console.print(JSON.stringify(payload, null, 2));
 }
 

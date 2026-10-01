@@ -22,34 +22,37 @@
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/parsing.ts';
 import { getConfigValue } from '@/core/config/config-repository.ts';
-import { CONFIG_KEY_DEFINITIONS } from '@/core/config/config-schema.ts';
-import type { Console } from '@/core/ui/console.ts';
+import { CONFIG_KEY_DEFINITIONS, type ConfigEntryJson } from '@/core/config/config-schema.ts';
+import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
-export const VALID_FORMATS = ['text', 'json'] as const;
+export const VALID_FORMATS = ['text', 'table', 'json'] as const;
 type ConfigListFormat = (typeof VALID_FORMATS)[number];
 
 export interface ConfigListOptions {
   format?: string;
 }
 
-interface ConfigListEntryJson {
-  key: string;
-  sensitive: boolean;
-  set: boolean;
-  value?: string;
-}
-
 const NOT_SET_MESSAGE = '(not set)';
-
-function printJson(console: Console, entries: ConfigListEntryJson[]): void {
-  console.print(JSON.stringify(entries, null, 2));
-}
 
 function displayValue(sensitive: boolean, value: string | undefined): string {
   if (value === undefined) {
     return NOT_SET_MESSAGE;
   }
   return sensitive ? '(hidden)' : value;
+}
+
+function formatTable(rows: { key: string; display: string }[]): string {
+  const [keyWidth] = columnFormatting([rows.map((row) => row.key)]);
+
+  const header = ['KEY'.padEnd(keyWidth), 'VALUE'].join(' | ');
+  const separator = '-'.repeat(header.length);
+
+  const lines = [header, separator];
+  for (const row of rows) {
+    lines.push([row.key.padEnd(keyWidth), row.display].join(' | '));
+  }
+
+  return lines.join('\n');
 }
 
 export async function listConfig(
@@ -67,14 +70,24 @@ export async function listConfig(
   );
 
   if (format === 'json') {
-    printJson(
-      console,
-      entries.map(({ definition, value }) => ({
-        key: definition.key,
-        sensitive: definition.sensitive,
-        set: value !== undefined,
-        ...(!definition.sensitive && value !== undefined ? { value } : {}),
-      })),
+    const payload: ConfigEntryJson[] = entries.map(({ definition, value }) => ({
+      key: definition.key,
+      sensitive: definition.sensitive,
+      set: value !== undefined,
+      ...(!definition.sensitive && value !== undefined ? { value } : {}),
+    }));
+    console.print(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  if (format === 'table') {
+    console.print(
+      formatTable(
+        entries.map(({ definition, value }) => ({
+          key: definition.key,
+          display: displayValue(definition.sensitive, value),
+        })),
+      ),
     );
     return;
   }
