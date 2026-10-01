@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarCloud region/URL helpers - pure, dependency-free (avoids a cycle between auth-resolver.ts and identity-fetch.ts).
+// SonarQube Cloud region/URL helpers - pure, dependency-free (avoids a cycle between auth-resolver.ts and identity-fetch.ts).
 
 import {
   SONARCLOUD_API_URL,
@@ -51,7 +51,7 @@ export function isSonarQubeCloud(serverUrl: string): boolean {
 
 /**
  * Determine the base URL for a request based on its endpoint.
- * SonarCloud uses separate hosts:
+ * SonarQube Cloud uses separate hosts:
  * - sonarcloud.io for /api/... endpoints
  * - api.sonarcloud.io for all other endpoints
  */
@@ -74,9 +74,9 @@ const SERVER_V2_PREFIX = '/api/v2';
 
 /**
  * SonarQube Server's V2 API paths (`/api/v2/...`) have no equivalent under that
- * prefix on SonarCloud: the same functionality lives at the API host without it
- * (e.g. Server's `/api/v2/sca/issues-releases` is SonarCloud's `/sca/issues-releases`).
- * A request with that prefix 404s or 403s on SonarCloud regardless of host, so
+ * prefix on SonarQube Cloud: the same functionality lives at the API host without it
+ * (e.g. Server's `/api/v2/sca/issues-releases` is SonarQube Cloud's `/sca/issues-releases`).
+ * A request with that prefix 404s or 403s on SonarQube Cloud regardless of host, so
  * stripping it is always correct there. Only relevant for `sonar api`'s free-form
  * endpoint — every other caller already picks the right path per connection type.
  */
