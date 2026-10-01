@@ -112,6 +112,22 @@ function codexMcpState(targetRoot: string): Record<string, unknown> {
   });
 }
 
+function openCodeMcpState(targetRoot: string): Record<string, unknown> {
+  return baseState({
+    integrations: {
+      installed: [
+        makeInstallEntry('test-id', 'opencode', 'mcp-server', targetRoot, [
+          makeResource(
+            'mcp-config',
+            'json-patch',
+            join(targetRoot, '.config', 'opencode', 'opencode.json'),
+          ),
+        ]),
+      ],
+    },
+  });
+}
+
 function mcpStateWithFeature(targetRoot: string, mcpConfigPath: string): Record<string, unknown> {
   return baseState({
     integrations: {
@@ -752,6 +768,78 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('NOT CONFIGURED');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows MCP configured when valid OpenCode config exists',
+    async () => {
+      harness.userHome.writeFile(
+        join('.config', 'opencode', 'opencode.json'),
+        JSON.stringify({
+          mcp: { sonarqube: { type: 'local', command: ['sonar', 'run', 'mcp'], enabled: true } },
+        }),
+      );
+      harness.state().withRawState(JSON.stringify(openCodeMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).not.toContain('NOT CONFIGURED');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows MCP not configured when OpenCode config has no sonarqube entry',
+    async () => {
+      harness.userHome.writeFile(
+        join('.config', 'opencode', 'opencode.json'),
+        JSON.stringify({ mcp: { other: { type: 'local', command: ['x'] } } }),
+      );
+      harness.state().withRawState(JSON.stringify(openCodeMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('NOT CONFIGURED');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows MCP invalid config when OpenCode sonarqube command is not an array',
+    async () => {
+      harness.userHome.writeFile(
+        join('.config', 'opencode', 'opencode.json'),
+        JSON.stringify({ mcp: { sonarqube: { type: 'local', command: 'sonar' } } }),
+      );
+      harness.state().withRawState(JSON.stringify(openCodeMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('CONFIGURED / INVALID CONFIG');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'recommends the OpenCode integrate command when the OpenCode MCP config is invalid',
+    async () => {
+      harness.userHome.writeFile(
+        join('.config', 'opencode', 'opencode.json'),
+        JSON.stringify({ mcp: { sonarqube: { type: 'local', command: 'sonar' } } }),
+      );
+      harness.state().withRawState(JSON.stringify(openCodeMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Run 'sonar integrate opencode' to reinstall MCP");
+      expect(result.stdout).not.toContain("Run 'sonar integrate claude'");
     },
     { timeout: 15000 },
   );

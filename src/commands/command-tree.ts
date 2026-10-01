@@ -570,7 +570,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('opencode')
     .description(
-      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks.',
+      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks and configure the SonarQube MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
