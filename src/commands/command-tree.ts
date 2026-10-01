@@ -118,6 +118,7 @@ import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
+import { opencodePostToolUse } from './hook/opencode-post-tool-use.ts';
 import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
@@ -580,7 +581,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('opencode')
     .description(
-      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks.',
+      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks and configure Vortex analysis.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
@@ -993,6 +994,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('opencode-chat-message')
     .description('OpenCode chat.message handler: mask secrets in a message before it is sent')
     .anonymousAction(handleHookInvocation(opencodeChatMessage));
+
+  hookCommand
+    .command('opencode-post-tool-use')
+    .description(
+      'OpenCode tool.execute.after handler: run Vortex analysis after agent edits or writes a file',
+    )
+    .anonymousAction(handleHookInvocation(opencodePostToolUse));
 
   hookCommand
     .command('claude-post-tool-use')
