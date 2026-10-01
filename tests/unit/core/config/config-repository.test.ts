@@ -26,7 +26,11 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigValue, setConfigValue } from '@/core/config/config-repository.ts';
+import {
+  getConfigValue,
+  setConfigValue,
+  unsetConfigValue,
+} from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 import { CLI_CONFIG_FILE_NAME, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { clearSecretCache, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
@@ -117,5 +121,33 @@ describe('config repository', () => {
     expect(emptyError).toBeInstanceOf(InvalidOptionError);
     expect(whitespaceError).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
+  });
+
+  it('removes each value from the store matching its sensitivity, reporting it was removed', async () => {
+    await setConfigValue('log.level', 'DEBUG');
+    await setConfigValue('network.proxy.https', 'http://user:secret@proxy');
+
+    expect(await unsetConfigValue('log.level')).toBe(true);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(true);
+
+    expect(await getConfigValue('log.level')).toBeUndefined();
+    expect(await getConfigValue('network.proxy.https')).toBeUndefined();
+  });
+
+  it('is a no-op reporting nothing removed for a key that is not currently set', async () => {
+    expect(await unsetConfigValue('log.level')).toBe(false);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(false);
+
+    expect(await getConfigValue('log.level')).toBeUndefined();
+    expect(await getConfigValue('network.proxy.https')).toBeUndefined();
+    expect(existsSync(testConfigFile)).toBe(false);
+  });
+
+  it('rejects an unknown key', async () => {
+    const error = await unsetConfigValue('unknown.key' as ConfigKey).catch(
+      (error: unknown) => error,
+    );
+
+    expect(error).toBeInstanceOf(InvalidOptionError);
   });
 });
