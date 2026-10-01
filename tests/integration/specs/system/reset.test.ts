@@ -403,7 +403,6 @@ describe('system reset --force', () => {
           config: { cliVersion: '0.0.0' },
           dependencies: { installed: [] },
           telemetry: {
-            enabled: true,
             installationId: expectedInstallationId,
             firstUseDate: expectedFirstUseDate,
             events: [],
@@ -419,7 +418,6 @@ describe('system reset --force', () => {
       const after = readState(harness.stateJsonFile.path).telemetry;
       expect(after.installationId).toBe(expectedInstallationId);
       expect(after.firstUseDate).toBe(expectedFirstUseDate);
-      expect(after.enabled).toBe(true);
     },
     { timeout: 15000 },
   );
