@@ -24,6 +24,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   openCodeIntegration,
+  resolveOpenCodeMcpConfigPath,
   resolveOpenCodePluginPath,
 } from '@/commands/integrate/opencode/declaration.ts';
 import { OPENCODE_PLUGIN_CONTENT } from '@/commands/integrate/opencode/plugin-content.ts';
@@ -57,14 +58,21 @@ describe('resolveOpenCodePluginPath', () => {
   });
 });
 
-describe('openCodeIntegration', () => {
-  it('declares a single secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
-    expect(openCodeIntegration.id).toBe('opencode');
-    expect(openCodeIntegration.features).toHaveLength(1);
+describe('resolveOpenCodeMcpConfigPath', () => {
+  it('writes to <project>/opencode.json for the project scope', () => {
+    expect(resolveOpenCodeMcpConfigPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', 'opencode.json'),
+    );
+  });
+});
 
-    const [feature] = openCodeIntegration.features;
-    expect(feature.dependencies).toHaveLength(1);
-    expect(feature.resources).toHaveLength(1);
+describe('openCodeIntegration', () => {
+  it('declares a secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
+    expect(openCodeIntegration.id).toBe('opencode');
+
+    const feature = openCodeIntegration.features.find((f) => f.id === 'sonar-secrets-hooks');
+    expect(feature?.dependencies).toHaveLength(1);
+    expect(feature?.resources).toHaveLength(1);
   });
 });
 
