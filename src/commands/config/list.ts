@@ -20,7 +20,7 @@
 // Print every sonar config key with its current value
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getConfigValue } from '@/core/config/config-repository.ts';
 import { CONFIG_KEY_DEFINITIONS, type ConfigEntryJson } from '@/core/config/config-schema.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
