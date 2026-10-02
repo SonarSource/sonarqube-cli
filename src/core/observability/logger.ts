@@ -53,7 +53,7 @@ interface LoggerConfig {
 }
 
 let config: LoggerConfig = {
-  level: (process.env.LOG_LEVEL || 'INFO') as LogLevel,
+  level: 'INFO',
 };
 
 let logDirCreated = false;
