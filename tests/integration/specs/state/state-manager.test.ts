@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { version as CLI_VERSION } from '../../../../package.json';
 import { TestHarness } from '../../harness';
 
 describe('loadState', () => {
@@ -38,7 +39,7 @@ describe('loadState', () => {
     async () => {
       harness.state().withRawState('not-valid-json');
 
-      const result = await harness.run('config telemetry');
+      const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -53,10 +54,10 @@ describe('loadState', () => {
   it(
     'runs the command normally when state.json is valid',
     async () => {
-      const result = await harness.run('config telemetry');
+      const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Telemetry is currently');
+      expect(result.stdout).toContain(`v${CLI_VERSION}`);
       expect(() => {
         harness.stateJsonFile.asJson();
       }).not.toThrow();
