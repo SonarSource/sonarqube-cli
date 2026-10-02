@@ -90,7 +90,7 @@ describe('authStatus with FakeConsole', () => {
     restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     const output = rendered(fake);
     expect(output).toContain('Connected');
@@ -110,7 +110,7 @@ describe('authStatus with FakeConsole', () => {
     restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
   });
@@ -126,7 +126,7 @@ describe('authStatus with FakeConsole', () => {
     restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
   });
@@ -142,7 +142,7 @@ describe('authStatus with FakeConsole', () => {
     restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     const output = rendered(fake);
     expect(output).toContain('This project expects a different connection');
@@ -165,7 +165,7 @@ describe('authStatus with FakeConsole', () => {
     );
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
     expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io', 'another-org');
@@ -180,7 +180,7 @@ describe('authStatus with FakeConsole', () => {
     restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
-    await authStatus(ctx);
+    await authStatus({}, ctx);
 
     const output = rendered(fake);
     expect(output).toContain('Connected');
