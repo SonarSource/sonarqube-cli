@@ -58,8 +58,10 @@ function feedStdin(
     stdin.end();
     return;
   }
-  // pipeline honours backpressure and ends the stream once the iterable does.
+  // pipeline honours backpressure and ends the stream once the iterable does. EPIPE is reported through
+  // the stdin 'error' listener instead, so the exit code carries that failure rather than a rejection.
   void pipeline(options.stdinData, stdin).catch((err: unknown) => {
+    if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
     killChild();
     onWriteFailed(err as Error);
   });
@@ -84,6 +86,7 @@ export async function spawnProcess(
 
     let stdout = '';
     let stderr = '';
+    let stdinBroken = false;
     // A character's bytes can straddle two chunks, so the decoder holds the remainder until the next one arrives.
     const stdoutDecoder = new StringDecoder('utf-8');
     const stderrDecoder = new StringDecoder('utf-8');
@@ -101,8 +104,14 @@ export async function spawnProcess(
     }
 
     if (proc.stdin) {
-      // The child may exit before we finish writing; its exit code reports that better than a broken pipe does.
-      proc.stdin.on('error', () => undefined);
+      // A child that exits before reading its input breaks the pipe; the exit code reports that better than throwing does.
+      proc.stdin.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EPIPE') {
+          stdinBroken = true;
+        } else {
+          reject(error);
+        }
+      });
       feedStdin(proc.stdin, options, reject, () => proc.kill());
     }
 
@@ -110,7 +119,7 @@ export async function spawnProcess(
 
     proc.on('exit', (code) => {
       resolve({
-        exitCode: code,
+        exitCode: stdinBroken ? code || 1 : code,
         stdout: (stdout + stdoutDecoder.end()).trim(),
         stderr: (stderr + stderrDecoder.end()).trim(),
       });
@@ -181,9 +190,10 @@ export async function spawnProcessCapturingBytes(
       stderr += stderrDecoder.write(data);
     });
 
-    if (options.stdinData !== undefined && proc.stdin) {
-      proc.stdin.write(options.stdinData);
-      proc.stdin.end();
+    if (proc.stdin) {
+      // The child may exit before we finish writing; its exit code reports that better than a broken pipe does.
+      proc.stdin.on('error', () => undefined);
+      feedStdin(proc.stdin, options, reject, () => proc.kill());
     }
 
     proc.on('error', reject);
