@@ -24,6 +24,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   openCodeIntegration,
+  resolveOpenCodeMcpConfigPath,
   resolveOpenCodePluginPath,
 } from '@/commands/integrate/opencode/declaration.ts';
 import { OPENCODE_PLUGIN_CONTENT } from '@/commands/integrate/opencode/plugin-content.ts';
@@ -53,6 +54,14 @@ describe('resolveOpenCodePluginPath', () => {
   it('writes to <project>/.opencode/plugins for the project scope', () => {
     expect(resolveOpenCodePluginPath(fakeContext('project', '/project/root'))).toBe(
       join('/project/root', '.opencode', 'plugins', 'sonar.ts'),
+    );
+  });
+});
+
+describe('resolveOpenCodeMcpConfigPath', () => {
+  it('writes to <project>/opencode.json for the project scope', () => {
+    expect(resolveOpenCodeMcpConfigPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', 'opencode.json'),
     );
   });
 });
