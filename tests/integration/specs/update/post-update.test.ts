@@ -43,6 +43,7 @@ import type {
   InstalledIntegrationFeature,
   IntegrationScope,
 } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
@@ -987,6 +988,66 @@ describe('post-update migration', () => {
     },
     { timeout: 15000 },
   );
+
+  describe('legacy telemetry and stats settings', () => {
+    function seedLegacyState(telemetryEnabled: boolean, statsEnabled: boolean): void {
+      const legacyState = getDefaultState('0.5.0');
+      legacyState.telemetry.enabled = telemetryEnabled;
+      legacyState.stats = { enabled: statsEnabled };
+      // Telemetry enabled so the harness leaves telemetry.enabled unset in the config.
+      harness.state().withTelemetryEnabled().withRawState(JSON.stringify(legacyState));
+    }
+
+    it(
+      'carries opt-outs from state into the config store',
+      async () => {
+        seedLegacyState(false, false);
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        const config = harness.cliHome.file('cli-config.properties').asText();
+        expect(config).toContain('telemetry.enabled=false');
+        expect(config).toContain('stats.enabled=false');
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.telemetry.enabled).toBeUndefined();
+        expect(state.stats).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'leaves the config store unset when state has telemetry and stats enabled',
+      async () => {
+        seedLegacyState(true, true);
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.telemetry.enabled).toBeUndefined();
+        expect(state.stats).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'keeps a value already in the config store',
+      async () => {
+        seedLegacyState(false, false);
+        harness.cliHome.writeFile('cli-config.properties', 'telemetry.enabled=true\n');
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        const config = harness.cliHome.file('cli-config.properties').asText();
+        expect(config).toContain('telemetry.enabled=true');
+        expect(config).not.toContain('telemetry.enabled=false');
+      },
+      { timeout: 15000 },
+    );
+  });
 
   describe('trigger', () => {
     const STALE_CLI_VERSION = '0.5.0';
