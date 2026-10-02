@@ -53,7 +53,7 @@ interface LoggerConfig {
 }
 
 let config: LoggerConfig = {
-  level: (process.env.LOG_LEVEL || 'INFO') as LogLevel,
+  level: 'INFO',
 };
 
 let logDirCreated = false;
@@ -65,9 +65,13 @@ function ensureLogDir(): void {
   }
 }
 
+export function isLogLevel(value: string): value is LogLevel {
+  return Object.hasOwn(LOG_LEVELS, value);
+}
+
 function getLogLevel(): LogLevel {
-  const envLevel = process.env.LOG_LEVEL as LogLevel | undefined;
-  if (envLevel && envLevel in LOG_LEVELS) return envLevel;
+  const envLevel = process.env.LOG_LEVEL;
+  if (envLevel && isLogLevel(envLevel)) return envLevel;
   return config.level;
 }
 
