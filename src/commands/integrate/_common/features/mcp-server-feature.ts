@@ -24,7 +24,7 @@ import type {
   ResourceDeclaration,
 } from '@/core/framework/features';
 import { jsonPatch, tomlPatch } from '@/core/framework/features';
-import { getMcpConfig } from '@/core/host/mcp/mcp-helper.ts';
+import { getMcpConfig, type McpServerConfig } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr } from '../attrs.ts';
 import { MCP_SERVER_FEATURE_BENEFIT, MCP_SERVER_FEATURE_PREVIEW } from '../feature-constants.ts';
@@ -32,7 +32,7 @@ import type { IntegrateAgentOptions } from '../types.ts';
 
 export const MCP_CONFIG_RESOURCE_ID = 'mcp-config';
 
-export type McpConfigFormat = 'json' | 'toml';
+export type McpConfigFormat = 'json' | 'toml' | 'opencode';
 
 export interface McpServerFeatureConfig {
   resolveConfigPath: (context: IntegrationContext) => string;
@@ -57,6 +57,7 @@ const SONARQUBE_MCP_SERVER_ID = 'sonarqube';
 const SERVERS_KEY: Record<McpConfigFormat, string> = {
   json: 'mcpServers',
   toml: 'mcp_servers',
+  opencode: 'mcp',
 };
 
 function createMcpConfigResource({
@@ -70,15 +71,19 @@ function createMcpConfigResource({
     targetPath: resolveConfigPath,
     defaultValue: {},
     patch: (document: Record<string, unknown>, context: IntegrationContext) =>
-      upsertMcpServer(document, desiredMcpServerConfig(context, alwaysGlobal), format),
+      upsertMcpServer(document, desiredMcpServerConfig(context, alwaysGlobal, format), format),
     removePatch: (document: Record<string, unknown>) => removeMcpServer(document, format),
   };
 
   return format === 'toml' ? tomlPatch(options) : jsonPatch(options);
 }
 
-function desiredMcpServerConfig(context: IntegrationContext, alwaysGlobal: boolean) {
-  return getMcpConfig(
+function desiredMcpServerConfig(
+  context: IntegrationContext,
+  alwaysGlobal: boolean,
+  format: McpConfigFormat,
+) {
+  const serverConfig = getMcpConfig(
     alwaysGlobal || context.scope === 'global'
       ? { withFsMount: false }
       : {
@@ -87,6 +92,16 @@ function desiredMcpServerConfig(context: IntegrationContext, alwaysGlobal: boole
           projectKey: getOptionalStringAttr(context, 'projectKey'),
         },
   );
+  return format === 'opencode' ? toOpenCodeServerConfig(serverConfig) : serverConfig;
+}
+
+function toOpenCodeServerConfig({ command, args, env }: McpServerConfig) {
+  return {
+    type: 'local',
+    command: [command, ...args],
+    ...(env && { environment: env }),
+    enabled: true,
+  };
 }
 
 export function upsertMcpServer(

@@ -33,6 +33,7 @@ import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { OPENCODE_PLUGIN_CONTENT, OPENCODE_PLUGIN_MANAGED_MARKER } from './plugin-content.ts';
@@ -41,6 +42,7 @@ const OPENCODE_PROJECT_CONFIG_DIR = '.opencode';
 const OPENCODE_GLOBAL_CONFIG_DIR = join('.config', 'opencode');
 const PLUGINS_DIR = 'plugins';
 const PLUGIN_FILE = 'sonar.ts';
+const CONFIG_FILE = 'opencode.json';
 
 export const OPENCODE_INTEGRATION_ID = 'opencode';
 const OPENCODE_DISPLAY_NAME = 'OpenCode';
@@ -56,6 +58,12 @@ export function resolveOpenCodePluginPath(context: IntegrationContext): string {
   return context.scope === 'global'
     ? join(context.targetRoot, OPENCODE_GLOBAL_CONFIG_DIR, PLUGINS_DIR, PLUGIN_FILE)
     : join(context.targetRoot, OPENCODE_PROJECT_CONFIG_DIR, PLUGINS_DIR, PLUGIN_FILE);
+}
+
+export function resolveOpenCodeMcpConfigPath(context: IntegrationContext): string {
+  return context.scope === 'global'
+    ? join(context.targetRoot, OPENCODE_GLOBAL_CONFIG_DIR, CONFIG_FILE)
+    : join(context.targetRoot, CONFIG_FILE);
 }
 
 export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOptions> = {
@@ -94,5 +102,9 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
         }),
       ],
     },
+    createMcpServerFeature<OpenCodeIntegrationOptions>({
+      resolveConfigPath: resolveOpenCodeMcpConfigPath,
+      format: 'opencode',
+    }),
   ],
 };
