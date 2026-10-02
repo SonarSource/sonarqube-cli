@@ -48,6 +48,12 @@ export async function getConfigValue(key: ConfigKey): Promise<string | undefined
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    throw new InvalidOptionError(
+      `Value for config key '${key}' must not be empty.`,
+      `If you meant to unset it, run 'sonar config unset ${key}'.`,
+    );
+  }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
       `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
