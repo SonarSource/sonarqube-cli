@@ -39,7 +39,8 @@ export type CommandExecutedPayload = {
 /**
  * Build a CliCommandExecuted fact for a finished command.
  *
- * `result` is derived from `process.exitCode` (`success` when 0 or unset).
+ * `result` is derived from the invocation context when set, otherwise from
+ * `process.exitCode` (`success` when 0 or unset).
  * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
  * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
  * `arguments` comes from {@link SonarCommand.describeInvocationArguments}.
@@ -51,7 +52,9 @@ export async function buildCommandExecutedFact(
   return new TelemetryFact(CLI_COMMAND_EXECUTED, {
     command: commandName,
     subcommand,
-    result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
+    result:
+      command.invocationContext?.currentCommandResult() ??
+      ((process.exitCode ?? 0) === 0 ? 'success' : 'failure'),
     distribution: DISTRIBUTION,
     project_uuid: await currentProjectUuid(),
     arguments: command.describeInvocationArguments(),
