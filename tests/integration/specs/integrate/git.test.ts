@@ -1093,11 +1093,7 @@ describe('integrate git --local (CLI-1118)', () => {
       git(['commit', '-m', 'initial'], harness.cwd.path);
 
       const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
-      const worktreeAdd = Bun.spawnSync(
-        ['git', 'worktree', 'add', worktreePath, '-b', 'linked-branch'],
-        { cwd: harness.cwd.path },
-      );
-      expect(worktreeAdd.exitCode).toBe(0);
+      git(['worktree', 'add', worktreePath, '-b', 'linked-branch'], harness.cwd.path);
 
       // In the worktree, `.git` is a file, not a directory — this is exactly the case where
       // the fallback resolver matters (`--git-common-dir`, never `--git-path hooks`, which
