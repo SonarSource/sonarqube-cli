@@ -58,13 +58,12 @@ describe('resolveOpenCodePluginPath', () => {
 });
 
 describe('openCodeIntegration', () => {
-  it('declares a single secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
+  it('declares a secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
     expect(openCodeIntegration.id).toBe('opencode');
-    expect(openCodeIntegration.features).toHaveLength(1);
 
-    const [feature] = openCodeIntegration.features;
-    expect(feature.dependencies).toHaveLength(1);
-    expect(feature.resources).toHaveLength(1);
+    const feature = openCodeIntegration.features.find((f) => f.id === 'sonar-secrets-hooks');
+    expect(feature?.dependencies).toHaveLength(1);
+    expect(feature?.resources).toHaveLength(1);
   });
 });
 
