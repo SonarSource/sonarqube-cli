@@ -89,6 +89,21 @@ describe('config unset', () => {
   );
 
   it(
+    'is a no-op and writes nothing for a sensitive key that is not currently set, informing rather than claiming success',
+    async () => {
+      const result = await harness.run('config unset network.tls.clientPassphrase');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        "'network.tls.clientPassphrase' is not set; nothing to remove.",
+      );
+      expect(result.stdout + result.stderr).not.toContain("Removed 'network.tls.clientPassphrase'");
+      expect(existsSync(harness.keychainJsonFile)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 2 and writes nothing for an unknown key',
     async () => {
       const result = await harness.run('config unset not.a.real.key');

@@ -27,15 +27,11 @@ export async function unsetConfig(key: string, ctx: CommandInvocationContext): P
   const { console } = ctx;
   const configKey = key as ConfigKey;
   // Throws InvalidOptionError for an unknown key before any store is touched.
-  const definition = getKeyDefinition(configKey);
+  getKeyDefinition(configKey);
   const removed = await unsetConfigValue(configKey);
   if (!removed) {
     console.info(`'${configKey}' is not set; nothing to remove.`);
     return;
   }
-  console.success(
-    definition.sensitive
-      ? `Removed '${configKey}' from the system keychain.`
-      : `Removed '${configKey}'.`,
-  );
+  console.success(`Removed '${configKey}'.`);
 }
