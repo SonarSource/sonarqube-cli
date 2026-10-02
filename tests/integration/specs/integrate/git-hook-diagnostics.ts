@@ -22,6 +22,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '@/commands/integrate/git/tools/shared.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
+import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import type { TestHarness } from '../../harness';
 import { IS_WINDOWS } from '../../harness/platform';
@@ -188,6 +190,11 @@ export function buildGitHookDiagnostics(
   const localHooksPath = gitConfigGet(context.repoCwd, context.hookEnv, 'local', 'core.hooksPath');
   const sonarBinName = IS_WINDOWS ? 'sonar.exe' : 'sonar';
   const sonarBinPath = join(context.sonarBinDir, sonarBinName);
+  const secretsBinPath = join(
+    context.harness.cliHome.path,
+    'bin',
+    buildLocalBinaryName(detectPlatform()),
+  );
   const globalHookScript = join(globalHooksPath, context.hook);
   const localHookScript = join(context.repoCwd, '.git', 'hooks', context.hook);
 
@@ -212,7 +219,7 @@ export function buildGitHookDiagnostics(
     `  global hook script (${globalHookScript}): ${fileProbe(globalHookScript)}`,
     `  local hook script (${localHookScript}): ${fileProbe(localHookScript)}`,
     `  sonar binary (${sonarBinPath}): ${fileProbe(sonarBinPath)}`,
-    `  sonar-secrets in cli home: ${fileProbe(join(context.harness.cliHome.path, 'bin', 'sonar-secrets'))}`,
+    `  sonar-secrets in cli home (${secretsBinPath}): ${fileProbe(secretsBinPath)}`,
     '',
     'global hook script head:',
     hookScriptHead,
