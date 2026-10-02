@@ -72,7 +72,7 @@ export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
-  legacyCagSkillPath: (context: IntegrationContext) => string,
+  legacyCagSkillPath?: (context: IntegrationContext) => string,
 ): FeatureContainer<TOptions> {
   const subfeatureIds = subfeatures.map((subfeature) => subfeature.id);
 
@@ -84,12 +84,14 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     shouldInstall: vortexShouldInstall,
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
-    legacyCleanups: [
-      wholeFileRemover({
-        id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-        targetPath: legacyCagSkillPath,
-      }),
-    ],
+    legacyCleanups: legacyCagSkillPath
+      ? [
+          wholeFileRemover({
+            id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+            targetPath: legacyCagSkillPath,
+          }),
+        ]
+      : [],
     subfeatures,
   };
 }
