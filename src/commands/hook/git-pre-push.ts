@@ -281,11 +281,9 @@ function batchSafePath(field: string): string {
 }
 
 async function knownRemoteTips(refs: PushRef[]): Promise<string[]> {
-  const tips: string[] = [];
-  for (const sha of new Set(refs.map((ref) => ref.remoteSha))) {
-    if (await isKnownCommit(sha)) tips.push(sha);
-  }
-  return tips;
+  const shas = [...new Set(refs.map((ref) => ref.remoteSha))];
+  const known = await Promise.all(shas.map((sha) => isKnownCommit(sha)));
+  return shas.filter((_, index) => known[index]);
 }
 
 /** A remote tip this clone never fetched cannot narrow the range. */
