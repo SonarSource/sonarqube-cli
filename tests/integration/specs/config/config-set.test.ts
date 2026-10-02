@@ -35,6 +35,8 @@ describe('config set', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    // Keeps the harness from seeding telemetry.enabled=false into the config file.
+    harness.state().withTelemetryEnabled();
   });
 
   afterEach(async () => {
