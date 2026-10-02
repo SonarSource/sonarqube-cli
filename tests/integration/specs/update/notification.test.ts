@@ -26,6 +26,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
+
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { TestHarness } from '../../harness';
 
@@ -80,8 +82,9 @@ describe('update notification', () => {
     async () => {
       await harness.newFakeBinariesServer().withStableVersion('99.0.0').start();
 
-      const result = await harness.run('config telemetry --disabled', {
-        extraEnv: INTERACTIVE_ENV,
+      // `stats` is an Alpha command, so it needs ALPHA_ENV_VAR to be available.
+      const result = await harness.run('stats', {
+        extraEnv: { ...INTERACTIVE_ENV, [ALPHA_ENV_VAR]: 'true' },
       });
 
       expect(result.exitCode).toBe(0);
