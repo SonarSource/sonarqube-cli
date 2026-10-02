@@ -96,9 +96,11 @@ describe('config repository', () => {
 
     const getError = await getConfigValue(unknownKey).catch((error: unknown) => error);
     const setError = await setConfigValue(unknownKey, 'value').catch((error: unknown) => error);
+    const unsetError = await unsetConfigValue(unknownKey).catch((error: unknown) => error);
 
     expect(getError).toBeInstanceOf(InvalidOptionError);
     expect(setError).toBeInstanceOf(InvalidOptionError);
+    expect(unsetError).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
     expect(await getConfigSecret(unknownKey)).toBeNull();
   });
@@ -141,13 +143,5 @@ describe('config repository', () => {
     expect(await getConfigValue('log.level')).toBeUndefined();
     expect(await getConfigValue('network.proxy.https')).toBeUndefined();
     expect(existsSync(testConfigFile)).toBe(false);
-  });
-
-  it('rejects an unknown key', async () => {
-    const error = await unsetConfigValue('unknown.key' as ConfigKey).catch(
-      (error: unknown) => error,
-    );
-
-    expect(error).toBeInstanceOf(InvalidOptionError);
   });
 });
