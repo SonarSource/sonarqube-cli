@@ -20,7 +20,6 @@
 
 import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
 
-import { tryLoadState } from '../state/state-manager.ts';
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import {
@@ -65,8 +64,7 @@ export async function commitTelemetryFacts(
  */
 function scheduleTelemetryFlush(): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
-  const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) return;
+  if (!isTelemetryEnabled()) return;
   if (resolveTelemetryEgress().kind !== 'off') {
     spawnFlushWorker();
   }
@@ -101,8 +99,7 @@ const FLUSH_TIMEOUT_MS = 60_000;
  * Called by the hidden `sonar flush-telemetry` command.
  */
 export async function flushTelemetry(): Promise<void> {
-  const state = tryLoadState();
-  if (!state || !isTelemetryEnabled(state)) {
+  if (!isTelemetryEnabled()) {
     return;
   }
   // Guarded here rather than inside flushTelemetryEvents, which stays an unconditional

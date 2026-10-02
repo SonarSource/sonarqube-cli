@@ -44,6 +44,7 @@ import {
 } from './claude-hooks-migration.ts';
 import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
+import { migrateLegacyStateConfig } from './legacy-config-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**
@@ -124,6 +125,7 @@ export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): 
 }
 
 async function runActions(deps: PostUpdateDependencies): Promise<void> {
+  migrateLegacyStateConfig();
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();

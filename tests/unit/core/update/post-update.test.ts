@@ -170,29 +170,31 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 8 times:
-    //   1. inside migrateLegacyTelemetryEvents
-    //   2. inside migrateKnownServerProjectMappings
-    //   3. inside migrateAgentIntegrationsToGlobalScope
-    //   4. inside migrateDeclarativeIntegrations
-    //   5. inside migrateClaudeCodeHooks
-    //   6. inside updateSecretsBinaryIfNeeded
-    //   7. inside updateScaScannerBinaryIfNeeded
-    //   8. the reload after runActions (the fix being tested)
+    // The version check reads via tryLoadState, so loadState is called 9 times:
+    //   1. inside migrateLegacyStateConfig
+    //   2. inside migrateLegacyTelemetryEvents
+    //   3. inside migrateKnownServerProjectMappings
+    //   4. inside migrateAgentIntegrationsToGlobalScope
+    //   5. inside migrateDeclarativeIntegrations
+    //   6. inside migrateClaudeCodeHooks
+    //   7. inside updateSecretsBinaryIfNeeded
+    //   8. inside updateScaScannerBinaryIfNeeded
+    //   9. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
-      .mockReturnValueOnce(makeState()) // call 1: migrateLegacyTelemetryEvents
-      .mockReturnValueOnce(makeState()) // call 2: migrateKnownServerProjectMappings
-      .mockReturnValueOnce(makeState()) // call 3: migrateAgentIntegrationsToGlobalScope
-      .mockReturnValueOnce(makeState()) // call 4: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 5: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 6: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 7: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 8: reload
+      .mockReturnValueOnce(makeState()) // call 1: migrateLegacyStateConfig
+      .mockReturnValueOnce(makeState()) // call 2: migrateLegacyTelemetryEvents
+      .mockReturnValueOnce(makeState()) // call 3: migrateKnownServerProjectMappings
+      .mockReturnValueOnce(makeState()) // call 4: migrateAgentIntegrationsToGlobalScope
+      .mockReturnValueOnce(makeState()) // call 5: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 6: migrateClaudeCodeHooks
+      .mockReturnValueOnce(makeState()) // call 7: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 8: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 9: reload
 
     await runPostUpdateActions(makeDeps());
 
-    expect(loadStateSpy).toHaveBeenCalledTimes(8);
+    expect(loadStateSpy).toHaveBeenCalledTimes(9);
     expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
 
@@ -226,9 +228,12 @@ describe('runPostUpdateActions', () => {
   });
 
   it('still saves state when only migrateKnownServerProjectMappings fails', async () => {
-    loadStateSpy.mockReturnValueOnce(makeState()).mockImplementationOnce(() => {
-      throw new Error('state load failed');
-    });
+    loadStateSpy
+      .mockReturnValueOnce(makeState())
+      .mockReturnValueOnce(makeState())
+      .mockImplementationOnce(() => {
+        throw new Error('state load failed');
+      });
 
     await runPostUpdateActions(makeDeps());
 

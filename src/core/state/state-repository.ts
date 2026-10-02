@@ -56,7 +56,6 @@ function ensureStateDir(): void {
 function migrateState(raw: Record<string, unknown>): CliState {
   if (!raw.telemetry) {
     raw.telemetry = {
-      enabled: true,
       installationId: randomUUID(),
       firstUseDate: new Date().toISOString(),
     };
