@@ -104,12 +104,14 @@ describe('config unset', () => {
   );
 
   it(
-    'exits with code 2 and writes nothing for an unknown key',
+    'exits with code 1 and writes nothing for an unknown key',
     async () => {
       const result = await harness.run('config unset not.a.real.key');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain("Unknown config key 'not.a.real.key'");
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "command-argument value 'not.a.real.key' is invalid for argument 'key'. Allowed choices are",
+      );
       expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
     },
     { timeout: 15000 },

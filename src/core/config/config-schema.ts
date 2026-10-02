@@ -93,6 +93,8 @@ export const CONFIG_KEY_DEFINITIONS = [
 
 export type ConfigKey = (typeof CONFIG_KEY_DEFINITIONS)[number]['key'];
 
+export const CONFIG_KEY_NAMES: readonly ConfigKey[] = CONFIG_KEY_DEFINITIONS.map(({ key }) => key);
+
 export const CONFIG_KEY_BY_NAME: ReadonlyMap<ConfigKey, ConfigKeyDefinition> = new Map(
   CONFIG_KEY_DEFINITIONS.map((definition) => [definition.key, definition]),
 );
