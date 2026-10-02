@@ -61,6 +61,7 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 import {
+  disableTelemetryInConfigFile,
   makeTelemetryState,
   readAnalysisEvents,
   readCommandEvents,
@@ -260,7 +261,7 @@ describe('emitAnalysisCompleted()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
@@ -437,7 +438,7 @@ describe('emitIntegrationConfigured()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredPayload());
 
@@ -484,7 +485,7 @@ describe('emitCommandExecuted()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitCommandExecuted({
       command: 'auth',
@@ -868,7 +869,7 @@ function makeCtx() {
 
 describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
     const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,

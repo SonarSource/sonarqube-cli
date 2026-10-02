@@ -419,8 +419,6 @@ describe('loadState: migration', () => {
   });
 
   it('does not backfill stats when absent in state file', () => {
-    // Unlike telemetry, stats consent is not imposed on existing users who never touch it:
-    // isStatsEnabled() treats absence as enabled, so migration deliberately leaves it unset.
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     delete raw['stats'];
     mkdirSync(testCliDir, { recursive: true });
