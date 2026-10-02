@@ -191,7 +191,6 @@ export async function spawnProcessCapturingBytes(
     });
 
     if (proc.stdin) {
-      // The child may exit before we finish writing; its exit code reports that better than a broken pipe does.
       proc.stdin.on('error', () => undefined);
       feedStdin(proc.stdin, options, reject, () => proc.kill());
     }
