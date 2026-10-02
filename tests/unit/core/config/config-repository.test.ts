@@ -26,7 +26,11 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigValue, setConfigValue } from '@/core/config/config-repository.ts';
+import {
+  getConfigValue,
+  setConfigValue,
+  unsetConfigValue,
+} from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 import { CLI_CONFIG_FILE_NAME, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { clearSecretCache, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
@@ -92,9 +96,11 @@ describe('config repository', () => {
 
     const getError = await getConfigValue(unknownKey).catch((error: unknown) => error);
     const setError = await setConfigValue(unknownKey, 'value').catch((error: unknown) => error);
+    const unsetError = await unsetConfigValue(unknownKey).catch((error: unknown) => error);
 
     expect(getError).toBeInstanceOf(InvalidOptionError);
     expect(setError).toBeInstanceOf(InvalidOptionError);
+    expect(unsetError).toBeInstanceOf(InvalidOptionError);
     expect(existsSync(testConfigFile)).toBe(false);
     expect(await getConfigSecret(unknownKey)).toBeNull();
   });
@@ -116,6 +122,26 @@ describe('config repository', () => {
 
     expect(emptyError).toBeInstanceOf(InvalidOptionError);
     expect(whitespaceError).toBeInstanceOf(InvalidOptionError);
+    expect(existsSync(testConfigFile)).toBe(false);
+  });
+
+  it('removes each value from the store matching its sensitivity, reporting it was removed', async () => {
+    await setConfigValue('log.level', 'DEBUG');
+    await setConfigValue('network.proxy.https', 'http://user:secret@proxy');
+
+    expect(await unsetConfigValue('log.level')).toBe(true);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(true);
+
+    expect(await getConfigValue('log.level')).toBeUndefined();
+    expect(await getConfigValue('network.proxy.https')).toBeUndefined();
+  });
+
+  it('is a no-op reporting nothing removed for a key that is not currently set', async () => {
+    expect(await unsetConfigValue('log.level')).toBe(false);
+    expect(await unsetConfigValue('network.proxy.https')).toBe(false);
+
+    expect(await getConfigValue('log.level')).toBeUndefined();
+    expect(await getConfigValue('network.proxy.https')).toBeUndefined();
     expect(existsSync(testConfigFile)).toBe(false);
   });
 });
