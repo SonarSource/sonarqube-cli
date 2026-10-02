@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { Argument } from 'commander';
 
 import {
   AuthResolver,
@@ -412,7 +413,7 @@ describe('CliCommandExecuted', () => {
       expect(readCommandEvents(testDir)[0].event_payload.arguments).toBeNull();
     });
 
-    it('renders a positional argument by name, never its value', async () => {
+    it('renders a free-form positional argument by name only, never its value', async () => {
       const command = makeCommand('link');
       command.argument('<projectKey>', 'desc');
       command.args = ['super-secret-key'];
@@ -422,6 +423,16 @@ describe('CliCommandExecuted', () => {
       const args = readCommandEvents(testDir)[0].event_payload.arguments;
       expect(args).toBe('projectKey');
       expect(args).not.toContain('super-secret-key');
+    });
+
+    it('renders a choice-restricted positional argument with its value', async () => {
+      const command = makeCommand('config get');
+      command.addArgument(new Argument('<key>', 'desc').choices(['log.level', 'stats.enabled']));
+      command.args = ['log.level'];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('key=log.level');
     });
 
     it('excludes an optional positional argument that was not supplied', async () => {

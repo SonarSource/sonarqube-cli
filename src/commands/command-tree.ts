@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, InvalidArgumentError } from 'commander';
+import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
@@ -32,6 +32,7 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import { CONFIG_KEY_NAMES } from '@/core/config/config-schema.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
@@ -770,7 +771,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   configure
     .command('get')
     .description('Print a stored sonar config value')
-    .argument('<key>', 'Config key to read')
+    .addArgument(new Argument('<key>', 'Config key to read').choices(CONFIG_KEY_NAMES))
     .addOption(formatOption(CONFIG_GET_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, key: string, options: ConfigGetOptions) => getConfig(key, options, ctx));
 
@@ -785,14 +786,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   configure
     .command('set')
     .description('Store a sonar config value')
-    .argument('<key>', 'Config key to set')
+    .addArgument(new Argument('<key>', 'Config key to set').choices(CONFIG_KEY_NAMES))
     .argument('[value]', 'Value to store; omit to enter it interactively without echoing')
     .anonymousAction((ctx, key: string, value: string | undefined) => setConfig(key, value, ctx));
 
   configure
     .command('unset')
     .description('Remove a stored sonar config value')
-    .argument('<key>', 'Config key to unset')
+    .addArgument(new Argument('<key>', 'Config key to unset').choices(CONFIG_KEY_NAMES))
     .anonymousAction((ctx, key: string) => unsetConfig(key, ctx));
 
   configure
