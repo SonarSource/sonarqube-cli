@@ -23,6 +23,7 @@
 import { SCA_SCANNER_CLI_DIST_PREFIX } from '@/core/config-constants.ts';
 import { type PlatformInfo, SCA_SCANNER_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import {
+  SCA_SCANNER_CLI_EXTENSIONS,
   SCA_SCANNER_CLI_SIGNATURES,
   SCA_SCANNER_CLI_VERSION,
   SONARSOURCE_PUBLIC_KEY,
@@ -42,6 +43,7 @@ export const SCA_SCANNER_SPEC: BinarySpec = {
   distPrefix: SCA_SCANNER_CLI_DIST_PREFIX,
   signatures: SCA_SCANNER_CLI_SIGNATURES,
   publicKey: SONARSOURCE_PUBLIC_KEY,
+  extensions: SCA_SCANNER_CLI_EXTENSIONS,
 };
 
 export async function installScaScannerBinary(console: Console): Promise<string> {

@@ -23,6 +23,7 @@
 import { SONAR_SECRETS_DIST_PREFIX } from '@/core/config-constants.ts';
 import { type PlatformInfo, SECRETS_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import {
+  SONAR_SECRETS_EXTENSIONS,
   SONAR_SECRETS_SIGNATURES,
   SONAR_SECRETS_VERSION,
   SONARSOURCE_PUBLIC_KEY,
@@ -43,6 +44,7 @@ export const SECRETS_SPEC: BinarySpec = {
   distPrefix: SONAR_SECRETS_DIST_PREFIX,
   signatures: SONAR_SECRETS_SIGNATURES,
   publicKey: SONARSOURCE_PUBLIC_KEY,
+  extensions: SONAR_SECRETS_EXTENSIONS,
 };
 
 /**
