@@ -82,7 +82,7 @@ describe('config get', () => {
       const result = await harness.run('config get network.tls.clientPassphrase');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('(hidden)');
+      expect(result.stdout + result.stderr).toContain('*******');
       expect(result.stdout + result.stderr).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
