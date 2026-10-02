@@ -32,6 +32,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { SpawnResult } from '@/core/process/process.ts';
+
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -41,6 +43,7 @@ import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { type CliResult, TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+import { git, GIT_BIN, initGitRepo as initGitTestRepo } from '../hook/git-test-helpers.ts';
 
 const PATH_DELIM = IS_WINDOWS ? ';' : ':';
 function pathWithoutNodeModules(envPath: string | undefined): string {
@@ -83,41 +86,57 @@ function setupSonarBinDir(harness: TestHarness): {
   return { sonarBinDir, hookEnv: buildHookEnv(sonarBinDir, harness) };
 }
 
-function setupGitUser(cwd: string): void {
-  Bun.spawnSync(['git', 'config', 'user.email', 'test@example.com'], { cwd });
-  Bun.spawnSync(['git', 'config', 'user.name', 'Test User'], { cwd });
-}
-
 function addBareRemote(cwd: string): void {
   const remotePath = join(cwd, '..', 'remote.git');
   mkdirSync(remotePath, { recursive: true });
-  Bun.spawnSync(['git', 'init', '--bare'], { cwd: remotePath });
-  Bun.spawnSync(['git', 'remote', 'add', 'origin', remotePath], { cwd });
-  Bun.spawnSync(['git', 'branch', '-M', 'main'], { cwd });
+  git(['init', '--bare'], remotePath);
+  git(['remote', 'add', 'origin', remotePath], cwd);
+  git(['branch', '-M', 'main'], cwd);
+}
+
+async function runGitHook(
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+): Promise<SpawnResult> {
+  const proc = Bun.spawn([GIT_BIN, ...args], {
+    cwd,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  return { exitCode, stdout, stderr };
 }
 
 function gitCommit(
   cwd: string,
   env: Record<string, string>,
   message: string,
-): ReturnType<typeof Bun.spawnSync> {
-  return Bun.spawnSync(['git', 'commit', '-m', message], {
-    cwd,
-    env,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+): Promise<SpawnResult> {
+  return runGitHook(['commit', '-m', message], cwd, env);
+}
+
+async function commitSuccessfully(
+  cwd: string,
+  env: Record<string, string>,
+  message: string,
+): Promise<void> {
+  const result = await gitCommit(cwd, env, message);
+  expect(result.exitCode, result.stdout + result.stderr).toBe(0);
 }
 
 function gitPush(
   cwd: string,
   env: Record<string, string>,
   setUpstream: boolean,
-): ReturnType<typeof Bun.spawnSync> {
-  const args = setUpstream
-    ? ['git', 'push', '-u', 'origin', 'main']
-    : ['git', 'push', 'origin', 'main'];
-  return Bun.spawnSync(args, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
+): Promise<SpawnResult> {
+  const args = setUpstream ? ['push', '-u', 'origin', 'main'] : ['push', 'origin', 'main'];
+  return runGitHook(args, cwd, env);
 }
 
 const INTEGRATION_TEST_TOKEN = 'test-token';
@@ -213,10 +232,11 @@ async function setupAuthenticated(
 }
 
 function initGitRepo(harness: TestHarness): void {
-  mkdirSync(harness.cwd.path, { recursive: true });
-  Bun.spawnSync(['git', 'init'], { cwd: harness.cwd.path });
+  initGitTestRepo(harness.cwd.path);
+  // These specs exercise installed hooks, so undo the shared setup's hook disabling.
+  git(['config', '--local', '--unset', 'core.hooksPath'], harness.cwd.path);
   // Isolate from host git config so line-ending settings (autocrlf) don't break tests
-  Bun.spawnSync(['git', 'config', 'core.autocrlf', 'false'], { cwd: harness.cwd.path });
+  git(['config', 'core.autocrlf', 'false'], harness.cwd.path);
 }
 
 describe('integrate git (native hooks)', () => {
@@ -256,12 +276,12 @@ describe('integrate git (native hooks)', () => {
 
       const { hookEnv } = setupSonarBinDir(harness);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-      Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
-      setupGitUser(harness.cwd.path);
+      git(['add', 'secret.js'], harness.cwd.path);
+      expect(git(['diff', '--cached', '--name-only'], harness.cwd.path)).toBe('secret.js');
 
-      const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
-      expect(commit.exitCode).not.toBe(0);
-      const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+      const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
+      const output = commit.stdout + commit.stderr;
+      expect(commit.exitCode, output).not.toBe(0);
       expect(output).toContain('Secrets detected');
     },
     { timeout: 30000 },
@@ -280,24 +300,23 @@ describe('integrate git (native hooks)', () => {
       expect(result.stdout).toContain('Verify the pre-push hook works');
 
       const { hookEnv } = setupSonarBinDir(harness);
-      setupGitUser(harness.cwd.path);
 
       // First commit + push: clean file, should succeed
       harness.cwd.writeFile('clean.js', 'const x = 1;\n');
-      Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
-      gitCommit(harness.cwd.path, hookEnv, 'initial');
+      git(['add', 'clean.js'], harness.cwd.path);
+      await commitSuccessfully(harness.cwd.path, hookEnv, 'initial');
       addBareRemote(harness.cwd.path);
-      const firstPush = gitPush(harness.cwd.path, hookEnv, true);
-      expect(firstPush.exitCode).toBe(0);
+      const firstPush = await gitPush(harness.cwd.path, hookEnv, true);
+      expect(firstPush.exitCode, firstPush.stdout + firstPush.stderr).toBe(0);
 
       // Second commit + push: file with secret, should be blocked by pre-push hook
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-      Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
-      gitCommit(harness.cwd.path, hookEnv, 'wip');
-      const secondPush = gitPush(harness.cwd.path, hookEnv, false);
+      git(['add', 'secret.js'], harness.cwd.path);
+      await commitSuccessfully(harness.cwd.path, hookEnv, 'wip');
+      const secondPush = await gitPush(harness.cwd.path, hookEnv, false);
 
-      expect(secondPush.exitCode).not.toBe(0);
-      const output = (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
+      const output = secondPush.stdout + secondPush.stderr;
+      expect(secondPush.exitCode, output).not.toBe(0);
       expect(output).toContain('Secrets detected');
     },
     { timeout: 30000 },
@@ -648,14 +667,13 @@ describe('integrate git (native hooks)', () => {
         ).toContain('echo ran');
 
         const { hookEnv } = setupSonarBinDir(harness);
-        setupGitUser(harness.cwd.path);
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+        git(['add', 'secret.js'], harness.cwd.path);
 
-        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
 
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        const output = commit.stdout + commit.stderr;
+        expect(commit.exitCode, output).not.toBe(0);
         expect(output).toContain('Secrets detected');
         // Proves the old hook actually executed (chaining happened), not just that Sonar's ran.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(true);
@@ -674,14 +692,13 @@ describe('integrate git (native hooks)', () => {
         expect(install.exitCode).toBe(0);
 
         const { hookEnv } = setupSonarBinDir(harness);
-        setupGitUser(harness.cwd.path);
         harness.cwd.writeFile('clean.js', 'const x = 1;\n');
-        Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
+        git(['add', 'clean.js'], harness.cwd.path);
 
-        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
 
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        const output = commit.stdout + commit.stderr;
+        expect(commit.exitCode, output).not.toBe(0);
         expect(output).toContain('OLD-HOOK-FAILED');
         // Sonar's own secrets scan never ran — no "Secrets detected" output for this clean file,
         // and the abort happened before Sonar's part of the script.
@@ -712,15 +729,14 @@ describe('integrate git (native hooks)', () => {
         expect(install.exitCode).toBe(0);
 
         const { hookEnv } = setupSonarBinDir(harness);
-        setupGitUser(harness.cwd.path);
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
+        git(['add', 'secret.js'], harness.cwd.path);
 
-        const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
 
         // The GLOBAL hook's own secrets check still ran and blocked the commit...
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        const output = commit.stdout + commit.stderr;
+        expect(commit.exitCode, output).not.toBe(0);
         expect(output).toContain('Secrets detected');
         // ...but the old marked-as-Sonar hook was recognized and skipped, not executed again.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(false);
@@ -751,15 +767,14 @@ describe('integrate git (native hooks)', () => {
         expect(install.exitCode).toBe(0);
 
         const { hookEnv } = setupSonarBinDir(harness);
-        setupGitUser(harness.cwd.path);
 
         // First commit + push: clean file, should succeed and still run the chained old hook.
         harness.cwd.writeFile('clean.js', 'const x = 1;\n');
-        Bun.spawnSync(['git', 'add', 'clean.js'], { cwd: harness.cwd.path });
-        gitCommit(harness.cwd.path, hookEnv, 'initial');
+        git(['add', 'clean.js'], harness.cwd.path);
+        await commitSuccessfully(harness.cwd.path, hookEnv, 'initial');
         addBareRemote(harness.cwd.path);
-        const firstPush = gitPush(harness.cwd.path, hookEnv, true);
-        expect(firstPush.exitCode).toBe(0);
+        const firstPush = await gitPush(harness.cwd.path, hookEnv, true);
+        expect(firstPush.exitCode, firstPush.stdout + firstPush.stderr).toBe(0);
         // The chained hook actually read a non-empty ref list — proves stdin wasn't already
         // drained empty before it ran.
         const oldHookLog = readFileSync(join(harness.cwd.path, OLD_HOOK_MARKER_FILE), 'utf-8');
@@ -768,13 +783,12 @@ describe('integrate git (native hooks)', () => {
         // Second commit + push: file with a secret. If Sonar's scan lost its stdin (the bug this
         // capture-and-replay fixes), this would wrongly succeed instead of being blocked.
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
-        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
-        gitCommit(harness.cwd.path, hookEnv, 'wip');
-        const secondPush = gitPush(harness.cwd.path, hookEnv, false);
+        git(['add', 'secret.js'], harness.cwd.path);
+        await commitSuccessfully(harness.cwd.path, hookEnv, 'wip');
+        const secondPush = await gitPush(harness.cwd.path, hookEnv, false);
 
-        expect(secondPush.exitCode).not.toBe(0);
-        const output =
-          (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
+        const output = secondPush.stdout + secondPush.stderr;
+        expect(secondPush.exitCode, output).not.toBe(0);
         expect(output).toContain('Secrets detected');
       },
       { timeout: 30000 },
@@ -791,26 +805,27 @@ describe('integrate git (native hooks)', () => {
         expect(install.exitCode).toBe(0);
 
         const { hookEnv } = setupSonarBinDir(harness);
-        setupGitUser(harness.cwd.path);
+
         // A worktree needs an existing commit to branch from.
         harness.cwd.writeFile('initial.js', 'const x = 1;\n');
-        Bun.spawnSync(['git', 'add', 'initial.js'], { cwd: harness.cwd.path });
-        gitCommit(harness.cwd.path, hookEnv, 'initial');
+        git(['add', 'initial.js'], harness.cwd.path);
+        await commitSuccessfully(harness.cwd.path, hookEnv, 'initial');
 
         const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
-        const worktreeAdd = Bun.spawnSync(
-          ['git', 'worktree', 'add', worktreePath, '-b', 'linked-branch'],
-          { cwd: harness.cwd.path, env: hookEnv },
+        const worktreeAdd = await runGitHook(
+          ['worktree', 'add', worktreePath, '-b', 'linked-branch'],
+          harness.cwd.path,
+          hookEnv,
         );
-        expect(worktreeAdd.exitCode).toBe(0);
+        expect(worktreeAdd.exitCode, worktreeAdd.stdout + worktreeAdd.stderr).toBe(0);
 
         writeFileSync(join(worktreePath, 'secret.js'), `const token = "${GITHUB_TEST_TOKEN}";`);
-        Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: worktreePath });
+        git(['add', 'secret.js'], worktreePath);
 
-        const commit = gitCommit(worktreePath, hookEnv, 'wip');
+        const commit = await gitCommit(worktreePath, hookEnv, 'wip');
 
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
+        const output = commit.stdout + commit.stderr;
+        expect(commit.exitCode, output).not.toBe(0);
         expect(output).toContain('Secrets detected');
         // The old hook's marker lands in the worktree (git hooks run with the invoking
         // worktree as cwd) — proves --git-common-dir found the shared hook from there.
@@ -931,7 +946,7 @@ describe('integrate git --local (CLI-1118)', () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
       initGitRepo(harness);
       mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
-      Bun.spawnSync(['git', 'config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+      git(['config', 'core.hooksPath', '.husky'], harness.cwd.path);
 
       const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
 
@@ -1048,7 +1063,7 @@ describe('integrate git --local (CLI-1118)', () => {
       const globalInstall = await harness.run('integrate git --hook pre-commit --non-interactive');
       expect(globalInstall.exitCode).toBe(0);
       mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
-      Bun.spawnSync(['git', 'config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+      git(['config', 'core.hooksPath', '.husky'], harness.cwd.path);
 
       const localInstall = await harness.run(
         'integrate git --local --hook pre-commit --non-interactive',
@@ -1073,10 +1088,9 @@ describe('integrate git --local (CLI-1118)', () => {
       const globalHookBefore = harness.userHome.file(...globalHookFile).asText();
 
       // A worktree needs an existing commit to branch from.
-      setupGitUser(harness.cwd.path);
       harness.cwd.writeFile('initial.js', 'const x = 1;\n');
-      Bun.spawnSync(['git', 'add', 'initial.js'], { cwd: harness.cwd.path });
-      Bun.spawnSync(['git', 'commit', '-m', 'initial'], { cwd: harness.cwd.path });
+      git(['add', 'initial.js'], harness.cwd.path);
+      git(['commit', '-m', 'initial'], harness.cwd.path);
 
       const worktreePath = join(harness.cwd.path, '..', 'linked-worktree');
       const worktreeAdd = Bun.spawnSync(
