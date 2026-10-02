@@ -65,9 +65,7 @@ describe('config unset', () => {
       const result = await harness.run('config unset network.tls.clientPassphrase');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        "Removed 'network.tls.clientPassphrase' from the system keychain.",
-      );
+      expect(result.stdout + result.stderr).toContain("Removed 'network.tls.clientPassphrase'.");
       const keychain = JSON.parse(readFileSync(harness.keychainJsonFile, 'utf-8'));
       expect(keychain.tokens['config/network.tls.clientPassphrase']).toBeUndefined();
     },
