@@ -149,8 +149,9 @@ describe('sonar hook git-pre-push byte handling', () => {
     async () => {
       initGitRepo(harness.cwd.path);
       // Every byte value, including NUL and sequences no decoder accepts, in a record before the secret.
+      // Named so it sorts before 'after.ts' in git's raw output, which is ordered by path.
       writeFileSync(
-        join(harness.cwd.path, 'blob.bin'),
+        join(harness.cwd.path, 'a.bin'),
         Buffer.from(Array.from({ length: 256 }, (_, byte) => byte)),
       );
       writeFileSync(join(harness.cwd.path, 'after.ts'), secretIn('token'), 'utf-8');
