@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { getBooleanConfigValue } from '../config/config-repository.ts';
 import { ENV_DO_NOT_TRACK } from '../config-constants.ts';
 import type { CliState } from '../state/state.ts';
 
@@ -27,8 +28,12 @@ export function isDoNotTrackRequested(): boolean {
 }
 
 /** Whether telemetry collection and error reporting should run for this session. */
-export function isTelemetryEnabled(state: CliState): boolean {
-  return state.telemetry.enabled && !isDoNotTrackRequested();
+export function isTelemetryEnabled(): boolean {
+  try {
+    return getBooleanConfigValue('telemetry.enabled', true) && !isDoNotTrackRequested();
+  } catch {
+    return false;
+  }
 }
 
 export function describeTelemetryStatus(state: CliState): string {

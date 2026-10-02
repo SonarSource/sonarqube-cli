@@ -37,7 +37,6 @@ import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
-import { tryLoadState } from '@/core/state/state-repository.ts';
 import { commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
@@ -1141,20 +1140,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
+  COMMAND_TREE.hook('preAction', async () => {
+    // Safely: a throw from a Commander hook would abort the user's command.
+    // Before Sentry init, which reads the telemetry opt-out this migrates.
+    await runPostUpdateActionsSafely(postUpdateDeps);
+  });
+
   // Defer Sentry initialization until a command action is about to run, so that
   // --help and --version don't pay for it (unknown commands do reach the root
-  // action). The guard avoids re-loading state and re-initializing on nested commands.
+  // action). The guard avoids re-initializing on nested commands.
   let sentryInitialized = false;
   COMMAND_TREE.hook('preAction', () => {
     if (sentryInitialized) return;
     sentryInitialized = true;
-    const state = tryLoadState();
-    if (state) initSentry(state);
-  });
-
-  COMMAND_TREE.hook('preAction', async () => {
-    // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    initSentry();
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

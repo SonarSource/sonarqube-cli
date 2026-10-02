@@ -497,8 +497,8 @@ export interface StoredTelemetryEvent {
  * Telemetry configuration and pending event batch
  */
 export interface TelemetryState {
-  /** Whether telemetry collection is enabled */
-  enabled: boolean;
+  /** Legacy telemetry consent. Migrated to config in post-update. */
+  enabled?: boolean;
   /** ISO timestamp of first CLI use */
   firstUseDate: string;
   /** Stable installation ID created once when state is first initialized */
@@ -532,7 +532,7 @@ export interface CliState {
   dependencies: DependenciesState;
   /** Telemetry configuration and pending event batch */
   telemetry: TelemetryState;
-  /** Local stats collection consent, absent until explicitly toggled */
+  /** Legacy stats consent. Migrated to config in post-update. */
   stats?: StatsState;
   /** Registry of all agent extensions (hooks, skills) installed per project */
   agentExtensions: AgentExtension[];
@@ -574,7 +574,6 @@ export function getDefaultState(cliVersion: string): CliState {
       installed: [],
     },
     telemetry: {
-      enabled: true,
       installationId: randomUUID(),
       firstUseDate: new Date().toISOString(),
     },

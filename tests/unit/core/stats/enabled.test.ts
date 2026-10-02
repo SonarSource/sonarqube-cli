@@ -18,82 +18,51 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { getDefaultState } from '@/core/state/state.ts';
-import * as stateRepository from '@/core/state/state-repository.ts';
-import {
-  describeStatsStatus,
-  isStatsCollectionEnabled,
-  isStatsEnabled,
-} from '@/core/stats/enabled.ts';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-describe('isStatsEnabled', () => {
-  it('returns true when absent from state', () => {
-    const state = getDefaultState('1.0.0');
+import * as configFile from '@/core/config/config-file.ts';
+import { setConfigFileValue } from '@/core/config/config-file.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { isStatsCollectionEnabled } from '@/core/stats/enabled.ts';
 
-    expect(state.stats).toBeUndefined();
-    expect(isStatsEnabled(state)).toBe(true);
-  });
-
-  it('returns true when enabled in state', () => {
-    const state = getDefaultState('1.0.0');
-    state.stats = { enabled: true };
-
-    expect(isStatsEnabled(state)).toBe(true);
-  });
-
-  it('returns false when disabled in state', () => {
-    const state = getDefaultState('1.0.0');
-    state.stats = { enabled: false };
-
-    expect(isStatsEnabled(state)).toBe(false);
-  });
-});
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 
 describe('isStatsCollectionEnabled', () => {
-  it('returns true when state loads with no explicit stats preference', () => {
-    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(
-      getDefaultState('1.0.0'),
-    );
+  let savedSonarUserHome: string | undefined;
+  let testDir: string;
 
-    expect(isStatsCollectionEnabled()).toBe(true);
-
-    loadStateSpy.mockRestore();
+  beforeEach(() => {
+    savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+    testDir = mkdtempSync(join(tmpdir(), 'stats-enabled-test-'));
+    process.env[ENV_SONAR_USER_HOME] = testDir;
   });
 
-  it('returns false when state loads with stats explicitly disabled', () => {
-    const state = getDefaultState('1.0.0');
-    state.stats = { enabled: false };
-    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+  afterEach(() => {
+    restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('returns true when unset in config', () => {
+    expect(isStatsCollectionEnabled()).toBe(true);
+  });
+
+  it('returns false when disabled in config', () => {
+    setConfigFileValue('stats.enabled', 'false');
 
     expect(isStatsCollectionEnabled()).toBe(false);
-
-    loadStateSpy.mockRestore();
   });
 
-  it('returns false (fails closed) when state cannot be loaded', () => {
-    const loadStateSpy = spyOn(stateRepository, 'loadState').mockImplementation(() => {
-      throw new Error('corrupted state');
+  it('returns false (fails closed) when the config cannot be read', () => {
+    const readSpy = spyOn(configFile, 'getConfigFileValue').mockImplementation(() => {
+      throw new Error('unreadable config');
     });
 
     expect(isStatsCollectionEnabled()).toBe(false);
 
-    loadStateSpy.mockRestore();
-  });
-});
-
-describe('describeStatsStatus', () => {
-  it('reports enabled by default', () => {
-    expect(describeStatsStatus(getDefaultState('1.0.0'))).toBe(
-      'Stats collection is currently enabled.',
-    );
-  });
-
-  it('reports disabled when explicitly turned off', () => {
-    const state = getDefaultState('1.0.0');
-    state.stats = { enabled: false };
-
-    expect(describeStatsStatus(state)).toBe('Stats collection is currently disabled.');
+    readSpy.mockRestore();
   });
 });
