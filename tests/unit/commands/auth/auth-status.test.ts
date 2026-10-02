@@ -87,7 +87,11 @@ describe('authStatus with FakeConsole', () => {
       projectRoot: process.cwd(),
       serverUrl: 'https://regional.sonarcloud.io',
     });
-    restorers.push(() => discoverProjectSpy.mockRestore());
+    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue(null);
+    restorers.push(
+      () => discoverProjectSpy.mockRestore(),
+      () => getTokenSpy.mockRestore(),
+    );
 
     const { ctx, fake } = contextFor(envAuth());
     await authStatus({}, ctx);
@@ -139,7 +143,11 @@ describe('authStatus with FakeConsole', () => {
       projectRoot: process.cwd(),
       serverUrl: undefined,
     });
-    restorers.push(() => discoverProjectSpy.mockRestore());
+    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue(null);
+    restorers.push(
+      () => discoverProjectSpy.mockRestore(),
+      () => getTokenSpy.mockRestore(),
+    );
 
     const { ctx, fake } = contextFor(envAuth());
     await authStatus({}, ctx);
