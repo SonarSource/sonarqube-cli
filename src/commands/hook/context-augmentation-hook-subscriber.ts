@@ -45,7 +45,7 @@ export function createContextAugmentationPostToolUseSubscriber(
         await runContextPassthrough('__hook', ['Claude'], { stdinPayload: rawStdin, ctx });
         return { decision: 'handled' };
       } catch (err) {
-        logger.debug(`CAG PostToolUse forward failed: ${(err as Error).message}`);
+        logger.warn(`Vortex Context augmentation skipped: ${(err as Error).message}`);
         return { decision: 'none' };
       }
     },
