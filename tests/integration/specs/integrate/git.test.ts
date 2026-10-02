@@ -670,13 +670,22 @@ describe('integrate git (native hooks)', () => {
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
         git(['add', 'secret.js'], harness.cwd.path);
 
-        const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
+        const tracePath = join(harness.cwd.path, 'git-trace.jsonl');
+        const commit = await gitCommit(
+          harness.cwd.path,
+          { ...hookEnv, GIT_TRACE2_EVENT: tracePath },
+          'wip',
+        );
 
         const output = commit.stdout + commit.stderr;
-        expect(commit.exitCode, output).not.toBe(0);
-        expect(output).toContain('Secrets detected');
+        const diagnostics =
+          output +
+          '\nGit trace:\n' +
+          (existsSync(tracePath) ? readFileSync(tracePath, 'utf-8') : '');
         // Proves the old hook actually executed (chaining happened), not just that Sonar's ran.
-        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(true);
+        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE), diagnostics).toBe(true);
+        expect(commit.exitCode, diagnostics).not.toBe(0);
+        expect(output, diagnostics).toContain('Secrets detected');
       },
       { timeout: 30000 },
     );
