@@ -39,10 +39,12 @@ import * as openpgp from 'openpgp';
 
 import { SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
 import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/install/signatures.ts';
+import type { DependencyExtension } from '@/core/host/install/sonarsource-releases.ts';
 
 interface Platform {
   os: string;
   arch: string;
+  extension: DependencyExtension;
 }
 
 type ArchiveFormat = 'tar.gz';
@@ -52,12 +54,7 @@ interface ExternalBinary {
   version: string;
   binaryPath: string;
   platforms: Platform[];
-  /**
-   * Optional archive format. When set, the artifact is `<binary>-<plat>-<ver>.<archive>`
-   * inside `${binaryPath}-<plat>/`, signed via `<artifact>.asc`. Default
-   * (undefined): single-file `<binary>-<ver>-<plat>.exe` directly under
-   * `${binaryPath}/`, signed via `<artifact>.asc`.
-   */
+  /** Changes the URL layout only (see `buildAscUrl`); extension still comes from the platform. */
   archive?: ArchiveFormat;
   /**
    * Optional platform naming override. When set to `'x64'`, `x86-64` is rewritten
@@ -73,6 +70,8 @@ interface SignatureResult {
 
 const SIGNATURES_TS_PATH = new URL('../src/core/host/install/signatures.ts', import.meta.url);
 const PACKAGE_JSON_PATH = new URL('../package.json', import.meta.url);
+const HTTP_STATUS_FORBIDDEN = 403;
+const HTTP_STATUS_NOT_FOUND = 404;
 
 async function fetchSignatures(): Promise<void> {
   const verificationKey = await openpgp.readKey({ armoredKey: SONARSOURCE_PUBLIC_KEY });
@@ -97,7 +96,12 @@ async function fetchSignatures(): Promise<void> {
       }
     }
 
-    patchSignaturesTs(binaryName, version, signatures, SIGNATURES_TS_PATH);
+    const extensions: Record<string, DependencyExtension> = {};
+    for (const platform of platforms) {
+      extensions[urlPlatformKey(platform, externalBinary)] = platform.extension;
+    }
+
+    patchSignaturesTs(binaryName, version, signatures, extensions, SIGNATURES_TS_PATH);
     console.log('');
   }
 }
@@ -106,6 +110,7 @@ function patchSignaturesTs(
   binaryName: string,
   version: string,
   signatures: Record<string, string>,
+  extensions: Record<string, DependencyExtension>,
   outputPath: URL,
 ): void {
   const PREFIX = binaryName.toUpperCase().replaceAll('-', '_');
@@ -124,6 +129,14 @@ function patchSignaturesTs(
     `export const ${PREFIX}_SIGNATURES: Record<string, string> = {\n${sigEntries.join('\n')}\n};`,
   );
 
+  const extEntries = Object.entries(extensions)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([platform, ext]) => `  '${platform}': '${ext}',`);
+  content = content.replace(
+    new RegExp(String.raw`^export const ${PREFIX}_EXTENSIONS[^=]+=\s*\{[^}]*\};$`, 'ms'),
+    `export const ${PREFIX}_EXTENSIONS: Record<string, DependencyExtension> = {\n${extEntries.join('\n')}\n};`,
+  );
+
   writeFileSync(outputPath, content, 'utf-8');
   console.log(`Patched ${outputPath.toString()}`);
 }
@@ -139,10 +152,11 @@ function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
   const binaryName = binary.binaryPath.split('/').at(-1);
   if (binary.archive === 'tar.gz') {
     // e.g. Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz.asc
-    return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.tar.gz.asc`;
+    return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.${platform.extension}.asc`;
   }
-  // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.41.0.10709-macos-arm64.exe.asc
-  return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}/${binaryName}-${binary.version}-${platKey}.exe.asc`;
+  // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.52.0.13617-linux-arm64.bin.asc
+  //      CommercialDistribution/sonar-secrets/sonar-secrets-2.41.0.10709-macos-arm64.exe.asc
+  return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}/${binaryName}-${binary.version}-${platKey}.${platform.extension}.asc`;
 }
 
 /** Returns { platform, armoredSignature } if distributed, null if skipped. */
@@ -161,7 +175,10 @@ async function fetchAndVerifySignature(
 
   const ascResponse = await fetch(ascUrl);
   if (!ascResponse.ok) {
-    if (ascResponse.status === 404 || ascResponse.status === 403) {
+    if (
+      ascResponse.status === HTTP_STATUS_NOT_FOUND ||
+      ascResponse.status === HTTP_STATUS_FORBIDDEN
+    ) {
       console.log(`Skipped: ${ascResponse.status}`);
       return null;
     }

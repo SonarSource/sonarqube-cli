@@ -40,7 +40,11 @@ import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.t
 import type { IntegrationDeclaration } from '@/core/framework/features';
 import { recordInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import { type BinarySpec, buildLocalBinaryName } from '@/core/host/install/binary.ts';
+import {
+  type BinarySpec,
+  buildLocalBinaryName,
+  resolveDownloadExtension,
+} from '@/core/host/install/binary.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
@@ -65,7 +69,14 @@ import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
-  const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
+  const extension = resolveDownloadExtension(fixture, platform);
+  const downloadUrl = buildDownloadUrl(
+    fixture.name,
+    fixture.version,
+    fixture.distPrefix,
+    platform,
+    extension,
+  );
   const filename = downloadUrl.split('/').at(-1)!;
   return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
