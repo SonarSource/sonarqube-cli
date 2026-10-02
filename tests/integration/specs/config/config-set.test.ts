@@ -60,9 +60,7 @@ describe('config set', () => {
       const result = await harness.run('config set network.tls.clientPassphrase super-secret');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
-        "Saved 'network.tls.clientPassphrase' to the system keychain.",
-      );
+      expect(result.stdout + result.stderr).toContain("Saved 'network.tls.clientPassphrase'.");
       const keychain = JSON.parse(readFileSync(harness.keychainJsonFile, 'utf-8'));
       expect(keychain.tokens['config/network.tls.clientPassphrase']).toBe('super-secret');
       expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
@@ -148,6 +146,9 @@ describe('config set', () => {
       expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain(
         "Value for config key 'network.tls.clientPassphrase' must not be empty.",
+      );
+      expect(result.stdout + result.stderr).toContain(
+        "If you meant to unset it, run 'sonar config unset network.tls.clientPassphrase'.",
       );
       expect(existsSync(harness.keychainJsonFile)).toBe(false);
     },

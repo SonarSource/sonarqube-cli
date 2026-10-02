@@ -49,7 +49,10 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
   if (trimmedValue.length === 0) {
-    throw new InvalidOptionError(`Value for config key '${key}' must not be empty.`);
+    throw new InvalidOptionError(
+      `Value for config key '${key}' must not be empty.`,
+      `If you meant to unset it, run 'sonar config unset ${key}'.`,
+    );
   }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
