@@ -21,7 +21,7 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { setConfigValue } from '@/core/config/config-repository.ts';
+import { getKeyDefinition, setConfigValue } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -51,6 +51,7 @@ export async function setConfig(
   const { console } = ctx;
   const configKey = key as ConfigKey;
   // Throws InvalidOptionError for an unknown key before any store is written to.
+  getKeyDefinition(configKey);
   const resolvedValue = value ?? (await promptForValue(console, configKey));
   await setConfigValue(configKey, resolvedValue);
   console.success(`Saved '${configKey}'.`);
