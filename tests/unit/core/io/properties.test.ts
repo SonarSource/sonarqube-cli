@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { parseProperties, setProperty } from '@/core/io/properties.ts';
+import { parseProperties, removeProperty, setProperty } from '@/core/io/properties.ts';
 
 describe('parseProperties', () => {
   it('skips comments, blank lines and lines without a separator', () => {
@@ -103,5 +103,28 @@ describe('setProperty', () => {
       InvalidOptionError,
     );
     expect(() => setProperty('', 'log.level', 'DEBUG\r')).toThrow(InvalidOptionError);
+  });
+});
+
+describe('removeProperty', () => {
+  it('drops the line holding the key and keeps every other line', () => {
+    const content = '# my settings\nlog.level=DEBUG\ncustom.key=1\n';
+
+    expect(removeProperty(content, 'log.level')).toBe('# my settings\ncustom.key=1\n');
+  });
+
+  it('drops every duplicate of the key, not just the last', () => {
+    const content = 'log.level=DEBUG\ncustom.key=1\nlog.level=WARN\n';
+
+    const updated = removeProperty(content, 'log.level');
+
+    expect(updated).toBe('custom.key=1\n');
+    expect(parseProperties(updated).get('log.level')).toBeUndefined();
+  });
+
+  it('is a no-op when the key is absent', () => {
+    const content = 'custom.key=1\n';
+
+    expect(removeProperty(content, 'log.level')).toBe(content);
   });
 });

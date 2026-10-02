@@ -19,9 +19,9 @@
  */
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
+import { deleteConfigSecret, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
 
-import { getConfigFileValue, setConfigFileValue } from './config-file.ts';
+import { getConfigFileValue, removeConfigFileValue, setConfigFileValue } from './config-file.ts';
 import {
   CONFIG_KEY_BY_NAME,
   type ConfigKey,
@@ -64,4 +64,18 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
     return;
   }
   setConfigFileValue(key, trimmedValue);
+}
+
+/**
+ * Returns whether a value was actually removed. No-op (false) when `key` is not
+ * currently set — mirrors shell `unset` on an unset variable — so the caller can
+ * tell "removed" apart from "there was nothing to remove" instead of reporting
+ * success regardless.
+ */
+export async function unsetConfigValue(key: ConfigKey): Promise<boolean> {
+  const definition = getKeyDefinition(key);
+  if (definition.sensitive) {
+    return await deleteConfigSecret(key);
+  }
+  return removeConfigFileValue(key);
 }

@@ -23,7 +23,7 @@ import { dirname } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getConfigFile } from '@/core/config-constants.ts';
-import { parseProperties, setProperty } from '@/core/io/properties.ts';
+import { parseProperties, removeProperty, setProperty } from '@/core/io/properties.ts';
 
 function readConfigContent(): string {
   const configFile = getConfigFile();
@@ -52,4 +52,22 @@ export function setConfigFileValue(key: string, value: string): void {
   } catch (error) {
     throw new CommandFailedError(`Failed to save config: ${(error as Error).message}`);
   }
+}
+
+/** Returns whether a value was actually removed; no-op (false) when the config file doesn't exist or doesn't hold `key`. */
+export function removeConfigFileValue(key: string): boolean {
+  const configFile = getConfigFile();
+  if (!fs.existsSync(configFile)) {
+    return false;
+  }
+  const content = readConfigContent();
+  if (!parseProperties(content).has(key)) {
+    return false;
+  }
+  try {
+    fs.writeFileSync(configFile, removeProperty(content, key), 'utf-8');
+  } catch (error) {
+    throw new CommandFailedError(`Failed to save config: ${(error as Error).message}`);
+  }
+  return true;
 }
