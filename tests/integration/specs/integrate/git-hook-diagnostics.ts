@@ -587,9 +587,12 @@ export function buildGitHookDiagnostics(
     `  common-dir local hook (${commonDirLocalHook}): ${commonDirLocalHook.startsWith('(') ? commonDirLocalHook : fileProbe(commonDirLocalHook)}`,
     `  sonar binary (${sonarBinPath}): ${fileProbe(sonarBinPath)}`,
     `  sonar-secrets in cli home (${secretsBinPath}): ${fileProbe(secretsBinPath)}`,
+<<<<<<< HEAD
     `  chained hook marker (${CHAINED_HOOK_MARKER_FILE}): ${probeChainedHookMarker(context.repoCwd)}`,
     '',
     stagedSection,
+=======
+>>>>>>> b6416db6 (CLI-1219 Probe the versioned sonar-secrets binary path in hook diagnostics)
     '',
     'global hook script head:',
     hookScriptHead,
