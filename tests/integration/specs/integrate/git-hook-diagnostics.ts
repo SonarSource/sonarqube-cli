@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '@/commands/integrate/git/tools/shared.ts';
@@ -37,7 +37,12 @@ type GitHookOutcomePath =
   | 'inactive-unauthenticated'
   | 'inactive-secrets-binary-missing'
   | 'no-hook-output-probe-commit'
+  | 'silent-no-staged-scan'
+  | 'commit-succeeded-no-hook-signal'
   | 'unknown';
+
+/** Marker file written by chained-hook integration tests (see git.test.ts). */
+const CHAINED_HOOK_MARKER_FILE = 'old-hook-ran.txt';
 
 export type GitHookDiagnosticContext = {
   harness: TestHarness;
@@ -65,6 +70,31 @@ export function formatSpawnOutput(result: SpawnLike): string {
     return `[stdout]\n${stdout}\n[stderr]\n${stderr}`;
   }
   return stdout || stderr || '(empty)';
+}
+
+function gitSpawn(
+  cwd: string,
+  env: Record<string, string>,
+  args: string[],
+): { exitCode: number | null; output: string } {
+  const result = Bun.spawnSync(['git', ...args], {
+    cwd,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  return {
+    exitCode: result.exitCode,
+    output: (decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr)).trim(),
+  };
+}
+
+function gitRevParse(cwd: string, env: Record<string, string>, flag: string): string {
+  const { exitCode, output } = gitSpawn(cwd, env, ['rev-parse', flag]);
+  if (exitCode !== 0) {
+    return `(failed, git exit ${exitCode ?? 'null'}${output ? `: ${output}` : ''})`;
+  }
+  return output || '(empty)';
 }
 
 function gitConfigGet(
@@ -100,7 +130,15 @@ function probeShellBinaryResolution(env: Record<string, string>): string {
   return formatSpawnOutput(result);
 }
 
-function classifyHookOutput(output: string, exitCode: number | null): GitHookOutcomePath {
+function classifyHookOutput(
+  output: string,
+  exitCode: number | null,
+  postMortem: {
+    stagedFiles: string[];
+    directSonarHookOutput: string;
+    directSonarHookExit: number | null;
+  },
+): GitHookOutcomePath {
   if (output.includes('Secrets detected')) {
     return 'blocked-secret';
   }
@@ -110,7 +148,7 @@ function classifyHookOutput(output: string, exitCode: number | null): GitHookOut
   if (output.includes('Secrets scan failed') && output.includes('is not blocked')) {
     return 'scan-failed-soft';
   }
-  if (output.includes('code scanning is inactive: not authenticated')) {
+  if (output.includes('scanning is inactive: not authenticated')) {
     return 'inactive-unauthenticated';
   }
   if (output.includes('secret scanning is inactive: analyzer not installed')) {
@@ -118,6 +156,22 @@ function classifyHookOutput(output: string, exitCode: number | null): GitHookOut
   }
   if ((exitCode ?? 1) === 0 && output.trim() === '') {
     return 'no-hook-output-probe-commit';
+  }
+  if (
+    (exitCode ?? 1) === 0 &&
+    postMortem.stagedFiles.length === 0 &&
+    (postMortem.directSonarHookExit ?? 1) === 0 &&
+    postMortem.directSonarHookOutput.trim() === ''
+  ) {
+    return 'silent-no-staged-scan';
+  }
+  if (
+    (exitCode ?? 1) === 0 &&
+    !output.includes('Secrets detected') &&
+    !output.includes(SONAR_HOOK_SKIP_SECRETS_MESSAGE) &&
+    /\] wip|\] initial|create mode 100644/.test(output)
+  ) {
+    return 'commit-succeeded-no-hook-signal';
   }
   return 'unknown';
 }
@@ -136,9 +190,121 @@ function describeOutcomePath(path: GitHookOutcomePath): string {
       return 'Hook handler reported sonar-secrets analyzer missing.';
     case 'no-hook-output-probe-commit':
       return 'Operation succeeded with empty hook output — hook may not have run (check core.hooksPath).';
+    case 'silent-no-staged-scan':
+      return 'Post-mortem: zero staged files and `sonar hook git-pre-commit` exited 0 silently — matches git-pre-commit.ts early return when stagedFiles is empty.';
+    case 'commit-succeeded-no-hook-signal':
+      return 'Commit succeeded with normal git output only; no skip markers or secrets output — hook may not have run during commit, or Sonar scan no-op’d.';
     case 'unknown':
       return 'Output did not match a known fail-open marker; inspect raw stdout/stderr below.';
   }
+}
+
+function probeDotGitKind(repoCwd: string): string {
+  const dotGit = join(repoCwd, '.git');
+  if (!existsSync(dotGit)) {
+    return 'missing';
+  }
+  try {
+    return lstatSync(dotGit).isFile()
+      ? 'file (linked worktree admin pointer)'
+      : 'directory (main worktree or bare checkout)';
+  } catch (err) {
+    return `present, kind unknown (${(err as Error).message})`;
+  }
+}
+
+function probeRepoGitLayout(context: GitHookDiagnosticContext): string {
+  const { repoCwd, hookEnv } = context;
+  const worktreeList = gitSpawn(repoCwd, hookEnv, ['worktree', 'list', '--porcelain']);
+  return [
+    `  .git entry: ${probeDotGitKind(repoCwd)}`,
+    `  rev-parse --show-toplevel: ${gitRevParse(repoCwd, hookEnv, '--show-toplevel')}`,
+    `  rev-parse --git-dir: ${gitRevParse(repoCwd, hookEnv, '--git-dir')}`,
+    `  rev-parse --git-common-dir: ${gitRevParse(repoCwd, hookEnv, '--git-common-dir')}`,
+    `  worktree list (porcelain, exit ${worktreeList.exitCode ?? 'null'}):`,
+    worktreeList.output || '  (empty)',
+  ].join('\n');
+}
+
+function resolveCommonDirLocalHook(
+  repoCwd: string,
+  env: Record<string, string>,
+  hook: GitHookKind,
+): string {
+  const commonDir = gitRevParse(repoCwd, env, '--git-common-dir');
+  if (commonDir.startsWith('(')) {
+    return commonDir;
+  }
+  return join(commonDir, 'hooks', hook);
+}
+
+function probeStagedAndLastCommit(context: GitHookDiagnosticContext): {
+  stagedFiles: string[];
+  section: string;
+} {
+  const staged = gitSpawn(context.repoCwd, context.hookEnv, [
+    'diff',
+    '--cached',
+    '--name-only',
+    '--diff-filter=ACMR',
+  ]);
+  const stagedFiles =
+    staged.exitCode === 0 && staged.output ? staged.output.split(/\r?\n/).filter(Boolean) : [];
+  const lastCommit = gitSpawn(context.repoCwd, context.hookEnv, [
+    'log',
+    '-1',
+    '--name-only',
+    '--format=commit %H %s',
+  ]);
+  const lines = [
+    'post-mortem staged files (git diff --cached --name-only; empty after a successful commit is expected):',
+    staged.output || '(empty)',
+    '',
+    'last commit files (git log -1 --name-only):',
+    lastCommit.output || '(empty)',
+  ];
+  return { stagedFiles, section: lines.join('\n') };
+}
+
+function probeChainedHookMarker(repoCwd: string): string {
+  const markerPath = join(repoCwd, CHAINED_HOOK_MARKER_FILE);
+  if (!existsSync(markerPath)) {
+    return `missing (${markerPath})`;
+  }
+  try {
+    const content = readFileSync(markerPath, 'utf-8').trim();
+    return content ? `present, content=${JSON.stringify(content)}` : 'present, empty';
+  } catch (err) {
+    return `present, read failed: ${(err as Error).message}`;
+  }
+}
+
+function probeDirectSonarHookHandler(
+  context: GitHookDiagnosticContext,
+  sonarBinPath: string,
+): { exitCode: number | null; output: string; section: string } {
+  if (!existsSync(sonarBinPath)) {
+    return {
+      exitCode: null,
+      output: '',
+      section: `(skipped — sonar binary missing at ${sonarBinPath})`,
+    };
+  }
+  const result = Bun.spawnSync([sonarBinPath, 'hook', 'git-pre-commit'], {
+    cwd: context.repoCwd,
+    env: context.hookEnv,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const output = formatSpawnOutput(result);
+  return {
+    exitCode: result.exitCode,
+    output: decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr),
+    section: [
+      `sonar hook git-pre-commit post-mortem (cwd=${context.repoCwd}, exit=${result.exitCode ?? 'null'}):`,
+      output,
+    ].join('\n'),
+  };
 }
 
 function fileProbe(path: string): string {
@@ -146,6 +312,9 @@ function fileProbe(path: string): string {
     return 'missing';
   }
   try {
+    if (IS_WINDOWS) {
+      return 'present (exec bit not reported on Windows)';
+    }
     const mode = statSync(path).mode;
     const executable = (mode & 0o111) !== 0;
     return executable ? 'present, executable' : 'present, not executable';
@@ -180,7 +349,6 @@ export function buildGitHookDiagnostics(
 ): string {
   const output = formatSpawnOutput(result);
   const combined = decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr);
-  const outcome = classifyHookOutput(combined, result.exitCode);
   const globalHooksPath = gitConfigGet(
     context.repoCwd,
     context.hookEnv,
@@ -197,6 +365,18 @@ export function buildGitHookDiagnostics(
   );
   const globalHookScript = join(globalHooksPath, context.hook);
   const localHookScript = join(context.repoCwd, '.git', 'hooks', context.hook);
+  const commonDirLocalHook = resolveCommonDirLocalHook(
+    context.repoCwd,
+    context.hookEnv,
+    context.hook,
+  );
+  const { stagedFiles, section: stagedSection } = probeStagedAndLastCommit(context);
+  const directSonarHook = probeDirectSonarHookHandler(context, sonarBinPath);
+  const outcome = classifyHookOutput(combined, result.exitCode, {
+    stagedFiles,
+    directSonarHookOutput: directSonarHook.output,
+    directSonarHookExit: directSonarHook.exitCode,
+  });
 
   const hookScriptHead = existsSync(globalHookScript)
     ? readFileSync(globalHookScript, 'utf-8').split('\n').slice(0, 12).join('\n')
@@ -215,11 +395,18 @@ export function buildGitHookDiagnostics(
     `  core.hooksPath (global): ${globalHooksPath}`,
     `  core.hooksPath (local): ${localHooksPath}`,
     '',
+    'repo / worktree layout:',
+    probeRepoGitLayout(context),
+    '',
     'files:',
     `  global hook script (${globalHookScript}): ${fileProbe(globalHookScript)}`,
-    `  local hook script (${localHookScript}): ${fileProbe(localHookScript)}`,
+    `  repo-local hook script (${localHookScript}): ${fileProbe(localHookScript)}`,
+    `  common-dir local hook (${commonDirLocalHook}): ${commonDirLocalHook.startsWith('(') ? commonDirLocalHook : fileProbe(commonDirLocalHook)}`,
     `  sonar binary (${sonarBinPath}): ${fileProbe(sonarBinPath)}`,
     `  sonar-secrets in cli home (${secretsBinPath}): ${fileProbe(secretsBinPath)}`,
+    `  chained hook marker (${CHAINED_HOOK_MARKER_FILE}): ${probeChainedHookMarker(context.repoCwd)}`,
+    '',
+    stagedSection,
     '',
     'global hook script head:',
     hookScriptHead,
@@ -236,6 +423,8 @@ export function buildGitHookDiagnostics(
     globalHooksPath.startsWith('(')
       ? '(skipped — global core.hooksPath unset)'
       : probeDirectHookInvocation(context, globalHooksPath),
+    '',
+    directSonarHook.section,
     '',
     `${context.operation} combined output:`,
     output,
