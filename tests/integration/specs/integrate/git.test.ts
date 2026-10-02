@@ -94,14 +94,19 @@ function addBareRemote(cwd: string): void {
   git(['branch', '-M', 'main'], cwd);
 }
 
+interface GitHookResult extends SpawnResult {
+  diagnostics: string;
+}
+
 async function runGitHook(
   args: string[],
   cwd: string,
   env: Record<string, string>,
-): Promise<SpawnResult> {
+): Promise<GitHookResult> {
+  const tracePath = join(cwd, `git-trace-${crypto.randomUUID()}.jsonl`);
   const proc = Bun.spawn([GIT_BIN, ...args], {
     cwd,
-    env,
+    env: { ...env, GIT_TRACE2_EVENT: tracePath },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -110,14 +115,15 @@ async function runGitHook(
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
   ]);
-  return { exitCode, stdout, stderr };
+  const trace = existsSync(tracePath) ? readFileSync(tracePath, 'utf-8') : 'unavailable';
+  return { exitCode, stdout, stderr, diagnostics: stdout + stderr + '\nGit trace:\n' + trace };
 }
 
 function gitCommit(
   cwd: string,
   env: Record<string, string>,
   message: string,
-): Promise<SpawnResult> {
+): Promise<GitHookResult> {
   return runGitHook(['commit', '-m', message], cwd, env);
 }
 
@@ -127,14 +133,14 @@ async function commitSuccessfully(
   message: string,
 ): Promise<void> {
   const result = await gitCommit(cwd, env, message);
-  expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+  expect(result.exitCode, result.diagnostics).toBe(0);
 }
 
 function gitPush(
   cwd: string,
   env: Record<string, string>,
   setUpstream: boolean,
-): Promise<SpawnResult> {
+): Promise<GitHookResult> {
   const args = setUpstream ? ['push', '-u', 'origin', 'main'] : ['push', 'origin', 'main'];
   return runGitHook(args, cwd, env);
 }
@@ -281,8 +287,8 @@ describe('integrate git (native hooks)', () => {
 
       const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
       const output = commit.stdout + commit.stderr;
-      expect(commit.exitCode, output).not.toBe(0);
-      expect(output).toContain('Secrets detected');
+      expect(commit.exitCode, commit.diagnostics).not.toBe(0);
+      expect(output, commit.diagnostics).toContain('Secrets detected');
     },
     { timeout: 30000 },
   );
@@ -307,7 +313,7 @@ describe('integrate git (native hooks)', () => {
       await commitSuccessfully(harness.cwd.path, hookEnv, 'initial');
       addBareRemote(harness.cwd.path);
       const firstPush = await gitPush(harness.cwd.path, hookEnv, true);
-      expect(firstPush.exitCode, firstPush.stdout + firstPush.stderr).toBe(0);
+      expect(firstPush.exitCode, firstPush.diagnostics).toBe(0);
 
       // Second commit + push: file with secret, should be blocked by pre-push hook
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
@@ -316,8 +322,8 @@ describe('integrate git (native hooks)', () => {
       const secondPush = await gitPush(harness.cwd.path, hookEnv, false);
 
       const output = secondPush.stdout + secondPush.stderr;
-      expect(secondPush.exitCode, output).not.toBe(0);
-      expect(output).toContain('Secrets detected');
+      expect(secondPush.exitCode, secondPush.diagnostics).not.toBe(0);
+      expect(output, secondPush.diagnostics).toContain('Secrets detected');
     },
     { timeout: 30000 },
   );
@@ -670,22 +676,13 @@ describe('integrate git (native hooks)', () => {
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
         git(['add', 'secret.js'], harness.cwd.path);
 
-        const tracePath = join(harness.cwd.path, 'git-trace.jsonl');
-        const commit = await gitCommit(
-          harness.cwd.path,
-          { ...hookEnv, GIT_TRACE2_EVENT: tracePath },
-          'wip',
-        );
+        const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
 
         const output = commit.stdout + commit.stderr;
-        const diagnostics =
-          output +
-          '\nGit trace:\n' +
-          (existsSync(tracePath) ? readFileSync(tracePath, 'utf-8') : '');
         // Proves the old hook actually executed (chaining happened), not just that Sonar's ran.
-        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE), diagnostics).toBe(true);
-        expect(commit.exitCode, diagnostics).not.toBe(0);
-        expect(output, diagnostics).toContain('Secrets detected');
+        expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE), commit.diagnostics).toBe(true);
+        expect(commit.exitCode, commit.diagnostics).not.toBe(0);
+        expect(output, commit.diagnostics).toContain('Secrets detected');
       },
       { timeout: 30000 },
     );
@@ -707,7 +704,7 @@ describe('integrate git (native hooks)', () => {
         const commit = await gitCommit(harness.cwd.path, hookEnv, 'wip');
 
         const output = commit.stdout + commit.stderr;
-        expect(commit.exitCode, output).not.toBe(0);
+        expect(commit.exitCode, commit.diagnostics).not.toBe(0);
         expect(output).toContain('OLD-HOOK-FAILED');
         // Sonar's own secrets scan never ran — no "Secrets detected" output for this clean file,
         // and the abort happened before Sonar's part of the script.
@@ -745,8 +742,8 @@ describe('integrate git (native hooks)', () => {
 
         // The GLOBAL hook's own secrets check still ran and blocked the commit...
         const output = commit.stdout + commit.stderr;
-        expect(commit.exitCode, output).not.toBe(0);
-        expect(output).toContain('Secrets detected');
+        expect(commit.exitCode, commit.diagnostics).not.toBe(0);
+        expect(output, commit.diagnostics).toContain('Secrets detected');
         // ...but the old marked-as-Sonar hook was recognized and skipped, not executed again.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(false);
       },
@@ -783,7 +780,7 @@ describe('integrate git (native hooks)', () => {
         await commitSuccessfully(harness.cwd.path, hookEnv, 'initial');
         addBareRemote(harness.cwd.path);
         const firstPush = await gitPush(harness.cwd.path, hookEnv, true);
-        expect(firstPush.exitCode, firstPush.stdout + firstPush.stderr).toBe(0);
+        expect(firstPush.exitCode, firstPush.diagnostics).toBe(0);
         // The chained hook actually read a non-empty ref list — proves stdin wasn't already
         // drained empty before it ran.
         const oldHookLog = readFileSync(join(harness.cwd.path, OLD_HOOK_MARKER_FILE), 'utf-8');
@@ -797,8 +794,8 @@ describe('integrate git (native hooks)', () => {
         const secondPush = await gitPush(harness.cwd.path, hookEnv, false);
 
         const output = secondPush.stdout + secondPush.stderr;
-        expect(secondPush.exitCode, output).not.toBe(0);
-        expect(output).toContain('Secrets detected');
+        expect(secondPush.exitCode, secondPush.diagnostics).not.toBe(0);
+        expect(output, secondPush.diagnostics).toContain('Secrets detected');
       },
       { timeout: 30000 },
     );
@@ -826,7 +823,7 @@ describe('integrate git (native hooks)', () => {
           harness.cwd.path,
           hookEnv,
         );
-        expect(worktreeAdd.exitCode, worktreeAdd.stdout + worktreeAdd.stderr).toBe(0);
+        expect(worktreeAdd.exitCode, worktreeAdd.diagnostics).toBe(0);
 
         writeFileSync(join(worktreePath, 'secret.js'), `const token = "${GITHUB_TEST_TOKEN}";`);
         git(['add', 'secret.js'], worktreePath);
@@ -834,8 +831,8 @@ describe('integrate git (native hooks)', () => {
         const commit = await gitCommit(worktreePath, hookEnv, 'wip');
 
         const output = commit.stdout + commit.stderr;
-        expect(commit.exitCode, output).not.toBe(0);
-        expect(output).toContain('Secrets detected');
+        expect(commit.exitCode, commit.diagnostics).not.toBe(0);
+        expect(output, commit.diagnostics).toContain('Secrets detected');
         // The old hook's marker lands in the worktree (git hooks run with the invoking
         // worktree as cwd) — proves --git-common-dir found the shared hook from there.
         expect(existsSync(join(worktreePath, OLD_HOOK_MARKER_FILE))).toBe(true);
