@@ -21,6 +21,9 @@
 // Process management helpers
 
 import { spawn } from 'node:child_process';
+import type { Writable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { StringDecoder } from 'node:string_decoder';
 
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
@@ -28,7 +31,8 @@ export interface SpawnOptions {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: StdioMode;
-  stdinData?: string;
+  /** An iterable is pulled one chunk at a time, so a large input is never held whole. */
+  stdinData?: string | Buffer | AsyncIterable<Buffer>;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
@@ -40,6 +44,27 @@ export interface SpawnResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
+}
+
+function feedStdin(
+  stdin: Writable,
+  options: SpawnOptions,
+  onWriteFailed: (err: Error) => void,
+  killChild: () => void,
+): void {
+  if (options.stdinData === undefined) return;
+  if (typeof options.stdinData === 'string' || Buffer.isBuffer(options.stdinData)) {
+    stdin.write(options.stdinData);
+    stdin.end();
+    return;
+  }
+  // pipeline honours backpressure and ends the stream once the iterable does. EPIPE is reported through
+  // the stdin 'error' listener instead, so the exit code carries that failure rather than a rejection.
+  void pipeline(options.stdinData, stdin).catch((err: unknown) => {
+    if ((err as NodeJS.ErrnoException).code === 'EPIPE') return;
+    killChild();
+    onWriteFailed(err as Error);
+  });
 }
 
 /**
@@ -61,31 +86,42 @@ export async function spawnProcess(
 
     let stdout = '';
     let stderr = '';
+    let stdinBroken = false;
+    // A character's bytes can straddle two chunks, so the decoder holds the remainder until the next one arrives.
+    const stdoutDecoder = new StringDecoder('utf-8');
+    const stderrDecoder = new StringDecoder('utf-8');
 
     if (proc.stdout) {
       proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        stdout += stdoutDecoder.write(data);
       });
     }
 
     if (proc.stderr) {
       proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        stderr += stderrDecoder.write(data);
       });
     }
 
-    if (options.stdinData !== undefined && proc.stdin) {
-      proc.stdin.write(options.stdinData);
-      proc.stdin.end();
+    if (proc.stdin) {
+      // A child that exits before reading its input breaks the pipe; the exit code reports that better than throwing does.
+      proc.stdin.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'EPIPE') {
+          stdinBroken = true;
+        } else {
+          reject(error);
+        }
+      });
+      feedStdin(proc.stdin, options, reject, () => proc.kill());
     }
 
     proc.on('error', reject);
 
     proc.on('exit', (code) => {
       resolve({
-        exitCode: code,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        exitCode: stdinBroken ? code || 1 : code,
+        stdout: (stdout + stdoutDecoder.end()).trim(),
+        stderr: (stderr + stderrDecoder.end()).trim(),
       });
     });
   });
@@ -123,4 +159,49 @@ export async function spawnProcessWithTimeout(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+export interface BytesSpawnResult {
+  exitCode: number | null;
+  /** Raw stdout. Untrimmed and undecoded, so it can carry arbitrary bytes. */
+  stdout: Buffer;
+  stderr: string;
+}
+
+/** Like {@link spawnProcess}, but keeps stdout as bytes for output that is not text. */
+export async function spawnProcessCapturingBytes(
+  command: string,
+  args: string[],
+  options: SpawnOptions = {},
+): Promise<BytesSpawnResult> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...options.env },
+      stdio: [options.stdin ?? 'ignore', options.stdout ?? 'pipe', options.stderr ?? 'pipe'],
+    });
+
+    const stdout: Buffer[] = [];
+    let stderr = '';
+    const stderrDecoder = new StringDecoder('utf-8');
+    proc.stdout?.on('data', (data: Buffer) => {
+      stdout.push(data);
+    });
+    proc.stderr?.on('data', (data: Buffer) => {
+      stderr += stderrDecoder.write(data);
+    });
+
+    if (proc.stdin) {
+      proc.stdin.on('error', () => undefined);
+      feedStdin(proc.stdin, options, reject, () => proc.kill());
+    }
+
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      resolve({
+        exitCode: code,
+        stdout: Buffer.concat(stdout),
+        stderr: (stderr + stderrDecoder.end()).trim(),
+      });
+    });
+  });
 }

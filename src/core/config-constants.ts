@@ -281,6 +281,8 @@ export const STATS_RETENTION_DAYS = 365;
 
 export const EXIT_CODE_SECRETS_FOUND = 51;
 
+export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
+
 /**
  * The `caller_command` value recorded on every sonar-secrets analysis event, one per
  * call site. `agentPromptSubmit` is shared by the Claude and Codex prompt-submit hooks
