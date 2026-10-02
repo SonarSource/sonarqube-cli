@@ -20,18 +20,15 @@
 // Remove a stored sonar config value
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { getKeyDefinition, unsetConfigValue } from '@/core/config/config-repository.ts';
+import { unsetConfigValue } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 
-export async function unsetConfig(key: string, ctx: CommandInvocationContext): Promise<void> {
+export async function unsetConfig(key: ConfigKey, ctx: CommandInvocationContext): Promise<void> {
   const { console } = ctx;
-  const configKey = key as ConfigKey;
-  // Throws InvalidOptionError for an unknown key before any store is touched.
-  getKeyDefinition(configKey);
-  const removed = await unsetConfigValue(configKey);
+  const removed = await unsetConfigValue(key);
   if (!removed) {
-    console.info(`'${configKey}' is not set; nothing to remove.`);
+    console.info(`'${key}' is not set; nothing to remove.`);
     return;
   }
-  console.success(`Removed '${configKey}'.`);
+  console.success(`Removed '${key}'.`);
 }
