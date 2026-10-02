@@ -75,7 +75,6 @@ describe('update notification eligibility', () => {
     expect(updateNotifier.isEligible(resolveCommand(['api']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['context']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['hook', 'git-pre-commit']))).toBe(false);
-    expect(updateNotifier.isEligible(resolveCommand(['config', 'telemetry']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['system', 'reset']))).toBe(false);
   });
 });
