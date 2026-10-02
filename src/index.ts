@@ -23,6 +23,7 @@
 // Main CLI entry point
 
 import { createCommandTree } from '@/commands/command-tree.ts';
+import { loadLoggerConfig } from '@/core/observability/logger-config.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
@@ -34,6 +35,8 @@ function argvRequestsFormattedOutput(): boolean {
       a === '--format=toon',
   );
 }
+
+await loadLoggerConfig();
 
 const console = new TerminalConsole();
 
