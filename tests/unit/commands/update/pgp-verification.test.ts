@@ -112,7 +112,7 @@ describe('verifyBinarySignature', () => {
     const signatures = { 'linux-x86-64': armoredSignature };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey),
+      verifyBinarySignature('sonar-secrets', binaryPath, PLATFORM, signatures, armoredPublicKey),
     ).resolves.toBeUndefined();
   });
 
@@ -124,8 +124,8 @@ describe('verifyBinarySignature', () => {
     };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature(binaryPath, unknownPlatform, {}, armoredPublicKey),
-    ).rejects.toThrow("Signature not found for 'linux-arm'");
+      verifyBinarySignature('sonar-secrets', binaryPath, unknownPlatform, {}, armoredPublicKey),
+    ).rejects.toThrow("sonar-secrets is not available for platform 'linux-arm'");
   });
 
   it('throws when the binary content does not match the signature', async () => {
@@ -133,7 +133,7 @@ describe('verifyBinarySignature', () => {
     const signatures = { 'linux-x86-64': armoredSignature };
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      verifyBinarySignature(binaryPath, PLATFORM, signatures, armoredPublicKey),
+      verifyBinarySignature('sonar-secrets', binaryPath, PLATFORM, signatures, armoredPublicKey),
     ).rejects.toThrow('Binary signature verification failed');
   });
 });
