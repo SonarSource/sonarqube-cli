@@ -31,7 +31,6 @@ import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
-import { tryLoadState } from '../state/state-manager.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 
 const CACHE_FILENAME = 'project-uuid-cache.json';
@@ -123,8 +122,7 @@ export async function resolveProjectUuid(
   projectKey: string,
 ): Promise<string | null> {
   try {
-    const state = tryLoadState();
-    if (!state || !isTelemetryEnabled()) return null;
+    if (!isTelemetryEnabled()) return null;
 
     const entryKey = cacheKey(auth.serverUrl, projectKey);
     const diskCache = readDiskCache();

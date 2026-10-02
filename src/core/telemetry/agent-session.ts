@@ -24,19 +24,12 @@
 // buildCommandTree captures a hook-returned id and postAction passes it to
 // resolveAgentSessionId, which trims empty values and falls back to env.
 
-import { tryLoadState } from '@/core/state/state-manager.ts';
-
 import { isTelemetryEnabled } from './enabled.ts';
 
 function nonEmptyTrimmed(value: string | null | undefined): string | null {
   if (value == null) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function shouldIdentifyAgentSession(): boolean {
-  const state = tryLoadState();
-  return state != null && isTelemetryEnabled();
 }
 
 function normalizeAgentSessionId(value: unknown): string | null {
@@ -83,6 +76,6 @@ export function resolveAgentSessionId(
   hookSessionId: string | null,
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
-  if (!shouldIdentifyAgentSession()) return null;
+  if (!isTelemetryEnabled()) return null;
   return resolveAgentSessionIdFromHookOrEnv(hookSessionId, env);
 }
