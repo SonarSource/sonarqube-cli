@@ -31,21 +31,15 @@ import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import { discoverProject } from '@/core/project-info.ts';
-import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
-import { vortexUnavailableHookMessage } from '@/core/vortex/availability-messages.ts';
-import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
-import {
-  isVortexEntitlementLossNoticeDue,
-  recordVortexEntitlementLossWarned,
-} from '@/core/vortex/vortex-entitlement-notice.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJson } from './stdin.ts';
+import { resolveVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
 const SQAA_TOOLS = new Set(['edit', 'write']);
 
@@ -61,23 +55,6 @@ interface OpenCodePostToolUseResult {
 
 function writeResult(result: OpenCodePostToolUseResult): void {
   process.stdout.write(JSON.stringify(result) + '\n');
-}
-
-async function resolveVortexUnavailableNotice(
-  connection: SonarConnection,
-): Promise<string | undefined> {
-  if (!isVortexEntitlementLossNoticeDue()) {
-    return undefined;
-  }
-  const status = await recheckVortexEntitlement(connection);
-  const message = vortexUnavailableHookMessage(status);
-  if (!message) {
-    return undefined;
-  }
-  if (status === 'not_entitled') {
-    recordVortexEntitlementLossWarned();
-  }
-  return message;
 }
 
 async function analyzeEditedFile(
@@ -156,7 +133,7 @@ async function analyzeEditedFile(
 
   if (fetchResult.error) {
     if (fetchResult.error instanceof SqaaForbiddenError) {
-      return resolveVortexUnavailableNotice(connection);
+      return resolveVortexUnavailableHookNotice(connection);
     }
     logger.debug(`opencode-post-tool-use SQAA analysis failed: ${fetchResult.error.message}`);
     return undefined;
