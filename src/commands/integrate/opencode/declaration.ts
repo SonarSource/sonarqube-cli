@@ -38,6 +38,7 @@ import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
+import { createContextAugmentationSkillSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
@@ -56,6 +57,8 @@ import { OPENCODE_SQAA_PLUGIN_CONTENT } from './sqaa-plugin-content.ts';
 const OPENCODE_PROJECT_CONFIG_DIR = '.opencode';
 const OPENCODE_GLOBAL_CONFIG_DIR = join('.config', 'opencode');
 const PLUGINS_DIR = 'plugins';
+const SKILLS_DIR = 'skills';
+const CAG_SKILL_NAME = 'sonar-context-augmentation';
 const SECRETS_PLUGIN_FILE = 'sonar-secrets.ts';
 const SQAA_PLUGIN_FILE = 'sonar-sqaa.ts';
 const AGENTS_MD_FILE = 'AGENTS.md';
@@ -83,6 +86,12 @@ export function resolveOpenCodeSecretsPluginPath(context: IntegrationContext): s
 
 export function resolveOpenCodeSqaaPluginPath(context: IntegrationContext): string {
   return resolvePluginFilePath(context, SQAA_PLUGIN_FILE);
+}
+
+export function resolveOpenCodeCagSkillPath(context: IntegrationContext): string {
+  const configDir =
+    context.scope === 'global' ? OPENCODE_GLOBAL_CONFIG_DIR : OPENCODE_PROJECT_CONFIG_DIR;
+  return join(context.targetRoot, configDir, SKILLS_DIR, CAG_SKILL_NAME, 'SKILL.md');
 }
 
 export function resolveOpenCodeAgentsMdPath(context: IntegrationContext): string {
@@ -155,6 +164,10 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
       createSqaaInstructionsSubfeature<OpenCodeIntegrationOptions>([
         createSqaaInstructionsSnippet(resolveOpenCodeAgentsMdPath),
       ]),
+      createContextAugmentationSkillSubfeature<OpenCodeIntegrationOptions>({
+        targetPath: resolveOpenCodeCagSkillPath,
+        instructionsTargetPath: resolveOpenCodeAgentsMdPath,
+      }),
     ]),
     createMcpServerFeature<OpenCodeIntegrationOptions>({
       resolveConfigPath: resolveOpenCodeMcpConfigPath,

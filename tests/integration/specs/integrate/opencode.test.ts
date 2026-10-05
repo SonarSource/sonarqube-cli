@@ -23,13 +23,19 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
+  CONTEXT_AUGMENTATION_FEATURE_ID,
+  CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY,
+} from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import {
   SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { openCodeIntegration } from '@/commands/integrate/opencode/declaration.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
+import { readCagInvocations } from '../../harness/cag-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const TEST_ORG = 'my-org';
@@ -260,6 +266,135 @@ describe('integrate opencode — Vortex SQAA feature', () => {
       expect(harness.userHome.exists('.config', 'opencode', 'plugins', 'sonar-sqaa.ts')).toBe(
         false,
       );
+      expect(findOpenCodeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+});
+
+describe('integrate opencode — Vortex Context feature', () => {
+  let harness: TestHarness;
+  const skillRelativePath = ['.config', 'opencode', 'skills', 'sonar-context-augmentation'];
+  const runEnv = (serverUrl: string) => ({
+    SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+    SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+  });
+
+  async function startEntitledServer() {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('cloud-token')
+      .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+      .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
+      .withProject(TEST_PROJECT)
+      .withScaEnabled(true)
+      .start();
+    harness.withAuth(server.baseUrl(), 'cloud-token', TEST_ORG);
+    return server.baseUrl();
+  }
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'writes the skill and the AGENTS.md instructions rendered by the Context binary',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const serverUrl = await startEntitledServer();
+
+      const result = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: runEnv(serverUrl),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const skill = harness.userHome.file(...skillRelativePath, 'SKILL.md');
+      expect(skill.asText()).toContain('# Generated CAG skill');
+      expect(skill.asText()).toContain('--sca-enabled=true');
+      const printSkill = readCagInvocations(harness).find(
+        (invocation) => invocation.argv[1] === 'print-skill',
+      );
+      expect(printSkill?.argv).toContain('sonar context');
+      const agentsMd = harness.userHome.file('.config', 'opencode', 'AGENTS.md').asText();
+      expect(agentsMd).toContain('<!-- sonar:begin:sonar-context-augmentation-protocol -->');
+      expect(agentsMd).toContain(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY.trim());
+      expect(agentsMd).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+      expect(
+        findInstalledSubfeature(
+          harness,
+          'opencode',
+          VORTEX_FEATURE_ID,
+          CONTEXT_AUGMENTATION_FEATURE_ID,
+        ),
+      ).toBeDefined();
+      expect(harness.userHome.exists('.config', 'opencode', 'plugins', 'sonar-cag.ts')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails and writes no skill when the Context binary renders an empty skill',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled({ printSkillEmpty: true });
+      const serverUrl = await startEntitledServer();
+
+      const result = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: runEnv(serverUrl),
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'sonar-context-augmentation tool print-skill produced empty output',
+      );
+      expect(harness.userHome.exists(...skillRelativePath, 'SKILL.md')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'removes the skill and only its own AGENTS.md lines when entitlement is lost',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled();
+      const serverUrl = await startEntitledServer();
+      harness.userHome.writeFile('.config/opencode/AGENTS.md', '# My own rules\n');
+      const installed = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: runEnv(serverUrl),
+      });
+      expect(installed.exitCode).toBe(0);
+      expect(harness.userHome.exists(...skillRelativePath, 'SKILL.md')).toBe(true);
+
+      const persistedState = harness.stateJsonFile.asJson() as CliState;
+      const unentitledServer = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', {
+          allowed: false,
+          hasEntitlement: false,
+        })
+        .withProject(TEST_PROJECT)
+        .start();
+      harness.withAuth(unentitledServer.baseUrl(), 'cloud-token', TEST_ORG);
+      const activeConnection = persistedState.auth.connections.find(
+        (connection) => connection.id === persistedState.auth.activeConnectionId,
+      );
+      if (activeConnection) activeConnection.serverUrl = unentitledServer.baseUrl();
+      harness.state().withRawState(JSON.stringify(persistedState));
+      harness.state().withContextAugmentationBinaryInstalled();
+      const removed = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: runEnv(unentitledServer.baseUrl()),
+      });
+
+      expect(removed.exitCode).toBe(0);
+      expect(harness.userHome.exists(...skillRelativePath, 'SKILL.md')).toBe(false);
+      const agentsMd = harness.userHome.file('.config', 'opencode', 'AGENTS.md').asText();
+      expect(agentsMd).toContain('# My own rules');
+      expect(agentsMd).not.toContain('sonar-context-augmentation-protocol');
       expect(findOpenCodeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
