@@ -33,6 +33,9 @@ export interface ConfigKeyDefinition {
   readonly allowedValues?: readonly string[];
 }
 
+export const NOT_SET_MESSAGE = '(not set)';
+export const MASKED_VALUE = '***';
+
 const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
 
 export const CONFIG_KEY_DEFINITIONS = [
