@@ -22,7 +22,13 @@
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getConfigValue } from '@/core/config/config-repository.ts';
-import { CONFIG_KEY_DEFINITIONS, type ConfigEntryJson } from '@/core/config/config-schema.ts';
+import {
+  CONFIG_KEY_DEFINITIONS,
+  type ConfigEntryJson,
+  MASKED_VALUE,
+  NOT_SET_MESSAGE,
+} from '@/core/config/config-schema.ts';
+import { gray } from '@/core/ui/colors.ts';
 import { columnFormatting } from '@/core/ui/formatter/column-formatting.ts';
 
 export const VALID_FORMATS = ['text', 'table', 'json'] as const;
@@ -33,13 +39,11 @@ export interface ConfigListOptions {
   onlySet?: boolean;
 }
 
-const NOT_SET_MESSAGE = '(not set)';
-
 function displayValue(sensitive: boolean, value: string | undefined): string {
   if (value === undefined) {
-    return NOT_SET_MESSAGE;
+    return gray(NOT_SET_MESSAGE);
   }
-  return sensitive ? '(hidden)' : value;
+  return sensitive ? gray(MASKED_VALUE) : value;
 }
 
 const SENSITIVE_HEADER = 'SENSITIVE';
