@@ -22,7 +22,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CONFIG_KEY_DEFINITIONS } from '@/core/config/config-schema.ts';
+import {
+  CONFIG_KEY_DEFINITIONS,
+  MASKED_VALUE,
+  NOT_SET_MESSAGE,
+} from '@/core/config/config-schema.ts';
 
 import { TestHarness } from '../../harness';
 
@@ -48,7 +52,7 @@ describe('config list', () => {
       const lines = result.stdout.trim().split('\n');
       expect(lines).toHaveLength(CONFIG_KEY_DEFINITIONS.length);
       for (const definition of CONFIG_KEY_DEFINITIONS) {
-        expect(result.stdout).toContain(`${definition.key}=(not set)`);
+        expect(result.stdout).toContain(`${definition.key}=${NOT_SET_MESSAGE}`);
       }
     },
     { timeout: 15000 },
@@ -79,7 +83,7 @@ describe('config list', () => {
       const result = await harness.run('config list');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('network.tls.clientPassphrase=(hidden)');
+      expect(result.stdout).toContain(`network.tls.clientPassphrase=${MASKED_VALUE}`);
       expect(result.stdout).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
@@ -105,7 +109,7 @@ describe('config list', () => {
         expect(result.stdout).toContain(definition.key);
       }
       expect(result.stdout).toContain('network.tls.clientPassphrase');
-      expect(result.stdout).toContain('(hidden)');
+      expect(result.stdout).toContain(MASKED_VALUE);
       expect(result.stdout).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
