@@ -20,9 +20,14 @@
 
 import { join } from 'node:path';
 
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
 import {
   askUser,
+  install,
   isFeatureInstalledGloballyForProject,
   skip,
   sonarSecretsBinaryDependency,
@@ -35,13 +40,25 @@ import {
 } from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+  SQAA_HOOK_FEATURE_ID,
+} from '../_common/features/sqaa-instructions-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { OPENCODE_PLUGIN_CONTENT, OPENCODE_PLUGIN_MANAGED_MARKER } from './plugin-content.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
+import {
+  OPENCODE_PLUGIN_MANAGED_MARKER,
+  OPENCODE_SECRETS_PLUGIN_CONTENT,
+} from './secrets-plugin-content.ts';
+import { OPENCODE_SQAA_PLUGIN_CONTENT } from './sqaa-plugin-content.ts';
 
 const OPENCODE_PROJECT_CONFIG_DIR = '.opencode';
 const OPENCODE_GLOBAL_CONFIG_DIR = join('.config', 'opencode');
 const PLUGINS_DIR = 'plugins';
-const PLUGIN_FILE = 'sonar.ts';
+const SECRETS_PLUGIN_FILE = 'sonar-secrets.ts';
+const SQAA_PLUGIN_FILE = 'sonar-sqaa.ts';
+const AGENTS_MD_FILE = 'AGENTS.md';
 const CONFIG_FILE = 'opencode.json';
 
 export const OPENCODE_INTEGRATION_ID = 'opencode';
@@ -54,10 +71,41 @@ export interface OpenCodeIntegrationOptions extends IntegrateAgentOptions {
   globalSecretsHookExists?: boolean;
 }
 
-export function resolveOpenCodePluginPath(context: IntegrationContext): string {
+function resolvePluginFilePath(context: IntegrationContext, fileName: string): string {
   return context.scope === 'global'
-    ? join(context.targetRoot, OPENCODE_GLOBAL_CONFIG_DIR, PLUGINS_DIR, PLUGIN_FILE)
-    : join(context.targetRoot, OPENCODE_PROJECT_CONFIG_DIR, PLUGINS_DIR, PLUGIN_FILE);
+    ? join(context.targetRoot, OPENCODE_GLOBAL_CONFIG_DIR, PLUGINS_DIR, fileName)
+    : join(context.targetRoot, OPENCODE_PROJECT_CONFIG_DIR, PLUGINS_DIR, fileName);
+}
+
+export function resolveOpenCodeSecretsPluginPath(context: IntegrationContext): string {
+  return resolvePluginFilePath(context, SECRETS_PLUGIN_FILE);
+}
+
+export function resolveOpenCodeSqaaPluginPath(context: IntegrationContext): string {
+  return resolvePluginFilePath(context, SQAA_PLUGIN_FILE);
+}
+
+export function resolveOpenCodeAgentsMdPath(context: IntegrationContext): string {
+  return context.scope === 'global'
+    ? join(context.targetRoot, OPENCODE_GLOBAL_CONFIG_DIR, AGENTS_MD_FILE)
+    : join(context.targetRoot, AGENTS_MD_FILE);
+}
+
+function createSqaaPluginSubfeature(): SubfeatureDeclaration<OpenCodeIntegrationOptions> {
+  return {
+    id: SQAA_HOOK_FEATURE_ID,
+    displayName: 'Vortex analysis hook',
+    shouldInstall: () => install(),
+    resources: [
+      wholeFile({
+        id: 'opencode-sqaa-plugin',
+        displayName: 'OpenCode Vortex analysis plugin',
+        targetPath: resolveOpenCodeSqaaPluginPath,
+        content: OPENCODE_SQAA_PLUGIN_CONTENT,
+        managedMarker: OPENCODE_PLUGIN_MANAGED_MARKER,
+      }),
+    ],
+  };
 }
 
 export function resolveOpenCodeMcpConfigPath(context: IntegrationContext): string {
@@ -96,12 +144,18 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
         wholeFile({
           id: 'opencode-secrets-plugin',
           displayName: 'OpenCode secrets scanning plugin',
-          targetPath: resolveOpenCodePluginPath,
-          content: OPENCODE_PLUGIN_CONTENT,
+          targetPath: resolveOpenCodeSecretsPluginPath,
+          content: OPENCODE_SECRETS_PLUGIN_CONTENT,
           managedMarker: OPENCODE_PLUGIN_MANAGED_MARKER,
         }),
       ],
     },
+    createVortexFeature<OpenCodeIntegrationOptions>([
+      createSqaaPluginSubfeature(),
+      createSqaaInstructionsSubfeature<OpenCodeIntegrationOptions>([
+        createSqaaInstructionsSnippet(resolveOpenCodeAgentsMdPath),
+      ]),
+    ]),
     createMcpServerFeature<OpenCodeIntegrationOptions>({
       resolveConfigPath: resolveOpenCodeMcpConfigPath,
       format: 'opencode',
