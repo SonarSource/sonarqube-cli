@@ -177,6 +177,36 @@ describe('allowlist secrets remove', () => {
   );
 });
 
+describe('allowlist secrets remove with a dash-prefixed key', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'removes an entry whose key starts with "-"',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, '-dash-key', 'dash-secret-value');
+
+      const removeResult = await harness.run('allowlist secrets remove -- -dash-key');
+      expect(removeResult.exitCode).toBe(0);
+      expect(removeResult.stdout + removeResult.stderr).toContain(
+        'Removed entry with key: -dash-key',
+      );
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
+    },
+    { timeout: 15000 },
+  );
+});
+
 describe('allowlist secrets clear', () => {
   let harness: TestHarness;
 
@@ -311,7 +341,7 @@ async function seedAllowlistEntry(
 ): Promise<void> {
   const env = harness.env();
   const binaryPath = harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).path;
-  const proc = Bun.spawn([binaryPath, 'allowlist', 'add', '--key', key], {
+  const proc = Bun.spawn([binaryPath, 'allowlist', 'add', `--key=${key}`], {
     env,
     stdin: 'pipe',
     stdout: 'ignore',

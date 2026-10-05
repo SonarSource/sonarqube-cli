@@ -52,12 +52,15 @@ afterEach(() => {
 });
 
 describe('allowlistSecretsRemove', () => {
-  it('forwards the key as-is to the shared spawn wrapper', async () => {
-    await allowlistSecretsRemove('sqs-local-token-2026-09', ctx);
+  it.each(['sqs-local-token-2026-09', '-dash-prefixed', '--force'])(
+    'forwards key %p after a "--" separator so it cannot be parsed as a flag',
+    async (key) => {
+      await allowlistSecretsRemove(key, ctx);
 
-    expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(runSpy).toHaveBeenCalledWith(['remove', 'sqs-local-token-2026-09'], fake);
-  });
+      expect(runSpy).toHaveBeenCalledTimes(1);
+      expect(runSpy).toHaveBeenCalledWith(['remove', '--', key], fake);
+    },
+  );
 });
 
 describe('allowlistSecretsClear', () => {
