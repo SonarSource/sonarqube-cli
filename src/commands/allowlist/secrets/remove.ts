@@ -22,9 +22,10 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 
 import { runSecretsAllowlistCommand } from './spawn-secrets-cli.ts';
 
+// `--` keeps a key that starts with `-` (legal for sonar-secrets) from being parsed as a flag.
 export async function allowlistSecretsRemove(
   key: string,
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  await runSecretsAllowlistCommand(['remove', key], ctx.console);
+  await runSecretsAllowlistCommand(['remove', '--', key], ctx.console);
 }
