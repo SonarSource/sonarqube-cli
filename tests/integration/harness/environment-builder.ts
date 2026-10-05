@@ -198,6 +198,8 @@ export class EnvironmentBuilder {
   private _installSecretsBinary = false;
   private _installCagBinary = false;
   private _cagInitExitCode = 0;
+  private _cagPrintSkillExitCode = 0;
+  private _cagPrintSkillEmpty = false;
   private _cagSessionContextExitCode = 0;
   private _cagSessionContextStdout?: string;
   private _cagStopAllExitCode = 0;
@@ -296,6 +298,8 @@ export class EnvironmentBuilder {
   withContextAugmentationBinaryInstalled(
     options: {
       initExitCode?: number;
+      printSkillExitCode?: number;
+      printSkillEmpty?: boolean;
       sessionContextExitCode?: number;
       sessionContextStdout?: string;
       stopAllExitCode?: number;
@@ -305,6 +309,8 @@ export class EnvironmentBuilder {
   ): this {
     this._installCagBinary = true;
     this._cagInitExitCode = options.initExitCode ?? 0;
+    this._cagPrintSkillExitCode = options.printSkillExitCode ?? 0;
+    this._cagPrintSkillEmpty = options.printSkillEmpty ?? false;
     this._cagSessionContextExitCode = options.sessionContextExitCode ?? 0;
     this._cagSessionContextStdout = options.sessionContextStdout;
     this._cagStopAllExitCode = options.stopAllExitCode ?? 0;
@@ -335,6 +341,7 @@ export class EnvironmentBuilder {
     if (this._installCagBinary && this._cagSentinelPath) {
       env.CAG_STUB_SENTINEL = this._cagSentinelPath;
       env.CAG_STUB_INIT_EXIT = String(this._cagInitExitCode);
+      env.CAG_STUB_PRINT_SKILL_EXIT = String(this._cagPrintSkillExitCode);
       env.CAG_STUB_SESSION_CONTEXT_EXIT = String(this._cagSessionContextExitCode);
       env.CAG_STUB_STOP_ALL_EXIT = String(this._cagStopAllExitCode);
       if (this._cagSessionContextStdout !== undefined) {
@@ -343,6 +350,8 @@ export class EnvironmentBuilder {
       if (this._cagStdoutLine !== undefined) env.CAG_STUB_STDOUT_LINE = this._cagStdoutLine;
       if (this._cagStderrLine !== undefined) env.CAG_STUB_STDERR_LINE = this._cagStderrLine;
     }
+
+    if (this._cagPrintSkillEmpty) env.CAG_STUB_PRINT_SKILL_EMPTY = '1';
 
     return env;
   }
