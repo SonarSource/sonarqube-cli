@@ -22,7 +22,13 @@
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getConfigValue, getKeyDefinition } from '@/core/config/config-repository.ts';
-import type { ConfigEntryJson, ConfigKey } from '@/core/config/config-schema.ts';
+import {
+  type ConfigEntryJson,
+  type ConfigKey,
+  MASKED_VALUE,
+  NOT_SET_MESSAGE,
+} from '@/core/config/config-schema.ts';
+import { gray } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -31,8 +37,6 @@ type ConfigGetFormat = (typeof VALID_FORMATS)[number];
 export interface ConfigGetOptions {
   format?: string;
 }
-
-const NOT_SET_MESSAGE = '(not set)';
 
 function printJson(console: Console, payload: ConfigEntryJson): void {
   console.print(JSON.stringify(payload, null, 2));
@@ -60,9 +64,9 @@ export async function getConfig(
   }
 
   if (definition.sensitive) {
-    console.print(isSet ? '(hidden)' : NOT_SET_MESSAGE);
+    console.print(isSet ? gray(MASKED_VALUE) : gray(NOT_SET_MESSAGE));
     return;
   }
 
-  console.print(value ?? NOT_SET_MESSAGE);
+  console.print(value ?? gray(NOT_SET_MESSAGE));
 }

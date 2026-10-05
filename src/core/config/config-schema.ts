@@ -111,3 +111,6 @@ export interface ConfigEntryJson {
   set: boolean;
   value?: string;
 }
+
+export const NOT_SET_MESSAGE = '(not set)';
+export const MASKED_VALUE = '***';
