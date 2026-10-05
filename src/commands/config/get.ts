@@ -43,21 +43,19 @@ function printJson(console: Console, payload: ConfigEntryJson): void {
 }
 
 export async function getConfig(
-  key: string,
+  key: ConfigKey,
   options: ConfigGetOptions,
   ctx: CommandInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
   const format: ConfigGetFormat = resolveFormatOption(options.format, VALID_FORMATS, 'text');
-  const configKey = key as ConfigKey;
-  // Throws InvalidOptionError for an unknown key before any store is read.
-  const definition = getKeyDefinition(configKey);
-  const value = await getConfigValue(configKey);
+  const definition = getKeyDefinition(key);
+  const value = await getConfigValue(key);
   const isSet = value !== undefined;
 
   if (format === 'json') {
     printJson(console, {
-      key: configKey,
+      key,
       sensitive: definition.sensitive,
       set: isSet,
       ...(!definition.sensitive && isSet ? { value } : {}),

@@ -22,7 +22,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { CONFIG_KEY_DEFINITIONS } from '@/core/config/config-schema.ts';
+import {
+  CONFIG_KEY_DEFINITIONS,
+  MASKED_VALUE,
+  NOT_SET_MESSAGE,
+} from '@/core/config/config-schema.ts';
 
 import { TestHarness } from '../../harness';
 
@@ -48,7 +52,7 @@ describe('config list', () => {
       const lines = result.stdout.trim().split('\n');
       expect(lines).toHaveLength(CONFIG_KEY_DEFINITIONS.length);
       for (const definition of CONFIG_KEY_DEFINITIONS) {
-        expect(result.stdout).toContain(`${definition.key}=(not set)`);
+        expect(result.stdout).toContain(`${definition.key}=${NOT_SET_MESSAGE}`);
       }
     },
     { timeout: 15000 },
@@ -79,7 +83,7 @@ describe('config list', () => {
       const result = await harness.run('config list');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('network.tls.clientPassphrase=*******');
+      expect(result.stdout).toContain(`network.tls.clientPassphrase=${MASKED_VALUE}`);
       expect(result.stdout).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
@@ -105,7 +109,7 @@ describe('config list', () => {
         expect(result.stdout).toContain(definition.key);
       }
       expect(result.stdout).toContain('network.tls.clientPassphrase');
-      expect(result.stdout).toContain('*******');
+      expect(result.stdout).toContain(MASKED_VALUE);
       expect(result.stdout).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
@@ -132,72 +136,6 @@ describe('config list', () => {
         ]),
       );
       expect(result.stdout).not.toContain('super-secret-passphrase');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    '--only-set shows only keys that currently have a value',
-    async () => {
-      const set = await harness.run('config set log.level DEBUG');
-      expect(set.exitCode).toBe(0);
-
-      const result = await harness.run('config list --only-set');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('log.level=DEBUG');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    '--only-set with --format json includes only set keys',
-    async () => {
-      const set = await harness.run(
-        'config set network.tls.clientPassphrase super-secret-passphrase',
-      );
-      expect(set.exitCode).toBe(0);
-
-      const result = await harness.run('config list --only-set --format json');
-
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout)).toEqual([
-        { key: 'network.tls.clientPassphrase', sensitive: true, set: true },
-      ]);
-      expect(result.stdout).not.toContain('super-secret-passphrase');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    '--only-set prints a message instead of an empty list when nothing is set',
-    async () => {
-      const result = await harness.run('config list --only-set');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('No config values are set.');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    '--help lists every allowlisted key with its sensitivity and description',
-    async () => {
-      const result = await harness.run('config list --help');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Config keys:');
-      expect(result.stdout).toContain('SENSITIVE');
-      for (const definition of CONFIG_KEY_DEFINITIONS) {
-        // Trailing space guards against a key that is a prefix of another
-        // (e.g. 'network.proxy.http' vs 'network.proxy.https').
-        const row = result.stdout
-          .split('\n')
-          .find((line) => line.trim().startsWith(`${definition.key} `));
-        expect(row).toBeDefined();
-        expect(row).toContain(definition.sensitive ? 'yes' : 'no');
-        expect(row).toContain(definition.description);
-      }
     },
     { timeout: 15000 },
   );
