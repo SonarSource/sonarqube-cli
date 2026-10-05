@@ -22,10 +22,18 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import {
+  SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+} from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { openCodeIntegration } from '@/commands/integrate/opencode/declaration.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
-import { findInstalledFeature } from './state-helpers';
+import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
+
+const TEST_ORG = 'my-org';
+const TEST_PROJECT = 'my-project';
 
 function findOpenCodeFeature(harness: TestHarness, featureId: string, scope?: string) {
   return findInstalledFeature(harness, 'opencode', featureId, scope);
@@ -169,6 +177,90 @@ describe('integrate opencode — MCP server configuration', () => {
         ],
         operations: [],
       });
+    },
+    { timeout: 30000 },
+  );
+});
+
+describe('integrate opencode — Vortex SQAA feature', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'writes the SQAA plugin and the AGENTS.md protocol when Vortex is entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+      const result = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const plugin = harness.userHome.file('.config', 'opencode', 'plugins', 'sonar-sqaa.ts');
+      expect(plugin.exists()).toBe(true);
+      expect(plugin.asText()).toContain('opencode-post-tool-use');
+      const agentsMd = harness.userHome.file('.config', 'opencode', 'AGENTS.md').asText();
+      expect(agentsMd).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+      expect(agentsMd).toContain('# Vortex analysis protocol');
+      expect(agentsMd).toContain('sonar analyze agentic --depth DEEP');
+      expect(
+        findInstalledSubfeature(harness, 'opencode', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),
+      ).toBeDefined();
+      expect(
+        findInstalledSubfeature(
+          harness,
+          'opencode',
+          VORTEX_FEATURE_ID,
+          SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        ),
+      ).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not install Vortex when the organization is not entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+      const result = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.exists('.config', 'opencode', 'plugins', 'sonar-sqaa.ts')).toBe(
+        false,
+      );
+      expect(findOpenCodeFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
