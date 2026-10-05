@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, InvalidArgumentError } from 'commander';
+import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
@@ -32,12 +32,12 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import { CONFIG_KEY_NAMES, type ConfigKey } from '@/core/config/config-schema.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
-import { tryLoadState } from '@/core/state/state-repository.ts';
 import { commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
@@ -98,8 +98,14 @@ import {
   getConfig,
   VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
 } from './config/get.ts';
-import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
-import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
+import {
+  configListExtraHelpText,
+  type ConfigListOptions,
+  listConfig,
+  VALID_FORMATS as CONFIG_LIST_VALID_FORMATS,
+} from './config/list.ts';
+import { setConfig } from './config/set.ts';
+import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
@@ -763,23 +769,34 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   configure
     .command('get')
     .description('Print a stored sonar config value')
-    .argument('<key>', 'Config key to read')
+    .addArgument(new Argument('<key>', 'Config key to read').choices(CONFIG_KEY_NAMES))
     .addOption(formatOption(CONFIG_GET_VALID_FORMATS, 'text'))
-    .anonymousAction((ctx, key: string, options: ConfigGetOptions) => getConfig(key, options, ctx));
+    .anonymousAction((ctx, key: ConfigKey, options: ConfigGetOptions) =>
+      getConfig(key, options, ctx),
+    );
 
   configure
-    .command('telemetry')
-    .description('Configure telemetry settings')
-    .option('--enabled', 'Enable collection of anonymous usage statistics')
-    .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
+    .command('list')
+    .description('Print every sonar config key with its current value')
+    .addOption(formatOption(CONFIG_LIST_VALID_FORMATS, 'text'))
+    .option('--only-set', 'Only show keys that currently have a value')
+    .addHelpText('after', configListExtraHelpText())
+    .anonymousAction((ctx, options: ConfigListOptions) => listConfig(options, ctx));
 
   configure
-    .command('stats')
-    .description('Configure local stats collection settings')
-    .option('--enabled', 'Enable local stats collection')
-    .option('--disabled', 'Disable local stats collection')
-    .anonymousAction((ctx, options: ConfigureStatsOptions) => configureStats(options, ctx));
+    .command('set')
+    .description('Store a sonar config value')
+    .addArgument(new Argument('<key>', 'Config key to set').choices(CONFIG_KEY_NAMES))
+    .argument('[value]', 'Value to store; omit to enter it interactively without echoing')
+    .anonymousAction((ctx, key: ConfigKey, value: string | undefined) =>
+      setConfig(key, value, ctx),
+    );
+
+  configure
+    .command('unset')
+    .description('Remove a stored sonar config value')
+    .addArgument(new Argument('<key>', 'Config key to unset').choices(CONFIG_KEY_NAMES))
+    .anonymousAction((ctx, key: ConfigKey) => unsetConfig(key, ctx));
 
   // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
   COMMAND_TREE.command('stats')
@@ -1134,20 +1151,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
+  COMMAND_TREE.hook('preAction', async () => {
+    // Safely: a throw from a Commander hook would abort the user's command.
+    // Before Sentry init, which reads the telemetry opt-out this migrates.
+    await runPostUpdateActionsSafely(postUpdateDeps);
+  });
+
   // Defer Sentry initialization until a command action is about to run, so that
   // --help and --version don't pay for it (unknown commands do reach the root
-  // action). The guard avoids re-loading state and re-initializing on nested commands.
+  // action). The guard avoids re-initializing on nested commands.
   let sentryInitialized = false;
   COMMAND_TREE.hook('preAction', () => {
     if (sentryInitialized) return;
     sentryInitialized = true;
-    const state = tryLoadState();
-    if (state) initSentry(state);
-  });
-
-  COMMAND_TREE.hook('preAction', async () => {
-    // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    initSentry();
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.

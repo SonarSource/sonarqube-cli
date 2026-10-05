@@ -68,8 +68,9 @@ export const STATE_FILE = join(CLI_DIR, 'state.json');
 // Config
 // ---------------------------------------------------------------------------
 
+export const CLI_CONFIG_FILE_NAME = 'cli-config.properties';
 export function getConfigFile(): string {
-  return join(getCliDir(), 'cli-config.properties');
+  return join(getCliDir(), CLI_CONFIG_FILE_NAME);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +280,8 @@ export const STATS_RETENTION_DAYS = 365;
 // their own copy in sync by hand.
 
 export const EXIT_CODE_SECRETS_FOUND = 51;
+
+export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
 
 /**
  * The `caller_command` value recorded on every sonar-secrets analysis event, one per

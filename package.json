@@ -30,24 +30,28 @@
   },
   "externalBinaries": {
     "sonar-secrets": {
-      "version": "2.49.0.12346",
+      "version": "2.52.0.13617",
       "binaryPath": "CommercialDistribution/sonar-secrets",
       "platforms": [
         {
           "os": "linux",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "bin"
         },
         {
           "os": "linux",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "bin"
         },
         {
           "os": "macos",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "bin"
         },
         {
           "os": "windows",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "exe"
         }
       ]
     },
@@ -57,19 +61,23 @@
       "platforms": [
         {
           "os": "linux",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "exe"
         },
         {
           "os": "linux",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "exe"
         },
         {
           "os": "macos",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "exe"
         },
         {
           "os": "windows",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "exe"
         }
       ]
     },
@@ -81,26 +89,30 @@
       "platforms": [
         {
           "os": "linux",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "tar.gz"
         },
         {
           "os": "linux",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "tar.gz"
         },
         {
           "os": "macos",
-          "arch": "arm64"
+          "arch": "arm64",
+          "extension": "tar.gz"
         },
         {
           "os": "windows",
-          "arch": "x86-64"
+          "arch": "x86-64",
+          "extension": "tar.gz"
         }
       ]
     }
   },
   "dependencies": {
     "@clack/core": "1.5.1",
-    "@sentry/bun": "11.0.0",
+    "@sentry/bun": "11.1.0",
     "@toon-format/toon": "2.3.1",
     "commander": "15.0.0",
     "js-yaml": "5.4.2",
@@ -134,7 +146,7 @@
     "lint-staged": "16.4.0",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.70.1"
+    "typescript-eslint": "8.71.0"
   },
   "overrides": {
     "flatted": "3.4.4"

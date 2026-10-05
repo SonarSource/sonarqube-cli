@@ -35,7 +35,7 @@ import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import type { BinarySpec } from '@/core/host/install/binary.ts';
+import { type BinarySpec, resolveDownloadExtension } from '@/core/host/install/binary.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
@@ -61,7 +61,14 @@ for (const fixture of FIXTURES) {
 }
 
 async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
-  const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
+  const extension = resolveDownloadExtension(fixture, platform);
+  const downloadUrl = buildDownloadUrl(
+    fixture.name,
+    fixture.version,
+    fixture.distPrefix,
+    platform,
+    extension,
+  );
   const signatureUrl = `${downloadUrl}.asc`;
   // Keep the original versioned filename so the fake binaries server can match requests exactly
   const downloadFilename = downloadUrl.split('/').at(-1)!;
@@ -85,7 +92,13 @@ async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
     console.log('  Download complete.');
 
     console.log('Verifying PGP signature...');
-    await verifyBinarySignature(destPath, platform, fixture.signatures, fixture.publicKey);
+    await verifyBinarySignature(
+      fixture.name,
+      destPath,
+      platform,
+      fixture.signatures,
+      fixture.publicKey,
+    );
     console.log('  Signature verified.');
 
     if (platform.os !== 'windows') {

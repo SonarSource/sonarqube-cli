@@ -19,10 +19,6 @@
  */
 
 // Integration tests for `config get` — CLI wiring and exit codes.
-// Value-set scenarios (non-sensitive value printed, sensitive value redacted) are
-// covered at the unit level (tests/unit/commands/config/get.test.ts) since seeding the
-// generic config store end-to-end requires `config set` (CLI-1119), not yet wired to a
-// CLI command.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -62,12 +58,45 @@ describe('config get', () => {
   );
 
   it(
-    'exits with code 2 for an unknown key',
+    'prints the stored value for a set, non-sensitive key',
+    async () => {
+      const set = await harness.run('config set log.level DEBUG');
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config get log.level');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('DEBUG');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'never prints the real value in text mode for a set, sensitive key',
+    async () => {
+      const set = await harness.run(
+        'config set network.tls.clientPassphrase super-secret-passphrase',
+      );
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config get network.tls.clientPassphrase');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('(hidden)');
+      expect(result.stdout + result.stderr).not.toContain('super-secret-passphrase');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits with code 1 for an unknown key',
     async () => {
       const result = await harness.run('config get not.a.real.key');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain("Unknown config key 'not.a.real.key'");
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        "command-argument value 'not.a.real.key' is invalid for argument 'key'. Allowed choices are",
+      );
     },
     { timeout: 15000 },
   );
@@ -84,6 +113,25 @@ describe('config get', () => {
   );
 
   it(
+    'includes the value in JSON output for a set, non-sensitive key',
+    async () => {
+      const set = await harness.run('config set log.level DEBUG');
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config get log.level --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        key: 'log.level',
+        sensitive: false,
+        set: true,
+        value: 'DEBUG',
+      });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports set: false without a value in JSON output for an unset, sensitive key',
     async () => {
       const result = await harness.run('config get network.tls.clientPassphrase --format json');
@@ -94,6 +142,27 @@ describe('config get', () => {
         sensitive: true,
         set: false,
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports set: true but never the real value in JSON output for a set, sensitive key',
+    async () => {
+      const set = await harness.run(
+        'config set network.tls.clientPassphrase super-secret-passphrase',
+      );
+      expect(set.exitCode).toBe(0);
+
+      const result = await harness.run('config get network.tls.clientPassphrase --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        key: 'network.tls.clientPassphrase',
+        sensitive: true,
+        set: true,
+      });
+      expect(result.stdout).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
   );

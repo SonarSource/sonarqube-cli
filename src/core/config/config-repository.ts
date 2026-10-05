@@ -19,9 +19,9 @@
  */
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
+import { deleteConfigSecret, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
 
-import { getConfigFileValue, setConfigFileValue } from './config-file.ts';
+import { getConfigFileValue, removeConfigFileValue, setConfigFileValue } from './config-file.ts';
 import {
   CONFIG_KEY_BY_NAME,
   type ConfigKey,
@@ -45,9 +45,20 @@ export async function getConfigValue(key: ConfigKey): Promise<string | undefined
   return getConfigFileValue(key);
 }
 
+export function getBooleanConfigValue(key: ConfigKey, defaultValue: boolean): boolean {
+  const value = getConfigFileValue(key);
+  return value === undefined ? defaultValue : value === 'true';
+}
+
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    throw new InvalidOptionError(
+      `Value for config key '${key}' must not be empty.`,
+      `If you meant to unset it, run 'sonar config unset ${key}'.`,
+    );
+  }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
       `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
@@ -58,4 +69,18 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
     return;
   }
   setConfigFileValue(key, trimmedValue);
+}
+
+/**
+ * Returns whether a value was actually removed. No-op (false) when `key` is not
+ * currently set — mirrors shell `unset` on an unset variable — so the caller can
+ * tell "removed" apart from "there was nothing to remove" instead of reporting
+ * success regardless.
+ */
+export async function unsetConfigValue(key: ConfigKey): Promise<boolean> {
+  const definition = getKeyDefinition(key);
+  if (definition.sensitive) {
+    return await deleteConfigSecret(key);
+  }
+  return removeConfigFileValue(key);
 }
