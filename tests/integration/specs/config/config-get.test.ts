@@ -22,6 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { MASKED_VALUE, NOT_SET_MESSAGE } from '@/core/config/config-schema.ts';
+
 import { TestHarness } from '../../harness';
 
 describe('config get', () => {
@@ -41,7 +43,7 @@ describe('config get', () => {
       const result = await harness.run('config get log.level');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('(not set)');
+      expect(result.stdout + result.stderr).toContain(NOT_SET_MESSAGE);
     },
     { timeout: 15000 },
   );
@@ -52,7 +54,7 @@ describe('config get', () => {
       const result = await harness.run('config get network.tls.clientPassphrase');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('(not set)');
+      expect(result.stdout + result.stderr).toContain(NOT_SET_MESSAGE);
     },
     { timeout: 15000 },
   );
@@ -82,7 +84,7 @@ describe('config get', () => {
       const result = await harness.run('config get network.tls.clientPassphrase');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('(hidden)');
+      expect(result.stdout + result.stderr).toContain(MASKED_VALUE);
       expect(result.stdout + result.stderr).not.toContain('super-secret-passphrase');
     },
     { timeout: 15000 },
