@@ -143,12 +143,12 @@ describe('allowlist secrets remove', () => {
     await harness.dispose();
   });
 
-  it(
+  it.skipIf(IS_WINDOWS)(
     'forwards the exit code when the binary reports the key was not found',
     async () => {
       harness.state().withSecretsBinaryInstalled();
 
-      const result = await harness.run('allowlist secrets remove nonexistent-key');
+      const result = await harness.runWithRealTty('allowlist secrets remove nonexistent-key');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('No entry found with key: nonexistent-key');
@@ -156,7 +156,7 @@ describe('allowlist secrets remove', () => {
     { timeout: 15000 },
   );
 
-  it(
+  it.skipIf(IS_WINDOWS)(
     // Full round trip against a real, seeded entry: proves `remove` actually removes it from
     // the allowlist the binary reads, not just that the CLI forwards a key string.
     'removes a real, seeded entry, and it no longer shows up in the allowlist afterward',
@@ -164,7 +164,7 @@ describe('allowlist secrets remove', () => {
       harness.state().withSecretsBinaryInstalled();
       await seedAllowlistEntry(harness, 'roundtrip-key', 'roundtrip-secret-value');
 
-      const removeResult = await harness.run('allowlist secrets remove roundtrip-key');
+      const removeResult = await harness.runWithRealTty('allowlist secrets remove roundtrip-key');
       expect(removeResult.exitCode).toBe(0);
       expect(removeResult.stdout + removeResult.stderr).toContain(
         'Removed entry with key: roundtrip-key',
@@ -172,6 +172,25 @@ describe('allowlist secrets remove', () => {
 
       const showResult = await harness.run('allowlist secrets show');
       expect(showResult.stdout + showResult.stderr).toContain('Allowlist is empty');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'refuses to run without a real interactive terminal, and leaves the seeded entry in place',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      await seedAllowlistEntry(harness, 'gated-key', 'gated-secret-value');
+
+      const result = await harness.run('allowlist secrets remove gated-key');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'sonar allowlist secrets remove requires a human at an interactive terminal; it cannot be run by an agent or script.',
+      );
+
+      const showResult = await harness.run('allowlist secrets show');
+      expect(showResult.stdout + showResult.stderr).not.toContain('Allowlist is empty');
     },
     { timeout: 15000 },
   );
@@ -271,10 +290,7 @@ describe('allowlist secrets with analyze secrets', () => {
     await harness.dispose();
   });
 
-  it.each([
-    ['remove', 'allowlist secrets remove analysis-key'],
-    ['clear --force', 'allowlist secrets clear --force'],
-  ])(
+  it.each([['clear --force', 'allowlist secrets clear --force']])(
     'does not report an allowlisted secret, and reports it again after %s',
     async (_label, allowlistCommand) => {
       harness.state().withSecretsBinaryInstalled();
@@ -287,6 +303,28 @@ describe('allowlist secrets with analyze secrets', () => {
       expect(allowlisted.stdout + allowlisted.stderr).toContain('No secrets found');
 
       const allowlistResult = await harness.run(allowlistCommand);
+      expect(allowlistResult.exitCode).toBe(0);
+
+      const reported = await harness.run('analyze secrets secrets.js');
+      expect(reported.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+      expect(reported.stdout + reported.stderr).toContain('GitHub Token');
+    },
+    { timeout: 30000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'does not report an allowlisted secret, and reports it again after remove',
+    async () => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+      harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+      await seedAllowlistEntry(harness, 'analysis-key', GITHUB_TEST_TOKEN);
+
+      const allowlisted = await harness.run('analyze secrets secrets.js');
+      expect(allowlisted.exitCode).toBe(0);
+      expect(allowlisted.stdout + allowlisted.stderr).toContain('No secrets found');
+
+      const allowlistResult = await harness.runWithRealTty('allowlist secrets remove analysis-key');
       expect(allowlistResult.exitCode).toBe(0);
 
       const reported = await harness.run('analyze secrets secrets.js');

@@ -18,13 +18,27 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { runSecretsAllowlistCommand } from './spawn-secrets-cli.ts';
 
+/**
+ * Removing an entry re-flags a value a human previously approved, so it gets the same
+ * human-presence check as `add`, with no bypass flag.
+ */
 export async function allowlistSecretsRemove(
   key: string,
   ctx: CommandInvocationContext,
 ): Promise<void> {
+  if (!process.stdin.isTTY) {
+    throw new CommandFailedError(
+      'sonar allowlist secrets remove requires a human at an interactive terminal; it cannot be run by an agent or script.',
+      {
+        remediationHint:
+          'Open a terminal and run this command there. Coding agents cannot remove allowlist entries on your behalf.',
+      },
+    );
+  }
   await runSecretsAllowlistCommand(['remove', key], ctx.console);
 }

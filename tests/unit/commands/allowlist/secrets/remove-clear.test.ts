@@ -19,13 +19,13 @@
  */
 
 /**
- * `remove` and `clear` are both pure passthroughs with no gating of their own — deliberately,
- * per the refinement doc: `sonar-secrets allowlist clear` already owns its confirm-or-force
- * gate natively, so re-checking `process.stdin.isTTY` here would produce two independent
- * confirmation prompts back to back. The only thing worth unit-testing is that the args array
- * each one builds is exactly right; the organic behavior (real exit codes, real confirm/--force
- * handling) is covered by tests/integration/specs/allowlist/secrets.test.ts against the real
- * fixture binary.
+ * `remove` is now gated on a real interactive terminal, the same human-presence check as
+ * `add`, because removing an entry re-flags a value a human previously approved. `clear` stays
+ * a pure passthrough with no gating of its own: the binary already owns its own confirm-or-force
+ * step, so re-checking `process.stdin.isTTY` here would produce two independent confirmation
+ * prompts back to back. The organic behavior (real exit codes, real confirm/--force handling)
+ * is covered by tests/integration/specs/allowlist/secrets.test.ts against the real fixture
+ * binary.
  */
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
@@ -33,10 +33,12 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { allowlistSecretsClear } from '@/commands/allowlist/secrets/clear.ts';
 import { allowlistSecretsRemove } from '@/commands/allowlist/secrets/remove.ts';
 import * as spawnSecretsCli from '@/commands/allowlist/secrets/spawn-secrets-cli.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
+const originalIsTTY = process.stdin.isTTY;
 let fake: FakeConsole;
 let ctx: CommandInvocationContext;
 let runSpy: ReturnType<typeof spyOn>;
@@ -48,15 +50,33 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Object.defineProperty(process.stdin, 'isTTY', { value: originalIsTTY, configurable: true });
   runSpy.mockRestore();
 });
 
 describe('allowlistSecretsRemove', () => {
   it('forwards the key as-is to the shared spawn wrapper', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+
     await allowlistSecretsRemove('sqs-local-token-2026-09', ctx);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(runSpy).toHaveBeenCalledWith(['remove', 'sqs-local-token-2026-09'], fake);
+  });
+
+  it('refuses to run and never spawns the binary when stdin is not a TTY', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+
+    const error = await allowlistSecretsRemove('some-key', ctx).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as Error).message).toBe(
+      'sonar allowlist secrets remove requires a human at an interactive terminal; it cannot be run by an agent or script.',
+    );
+    expect((error as CommandFailedError).remediationHint).toBe(
+      'Open a terminal and run this command there. Coding agents cannot remove allowlist entries on your behalf.',
+    );
+    expect(runSpy).not.toHaveBeenCalled();
   });
 });
 

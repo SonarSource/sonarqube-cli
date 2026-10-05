@@ -876,7 +876,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   allowlistSecretsCmd
     .command('remove')
-    .description('Remove an entry from the sonar-secrets allowlist by key')
+    .description(
+      'Remove an entry from the sonar-secrets allowlist by key (interactive; requires a real terminal, not usable by agents or scripts)',
+    )
     .argument('<key>', 'Unique key of the allowlist entry to remove')
     .anonymousAction((ctx, key: string) => allowlistSecretsRemove(key, ctx));
 
