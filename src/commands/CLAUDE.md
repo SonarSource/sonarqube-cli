@@ -41,3 +41,29 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 `sonar self-update` is a deprecated, hidden alias for `sonar update` (only when `CURRENT_DISTRIBUTION.enableSelfUpdate` is true; see `src/core/host/distribution.ts`), staged with `Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' })`. Calling it prints a deprecation warning, then runs the same `updateVersion()` logic. Both are registered in `src/commands/command-tree.ts`.
 
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
+
+## Cloud onboarding prototype
+
+`sonar auth login --no-organization` stores a Cloud user token without discovering or validating an organization. `--org` conflicts with this flag; ordinary login retains its organization selection. The org-independent state is usable by authenticated commands. `--non-interactive` requires an explicit Cloud server and `--org` or `--no-organization`, opens the browser even in CI, skips terminal prompts, and waits only for a validated callback. It refuses environment-auth conflicts.
+
+`sonar org import --github <owner> --plan team-trial` reuses an administrable GitHub binding or finds/installs the GitHub App, creates and binds a Cloud organization with the existing v1 API, starts a cardless Team trial when absent (default `team-trial`; explicit `free` retains zero-cost Free signup), and selects the org. Existing subscriptions are preserved. Supports `--key`, `--installation-id`, `--no-browser`, `--timeout`, and `--format text|json`. The JSON result exposes `organizationKey`, `github`, `plan`, and `url`; browser instructions go to stderr. No backend endpoints were added.
+
+`sonar project wait --repo <owner/repo>` resolves the real linked project in the active organization; `--project` selects a key directly and is required for monorepos. It requests auto-enable eligibility only when no completed analysis exists, handles empty HTTP 202 responses, and polls `/api/project_analyses/search`. JSON exposes `projectKey`, `analysisId`, `analysisDate`, and `url`. It does not guarantee the analyzed revision matches local changes. Unsupported automatic analysis errors with CI guidance; timeouts are resumable. Shared transport/domain API calls are in `core/server/cloud-onboarding.ts`; sequential polling is in `core/commands/poll.ts`.
+
+Portable agent instructions are in `skills/sonarcloud-onboard/SKILL.md`. The prototype must be built locally or supplied as a compatible binary; a current stable download may lack these commands. Integration tests cover the full flow using local HTTP fixtures and the standard isolated TestHarness, with no live Cloud mutations.
+
+`auth login --force` skips saved-token reuse and starts a fresh browser exchange. Existing saved credentials are replaced only after successful validation and organization resolution. This is needed when switching an SSO connection to GitHub for organization onboarding. The legacy installation-discovery endpoints require a GitHub/Bitbucket identity; an SSO user resolves to `OTHER` and gets HTTP 400. `org import` identifies the failing discovery step and prints the server explanation. GET 400 responses now use the shared structured-error parser, which also recognizes v1 `errors[].msg`.
+
+Free-plan selection matches `/billing/plans`'s top-level `name` (`Free_v2`, case-insensitive), then verifies all currency amounts are zero. The live response does not supply `tiers[].metadata`; do not depend on it. The separate legacy `Free` (OSS) plan must not be selected. GitHub redirects to the normal Cloud onboarding UI after App installation, but the CLI independently completes subscription signup; no browser plan-selection step is required.
+
+For an organization freshly created by `org import`, create the subscription before reading `/billing/subscriptions`, matching web onboarding. On reused organizations, keep the existing-subscription lookup and propagate authorization errors; a 403 is never interpreted as absence. Organization-ID and billing errors identify the failed endpoint.
+
+## Guided browser handoffs
+
+`auth login --non-interactive --no-browser --events` prepares a sign-in URL and holds the loopback callback open. `org import --no-browser --events` prepares GitHub access and holds the installation poll open. Both emit versioned `browser_required`, `step_started`, `step_completed`, and `step_failed` JSON events on stderr alongside diagnostics. stdout retains normal output or the final JSON result. The agent reads an action, explains it, then runs `sonar browser open <url>`; the original command must keep running. `project wait --events` reports analysis progress without changing its result JSON. Browser opening is a technical anonymous command accepting HTTP(S) URLs without credentials or control characters.
+
+The shared reporter is `core/commands/onboarding-progress.ts`. Login validates reused tokens; invalid saved credentials trigger a fresh exchange, and unreachable validation aborts. Browser-only callback validation failures reject even outside CI. Ordinary invocations retain automatic browser opening; auth events require both `--non-interactive` and `--no-browser`, and org events require `--no-browser`.
+
+Cardless Team trials use POST /billing/subscriptions with email and no priceId, card or address. Verify planKey=team and active status case-insensitively (dev9 returns Team/active), trial=true, valid trialPeriod and GET /billing/customers paymentMethodStatus=NONE. Return trial/status/period in org JSON. Preserve existing subscriptions and propagate rejected trials without paid fallback.
+
+Organization import reuses an administrable unbound organization at the requested/default key and binds its existing installation via POST /api/alm_integration/bind_organization. It preserves subscriptions and rejects replacing an unrelated binding.
