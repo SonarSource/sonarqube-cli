@@ -22,7 +22,6 @@
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
-import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
 
@@ -37,13 +36,6 @@ import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
 
-export interface ConfigurationData {
-  serverURL: string;
-  projectKey: string | undefined;
-  organization: string | undefined;
-  token: string;
-}
-
 /**
  * Integrate command handler
  */
@@ -56,22 +48,17 @@ export async function integrateClaude(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate claude --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Claude Code', auth, console);
+  await displayAgentIntegratePrelude('Claude Code', auth, console);
 
-  const config = toConfigurationData(integrateCtx);
   const vortex = await resolveVortexSetup(auth, console);
   const featureAttrs = buildRecordedIntegrationAttrs({
-    baseAttrs: buildIntegrationAttrs(config),
-    projectRoot: integrateCtx.project.projectRoot,
-    mainRepoRoot: integrateCtx.project.mainRepoRoot,
-    serverUrl: config.serverURL,
-    orgKey: config.organization,
+    serverUrl: auth.serverUrl,
+    orgKey: auth.orgKey,
     contextAugmentation: vortex,
   });
   const { installRoot, installScope } = resolveIntegrateInstallTarget();
   const integrationOptions = {
     ...options,
-    projectRoot: integrateCtx.project.projectRoot,
     vortexDisposition: vortex.disposition,
   } satisfies ClaudeIntegrationOptions;
   let installError: Error | undefined;
@@ -104,26 +91,4 @@ export async function integrateClaude(
   if (installError) {
     throw installError;
   }
-}
-
-function toConfigurationData(ctx: {
-  serverUrl: string;
-  organization: string | undefined;
-  projectKey: string | undefined;
-  token: string;
-}): ConfigurationData {
-  return {
-    serverURL: ctx.serverUrl,
-    organization: ctx.organization,
-    projectKey: ctx.projectKey,
-    token: ctx.token,
-  };
-}
-
-function buildIntegrationAttrs(
-  config: ConfigurationData,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: config.projectKey ?? null,
-  };
 }

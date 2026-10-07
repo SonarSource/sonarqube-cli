@@ -35,11 +35,10 @@ export async function integrateCopilot(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate copilot --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Copilot', auth, console);
+  await displayAgentIntegratePrelude('Copilot', auth, console);
 
   await finalizeAgentInstall<CopilotIntegrationOptions>({
     integrationId: COPILOT_INTEGRATION_ID,
-    context: integrateCtx,
     options,
     auth,
     ctx,
