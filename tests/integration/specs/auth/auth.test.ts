@@ -438,6 +438,37 @@ describe('auth login --with-token', () => {
     expect(
       readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
     ).toBe('imported-token');
+    expect(harness.stateJsonFile.asJson().auth.connections[0].type).toBe('on-premise');
+  });
+
+  it('imports a custom Cloud server token when --org is explicit', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('custom-cloud-token')
+      .withOrganizations([{ key: 'custom-org', name: 'Custom Org' }])
+      .start();
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()} --org custom-org`,
+      'custom-cloud-token\n',
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Using organization: custom-org');
+    const connection = harness.stateJsonFile.asJson().auth.connections[0] as {
+      type: string;
+      serverUrl: string;
+      orgKey?: string;
+    };
+    expect(connection.type).toBe('cloud');
+    expect(connection.serverUrl).toBe(server.baseUrl());
+    expect(connection.orgKey).toBe('custom-org');
+    expect(
+      readKeychainToken(
+        harness.keychainJsonFile,
+        generateKeychainAccount(server.baseUrl(), 'custom-org'),
+      ),
+    ).toBe('custom-cloud-token');
   });
 
   it.each([
@@ -1191,9 +1222,13 @@ describe('auth login — server selection', () => {
   );
 
   it(
-    'ignores --org on a SonarQube Server connection, which has no organizations',
+    'treats a custom server URL as Cloud when --org is explicit and reuses its token',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'some-org', name: 'Some Org' }])
+        .start();
       const login = `auth login --server ${server.baseUrl()} --org some-org`;
 
       const first = await confirmTrust(harness, login, {
@@ -1208,11 +1243,14 @@ describe('auth login — server selection', () => {
       const state = harness.stateJsonFile.asJson() as {
         auth: { connections: Array<{ type: string; orgKey?: string }> };
       };
-      expect(state.auth.connections[0].type).toBe('on-premise');
-      expect(state.auth.connections[0].orgKey).toBeUndefined();
-      // The keychain account is derived from the organization, so an --org the connection never
-      // records must not reach the lookup either: the second login would miss the token it just
-      // saved and send the user through the browser flow again.
+      expect(state.auth.connections[0].type).toBe('cloud');
+      expect(state.auth.connections[0].orgKey).toBe('some-org');
+      expect(
+        readKeychainToken(
+          harness.keychainJsonFile,
+          generateKeychainAccount(server.baseUrl(), 'some-org'),
+        ),
+      ).toBe('my-token');
       expect(second.stdout).toContain('You are already authenticated');
     },
     { timeout: 15000 },

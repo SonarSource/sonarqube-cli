@@ -83,10 +83,8 @@ export async function authLogin(
   const server = await resolveServer(options, console);
   await confirmServerTrust(server, console);
 
-  const isCloud = isSonarQubeCloud(server);
-  // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
-  // keeps the keychain account, the recorded connection and the resolved organization consistent.
-  const orgOption = isCloud ? options.org?.trim() : undefined;
+  const isCloud = options.org !== undefined || isSonarQubeCloud(server);
+  const orgOption = options.org?.trim();
 
   try {
     const auth = await getOrGenerateToken(server, orgOption, console);
@@ -138,8 +136,8 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
   if (server === undefined) {
     throw new InvalidOptionError('--server is required with --with-token.');
   }
-  const isCloud = isSonarQubeCloud(server);
-  const org = isCloud ? options.org?.trim() : undefined;
+  const isCloud = options.org !== undefined || isSonarQubeCloud(server);
+  const org = options.org?.trim();
   const tokenStatus = await checkTokenStatus(server, token);
   if (tokenStatus.status === 'invalid') {
     throw new CommandFailedError(`The supplied token is invalid for ${server}.`);
@@ -319,7 +317,7 @@ async function getOrGenerateToken(
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
   const existingToken = await getKeystoreToken(server, org);
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
+    const displayServer = org ? `${server} (${org})` : server;
     console.print(`Token already exists for: ${displayServer}`);
     console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
