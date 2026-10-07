@@ -18,107 +18,52 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared preflight opening for agent integrate commands (claude, codex, copilot).
+// Shared preflight opening for agent integrate commands (claude, codex, copilot, cursor, antigravity, opencode).
 
 import { homedir } from 'node:os';
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { printAgentPreflightSummary } from './preflight-summary.ts';
-
-export interface AgentIntegrateContext {
-  project: DiscoveredProject;
-  projectKey: string | undefined;
-  serverUrl: string;
-  organization: string | undefined;
-  token: string;
-}
-
-export function introAgentIntegration(agentDisplayName: string, console: Console): void {
-  console.intro(`SonarQube Integration Setup for ${agentDisplayName}`);
-}
-
-export async function discoverIntegrateProject(
-  auth: ResolvedAuth,
-  console: Console,
-): Promise<DiscoveredProject> {
-  return console.withSpinner('Discovering project...', () =>
-    discoverProject(process.cwd(), { auth, silent: true, console }),
-  );
-}
-
-export function warnAuthProjectMismatches(
-  auth: ResolvedAuth,
-  project: DiscoveredProject,
-  console: Console,
-): void {
-  if (auth.serverUrl && project.serverUrl && auth.serverUrl !== project.serverUrl) {
-    console.warn(
-      'Detected a Server URL mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-
-  if (auth.orgKey && project.organization && auth.orgKey !== project.organization) {
-    console.warn(
-      'Detected an organization mismatch between the current project configuration and the auth logged in configuration. If this is not intended please consider running "sonar auth logout" and re-run the integrate command',
-    );
-  }
-}
-
-export function assertSonarCloudOrganization(
-  serverUrl: string,
-  organization: string | undefined,
-): void {
-  if (isSonarQubeCloud(serverUrl) && !organization) {
-    throw new CommandFailedError('SonarQube Cloud requires an organization.', {
-      remediationHint: "Run 'sonar auth login' with a SonarQube Cloud organization.",
-    });
-  }
-}
-
-export function buildAgentIntegrateContext(
-  auth: ResolvedAuth,
-  project: DiscoveredProject,
-): AgentIntegrateContext {
-  return {
-    project,
-    projectKey: project.projectKey,
-    serverUrl: auth.serverUrl,
-    organization: auth.orgKey,
-    token: auth.token,
-  };
-}
-
 /**
- * Shared preflight for all agent integrate commands: intro, project discovery,
- * mismatch warnings, cloud org check, then the Connection/Project preflight
- * summary (including token validation). Every agent integration installs
- * globally.
+ * Shared preflight for all agent integrate commands: intro, cloud org check, then
+ * token validation. Every agent integration installs globally, so no project is
+ * discovered.
  */
 export async function displayAgentIntegratePrelude(
   agentDisplayName: string,
   auth: ResolvedAuth,
   console: Console,
-): Promise<AgentIntegrateContext> {
-  introAgentIntegration(agentDisplayName, console);
-  const project = await discoverIntegrateProject(auth, console);
-  warnAuthProjectMismatches(auth, project, console);
-  assertSonarCloudOrganization(auth.serverUrl, auth.orgKey);
-  await printAgentPreflightSummary(
-    {
-      serverUrl: auth.serverUrl,
-      organization: auth.orgKey,
-      token: auth.token,
-      project,
-      projectKey: project.projectKey,
-    },
-    console,
-  );
-  return buildAgentIntegrateContext(auth, project);
+): Promise<void> {
+  console.intro(`SonarQube Integration Setup for ${agentDisplayName}`);
+
+  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
+    throw new CommandFailedError('SonarQube Cloud requires an organization.', {
+      remediationHint: "Run 'sonar auth login' with a SonarQube Cloud organization.",
+    });
+  }
+
+  const tokenResult = await checkTokenStatus(auth.serverUrl, auth.token);
+  if (tokenResult.status === 'unreachable') {
+    console.outro('Setup failed', 'error');
+    console.info('Server could not be reached.');
+    console.text(
+      '   Ensure the URL is correct and check your network connection or SONAR_HOST_URL.',
+    );
+    throw new CommandFailedError(
+      tokenResult.errorMessage
+        ? `Server is unreachable: ${tokenResult.errorMessage}`
+        : 'Server is unreachable.',
+    );
+  }
+  if (tokenResult.status === 'invalid') {
+    throw new CommandFailedError('Token is invalid.', {
+      remediationHint: "Run 'sonar auth login' to obtain a fresh token.",
+    });
+  }
 }
 
 /** Every agent integration installs to the user's home directory. */

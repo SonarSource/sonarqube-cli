@@ -66,26 +66,19 @@ export function buildContextAugmentationAttrs(
   };
 }
 
-/** Assembles the attrs persisted on an agent integration's features, shared by every agent handler. `mainRepoRoot` should come from the caller's own `DiscoveredProject`; falls back to `projectRoot` when absent. */
+/** Assembles the attrs persisted on an agent integration's features, shared by every agent handler. */
 export function buildRecordedIntegrationAttrs(params: {
-  baseAttrs: Record<string, IntegrationStateAttribute>;
-  projectRoot: string;
-  mainRepoRoot?: string;
   serverUrl: string;
   orgKey: string | undefined;
   contextAugmentation: ResolvedVortexSetup | null;
 }): Record<string, IntegrationStateAttribute> {
-  return {
-    ...params.baseAttrs,
-    repoRoot: params.mainRepoRoot ?? params.projectRoot,
-    ...(params.contextAugmentation?.disposition === 'install'
-      ? buildContextAugmentationAttrs(
-          params.serverUrl,
-          params.orgKey,
-          params.contextAugmentation.scaEnabled === true,
-        )
-      : {}),
-  };
+  return params.contextAugmentation?.disposition === 'install'
+    ? buildContextAugmentationAttrs(
+        params.serverUrl,
+        params.orgKey,
+        params.contextAugmentation.scaEnabled === true,
+      )
+    : {};
 }
 
 export interface ApplyContextAugmentationToolIntegrationParams {
