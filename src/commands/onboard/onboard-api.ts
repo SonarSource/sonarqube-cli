@@ -22,6 +22,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS, pollUntil, waitDeadline } from '@/core/commands/poll.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { IssuesClient } from '@/core/server/issues.ts';
 
 interface ComputeTask {
   id: string;
@@ -33,9 +34,11 @@ interface ComputeTask {
 
 export class OnboardApiClient {
   readonly components: ComponentsClient;
+  readonly issues: IssuesClient;
 
   constructor(private readonly http: SonarHttpClient) {
     this.components = new ComponentsClient(http);
+    this.issues = new IssuesClient(http);
   }
 
   createProject(projectKey: string, name: string, organization?: string) {

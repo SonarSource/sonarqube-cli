@@ -27,15 +27,22 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { installSonarScanner } from '@/core/host/install/sonar-scanner.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { isSonarQubeCloud } from '@/core/server/sonarcloud-region.ts';
+import type { IssuesSearchResponse } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import type { Console } from '@/core/ui/console.ts';
 
+import { DEFAULT_STATUSES } from '../list/issues.ts';
 import { OnboardApiClient } from './onboard-api.ts';
+import { ONBOARD_ISSUES_PAGE_SIZE, printOnboardReport, resolveOnboardFormat } from './output.ts';
+import { OnboardProgressConsole } from './progress-console.ts';
 import { generateProjectTarget } from './project-key.ts';
 import { runFirstAnalysis } from './scanner.ts';
 import { scannerNetworkEnv } from './scanner-network.ts';
 
 export interface OnboardOptions {
   projectKey?: string;
+  format?: string;
+  verbose?: boolean;
 }
 
 function validateProjectKey(key: string): string {
@@ -67,6 +74,7 @@ function assertSupportedBuild(projectRoot: string): void {
 async function resolveTarget(
   options: OnboardOptions,
   ctx: CommandAuthenticatedInvocationContext,
+  progress: Console,
 ): Promise<{ projectKey: string; projectRoot: string; projectName: string }> {
   if (options.projectKey !== undefined)
     return {
@@ -78,7 +86,7 @@ async function resolveTarget(
     auth: null,
     useKnownMappings: false,
     silent: true,
-    console: ctx.console,
+    console: progress,
   });
   if (!project.projectKey) {
     const target = await generateProjectTarget(
@@ -86,7 +94,7 @@ async function resolveTarget(
       project.repoRoot,
       ctx.auth.orgKey,
     );
-    ctx.console.info(`Generated project key '${target.projectKey}' for '${target.projectName}'.`);
+    progress.info(`Generated project key '${target.projectKey}' for '${target.projectName}'.`);
     return target;
   }
   if (
@@ -102,7 +110,7 @@ async function resolveTarget(
       },
     );
   }
-  ctx.console.info(`Using project key '${project.projectKey}' from project configuration.`);
+  progress.info(`Using project key '${project.projectKey}' from project configuration.`);
   return {
     projectKey: validateProjectKey(project.projectKey),
     projectRoot: project.projectRoot,
@@ -114,8 +122,25 @@ export async function onboard(
   options: OnboardOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const { console } = ctx;
+  const format = resolveOnboardFormat(options.format);
+  const wasFormatted = console.isFormattedOutputMode();
+  console.setFormattedOutputMode(format === 'json');
+  try {
+    await runOnboarding(options, ctx, format);
+  } finally {
+    console.setFormattedOutputMode(wasFormatted);
+  }
+}
+
+async function runOnboarding(
+  options: OnboardOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+  format: 'text' | 'json',
+): Promise<void> {
   const { auth, console } = ctx;
-  const { projectKey, projectRoot, projectName } = await resolveTarget(options, ctx);
+  const progress = new OnboardProgressConsole(console, format);
+  const { projectKey, projectRoot, projectName } = await resolveTarget(options, ctx, progress);
   if ((auth.connectionType === 'cloud' || isSonarQubeCloud(auth.serverUrl)) && !auth.orgKey) {
     throw new CommandFailedError('A SonarQube Cloud organization is required for onboarding.', {
       remediationHint: 'Run sonar auth login --org <organization> first.',
@@ -129,7 +154,7 @@ export async function onboard(
       { remediationHint: 'Choose a different --project-key to create another project.' },
     );
 
-  const scanner = await installSonarScanner(console);
+  const scanner = await installSonarScanner(progress);
   const directory = mkdtempSync(join(tmpdir(), 'sonar-onboard-'));
   const dashboard = `${auth.serverUrl.replace(/\/$/, '')}/dashboard?id=${encodeURIComponent(projectKey)}`;
   let created = false;
@@ -138,29 +163,73 @@ export async function onboard(
     await api.createProject(projectKey, projectName, auth.orgKey).orThrow();
     created = true;
     noteProject(auth, projectKey);
-    console.success(`Created private unbound project '${projectKey}'.`);
-    const taskId = await runFirstAnalysis(
-      scanner,
-      projectRoot,
-      projectKey,
-      auth,
-      directory,
-      networkEnv,
-      console,
-    );
-    console.success('Analysis uploaded.');
-    const analysisId = await console.withSpinner('Waiting for analysis processing', () =>
+    progress.success(`Created private unbound project '${projectKey}'.`);
+    const scan = () =>
+      runFirstAnalysis(
+        scanner,
+        projectRoot,
+        projectKey,
+        auth,
+        directory,
+        networkEnv,
+        options.verbose ? { console, channel: format === 'json' ? 'stderr' : 'stdout' } : undefined,
+      );
+    if (options.verbose) progress.info('Analyzing source code');
+    const { taskId, logPath, stdout, stderr } = options.verbose
+      ? await scan()
+      : await progress.withSpinner('Analyzing source code', scan);
+    progress.success('Analysis uploaded.');
+    const analysisId = await progress.withSpinner('Waiting for analysis processing', () =>
       api.waitForAnalysis(taskId, projectKey),
     );
-    const gate = await api.qualityGate(analysisId);
-    console.success('Analysis processed.');
-    console.text(`Quality gate: ${gate}`);
-    console.text(`Results: ${dashboard}`);
+    progress.success('Analysis processed.');
+    const warnings = progress.warnings;
+    let gate: string | null = null;
+    let issueResult: IssuesSearchResponse | null = null;
+    try {
+      gate = await api.qualityGate(analysisId);
+    } catch (error) {
+      progress.warn(
+        `Could not retrieve the quality gate: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
+      issueResult = await api.issues
+        .searchIssues({
+          projects: projectKey,
+          organization: auth.orgKey,
+          issueStatuses: DEFAULT_STATUSES.join(','),
+          ps: ONBOARD_ISSUES_PAGE_SIZE,
+          p: 1,
+        })
+        .orThrow();
+    } catch (error) {
+      progress.warn(
+        `Could not retrieve issues: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    printOnboardReport(
+      {
+        projectKey,
+        projectName,
+        analysis: { status: 'completed', id: analysisId },
+        qualityGate: gate,
+        dashboardUrl: dashboard,
+        issues: issueResult?.issues ?? null,
+        paging: issueResult?.paging ?? null,
+        scannerLogPath: logPath,
+        ...(options.verbose ? { scannerOutput: { stdout, stderr } } : {}),
+        messages: console.getMessagesForFormattedOutput(),
+        warnings,
+      },
+      format,
+      console,
+    );
   } catch (cause) {
     if (!created) throw cause;
     const message = cause instanceof Error ? cause.message : String(cause);
     throw new CommandFailedError(
-      `Project '${projectKey}' was created, but its first analysis could not be completed: ${message}`,
+      `Project '${projectKey}' was created, but its first analysis could not be completed: ${message}\nThe project and scanner installation have been retained. Full results: ${dashboard}`,
       {
         cause,
         remediationHint: `The project and scanner installation have been retained. Check ${dashboard} and rerun the scanner from ${scanner.home} after resolving the error.`,

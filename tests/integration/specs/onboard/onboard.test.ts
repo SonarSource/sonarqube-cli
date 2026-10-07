@@ -32,11 +32,13 @@ import { rootCertificates } from 'node:tls';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { OnboardReport } from '@/commands/onboard/output.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { scannerArchive, SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
 import type { CliState } from '@/core/state/state.ts';
 
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
+import type { RunOptions } from '../../harness/types.ts';
 import { commitFile, git, initGitRepo } from '../hook/git-test-helpers.ts';
 
 const TOKEN = 'onboard-test-token';
@@ -64,6 +66,13 @@ describe('sonar onboard', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  function runText(command: string, options?: RunOptions) {
+    return harness.run(
+      command.startsWith('onboard') ? command + ' --format text' : command,
+      options,
+    );
+  }
 
   function seedScanner(): string {
     const home = join(harness.cliHome.path, 'bin', scannerArchive(detectPlatform()).directoryName);
@@ -95,6 +104,14 @@ describe('sonar onboard', () => {
           .split('\n')
           .map((line) => JSON.parse(line) as Invocation)
       : [];
+  }
+
+  function scannerLogs(): string {
+    const logs = join(harness.cliHome.path, 'logs');
+    return readdirSync(logs)
+      .filter((name) => name.startsWith('sonar-scanner-'))
+      .map((name) => readFileSync(join(logs, name), 'utf8'))
+      .join('\n');
   }
 
   function seedExternalScanner(version = '7.3.0.5189'): string {
@@ -138,16 +155,16 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     const home = seedExternalScanner();
     harness.withExtraEnv({ SONARQUBE_CLI_BINARIES_URL: binaries.baseUrl() });
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-    expect(result.stdout).toContain('Using installed SonarScanner 7.3.0.5189');
+    expect(result.stdout + result.stderr).toContain('Using installed SonarScanner 7.3.0.5189');
     expect(invocations()[0].args).toContain(join(home, 'lib', 'sonar-scanner-cli-7.3.0.5189.jar'));
     expect(binaries.getRecordedRequests().some((r) => r.path.endsWith('.zip'))).toBe(false);
     expect(harness.cliHome.file('bin').exists()).toBe(false);
     const state = harness.stateJsonFile.asJson() as CliState;
     expect(state.dependencies.installed.some((d) => d.id === 'sonar-scanner')).toBe(false);
     harness.state().withRawState(harness.stateJsonFile.asText());
-    expect((await harness.run('system reset --force')).exitCode).toBe(0);
+    expect((await runText('system reset --force')).exitCode).toBe(0);
     expect(existsSync(home)).toBe(true);
   });
 
@@ -156,9 +173,9 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
     seedExternalScanner();
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-    expect(result.stdout).toContain('Using installed SonarScanner 7.3.0.5189');
+    expect(result.stdout + result.stderr).toContain('Using installed SonarScanner 7.3.0.5189');
     expect(invocations()[0].args.join(' ')).toContain('sonar-scanner-cli-7.3.0.5189.jar');
   });
 
@@ -167,9 +184,9 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
     seedExternalScanner('5.0.1.3006');
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-    expect(result.stdout).toContain('Using cached SonarScanner');
+    expect(result.stdout + result.stderr).toContain('Using cached SonarScanner');
     expect(invocations()[0].args.join(' ')).toContain(
       `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`,
     );
@@ -183,14 +200,288 @@ describe('sonar onboard', () => {
       seedScanner();
       seedExternalScanner();
       harness.withExtraEnv({ ONBOARD_STUB_PATH_VERSION_EXIT_CODE: '1' });
-      const result = await harness.run('onboard --project-key new-project');
+      const result = await runText('onboard --project-key new-project');
       expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain('Using cached SonarScanner');
+      expect(result.stdout + result.stderr).toContain('Using cached SonarScanner');
     },
   );
 
+  it.each([' --format json', ' --format=json'])(
+    'includes messages while omitting scanner logs without verbose%s',
+    async (format) => {
+      const server = await harness
+        .newFakeServer()
+        .withOnboarding({
+          issues: [
+            {
+              ruleKey: 'javascript:S100',
+              message: 'Rename this function',
+              component: 'new-project:src/app.js',
+              line: 12,
+            },
+          ],
+        })
+        .start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      seedScanner();
+      harness.withExtraEnv({
+        ONBOARD_STUB_STDOUT: 'SCANNER-RAW-OUTPUT',
+        ONBOARD_STUB_STDERR: 'SCANNER-RAW-DIAGNOSTIC',
+      });
+      const result = await harness.run('onboard --project-key new-project' + format);
+      expect(result.exitCode, result.stderr).toBe(0);
+      const report = JSON.parse(result.stdout) as OnboardReport;
+      expect(report.projectKey).toBe('new-project');
+      expect(report.analysis).toEqual({ status: 'completed', id: 'onboard-analysis' });
+      expect(report.qualityGate).toBe('OK');
+      expect(report.dashboardUrl).toBe(server.baseUrl() + '/dashboard?id=new-project');
+      expect(report.issues).toHaveLength(1);
+      expect(report.issues?.[0]).toMatchObject({
+        rule: 'javascript:S100',
+        message: 'Rename this function',
+        line: 12,
+      });
+      expect(report.paging).toEqual({ pageIndex: 1, pageSize: 20, total: 1 });
+      expect(report.warnings).toEqual([]);
+      expect(report.scannerOutput).toBeUndefined();
+      expect(result.stdout).not.toContain('SCANNER-RAW');
+      expect(result.stderr).not.toContain('SCANNER-RAW');
+      expect(report.messages.some((message) => message.includes('Analysis processed.'))).toBe(true);
+      expect(result.stderr).toBe('');
+      expect(readFileSync(report.scannerLogPath, 'utf8')).toContain('SCANNER-RAW-OUTPUT');
+      const calls = server.getRecordedRequests();
+      const issues = calls.find((r) => r.path === '/api/issues/search')!;
+      expect(issues.query).toMatchObject({
+        components: 'new-project',
+        issueStatuses: 'OPEN,CONFIRMED',
+        ps: '20',
+        p: '1',
+      });
+      expect(calls.findIndex((r) => r.path === '/api/ce/task')).toBeLessThan(
+        calls.findIndex((r) => r.path === '/api/issues/search'),
+      );
+      expect(calls.some((r) => r.path === '/api/project_pull_requests/list')).toBe(false);
+    },
+  );
+
+  it('prints a human summary and a wrapped issue table with scanner logs omitted by default', async () => {
+    const message =
+      'A detailed issue message containing all the context needed to understand and fix this problem without losing any of the explanatory text.';
+    const server = await harness
+      .newFakeServer()
+      .withOnboarding({
+        qualityGate: 'ERROR',
+        issues: [
+          {
+            ruleKey: 'javascript:S100',
+            message,
+            component: 'new-project:src/routes/app.js',
+            line: 42,
+            severity: 'CRITICAL',
+          },
+          { ruleKey: 'javascript:S200', message: 'Confirmed issue', status: 'CONFIRMED' },
+          { ruleKey: 'javascript:S300', message: 'Hidden accepted issue', status: 'ACCEPTED' },
+        ],
+      })
+      .start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.withExtraEnv({ CODEX_CI: '1', COLUMNS: '72', ONBOARD_STUB_STDOUT: 'RAW-SCANNER-LOG' });
+    const result = await harness.run('onboard --project-key new-project --format text');
+    expect(result.exitCode, result.stderr).toBe(0);
+    const output = Bun.stripANSI(result.stdout);
+    expect(output).toContain('Analysis complete — cwd');
+    expect(output).toMatch(/Quality gate\s+Failed/);
+    expect(output).toMatch(/Active issues\s+2/);
+    expect(output).toContain('Full results');
+    expect(output).toContain('SEVERITY');
+    expect(output).toContain('FILE:LINE');
+    expect(output).toContain('src/routes/app.js:42');
+    expect(output).toContain('javascript:S100');
+    expect(output).not.toContain('Hidden accepted issue');
+    expect(output).not.toContain('RAW-SCANNER-LOG');
+    expect(result.stderr).not.toContain('RAW-SCANNER-LOG');
+    expect(output).toContain('Analyzing source code...');
+    const table = output.slice(output.indexOf('SEVERITY'), output.indexOf('Showing'));
+    expect(table.split('\n').every((line) => Bun.stringWidth(line) <= 72)).toBe(true);
+    expect(table.replace(/\s+/g, '')).toContain(message.replace(/\s+/g, ''));
+  });
+
+  it('streams verbose logs before the scanner finishes and redacts tokens across chunks', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.withExtraEnv({ ONBOARD_STUB_STREAMING: 'true' });
+    const session = harness.runInteractive('onboard --project-key new-project --verbose');
+    await session.waitText('SCANNER-FIRST');
+    expect(session.output()).not.toContain('SCANNER-LAST');
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/ce/task')).toBe(false);
+    const result = await session.waitFinish();
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.stdout).toContain('SCANNER-LAST');
+    expect(result.stdout).toContain('SCANNER-STDERR');
+    expect(result.stdout).toContain('[REDACTED]');
+    expect(result.stdout + result.stderr).not.toContain(TOKEN);
+    expect(result.stdout).not.toContain('Analyzing source code...');
+    expect(result.stdout.indexOf('SCANNER-LAST')).toBeLessThan(
+      result.stdout.indexOf('Analysis complete'),
+    );
+  });
+
+  it('streams verbose JSON logs to stderr and keeps stdout as one JSON document', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.withExtraEnv({ ONBOARD_STUB_STREAMING: 'true' });
+    const result = await harness.run('onboard --project-key new-project --verbose --format json');
+    expect(result.exitCode).toBe(0);
+    const report = JSON.parse(result.stdout) as OnboardReport;
+    expect(report.analysis.status).toBe('completed');
+    expect(report.scannerOutput?.stdout).toContain('SCANNER-FIRST');
+    expect(report.scannerOutput?.stdout).toContain('SCANNER-LAST');
+    expect(result.stderr).toContain('SCANNER-FIRST');
+    expect(result.stderr).toContain('SCANNER-STDERR');
+    expect(result.stdout + result.stderr).not.toContain(TOKEN);
+  });
+
+  it('reports pagination and an exact command to retrieve the next issue page', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withOnboarding({
+        issues: Array.from({ length: 23 }, (_, i) => ({
+          ruleKey: 'javascript:S100',
+          message: 'Issue ' + i,
+        })),
+      })
+      .start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    const result = await harness.run('onboard --project-key new-project --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Showing 20 of 23 active issues.');
+    expect(result.stdout).toContain(
+      'sonar list issues --project=new-project --format table --page-size 20 --page 2',
+    );
+  });
+
+  it('distinguishes zero issues from a failed issue request in JSON', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    const result = await harness.run('onboard --project-key new-project --format json');
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      issues: [],
+      paging: { total: 0 },
+      warnings: [],
+    });
+  });
+
+  it.each(['json', 'text'])(
+    'keeps analysis completed when issue retrieval fails (%s)',
+    async (format) => {
+      const server = await harness
+        .newFakeServer()
+        .withOnboarding({
+          issuesSearchError: { status: 503, message: 'Issue service unavailable' },
+        })
+        .start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      seedScanner();
+      const result = await harness.run('onboard --project-key new-project --format ' + format);
+      expect(result.exitCode, result.stderr).toBe(0);
+      if (format === 'text') expect(result.stderr).toContain('Could not retrieve issues');
+      else expect(result.stderr).toBe('');
+      expect(result.stderr).not.toContain('first analysis could not be completed');
+      if (format === 'json') {
+        const report = JSON.parse(result.stdout);
+        expect(report.analysis.status).toBe('completed');
+        expect(report.issues).toBeNull();
+        expect(report.paging).toBeNull();
+        expect(report.warnings).toHaveLength(1);
+        expect(report.dashboardUrl).toContain('/dashboard?id=new-project');
+      } else {
+        expect(result.stdout).toContain('Analysis complete');
+        expect(result.stdout).toMatch(/Active issues\s+Unavailable/);
+        expect(result.stdout).toContain('Issues could not be loaded.');
+      }
+    },
+  );
+
+  it('keeps completed analysis and issues when the quality gate cannot be retrieved', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withOnboarding({
+        qualityGateError: { status: 503, message: 'Gate service unavailable' },
+      })
+      .start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    const result = await harness.run('onboard --project-key new-project --format json');
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      analysis: { status: 'completed' },
+      qualityGate: null,
+      issues: [],
+    });
+    expect(JSON.parse(result.stdout).warnings[0]).toContain('Could not retrieve the quality gate');
+    expect(result.stderr).toBe('');
+  });
+
+  it('saves redacted scanner diagnostics and prints their location on failure', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.withExtraEnv({
+      ONBOARD_STUB_EXIT_CODE: '1',
+      ONBOARD_STUB_STDOUT: 'LOG-MARKER ' + TOKEN,
+    });
+    const result = await harness.run('onboard --project-key new-project --format json');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Inspect ');
+    expect(result.stderr).toContain('.log');
+    expect(result.stdout).not.toContain('LOG-MARKER');
+    expect(result.stderr).not.toContain('LOG-MARKER');
+    expect(scannerLogs()).toContain('LOG-MARKER [REDACTED]');
+    expect(scannerLogs()).not.toContain(TOKEN);
+  });
+
+  it('rejects unsupported output formats before making changes', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    const result = await harness.run('onboard --project-key new-project --format yaml');
+    expect(result.exitCode).not.toBe(0);
+    expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(false);
+  });
+
+  it.skipIf(IS_WINDOWS)(
+    'defaults to text with an issue table in an interactive human terminal',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      seedScanner();
+      const result = await harness.runWithRealTty('onboard --project-key new-project');
+      expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+      expect(result.stdout).toContain('Analysis complete');
+      expect(result.stdout).toContain('Full results');
+      expect(result.stdout).not.toContain('"analysis":');
+    },
+  );
+
+  it('defaults to text even for an agent using piped output', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    const result = await harness.run('onboard --project-key new-project', {
+      extraEnv: { CODEX_CI: '1' },
+    });
+    expect(result.exitCode, result.stderr + result.stdout).toBe(0);
+    expect(result.stdout).not.toContain('"analysis":');
+    expect(result.stdout).toContain('Full results');
+  });
+
   it('requires authentication', async () => {
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('Not authenticated');
   });
@@ -199,7 +490,7 @@ describe('sonar onboard', () => {
     const server = await harness.newFakeServer().start();
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
-    const result = await harness.run('onboard');
+    const result = await runText('onboard');
     expect(result.exitCode).toBe(0);
     const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
     const params = new URLSearchParams(creation.body);
@@ -209,7 +500,7 @@ describe('sonar onboard', () => {
     expect(result.stdout + result.stderr).toContain(`Generated project key '${key}'`);
     expect(invocations()[0].args).toContain(`-Dsonar.projectKey=${key}`);
     expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
-    const repeated = await harness.run('onboard');
+    const repeated = await runText('onboard');
     expect(repeated.exitCode).toBe(1);
     expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
     expect(
@@ -224,7 +515,7 @@ describe('sonar onboard', () => {
     harness.cwd.writeFile('.git', 'invalid worktree marker');
     harness.cwd.writeFile('nested/app.js', '');
     const directory = join(harness.cwd.path, 'nested');
-    expect((await harness.run('onboard', { cwd: directory })).exitCode).toBe(0);
+    expect((await runText('onboard', { cwd: directory })).exitCode).toBe(0);
     const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
     expect(new URLSearchParams(creation.body).get('project')).toMatch(/^nested-[a-f0-9]{12}$/);
     expect(invocations()[0].cwd).toBe(directory);
@@ -244,7 +535,7 @@ describe('sonar onboard', () => {
       const checkout = join(harness.cwd.path, `checkout-${index}`);
       initGitRepo(checkout);
       git(['remote', 'add', 'origin', remote], checkout);
-      const result = await harness.run('onboard', { cwd: checkout });
+      const result = await runText('onboard', { cwd: checkout });
       expect(result.stdout + result.stderr).not.toContain('fake-password');
       if (index === 0) {
         expect(result.exitCode).toBe(0);
@@ -272,9 +563,9 @@ describe('sonar onboard', () => {
     seedScanner();
     initGitRepo(harness.cwd.path);
     git(['remote', 'add', 'origin', 'https://example.test/alice/my-app.git'], harness.cwd.path);
-    expect((await harness.run('onboard')).exitCode).toBe(0);
+    expect((await runText('onboard')).exitCode).toBe(0);
     git(['remote', 'set-url', 'origin', 'https://example.test/bob/my-app.git'], harness.cwd.path);
-    expect((await harness.run('onboard')).exitCode).toBe(0);
+    expect((await runText('onboard')).exitCode).toBe(0);
     const keys = server
       .getRecordedRequests()
       .filter((r) => r.path === '/api/projects/create')
@@ -290,7 +581,7 @@ describe('sonar onboard', () => {
     initGitRepo(harness.cwd.path);
     commitFile(harness.cwd.path, 'README.md', 'test');
     harness.cwd.writeFile('src/app.js', '');
-    const result = await harness.run('onboard', { cwd: join(harness.cwd.path, 'src') });
+    const result = await runText('onboard', { cwd: join(harness.cwd.path, 'src') });
     expect(result.exitCode).toBe(0);
     const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
     const params = new URLSearchParams(creation.body);
@@ -300,7 +591,7 @@ describe('sonar onboard', () => {
     expect(invocations()[0].cwd).toBe(harness.cwd.path);
     const worktree = join(harness.userHome.path, 'different-worktree-name');
     git(['worktree', 'add', '-b', 'onboard-test', worktree], harness.cwd.path);
-    const repeated = await harness.run('onboard', { cwd: worktree });
+    const repeated = await runText('onboard', { cwd: worktree });
     expect(repeated.exitCode).toBe(1);
     expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
   });
@@ -310,7 +601,7 @@ describe('sonar onboard', () => {
     seedScanner();
     for (const organization of ['org-a', 'org-b']) {
       harness.withAuth(server.baseUrl(), TOKEN, organization);
-      expect((await harness.run('onboard')).exitCode).toBe(0);
+      expect((await runText('onboard')).exitCode).toBe(0);
     }
     const creations = server
       .getRecordedRequests()
@@ -330,7 +621,7 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
     harness.cwd.writeFile(`${name}/.keep`, '');
-    const result = await harness.run('onboard', { cwd: join(harness.cwd.path, name) });
+    const result = await runText('onboard', { cwd: join(harness.cwd.path, name) });
     expect(result.exitCode).toBe(0);
     const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
     expect(new URLSearchParams(creation.body).get('project')).toMatch(
@@ -344,9 +635,7 @@ describe('sonar onboard', () => {
     seedScanner();
     for (const name of ['My App', 'My-App']) {
       harness.cwd.writeFile(`${name}/.keep`, '');
-      expect((await harness.run('onboard', { cwd: join(harness.cwd.path, name) })).exitCode).toBe(
-        0,
-      );
+      expect((await runText('onboard', { cwd: join(harness.cwd.path, name) })).exitCode).toBe(0);
     }
     const keys = server
       .getRecordedRequests()
@@ -362,12 +651,12 @@ describe('sonar onboard', () => {
     seedScanner();
     for (const parent of ['one', 'two']) harness.cwd.writeFile(`${parent}/my-app/.keep`, '');
     expect(
-      (await harness.run('onboard', { cwd: join(harness.cwd.path, 'one', 'my-app') })).exitCode,
+      (await runText('onboard', { cwd: join(harness.cwd.path, 'one', 'my-app') })).exitCode,
     ).toBe(0);
     const key = new URLSearchParams(
       server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!.body,
     ).get('project');
-    const repeated = await harness.run('onboard', { cwd: join(harness.cwd.path, 'two', 'my-app') });
+    const repeated = await runText('onboard', { cwd: join(harness.cwd.path, 'two', 'my-app') });
     expect(repeated.exitCode).toBe(1);
     expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
   });
@@ -377,7 +666,7 @@ describe('sonar onboard', () => {
     async (key) => {
       const server = await harness.newFakeServer().start();
       harness.withAuth(server.baseUrl(), TOKEN);
-      const result = await harness.run(
+      const result = await runText(
         key === '' ? 'onboard --project-key=' : `onboard --project-key "${key}"`,
       );
       expect(result.exitCode).toBe(2);
@@ -393,12 +682,12 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
     harness.cwd.writeFile('app.js', 'const x = 1;');
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Created private unbound project');
-    expect(result.stdout).toContain('Analysis uploaded.');
-    expect(result.stdout).toContain('Analysis processed.');
-    expect(result.stdout).toContain('Quality gate: OK');
+    expect(result.stdout + result.stderr).toContain('Created private unbound project');
+    expect(result.stdout + result.stderr).toContain('Analysis uploaded.');
+    expect(result.stdout + result.stderr).toContain('Analysis processed.');
+    expect(result.stdout).toMatch(/Quality gate\s+Passed/);
     expect(result.stdout).toContain(`${server.baseUrl()}/dashboard?id=new-project`);
     const requests = server.getRecordedRequests();
     const creation = requests.find((r) => r.path === '/api/projects/create')!;
@@ -429,7 +718,7 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN, 'my-org');
     harness.withExtraEnv({ SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl() });
     seedScanner();
-    const result = await harness.run('onboard --project-key my-org_app');
+    const result = await runText('onboard --project-key my-org_app');
     expect(result.exitCode).toBe(0);
     const body = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')?.body;
     expect(new URLSearchParams(body).get('organization')).toBe('my-org');
@@ -441,7 +730,7 @@ describe('sonar onboard', () => {
   it('rejects a Cloud connection without an organization before installing', async () => {
     const server = await harness.newFakeServer().asSonarCloud().start();
     harness.withAuth(server.baseUrl(), TOKEN);
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('organization is required');
     expect(harness.cliHome.file('bin').exists()).toBe(false);
@@ -453,7 +742,7 @@ describe('sonar onboard', () => {
     seedScanner();
     const properties = 'sonar.projectKey=configured-key\nsonar.sources=src\n';
     harness.cwd.writeFile('sonar-project.properties', properties);
-    const result = await harness.run('onboard');
+    const result = await runText('onboard');
     expect(result.exitCode).toBe(0);
     expect(invocations()[0].args).toContain('-Dsonar.projectKey=configured-key');
     expect(harness.cwd.file('sonar-project.properties').asText()).toBe(properties);
@@ -466,7 +755,7 @@ describe('sonar onboard', () => {
     initGitRepo(harness.cwd.path);
     harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=parent-key');
     harness.cwd.writeFile('src/app.js', '');
-    const result = await harness.run('onboard', { cwd: join(harness.cwd.path, 'src') });
+    const result = await runText('onboard', { cwd: join(harness.cwd.path, 'src') });
     expect(result.exitCode).toBe(0);
     expect(invocations()[0].cwd).toBe(harness.cwd.path);
   });
@@ -479,7 +768,7 @@ describe('sonar onboard', () => {
       'sonar-project.properties',
       'sonar.projectKey=old-key\nsonar.host.url=https://other.example.com',
     );
-    const result = await harness.run('onboard --project-key explicit-key');
+    const result = await runText('onboard --project-key explicit-key');
     expect(result.exitCode).toBe(0);
     expect(invocations()[0].args).toContain('-Dsonar.projectKey=explicit-key');
     expect(invocations()[0].args).toContain(`-Dsonar.host.url=${server.baseUrl()}`);
@@ -492,7 +781,7 @@ describe('sonar onboard', () => {
       'sonar-project.properties',
       'sonar.projectKey=key\nsonar.host.url=https://other.example.com',
     );
-    const result = await harness.run('onboard');
+    const result = await runText('onboard');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('does not match the active connection');
     expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(false);
@@ -501,7 +790,7 @@ describe('sonar onboard', () => {
   it('rejects existing projects without installing or scanning', async () => {
     const server = await harness.newFakeServer().withProject('existing-key').start();
     harness.withAuth(server.baseUrl(), TOKEN);
-    const result = await harness.run('onboard --project-key existing-key');
+    const result = await runText('onboard --project-key existing-key');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain("Project 'existing-key' already exists");
     expect(harness.cliHome.file('bin').exists()).toBe(false);
@@ -514,7 +803,7 @@ describe('sonar onboard', () => {
       const server = await harness.newFakeServer().start();
       harness.withAuth(server.baseUrl(), TOKEN);
       harness.cwd.writeFile(file, '');
-      const result = await harness.run('onboard --project-key new-project');
+      const result = await runText('onboard --project-key new-project');
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('requires SonarScanner for');
       expect(harness.cliHome.file('bin').exists()).toBe(false);
@@ -530,7 +819,7 @@ describe('sonar onboard', () => {
       .start();
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('Create Projects permission required');
     expect(invocations()).toHaveLength(0);
@@ -545,7 +834,7 @@ describe('sonar onboard', () => {
       ONBOARD_STUB_STDOUT: TOKEN,
       ONBOARD_STUB_STDERR: TOKEN,
     });
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
       'project and scanner installation have been retained',
@@ -563,7 +852,7 @@ describe('sonar onboard', () => {
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
     harness.withExtraEnv(env);
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('analysis task report');
     expect(server.getRecordedRequests().some((r) => r.path === '/api/ce/task')).toBe(false);
@@ -576,7 +865,7 @@ describe('sonar onboard', () => {
       .start();
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(0);
     expect(server.getRecordedRequests().filter((r) => r.path === '/api/ce/task')).toHaveLength(2);
   }, 15000);
@@ -590,7 +879,7 @@ describe('sonar onboard', () => {
         .start();
       harness.withAuth(server.baseUrl(), TOKEN);
       seedScanner();
-      const result = await harness.run('onboard --project-key new-project');
+      const result = await runText('onboard --project-key new-project');
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(status.toLowerCase());
     },
@@ -600,9 +889,9 @@ describe('sonar onboard', () => {
     const server = await harness.newFakeServer().withOnboarding({ qualityGate: 'ERROR' }).start();
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Quality gate: ERROR');
+    expect(result.stdout).toMatch(/Quality gate\s+Failed/);
   });
 
   it('honors NO_PROXY when configuring the Java scanner', async () => {
@@ -615,7 +904,7 @@ describe('sonar onboard', () => {
       SONAR_SCANNER_PROXY_HOST: 'stale-proxy',
       SONAR_SCANNER_PROXY_PORT: 'not-a-port',
     });
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(0);
     expect(invocations()[0].network.proxyHost).toBeUndefined();
     expect(invocations()[0].network.proxyPort).toBeUndefined();
@@ -645,7 +934,7 @@ describe('sonar onboard', () => {
         SONARQUBE_CLI_BINARIES_URL: binaries.baseUrl(),
         [caVariable]: harness.cwd.file('ca-bundle.pem').path,
       });
-      const result = await harness.run('onboard --project-key new-project', { timeoutMs: 120000 });
+      const result = await runText('onboard --project-key new-project', { timeoutMs: 120000 });
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Create Projects permission required');
       expect(binaries.getRecordedRequests().some((r) => r.path.endsWith('.zip'))).toBe(true);
@@ -676,11 +965,11 @@ describe('sonar onboard', () => {
         SONAR_REGION: 'us',
         ...(region === 'us' ? { SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl() } : {}),
       });
-      const result = await harness.run('onboard --project-key bootstrap-test', {
+      const result = await runText('onboard --project-key bootstrap-test', {
         timeoutMs: 120000,
       });
-      expect(result.stdout).toContain('Simulation mode.');
-      expect(result.stdout).toContain('EXECUTION SUCCESS');
+      expect(scannerLogs()).toContain('Simulation mode.');
+      expect(scannerLogs()).toContain('EXECUTION SUCCESS');
       expect(harness.cliHome.file('scanner-bootstrap.properties').exists()).toBe(true);
       expect(result.stdout + result.stderr).not.toContain('Inconsistent values');
       expect(result.exitCode).toBe(1);
@@ -699,7 +988,7 @@ describe('sonar onboard', () => {
       .start();
     harness.withAuth(server.baseUrl(), TOKEN);
     harness.withExtraEnv({ SONARQUBE_CLI_BINARIES_URL: binaries.baseUrl() });
-    const result = await harness.run('onboard --project-key new-project');
+    const result = await runText('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('checksum verification failed');
     expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(false);
@@ -710,9 +999,9 @@ describe('sonar onboard', () => {
     const server = await harness.newFakeServer().start();
     harness.withAuth(server.baseUrl(), TOKEN);
     const home = seedScanner();
-    expect((await harness.run('onboard --project-key new-project')).exitCode).toBe(0);
+    expect((await runText('onboard --project-key new-project')).exitCode).toBe(0);
     harness.state().withRawState(harness.stateJsonFile.asText());
-    const reset = await harness.run('system reset --force');
+    const reset = await runText('system reset --force');
     expect(reset.exitCode).toBe(0);
     expect(existsSync(home), reset.stdout + reset.stderr).toBe(false);
   });

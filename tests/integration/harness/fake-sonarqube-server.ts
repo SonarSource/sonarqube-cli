@@ -39,6 +39,9 @@ interface OnboardConfig {
   taskStatuses?: Array<'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'CANCELED'>;
   taskProjectKey?: string;
   qualityGate?: string;
+  issues?: IssueConfig[];
+  issuesSearchError?: { status: number; message: string };
+  qualityGateError?: { status: number; message: string };
 }
 
 /** Statuses `resolved=true` matches; `resolved=false` matches everything else. */
@@ -1013,7 +1016,15 @@ export class FakeSonarQubeServerBuilder {
               { errors: [{ msg: failure.message }] },
               { status: failure.status },
             );
-          const project = new ProjectBuilder(key).getData();
+          const builder = new ProjectBuilder(key);
+          for (const issue of onboardConfig.issues ?? []) builder.withIssue(issue);
+          if (onboardConfig.issuesSearchError) {
+            builder.withIssuesSearchError(
+              onboardConfig.issuesSearchError.status,
+              onboardConfig.issuesSearchError.message,
+            );
+          }
+          const project = builder.getData();
           project.name = params.get('name') ?? key;
           projects.set(key, project);
           onboardedProjectKey = key;
@@ -1038,6 +1049,12 @@ export class FakeSonarQubeServerBuilder {
           path === '/api/qualitygates/project_status' &&
           query.analysisId === 'onboard-analysis'
         ) {
+          if (onboardConfig.qualityGateError) {
+            return Response.json(
+              { errors: [{ msg: onboardConfig.qualityGateError.message }] },
+              { status: onboardConfig.qualityGateError.status },
+            );
+          }
           return Response.json({ projectStatus: { status: onboardConfig.qualityGate ?? 'OK' } });
         }
 

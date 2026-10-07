@@ -70,6 +70,17 @@ if (process.env.ONBOARD_STUB_LOG_PATH) {
     }) + '\n',
   );
 }
+if (process.env.ONBOARD_STUB_STREAMING === 'true') {
+  console.log('SCANNER-FIRST');
+  await Bun.sleep(400);
+  const token = process.env.SONAR_TOKEN ?? '';
+  process.stdout.write(token.slice(0, 8));
+  await Bun.sleep(50);
+  process.stdout.write(token.slice(8) + '\n');
+  console.error('SCANNER-STDERR');
+  await Bun.sleep(400);
+  console.log('SCANNER-LAST');
+}
 if (process.env.ONBOARD_STUB_STDOUT) console.log(process.env.ONBOARD_STUB_STDOUT);
 if (process.env.ONBOARD_STUB_STDERR) console.error(process.env.ONBOARD_STUB_STDERR);
 const exitCode = Number(process.env.ONBOARD_STUB_EXIT_CODE ?? 0);

@@ -166,6 +166,7 @@ import {
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
 } from './list/projects.ts';
 import { onboard, type OnboardOptions } from './onboard/index.ts';
+import { ONBOARD_FORMATS } from './onboard/output.ts';
 import { orgImport, type OrgImportOptions } from './org/import.ts';
 import { projectWait, type ProjectWaitOptions } from './project/wait.ts';
 import {
@@ -700,6 +701,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--project-key <key>',
       'Key for the new project; detected from configuration or generated deterministically when omitted',
     )
+    .addOption(formatOption(ONBOARD_FORMATS, 'text'))
+    .option('--verbose', 'Stream scanner logs in real time (to stderr with --format json)')
     .authenticatedAction((ctx, options: OnboardOptions) => onboard(options, ctx));
 
   // Analyze code for quality and security issues
