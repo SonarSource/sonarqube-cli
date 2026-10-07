@@ -29,15 +29,10 @@ import * as token from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
-import type { DiscoveredProject } from '@/core/project-info.ts';
-import * as discovery from '@/core/project-info.ts';
 import { okAsync } from '@/core/result.ts';
-import { ComponentsClient } from '@/core/server/components.ts';
-import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import type { PhaseItem } from '@/core/ui/console.ts';
 import { VortexEntitlementClient } from '@/core/vortex/entitlement.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
@@ -61,11 +56,6 @@ let fake: FakeConsole;
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
 let CLOUD_CTX: CommandAuthenticatedInvocationContext;
 
-function getPhaseItems(title: string): PhaseItem[] {
-  const call = fake.calls.find((c) => c.method === 'phase' && c.args[0] === title);
-  return (call?.args[1] ?? []) as PhaseItem[];
-}
-
 describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
   let saveStateSpy: ReturnType<typeof spyOn>;
@@ -77,18 +67,6 @@ describe('integrateCommand', () => {
   >;
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: any[]) => any>
-  >;
-  let componentExistsSpy: Mock<
-    Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: any[]) => any>
-  >;
-  let isOrganizationAccessibleSpy: Mock<
-    Extract<
-      (typeof OrganizationsClient.prototype)['isOrganizationAccessible'],
-      (...args: any[]) => any
-    >
-  >;
-  let discoverProjectSpy: Mock<
-    Extract<(typeof discovery)['discoverProject'], (...args: any[]) => any>
   >;
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: any[]) => any>
@@ -112,17 +90,7 @@ describe('integrateCommand', () => {
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
-      okAsync(true),
-    );
-    isOrganizationAccessibleSpy = spyOn(
-      OrganizationsClient.prototype,
-      'isOrganizationAccessible',
-    ).mockResolvedValue(true);
-    discoverProjectSpy = spyOn(discovery, 'discoverProject');
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
-
-    mockDiscoveredProject({});
   });
 
   afterEach(() => {
@@ -130,9 +98,6 @@ describe('integrateCommand', () => {
     saveStateSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
-    componentExistsSpy.mockRestore();
-    isOrganizationAccessibleSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
     getScaEnablementSpy.mockRestore();
   });
@@ -147,57 +112,13 @@ describe('integrateCommand', () => {
     expect(introText).toBeDefined();
   });
 
-  it('shows discovering project spinner', async () => {
-    await integrateClaude({}, SERVER_CTX);
-
-    expect(
-      fake.calls.some(
-        (c) => c.method === 'spinner' && String(c.args[0]) === 'Discovering project...',
-      ),
-    ).toBe(true);
-  });
-
-  it('shows Connection and Project setup summary sections', async () => {
-    await integrateClaude({}, CLOUD_CTX);
-
-    expect(getPhaseItems('Connection').some((i) => i.text === 'Server')).toBe(true);
-    expect(getPhaseItems('Connection').some((i) => i.text === 'Organization')).toBe(true);
-    expect(
-      getPhaseItems('Connection').some((i) => i.text === 'Token' && i.detail === 'valid'),
-    ).toBe(true);
-    expect(getPhaseItems('Project').some((i) => i.text === 'Root')).toBe(true);
-  });
-
   it('validates token against the auth server URL', async () => {
     await integrateClaude({}, SERVER_CTX);
 
     expect(checkTokenStatusSpy).toHaveBeenCalledWith(SERVER_AUTH.serverUrl, SERVER_AUTH.token);
   });
 
-  it('shows warning when resolved server does not match discovered server', async () => {
-    mockDiscoveredProject({ serverUrl: 'https://example-sonarqube.com' });
-
-    await integrateClaude({}, CLOUD_CTX);
-
-    const warnText = fake.calls.find(
-      (c) => c.method === 'warn' && String(c.args[0]).includes('Server URL mismatch'),
-    );
-    expect(warnText).toBeDefined();
-  });
-
-  it('shows warning when resolved organization does not match discovered organization', async () => {
-    mockDiscoveredProject({ organization: 'an-org' });
-
-    await integrateClaude({}, CLOUD_CTX);
-
-    const warnText = fake.calls.find(
-      (c) => c.method === 'warn' && String(c.args[0]).includes('organization mismatch'),
-    );
-    expect(warnText).toBeDefined();
-  });
-
   it('validates organization is provided when server is SonarQube Cloud', async () => {
-    mockDiscoveredProject({});
     const cloudAuthNoOrg = new ResolvedAuth({
       token: 'test-token',
       serverUrl: 'https://sonarcloud.io',
@@ -212,35 +133,6 @@ describe('integrateCommand', () => {
         new CommandAuthenticatedInvocationContext(cloudAuthNoOrg, new FakeConsole()),
       ),
     ).rejects.toThrow(CommandFailedError);
-  });
-
-  it('shows config source from discovered files', async () => {
-    mockDiscoveredProject({
-      projectKey: 'my-project',
-      configSources: ['sonar-project.properties'],
-    });
-
-    await integrateClaude({}, SERVER_CTX);
-
-    const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
-    expect(configSource?.status).toBe('done');
-    expect(configSource?.detail).toBe('sonar-project.properties');
-  });
-
-  it('shows config source as none detected when no config file contributed', async () => {
-    await integrateClaude({}, SERVER_CTX);
-
-    const configSource = getPhaseItems('Project').find((i) => i.text === 'Config source');
-    expect(configSource?.status).toBe('warn');
-    expect(configSource?.detail).toBe('none detected');
-  });
-
-  it('project key defaults to discovered project key', async () => {
-    mockDiscoveredProject({ projectKey: 'project' });
-
-    await integrateClaude({}, SERVER_CTX);
-
-    expect(getPhaseItems('Project').find((i) => i.text === 'Key')?.detail).toBe('project');
   });
 
   it('aborts when token is invalid', async () => {
@@ -268,7 +160,6 @@ describe('integrateCommand', () => {
   });
 
   it('installs Vortex through the declarative installer in a single call', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
 
@@ -280,14 +171,11 @@ describe('integrateCommand', () => {
         integrationId: 'claude-code',
         auth: CLOUD_AUTH,
         options: expect.objectContaining({
-          projectRoot: '/project/root',
           vortexDisposition: 'install',
         }),
         scope: 'global',
         targetRoot: homedir(),
         attrs: {
-          projectKey: 'a-project',
-          repoRoot: '/project/root',
           orgKey: 'cloud-org',
           scaEnabled: true,
           serverUrl: 'https://sonarcloud.io',
@@ -296,27 +184,7 @@ describe('integrateCommand', () => {
     );
   });
 
-  it('records the already-resolved mainRepoRoot from discovery instead of re-deriving it', async () => {
-    // attrs.repoRoot must record mainRepoRoot (main tree), not repoRoot (current worktree).
-    mockDiscoveredProject({
-      repoRoot: '/repo-worktrees/feature-x',
-      mainRepoRoot: '/repo',
-      projectKey: 'a-project',
-    });
-    mockVortexEntitlement(true);
-    getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
-
-    await integrateClaude({}, CLOUD_CTX);
-
-    expect(installIntegrationSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attrs: expect.objectContaining({ repoRoot: '/repo' }),
-      }),
-    );
-  });
-
   it('requests Vortex removal when the project organization is not entitled', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(false);
 
     await integrateClaude({}, CLOUD_CTX);
@@ -325,14 +193,11 @@ describe('integrateCommand', () => {
       targetRoot: homedir(),
       scope: 'global',
       auth: CLOUD_AUTH,
-      projectRoot: '/project/root',
-      projectKey: 'a-project',
       vortexDisposition: 'remove',
     });
   });
 
   it('rethrows Vortex installation failures', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
     installIntegrationSpy.mockRejectedValueOnce(new Error('print failed'));
 
@@ -352,31 +217,11 @@ describe('integrateCommand', () => {
   });
 
   it('runs migration and installs hooks when setup summary succeeds', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
     mockVortexEntitlement(true);
 
     await integrateClaude({}, CLOUD_CTX);
 
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', 'install');
-  });
-
-  it('still installs when organization access check fails in the summary', async () => {
-    mockDiscoveredProject({ repoRoot: '/project/root', projectKey: 'a-project' });
-    mockVortexEntitlement(true);
-    isOrganizationAccessibleSpy.mockResolvedValue(false);
-
-    await integrateClaude({}, CLOUD_CTX);
-
-    assertMigrationAndHookInstallationRan('a-project', '/project/root', 'install');
-  });
-
-  it('requests Vortex removal when project key is missing and entitlement is lost', async () => {
-    mockDiscoveredProject({ repoRoot: '/projectB/root' });
-    mockVortexEntitlement(false);
-
-    await integrateClaude({}, CLOUD_CTX);
-
-    assertMigrationAndHookInstallationRan(undefined, '/projectB/root', 'remove');
+    assertMigrationAndHookInstallationRan('install');
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -393,19 +238,6 @@ describe('integrateCommand', () => {
     expect(installIntegrationSpy).toHaveBeenCalledTimes(1);
   });
 
-  function mockDiscoveredProject(project: Partial<DiscoveredProject>) {
-    const repoRoot = project.repoRoot || process.cwd();
-    discoverProjectSpy.mockResolvedValue({
-      repoRoot,
-      mainRepoRoot: project.mainRepoRoot,
-      projectRoot: project.projectRoot || repoRoot,
-      serverUrl: project.serverUrl,
-      organization: project.organization,
-      projectKey: project.projectKey,
-      configSources: project.configSources ?? [],
-    });
-  }
-
   function mockVortexEntitlement(hasEntitlement: boolean) {
     hasVortexEntitlementSpy.mockResolvedValue({
       status: hasEntitlement ? 'enabled' : 'not_entitled',
@@ -413,8 +245,6 @@ describe('integrateCommand', () => {
   }
 
   function assertMigrationAndHookInstallationRan(
-    projectKey: string | undefined,
-    projectRootDir: string,
     vortexDisposition: VortexDisposition,
     auth: ResolvedAuth = CLOUD_AUTH,
   ): void {
@@ -422,8 +252,6 @@ describe('integrateCommand', () => {
       targetRoot: homedir(),
       scope: 'global',
       auth,
-      projectRoot: projectRootDir,
-      projectKey,
       vortexDisposition,
     });
   }
@@ -432,22 +260,16 @@ describe('integrateCommand', () => {
     targetRoot,
     scope,
     auth,
-    projectRoot,
-    projectKey,
     vortexDisposition,
   }: {
     targetRoot: string;
     scope: 'global';
     auth: ResolvedAuth;
-    projectRoot: string;
-    projectKey?: string;
     vortexDisposition: VortexDisposition;
   }): void {
     // The connection attrs are recorded only when Vortex is installed: its
     // context augmentation subfeature reads them back at runtime.
     const attrs = {
-      projectKey: projectKey ?? null,
-      repoRoot: projectRoot,
       ...(vortexDisposition === 'install'
         ? { orgKey: auth.orgKey ?? null, scaEnabled: false, serverUrl: auth.serverUrl }
         : {}),
@@ -458,10 +280,7 @@ describe('integrateCommand', () => {
       expect.objectContaining({
         integrationId: 'claude-code',
         auth,
-        options: expect.objectContaining({
-          projectRoot,
-          vortexDisposition,
-        }),
+        options: expect.objectContaining({ vortexDisposition }),
         scope,
         targetRoot,
         attrs,

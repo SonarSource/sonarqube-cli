@@ -20,7 +20,6 @@
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
-import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
@@ -44,7 +43,7 @@ export async function integrateAntigravity(
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Antigravity', auth, console);
+  await displayAgentIntegratePrelude('Antigravity', auth, console);
 
   const vortex = await resolveVortexSetup(auth, console);
 
@@ -52,16 +51,12 @@ export async function integrateAntigravity(
 
   const integrationOptions: AntigravityIntegrationOptions = {
     ...options,
-    projectRoot: integrateCtx.project.projectRoot,
     vortexDisposition: vortex.disposition,
   };
 
   const attrs = buildRecordedIntegrationAttrs({
-    baseAttrs: buildIntegrationAttrs(integrateCtx),
-    projectRoot: integrateCtx.project.projectRoot,
-    mainRepoRoot: integrateCtx.project.mainRepoRoot,
-    serverUrl: integrateCtx.serverUrl,
-    orgKey: integrateCtx.organization,
+    serverUrl: auth.serverUrl,
+    orgKey: auth.orgKey,
     contextAugmentation: vortex,
   });
 
@@ -86,16 +81,4 @@ export async function integrateAntigravity(
       });
     },
   });
-}
-
-function buildIntegrationAttrs(ctx: {
-  serverUrl: string;
-  organization: string | undefined;
-  projectKey: string | undefined;
-}): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: ctx.projectKey ?? null,
-    serverUrl: ctx.serverUrl,
-    orgKey: ctx.organization ?? null,
-  };
 }

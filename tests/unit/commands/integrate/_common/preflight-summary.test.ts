@@ -20,106 +20,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  printAgentPreflightSummary,
-  printGitPreflightSummary,
-} from '@/commands/integrate/_common/preflight-summary.ts';
-import * as token from '@/core/auth/token.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { printGitPreflightSummary } from '@/commands/integrate/_common/preflight-summary.ts';
 import * as processLib from '@/core/process/process.ts';
-import type { DiscoveredProject } from '@/core/project-info.ts';
-import { okAsync } from '@/core/result.ts';
-import { ComponentsClient } from '@/core/server/components.ts';
-import { OrganizationsClient } from '@/core/server/organizations.ts';
 import type { PhaseItem } from '@/core/ui/console.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
-
-const BASE_PROJECT: DiscoveredProject = {
-  repoRoot: '/workspace/app',
-  projectRoot: '/workspace/app',
-  configSources: [],
-};
 
 let fake: FakeConsole;
 
 beforeEach(() => {
   fake = new FakeConsole();
-});
-
-describe('printAgentPreflightSummary', () => {
-  let checkTokenStatusSpy: ReturnType<typeof spyOn>;
-  let componentExistsSpy: ReturnType<typeof spyOn>;
-  let isOrganizationAccessibleSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
-      okAsync(true),
-    );
-    isOrganizationAccessibleSpy = spyOn(
-      OrganizationsClient.prototype,
-      'isOrganizationAccessible',
-    ).mockResolvedValue(true);
-  });
-
-  afterEach(() => {
-    checkTokenStatusSpy.mockRestore();
-    componentExistsSpy.mockRestore();
-    isOrganizationAccessibleSpy.mockRestore();
-  });
-
-  it('renders Connection and Project sections with config source from files', async () => {
-    await printAgentPreflightSummary(
-      {
-        serverUrl: 'https://sonarcloud.io',
-        organization: 'my-org',
-        token: 'token',
-        project: {
-          ...BASE_PROJECT,
-          configSources: ['sonar-project.properties', '.sonarlint/connectedMode.json'],
-        },
-        projectKey: 'my-org_app',
-      },
-      fake,
-    );
-
-    expect(getPhaseItems('Connection').find((i) => i.text === 'Token')?.detail).toBe('valid');
-    expect(getPhaseItems('Project').find((i) => i.text === 'Config source')?.detail).toBe(
-      'sonar-project.properties, .sonarlint/connectedMode.json',
-    );
-  });
-
-  it('shows setup failed guidance when the server is unreachable', async () => {
-    checkTokenStatusSpy.mockResolvedValue({ status: 'unreachable' });
-
-    const error = await captureRejection(
-      printAgentPreflightSummary(
-        {
-          serverUrl: 'https://sonar.example.com',
-          token: 'token',
-          project: BASE_PROJECT,
-        },
-        fake,
-      ),
-    );
-
-    expect(error).toBeInstanceOf(CommandFailedError);
-    expect((error as Error).message).toBe('Server is unreachable.');
-
-    expect(getPhaseItems('Connection').find((i) => i.text === 'Token')?.detail).toBe('unreachable');
-    expect(
-      fake.calls.find((c) => c.method === 'outro' && c.args[0] === 'Setup failed'),
-    ).toBeDefined();
-    expect(
-      fake.calls.find(
-        (c) => c.method === 'info' && String(c.args[0]).includes('Server could not be reached'),
-      ),
-    ).toBeDefined();
-    expect(
-      fake.calls.find((c) => c.method === 'text' && String(c.args[0]).includes('SONAR_HOST_URL')),
-    ).toBeDefined();
-  });
 });
 
 describe('printGitPreflightSummary', () => {
@@ -151,13 +61,4 @@ describe('printGitPreflightSummary', () => {
 function getPhaseItems(title: string): PhaseItem[] {
   const call = fake.calls.find((c) => c.method === 'phase' && c.args[0] === title);
   return (call?.args[1] ?? []) as PhaseItem[];
-}
-
-async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
-  try {
-    await promise;
-  } catch (error) {
-    return error;
-  }
-  throw new Error('expected promise to reject');
 }
