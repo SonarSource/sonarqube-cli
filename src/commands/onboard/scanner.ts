@@ -54,6 +54,7 @@ export async function runFirstAnalysis(
     `-Dsonar.working.directory=${join(directory, 'work')}`,
     `-Dsonar.scanner.metadataFilePath=${reportPath}`,
     '-Dsonar.qualitygate.wait=false',
+    '-Dsonar.scanner.autoconfig.enabled=true',
   ];
   if (auth.orgKey) args.push(`-Dsonar.organization=${auth.orgKey}`);
   if (projectName !== undefined) args.push(`-Dsonar.projectName=${projectName}`);

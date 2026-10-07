@@ -928,11 +928,12 @@ describe('sonar onboard', () => {
     const server = await harness.newFakeServer().start();
     harness.withAuth(server.baseUrl(), TOKEN);
     seedScanner();
-    const properties = 'sonar.projectKey=configured-key\nsonar.sources=src\n';
+    const properties = 'sonar.projectKey=configured-key\nsonar.scanner.autoconfig.enabled=false\n';
     harness.cwd.writeFile('sonar-project.properties', properties);
     const result = await runText('onboard');
     expect(result.exitCode).toBe(0);
     expect(invocations()[0].args).toContain('-Dsonar.projectKey=configured-key');
+    expect(invocations()[0].args).toContain('-Dsonar.scanner.autoconfig.enabled=true');
     expect(harness.cwd.file('sonar-project.properties').asText()).toBe(properties);
   });
 
@@ -1011,15 +1012,20 @@ describe('sonar onboard', () => {
   );
 
   it.each(['pom.xml', 'build.gradle.kts', 'app.csproj'])(
-    'rejects builds requiring dedicated scanners: %s',
+    'uses Scanner CLI automatic configuration regardless of build marker: %s',
     async (file) => {
       const server = await harness.newFakeServer().start();
       harness.withAuth(server.baseUrl(), TOKEN);
+      seedScanner();
       harness.cwd.writeFile(file, '');
       const result = await runText('onboard --project-key new-project');
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('requires SonarScanner for');
-      expect(harness.cliHome.file('bin').exists()).toBe(false);
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      expect(invocations()).toHaveLength(1);
+      expect(invocations()[0].args).toContain('-Dsonar.scanner.autoconfig.enabled=true');
+      expect(result.stdout).toContain('Analysis complete');
+      expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(
+        true,
+      );
     },
   );
 

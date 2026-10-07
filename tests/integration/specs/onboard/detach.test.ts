@@ -142,6 +142,7 @@ describe('sonar onboard --detach', () => {
     );
     expect(invocation.cwd).toBe(join(harness.cwd.path, 'service'));
     expect(invocation.args).toContain('-Dsonar.projectName=Background Service');
+    expect(invocation.args).toContain('-Dsonar.scanner.autoconfig.enabled=true');
     expect(invocation.args.join(' ')).not.toContain(TOKEN);
     expect(invocation.network.proxyHost).toBeUndefined();
     expect(invocation.network.proxyPort).toBeUndefined();

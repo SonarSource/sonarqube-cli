@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 
@@ -85,23 +85,6 @@ function validateProjectKey(key: string): string {
     );
   }
   return key;
-}
-
-function assertSupportedBuild(projectRoot: string): void {
-  const files = readdirSync(projectRoot);
-  let scanner: string | undefined;
-  if (existsSync(join(projectRoot, 'pom.xml'))) scanner = 'Maven';
-  else if (
-    files.some((name) =>
-      ['build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts'].includes(name),
-    )
-  )
-    scanner = 'Gradle';
-  else if (files.some((name) => /\.(slnx?|csproj|vbproj|fsproj)$/i.test(name))) scanner = '.NET';
-  if (scanner)
-    throw new CommandFailedError(`This project requires SonarScanner for ${scanner}.`, {
-      remediationHint: `Use the dedicated SonarScanner for ${scanner} to create its first analysis.`,
-    });
 }
 
 async function resolveTarget(
@@ -214,8 +197,6 @@ async function runOnboarding(
     );
     return;
   }
-  assertSupportedBuild(projectRoot);
-
   const scanner = await installSonarScanner(progress);
   const directory = options.detach
     ? createDetachedWorkDirectory()
