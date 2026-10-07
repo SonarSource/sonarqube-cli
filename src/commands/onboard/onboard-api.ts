@@ -32,6 +32,9 @@ interface ComputeTask {
   errorMessage?: string;
 }
 
+export const ONBOARD_VISIBILITIES = ['private', 'public'] as const;
+export type OnboardVisibility = (typeof ONBOARD_VISIBILITIES)[number];
+
 export class OnboardApiClient {
   readonly components: ComponentsClient;
   readonly issues: IssuesClient;
@@ -41,13 +44,18 @@ export class OnboardApiClient {
     this.issues = new IssuesClient(http);
   }
 
-  createProject(projectKey: string, name: string, organization?: string) {
+  createProject(
+    projectKey: string,
+    name: string,
+    organization?: string,
+    visibility: OnboardVisibility = 'private',
+  ) {
     return this.http.postFormJson<{ project: { key: string; name: string } }>(
       '/api/projects/create',
       {
         project: projectKey,
         name,
-        visibility: 'private',
+        visibility,
         ...(organization ? { organization } : {}),
       },
     );

@@ -18,13 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installSonarScanner } from '@/core/host/install/sonar-scanner.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import { isSonarQubeCloud } from '@/core/server/sonarcloud-region.ts';
 import type { IssuesSearchResponse } from '@/core/server/types.ts';
@@ -32,7 +33,7 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { DEFAULT_STATUSES } from '../list/issues.ts';
-import { OnboardApiClient } from './onboard-api.ts';
+import { OnboardApiClient, type OnboardVisibility } from './onboard-api.ts';
 import { ONBOARD_ISSUES_PAGE_SIZE, printOnboardReport, resolveOnboardFormat } from './output.ts';
 import { OnboardProgressConsole } from './progress-console.ts';
 import { generateProjectTarget } from './project-key.ts';
@@ -41,8 +42,38 @@ import { scannerNetworkEnv } from './scanner-network.ts';
 
 export interface OnboardOptions {
   projectKey?: string;
+  path?: string;
+  name?: string;
+  visibility?: string;
   format?: string;
   verbose?: boolean;
+}
+
+function resolveSourcePath(path: string | undefined): string {
+  if (path === undefined) return process.cwd();
+  if (!path.trim()) throw new InvalidOptionError('--path must not be empty.');
+  const directory = resolve(path);
+  try {
+    if (statSync(directory).isDirectory()) return canonicalizePath(directory);
+  } catch {
+    // Missing or inaccessible directories are invalid invocation targets.
+  }
+  throw new InvalidOptionError(`--path must point to an existing directory: '${path}'.`);
+}
+
+function validateProjectName(name: string): string {
+  if (!name.trim() || /[\u0000-\u001f\u007f]/.test(name)) {
+    throw new InvalidOptionError(
+      '--name must be non-empty and must not contain control characters.',
+    );
+  }
+  return name.trim();
+}
+
+function resolveVisibility(visibility: string | undefined): OnboardVisibility {
+  if (visibility === undefined) return 'private';
+  if (visibility === 'private' || visibility === 'public') return visibility;
+  throw new InvalidOptionError('--visibility must be private or public.');
 }
 
 function validateProjectKey(key: string): string {
@@ -76,13 +107,14 @@ async function resolveTarget(
   ctx: CommandAuthenticatedInvocationContext,
   progress: Console,
 ): Promise<{ projectKey: string; projectRoot: string; projectName: string }> {
+  const sourceRoot = resolveSourcePath(options.path);
   if (options.projectKey !== undefined)
     return {
       projectKey: validateProjectKey(options.projectKey),
-      projectRoot: process.cwd(),
-      projectName: basename(process.cwd()),
+      projectRoot: sourceRoot,
+      projectName: basename(sourceRoot),
     };
-  const project = await discoverProject(process.cwd(), {
+  const project = await discoverProject(sourceRoot, {
     auth: null,
     useKnownMappings: false,
     silent: true,
@@ -93,6 +125,7 @@ async function resolveTarget(
       project.projectRoot,
       project.repoRoot,
       ctx.auth.orgKey,
+      options.path !== undefined,
     );
     progress.info(`Generated project key '${target.projectKey}' for '${target.projectName}'.`);
     return target;
@@ -113,8 +146,8 @@ async function resolveTarget(
   progress.info(`Using project key '${project.projectKey}' from project configuration.`);
   return {
     projectKey: validateProjectKey(project.projectKey),
-    projectRoot: project.projectRoot,
-    projectName: basename(project.projectRoot),
+    projectRoot: options.path !== undefined ? sourceRoot : project.projectRoot,
+    projectName: basename(options.path !== undefined ? sourceRoot : project.projectRoot),
   };
 }
 
@@ -140,30 +173,52 @@ async function runOnboarding(
 ): Promise<void> {
   const { auth, console } = ctx;
   const progress = new OnboardProgressConsole(console, format);
-  const { projectKey, projectRoot, projectName } = await resolveTarget(options, ctx, progress);
+  const visibility = resolveVisibility(options.visibility);
+  const requestedName = options.name !== undefined ? validateProjectName(options.name) : undefined;
+  const target = await resolveTarget(options, ctx, progress);
+  const { projectKey, projectRoot } = target;
+  const projectName = requestedName ?? target.projectName;
   if ((auth.connectionType === 'cloud' || isSonarQubeCloud(auth.serverUrl)) && !auth.orgKey) {
     throw new CommandFailedError('A SonarQube Cloud organization is required for onboarding.', {
       remediationHint: 'Run sonar auth login --org <organization> first.',
     });
   }
-  assertSupportedBuild(projectRoot);
   const api = new OnboardApiClient(ctx.connection.httpClient);
-  if (await api.components.componentExists(projectKey).orThrow())
-    throw new CommandFailedError(
-      `Project '${projectKey}' already exists. Onboarding creates a new project.`,
-      { remediationHint: 'Choose a different --project-key to create another project.' },
+  const dashboard = `${auth.serverUrl.replace(/\/$/, '')}/dashboard?id=${encodeURIComponent(projectKey)}`;
+  const existingProject = await api.components.getComponent(projectKey).orThrow();
+  if (existingProject) {
+    progress.warn(
+      `Project '${projectKey}' already exists. Onboarding skipped; no analysis was run.`,
     );
+    printOnboardReport(
+      {
+        projectKey,
+        projectName: existingProject.name ?? projectName,
+        analysis: { status: 'skipped', id: null },
+        qualityGate: null,
+        dashboardUrl: dashboard,
+        issues: null,
+        paging: null,
+        scannerLogPath: null,
+        messages: console.getMessagesForFormattedOutput(),
+        warnings: progress.warnings,
+      },
+      format,
+      console,
+    );
+    return;
+  }
+  assertSupportedBuild(projectRoot);
 
   const scanner = await installSonarScanner(progress);
   const directory = mkdtempSync(join(tmpdir(), 'sonar-onboard-'));
-  const dashboard = `${auth.serverUrl.replace(/\/$/, '')}/dashboard?id=${encodeURIComponent(projectKey)}`;
   let created = false;
   try {
     const networkEnv = await scannerNetworkEnv(auth.serverUrl, scanner.javaPath, directory);
-    await api.createProject(projectKey, projectName, auth.orgKey).orThrow();
+    await api.createProject(projectKey, projectName, auth.orgKey, visibility).orThrow();
     created = true;
     noteProject(auth, projectKey);
-    progress.success(`Created private unbound project '${projectKey}'.`);
+    progress.success(`Created ${visibility} unbound project '${projectKey}'.`);
     const scan = () =>
       runFirstAnalysis(
         scanner,
@@ -173,6 +228,7 @@ async function runOnboarding(
         directory,
         networkEnv,
         options.verbose ? { console, channel: format === 'json' ? 'stderr' : 'stdout' } : undefined,
+        requestedName,
       );
     if (options.verbose) progress.info('Analyzing source code');
     const { taskId, logPath, stdout, stderr } = options.verbose

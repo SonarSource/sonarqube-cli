@@ -19,10 +19,11 @@
  */
 
 import { createHash } from 'node:crypto';
-import { basename } from 'node:path';
+import { basename, relative } from 'node:path';
 
 import { getGitRemote } from '@/core/host/git/discover.ts';
 import { resolveGitRepoRoot, resolveMainWorktreeRoot } from '@/core/host/git/worktree.ts';
+import { normalizePath } from '@/core/io/fs-utils.ts';
 
 interface RepositoryIdentity {
   name: string;
@@ -74,14 +75,20 @@ export async function generateProjectTarget(
   invocationRoot: string,
   repoRoot: string | undefined,
   organization: string | undefined,
+  scopeToDirectory = false,
 ): Promise<{ projectKey: string; projectRoot: string; projectName: string }> {
   const gitRoot = repoRoot ? await resolveGitRepoRoot(invocationRoot) : null;
-  const projectRoot = gitRoot ?? invocationRoot;
+  const projectRoot = scopeToDirectory ? invocationRoot : (gitRoot ?? invocationRoot);
   const repository = gitRoot ? repositoryIdentity(await getGitRemote(gitRoot)) : undefined;
+  const subdirectory = gitRoot
+    ? normalizePath(relative(gitRoot, projectRoot)).normalize('NFC')
+    : '';
   const nameRoot =
     gitRoot && !repository ? ((await resolveMainWorktreeRoot(gitRoot)) ?? gitRoot) : projectRoot;
-  const projectName = (repository?.name ?? basename(nameRoot)) || 'project';
-  const identity = repository?.identity ?? `directory:${projectName.normalize('NFC')}`;
+  const repositoryName = (repository?.name ?? basename(nameRoot)) || 'project';
+  const projectName = subdirectory ? basename(projectRoot) : repositoryName;
+  const repositoryId = repository?.identity ?? `directory:${repositoryName.normalize('NFC')}`;
+  const identity = subdirectory ? JSON.stringify([repositoryId, subdirectory]) : repositoryId;
   const hash = createHash('sha256')
     .update(JSON.stringify([organization ?? '', identity]))
     .digest('hex')

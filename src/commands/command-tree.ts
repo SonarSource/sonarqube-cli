@@ -166,6 +166,7 @@ import {
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
 } from './list/projects.ts';
 import { onboard, type OnboardOptions } from './onboard/index.ts';
+import { ONBOARD_VISIBILITIES } from './onboard/onboard-api.ts';
 import { ONBOARD_FORMATS } from './onboard/output.ts';
 import { orgImport, type OrgImportOptions } from './org/import.ts';
 import { projectWait, type ProjectWaitOptions } from './project/wait.ts';
@@ -700,6 +701,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option(
       '--project-key <key>',
       'Key for the new project; detected from configuration or generated deterministically when omitted',
+    )
+    .option(
+      '--path <directory>',
+      'Directory to onboard (relative or absolute); sets the exact scan root',
+    )
+    .option('--name <name>', 'Display name for the new project; does not affect its key')
+    .addOption(
+      new SonarOption('--visibility <visibility>', 'Visibility of the new project')
+        .choices(ONBOARD_VISIBILITIES)
+        .default('private'),
     )
     .addOption(formatOption(ONBOARD_FORMATS, 'text'))
     .option('--verbose', 'Stream scanner logs in real time (to stderr with --format json)')

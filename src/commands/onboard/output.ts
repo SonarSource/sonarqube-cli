@@ -32,12 +32,12 @@ export const ONBOARD_ISSUES_PAGE_SIZE = 20;
 export interface OnboardReport {
   projectKey: string;
   projectName: string;
-  analysis: { status: 'completed'; id: string };
+  analysis: { status: 'completed'; id: string } | { status: 'skipped'; id: null };
   qualityGate: string | null;
   dashboardUrl: string;
   issues: SonarQubeIssue[] | null;
   paging: Paging | null;
-  scannerLogPath: string;
+  scannerLogPath: string | null;
   scannerOutput?: { stdout: string; stderr: string };
   messages: string[];
   warnings: string[];
@@ -70,6 +70,10 @@ export function printOnboardReport(
 ): void {
   if (format === 'json') {
     console.print(JSON.stringify(report, null, 2));
+    return;
+  }
+  if (report.analysis.status === 'skipped') {
+    console.print(`Project dashboard: ${report.dashboardUrl}`);
     return;
   }
   const total = report.paging?.total;
