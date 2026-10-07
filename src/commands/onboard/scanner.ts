@@ -24,13 +24,16 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
-import { scannerJavaArgs, scannerJavaPath } from '@/core/host/install/sonar-scanner.ts';
+import {
+  type ScannerInstallation,
+  scannerJavaArgs,
+} from '@/core/host/install/scanner-discovery.ts';
 import { parseProperties } from '@/core/io/properties.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 export async function runFirstAnalysis(
-  scannerHome: string,
+  scanner: ScannerInstallation,
   projectRoot: string,
   projectKey: string,
   auth: ResolvedAuth,
@@ -40,7 +43,7 @@ export async function runFirstAnalysis(
 ): Promise<string> {
   const reportPath = join(directory, 'report-task.txt');
   const args = [
-    ...scannerJavaArgs(scannerHome, projectRoot),
+    ...scannerJavaArgs(scanner, projectRoot),
     `-Dsonar.host.url=${auth.serverUrl}`,
     `-Dsonar.projectKey=${projectKey}`,
     `-Dsonar.projectBaseDir=${projectRoot}`,
@@ -52,7 +55,7 @@ export async function runFirstAnalysis(
 
   console.info(`Analyzing ${projectRoot}`);
   const result = await spawnProcessWithTimeout(
-    scannerJavaPath(scannerHome),
+    scanner.javaPath,
     args,
     {
       cwd: projectRoot,

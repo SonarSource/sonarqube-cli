@@ -22,12 +22,36 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const args = process.argv.slice(2);
-if (args.includes('--version')) {
-  console.log('SonarScanner CLI 8.1.0.6389');
-  process.exit(Number(process.env.ONBOARD_STUB_VERSION_EXIT_CODE ?? 0));
-}
 const property = (name: string) =>
   args.find((arg) => arg.startsWith(`-D${name}=`))?.slice(name.length + 3);
+if (args.includes('--version')) {
+  const home = property('scanner.home');
+  const external = !home || home === process.env.ONBOARD_STUB_SCANNER_HOME;
+  const version = external
+    ? (process.env.ONBOARD_STUB_SCANNER_VERSION ?? '8.1.0.6389')
+    : '8.1.0.6389';
+  console.log(`SonarScanner CLI ${version}`);
+  process.exit(
+    Number(
+      (!home ? process.env.ONBOARD_STUB_PATH_VERSION_EXIT_CODE : undefined) ??
+        process.env.ONBOARD_STUB_VERSION_EXIT_CODE ??
+        0,
+    ),
+  );
+}
+const dumpPath = property('sonar.scanner.internal.dumpToFile');
+if (dumpPath) {
+  const escape = (value: string) => value.replaceAll('\\', '\\\\').replaceAll(':', '\\:');
+  writeFileSync(
+    dumpPath,
+    [
+      `scanner.home=${escape(process.env.ONBOARD_STUB_SCANNER_HOME ?? '')}`,
+      `java.home=${escape(process.env.ONBOARD_STUB_JAVA_HOME ?? '')}`,
+      `java.class.path=${escape(process.env.ONBOARD_STUB_SCANNER_CLASSPATH ?? '')}`,
+    ].join('\n'),
+  );
+  process.exit(0);
+}
 if (process.env.ONBOARD_STUB_LOG_PATH) {
   appendFileSync(
     process.env.ONBOARD_STUB_LOG_PATH,

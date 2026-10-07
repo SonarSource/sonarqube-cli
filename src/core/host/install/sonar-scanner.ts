@@ -35,6 +35,11 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { type PlatformInfo, SONAR_SCANNER_BINARY_NAME } from './install-types.ts';
 import { ensureBinDirectory } from './install-utils.ts';
+import {
+  discoverSonarScanner,
+  type ScannerInstallation,
+  verifyScanner,
+} from './scanner-discovery.ts';
 import { downloadBinary } from './sonarsource-releases.ts';
 
 export const SONAR_SCANNER_VERSION = '8.1.0.6389';
@@ -73,8 +78,13 @@ export function scannerArchive(platform: PlatformInfo) {
   return { ...archive, directoryName, url };
 }
 
-export function scannerJavaPath(scannerHome: string): string {
-  return join(scannerHome, 'jre', 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+function managedScanner(home: string): ScannerInstallation {
+  return {
+    home,
+    javaPath: join(home, 'jre', 'bin', process.platform === 'win32' ? 'java.exe' : 'java'),
+    classPath: join(home, 'lib', `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`),
+    version: SONAR_SCANNER_VERSION,
+  };
 }
 
 export function verifyScannerArchive(bytes: Buffer, platform: PlatformInfo): void {
@@ -82,30 +92,6 @@ export function verifyScannerArchive(bytes: Buffer, platform: PlatformInfo): voi
   if (checksum !== scannerArchive(platform).sha256) {
     throw new CommandFailedError('SonarScanner archive checksum verification failed.');
   }
-}
-
-export function scannerJavaArgs(scannerHome: string, projectRoot: string): string[] {
-  return [
-    '-Djava.awt.headless=true',
-    '-Djdk.http.auth.tunneling.disabledSchemes=',
-    '-classpath',
-    join(scannerHome, 'lib', `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`),
-    `-Dscanner.home=${scannerHome}`,
-    `-Dproject.home=${projectRoot}`,
-    'org.sonarsource.scanner.cli.Main',
-  ];
-}
-
-async function verifyScanner(scannerHome: string): Promise<void> {
-  const result = await spawnProcessWithTimeout(
-    scannerJavaPath(scannerHome),
-    [...scannerJavaArgs(scannerHome, scannerHome), '--version'],
-    { stdout: 'pipe', stderr: 'pipe' },
-    30000,
-    'SonarScanner installation verification timed out.',
-  );
-  if (result.exitCode !== 0)
-    throw new CommandFailedError('SonarScanner installation verification failed.');
 }
 
 async function unpackScanner(archivePath: string, destination: string): Promise<void> {
@@ -136,19 +122,26 @@ async function unpackScanner(archivePath: string, destination: string): Promise<
     });
 }
 
-export async function installSonarScanner(console: Console): Promise<string> {
+export async function installSonarScanner(console: Console): Promise<ScannerInstallation> {
+  const existing = await discoverSonarScanner();
+  if (existing) {
+    console.info(`Using installed SonarScanner ${existing.version} from ${existing.home}.`);
+    return existing;
+  }
   const archive = scannerArchive(detectPlatform());
   const binDir = ensureBinDirectory();
   const scannerHome = join(BIN_DIR, archive.directoryName);
-  if (existsSync(scannerJavaPath(scannerHome))) {
-    await verifyScanner(scannerHome);
+  const scanner = managedScanner(scannerHome);
+  if (existsSync(scanner.javaPath)) {
+    await verifyScanner(scanner);
     recordInstalledDependency(
       SONAR_SCANNER_BINARY_NAME,
       SONAR_SCANNER_VERSION,
       scannerHome,
       console,
     );
-    return scannerHome;
+    console.info(`Using cached SonarScanner ${SONAR_SCANNER_VERSION} from ${scannerHome}.`);
+    return scanner;
   }
 
   const staging = mkdtempSync(join(binDir, '.sonar-scanner-'));
@@ -161,10 +154,10 @@ export async function installSonarScanner(console: Console): Promise<string> {
     verifyScannerArchive(readFileSync(archivePath), detectPlatform());
     await unpackScanner(archivePath, staging);
     const extracted = join(staging, archive.directoryName);
-    await verifyScanner(extracted);
+    await verifyScanner(managedScanner(extracted));
     // Another onboarding invocation may have completed installation while this one downloaded.
     if (!existsSync(scannerHome)) renameSync(extracted, scannerHome);
-    await verifyScanner(scannerHome);
+    await verifyScanner(scanner);
     recordInstalledDependency(
       SONAR_SCANNER_BINARY_NAME,
       SONAR_SCANNER_VERSION,
@@ -172,7 +165,7 @@ export async function installSonarScanner(console: Console): Promise<string> {
       console,
     );
     console.success(`SonarScanner installed at ${scannerHome}`);
-    return scannerHome;
+    return scanner;
   } catch (cause) {
     if (cause instanceof CommandFailedError) throw cause;
     throw new CommandFailedError('Could not install SonarScanner.', {

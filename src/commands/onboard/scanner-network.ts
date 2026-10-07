@@ -28,12 +28,11 @@ import {
   getNetworkConfigOrThrow,
 } from '@/core/host/connectivity/network-config.ts';
 import { pemToPkcs12 } from '@/core/host/crypto/pkcs12.ts';
-import { scannerJavaPath } from '@/core/host/install/sonar-scanner.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 export async function scannerNetworkEnv(
   serverUrl: string,
-  scannerHome: string,
+  javaPath: string,
   temporaryDirectory: string,
 ): Promise<NodeJS.ProcessEnv> {
   const config = await getNetworkConfigOrThrow();
@@ -75,7 +74,7 @@ export async function scannerNetworkEnv(
       writeFileSync(certPath, certificate, { mode: 0o600 });
       // Scanner distributions omit the keytool executable but retain its java.base module.
       const result = await spawnProcessWithTimeout(
-        scannerJavaPath(scannerHome),
+        javaPath,
         [
           '-m',
           'java.base/sun.security.tools.keytool.Main',
