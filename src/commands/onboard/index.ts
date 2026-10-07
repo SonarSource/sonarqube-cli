@@ -30,6 +30,7 @@ import { isSonarQubeCloud } from '@/core/server/sonarcloud-region.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { OnboardApiClient } from './onboard-api.ts';
+import { generateProjectTarget } from './project-key.ts';
 import { runFirstAnalysis } from './scanner.ts';
 import { scannerNetworkEnv } from './scanner-network.ts';
 
@@ -66,20 +67,28 @@ function assertSupportedBuild(projectRoot: string): void {
 async function resolveTarget(
   options: OnboardOptions,
   ctx: CommandAuthenticatedInvocationContext,
-): Promise<{ projectKey: string; projectRoot: string }> {
+): Promise<{ projectKey: string; projectRoot: string; projectName: string }> {
   if (options.projectKey !== undefined)
-    return { projectKey: validateProjectKey(options.projectKey), projectRoot: process.cwd() };
+    return {
+      projectKey: validateProjectKey(options.projectKey),
+      projectRoot: process.cwd(),
+      projectName: basename(process.cwd()),
+    };
   const project = await discoverProject(process.cwd(), {
     auth: null,
     useKnownMappings: false,
     silent: true,
     console: ctx.console,
   });
-  if (!project.projectKey)
-    throw new InvalidOptionError(
-      'Could not determine a project key.',
-      'Run: sonar onboard --project-key <key>',
+  if (!project.projectKey) {
+    const target = await generateProjectTarget(
+      project.projectRoot,
+      project.repoRoot,
+      ctx.auth.orgKey,
     );
+    ctx.console.info(`Generated project key '${target.projectKey}' for '${target.projectName}'.`);
+    return target;
+  }
   if (
     (project.serverUrl &&
       project.serverUrl.replace(/\/$/, '') !== ctx.auth.serverUrl.replace(/\/$/, '')) ||
@@ -94,7 +103,11 @@ async function resolveTarget(
     );
   }
   ctx.console.info(`Using project key '${project.projectKey}' from project configuration.`);
-  return { projectKey: validateProjectKey(project.projectKey), projectRoot: project.projectRoot };
+  return {
+    projectKey: validateProjectKey(project.projectKey),
+    projectRoot: project.projectRoot,
+    projectName: basename(project.projectRoot),
+  };
 }
 
 export async function onboard(
@@ -102,7 +115,7 @@ export async function onboard(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { auth, console } = ctx;
-  const { projectKey, projectRoot } = await resolveTarget(options, ctx);
+  const { projectKey, projectRoot, projectName } = await resolveTarget(options, ctx);
   if ((auth.connectionType === 'cloud' || isSonarQubeCloud(auth.serverUrl)) && !auth.orgKey) {
     throw new CommandFailedError('A SonarQube Cloud organization is required for onboarding.', {
       remediationHint: 'Run sonar auth login --org <organization> first.',
@@ -113,20 +126,21 @@ export async function onboard(
   if (await api.components.componentExists(projectKey).orThrow())
     throw new CommandFailedError(
       `Project '${projectKey}' already exists. Onboarding creates a new project.`,
+      { remediationHint: 'Choose a different --project-key to create another project.' },
     );
 
-  const scannerHome = await installSonarScanner(console);
+  const scanner = await installSonarScanner(console);
   const directory = mkdtempSync(join(tmpdir(), 'sonar-onboard-'));
   const dashboard = `${auth.serverUrl.replace(/\/$/, '')}/dashboard?id=${encodeURIComponent(projectKey)}`;
   let created = false;
   try {
-    const networkEnv = await scannerNetworkEnv(auth.serverUrl, scannerHome, directory);
-    await api.createProject(projectKey, basename(projectRoot), auth.orgKey).orThrow();
+    const networkEnv = await scannerNetworkEnv(auth.serverUrl, scanner.javaPath, directory);
+    await api.createProject(projectKey, projectName, auth.orgKey).orThrow();
     created = true;
     noteProject(auth, projectKey);
     console.success(`Created private unbound project '${projectKey}'.`);
     const taskId = await runFirstAnalysis(
-      scannerHome,
+      scanner,
       projectRoot,
       projectKey,
       auth,
@@ -149,7 +163,7 @@ export async function onboard(
       `Project '${projectKey}' was created, but its first analysis could not be completed: ${message}`,
       {
         cause,
-        remediationHint: `The project and scanner installation have been retained. Check ${dashboard} and rerun the scanner from ${scannerHome} after resolving the error.`,
+        remediationHint: `The project and scanner installation have been retained. Check ${dashboard} and rerun the scanner from ${scanner.home} after resolving the error.`,
       },
     );
   } finally {

@@ -27,7 +27,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { rootCertificates } from 'node:tls';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -37,7 +37,7 @@ import { scannerArchive, SONAR_SCANNER_VERSION } from '@/core/host/install/sonar
 import type { CliState } from '@/core/state/state.ts';
 
 import { IS_WINDOWS, normalizePath, TestHarness } from '../../harness';
-import { initGitRepo } from '../hook/git-test-helpers.ts';
+import { commitFile, git, initGitRepo } from '../hook/git-test-helpers.ts';
 
 const TOKEN = 'onboard-test-token';
 
@@ -53,6 +53,13 @@ describe('sonar onboard', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    // Keep user-installed scanners out of tests that exercise the managed installation.
+    const bin = join(harness.userHome.path, 'path-bin');
+    mkdirSync(bin, { recursive: true });
+    const launcher = join(bin, IS_WINDOWS ? 'sonar-scanner.bat' : 'sonar-scanner');
+    writeFileSync(launcher, IS_WINDOWS ? '@echo off\r\nexit /b 1\r\n' : '#!/bin/sh\nexit 1\n');
+    if (!IS_WINDOWS) chmodSync(launcher, 0o755);
+    harness.withExtraEnv({ PATH: bin + delimiter + (process.env.PATH ?? '') });
   });
   afterEach(async () => {
     await harness.dispose();
@@ -90,20 +97,279 @@ describe('sonar onboard', () => {
       : [];
   }
 
+  function seedExternalScanner(version = '7.3.0.5189'): string {
+    const home = join(harness.userHome.path, 'external scanner');
+    const bin = join(home, 'bin');
+    const javaHome = join(home, 'custom java');
+    const java = join(javaHome, 'bin', IS_WINDOWS ? 'java.exe' : 'java');
+    const embeddedJavaHome = IS_WINDOWS ? join(home, 'jre') : javaHome;
+    const runtime = join(embeddedJavaHome, 'bin', IS_WINDOWS ? 'java.exe' : 'java');
+    const jar = join(home, 'lib', `sonar-scanner-cli-${version}.jar`);
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(join(embeddedJavaHome, 'bin'), { recursive: true });
+    mkdirSync(join(home, 'lib'), { recursive: true });
+    const stub = join(
+      import.meta.dir,
+      '../../resources',
+      IS_WINDOWS ? 'sonar-scanner-stub.exe' : 'sonar-scanner-stub',
+    );
+    copyFileSync(stub, runtime);
+    if (!IS_WINDOWS) chmodSync(java, 0o755);
+    writeFileSync(jar, '');
+    if (IS_WINDOWS) writeFileSync(join(bin, 'sonar-scanner.bat'), '@echo off\r\n');
+    else {
+      copyFileSync(stub, join(bin, 'sonar-scanner'));
+      chmodSync(join(bin, 'sonar-scanner'), 0o755);
+    }
+    harness.withExtraEnv({
+      PATH: bin + delimiter + (process.env.PATH ?? ''),
+      ONBOARD_STUB_SCANNER_HOME: home,
+      ONBOARD_STUB_JAVA_HOME: embeddedJavaHome,
+      ONBOARD_STUB_SCANNER_CLASSPATH: jar,
+      ONBOARD_STUB_SCANNER_VERSION: version,
+      ONBOARD_STUB_LOG_PATH: harness.cliHome.file('scanner-invocations.jsonl').path,
+    });
+    return home;
+  }
+
+  it('reuses an installed scanner on PATH with its own version and runtime', async () => {
+    const server = await harness.newFakeServer().start();
+    const binaries = await harness.newFakeBinariesServer().noArtifacts().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    const home = seedExternalScanner();
+    harness.withExtraEnv({ SONARQUBE_CLI_BINARIES_URL: binaries.baseUrl() });
+    const result = await harness.run('onboard --project-key new-project');
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Using installed SonarScanner 7.3.0.5189');
+    expect(invocations()[0].args).toContain(join(home, 'lib', 'sonar-scanner-cli-7.3.0.5189.jar'));
+    expect(binaries.getRecordedRequests().some((r) => r.path.endsWith('.zip'))).toBe(false);
+    expect(harness.cliHome.file('bin').exists()).toBe(false);
+    const state = harness.stateJsonFile.asJson() as CliState;
+    expect(state.dependencies.installed.some((d) => d.id === 'sonar-scanner')).toBe(false);
+    harness.state().withRawState(harness.stateJsonFile.asText());
+    expect((await harness.run('system reset --force')).exitCode).toBe(0);
+    expect(existsSync(home)).toBe(true);
+  });
+
+  it('prefers a usable PATH scanner over the cached managed scanner', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    seedExternalScanner();
+    const result = await harness.run('onboard --project-key new-project');
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Using installed SonarScanner 7.3.0.5189');
+    expect(invocations()[0].args.join(' ')).toContain('sonar-scanner-cli-7.3.0.5189.jar');
+  });
+
+  it('falls back to the managed cache when the PATH scanner is too old', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    seedExternalScanner('5.0.1.3006');
+    const result = await harness.run('onboard --project-key new-project');
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(result.stdout).toContain('Using cached SonarScanner');
+    expect(invocations()[0].args.join(' ')).toContain(
+      `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`,
+    );
+  });
+
+  it.skipIf(IS_WINDOWS)(
+    'falls back to the managed cache when the PATH launcher cannot run',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      seedScanner();
+      seedExternalScanner();
+      harness.withExtraEnv({ ONBOARD_STUB_PATH_VERSION_EXIT_CODE: '1' });
+      const result = await harness.run('onboard --project-key new-project');
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain('Using cached SonarScanner');
+    },
+  );
+
   it('requires authentication', async () => {
     const result = await harness.run('onboard --project-key new-project');
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('Not authenticated');
   });
 
-  it('fails without a project key and does not create or install anything', async () => {
+  it('generates a stable folder-based key without Git or project configuration', async () => {
     const server = await harness.newFakeServer().start();
     harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
     const result = await harness.run('onboard');
-    expect(result.exitCode).toBe(2);
-    expect(result.stdout + result.stderr).toContain('sonar onboard --project-key <key>');
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(false);
-    expect(harness.cliHome.file('bin').exists()).toBe(false);
+    expect(result.exitCode).toBe(0);
+    const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
+    const params = new URLSearchParams(creation.body);
+    const key = params.get('project')!;
+    expect(key).toMatch(/^cwd-[a-f0-9]{12}$/);
+    expect(params.get('name')).toBe('cwd');
+    expect(result.stdout + result.stderr).toContain(`Generated project key '${key}'`);
+    expect(invocations()[0].args).toContain(`-Dsonar.projectKey=${key}`);
+    expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+    const repeated = await harness.run('onboard');
+    expect(repeated.exitCode).toBe(1);
+    expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path === '/api/projects/create'),
+    ).toHaveLength(1);
+  });
+
+  it('uses the invocation folder when a parent contains an invalid Git marker', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.cwd.writeFile('.git', 'invalid worktree marker');
+    harness.cwd.writeFile('nested/app.js', '');
+    const directory = join(harness.cwd.path, 'nested');
+    expect((await harness.run('onboard', { cwd: directory })).exitCode).toBe(0);
+    const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
+    expect(new URLSearchParams(creation.body).get('project')).toMatch(/^nested-[a-f0-9]{12}$/);
+    expect(invocations()[0].cwd).toBe(directory);
+  });
+
+  it('uses credential-free Git origin identity consistently across HTTPS and SSH clones', async () => {
+    const server = await harness.newFakeServer().asSonarCloud().start();
+    harness.withAuth(server.baseUrl(), TOKEN, 'my-org');
+    seedScanner();
+    const remotes = [
+      'https://user:fake-password@EXAMPLE.test/owner/My-App.git?ignored=yes#fragment',
+      'git@example.test:owner/My-App.git',
+      'ssh://git@example.test:22/owner/My-App.git/',
+    ];
+    let key: string | undefined;
+    for (const [index, remote] of remotes.entries()) {
+      const checkout = join(harness.cwd.path, `checkout-${index}`);
+      initGitRepo(checkout);
+      git(['remote', 'add', 'origin', remote], checkout);
+      const result = await harness.run('onboard', { cwd: checkout });
+      expect(result.stdout + result.stderr).not.toContain('fake-password');
+      if (index === 0) {
+        expect(result.exitCode).toBe(0);
+        const creation = server
+          .getRecordedRequests()
+          .find((r) => r.path === '/api/projects/create')!;
+        const params = new URLSearchParams(creation.body);
+        key = params.get('project')!;
+        expect(key).toMatch(/^my-org_my-app-[a-f0-9]{12}$/);
+        expect(params.get('name')).toBe('My-App');
+        expect(invocations()[0].cwd).toBe(checkout);
+      } else {
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain(`Project '${key}' already exists`);
+      }
+    }
+    expect(
+      server.getRecordedRequests().filter((r) => r.path === '/api/projects/create'),
+    ).toHaveLength(1);
+  });
+
+  it('distinguishes repositories with the same name under different owners', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    initGitRepo(harness.cwd.path);
+    git(['remote', 'add', 'origin', 'https://example.test/alice/my-app.git'], harness.cwd.path);
+    expect((await harness.run('onboard')).exitCode).toBe(0);
+    git(['remote', 'set-url', 'origin', 'https://example.test/bob/my-app.git'], harness.cwd.path);
+    expect((await harness.run('onboard')).exitCode).toBe(0);
+    const keys = server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/api/projects/create')
+      .map((r) => new URLSearchParams(r.body).get('project'));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it('uses the main Git directory name without an origin, consistently from subdirectories and worktrees', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, 'README.md', 'test');
+    harness.cwd.writeFile('src/app.js', '');
+    const result = await harness.run('onboard', { cwd: join(harness.cwd.path, 'src') });
+    expect(result.exitCode).toBe(0);
+    const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
+    const params = new URLSearchParams(creation.body);
+    const key = params.get('project')!;
+    expect(key).toMatch(/^cwd-[a-f0-9]{12}$/);
+    expect(params.get('name')).toBe('cwd');
+    expect(invocations()[0].cwd).toBe(harness.cwd.path);
+    const worktree = join(harness.userHome.path, 'different-worktree-name');
+    git(['worktree', 'add', '-b', 'onboard-test', worktree], harness.cwd.path);
+    const repeated = await harness.run('onboard', { cwd: worktree });
+    expect(repeated.exitCode).toBe(1);
+    expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
+  });
+
+  it('namespaces generated keys by the active Cloud organization', async () => {
+    const server = await harness.newFakeServer().asSonarCloud().start();
+    seedScanner();
+    for (const organization of ['org-a', 'org-b']) {
+      harness.withAuth(server.baseUrl(), TOKEN, organization);
+      expect((await harness.run('onboard')).exitCode).toBe(0);
+    }
+    const creations = server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/api/projects/create')
+      .map((r) => new URLSearchParams(r.body));
+    expect(creations[0].get('project')).toMatch(/^org-a_cwd-[a-f0-9]{12}$/);
+    expect(creations[1].get('project')).toMatch(/^org-b_cwd-[a-f0-9]{12}$/);
+    expect(creations.map((params) => params.get('organization'))).toEqual(['org-a', 'org-b']);
+  });
+
+  it.each([
+    ['12345', '12345'],
+    ['Crème brûlée!!!', 'creme-brulee'],
+    ['🚀', 'project'],
+  ])('generates a valid key for directory %s', async (name, prefix) => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    harness.cwd.writeFile(`${name}/.keep`, '');
+    const result = await harness.run('onboard', { cwd: join(harness.cwd.path, name) });
+    expect(result.exitCode).toBe(0);
+    const creation = server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!;
+    expect(new URLSearchParams(creation.body).get('project')).toMatch(
+      new RegExp(`^${prefix}-[a-f0-9]{12}$`),
+    );
+  });
+
+  it('distinguishes folder names that normalize to the same readable key prefix', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    for (const name of ['My App', 'My-App']) {
+      harness.cwd.writeFile(`${name}/.keep`, '');
+      expect((await harness.run('onboard', { cwd: join(harness.cwd.path, name) })).exitCode).toBe(
+        0,
+      );
+    }
+    const keys = server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/api/projects/create')
+      .map((r) => new URLSearchParams(r.body).get('project'));
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys.every((key) => /^my-app-[a-f0-9]{12}$/.test(key!))).toBe(true);
+  });
+
+  it('generates the same key for the same directory name in different locations', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    for (const parent of ['one', 'two']) harness.cwd.writeFile(`${parent}/my-app/.keep`, '');
+    expect(
+      (await harness.run('onboard', { cwd: join(harness.cwd.path, 'one', 'my-app') })).exitCode,
+    ).toBe(0);
+    const key = new URLSearchParams(
+      server.getRecordedRequests().find((r) => r.path === '/api/projects/create')!.body,
+    ).get('project');
+    const repeated = await harness.run('onboard', { cwd: join(harness.cwd.path, 'two', 'my-app') });
+    expect(repeated.exitCode).toBe(1);
+    expect(repeated.stdout + repeated.stderr).toContain(`Project '${key}' already exists`);
   });
 
   it.each(['1234', 'bad/key', ' ', ''])(

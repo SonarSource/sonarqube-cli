@@ -698,7 +698,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .rootHelp({ category: 'core' })
     .option(
       '--project-key <key>',
-      'Key for the new project; detected from project configuration when omitted',
+      'Key for the new project; detected from configuration or generated deterministically when omitted',
     )
     .authenticatedAction((ctx, options: OnboardOptions) => onboard(options, ctx));
 
