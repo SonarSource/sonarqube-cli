@@ -27,6 +27,7 @@
 import { NetworkConfigError } from '@/core/errors.ts';
 import { errAsync, okAsync, ResultAsync } from '@/core/result.ts';
 import {
+  HTTP_STATUS_ACCEPTED,
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -123,7 +124,7 @@ export class SonarHttpClient {
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       return new ServiceUnavailableError();
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
+    if ((method === 'POST' || method === 'GET') && response.status === HTTP_STATUS_BAD_REQUEST) {
       return await parseBadRequestError(response);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
@@ -237,6 +238,17 @@ export class SonarHttpClient {
     });
   }
 
+  /** A 202 represents queued work; its body may be empty. Other errors stay typed. */
+  getOrNullIfAccepted<T>(
+    endpoint: string,
+    params?: QueryParams,
+  ): ResultAsync<T | null, HttpClientError> {
+    return this.getSafe<T>(endpoint, params, GET_REQUEST_TIMEOUT_MS, HTTP_STATUS_ACCEPTED).andThen(
+      (result) =>
+        result.response.status === HTTP_STATUS_ACCEPTED ? okAsync(null) : this.toGetResult(result),
+    );
+  }
+
   private toGetResult<T>(result: SafeGetResult<T>): ResultAsync<T, HttpClientError> {
     return ResultAsync.fromPromise(this.buildStatusError(result.response, 'GET'), toError).andThen(
       (error) => {
@@ -271,6 +283,7 @@ export class SonarHttpClient {
     endpoint: string,
     params?: QueryParams,
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
+    pendingStatus?: number,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
       (async (): Promise<Response> => {
@@ -289,7 +302,9 @@ export class SonarHttpClient {
     ).andThen((response) =>
       ResultAsync.fromPromise(
         (async (): Promise<TValue | undefined> =>
-          response.ok ? ((await response.json()) as TValue) : undefined)(),
+          response.ok && response.status !== pendingStatus
+            ? ((await response.json()) as TValue)
+            : undefined)(),
         (err) =>
           new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
       ).map((value) => ({ response, value })),
@@ -433,6 +448,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 }
 
 interface StructuredErrorBody {
+  errors?: unknown;
   message?: string;
   code?: string;
   meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
@@ -455,6 +471,21 @@ function badRequestFallbackMessage(response: Response, text: string): string {
   return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
 }
 
+function legacyErrorMessage(errors: unknown): string | undefined {
+  if (!Array.isArray(errors)) return undefined;
+  const messages = errors.flatMap((error: unknown) => {
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('msg' in error) ||
+      typeof error.msg !== 'string'
+    )
+      return [];
+    return [error.msg];
+  });
+  return messages.join('; ') || undefined;
+}
+
 async function parseBadRequestError(response: Response): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
   const fallback = badRequestFallbackMessage(response, text);
@@ -462,7 +493,7 @@ async function parseBadRequestError(response: Response): Promise<BadRequestError
     return new BadRequestError(fallback);
   }
   return new BadRequestError(
-    body.message ?? fallback,
+    body.message ?? legacyErrorMessage(body.errors) ?? fallback,
     body.code,
     body.meta as Record<string, unknown> | undefined,
   );

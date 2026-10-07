@@ -25,6 +25,10 @@ import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { parseInteger } from '@/core/commands/params.ts';
+import {
+  DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
+  DEFAULT_INSTALLATION_TIMEOUT_SECONDS,
+} from '@/core/commands/poll.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   isAlphaEnabledFromEnv,
@@ -93,6 +97,7 @@ import {
   type AuthStatusOptions,
   VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
 } from './auth/status.ts';
+import { browserOpen } from './browser/open.ts';
 import {
   type ConfigGetOptions,
   getConfig,
@@ -160,6 +165,8 @@ import {
   type ListProjectsOptions,
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
 } from './list/projects.ts';
+import { orgImport, type OrgImportOptions } from './org/import.ts';
+import { projectWait, type ProjectWaitOptions } from './project/wait.ts';
 import {
   DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
@@ -276,6 +283,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       this.outputHelp();
     });
 
+  COMMAND_TREE.command('browser')
+    .description('Open URLs in your default browser')
+    .rootHelp({ category: 'cli-management' })
+    .command('open')
+    .description('Open a prepared browser-action URL after explaining it to the user')
+    .argument('<url>', 'HTTP(S) browser-action URL')
+    .anonymousAction((ctx, url: string) => browserOpen(url, ctx));
+
   // Manage authentication tokens and credentials
   const auth = COMMAND_TREE.command('auth')
     .description('Manage authentication tokens and credentials')
@@ -294,8 +309,25 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '-s, --server <server>',
       'SonarQube Server URL, SonarQube Cloud EU (https://sonarcloud.io), or SonarQube Cloud US (https://sonarqube.us). Defaults to SonarQube Cloud EU.',
     )
-    .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
+    .option(
+      '-o, --org <org>',
+      'SonarQube Cloud organization key (omit with --no-organization for onboarding)',
+    )
     .option('--with-token', 'Read an existing token from standard input')
+    .option('--force', 'Start a fresh browser login instead of reusing a saved token')
+    .option('--no-browser', 'Prepare sign-in and wait for the callback without opening the browser')
+    .option(
+      '--events',
+      'Emit structured progress and browser actions on stderr; requires --non-interactive --no-browser',
+    )
+    .option(
+      '--non-interactive',
+      'Wait for the Cloud browser token callback without terminal prompts',
+    )
+    .option(
+      '--no-organization',
+      'Save a user-scoped Cloud token without selecting an organization (for onboarding)',
+    )
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
@@ -404,6 +436,52 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, file: string | undefined, options: QualityGateStatusOptions) =>
       qualityGateStatus({ ...options, file }, ctx),
     );
+
+  COMMAND_TREE.command('org')
+    .description('Manage SonarQube Cloud organizations')
+    .rootHelp({ category: 'integrate' })
+    .command('import')
+    .description(
+      'Import a GitHub organization, install the App if needed, and start a cardless Team trial',
+    )
+    .requiredOption('--github <owner>', 'GitHub organization or account name')
+    .option('--key <key>', 'Cloud organization key (defaults to GitHub account name)')
+    .option('--installation-id <id>', 'Existing GitHub App installation ID')
+    .addOption(
+      new SonarOption('--plan <plan>', 'Subscription for a new organization')
+        .choices(['team-trial', 'free'])
+        .default('team-trial'),
+    )
+    .addOption(
+      new SonarOption('--timeout <seconds>', 'GitHub installation wait timeout')
+        .argParser(parseInteger)
+        .default(DEFAULT_INSTALLATION_TIMEOUT_SECONDS),
+    )
+    .option('--no-browser', 'Print the installation URL without opening it')
+    .option(
+      '--events',
+      'Emit structured progress and browser actions on stderr; requires --no-browser',
+    )
+    .addOption(formatOption(['text', 'json'], 'text'))
+    .authenticatedAction((ctx, options: OrgImportOptions) => orgImport(options, ctx));
+
+  COMMAND_TREE.command('project')
+    .description('Manage SonarQube Cloud projects')
+    .rootHelp({ category: 'integrate' })
+    .command('wait')
+    .description(
+      'Enable eligible automatic analysis and wait for a completed analysis on the default branch',
+    )
+    .option('--events', 'Emit structured analysis progress on stderr')
+    .option('-p, --project <key>', 'SonarQube project key')
+    .option('--repo <slug>', 'GitHub repository slug in the active organization')
+    .addOption(
+      new SonarOption('--timeout <seconds>', 'Analysis wait timeout')
+        .argParser(parseInteger)
+        .default(DEFAULT_ANALYSIS_TIMEOUT_SECONDS),
+    )
+    .addOption(formatOption(['text', 'json'], 'text'))
+    .authenticatedAction((ctx, options: ProjectWaitOptions) => projectWait(options, ctx));
 
   COMMAND_TREE.command('import')
     .description(

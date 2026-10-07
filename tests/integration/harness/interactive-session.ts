@@ -211,6 +211,25 @@ export class InteractiveSession {
     }, this.timeoutMs);
   }
 
+  /** Wait for a structured stderr event while the CLI process remains running. */
+  async waitEvent(name: string, timeoutMs = this.waitTimeoutMs): Promise<Record<string, unknown>> {
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      for (const line of this.rawStderr.split('\n')) {
+        try {
+          const event = JSON.parse(line) as Record<string, unknown>;
+          if (event !== null && event.event === name) return event;
+        } catch {
+          // Diagnostics and incomplete chunks are not events.
+        }
+      }
+      if (this.exitCode !== undefined || this.timedOut || Date.now() >= deadline) {
+        throw this.waitError('CLI did not emit event', name);
+      }
+      await this.waitUntilChange(deadline);
+    }
+  }
+
   async waitText(prompt: PromptText, timeoutMs = this.waitTimeoutMs): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (true) {
