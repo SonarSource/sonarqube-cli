@@ -50,6 +50,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
+import { SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -102,12 +103,14 @@ const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
   [CONTEXT_AUGMENTATION_BINARY_NAME]: SONAR_CONTEXT_AUGMENTATION_VERSION,
   [SCA_SCANNER_BINARY_NAME]: SCA_SCANNER_CLI_VERSION,
+  'sonar-scanner': SONAR_SCANNER_VERSION,
 };
 
 const BINARY_DISPLAY_NAMES: Record<string, string> = {
   'sonar-secrets': 'Secrets Detection',
   'sonar-context-augmentation': 'Vortex Context',
   'sca-scanner-cli': 'Dependency Risks Scanner',
+  'sonar-scanner': 'SonarScanner',
 };
 
 export const VALID_FORMATS = ['text', 'json'] as const;

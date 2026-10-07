@@ -677,7 +677,7 @@ describe('issuesSearchCommand', () => {
       expect(await printTable([])).toBe('No issues found');
     });
 
-    it('prints a header and one data row per issue', async () => {
+    it('prints a header and each issue with spacing between them', async () => {
       const output = await printTable([
         { ...createMockIssue('a'), severity: 'CRITICAL', rule: 'java:S001', message: 'Fix me' },
         createMockIssue('b'),
@@ -688,11 +688,11 @@ describe('issuesSearchCommand', () => {
       expect(lines[0]).toContain('RULE');
       expect(lines[0]).toContain('MESSAGE');
       expect(lines[0]).toContain('FILE');
-      expect(lines[1]).toMatch(/^-+$/);
+      expect(lines[1]).toMatch(/^─+$/);
       expect(lines[2]).toContain('CRITICAL');
       expect(lines[2]).toContain('java:S001');
       expect(lines[2]).toContain('Fix me');
-      expect(lines).toHaveLength(5);
+      expect(lines.filter((line) => line.trim())).toHaveLength(5);
     });
 
     it('prints the path after the project key and the line number', async () => {
@@ -714,10 +714,11 @@ describe('issuesSearchCommand', () => {
       expect(output).toContain('standalone-component:?');
     });
 
-    it('widens the rule column when the rule key exceeds the minimum width', async () => {
+    it('wraps long rule keys without dropping characters', async () => {
       const longRule = 'a'.repeat(40);
       const output = await printTable([{ ...createMockIssue('a'), rule: longRule }]);
-      expect(output).toContain(longRule);
+      expect(output.match(/a/g)).toHaveLength(longRule.length);
+      expect(output.split('\n').every((line) => Bun.stringWidth(line) <= 100)).toBe(true);
     });
   });
 });

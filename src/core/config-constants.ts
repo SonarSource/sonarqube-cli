@@ -174,6 +174,7 @@ export const SONARSOURCE_BINARIES_URL =
   process.env.SONARQUBE_CLI_BINARIES_URL ?? 'https://binaries.sonarsource.com';
 export const SONAR_SECRETS_DIST_PREFIX = 'CommercialDistribution/sonar-secrets';
 export const SCA_SCANNER_CLI_DIST_PREFIX = 'CommercialDistribution/sca-scanner-cli';
+export const SONAR_SCANNER_DIST_PREFIX = 'Distribution/sonar-scanner-cli';
 /**
  * Path prefix on binaries.sonarsource.com for sonar-context-augmentation. The full
  * path embeds the platform: `${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platform}/...`.

@@ -23,6 +23,7 @@
 // Main CLI entry point
 
 import { createCommandTree } from '@/commands/command-tree.ts';
+import { ONBOARD_WORKER_ARGUMENT, runDetachedAnalysisWorker } from '@/commands/onboard/detached.ts';
 import { loadLoggerConfig } from '@/core/observability/logger-config.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
@@ -36,21 +37,25 @@ function argvRequestsFormattedOutput(): boolean {
   );
 }
 
-await loadLoggerConfig();
+if (process.argv[2] === ONBOARD_WORKER_ARGUMENT) {
+  await runDetachedAnalysisWorker();
+} else {
+  await loadLoggerConfig();
 
-const console = new TerminalConsole();
+  const console = new TerminalConsole();
 
-// Activate formatted output mode early so startup messages are collected
-// rather than printed to stdout when the command will produce JSON output.
-// Handles both `--format json` (space-separated) and `--format=json` (equals form).
-if (argvRequestsFormattedOutput()) {
-  console.setFormattedOutputMode(true);
+  // Activate formatted output mode early so startup messages are collected
+  // rather than printed to stdout when the command will produce JSON output.
+  // Handles both `--format json` (space-separated) and `--format=json` (equals form).
+  if (argvRequestsFormattedOutput()) {
+    console.setFormattedOutputMode(true);
+  }
+
+  const tree = createCommandTree({ console });
+
+  await tree.runtime.flagsResolver.resolveFlags();
+  tree.refreshStagedVisibility();
+
+  await tree.parseAsync(process.argv);
+  await flushSentry();
 }
-
-const tree = createCommandTree({ console });
-
-await tree.runtime.flagsResolver.resolveFlags();
-tree.refreshStagedVisibility();
-
-await tree.parseAsync(process.argv);
-await flushSentry();

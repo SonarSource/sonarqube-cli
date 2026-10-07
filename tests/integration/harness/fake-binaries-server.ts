@@ -38,7 +38,7 @@ import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
   String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.(exe|bin)|` +
-    String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
+    String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz|sonar-scanner-cli-.*\.zip)(\.asc)?$`,
 );
 
 function pickContentType(filename: string): string {
@@ -81,6 +81,12 @@ export class FakeBinariesServer {
 }
 
 export class FakeBinariesServerBuilder {
+  private readonly extraArtifacts = new Map<string, Buffer>();
+
+  withArtifact(filename: string, bytes: Buffer): this {
+    this.extraArtifacts.set(filename, bytes);
+    return this;
+  }
   private _loadArtifacts = true;
   private _stableVersion?: string;
 
@@ -104,7 +110,7 @@ export class FakeBinariesServerBuilder {
 
     // Load versioned artifacts from resources (sonar-secrets and sca-scanner-cli .exe[.asc],
     // sonar-context-augmentation .tar.gz[.asc]).
-    const files = new Map<string, Buffer>();
+    const files = new Map(this.extraArtifacts);
     if (this._loadArtifacts) {
       for (const name of readdirSync(DEPENDENCY_ARTIFACTS_DIR)) {
         if (ARTIFACT_FILENAME_PATTERN.test(name)) {
