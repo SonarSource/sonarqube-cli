@@ -44,6 +44,7 @@ export async function runFirstAnalysis(
   liveOutput?: { console: Console; channel: OutputChannel },
   projectName?: string,
   existingLogPath?: string,
+  scannerProperties: string[] = [],
 ): Promise<{ taskId: string; logPath: string; stdout: string; stderr: string }> {
   const reportPath = join(directory, 'report-task.txt');
   const args = [
@@ -55,6 +56,7 @@ export async function runFirstAnalysis(
     `-Dsonar.scanner.metadataFilePath=${reportPath}`,
     '-Dsonar.qualitygate.wait=false',
     '-Dsonar.scanner.autoconfig.enabled=true',
+    ...scannerProperties.map((property) => `-D${property}`),
   ];
   if (auth.orgKey) args.push(`-Dsonar.organization=${auth.orgKey}`);
   if (projectName !== undefined) args.push(`-Dsonar.projectName=${projectName}`);

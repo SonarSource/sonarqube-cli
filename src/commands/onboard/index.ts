@@ -40,6 +40,7 @@ import { OnboardProgressConsole } from './progress-console.ts';
 import { generateProjectTarget } from './project-key.ts';
 import { runFirstAnalysis } from './scanner.ts';
 import { scannerNetworkEnv } from './scanner-network.ts';
+import { resolveOnboardScannerProperties } from './scanner-property.ts';
 
 export interface OnboardOptions {
   projectKey?: string;
@@ -49,6 +50,7 @@ export interface OnboardOptions {
   format?: string;
   verbose?: boolean;
   detach?: boolean;
+  scannerProperty?: string[];
 }
 
 function resolveSourcePath(path: string | undefined): string {
@@ -158,6 +160,7 @@ async function runOnboarding(
 ): Promise<void> {
   const { auth, console } = ctx;
   const progress = new OnboardProgressConsole(console, format);
+  const scannerProperties = resolveOnboardScannerProperties(options.scannerProperty);
   if (options.detach && options.verbose)
     throw new InvalidOptionError(
       '--detach cannot be combined with --verbose. Background scanner output is saved to the log file.',
@@ -217,6 +220,7 @@ async function runOnboarding(
         projectKey,
         auth,
         projectName: requestedName,
+        scannerProperties,
         networkEnv,
         dashboardUrl: dashboard,
       });
@@ -254,6 +258,8 @@ async function runOnboarding(
         networkEnv,
         options.verbose ? { console, channel: format === 'json' ? 'stderr' : 'stdout' } : undefined,
         requestedName,
+        undefined,
+        scannerProperties,
       );
     if (options.verbose) progress.info('Analyzing source code');
     const { taskId, logPath, stdout, stderr } = options.verbose

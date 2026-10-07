@@ -168,6 +168,7 @@ import {
 import { onboard, type OnboardOptions } from './onboard/index.ts';
 import { ONBOARD_VISIBILITIES } from './onboard/onboard-api.ts';
 import { ONBOARD_FORMATS } from './onboard/output.ts';
+import { collectOnboardScannerProperty } from './onboard/scanner-property.ts';
 import { orgImport, type OrgImportOptions } from './org/import.ts';
 import { projectWait, type ProjectWaitOptions } from './project/wait.ts';
 import {
@@ -716,6 +717,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option(
       '--detach',
       'Run analysis in the background after project creation and exit without waiting for results',
+    )
+    .option(
+      '--scanner-property <key=value>',
+      'Analysis setting (repeatable), e.g. sonar.exclusions=**/generated/**',
+      collectOnboardScannerProperty,
     )
     .option('--verbose', 'Stream scanner logs in real time (to stderr with --format json)')
     .authenticatedAction((ctx, options: OnboardOptions) => onboard(options, ctx));

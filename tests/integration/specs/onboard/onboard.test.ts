@@ -1029,6 +1029,78 @@ describe('sonar onboard', () => {
     },
   );
 
+  it('passes repeatable scanner settings unchanged, with the last value for duplicate keys', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    seedScanner();
+    const properties = 'sonar.projectKey=properties-key\nsonar.exclusions=old/**\n';
+    harness.cwd.writeFile('sonar-project.properties', properties);
+    const result = await runText(
+      'onboard --scanner-property "sonar.exclusions=first/**" --scanner-property "sonar.exclusions=**/generated/**,**/vendor/**" --scanner-property "sonar.coverage.jacoco.xmlReportPaths=coverage reports/jacoco.xml" --scanner-property "sonar.java.binaries=target/classes" --scanner-property "sonar.projectDescription=alpha=beta with spaces" --scanner-property "sonar.test.exclusions="',
+    );
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const [invocation] = invocations();
+    expect(invocation.args).toContain('-Dsonar.exclusions=**/generated/**,**/vendor/**');
+    expect(invocation.args.filter((arg) => arg.startsWith('-Dsonar.exclusions='))).toHaveLength(1);
+    expect(invocation.args).toContain(
+      '-Dsonar.coverage.jacoco.xmlReportPaths=coverage reports/jacoco.xml',
+    );
+    expect(invocation.args).toContain('-Dsonar.java.binaries=target/classes');
+    expect(invocation.args).toContain('-Dsonar.projectDescription=alpha=beta with spaces');
+    expect(invocation.args).toContain('-Dsonar.test.exclusions=');
+    expect(harness.cwd.file('sonar-project.properties').asText()).toBe(properties);
+  });
+
+  it.each(['', '=value', 'sonar.exclusions', 'bad key=value', 'sonar.exclusions=a\nb'])(
+    'rejects malformed scanner setting %j before changing anything',
+    async (property) => {
+      const server = await harness.newFakeServer().start();
+      harness.withAuth(server.baseUrl(), TOKEN);
+      const result = await runText(
+        `onboard --project-key new-project --scanner-property="${property}"`,
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain('--scanner-property');
+      expect(harness.cliHome.file('bin').exists()).toBe(false);
+      expect(
+        server.getRecordedRequests().some((request) => request.path === '/api/projects/create'),
+      ).toBe(false);
+    },
+  );
+
+  it.each([
+    'sonar.host.url',
+    'sonar.region',
+    'sonar.organization',
+    'sonar.projectKey',
+    'sonar.projectName',
+    'sonar.projectBaseDir',
+    'sonar.working.directory',
+    'sonar.scanner.metadataFilePath',
+    'sonar.qualitygate.wait',
+    'sonar.scanner.autoconfig.enabled',
+    'sonar.token',
+    'sonar.login',
+    'sonar.password',
+    'sonar.scanner.proxyPassword',
+    'sonar.scanner.truststorePath',
+  ])('rejects overriding managed scanner setting %s without printing its value', async (key) => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), TOKEN);
+    const result = await runText(
+      `onboard --project-key new-project --scanner-property ${key}=private-value`,
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout + result.stderr).toContain(
+      `Scanner property '${key}' is managed by onboard`,
+    );
+    expect(result.stdout + result.stderr).not.toContain('private-value');
+    expect(harness.cliHome.file('bin').exists()).toBe(false);
+    expect(
+      server.getRecordedRequests().some((request) => request.path === '/api/projects/create'),
+    ).toBe(false);
+  });
+
   it('does not scan when project creation is denied', async () => {
     const server = await harness
       .newFakeServer()

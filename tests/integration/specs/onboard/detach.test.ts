@@ -106,7 +106,7 @@ describe('sonar onboard --detach', () => {
       SONAR_SCANNER_PROXY_PORT: 'invalid',
     });
     const result = await harness.run(
-      'onboard --detach --path service --name "Background Service" --visibility public --format json',
+      'onboard --detach --path service --name "Background Service" --visibility public --scanner-property "sonar.exclusions=**/generated/**" --scanner-property "sonar.java.binaries=target/classes" --format json',
     );
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
     const report = JSON.parse(result.stdout) as OnboardReport;
@@ -143,6 +143,8 @@ describe('sonar onboard --detach', () => {
     expect(invocation.cwd).toBe(join(harness.cwd.path, 'service'));
     expect(invocation.args).toContain('-Dsonar.projectName=Background Service');
     expect(invocation.args).toContain('-Dsonar.scanner.autoconfig.enabled=true');
+    expect(invocation.args).toContain('-Dsonar.exclusions=**/generated/**');
+    expect(invocation.args).toContain('-Dsonar.java.binaries=target/classes');
     expect(invocation.args.join(' ')).not.toContain(TOKEN);
     expect(invocation.network.proxyHost).toBeUndefined();
     expect(invocation.network.proxyPort).toBeUndefined();

@@ -51,6 +51,7 @@ interface DetachedJob {
   projectRoot: string;
   projectKey: string;
   projectName?: string;
+  scannerProperties?: string[];
   auth: ResolvedAuthInit;
   networkEnv: NodeJS.ProcessEnv;
   dashboardUrl: string;
@@ -183,6 +184,9 @@ function validateJob(input: unknown): DetachedJob {
     typeof job.scanner.home !== 'string' ||
     typeof job.scanner.classPath !== 'string' ||
     typeof job.scanner.version !== 'string' ||
+    (job.scannerProperties !== undefined &&
+      (!Array.isArray(job.scannerProperties) ||
+        !job.scannerProperties.every((property) => typeof property === 'string'))) ||
     !job.networkEnv ||
     typeof job.networkEnv !== 'object'
   ) {
@@ -258,6 +262,7 @@ export async function runDetachedAnalysisWorker(): Promise<void> {
       undefined,
       job.projectName,
       logPath,
+      job.scannerProperties,
     );
     const api = new OnboardApiClient(new SonarHttpClient(auth.serverUrl, auth.token));
     status.status = 'uploaded';
