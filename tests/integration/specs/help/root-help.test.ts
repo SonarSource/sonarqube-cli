@@ -46,6 +46,7 @@ function getExpectedRootHelp(): string {
     '    2. Run sonar analyze --file <file> to scan your code for issues',
     '',
     '  COMMANDS',
+    '    onboard                                                           Create an unbound project, install SonarScanner, and run its first analysis',
     '    analyze                                                           Analyze code for quality and security issues',
     '    analyze secrets                                                   Scan files or stdin for hardcoded secrets',
     '    analyze dependency-risks                                          Analyze project dependencies for security and license risks',

@@ -1,5 +1,7 @@
 # Tests
 
+`tests/integration/specs/onboard/onboard.test.ts` covers first-analysis onboarding using a compiled SonarScanner Java stub (`resources/sonar-scanner-stub.ts`) for scan execution and the real, pinned platform archive for installation/extraction/JRE verification and importing custom CA bundles through Java without a keytool executable, covering both SONAR_CA_CERT and NODE_EXTRA_CA_CERTS. `pretest:integration` prepares both fixtures; the fake binaries server serves scanner ZIPs alongside existing dependency artifacts. Real scanner bootstrap regression tests use its offline simulation mode to validate endpoint arguments against inherited region settings without contacting external services. The stub records arguments and child authentication to a harness-local log; it never contacts external services.
+
 ## Philosophy
 
 **Integration tests are the default.** Unit tests are justified only when a situation is genuinely hard to recreate via integration tests due to test setup complexity. Before writing a unit test, first consider extending the harness or fake server infrastructure to handle the scenario. Unit tests are a last resort.

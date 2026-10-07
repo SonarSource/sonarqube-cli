@@ -29,7 +29,7 @@ export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
 export interface SpawnOptions {
   cwd?: string;
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   stdin?: StdioMode;
   /** An iterable is pulled one chunk at a time, so a large input is never held whole. */
   stdinData?: string | Buffer | AsyncIterable<Buffer>;

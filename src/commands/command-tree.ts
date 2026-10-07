@@ -165,6 +165,7 @@ import {
   type ListProjectsOptions,
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
 } from './list/projects.ts';
+import { onboard, type OnboardOptions } from './onboard/index.ts';
 import { orgImport, type OrgImportOptions } from './org/import.ts';
 import { projectWait, type ProjectWaitOptions } from './project/wait.ts';
 import {
@@ -691,6 +692,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate opencode' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
+
+  COMMAND_TREE.command('onboard')
+    .description('Create an unbound project, install SonarScanner, and run its first analysis')
+    .rootHelp({ category: 'core' })
+    .option(
+      '--project-key <key>',
+      'Key for the new project; detected from project configuration when omitted',
+    )
+    .authenticatedAction((ctx, options: OnboardOptions) => onboard(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')

@@ -1,0 +1,60 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+const args = process.argv.slice(2);
+if (args.includes('--version')) {
+  console.log('SonarScanner CLI 8.1.0.6389');
+  process.exit(Number(process.env.ONBOARD_STUB_VERSION_EXIT_CODE ?? 0));
+}
+const property = (name: string) =>
+  args.find((arg) => arg.startsWith(`-D${name}=`))?.slice(name.length + 3);
+if (process.env.ONBOARD_STUB_LOG_PATH) {
+  appendFileSync(
+    process.env.ONBOARD_STUB_LOG_PATH,
+    JSON.stringify({
+      args,
+      cwd: process.cwd(),
+      token: process.env.SONAR_TOKEN,
+      network: {
+        proxyHost: process.env.SONAR_SCANNER_PROXY_HOST,
+        proxyPort: process.env.SONAR_SCANNER_PROXY_PORT,
+        proxyUser: process.env.SONAR_SCANNER_PROXY_USER,
+        proxyPassword: process.env.SONAR_SCANNER_PROXY_PASSWORD,
+        truststore: process.env.SONAR_SCANNER_TRUSTSTORE_PATH,
+        keystore: process.env.SONAR_SCANNER_KEYSTORE_PATH,
+      },
+    }) + '\n',
+  );
+}
+if (process.env.ONBOARD_STUB_STDOUT) console.log(process.env.ONBOARD_STUB_STDOUT);
+if (process.env.ONBOARD_STUB_STDERR) console.error(process.env.ONBOARD_STUB_STDERR);
+const exitCode = Number(process.env.ONBOARD_STUB_EXIT_CODE ?? 0);
+if (exitCode !== 0) process.exit(exitCode);
+const reportPath = property('sonar.scanner.metadataFilePath');
+if (reportPath && process.env.ONBOARD_STUB_SKIP_REPORT !== 'true') {
+  mkdirSync(dirname(reportPath), { recursive: true });
+  writeFileSync(
+    reportPath,
+    `projectKey=${process.env.ONBOARD_STUB_REPORT_PROJECT ?? property('sonar.projectKey')}\nceTaskId=onboard-task\n`,
+  );
+}

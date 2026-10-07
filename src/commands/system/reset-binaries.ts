@@ -18,10 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
+import { basename } from 'node:path';
 
 import { BIN_DIR } from '@/core/config-constants.ts';
-import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
+import {
+  CONTEXT_AUGMENTATION_BINARY_NAME,
+  SONAR_SCANNER_BINARY_NAME,
+} from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
@@ -110,6 +114,10 @@ async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemov
   }
 
   const needsCagStop = plan.dependencyIds.has(CONTEXT_AUGMENTATION_BINARY_NAME);
+  const isScanner = plan.dependencyIds.has(SONAR_SCANNER_BINARY_NAME);
+  if (isScanner && !basename(safePath).startsWith('sonar-scanner-')) {
+    return { status: 'failed', message: `${label}: scanner install path rejected` };
+  }
   if (needsCagStop && existsSync(safePath)) {
     await stopAllContextAugmentationTools(safePath);
   }
@@ -117,7 +125,10 @@ async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemov
   try {
     const fileRemoved = existsSync(safePath);
     if (fileRemoved) {
-      rmSync(safePath, { force: true });
+      rmSync(safePath, {
+        force: true,
+        recursive: isScanner && statSync(safePath).isDirectory(),
+      });
     }
     return {
       status: 'cleaned',
