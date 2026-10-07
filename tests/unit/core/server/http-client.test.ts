@@ -103,6 +103,28 @@ describe('SonarHttpClient', () => {
       );
     });
 
+    it('preserves a structured explanation on a GET 400 response', async () => {
+      fetchSpy = mockFetch(
+        { message: 'Authentication method is not supported' },
+        { ok: false, status: 400 },
+      );
+      const result = await client.get('/api/alm_integration/list_unbound_applications');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('Authentication method is not supported');
+    });
+
+    it('preserves legacy API error messages on a GET 400 response', async () => {
+      fetchSpy = mockFetch(
+        { errors: [{ msg: 'User is not identified with a supported provider' }] },
+        { ok: false, status: 400 },
+      );
+      const result = await client.get('/api/alm_integration/show_app_info');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'User is not identified with a supported provider',
+      );
+    });
+
     it('returns an error result instead of throwing on a transport failure', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
       const result = await client.get('/api/authentication/validate');
