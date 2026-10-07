@@ -33,6 +33,7 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { DEFAULT_STATUSES } from '../list/issues.ts';
+import { createDetachedWorkDirectory, startDetachedAnalysis } from './detached.ts';
 import { OnboardApiClient, type OnboardVisibility } from './onboard-api.ts';
 import { ONBOARD_ISSUES_PAGE_SIZE, printOnboardReport, resolveOnboardFormat } from './output.ts';
 import { OnboardProgressConsole } from './progress-console.ts';
@@ -47,6 +48,7 @@ export interface OnboardOptions {
   visibility?: string;
   format?: string;
   verbose?: boolean;
+  detach?: boolean;
 }
 
 function resolveSourcePath(path: string | undefined): string {
@@ -173,6 +175,10 @@ async function runOnboarding(
 ): Promise<void> {
   const { auth, console } = ctx;
   const progress = new OnboardProgressConsole(console, format);
+  if (options.detach && options.verbose)
+    throw new InvalidOptionError(
+      '--detach cannot be combined with --verbose. Background scanner output is saved to the log file.',
+    );
   const visibility = resolveVisibility(options.visibility);
   const requestedName = options.name !== undefined ? validateProjectName(options.name) : undefined;
   const target = await resolveTarget(options, ctx, progress);
@@ -211,14 +217,52 @@ async function runOnboarding(
   assertSupportedBuild(projectRoot);
 
   const scanner = await installSonarScanner(progress);
-  const directory = mkdtempSync(join(tmpdir(), 'sonar-onboard-'));
+  const directory = options.detach
+    ? createDetachedWorkDirectory()
+    : mkdtempSync(join(tmpdir(), 'sonar-onboard-'));
   let created = false;
+  let handedOff = false;
   try {
     const networkEnv = await scannerNetworkEnv(auth.serverUrl, scanner.javaPath, directory);
     await api.createProject(projectKey, projectName, auth.orgKey, visibility).orThrow();
     created = true;
     noteProject(auth, projectKey);
     progress.success(`Created ${visibility} unbound project '${projectKey}'.`);
+    if (options.detach) {
+      const background = await startDetachedAnalysis({
+        scanner,
+        directory,
+        projectRoot,
+        projectKey,
+        auth,
+        projectName: requestedName,
+        networkEnv,
+        dashboardUrl: dashboard,
+      });
+      handedOff = true;
+      printOnboardReport(
+        {
+          projectKey,
+          projectName,
+          analysis: {
+            status: 'detached',
+            id: null,
+            pid: background.pid,
+            statusPath: background.statusPath,
+          },
+          qualityGate: null,
+          dashboardUrl: dashboard,
+          issues: null,
+          paging: null,
+          scannerLogPath: background.logPath,
+          messages: console.getMessagesForFormattedOutput(),
+          warnings: progress.warnings,
+        },
+        format,
+        console,
+      );
+      return;
+    }
     const scan = () =>
       runFirstAnalysis(
         scanner,
@@ -292,6 +336,6 @@ async function runOnboarding(
       },
     );
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    if (!handedOff) rmSync(directory, { recursive: true, force: true });
   }
 }

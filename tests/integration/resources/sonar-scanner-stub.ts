@@ -40,6 +40,13 @@ if (args.includes('--version')) {
   );
 }
 const dumpPath = property('sonar.scanner.internal.dumpToFile');
+if (args.includes('-importcert')) {
+  const at = args.indexOf('-keystore');
+  const path = args[at + 1];
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, 'test truststore', { mode: 0o600 });
+  process.exit(0);
+}
 if (dumpPath) {
   const escape = (value: string) => value.replaceAll('\\', '\\\\').replaceAll(':', '\\:');
   writeFileSync(
@@ -70,6 +77,7 @@ if (process.env.ONBOARD_STUB_LOG_PATH) {
     }) + '\n',
   );
 }
+if (process.env.ONBOARD_STUB_SLEEP_MS) await Bun.sleep(Number(process.env.ONBOARD_STUB_SLEEP_MS));
 if (process.env.ONBOARD_STUB_STREAMING === 'true') {
   console.log('SCANNER-FIRST');
   await Bun.sleep(400);

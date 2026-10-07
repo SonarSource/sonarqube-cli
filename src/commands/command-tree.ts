@@ -713,6 +713,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         .default('private'),
     )
     .addOption(formatOption(ONBOARD_FORMATS, 'text'))
+    .option(
+      '--detach',
+      'Run analysis in the background after project creation and exit without waiting for results',
+    )
     .option('--verbose', 'Stream scanner logs in real time (to stderr with --format json)')
     .authenticatedAction((ctx, options: OnboardOptions) => onboard(options, ctx));
 

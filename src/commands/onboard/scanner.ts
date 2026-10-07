@@ -43,6 +43,7 @@ export async function runFirstAnalysis(
   networkEnv: NodeJS.ProcessEnv,
   liveOutput?: { console: Console; channel: OutputChannel },
   projectName?: string,
+  existingLogPath?: string,
 ): Promise<{ taskId: string; logPath: string; stdout: string; stderr: string }> {
   const reportPath = join(directory, 'report-task.txt');
   const args = [
@@ -58,7 +59,7 @@ export async function runFirstAnalysis(
   if (projectName !== undefined) args.push(`-Dsonar.projectName=${projectName}`);
 
   mkdirSync(LOG_DIR, { recursive: true });
-  const logPath = join(LOG_DIR, `sonar-scanner-${randomUUID()}.log`);
+  const logPath = existingLogPath ?? join(LOG_DIR, `sonar-scanner-${randomUUID()}.log`);
   writeFileSync(logPath, `SonarScanner ${scanner.version}\nProject: ${projectKey}\n\n`, {
     mode: 0o600,
   });

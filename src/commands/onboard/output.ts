@@ -32,7 +32,10 @@ export const ONBOARD_ISSUES_PAGE_SIZE = 20;
 export interface OnboardReport {
   projectKey: string;
   projectName: string;
-  analysis: { status: 'completed'; id: string } | { status: 'skipped'; id: null };
+  analysis:
+    | { status: 'completed'; id: string }
+    | { status: 'skipped'; id: null }
+    | { status: 'detached'; id: null; pid: number; statusPath: string };
   qualityGate: string | null;
   dashboardUrl: string;
   issues: SonarQubeIssue[] | null;
@@ -74,6 +77,18 @@ export function printOnboardReport(
   }
   if (report.analysis.status === 'skipped') {
     console.print(`Project dashboard: ${report.dashboardUrl}`);
+    return;
+  }
+  if (report.analysis.status === 'detached') {
+    console.print(
+      [
+        `Analysis running in background (PID ${report.analysis.pid}).`,
+        `Project: ${report.projectKey}`,
+        `Scanner log: ${report.scannerLogPath}`,
+        `Analysis status: ${report.analysis.statusPath}`,
+        `Full results: ${report.dashboardUrl}`,
+      ].join('\n'),
+    );
     return;
   }
   const total = report.paging?.total;
