@@ -79,7 +79,7 @@ After opening the browser, keep waiting on the original command for consent/inst
 
 1. Work from the repository root. Read `git remote get-url origin` and extract the GitHub owner and repository from HTTPS or SSH remotes, stripping the optional `.git` suffix. Only use `github.com` remotes. Ask for the target when there is no unambiguous GitHub remote. Treat names as data: quote every shell argument and never evaluate remote URLs as shell code.
 2. Use the dev9 web/API pair above. If the user explicitly requests another environment, resolve its web/API pair and use it consistently for the entire run; do not infer the environment from a previously active connection.
-3. Prefer the absolute executable path supplied in `SONAR_ONBOARD_CLI`; otherwise resolve `sonar` on PATH. Check `auth login --help`, `org import --help`, and `project wait --help` for `--no-organization`, `--non-interactive`, `--no-browser`, and `--events` on login; `--github`, `--no-browser`, and `--events` on org import; and `--repo` and `--events` on project wait. Also check `browser open --help`. **These onboarding commands are a prototype: downloading today's stable CLI does not necessarily provide them.** Do not replace a supplied prototype with a stable release or call self-update on it.
+3. Prefer the absolute executable path supplied in `SONAR_ONBOARD_CLI`; otherwise resolve `sonar` on PATH. Check `onboard --help` for the local first-analysis path below: its help must explicitly describe `onboard` and support `--path`, `--project-key`, and `--format json`. Generic top-level help, even with exit code zero, does not establish availability. For the GitHub-bound path, check `auth login --help`, `org import --help`, and `project wait --help` for `--no-organization`, `--non-interactive`, `--no-browser`, and `--events` on login; `--github`, `--no-browser`, and `--events` on org import; and `--repo` and `--events` on project wait. Also check `browser open --help` when browser handoffs are needed. Require only the capabilities needed for the selected path. **These onboarding commands are a prototype: downloading today's stable CLI does not necessarily provide them.** Do not replace a supplied prototype with a stable release or call self-update on it.
 4. If the CLI is absent, an official stable installation can be performed with the user's installation authorization:
 
    ```sh
@@ -151,6 +151,8 @@ env SONARQUBE_CLI_SONARCLOUD_URL="$SERVER" \
 
 ## Import or reuse the project
 
+Choose the project path before provisioning. Use GitHub import below when a DevOps-bound project with automatic analysis is wanted. Prefer `sonar onboard` for a new project's first local analysis when that fits the request, especially when automatic analysis is unsupported and the build is supported by `onboard`. It creates an unbound project; do not import a project first and then expect `onboard` to analyze it. Both paths require the confirmed account and Cloud organization; `onboard` does not perform account connection, GitHub App installation, organization import, or trial setup.
+
 Query the real binding before provisioning so retries do not create another project:
 
 ```sh
@@ -167,7 +169,32 @@ URL-encode `ORG_KEY` if needed. Parse `repositories`; identify the exact target 
 
 `import` returning successfully means a project was provisioned. It does **not** prove an analysis completed.
 
+### First local analysis with `sonar onboard`
+
+After existing-project discovery and any missing organization setup, run from the selected repository or subproject directory:
+
+```sh
+env SONARQUBE_CLI_SONARCLOUD_URL="$SERVER" \
+    SONARQUBE_CLI_SONARCLOUD_API_URL="$API_SERVER" \
+    SONARQUBE_CLI_ORG="$ORG_KEY" \
+    "$CLI" onboard --path "$PROJECT_ROOT" --format json
+```
+
+`PROJECT_ROOT` is the validated absolute scan directory. Use `--project-key "$PROJECT_KEY"` when the user or verified configuration identifies the intended key; otherwise the CLI detects compatible local configuration or generates a deterministic key. Verify any existing configured or generated target belongs to the intended environment and organization before treating it as the repository's project. Optional `--name` sets the display name. New projects are private by default; use `--visibility public` only with explicit authorization. This command reuses or installs a scanner and uploads local source for analysis; it does not write a DevOps binding or local project configuration. Do not pass `--repo`, `--plan`, `--events`, or `--no-browser` to `onboard`; those belong to other commands.
+
+Maven projects use the wrapper or installed Maven and run `verify` plus SonarScanner for Maven, including tests by default. Use repeated `--maven-arg` only for needed build options. Gradle and .NET projects require their dedicated scanners; follow that guidance rather than forcing the generic scanner.
+
+Keep the foreground command running until it finishes. Parse its JSON `projectKey`, `analysis.status`, `analysis.id`, `qualityGate`, `dashboardUrl`, `issues`, `paging`, `scannerLogPath`, and `warnings`:
+
+- `completed`: the first analysis was processed. Continue with branch, analysis date/revision, quality gate, and full findings inspection below, using the returned project key. The report contains only the first issues page; null results or warnings mean unavailable data, not zero findings.
+- `skipped`: that project already exists and no analysis ran. Retrieve its existing analysis and findings; use the supported scanner path if a fresh analysis is required. Do not choose a new key just to evade the skip.
+- `detached`: a background worker started, but analysis completion is unverified. Prefer foreground mode for this workflow. If `--detach` is needed, follow the returned `analysis.statusPath` and scanner log until completion or failure; do not report startup as completed analysis.
+
+If project creation succeeds but analysis fails, retain the project, inspect the reported scanner log, fix the build/scanner problem, and rerun the appropriate scanner against the same key. Repeating `onboard` skips an existing project and will not retry its analysis. Do not create a duplicate project or switch to GitHub import as an automatic retry.
+
 ## Wait for analysis and inspect the result
+
+The wait command below applies to the GitHub-bound automatic-analysis path. A successful foreground `onboard` has already waited for its exact analysis task; proceed directly to result inspection instead of requesting automatic analysis for the unbound project.
 
 For a single-project repository:
 
