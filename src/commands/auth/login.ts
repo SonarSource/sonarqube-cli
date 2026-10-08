@@ -91,7 +91,14 @@ export async function authLogin(
     const auth = await getOrGenerateToken(server, orgOption, console);
     const { token, tokenName, reusedExistingToken } = auth;
 
-    const org = await resolveOrganization(server, isCloud, orgOption, auth, console);
+    const org = await resolveOrganization(
+      server,
+      isCloud,
+      orgOption,
+      auth,
+      console,
+      invocationAuth?.orgKey,
+    );
 
     await persistLoginCredentials(server, isCloud, org, token, {
       tokenName,
@@ -270,6 +277,7 @@ async function resolveOrganization(
   orgOption: string | undefined,
   auth: BrowserAuthResult & { reusedExistingToken: boolean },
   console: Console,
+  activeOrgKey: string | undefined,
 ): Promise<string | undefined> {
   if (!isCloud) {
     return undefined;
@@ -280,6 +288,7 @@ async function resolveOrganization(
       new OrganizationsClient(new SonarHttpClient(server, auth.token)),
       orgOption,
       console,
+      activeOrgKey,
     );
   } catch (error) {
     if (!auth.reusedExistingToken) {

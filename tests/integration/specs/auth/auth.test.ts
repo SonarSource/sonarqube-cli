@@ -50,6 +50,59 @@ async function declineTrust(
   return session.waitFinish();
 }
 
+type PickerRow = [name: string, key: string, status: 'active' | 'Admin' | 'Member'];
+
+const PICKER_ORGS = [
+  { key: 'my-org', name: 'My Org', actions: { admin: true } },
+  { key: 'my-org-2', name: 'My Org 2', actions: { admin: false } },
+  { key: 'my-org-3', name: 'My Org 3', actions: { admin: false } },
+];
+
+const ROWS_API_ORDER: PickerRow[] = [
+  ['My Org', 'my-org', 'Admin'],
+  ['My Org 2', 'my-org-2', 'Member'],
+  ['My Org 3', 'my-org-3', 'Member'],
+];
+
+const ROWS_ACTIVE_FIRST: PickerRow[] = [
+  ['My Org 3', 'my-org-3', 'active'],
+  ['My Org', 'my-org', 'Admin'],
+  ['My Org 2', 'my-org-2', 'Member'],
+];
+
+const PICKER_STATUS_CASES: Array<[string, string | undefined, PickerRow[], string]> = [
+  ['marks the active organization and lists it first', 'my-org-3', ROWS_ACTIVE_FIRST, 'my-org-3'],
+  ['lists statuses in API order without a stored connection', undefined, ROWS_API_ORDER, 'my-org'],
+  [
+    'marks nothing when the stored organization is not a membership',
+    'other-org',
+    ROWS_API_ORDER,
+    'my-org',
+  ],
+];
+
+function runLoginPicker(harness: TestHarness, serverUrl: string) {
+  return harness.runInteractive(`auth login --server ${serverUrl}`, {
+    extraEnv: {
+      SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+      SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+    },
+    browserToken: 'my-token',
+  });
+}
+
+function toRowSource([name, key, status]: PickerRow): string {
+  return `${name}\\s+${key}\\s+\\S*${status}`;
+}
+
+function pickerRowsSource(rows: PickerRow[]): string {
+  return rows.map(toRowSource).join('[^\\n]*\\n\\s*');
+}
+
+function hasActiveRow(rows: PickerRow[]): boolean {
+  return rows.some(([, , status]) => status === 'active');
+}
+
 function readKeychainToken(keychainFile: string, account: string): string | undefined {
   try {
     const store = JSON.parse(readFileSync(keychainFile, 'utf-8')) as {
@@ -723,6 +776,62 @@ describe('auth login — organization selection', () => {
     const result = await session.waitFinish();
 
     expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+    );
+  });
+
+  it.each(PICKER_STATUS_CASES)(
+    'picker %s',
+    async (_title, activeOrg, expectedRows, firstOptionKey) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations(PICKER_ORGS)
+        .start();
+      if (activeOrg) {
+        harness.withAuth(server.baseUrl(), 'my-token', activeOrg);
+      }
+
+      const session = runLoginPicker(harness, server.baseUrl());
+      await session.waitText('Select an organization');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(new RegExp(pickerRowsSource(expectedRows)));
+      expect(/\bactive\b/.test(result.stdout)).toBe(hasActiveRow(expectedRows));
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (${firstOptionKey})`,
+      );
+    },
+  );
+
+  it('keeps the manual-entry option last when the active organization moves first', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('my-token')
+      .withOrganizations(PICKER_ORGS)
+      .start();
+    harness.withAuth(server.baseUrl(), 'my-token', 'my-org-3');
+
+    const session = runLoginPicker(harness, server.baseUrl());
+    await session.waitText('Select an organization');
+    for (let i = 0; i < PICKER_ORGS.length; i++) {
+      session.keyDown();
+    }
+    session.keyEnter();
+    await session.waitText('Enter organization key');
+    session.write('my-org-2');
+    session.keyEnter();
+    const result = await session.waitFinish();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(
+      new RegExp(
+        `${pickerRowsSource(ROWS_ACTIVE_FIRST)}[^\\n]*\\n\\s*Enter organization key manually`,
+      ),
+    );
     expect(result.stdout).toContain(
       `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
     );
