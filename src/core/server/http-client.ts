@@ -124,7 +124,7 @@ export class SonarHttpClient {
       return new ServiceUnavailableError();
     }
     if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
-      return await parseBadRequestError(response);
+      return await parseBadRequestError(response, this.isCloud);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
@@ -143,6 +143,9 @@ export class SonarHttpClient {
     if (method === 'GET') {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         return new AccessDeniedError(response.status);
+      }
+      if (response.status === HTTP_STATUS_BAD_REQUEST) {
+        return await parseBadRequestError(response, this.isCloud);
       }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
@@ -434,6 +437,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 
 interface StructuredErrorBody {
   message?: string;
+  errors?: unknown;
   code?: string;
   meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
 }
@@ -450,19 +454,28 @@ async function readStructuredErrorBody(response: Response): Promise<{
   }
 }
 
-function badRequestFallbackMessage(response: Response, text: string): string {
-  const detail = text ? ' - ' + text : '';
+function badRequestFallbackMessage(response: Response, text: string, isCloud = false): string {
+  const hint = isCloud
+    ? 'Check the request parameters and organization.'
+    : 'Check the request parameters.';
+  const detail = text ? ` - ${text}` : ` - ${hint}`;
   return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
 }
 
-async function parseBadRequestError(response: Response): Promise<BadRequestError> {
+async function parseBadRequestError(
+  response: Response,
+  isCloud: boolean,
+): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = badRequestFallbackMessage(response, text, isCloud);
   if (!body) {
     return new BadRequestError(fallback);
   }
+  const message = typeof body.message === 'string' && body.message ? body.message : undefined;
+  const errors = Array.isArray(body.errors) ? (body.errors as Array<{ msg?: unknown } | null>) : [];
+  const detail = errors.find((error) => typeof error?.msg === 'string' && error.msg)?.msg;
   return new BadRequestError(
-    body.message ?? fallback,
+    message ?? (typeof detail === 'string' ? detail : fallback),
     body.code,
     body.meta as Record<string, unknown> | undefined,
   );

@@ -54,8 +54,15 @@ export type SonarQubeServerProjectConfigEntry = {
   serverUrl: string;
 };
 
+export type CustomCloudProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  serverUrl: string;
+  organization: string;
+};
+
 export type SharedProjectConfigEntry =
-  SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry;
+  SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry | CustomCloudProjectConfigEntry;
 
 export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping | null>;
@@ -89,6 +96,16 @@ function isServerEntry(value: Record<string, unknown>): value is SonarQubeServer
   );
 }
 
+function isCustomCloudEntry(
+  value: Record<string, unknown>,
+): value is CustomCloudProjectConfigEntry {
+  return (
+    value.region === undefined &&
+    isNonEmptyString(value.organization) &&
+    isNonEmptyString(value.serverUrl)
+  );
+}
+
 function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -97,7 +114,7 @@ function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
   if (!isNonEmptyString(record.projectKey) || !isNonEmptyString(record.path)) {
     return false;
   }
-  return isCloudEntry(record) || isServerEntry(record);
+  return isCloudEntry(record) || isServerEntry(record) || isCustomCloudEntry(record);
 }
 
 /**
@@ -203,6 +220,15 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
         projectKey: raw.projectKey,
         serverUrl: raw.serverUrl,
         organization: undefined,
+      };
+    }
+
+    if (isCustomCloudEntry(raw)) {
+      return {
+        projectRoot,
+        projectKey: raw.projectKey,
+        serverUrl: raw.serverUrl,
+        organization: raw.organization,
       };
     }
 
