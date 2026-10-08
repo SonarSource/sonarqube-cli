@@ -28,6 +28,7 @@ import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import {
   openCodeIntegration,
   resolveOpenCodeAgentsMdPath,
+  resolveOpenCodeCagSkillPath,
   resolveOpenCodeMcpConfigPath,
   resolveOpenCodeSecretsPluginPath,
   resolveOpenCodeSqaaPluginPath,
@@ -82,6 +83,27 @@ describe('resolveOpenCodeSqaaPluginPath', () => {
   });
 });
 
+describe('resolveOpenCodeCagSkillPath', () => {
+  it('writes ~/.config/opencode/skills/<name>/SKILL.md for the global scope', () => {
+    expect(resolveOpenCodeCagSkillPath(fakeContext('global', '/home/jonathan'))).toBe(
+      join(
+        '/home/jonathan',
+        '.config',
+        'opencode',
+        'skills',
+        'sonar-context-augmentation',
+        'SKILL.md',
+      ),
+    );
+  });
+
+  it('writes <project>/.opencode/skills/<name>/SKILL.md for the project scope', () => {
+    expect(resolveOpenCodeCagSkillPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.opencode', 'skills', 'sonar-context-augmentation', 'SKILL.md'),
+    );
+  });
+});
+
 describe('resolveOpenCodeAgentsMdPath', () => {
   it('writes ~/.config/opencode/AGENTS.md for the global scope', () => {
     expect(resolveOpenCodeAgentsMdPath(fakeContext('global', '/home/jonathan'))).toBe(
@@ -115,7 +137,7 @@ describe('openCodeIntegration', () => {
     expect(feature?.resources).toHaveLength(1);
   });
 
-  it('declares the shared Vortex container with the SQAA plugin and instructions as subfeatures', () => {
+  it('declares the shared Vortex container with the SQAA plugin, instructions and the CAG skill as subfeatures', () => {
     const feature = openCodeIntegration.features.find(
       (candidate) => candidate.id === VORTEX_FEATURE_ID,
     );
@@ -126,11 +148,16 @@ describe('openCodeIntegration', () => {
     expect(feature.subfeatures.map((subfeature) => subfeature.id)).toEqual([
       'sonar-sqaa-hook',
       'sqaa-instructions',
+      'context-augmentation',
     ]);
-    for (const subfeature of feature.subfeatures) {
+    const [sqaaHook, sqaaInstructions, contextAugmentation] = feature.subfeatures;
+    for (const subfeature of [sqaaHook, sqaaInstructions]) {
       expect(subfeature.dependencies).toBeUndefined();
       expect(subfeature.resources).toHaveLength(1);
     }
+    expect(contextAugmentation.dependencies).toHaveLength(1);
+    expect(contextAugmentation.resources).toHaveLength(2);
+    expect(contextAugmentation.operations).toHaveLength(1);
   });
 
   it('has no legacy CAG skill cleanup, since OpenCode never shipped one', () => {
