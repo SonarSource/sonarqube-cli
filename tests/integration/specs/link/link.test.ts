@@ -156,15 +156,20 @@ describe('sonar link', () => {
       expect(file.project.projectKey).toBe('my_project');
     });
 
-    it('fails when the Cloud connection URL does not resolve to a known region', async () => {
-      // A 'cloud' connection type (inferred from the org) whose serverUrl isn't
-      // a recognized SonarCloud host — cloudRegionFromUrl() can't derive a region.
+    it('retains a custom Cloud URL in the shared configuration', async () => {
       harness.withAuth('https://custom-cloud.example.com', 'test-token', 'my-org');
 
       const result = await harness.run('link my_project --path .');
 
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('region');
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: {
+          serverUrl: 'https://custom-cloud.example.com',
+          organization: 'my-org',
+          projectKey: 'my_project',
+          path: '.',
+        },
+      });
     });
 
     it('fails with a helpful message when --path escapes the repository root', async () => {
