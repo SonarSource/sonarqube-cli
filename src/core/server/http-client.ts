@@ -144,6 +144,9 @@ export class SonarHttpClient {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         return new AccessDeniedError(response.status);
       }
+      if (response.status === HTTP_STATUS_BAD_REQUEST) {
+        return await parseBadRequestError(response);
+      }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
       return buildError(`SonarQube API error: ${response.status} ${response.statusText}`);
@@ -434,6 +437,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 
 interface StructuredErrorBody {
   message?: string;
+  errors?: unknown;
   code?: string;
   meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
 }
@@ -451,7 +455,7 @@ async function readStructuredErrorBody(response: Response): Promise<{
 }
 
 function badRequestFallbackMessage(response: Response, text: string): string {
-  const detail = text ? ' - ' + text : '';
+  const detail = text ? ` - ${text}` : ' - Check the request parameters and organization.';
   return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
 }
 
@@ -461,8 +465,11 @@ async function parseBadRequestError(response: Response): Promise<BadRequestError
   if (!body) {
     return new BadRequestError(fallback);
   }
+  const message = typeof body.message === 'string' && body.message ? body.message : undefined;
+  const errors = Array.isArray(body.errors) ? (body.errors as Array<{ msg?: unknown } | null>) : [];
+  const detail = errors.find((error) => typeof error?.msg === 'string' && error.msg)?.msg;
   return new BadRequestError(
-    body.message ?? fallback,
+    message ?? (typeof detail === 'string' ? detail : fallback),
     body.code,
     body.meta as Record<string, unknown> | undefined,
   );

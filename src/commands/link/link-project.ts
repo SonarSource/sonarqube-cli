@@ -23,7 +23,11 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
+import {
+  SHARED_PROJECT_CONFIG_FILE_NAME,
+  SONARCLOUD_URL,
+  SONARCLOUD_US_URL,
+} from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
@@ -46,14 +50,21 @@ function deriveEntry(
     return { projectKey, path, serverUrl: auth.serverUrl };
   }
 
-  const region = cloudRegionFromUrl(auth.serverUrl);
-  if (!region || !auth.orgKey) {
+  if (!auth.orgKey) {
     throw new CommandFailedError(
-      'Could not determine the SonarQube Cloud region or organization for the active connection.',
+      'Could not determine the SonarQube Cloud organization for the active connection.',
       { remediationHint: "Run 'sonar auth login' to re-authenticate." },
     );
   }
 
+  if (auth.serverUrl !== SONARCLOUD_URL && auth.serverUrl !== SONARCLOUD_US_URL) {
+    return { projectKey, path, serverUrl: auth.serverUrl, organization: auth.orgKey };
+  }
+
+  const region = cloudRegionFromUrl(auth.serverUrl);
+  if (!region) {
+    throw new CommandFailedError('Could not determine the SonarQube Cloud region.');
+  }
   return { projectKey, path, region, organization: auth.orgKey };
 }
 
