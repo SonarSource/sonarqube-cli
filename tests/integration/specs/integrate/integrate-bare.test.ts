@@ -125,6 +125,25 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'offers OpenCode in the selection prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      for (let i = 0; i < 5; i++) session.keyDown();
+      session.keyEnter();
+      await session.waitText('SonarQube Integration Setup for OpenCode');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).toContain('SonarQube Integration Setup for OpenCode');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'mentions detected installed agents before the selection prompt',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
