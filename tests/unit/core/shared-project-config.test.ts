@@ -88,6 +88,27 @@ describe('SharedProjectConfigFileRepository.load', () => {
     }
   });
 
+  it('retains a custom Cloud URL and organization', async () => {
+    const dir = tempDir('cloud-custom');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sc-staging.io',
+      organization: 'acme',
+      projectKey: 'acme_staging',
+      path: '.',
+    });
+    try {
+      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mapping).toEqual({
+        projectRoot: dir,
+        projectKey: 'acme_staging',
+        serverUrl: 'https://sc-staging.io',
+        organization: 'acme',
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('resolves a Server entry', async () => {
     const dir = tempDir('server');
     mkdirSync(join(dir, 'services/onprem'), { recursive: true });
