@@ -19,6 +19,7 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { toOrganizationSummary } from '@/core/domain/organization.ts';
 import { discoverOrganization } from '@/core/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import {
@@ -27,7 +28,9 @@ import {
   type OrganizationsClient,
 } from '@/core/server/organizations.ts';
 import type { Paging } from '@/core/server/paging.ts';
-import type { Console } from '@/core/ui/console.ts';
+import type { Console, SelectOption } from '@/core/ui/console.ts';
+
+import { formatOrganizationRows, type OrganizationRow } from './rows.ts';
 
 /**
  * Turn a rejected lookup into an error.
@@ -68,6 +71,7 @@ export async function validateOrSelectOrganization(
   client: OrganizationsClient,
   org: string | undefined,
   console: Console,
+  activeOrgKey: string | undefined,
 ): Promise<string> {
   if (org) {
     await assertOrganizationAccessible(client, org);
@@ -92,7 +96,7 @@ export async function validateOrSelectOrganization(
     console.warn(`Organization '${configOrg}' from project config is not accessible.`);
   }
 
-  return await getUserSelectedOrganization(client, console);
+  return await getUserSelectedOrganization(client, console, activeOrgKey);
 }
 
 function organizationRequiredError(): CommandFailedError {
@@ -165,9 +169,14 @@ function listMemberOrganizations(
   );
 }
 
+function toSelectOption({ key, text }: OrganizationRow): SelectOption<string> {
+  return { value: key, label: text };
+}
+
 async function getUserSelectedOrganization(
   client: OrganizationsClient,
   console: Console,
+  activeOrgKey: string | undefined,
 ): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
   const {
@@ -192,11 +201,9 @@ async function getUserSelectedOrganization(
     );
   }
   const MANUAL_ENTRY = '__manual__';
+  const summaries = memberOrgs.map((org) => toOrganizationSummary(org, activeOrgKey));
   const orgOptions = [
-    ...memberOrgs.map((org: { key: string; name: string }) => ({
-      value: org.key,
-      label: `${org.name} (${org.key})`,
-    })),
+    ...formatOrganizationRows(summaries).map(toSelectOption),
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 
