@@ -29,7 +29,7 @@
 //                           Name kept for backwards compatibility with harness builder
 //                           callers; covers `tool integrate` and the legacy `init`
 //                           subcommand alike.
-//   CAG_STUB_PRINT_SKILL_EXIT — exit code returned for `tool print-skill` (default 0)
+//   CAG_STUB_PRINT_SKILL_EXIT — exit code returned for `tool print-skill` (default 0); a non-zero code also writes a line to stderr
 //   CAG_STUB_PRINT_SKILL_EMPTY — when "1", `tool print-skill` exits 0 with empty stdout
 //   CAG_STUB_SESSION_CONTEXT_EXIT — exit code returned for `tool print-session-start-context` (default 0)
 //   CAG_STUB_SESSION_CONTEXT_STDOUT — a line emitted to stdout by `tool print-session-start-context`
@@ -77,6 +77,7 @@ if (args[0] === 'tool' && args[1] === 'print-skill') {
     const scaEnabledArg = args.find((arg) => arg.startsWith('--sca-enabled='));
     process.stdout.write(`# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n`);
   }
+  if (exitCode !== 0) process.stderr.write('stub print-skill failure\n');
   process.exit(exitCode);
 }
 

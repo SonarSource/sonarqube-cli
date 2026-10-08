@@ -351,6 +351,25 @@ describe('integrate opencode — Vortex Context feature', () => {
       expect(result.stderr).toContain(
         'sonar-context-augmentation tool print-skill produced empty output',
       );
+      expect(result.stderr).toContain('Vortex Context skill generation failed.');
+      expect(harness.userHome.exists(...skillRelativePath, 'SKILL.md')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'reports the Context binary output when print-skill fails',
+    async () => {
+      harness.state().withContextAugmentationBinaryInstalled({ printSkillExitCode: 1 });
+      const serverUrl = await startEntitledServer();
+
+      const result = await harness.run('integrate opencode --non-interactive', {
+        extraEnv: runEnv(serverUrl),
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('stub print-skill failure');
+      expect(result.stderr).toContain('Vortex Context skill generation failed.');
       expect(harness.userHome.exists(...skillRelativePath, 'SKILL.md')).toBe(false);
     },
     { timeout: 30000 },

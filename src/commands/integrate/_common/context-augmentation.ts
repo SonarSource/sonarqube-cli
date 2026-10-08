@@ -145,13 +145,17 @@ export interface PrintContextAugmentationSkillParams {
   binaryPath: string;
   projectRoot: string;
   scaEnabled: boolean;
+  console: Console;
   orgKey?: string;
 }
+
+const PRINT_SKILL_FAILURE_MESSAGE = 'Vortex Context skill generation failed.';
 
 export async function printContextAugmentationSkill({
   binaryPath,
   projectRoot,
   scaEnabled,
+  console,
   orgKey,
 }: PrintContextAugmentationSkillParams): Promise<string> {
   const result = await runCagSubprocess(
@@ -169,14 +173,19 @@ export async function printContextAugmentationSkill({
     },
   );
   if (!result.ok) {
-    throw new CagStepFailedError(result);
+    reportCagFailure(result, console);
+    throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
   }
   if (result.stdout.trim().length === 0) {
-    throw new CagStepFailedError({
-      ...result,
-      ok: false,
-      failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
-    });
+    reportCagFailure(
+      {
+        ...result,
+        ok: false,
+        failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
+      },
+      console,
+    );
+    throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
   }
   return result.stdout;
 }

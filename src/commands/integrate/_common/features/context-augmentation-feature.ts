@@ -143,6 +143,7 @@ function createSkillResource(options: ContextAugmentationSkillFeatureOptions): R
         binaryPath: resolveContextAugmentationBinaryPath(context),
         projectRoot: context.targetRoot,
         scaEnabled: context.attrs?.scaEnabled === true,
+        console: context.console,
         orgKey: getOptionalStringAttr(context, 'orgKey'),
       }),
   });
