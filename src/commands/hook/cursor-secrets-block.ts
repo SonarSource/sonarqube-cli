@@ -20,9 +20,9 @@
 
 // Shared deny helpers for Cursor secrets hook handlers.
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
-import { commitStatsFacts } from '@/core/stats/facts.ts';
 
 import { runSecretsBinaryOnText } from '../analyze/secrets.ts';
 import { appendToCursorIgnore } from './cursor-ignore.ts';
@@ -50,11 +50,9 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
 }
 
 export async function denyCursor(ctx: CommandInvocationContext, message: string): Promise<never> {
-  // process.exit() bypasses postAction, so drain stats here or this run's StatsFact is lost.
-  commitStatsFacts(ctx.statsFacts());
   // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
   // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
-  // guarantees the payload is fully flushed before the process terminates.
+  // guarantees the payload is fully flushed before the command reports the required exit code.
   await new Promise<void>((resolve) => {
     process.stdout.write(
       JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }) + '\n',
@@ -63,7 +61,10 @@ export async function denyCursor(ctx: CommandInvocationContext, message: string)
       },
     );
   });
-  process.exit(CURSOR_BLOCK_EXIT_CODE);
+  ctx.setCommandResult('success');
+  throw new CommandFailedError('Cursor blocked file access.', {
+    exitCode: CURSOR_BLOCK_EXIT_CODE,
+  });
 }
 
 /** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */

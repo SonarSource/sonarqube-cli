@@ -127,6 +127,21 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 });
 
+describe('CommandInvocationContext command metadata', () => {
+  it('stores agent session ids and explicit command results', () => {
+    const context = ctx();
+
+    expect(context.currentAgentSessionId()).toBeNull();
+    expect(context.currentCommandResult()).toBeUndefined();
+
+    context.setAgentSessionId('cursor-session');
+    context.setCommandResult('success');
+
+    expect(context.currentAgentSessionId()).toBe('cursor-session');
+    expect(context.currentCommandResult()).toBe('success');
+  });
+});
+
 type AuthResolverInternals = AuthResolver & {
   resolveFromState: () => Promise<ResolvedAuth | null>;
 };
