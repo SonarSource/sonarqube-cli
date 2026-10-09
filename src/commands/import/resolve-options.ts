@@ -104,7 +104,7 @@ export async function resolveOrg(
   orgKey: string | undefined,
 ): Promise<ResolvedOrg> {
   if (!client.isCloud) {
-    throw new CommandFailedError('sonar import is only supported on SonarQube Cloud.', {
+    throw new CommandFailedError('The sonar import command is only supported on SonarQube Cloud.', {
       remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
     });
   }

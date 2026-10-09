@@ -99,9 +99,12 @@ export async function remediate(
 
 function assertCloudConnection(auth: ResolvedAuth): void {
   if (auth.connectionType !== 'cloud') {
-    throw new CommandFailedError('sonar remediate requires a SonarQube Cloud connection.', {
-      remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
-    });
+    throw new CommandFailedError(
+      'The sonar remediate command requires a SonarQube Cloud connection.',
+      {
+        remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+      },
+    );
   }
 }
 
