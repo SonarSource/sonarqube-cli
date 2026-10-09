@@ -90,7 +90,7 @@ function resolveAllOperations<TOptions>(
   return [...(feature.operations ?? []), ...subfeatures.flatMap((s) => s.operations ?? [])];
 }
 interface ApplyFeatureCallbacks<TOptions = Record<string, unknown>> {
-  onFeatureApplyStart?: (feature: FeatureDeclaration<TOptions>) => void;
+  onFeatureApplyStart?: (application: FeatureApplication<TOptions>) => void;
   onDependencyInstalled?: (dependency: DependencyDeclaration) => void;
   onDependencySkipped?: (dependency: DependencyDeclaration) => void;
   onResourceInstalled?: (resource: ResourceDeclaration) => void;
@@ -207,7 +207,7 @@ export class IntegrationInstaller {
 
     for (const execution of executions) {
       try {
-        options.callbacks?.onFeatureApplyStart?.(execution.application.feature);
+        options.callbacks?.onFeatureApplyStart?.(execution.application);
         await this.removeDeactivatedSubfeatures(execution);
         const applied = await this.applyFeatureWithUniqueDependencies(
           execution,
