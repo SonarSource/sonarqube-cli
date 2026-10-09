@@ -84,6 +84,45 @@ export function normalizeDecision(result: boolean | InstallDecision | undefined)
   return result;
 }
 
+export function reportFeatureAvailability<TOptions>(
+  applications: FeatureApplication<TOptions>[],
+  console: Console,
+): void {
+  for (const application of applications) {
+    reportAvailability(application.feature.displayName, application, console);
+    if (application.available !== true) {
+      continue;
+    }
+    for (const subfeatureApplication of application.subfeatureApplications) {
+      reportAvailability(
+        subfeatureApplication.subfeature.displayName,
+        subfeatureApplication,
+        console,
+      );
+    }
+  }
+}
+
+function reportAvailability(
+  displayName: string,
+  item: Pick<FeatureApplication, 'installed' | 'available' | 'unavailableReason'>,
+  console: Console,
+): void {
+  if (item.available === undefined) {
+    console.warn(`Could not check whether ${displayName} is available.`);
+    return;
+  }
+  if (item.available) {
+    return;
+  }
+  if (item.unavailableReason) {
+    console.info(item.unavailableReason);
+  }
+  if (item.installed) {
+    console.info(`${displayName} is no longer available. Removing it.`);
+  }
+}
+
 /**
  * Interactive feature selection over the pre-resolved `applications`.
  */
