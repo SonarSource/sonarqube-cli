@@ -75,9 +75,7 @@ import {
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
 const ANTIGRAVITY_DISPLAY_NAME = 'Antigravity';
 
-export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type AntigravityIntegrationOptions = IntegrateAgentOptions;
 
 // Antigravity has no session start event, so it doesn't deliver Vortex Context atm.
 // It also has no global rules directory, so project scope gets an always-on rule file
@@ -106,12 +104,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       displayName: 'secret scanning hooks',
       benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.globalSecretsHookExists === true
-          ? skip(
-              'Skipping the project-level secrets scanning hooks because a global secrets scanning hook is already configured.',
-            )
-          : askUser(),
       postInstallExample: secretsScanningExample('Antigravity'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
