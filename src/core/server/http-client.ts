@@ -144,6 +144,9 @@ export class SonarHttpClient {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         return new AccessDeniedError(response.status);
       }
+      if (response.status === HTTP_STATUS_BAD_REQUEST) {
+        return await parseBadRequestError(response);
+      }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
       return buildError(`SonarQube API error: ${response.status} ${response.statusText}`);
@@ -434,6 +437,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 
 interface StructuredErrorBody {
   message?: string;
+  errors?: unknown;
   code?: string;
   meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
 }
@@ -450,19 +454,27 @@ async function readStructuredErrorBody(response: Response): Promise<{
   }
 }
 
-function badRequestFallbackMessage(response: Response, text: string): string {
-  const detail = text ? ' - ' + text : '';
-  return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
+function apiErrorFallbackMessage(response: Response, text: string, emptyBodyHint?: string): string {
+  const detail = text || emptyBodyHint;
+  const suffix = detail ? ` - ${detail}` : '';
+  return `SonarQube API error: ${response.status} ${response.statusText}${suffix}`;
 }
 
 async function parseBadRequestError(response: Response): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = apiErrorFallbackMessage(
+    response,
+    text,
+    'Check the request parameters and organization.',
+  );
   if (!body) {
     return new BadRequestError(fallback);
   }
+  const message = typeof body.message === 'string' && body.message ? body.message : undefined;
+  const errors = Array.isArray(body.errors) ? (body.errors as Array<{ msg?: unknown } | null>) : [];
+  const detail = errors.find((error) => typeof error?.msg === 'string' && error.msg)?.msg;
   return new BadRequestError(
-    body.message ?? fallback,
+    message ?? (typeof detail === 'string' ? detail : fallback),
     body.code,
     body.meta as Record<string, unknown> | undefined,
   );
@@ -472,7 +484,7 @@ async function parseRequestPayloadTooLargeError(
   response: Response,
 ): Promise<RequestPayloadTooLargeError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = apiErrorFallbackMessage(response, text);
   if (!body) {
     return new RequestPayloadTooLargeError(fallback);
   }

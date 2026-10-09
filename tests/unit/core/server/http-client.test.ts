@@ -22,6 +22,12 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import {
+  SONARCLOUD_STAGING_API_URL,
+  SONARCLOUD_STAGING_URL,
+  SONARCLOUD_US_STAGING_API_URL,
+  SONARCLOUD_US_STAGING_URL,
+} from '@/core/server/sonarcloud-region.ts';
 
 import { version as VERSION } from '../../../../package.json';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -56,6 +62,21 @@ describe('SonarHttpClient', () => {
       fetchSpy = mockFetch({ organizations: [] });
       await cloudClient.get('/organizations');
       expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/organizations`);
+    });
+
+    it.each([
+      [SONARCLOUD_STAGING_URL, SONARCLOUD_STAGING_API_URL],
+      [SONARCLOUD_US_STAGING_URL, SONARCLOUD_US_STAGING_API_URL],
+      [`${SONARCLOUD_STAGING_URL}/`, SONARCLOUD_STAGING_API_URL],
+    ])('routes staging Cloud endpoints for %s', async (serverUrl, apiUrl) => {
+      const cloudClient = new SonarHttpClient(serverUrl, TOKEN);
+      fetchSpy = mockFetch({ organizations: [] });
+      await cloudClient.get('/organizations');
+      expect(cloudClient.isCloud).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(`${apiUrl}/organizations`);
+      await cloudClient.get('/api/projects/search');
+      const webUrl = serverUrl.replace(/\/$/, '');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${webUrl}/api/projects/search`);
     });
 
     it('strips trailing slash from serverURL', async () => {
@@ -100,6 +121,27 @@ describe('SonarHttpClient', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe(
         'SonarQube API error: 401 Internal Server Error',
+      );
+    });
+
+    it('shows the API detail for a GET 400 response', async () => {
+      fetchSpy = mockFetch(
+        { errors: [{ msg: 'The organization parameter is required' }] },
+        { ok: false, status: 400 },
+      );
+      const result = await client.get('/api/projects/search');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe('The organization parameter is required');
+    });
+
+    it('gives a remediation for a GET 400 response without a body', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('', { status: 400, statusText: 'Bad Request' }),
+      );
+      const result = await client.get('/api/projects/search');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'Check the request parameters and organization.',
       );
     });
 
