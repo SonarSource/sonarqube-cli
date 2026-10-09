@@ -117,7 +117,7 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
 
 /**
  * Prints the applicable message and returns false when remediation is not
- * available for this organisation. Throws when entitlement could not be verified.
+ * available for this organization. Throws when entitlement could not be verified.
  */
 async function confirmEntitlement(
   client: RemediateApiClient,
@@ -128,14 +128,14 @@ async function confirmEntitlement(
   if (entitlement === 'not_eligible') {
     console.blank();
     console.info(
-      `The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`,
+      `The Remediation Agent is not available for your organization. See ${AGENTIC_PACK_URL}`,
     );
     return false;
   }
   if (entitlement === 'not_enabled') {
     console.blank();
     console.info(
-      `The Remediation Agent is not enabled for your organisation. Contact your admin to enable it.`,
+      `The Remediation Agent is not enabled for your organization. Contact your admin to enable it.`,
     );
     return false;
   }
