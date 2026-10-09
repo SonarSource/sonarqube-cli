@@ -18,16 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
-  ANTIGRAVITY_GLOBAL_GEMINI_MD,
   ANTIGRAVITY_LEGACY_GLOBAL_INSTRUCTIONS_PATH,
   ANTIGRAVITY_LEGACY_PROJECT_INSTRUCTIONS_PATH,
 } from '@/core/config-constants.ts';
-
-import { sonarBeginMarker } from '../_common/instructions-templates.ts';
 
 export { PROMPT_SECRETS_BODY } from '../copilot/instructions.ts';
 
@@ -36,21 +32,6 @@ export const PROMPT_SECRETS_RULE_MARKER = '# SonarQube secrets scanning for prom
 /** Render an Antigravity workspace rule (`.agents/rules/*.md`) with always-on activation. */
 export function buildAntigravityAlwaysOnRule(body: string): string {
   return `---\ntrigger: always_on\n---\n\n${body.trimEnd()}\n`;
-}
-
-/**
- * True when a global Sonar prompt-secrets rule is already present (legacy instructions
- * file or managed snippet in `~/.gemini/GEMINI.md`).
- */
-export function globalAntigravityPromptSecretsRuleExists(): boolean {
-  if (existsSync(ANTIGRAVITY_LEGACY_GLOBAL_INSTRUCTIONS_PATH)) {
-    return true;
-  }
-  if (!existsSync(ANTIGRAVITY_GLOBAL_GEMINI_MD)) {
-    return false;
-  }
-  const content = readFileSync(ANTIGRAVITY_GLOBAL_GEMINI_MD, 'utf-8');
-  return content.includes(sonarBeginMarker('antigravity-prompt-secrets'));
 }
 
 export function resolveLegacyProjectInstructionsPath(targetRoot: string): string {
