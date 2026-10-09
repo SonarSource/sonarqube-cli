@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type VortexDisposition = 'install' | 'preserve' | 'remove';
+export interface VortexDisposition {
+  action: 'install' | 'preserve' | 'remove';
+  unavailableReason?: string;
+}
 
 export interface IntegrateAgentOptions {
   nonInteractive?: boolean;
