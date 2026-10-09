@@ -498,8 +498,7 @@ export class EnvironmentBuilder {
 
   /**
    * Seeds a previously-installed integration feature in the state file so
-   * `shouldInstall` state probes (e.g. `isFeatureInstalledGloballyForProject`) see it as
-   * already installed.
+   * `shouldInstall` state probes see it as already installed.
    */
   withInstalledIntegrationFeature<TOptions>(
     integration: IntegrationDeclaration<TOptions>,

@@ -27,13 +27,10 @@
 // secret, and (b) direct the agent to run `sonar analyze agentic` at
 // end-of-turn for files modified in that turn.
 
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
 export const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
-export const GLOBAL_INSTRUCTIONS_DIR = join(homedir(), '.copilot', 'instructions');
 
 export const PROMPT_SECRETS_BODY = `# SonarQube secrets scanning for prompts protocol
 
@@ -57,7 +54,3 @@ If the prompt appears to contain any such secret (either by your judgement or th
 1. Inform the user that their prompt appears to contain a secret or credential and that it may now be exposed in chat history, logs, and any downstream telemetry.
 2. Advise them to rotate the leaked credential immediately at its source of truth.
 `;
-
-export function globalCopilotInstructionsExist(): boolean {
-  return existsSync(join(GLOBAL_INSTRUCTIONS_DIR, INSTRUCTIONS_FILENAME));
-}
