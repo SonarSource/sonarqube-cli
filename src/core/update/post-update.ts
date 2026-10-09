@@ -37,11 +37,6 @@ import {
 } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
-import {
-  cleanObsoleteFromState,
-  type InstallHooksFn,
-  migrateClaudeCodeHooks,
-} from './claude-hooks-migration.ts';
 import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyStateConfig } from './legacy-config-migration.ts';
@@ -66,8 +61,6 @@ export type AgentIntegrationHandlers = Readonly<Record<string, AgentIntegrationH
 export interface PostUpdateDependencies {
   /** Full registry of declarative integrations (`@/commands/integrate`). */
   supportedIntegrations: IntegrationRegistry;
-  /** Installs/refreshes Claude Code hook scripts (`@/commands/integrate/claude/hooks.ts`). */
-  installHooks: InstallHooksFn;
   /** Process console created at CLI startup. */
   console: Console;
   /** Credentials for migrations that need them, via `runtime.authResolver.resolveAuth()`. */
@@ -104,12 +97,11 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
   try {
     await runActions(deps);
     // Reload state to pick up changes made by subroutines
-    // (migrateDeclarativeIntegrations, migrateClaudeCodeHooks,
+    // (migrateDeclarativeIntegrations,
     // updateSecretsBinaryIfNeeded) that load and save their own state copies.
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     delete state.config.betaCommandWarnings;
-    cleanObsoleteFromState(state);
     saveState(state);
   } catch (error) {
     deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
@@ -133,7 +125,6 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   // Before reconciliation: that would re-apply the artifacts this deletes.
   await migrateAgentIntegrationsToGlobalScope(deps);
   await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
-  await migrateClaudeCodeHooks(deps.installHooks);
   await updateSecretsBinaryIfNeeded(deps.console);
   await updateScaScannerBinaryIfNeeded(deps.console);
 }

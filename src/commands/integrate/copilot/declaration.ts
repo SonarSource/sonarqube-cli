@@ -26,9 +26,7 @@ import type {
   ResourceDeclaration,
 } from '@/core/framework/features';
 import {
-  askUser,
   jsonPatch,
-  skip,
   sonarSecretsBinaryDependency,
   textSnippet,
   wholeFile,
@@ -71,7 +69,6 @@ import {
   upsertCopilotHooks,
 } from './hooks.ts';
 import {
-  globalCopilotInstructionsExist,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
   PROMPT_SECRETS_BODY,
@@ -81,9 +78,7 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
 
-export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type CopilotIntegrationOptions = IntegrateAgentOptions;
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
   id: COPILOT_INTEGRATION_ID,
@@ -94,12 +89,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'pre-tool-use hook',
       benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.globalSecretsHookExists === true
-          ? skip(
-              'Skipping the project-level pre-tool-use hook because a global secrets scanning hook is already configured.',
-            )
-          : askUser(),
       postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
@@ -133,12 +122,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'prompt-secrets instructions',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) =>
-        scope === 'project' && globalCopilotInstructionsExist()
-          ? askUser(
-              'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
-            )
-          : askUser(),
       resources: [
         textSnippet({
           id: 'prompt-secrets-instructions-file',
