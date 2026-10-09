@@ -23,7 +23,6 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
-import * as hooks from '@/commands/integrate/claude/hooks.ts';
 import { AuthResolver } from '@/core/auth/auth-resolver.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { IntegrationRegistry } from '@/core/framework/features';
@@ -32,7 +31,6 @@ import { okAsync } from '@/core/result.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
-import * as migration from '@/core/update/claude-hooks-migration.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
 import {
   migrateDeclarativeIntegrations,
@@ -50,7 +48,6 @@ function makeDeps(): PostUpdateDependencies {
   authResolver.resolveAuth = () => okAsync(null);
   return {
     supportedIntegrations,
-    installHooks: hooks.installHooks,
     console,
     runtime: createCliRuntime({ authResolver, console, isAlphaEnabled: false }),
     // Empty: the default state records no integrations, so the global-integrations
@@ -70,9 +67,6 @@ describe('runPostUpdateActions', () => {
   let tryLoadStateSpy: Mock<typeof stateRepository.tryLoadState>;
   let saveStateSpy: Mock<typeof stateRepository.saveState>;
   let isNewerVersionSpy: Mock<typeof versionLib.isNewerVersion>;
-  let migrateHookScriptsSpy: Mock<typeof migration.migrateHookScripts>;
-  let removeObsoleteHookArtifactsSpy: Mock<typeof migration.removeObsoleteHookArtifacts>;
-  let installHooksSpy: Mock<typeof hooks.installHooks>;
   let installSecretsBinarySpy: Mock<typeof secretsInstall.installSecretsBinary>;
 
   beforeEach(() => {
@@ -82,12 +76,6 @@ describe('runPostUpdateActions', () => {
     tryLoadStateSpy = spyOn(stateRepository, 'tryLoadState').mockReturnValue(makeState());
     saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
     isNewerVersionSpy = spyOn(versionLib, 'isNewerVersion').mockReturnValue(true);
-    migrateHookScriptsSpy = spyOn(migration, 'migrateHookScripts').mockImplementation(() => {});
-    removeObsoleteHookArtifactsSpy = spyOn(
-      migration,
-      'removeObsoleteHookArtifacts',
-    ).mockResolvedValue(undefined);
-    installHooksSpy = spyOn(hooks, 'installHooks').mockResolvedValue(undefined);
     installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
       '/fake/bin/sonar-secrets',
     );
@@ -100,9 +88,6 @@ describe('runPostUpdateActions', () => {
     tryLoadStateSpy.mockRestore();
     saveStateSpy.mockRestore();
     isNewerVersionSpy.mockRestore();
-    migrateHookScriptsSpy.mockRestore();
-    removeObsoleteHookArtifactsSpy.mockRestore();
-    installHooksSpy.mockRestore();
     installSecretsBinarySpy.mockRestore();
   });
 
@@ -145,7 +130,6 @@ describe('runPostUpdateActions', () => {
     await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).not.toHaveBeenCalled();
-    expect(installHooksSpy).not.toHaveBeenCalled();
   });
 
   it('saves state with cliVersion bumped to the current version', async () => {
@@ -170,16 +154,15 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 9 times:
+    // The version check reads via tryLoadState, so loadState is called 8 times:
     //   1. inside migrateLegacyStateConfig
     //   2. inside migrateLegacyTelemetryEvents
     //   3. inside migrateKnownServerProjectMappings
     //   4. inside migrateAgentIntegrationsToGlobalScope
     //   5. inside migrateDeclarativeIntegrations
-    //   6. inside migrateClaudeCodeHooks
-    //   7. inside updateSecretsBinaryIfNeeded
-    //   8. inside updateScaScannerBinaryIfNeeded
-    //   9. the reload after runActions (the fix being tested)
+    //   6. inside updateSecretsBinaryIfNeeded
+    //   7. inside updateScaScannerBinaryIfNeeded
+    //   8. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: migrateLegacyStateConfig
@@ -187,14 +170,13 @@ describe('runPostUpdateActions', () => {
       .mockReturnValueOnce(makeState()) // call 3: migrateKnownServerProjectMappings
       .mockReturnValueOnce(makeState()) // call 4: migrateAgentIntegrationsToGlobalScope
       .mockReturnValueOnce(makeState()) // call 5: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 6: migrateClaudeCodeHooks
-      .mockReturnValueOnce(makeState()) // call 7: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 8: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 9: reload
+      .mockReturnValueOnce(makeState()) // call 6: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 7: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 8: reload
 
     await runPostUpdateActions(makeDeps());
 
-    expect(loadStateSpy).toHaveBeenCalledTimes(9);
+    expect(loadStateSpy).toHaveBeenCalledTimes(8);
     expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
 
@@ -238,23 +220,6 @@ describe('runPostUpdateActions', () => {
     await runPostUpdateActions(makeDeps());
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('removes sonar-a3s entries from state on upgrade', async () => {
-    const state = makeState();
-    state.agents['claude-code'].hooks.installed.push({
-      name: 'sonar-a3s',
-      type: 'PostToolUse',
-      installedAt: new Date().toISOString(),
-    });
-    loadStateSpy.mockReturnValue(state);
-
-    await runPostUpdateActions(makeDeps());
-
-    const saved = saveStateSpy.mock.calls[0][0];
-    expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
-      false,
-    );
   });
 });
 
