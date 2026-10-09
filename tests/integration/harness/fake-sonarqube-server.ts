@@ -515,6 +515,8 @@ export class FakeSonarQubeServerBuilder {
   private orgsLookupReturnsNotFound = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
+  private projectsSearchErrorStatusCode?: number;
+  private projectsSearchErrorBody?: string;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -660,6 +662,12 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationsSearchError(statusCode: number): this {
     this.organizationsSearchErrorCode = statusCode;
+    return this;
+  }
+
+  withProjectsSearchError(statusCode: number, body = ''): this {
+    this.projectsSearchErrorStatusCode = statusCode;
+    this.projectsSearchErrorBody = body;
     return this;
   }
 
@@ -896,6 +904,8 @@ export class FakeSonarQubeServerBuilder {
       orgsLookupReturnsNotFound,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
+      projectsSearchErrorStatusCode,
+      projectsSearchErrorBody,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -1472,6 +1482,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/components/search' || path === '/api/projects/search') {
+          if (projectsSearchErrorStatusCode !== undefined) {
+            return new Response(projectsSearchErrorBody, { status: projectsSearchErrorStatusCode });
+          }
           const allProjects = [...projects.values()].map((p) => ({
             key: p.key,
             name: p.name,

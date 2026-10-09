@@ -96,20 +96,6 @@ describe('link', () => {
     });
   });
 
-  it('fails without writing when the Cloud connection has no resolvable region', async () => {
-    const auth = new ResolvedAuth({
-      token: cloudAuth.token,
-      serverUrl: 'https://custom-cloud.example.com',
-      orgKey: cloudAuth.orgKey,
-      connectionType: 'cloud',
-      source: 'state',
-    });
-
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(link('my_project', { path: '.' }, ctxFor(auth))).rejects.toThrow('region');
-    expect(setSpy).not.toHaveBeenCalled();
-  });
-
   it('rejects a blank --path without resolving git or writing anything', async () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(link('my_project', { path: ' ' }, ctxFor(onPremAuth))).rejects.toThrow(

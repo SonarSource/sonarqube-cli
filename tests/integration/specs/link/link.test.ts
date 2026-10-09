@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 
 import { TestHarness } from '../../harness';
 import { initGitRepo } from '../hook/git-test-helpers.ts';
@@ -134,6 +134,21 @@ describe('sonar link', () => {
       });
     });
 
+    it.each([
+      [`${SONARCLOUD_URL}/`, 'eu'],
+      [`${SONARCLOUD_US_URL}/`, 'us'],
+      [`${SONARCLOUD_URL.toUpperCase()}/`, 'eu'],
+    ] as const)('keeps a region entry for production Cloud URL %s', async (serverUrl, region) => {
+      harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+      const result = await harness.run('link my_project --path .');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: { region, organization: 'my-org', projectKey: 'my_project', path: '.' },
+      });
+    });
+
     it('overwrites an existing entry rather than merging with it', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile(
@@ -156,16 +171,19 @@ describe('sonar link', () => {
       expect(file.project.projectKey).toBe('my_project');
     });
 
-    it('fails when the Cloud connection URL does not resolve to a known region', async () => {
-      // A 'cloud' connection type (inferred from the org) whose serverUrl isn't
-      // a recognized SonarCloud host — cloudRegionFromUrl() can't derive a region.
-      harness.withAuth('https://custom-cloud.example.com', 'test-token', 'my-org');
+    it.each(['https://custom-cloud.example.com', `${SONARCLOUD_URL}:8443`])(
+      'retains custom Cloud URL %s in the shared configuration',
+      async (serverUrl) => {
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
 
-      const result = await harness.run('link my_project --path .');
+        const result = await harness.run('link my_project --path .');
 
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('region');
-    });
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, organization: 'my-org', projectKey: 'my_project', path: '.' },
+        });
+      },
+    );
 
     it('fails with a helpful message when --path escapes the repository root', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
