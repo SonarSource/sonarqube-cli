@@ -66,8 +66,10 @@ import {
   VORTEX_FEATURE_ID,
 } from '../_common/vortex.ts';
 import type { ClaudeHookSubfeature } from './hook-container-feature.ts';
-import { createPostToolUseDispatchResources } from './hook-container-feature.ts';
-import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
+import {
+  CLAUDE_PROJECT_DIR_PLACEHOLDER,
+  createPostToolUseDispatchResources,
+} from './hook-container-feature.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
