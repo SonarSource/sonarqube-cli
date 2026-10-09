@@ -2715,6 +2715,31 @@ describe('analyze agentic — --format json', () => {
   );
 
   it(
+    'does not attach the request-parameters hint to an empty 413 response',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(413, '')
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('413 Payload Too Large');
+      expect(result.stdout + result.stderr).not.toContain('Check the request parameters');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled',
     async () => {
       const server = await harness

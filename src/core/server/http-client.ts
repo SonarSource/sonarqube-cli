@@ -454,14 +454,19 @@ async function readStructuredErrorBody(response: Response): Promise<{
   }
 }
 
-function badRequestFallbackMessage(response: Response, text: string): string {
-  const detail = text ? ` - ${text}` : ' - Check the request parameters and organization.';
-  return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
+function apiErrorFallbackMessage(response: Response, text: string, emptyBodyHint?: string): string {
+  const detail = text || emptyBodyHint;
+  const suffix = detail ? ` - ${detail}` : '';
+  return `SonarQube API error: ${response.status} ${response.statusText}${suffix}`;
 }
 
 async function parseBadRequestError(response: Response): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = apiErrorFallbackMessage(
+    response,
+    text,
+    'Check the request parameters and organization.',
+  );
   if (!body) {
     return new BadRequestError(fallback);
   }
@@ -479,7 +484,7 @@ async function parseRequestPayloadTooLargeError(
   response: Response,
 ): Promise<RequestPayloadTooLargeError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = apiErrorFallbackMessage(response, text);
   if (!body) {
     return new RequestPayloadTooLargeError(fallback);
   }
