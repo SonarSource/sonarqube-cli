@@ -28,7 +28,6 @@ import type {
   InstalledIntegrationOperation,
   InstalledIntegrationResource,
   InstalledSubfeature,
-  IntegrationScope,
 } from '@/core/state/state.ts';
 
 import { version as VERSION } from '../../../../package.json';
@@ -216,23 +215,6 @@ export function findInstalledFeature<TOptions>(
 ): InstalledIntegrationFeature | undefined {
   return findInstalledIntegration(state, integration)?.features.find((entry) =>
     matchesFeatureKey(entry, context, feature),
-  );
-}
-
-/** True for a project install whose `featureId` already has a recorded global install. */
-export function isFeatureInstalledGloballyForProject(
-  state: CliState | undefined,
-  scope: IntegrationScope,
-  integrationId: string,
-  featureId: string,
-): boolean {
-  return (
-    scope === 'project' &&
-    state !== undefined &&
-    (state.integrations.installed
-      .find((integration) => integration.integrationId === integrationId)
-      ?.features.some((feature) => feature.featureId === featureId && feature.scope === 'global') ??
-      false)
   );
 }
 

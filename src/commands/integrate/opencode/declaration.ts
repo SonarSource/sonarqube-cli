@@ -25,14 +25,7 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import {
-  askUser,
-  install,
-  isFeatureInstalledGloballyForProject,
-  skip,
-  sonarSecretsBinaryDependency,
-  wholeFile,
-} from '@/core/framework/features';
+import { install, sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
@@ -70,9 +63,7 @@ const SECRETS_EXAMPLE_FOOTER =
   '  Sonar will detect the token and mask it before the message is sent.';
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
-export interface OpenCodeIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type OpenCodeIntegrationOptions = IntegrateAgentOptions;
 
 function resolvePluginFilePath(context: IntegrationContext, fileName: string): string {
   return context.scope === 'global'
@@ -132,21 +123,6 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
       displayName: 'secret scanning hooks',
       benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      shouldInstall: ({ options, scope, state }) => {
-        const globalHookExists =
-          options.globalSecretsHookExists ??
-          isFeatureInstalledGloballyForProject(
-            state,
-            scope,
-            OPENCODE_INTEGRATION_ID,
-            SONAR_SECRETS_HOOKS_FEATURE_ID,
-          );
-        return globalHookExists
-          ? skip(
-              'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
-            )
-          : askUser();
-      },
       postInstallExample: secretsScanningExample(OPENCODE_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [

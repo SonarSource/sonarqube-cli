@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -29,9 +28,8 @@ import {
   ANTIGRAVITY_PROJECT_SONAR_HOOKS_DIR_FROM_AGENTS,
 } from '@/core/config-constants.ts';
 import type { IntegrationContext } from '@/core/framework/features';
-import type { Console } from '@/core/ui/console.ts';
 
-import { HOOK_TIMEOUT_SEC, readOrInitJson, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
+import { HOOK_TIMEOUT_SEC, SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
 export const SONAR_SECRETS_BLOCK_NAME = 'sonar-secrets';
 export const PRETOOL_SECRETS_BASENAME = 'pretool-secrets';
@@ -62,36 +60,6 @@ export interface AntigravityHookBlock {
 }
 
 export type AntigravityHooksDocument = Record<string, AntigravityHookBlock | undefined>;
-
-/**
- * Probe `~/.gemini/config/hooks.json` for an existing global sonar-secrets
- * PreToolUse hook. Returns the active hook script path when healthy, so project
- * installs can skip duplicate secrets scanning.
- */
-export async function detectGlobalSecretsHook(console: Console): Promise<string | undefined> {
-  if (!existsSync(ANTIGRAVITY_GLOBAL_HOOKS_JSON)) return undefined;
-
-  const parsed = await readOrInitJson<AntigravityHooksDocument>(ANTIGRAVITY_GLOBAL_HOOKS_JSON, {});
-  const block = parsed[SONAR_SECRETS_BLOCK_NAME];
-  if (block?.enabled === false) return undefined;
-  const matchedEntry = block?.PreToolUse?.find(isSonarSecretsPreToolUseEntry);
-  if (!matchedEntry) return undefined;
-
-  const command = matchedEntry.hooks.find((hook) =>
-    hookReferencesSonarSecrets(hook.command),
-  )?.command;
-  const scriptPath =
-    (command ? extractScriptPathFromHookCommand(command) : undefined) ??
-    join(ANTIGRAVITY_GLOBAL_SONAR_HOOKS_DIR, hookScriptName());
-  if (!existsSync(scriptPath)) {
-    console.warn(
-      `Global hook configuration detected at ${ANTIGRAVITY_GLOBAL_HOOKS_JSON} but the backing script is missing. Falling back to project-level installation.`,
-    );
-    return undefined;
-  }
-
-  return scriptPath;
-}
 
 export function upsertAntigravitySecretsBlock(
   document: unknown,

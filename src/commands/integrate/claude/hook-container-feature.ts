@@ -29,7 +29,11 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
+
+/**
+ * Claude Code's environment variable for project root in case the agent changes cwd durign the run
+ */
+export const CLAUDE_PROJECT_DIR_PLACEHOLDER = '${CLAUDE_PROJECT_DIR}';
 
 export interface ClaudeHookSubfeature<
   TOptions = Record<string, unknown>,
