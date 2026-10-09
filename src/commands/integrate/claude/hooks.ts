@@ -20,20 +20,17 @@
 
 // Hooks installation (cross-platform)
 
-import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
 import logger from '@/core/observability/logger.ts';
-import type { Console } from '@/core/ui/console.ts';
 
 import {
   buildUnixHookScript,
   buildWindowsHookScript,
   readOrInitJson,
   resolveAgentHookCommand,
-  SONAR_SECRETS_MARKER,
   writeHookScript,
 } from '../_common/hooks.ts';
 
@@ -135,139 +132,35 @@ async function installHook(params: HookInstallParams): Promise<void> {
 }
 
 /**
- * Result of probing for a Sonar secrets hook installation under a given root.
- * Internal — surfaced to callers via {@link detectGlobalSecretsHook} (noisy,
- * for the integrate flow) and {@link areHooksInstalled} (silent probe).
- *
- *  - `installed`: settings entry references sonar-secrets AND the backing
- *    script directory exists. `hookDir` is the absolute path of that directory.
- *  - `orphaned`:  settings entry exists but the backing script directory is
- *    missing — the install was partially deleted/corrupted. `hookDir`
- *    is the expected path of the missing script directory so callers can
- *    surface it to the user.
- *  - `absent`:    no settings entry referencing sonar-secrets.
- */
-type SecretsHookState =
-  | { kind: 'installed'; hookDir: string }
-  | { kind: 'orphaned'; hookDir: string }
-  | { kind: 'absent' };
-
-/**
- * Silent probe — single source of truth for the install/orphaned/absent contract.
- */
-async function probeSecretsHook(hooksRoot: string): Promise<SecretsHookState> {
-  const settingsPath = join(hooksRoot, AGENT_CONFIG_DIR.claude, SETTINGS_FILE);
-
-  if (!nodeFs.existsSync(settingsPath)) {
-    return { kind: 'absent' };
-  }
-
-  try {
-    const data = await fsPromises.readFile(settingsPath, 'utf-8');
-    const settings = JSON.parse(data) as AgentSettings;
-
-    const hasSettingsEntry = Boolean(
-      settings.hooks?.PreToolUse &&
-      Array.isArray(settings.hooks.PreToolUse) &&
-      settings.hooks.PreToolUse.some(
-        (e) =>
-          Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(SONAR_SECRETS_MARKER)),
-      ),
-    );
-
-    if (!hasSettingsEntry) {
-      return { kind: 'absent' };
-    }
-
-    const hookDir = join(hooksRoot, AGENT_CONFIG_DIR.claude, HOOKS_DIR, SONAR_SECRETS_MARKER);
-    if (!nodeFs.existsSync(hookDir)) {
-      return { kind: 'orphaned', hookDir };
-    }
-    return { kind: 'installed', hookDir };
-  } catch {
-    return { kind: 'absent' };
-  }
-}
-
-/**
- * Probe `hooksRoot` for an existing global sonar-secrets hook. Returns the
- * hook directory when a healthy install is found (caller should skip
- * project-level secrets hooks), and `undefined` otherwise.
- *
- *  - Healthy global install → silent, returns the hook dir.
- *  - Orphaned install → `console.warn(...)` and returns `undefined`.
- *  - No global install → silent, returns `undefined`.
- */
-export async function detectGlobalSecretsHook(
-  hooksRoot: string,
-  console: Console,
-): Promise<string | undefined> {
-  const state = await probeSecretsHook(hooksRoot);
-  if (state.kind === 'installed') {
-    return state.hookDir;
-  }
-  if (state.kind === 'orphaned') {
-    console.warn(
-      `WARNING: Global hook configuration detected, but the source files are missing at ${state.hookDir}. Falling back to local project installation`,
-    );
-  }
-  return undefined;
-}
-
-/**
- * Check whether a Sonar secrets hook is fully installed under `hooksRoot`.
- *
- * Silent — probing must not emit user-facing messages.
- */
-export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
-  return (await probeSecretsHook(hooksRoot)).kind === 'installed';
-}
-
-export interface InstallHooksOptions {
-  /**
-   * When true, skip the project-level sonar-secrets hook writes.
-   * Used when a global sonar-secrets hook is already configured to avoid duplicate execution.
-   */
-  skipSecretsHooks?: boolean;
-}
-
-/**
  * Reinstall the secrets hooks (cross-platform) into globalDir when provided,
  * otherwise projectRoot. The Vortex analysis hook is deliberately not installed
  * here: it needs an entitlement check, which the post-update caller cannot do.
  */
-export async function installHooks(
-  projectRoot: string,
-  globalDir?: string,
-  options: InstallHooksOptions = {},
-): Promise<void> {
+export async function installHooks(projectRoot: string, globalDir?: string): Promise<void> {
   const secretsDir = globalDir ?? projectRoot;
   const secretsScope = globalDir ? 'global' : 'project';
-  const { skipSecretsHooks = false } = options;
 
   try {
-    if (!skipSecretsHooks) {
-      await installHook({
-        installDir: secretsDir,
-        scope: secretsScope,
-        agent: 'claude',
-        eventType: 'PreToolUse',
-        matcher: 'Read',
-        scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
-        scriptContentUnix: buildUnixHookScript('claude-pre-tool-use'),
-        scriptContentWindows: buildWindowsHookScript('claude-pre-tool-use'),
-      });
-      await installHook({
-        installDir: secretsDir,
-        scope: secretsScope,
-        agent: 'claude',
-        eventType: 'UserPromptSubmit',
-        matcher: '*',
-        scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
-        scriptContentUnix: buildUnixHookScript('claude-prompt-submit'),
-        scriptContentWindows: buildWindowsHookScript('claude-prompt-submit'),
-      });
-    }
+    await installHook({
+      installDir: secretsDir,
+      scope: secretsScope,
+      agent: 'claude',
+      eventType: 'PreToolUse',
+      matcher: 'Read',
+      scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
+      scriptContentUnix: buildUnixHookScript('claude-pre-tool-use'),
+      scriptContentWindows: buildWindowsHookScript('claude-pre-tool-use'),
+    });
+    await installHook({
+      installDir: secretsDir,
+      scope: secretsScope,
+      agent: 'claude',
+      eventType: 'UserPromptSubmit',
+      matcher: '*',
+      scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
+      scriptContentUnix: buildUnixHookScript('claude-prompt-submit'),
+      scriptContentWindows: buildWindowsHookScript('claude-prompt-submit'),
+    });
   } catch (error) {
     logger.debug(`Failed to install hooks: ${(error as Error).message}`);
     // Non-critical - don't fail if hooks installation fails
