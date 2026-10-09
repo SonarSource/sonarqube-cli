@@ -35,11 +35,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.9.14
 
-      - uses: SonarSource/ci-github-actions/get-build-number@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # 2.2.0
+      - uses: SonarSource/ci-github-actions/get-build-number@62463382a24f2004ffa20adbe9985f6459e031e6 # 2.3.0
         id: get-build-number
 
       - name: Update package.json version with build number
@@ -537,7 +537,7 @@ jobs:
       - integration-and-e2e-windows
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # 2.2.0
+      - uses: SonarSource/ci-github-actions/promote@62463382a24f2004ffa20adbe9985f6459e031e6 # 2.3.0
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
