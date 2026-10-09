@@ -26,7 +26,6 @@ import type {
   ResourceDeclaration,
 } from '@/core/framework/features';
 import {
-  askUser,
   jsonPatch,
   sonarSecretsBinaryDependency,
   textSnippet,
@@ -70,7 +69,6 @@ import {
   upsertCopilotHooks,
 } from './hooks.ts';
 import {
-  globalCopilotInstructionsExist,
   INSTRUCTIONS_FILENAME,
   PROJECT_INSTRUCTIONS_REL_DIR,
   PROMPT_SECRETS_BODY,
@@ -124,12 +122,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'prompt-secrets instructions',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) =>
-        scope === 'project' && globalCopilotInstructionsExist()
-          ? askUser(
-              'Global Copilot instructions already exist. Do you also want to create a project-local copy for this repo?',
-            )
-          : askUser(),
       resources: [
         textSnippet({
           id: 'prompt-secrets-instructions-file',
