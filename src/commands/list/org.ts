@@ -20,6 +20,7 @@
 
 // Organizations command - list organizations the authenticated user can switch into
 
+import { formatOrganizationRows } from '@/commands/components/organization/rows.ts';
 import { CommandFailedError, type InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
@@ -28,10 +29,6 @@ import { errAsync, type ResultAsync } from '@/core/result.ts';
 import { type Organization, OrganizationsClient } from '@/core/server/organizations.ts';
 import { hasNextPage, type Paging } from '@/core/server/paging.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
-import { cyan } from '@/core/ui/colors.ts';
-import { padColumns } from '@/core/ui/formatter/column-formatting.ts';
-
-const COLUMN_GAP = 2;
 
 export const VALID_FORMATS = ['json', 'table'] as const;
 
@@ -57,39 +54,13 @@ export function listOrganizations(
   );
 }
 
-function statusLabel(organization: OrganizationSummary): string {
-  if (organization.isActive) {
-    return 'active';
-  }
-  return organization.isAdmin ? 'Admin' : 'Member';
-}
-
-function withActiveFirst(organizations: OrganizationSummary[]): OrganizationSummary[] {
-  const active = organizations.find((o) => o.isActive);
-  if (!active) {
-    return organizations;
-  }
-  return [active, ...organizations.filter((o) => o !== active)];
-}
-
 function formatTable(organizations: OrganizationSummary[]): string {
   if (organizations.length === 0) {
     return 'No organizations found';
   }
 
-  const ordered = withActiveFirst(organizations);
-
-  const [nameColumn, keyColumn] = padColumns(
-    [ordered.map((o) => o.name), ordered.map((o) => o.key)],
-    [],
-    COLUMN_GAP,
-  );
-
-  return ordered
-    .map((organization, i) => {
-      const status = statusLabel(organization);
-      return `${nameColumn[i]}${keyColumn[i]}${organization.isActive ? cyan(status) : status}`;
-    })
+  return formatOrganizationRows(organizations)
+    .map((row) => row.text)
     .join('\n');
 }
 
