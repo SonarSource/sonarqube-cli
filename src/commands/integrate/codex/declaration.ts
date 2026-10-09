@@ -78,9 +78,7 @@ export const CODEX_INTEGRATION_ID = 'codex';
 export const CODEX_HOOKS_CONFIG_RESOURCE_ID = 'codex-hooks-config';
 const CODEX_DISPLAY_NAME = 'Codex';
 
-export interface CodexIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type CodexIntegrationOptions = IntegrateAgentOptions;
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
   id: CODEX_INTEGRATION_ID,
@@ -88,7 +86,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: CODEX_DISPLAY_NAME,
-      integrationId: CODEX_INTEGRATION_ID,
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
       hooksPatchId: 'codex-hooks-secrets-hook',

@@ -28,7 +28,6 @@ import type {
 import {
   askUser,
   jsonPatch,
-  skip,
   sonarSecretsBinaryDependency,
   textSnippet,
   wholeFile,
@@ -81,9 +80,7 @@ export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
 
-export interface CopilotIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type CopilotIntegrationOptions = IntegrateAgentOptions;
 
 export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOptions> = {
   id: COPILOT_INTEGRATION_ID,
@@ -94,12 +91,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       displayName: 'pre-tool-use hook',
       benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.globalSecretsHookExists === true
-          ? skip(
-              'Skipping the project-level pre-tool-use hook because a global secrets scanning hook is already configured.',
-            )
-          : askUser(),
       postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [

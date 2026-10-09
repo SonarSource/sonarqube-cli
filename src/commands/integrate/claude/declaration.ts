@@ -81,9 +81,7 @@ export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
 export const CLAUDE_HOOKS_CONFIG_RESOURCE_ID = 'claude-hooks-config';
 const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
-export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type ClaudeIntegrationOptions = IntegrateAgentOptions;
 
 const sqaaPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
   id: 'sqaa-posttooluse',
@@ -152,7 +150,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Claude',
-      integrationId: CLAUDE_INTEGRATION_ID,
       configDir: CLAUDE_CONFIG_DIR,
       hooksConfigFileName: SETTINGS_FILE,
       hooksPatchId: 'claude-settings-secrets-hooks',
