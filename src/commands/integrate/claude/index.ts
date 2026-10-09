@@ -24,7 +24,6 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
 
 import {
   displayAgentIntegratePrelude,
@@ -74,36 +73,27 @@ export async function integrateClaude(
     projectRoot: integrateCtx.project.projectRoot,
     vortexDisposition: vortex.disposition,
   } satisfies ClaudeIntegrationOptions;
-  let installError: Error | undefined;
-  try {
-    await installIntegration({
-      registry: supportedIntegrations,
-      integrationId: CLAUDE_INTEGRATION_ID,
-      options: integrationOptions,
-      targetRoot: installRoot,
-      scope: installScope,
-      console: ctx.console,
-      auth,
-      attrs: featureAttrs,
-      nonInteractive: options.nonInteractive,
-      onSuccess: (facts) => {
-        recordIntegrationConfigured(ctx, {
-          auth,
-          integrationId: CLAUDE_INTEGRATION_ID,
-          scope: installScope,
-          nonInteractive: options.nonInteractive ?? false,
-          isFromRouter: options.isFromRouter ?? false,
-          ...facts,
-        });
-      },
-    });
-  } catch (error) {
-    installError = error instanceof Error ? error : new Error(String(error));
-  }
-  await removeObsoleteHookArtifacts(installRoot);
-  if (installError) {
-    throw installError;
-  }
+  await installIntegration({
+    registry: supportedIntegrations,
+    integrationId: CLAUDE_INTEGRATION_ID,
+    options: integrationOptions,
+    targetRoot: installRoot,
+    scope: installScope,
+    console: ctx.console,
+    auth,
+    attrs: featureAttrs,
+    nonInteractive: options.nonInteractive,
+    onSuccess: (facts) => {
+      recordIntegrationConfigured(ctx, {
+        auth,
+        integrationId: CLAUDE_INTEGRATION_ID,
+        scope: installScope,
+        nonInteractive: options.nonInteractive ?? false,
+        isFromRouter: options.isFromRouter ?? false,
+        ...facts,
+      });
+    },
+  });
 }
 
 function toConfigurationData(ctx: {

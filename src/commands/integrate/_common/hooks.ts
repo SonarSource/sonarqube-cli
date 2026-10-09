@@ -19,11 +19,11 @@
  */
 
 // Shared hook helpers used by the agent integrations. Keeps the hook script
-// builders, cross-platform script writer, and JSON config read-or-init helper
+// builders and JSON config read-or-init helper
 // in one place so every integration stays behaviorally aligned.
 
-import { existsSync, mkdirSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
@@ -50,29 +50,6 @@ export function buildWindowsHookScript(subcommand: string): string {
 
 function sonarHookCommand(subcommand: string): string {
   return `sonar hook ${subcommand}`;
-}
-
-/**
- * Write a hook script for the current platform (`.sh` on Unix, `.ps1` on
- * Windows), creating `scriptDir` if needed. Returns the absolute path of
- * the script that was written.
- */
-export async function writeHookScript(
-  scriptDir: string,
-  basename: string,
-  unixContent: string,
-  windowsContent: string,
-): Promise<string> {
-  const isWindows = process.platform === 'win32';
-  const ext = isWindows ? '.ps1' : '.sh';
-  const scriptPath = join(scriptDir, `${basename}${ext}`);
-  mkdirSync(scriptDir, { recursive: true });
-  await writeFile(
-    scriptPath,
-    isWindows ? windowsContent : unixContent,
-    isWindows ? undefined : { mode: 0o755 },
-  );
-  return scriptPath;
 }
 
 /**
