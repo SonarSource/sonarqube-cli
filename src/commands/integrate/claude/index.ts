@@ -24,7 +24,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { installIntegration } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
+import { removeObsoleteHookArtifacts } from '@/core/update/claude-a3s-cleanup.ts';
 
 import {
   displayAgentIntegratePrelude,

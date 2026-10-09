@@ -132,7 +132,6 @@ import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';
-import { installHooks } from './integrate/claude/hooks.ts';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
@@ -231,7 +230,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   const postUpdateDeps: PostUpdateDependencies = {
     supportedIntegrations,
-    installHooks,
     console,
     runtime,
     agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
