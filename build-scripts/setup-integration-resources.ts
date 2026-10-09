@@ -30,7 +30,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -39,6 +39,7 @@ import { type BinarySpec, resolveDownloadExtension } from '@/core/host/install/b
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
+import { scannerArchive, verifyScannerArchive } from '@/core/host/install/sonar-scanner.ts';
 import {
   buildCagDownloadUrl,
   buildDownloadUrl,
@@ -59,6 +60,14 @@ mkdirSync(DEPENDENCY_ARTIFACTS_DIR, { recursive: true });
 for (const fixture of FIXTURES) {
   await prepareBinaryFixture(fixture);
 }
+
+const scanner = scannerArchive(platform);
+const scannerArchivePath = join(DEPENDENCY_ARTIFACTS_DIR, scanner.url.split('/').at(-1)!);
+if (!existsSync(scannerArchivePath)) {
+  console.log('Downloading SonarScanner archive fixture.');
+  await downloadBinary(scanner.url, scannerArchivePath);
+}
+verifyScannerArchive(readFileSync(scannerArchivePath), platform);
 
 async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
   const extension = resolveDownloadExtension(fixture, platform);
@@ -164,4 +173,22 @@ if (shouldCompileCagStub) {
     throw new Error(`Failed to compile CAG stub: bun build exited with ${result.status}`);
   }
   console.log(`  CAG stub ready at ${cagStubOutfile}`);
+}
+
+const scannerStubSource = join(RESOURCES_DIR, 'sonar-scanner-stub.ts');
+const scannerStubOutfile = join(
+  RESOURCES_DIR,
+  platform.os === 'windows' ? 'sonar-scanner-stub.exe' : 'sonar-scanner-stub',
+);
+if (
+  !existsSync(scannerStubOutfile) ||
+  statSync(scannerStubSource).mtimeMs > statSync(scannerStubOutfile).mtimeMs
+) {
+  const result = spawnSync(
+    process.execPath,
+    ['build', '--compile', scannerStubSource, '--outfile', scannerStubOutfile],
+    { stdio: 'inherit' },
+  );
+  if (result.status !== 0)
+    throw new Error(`Failed to compile SonarScanner stub: bun build exited with ${result.status}`);
 }

@@ -34,6 +34,16 @@ import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;
 
+interface OnboardConfig {
+  createError?: { status: number; message: string };
+  taskStatuses?: Array<'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'CANCELED'>;
+  taskProjectKey?: string;
+  qualityGate?: string;
+  issues?: IssueConfig[];
+  issuesSearchError?: { status: number; message: string };
+  qualityGateError?: { status: number; message: string };
+}
+
 /** Statuses `resolved=true` matches; `resolved=false` matches everything else. */
 const RESOLVED_ISSUE_STATUSES = new Set(['FALSE_POSITIVE', 'ACCEPTED', 'FIXED']);
 
@@ -463,6 +473,12 @@ export class FakeSonarQubeServer {
 }
 
 export class FakeSonarQubeServerBuilder {
+  private onboardConfig: OnboardConfig = {};
+
+  withOnboarding(config: OnboardConfig = {}): this {
+    this.onboardConfig = config;
+    return this;
+  }
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
   private treatAsCloud = false;
@@ -861,6 +877,9 @@ export class FakeSonarQubeServerBuilder {
   }
 
   start(): Promise<FakeSonarQubeServer> {
+    const onboardConfig = this.onboardConfig;
+    const taskStatuses = [...(onboardConfig.taskStatuses ?? ['SUCCESS'])];
+    let onboardedProjectKey: string | undefined;
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     const {
       validToken,
@@ -984,6 +1003,59 @@ export class FakeSonarQubeServerBuilder {
             status: 401,
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/api/projects/create' && req.method === 'POST') {
+          const params = new URLSearchParams(body);
+          const key = params.get('project') ?? '';
+          const failure =
+            onboardConfig.createError ??
+            (projects.has(key) ? { status: 400, message: 'Project already exists' } : undefined);
+          if (failure)
+            return Response.json(
+              { errors: [{ msg: failure.message }] },
+              { status: failure.status },
+            );
+          const builder = new ProjectBuilder(key);
+          for (const issue of onboardConfig.issues ?? []) builder.withIssue(issue);
+          if (onboardConfig.issuesSearchError) {
+            builder.withIssuesSearchError(
+              onboardConfig.issuesSearchError.status,
+              onboardConfig.issuesSearchError.message,
+            );
+          }
+          const project = builder.getData();
+          project.name = params.get('name') ?? key;
+          projects.set(key, project);
+          onboardedProjectKey = key;
+          return Response.json({ project: { key, name: project.name } });
+        }
+
+        if (path === '/api/ce/task') {
+          const status =
+            taskStatuses.length > 1 ? taskStatuses.shift()! : (taskStatuses[0] ?? 'SUCCESS');
+          return Response.json({
+            task: {
+              id: query.id,
+              componentKey: onboardConfig.taskProjectKey ?? onboardedProjectKey,
+              status,
+              ...(status === 'SUCCESS' ? { analysisId: 'onboard-analysis' } : {}),
+              ...(status === 'FAILED' ? { errorMessage: 'Analysis processing failed' } : {}),
+            },
+          });
+        }
+
+        if (
+          path === '/api/qualitygates/project_status' &&
+          query.analysisId === 'onboard-analysis'
+        ) {
+          if (onboardConfig.qualityGateError) {
+            return Response.json(
+              { errors: [{ msg: onboardConfig.qualityGateError.message }] },
+              { status: onboardConfig.qualityGateError.status },
+            );
+          }
+          return Response.json({ projectStatus: { status: onboardConfig.qualityGate ?? 'OK' } });
         }
 
         if (path === '/api/authentication/validate') {

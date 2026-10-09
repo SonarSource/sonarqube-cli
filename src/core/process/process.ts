@@ -25,16 +25,20 @@ import type { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
 export interface SpawnOptions {
   cwd?: string;
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   stdin?: StdioMode;
   /** An iterable is pulled one chunk at a time, so a large input is never held whole. */
   stdinData?: string | Buffer | AsyncIterable<Buffer>;
   stdout?: StdioMode;
   stderr?: StdioMode;
+  onStdout?: (text: string) => void;
+  onStderr?: (text: string) => void;
   detached?: boolean;
   /** Called immediately after the child process spawns, with a function to kill it. */
   onSpawn?: (kill: () => void) => void;
@@ -90,16 +94,33 @@ export async function spawnProcess(
     // A character's bytes can straddle two chunks, so the decoder holds the remainder until the next one arrives.
     const stdoutDecoder = new StringDecoder('utf-8');
     const stderrDecoder = new StringDecoder('utf-8');
+    const notify = (callback: ((text: string) => void) | undefined, text: string): void => {
+      if (!text) return;
+      try {
+        callback?.(text);
+      } catch (error) {
+        proc.kill();
+        reject(
+          error instanceof Error
+            ? error
+            : new CommandFailedError('Process output handling failed.', { cause: error }),
+        );
+      }
+    };
 
     if (proc.stdout) {
       proc.stdout.on('data', (data: Buffer) => {
-        stdout += stdoutDecoder.write(data);
+        const text = stdoutDecoder.write(data);
+        stdout += text;
+        notify(options.onStdout, text);
       });
     }
 
     if (proc.stderr) {
       proc.stderr.on('data', (data: Buffer) => {
-        stderr += stderrDecoder.write(data);
+        const text = stderrDecoder.write(data);
+        stderr += text;
+        notify(options.onStderr, text);
       });
     }
 
@@ -117,11 +138,15 @@ export async function spawnProcess(
 
     proc.on('error', reject);
 
-    proc.on('exit', (code) => {
+    proc.on('close', (code) => {
+      const stdoutTail = stdoutDecoder.end();
+      const stderrTail = stderrDecoder.end();
+      notify(options.onStdout, stdoutTail);
+      notify(options.onStderr, stderrTail);
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
-        stdout: (stdout + stdoutDecoder.end()).trim(),
-        stderr: (stderr + stderrDecoder.end()).trim(),
+        stdout: (stdout + stdoutTail).trim(),
+        stderr: (stderr + stderrTail).trim(),
       });
     });
   });

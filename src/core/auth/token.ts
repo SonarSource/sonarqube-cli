@@ -191,8 +191,9 @@ export async function openBrowserWithFallback(
   authURL: string,
   console: Console,
   browserOpener: (url: string) => Promise<void> = openBrowser,
+  allowInCi = false,
 ): Promise<void> {
-  if (process.env.CI === 'true') {
+  if (process.env.CI === 'true' && !allowInCi) {
     return;
   }
   if (process.env.SONARQUBE_CLI_DISABLE_BROWSER === 'true') {
@@ -330,10 +331,19 @@ export async function waitForTokenInteractive(
 /**
  * Generate token via browser OAuth flow
  */
+export interface BrowserAuthOptions {
+  browserOnly?: boolean;
+  manualBrowser?: boolean;
+}
+
 export async function generateTokenViaBrowser(
   serverURL: string,
   console: Console,
-  openBrowserFn: (url: string) => Promise<void> = (url) => openBrowserWithFallback(url, console),
+  openBrowserFn: (url: string) => Promise<void> = (url) =>
+    options.manualBrowser
+      ? Promise.resolve()
+      : openBrowserWithFallback(url, console, undefined, options.browserOnly),
+  options: BrowserAuthOptions = {},
 ): Promise<BrowserAuthResult> {
   let resolveToken: ((result: BrowserAuthResult) => void) | null = null;
   let rejectToken: ((err: Error) => void) | null = null;
@@ -361,7 +371,7 @@ export async function generateTokenViaBrowser(
       if (isValid) {
         callbackState.validatedToken = token;
         resolveToken?.({ token, tokenName });
-      } else if (process.env.CI === 'true') {
+      } else if (options.browserOnly || process.env.CI === 'true') {
         logger.warn(
           `Auth callback token rejected: ${validation.status}${
             validation.errorMessage ? ` (${validation.errorMessage})` : ''
@@ -380,14 +390,18 @@ export async function generateTokenViaBrowser(
 
   console.print('🔑 Obtaining access token from SonarQube...');
   console.print(`URL: ${blue(authURL)}`);
-  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER !== 'true') {
+  if (
+    !options.browserOnly &&
+    !options.manualBrowser &&
+    process.env.SONARQUBE_CLI_DISABLE_BROWSER !== 'true'
+  ) {
     await console.pressEnterKeyPrompt('Press Enter to open the browser');
   }
   await openBrowserFn(authURL);
 
   let authResult: BrowserAuthResult | undefined;
   try {
-    if (process.env.CI === 'true') {
+    if (options.browserOnly || process.env.CI === 'true') {
       // Non-interactive: wait for server token
       authResult = await tokenPromise;
     } else {

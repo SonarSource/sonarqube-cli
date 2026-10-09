@@ -23,10 +23,12 @@
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+
 /**
  * Open URL in default browser
  */
-export async function openBrowser(url: string): Promise<void> {
+export async function openBrowser(url: string, spawnProcess: typeof spawn = spawn): Promise<void> {
   const os = platform();
 
   let command: string;
@@ -45,7 +47,7 @@ export async function openBrowser(url: string): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, {
+    const proc = spawnProcess(command, args, {
       stdio: 'ignore',
       detached: true,
       shell: false,
@@ -60,11 +62,16 @@ export async function openBrowser(url: string): Promise<void> {
       }
     });
 
-    proc.on('exit', () => {
-      // Exit code 0 or null means success, ignore non-zero exit codes
-      resolve();
+    proc.on('exit', (code, signal) => {
+      if (code === 0) resolve();
+      else
+        reject(
+          new CommandFailedError(
+            `Browser opener failed (${command}: ${signal ?? code ?? 'unknown exit'}).`,
+          ),
+        );
     });
 
-    proc.unref();
+    // Keep the short-lived opener referenced until its result is confirmed.
   });
 }

@@ -34,8 +34,10 @@ import {
   generateTokenViaBrowser,
   readTokenFromStdin,
 } from '@/core/auth/token.ts';
+import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { OnboardingProgress } from '@/core/commands/onboarding-progress.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
   deleteStaleTokens,
@@ -57,6 +59,7 @@ import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { type AuthLoginOptions, validateLoginOptions } from './login-options.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
@@ -69,8 +72,24 @@ export async function authLogin(
   options: AuthLoginOptions,
   ctx: CommandInvocationContext,
 ): Promise<void> {
-  const { console } = ctx;
   validateLoginOptions(options);
+  const progress = new OnboardingProgress(ctx.console, options.events);
+  progress.start('connect_account', 'Connecting your SonarQube account.');
+  try {
+    await login(options, ctx, progress);
+    progress.complete('connect_account', 'Your account is connected.');
+  } catch (error) {
+    progress.fail('Account connection did not complete. Return to your agent to resume sign-in.');
+    throw error;
+  }
+}
+
+async function login(
+  options: AuthLoginOptions,
+  ctx: CommandInvocationContext,
+  progress: OnboardingProgress,
+): Promise<void> {
+  const { console } = ctx;
   if (options.withToken) {
     await authLoginWithToken(options, console);
     return;
@@ -80,6 +99,11 @@ export async function authLogin(
     throw authResult.error;
   }
   const invocationAuth = authResult.value;
+  if (options.nonInteractive && invocationAuth?.comesFromEnv()) {
+    throw new InvalidOptionError(
+      'Environment credentials take precedence. Unset them before starting non-interactive browser login.',
+    );
+  }
   await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options, console);
   await confirmServerTrust(server, console);
@@ -90,17 +114,20 @@ export async function authLogin(
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption, console);
+    const auth = await getOrGenerateToken(server, orgOption, console, options, progress);
     const { token, tokenName, reusedExistingToken } = auth;
 
-    const org = await resolveOrganization(server, isCloud, orgOption, auth, console);
+    const org =
+      options.organization === false
+        ? undefined
+        : await resolveOrganization(server, isCloud, orgOption, auth, console);
 
     await persistLoginCredentials(server, isCloud, org, token, {
       tokenName,
       reusedExistingToken,
     });
 
-    const displayServer = isCloud ? `${server} (${org})` : server;
+    const displayServer = isCloud && org ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
     if (invocationAuth?.comesFromEnv()) {
       console.warn(
@@ -161,7 +188,7 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
 
   await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true });
 
-  const displayServer = isCloud ? `${server} (${org})` : server;
+  const displayServer = isCloud && org ? `${server} (${org})` : server;
   console.success(`Authentication successful for: ${displayServer}`);
 }
 
@@ -317,18 +344,46 @@ async function getOrGenerateToken(
   server: string,
   org: string | undefined,
   console: Console,
+  options: AuthLoginOptions,
+  progress: OnboardingProgress,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const existingToken = await getKeystoreToken(server, org);
+  const existingToken = options.force ? null : await getKeystoreToken(server, org);
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
-    console.print(`Token already exists for: ${displayServer}`);
-    console.print('You are already authenticated');
-    return { token: existingToken, reusedExistingToken: true };
+    const status = await checkTokenStatus(server, existingToken);
+    if (status.status === 'valid') {
+      console.print(`Token already exists for: ${server}`);
+      console.print('You are already authenticated');
+      return { token: existingToken, reusedExistingToken: true };
+    }
+    if (status.status === 'unreachable')
+      throw new CommandFailedError(
+        `Could not verify your saved sign-in: ${status.errorMessage ?? 'server unavailable'}`,
+        {
+          remediationHint:
+            'Check connectivity, or use --force to reconnect if the saved sign-in was rejected.',
+        },
+      );
+    console.info('Your saved sign-in has expired. Preparing a new connection.', 'stderr');
   }
 
-  console.print(`\nAuthenticating with: ${server}`);
-  const authResult = await generateTokenViaBrowser(server, console);
-  console.discreetSuccess('Token received');
+  const browserOptions = {
+    browserOnly: options.nonInteractive,
+    manualBrowser: options.browser === false,
+  };
+  const onBrowser = async (url: string) => {
+    progress.browser(
+      'connect_account',
+      url,
+      'Choose GitHub on the SonarQube sign-in page and approve the connection. Then return to your agent.',
+    );
+    if (options.browser !== false)
+      await openBrowserWithFallback(url, console, undefined, options.nonInteractive);
+  };
+  const authResult =
+    options.nonInteractive || options.browser === false || options.events
+      ? await generateTokenViaBrowser(server, console, onBrowser, browserOptions)
+      : await generateTokenViaBrowser(server, console);
+  console.discreetSuccess('Connection approved');
   return { ...authResult, reusedExistingToken: false };
 }
 
@@ -581,44 +636,4 @@ async function resolveServer(options: AuthLoginOptions, console: Console): Promi
   return server;
 }
 
-function validateLoginOptions(options: AuthLoginOptions): void {
-  if (options.org !== undefined && !options.org.trim()) {
-    throw new InvalidOptionError('--org value cannot be empty.', 'Use --org <organization-key>.');
-  }
-
-  if (options.server !== undefined && !options.server.trim()) {
-    throw new InvalidOptionError(
-      '--server value cannot be empty.',
-      'Use --server <url> (for example https://sonarcloud.io).',
-    );
-  }
-
-  if (options.server !== undefined && !isValidServerUrl(options.server)) {
-    throw new InvalidOptionError(
-      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
-      'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
-    );
-  }
-
-  if (options.withToken && options.server === undefined) {
-    throw new InvalidOptionError('--server is required with --with-token.', 'Use --server <url>.');
-  }
-
-  if (
-    options.withToken &&
-    options.server !== undefined &&
-    isSonarQubeCloud(options.server) &&
-    options.org === undefined
-  ) {
-    throw new InvalidOptionError(
-      '--org is required for SonarQube Cloud with --with-token.',
-      'Use --org <organization-key>.',
-    );
-  }
-}
-
-export interface AuthLoginOptions {
-  server?: string;
-  org?: string;
-  withToken?: boolean;
-}
+export type { AuthLoginOptions } from './login-options.ts';
