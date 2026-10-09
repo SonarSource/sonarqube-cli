@@ -37,7 +37,7 @@ export async function integrateCursor(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate cursor --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Cursor', auth, console);
+  await displayAgentIntegratePrelude('Cursor', auth, console);
 
   console.warn(
     "Cursor's cloud/background agents only pick up project-level hooks, not global ones.",
@@ -45,7 +45,6 @@ export async function integrateCursor(
 
   await finalizeAgentInstall<CursorIntegrationOptions>({
     integrationId: CURSOR_INTEGRATION_ID,
-    context: integrateCtx,
     options,
     auth,
     ctx,
