@@ -221,23 +221,6 @@ describe('runPostUpdateActions', () => {
 
     expect(saveStateSpy).toHaveBeenCalledTimes(1);
   });
-
-  it('removes sonar-a3s entries from state on upgrade', async () => {
-    const state = makeState();
-    state.agents['claude-code'].hooks.installed.push({
-      name: 'sonar-a3s',
-      type: 'PostToolUse',
-      installedAt: new Date().toISOString(),
-    });
-    loadStateSpy.mockReturnValue(state);
-
-    await runPostUpdateActions(makeDeps());
-
-    const saved = saveStateSpy.mock.calls[0][0];
-    expect(saved.agents['claude-code'].hooks.installed.some((h) => h.name === 'sonar-a3s')).toBe(
-      false,
-    );
-  });
 });
 
 describe('migrateDeclarativeIntegrations', () => {

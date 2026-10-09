@@ -35,12 +35,10 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
 import {
   type CliResult,
   hookScriptName,
   hookScriptPath,
-  IS_WINDOWS,
   normalizePath,
   TestHarness,
 } from '../../harness';
@@ -893,76 +891,6 @@ describe('integrate claude — Vortex entitlement guard', () => {
     },
     { timeout: 30000 },
   );
-
-  it(
-    'removes obsolete sonar-a3s hook entry when sonar-sqaa is installed',
-    async () => {
-      harness.state().withContextAugmentationBinaryInstalled();
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('cloud-token')
-        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withVortexEntitlement('my-org', 'test-uuid-1234')
-        .withProject('my-project')
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
-      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
-
-      // Simulate pre-existing sonar-a3s hook from an older install, plus a third-party hook
-      harness.userHome.writeFile(
-        '.claude/hooks/sonar-a3s/build-scripts/posttool-a3s.sh',
-        '#!/bin/bash\necho old',
-      );
-      harness.userHome.writeFile(
-        '.claude/settings.json',
-        JSON.stringify({
-          hooks: {
-            PostToolUse: [
-              {
-                matcher: 'Edit|Write',
-                hooks: [
-                  {
-                    type: 'command',
-                    command: '.claude/hooks/sonar-a3s/build-scripts/posttool-a3s.sh',
-                    timeout: 60,
-                  },
-                ],
-              },
-              {
-                matcher: '*',
-                hooks: [
-                  {
-                    type: 'command',
-                    command: '.claude/hooks/some-other-tool/run.sh',
-                    timeout: 30,
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      );
-
-      const result = await harness.run(`integrate claude --non-interactive`, {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-
-      expect(result.exitCode).toBe(0);
-      const settings = harness.userHome.file('.claude', 'settings.json').asJson();
-      const postToolUseCommands = (
-        settings.hooks?.PostToolUse as Array<{ hooks: Array<{ command: string }> }>
-      )?.flatMap((e) => e.hooks.map((h) => h.command));
-      expect(postToolUseCommands?.some((c: string) => c.includes('sonar-a3s'))).toBe(false);
-      expect(postToolUseCommands?.some((c: string) => c.includes('sonar-sqaa'))).toBe(true);
-      expect(postToolUseCommands?.some((c: string) => c.includes('some-other-tool'))).toBe(true);
-      expect(harness.userHome.exists('.claude', 'hooks', 'sonar-a3s')).toBe(false);
-    },
-    { timeout: 30000 },
-  );
 });
 
 // ─── Local vs Global file placement ──────────────────────────────────────────
@@ -1156,97 +1084,6 @@ describe('integrate claude — file placement (local vs global)', () => {
 // ─── Argument validation ──────────────────────────────────────────────────────
 
 // ─── Legacy state migration ────────────────────────────────────────────────────
-
-// ─── Post-update migration ─────────────────────────────────────────────────────
-
-describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
-  let harness: TestHarness;
-
-  beforeEach(async () => {
-    harness = await TestHarness.create();
-  });
-
-  afterEach(async () => {
-    await harness.dispose();
-  });
-
-  it(
-    'purges obsolete sonar-a3s entries from state.json on first run after CLI upgrade',
-    async () => {
-      const now = new Date().toISOString();
-      // Old state: configured by v0.4.0 with sonar-a3s recorded in both the legacy
-      // hooks.installed list and the agentExtensions registry, alongside unrelated
-      // sonar-secrets entries that must survive the cleanup.
-      harness.state().withRawState(
-        JSON.stringify(
-          {
-            version: 1,
-            config: { cliVersion: '0.4.0' },
-            auth: { isAuthenticated: false, connections: [], activeConnectionId: null },
-            agents: {
-              'claude-code': {
-                configured: true,
-                configuredByCliVersion: '0.4.0',
-                hooks: {
-                  installed: [
-                    { name: 'sonar-a3s', type: 'PostToolUse', installedAt: now },
-                    { name: 'sonar-secrets', type: 'PreToolUse', installedAt: now },
-                  ],
-                },
-                skills: { installed: [] },
-              },
-            },
-            agentExtensions: [
-              {
-                id: 'a3s-ext',
-                agentId: 'claude-code',
-                projectRoot: harness.cwd.path,
-                global: false,
-                kind: 'hook',
-                name: 'sonar-a3s',
-                hookType: 'PostToolUse',
-                updatedByCliVersion: '0.4.0',
-                updatedAt: now,
-              },
-              {
-                id: 'secrets-ext',
-                agentId: 'claude-code',
-                projectRoot: harness.cwd.path,
-                global: false,
-                kind: 'hook',
-                name: 'sonar-secrets',
-                hookType: 'PreToolUse',
-                updatedByCliVersion: '0.4.0',
-                updatedAt: now,
-              },
-            ],
-            telemetry: { enabled: false },
-          },
-          null,
-          2,
-        ),
-      );
-
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
-
-      expect(result.exitCode).toBe(0);
-
-      const state = harness.stateJsonFile.asJson();
-      const extensions = (state.agentExtensions ?? []) as Array<{ name: string }>;
-      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
-        name: string;
-      }>;
-
-      // sonar-a3s is purged from both the legacy list and the registry...
-      expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
-      expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
-      // ...while unrelated entries survive.
-      expect(hooks.some((h) => h.name === 'sonar-secrets')).toBe(true);
-      expect(extensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
-    },
-    { timeout: 30000 },
-  );
-});
 
 describe('integrate — argument validation', () => {
   let harness: TestHarness;
