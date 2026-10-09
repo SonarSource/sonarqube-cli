@@ -18,24 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Hooks installation (cross-platform)
+// Claude Code secrets hook detection
 
 import * as nodeFs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { join } from 'node:path';
 
-import type { IntegrationContext } from '@/core/framework/features';
-import logger from '@/core/observability/logger.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import {
-  buildUnixHookScript,
-  buildWindowsHookScript,
-  readOrInitJson,
-  resolveAgentHookCommand,
-  SONAR_SECRETS_MARKER,
-  writeHookScript,
-} from '../_common/hooks.ts';
+import { SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
 const HOOKS_DIR = 'hooks';
 const SETTINGS_FILE = 'settings.json';
@@ -61,77 +52,6 @@ interface HookConfig {
 interface AgentSettings {
   hooks?: Record<string, HookConfig[] | undefined>;
   [key: string]: unknown;
-}
-
-interface HookInstallParams {
-  installDir: string;
-  /** 'global' uses absolute command path; 'project' uses path relative to installDir */
-  scope: 'global' | 'project';
-  agent: 'claude';
-  eventType: string;
-  matcher: string;
-  /** Path within hooks dir, without extension: 'sonar-secrets/build-scripts/pretool-secrets' */
-  scriptPath: string;
-  scriptContentUnix: string;
-  scriptContentWindows: string;
-  timeout?: number;
-}
-
-function upsertHookEntry(
-  settings: AgentSettings,
-  eventType: string,
-  marker: string,
-  matcher: string,
-  command: string,
-  timeout: number,
-): void {
-  const isOwned = (e: HookConfig) =>
-    Array.isArray(e.hooks) && e.hooks.some((h) => h.command.includes(marker));
-  settings.hooks![eventType] = [
-    ...(settings.hooks![eventType] ?? []).filter((e) => !isOwned(e)),
-    { matcher, hooks: [{ type: 'command', command, timeout }] },
-  ];
-}
-
-async function installHook(params: HookInstallParams): Promise<void> {
-  const {
-    installDir,
-    scope,
-    agent,
-    eventType,
-    matcher,
-    scriptPath,
-    scriptContentUnix,
-    scriptContentWindows,
-    timeout = 60,
-  } = params;
-
-  const configDir = AGENT_CONFIG_DIR[agent];
-
-  const fullScriptDir = join(installDir, configDir, HOOKS_DIR, dirname(scriptPath));
-  await writeHookScript(
-    fullScriptDir,
-    basename(scriptPath),
-    scriptContentUnix,
-    scriptContentWindows,
-  );
-
-  const hookContext = { targetRoot: installDir, scope } as IntegrationContext;
-  const command = resolveAgentHookCommand(
-    hookContext,
-    configDir,
-    scriptPath,
-    CLAUDE_PROJECT_DIR_PLACEHOLDER,
-  );
-
-  // Marker derived from first path segment (e.g. 'sonar-secrets' from 'sonar-secrets/build-scripts/pretool-secrets')
-  const marker = scriptPath.split('/')[0];
-
-  const settingsPath = join(installDir, configDir, SETTINGS_FILE);
-  const settings = await readOrInitJson<AgentSettings>(settingsPath, { hooks: {} });
-  settings.hooks ??= {};
-  upsertHookEntry(settings, eventType, marker, matcher, command, timeout);
-  await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
 /**
@@ -221,55 +141,4 @@ export async function detectGlobalSecretsHook(
  */
 export async function areHooksInstalled(hooksRoot: string): Promise<boolean> {
   return (await probeSecretsHook(hooksRoot)).kind === 'installed';
-}
-
-export interface InstallHooksOptions {
-  /**
-   * When true, skip the project-level sonar-secrets hook writes.
-   * Used when a global sonar-secrets hook is already configured to avoid duplicate execution.
-   */
-  skipSecretsHooks?: boolean;
-}
-
-/**
- * Reinstall the secrets hooks (cross-platform) into globalDir when provided,
- * otherwise projectRoot. The Vortex analysis hook is deliberately not installed
- * here: it needs an entitlement check, which the post-update caller cannot do.
- */
-export async function installHooks(
-  projectRoot: string,
-  globalDir?: string,
-  options: InstallHooksOptions = {},
-): Promise<void> {
-  const secretsDir = globalDir ?? projectRoot;
-  const secretsScope = globalDir ? 'global' : 'project';
-  const { skipSecretsHooks = false } = options;
-
-  try {
-    if (!skipSecretsHooks) {
-      await installHook({
-        installDir: secretsDir,
-        scope: secretsScope,
-        agent: 'claude',
-        eventType: 'PreToolUse',
-        matcher: 'Read',
-        scriptPath: 'sonar-secrets/build-scripts/pretool-secrets',
-        scriptContentUnix: buildUnixHookScript('claude-pre-tool-use'),
-        scriptContentWindows: buildWindowsHookScript('claude-pre-tool-use'),
-      });
-      await installHook({
-        installDir: secretsDir,
-        scope: secretsScope,
-        agent: 'claude',
-        eventType: 'UserPromptSubmit',
-        matcher: '*',
-        scriptPath: 'sonar-secrets/build-scripts/prompt-secrets',
-        scriptContentUnix: buildUnixHookScript('claude-prompt-submit'),
-        scriptContentWindows: buildWindowsHookScript('claude-prompt-submit'),
-      });
-    }
-  } catch (error) {
-    logger.debug(`Failed to install hooks: ${(error as Error).message}`);
-    // Non-critical - don't fail if hooks installation fails
-  }
 }

@@ -1158,11 +1158,6 @@ describe('integrate claude — file placement (local vs global)', () => {
 // ─── Legacy state migration ────────────────────────────────────────────────────
 
 // ─── Post-update migration ─────────────────────────────────────────────────────
-//
-// A pre-registry, project-scoped legacy install (upgraded via an explicit
-// `integrate claude --project <key>` re-run) is no longer reachable now that
-// `--project`/project-scope installs are gone (CLI-990) — the pre-registry
-// global-hooks case below still covers `migrateClaudeCodeHooks`'s fallback path.
 
 describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
   let harness: TestHarness;
@@ -1174,92 +1169,6 @@ describe.skipIf(IS_WINDOWS)('post-update migration on CLI upgrade', () => {
   afterEach(async () => {
     await harness.dispose();
   });
-
-  it(
-    'rewrites old hook scripts on first run after CLI upgrade (pre-registry state)',
-    async () => {
-      // Old state: configured by v0.4.0, no agentExtensions field (pre-registry)
-      harness.state().withRawState(
-        JSON.stringify(
-          {
-            version: 1,
-            config: { cliVersion: '0.4.0' },
-            auth: { isAuthenticated: false, connections: [], activeConnectionId: null },
-            agents: {
-              'claude-code': {
-                configured: true,
-                configuredByCliVersion: '0.4.0',
-                hooks: { installed: [] },
-              },
-            },
-            telemetry: { enabled: false },
-          },
-          null,
-          2,
-        ),
-      );
-
-      // Old global hook scripts in homedir (pre-registry fallback location)
-      const oldScript = `#!/bin/bash\noutput=$(sonar analyze --file "$file_path" 2>/dev/null)\n`;
-      const pretoolScriptRel = '.claude/hooks/sonar-secrets/build-scripts/pretool-secrets.sh';
-      const promptScriptRel = '.claude/hooks/sonar-secrets/build-scripts/prompt-secrets.sh';
-      harness.userHome.writeFile(pretoolScriptRel, oldScript);
-      harness.userHome.writeFile(promptScriptRel, oldScript);
-
-      // Old settings.json in homedir — hook entries referencing those scripts
-      harness.userHome.writeFile(
-        '.claude/settings.json',
-        JSON.stringify(
-          {
-            hooks: {
-              PreToolUse: [
-                {
-                  matcher: 'Read',
-                  hooks: [{ type: 'command', command: pretoolScriptRel, timeout: 60 }],
-                },
-              ],
-              UserPromptSubmit: [
-                {
-                  matcher: '*',
-                  hooks: [{ type: 'command', command: promptScriptRel, timeout: 60 }],
-                },
-              ],
-            },
-          },
-          null,
-          2,
-        ),
-      );
-
-      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
-
-      expect(result.exitCode).toBe(0);
-
-      // Scripts must be rewritten with the new subcommand
-      const pretoolContent = harness.userHome.file(pretoolScriptRel).asText();
-      expect(pretoolContent).toContain('sonar hook claude-pre-tool-use');
-      expect(pretoolContent).not.toContain('sonar analyze');
-
-      // settings.json must have correctly structured hook entries (absolute paths, global)
-      const settings = harness.userHome.file('.claude', 'settings.json').asJson();
-      const preToolEntry = settings.hooks?.PreToolUse?.[0];
-      const promptEntry = settings.hooks?.UserPromptSubmit?.[0];
-      expect(preToolEntry?.matcher).toBe('Read');
-      expect(preToolEntry?.hooks?.[0]?.type).toBe('command');
-      expect(preToolEntry?.hooks?.[0]?.timeout).toBe(60);
-      // Command is shell-quoted; compare the unquoted, normalized path.
-      expect(hookScriptPath(String(preToolEntry?.hooks?.[0]?.command))).toBe(
-        normalizePath(harness.userHome.file(pretoolScriptRel).path),
-      );
-      expect(promptEntry?.matcher).toBe('*');
-      expect(promptEntry?.hooks?.[0]?.type).toBe('command');
-      expect(promptEntry?.hooks?.[0]?.timeout).toBe(60);
-      expect(hookScriptPath(String(promptEntry?.hooks?.[0]?.command))).toBe(
-        normalizePath(harness.userHome.file(promptScriptRel).path),
-      );
-    },
-    { timeout: 30000 },
-  );
 
   it(
     'purges obsolete sonar-a3s entries from state.json on first run after CLI upgrade',
