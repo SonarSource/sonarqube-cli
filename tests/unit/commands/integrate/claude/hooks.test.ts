@@ -23,12 +23,7 @@ import * as fsPromises from 'node:fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
-import {
-  areHooksInstalled,
-  detectGlobalSecretsHook,
-  installHooks,
-} from '../../../../../src/commands/integrate/claude/hooks.ts';
-import { FakeConsole } from '../../../../_common/fake-console.ts';
+import { installHooks } from '../../../../../src/commands/integrate/claude/hooks.ts';
 
 const PROJECT_ROOT = '/fake/project';
 const GLOBAL_DIR = '/fake/global';
@@ -62,139 +57,6 @@ function getScriptPathFor(nameFragment: string): string | undefined {
 }
 
 let writeFileSpy: Mock<Extract<(typeof fsPromises)['writeFile'], (...args: any[]) => any>>;
-
-describe('detectGlobalSecretsHook', () => {
-  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
-  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
-  let fake: FakeConsole;
-
-  const SETTINGS_WITH_SECRETS = {
-    hooks: {
-      PreToolUse: [
-        {
-          matcher: 'Read',
-          hooks: [
-            { type: 'command', command: '.claude/hooks/sonar-secrets/pretool.sh', timeout: 60 },
-          ],
-        },
-      ],
-    },
-  };
-
-  beforeEach(() => {
-    fake = new FakeConsole();
-    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
-    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
-  });
-
-  afterEach(() => {
-    existsSyncSpy.mockRestore();
-    readFileSpy.mockRestore();
-  });
-
-  it('returns undefined and stays silent when settings.json does not exist (absent)', async () => {
-    existsSyncSpy.mockReturnValue(false);
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
-    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and stays silent when no PreToolUse entry references sonar-secrets (absent)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify({ hooks: { PreToolUse: [] } }));
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
-    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and stays silent when settings.json contains malformed JSON (absent)', async () => {
-    readFileSpy.mockResolvedValue('{ invalid json !!!');
-
-    expect(await detectGlobalSecretsHook(PROJECT_ROOT, fake)).toBeUndefined();
-    const noisy = fake.calls.filter((c) => c.method === 'info' || c.method === 'warn');
-    expect(noisy).toHaveLength(0);
-  });
-
-  it('returns undefined and emits warn(...) when settings entry exists but the sonar-secrets script directory is missing (orphaned)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
-    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
-      const path = normPath(String(p));
-      if (path.endsWith('.claude/hooks/sonar-secrets')) return false;
-      return path.endsWith('.claude/settings.json');
-    });
-
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT, fake);
-
-    expect(result).toBeUndefined();
-    const warnCall = fake.calls.find(
-      (c) =>
-        c.method === 'warn' &&
-        String(c.args[0]).includes(
-          'WARNING: Global hook configuration detected, but the source files are missing',
-        ),
-    );
-    expect(warnCall).toBeDefined();
-  });
-
-  it('returns the hook dir silently when both settings entry and sonar-secrets script directory are present (installed)', async () => {
-    readFileSpy.mockResolvedValue(JSON.stringify(SETTINGS_WITH_SECRETS));
-    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
-      const path = normPath(String(p));
-      return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
-    });
-
-    const result = await detectGlobalSecretsHook(PROJECT_ROOT, fake);
-
-    expect(result).toBeDefined();
-    expect(normPath(result ?? '')).toEndWith('.claude/hooks/sonar-secrets');
-    const infoCall = fake.calls.find((c) => c.method === 'info');
-    expect(infoCall).toBeUndefined();
-  });
-});
-
-describe('areHooksInstalled', () => {
-  let existsSyncSpy: Mock<Extract<(typeof nodeFs)['existsSync'], (...args: any[]) => any>>;
-  let readFileSpy: Mock<Extract<(typeof fsPromises)['readFile'], (...args: any[]) => any>>;
-
-  beforeEach(() => {
-    existsSyncSpy = spyOn(nodeFs, 'existsSync').mockReturnValue(true);
-    readFileSpy = spyOn(fsPromises, 'readFile').mockResolvedValue('{}');
-  });
-
-  afterEach(() => {
-    existsSyncSpy.mockRestore();
-    readFileSpy.mockRestore();
-  });
-
-  it('returns true when a sonar-secrets hook installation is detected', async () => {
-    const settings = {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: 'Read',
-            hooks: [
-              { type: 'command', command: '.claude/hooks/sonar-secrets/pretool.sh', timeout: 60 },
-            ],
-          },
-        ],
-      },
-    };
-    readFileSpy.mockResolvedValue(JSON.stringify(settings));
-    existsSyncSpy.mockImplementation((p: nodeFs.PathLike) => {
-      const path = normPath(String(p));
-      return path.endsWith('.claude/settings.json') || path.endsWith('.claude/hooks/sonar-secrets');
-    });
-
-    expect(await areHooksInstalled(PROJECT_ROOT)).toBe(true);
-  });
-
-  it('returns false when no installation is detected', async () => {
-    existsSyncSpy.mockReturnValue(false);
-
-    expect(await areHooksInstalled(PROJECT_ROOT)).toBe(false);
-  });
-});
 
 describe('installHooks', () => {
   // The production code reads `process.platform` directly,
@@ -379,33 +241,5 @@ describe('installHooks', () => {
     const actual = await installHooks(PROJECT_ROOT);
 
     expect(actual).toBeUndefined();
-  });
-
-  describe('skipSecretsHooks option', () => {
-    it('does not write the pretool-secrets script when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
-
-      expect(getScriptPathFor('pretool-secrets')).toBeUndefined();
-    });
-
-    it('does not write the prompt-secrets script when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
-
-      expect(getScriptPathFor('prompt-secrets')).toBeUndefined();
-    });
-
-    it('does not write any sonar-secrets entries to settings.json when skipSecretsHooks is true', async () => {
-      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: true });
-
-      expect(getSettingsWriteFor('PreToolUse')).toBeUndefined();
-      expect(getSettingsWriteFor('UserPromptSubmit')).toBeUndefined();
-    });
-
-    it('writes secrets scripts when skipSecretsHooks is false (default behaviour unchanged)', async () => {
-      await installHooks(PROJECT_ROOT, undefined, { skipSecretsHooks: false });
-
-      expect(getScriptPathFor('pretool-secrets')).toBeDefined();
-      expect(getScriptPathFor('prompt-secrets')).toBeDefined();
-    });
   });
 });

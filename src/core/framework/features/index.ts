@@ -62,7 +62,6 @@ export {
 export {
   findInstalledFeature,
   findInstalledIntegration,
-  isFeatureInstalledGloballyForProject,
   recordedFeatureOperations,
   recordedFeatureResources,
 } from './installation-recorder.ts';
