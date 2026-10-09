@@ -22,7 +22,6 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 
 import * as vortex from '@/commands/integrate/_common/vortex.ts';
 import { integrateCopilot } from '@/commands/integrate/copilot';
-import * as hooks from '@/commands/integrate/copilot/hooks.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -74,9 +73,6 @@ describe('integrateCopilot', () => {
       (...args: never[]) => unknown
     >
   >;
-  let detectGlobalSecretsHookSpy: Mock<
-    Extract<(typeof hooks)['detectGlobalSecretsHook'], (...args: never[]) => unknown>
-  >;
   let componentExistsSpy: Mock<
     Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: never[]) => unknown>
   >;
@@ -95,9 +91,6 @@ describe('integrateCopilot', () => {
     componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
       okAsync(true),
     );
-    detectGlobalSecretsHookSpy = spyOn(hooks, 'detectGlobalSecretsHook').mockResolvedValue(
-      undefined,
-    );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
       disposition: 'preserve',
     });
@@ -109,7 +102,6 @@ describe('integrateCopilot', () => {
     installIntegrationSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
     componentExistsSpy.mockRestore();
-    detectGlobalSecretsHookSpy.mockRestore();
     resolveVortexSetupSpy.mockRestore();
   });
 
