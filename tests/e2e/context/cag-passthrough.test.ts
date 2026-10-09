@@ -204,13 +204,11 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
     });
   }
 
-  // CAG gates its internal Compass tool on the forwarded organization, so the
-  // rendered context is org-dependent.
-  it('includes the Compass tool only for an allowlisted organization', async () => {
+  it('does not expose Compass on a non-sonarcloud.io server', async () => {
     const allowlisted = await runSessionStartHook('SessionStart', ALLOWLISTED_CAG_ORG_KEY);
     const other = await runSessionStartHook('SessionStart', SEEDED_ORG_KEY);
 
-    expect(allowlisted.hookSpecificOutput.additionalContext).toContain('compass get');
+    expect(allowlisted.hookSpecificOutput.additionalContext).not.toContain('compass get');
     expect(other.hookSpecificOutput.additionalContext).not.toContain('compass get');
   });
 
