@@ -37,7 +37,6 @@ import {
 } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
-import { cleanObsoleteFromState } from './claude-a3s-cleanup.ts';
 import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyStateConfig } from './legacy-config-migration.ts';
@@ -103,7 +102,6 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
     const state = loadState();
     state.config.cliVersion = CURRENT_VERSION;
     delete state.config.betaCommandWarnings;
-    cleanObsoleteFromState(state);
     saveState(state);
   } catch (error) {
     deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
