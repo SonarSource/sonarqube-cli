@@ -49,6 +49,7 @@ import {
 import { discoverServer } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
@@ -418,7 +419,7 @@ function validateLoginOptions(options: AuthLoginOptions): void {
 
   if (options.server !== undefined && !isValidServerUrl(options.server)) {
     throw new InvalidOptionError(
-      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
+      `Invalid server URL. ${INVALID_SERVER_URL_MESSAGE}`,
       'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
     );
   }
