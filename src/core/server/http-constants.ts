@@ -20,6 +20,7 @@
 
 // Shared HTTP status code constants used across API clients.
 
+export const HTTP_STATUS_ACCEPTED = 202;
 export const HTTP_STATUS_BAD_REQUEST = 400;
 export const HTTP_STATUS_FORBIDDEN = 403;
 export const HTTP_STATUS_NOT_FOUND = 404;
