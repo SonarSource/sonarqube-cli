@@ -25,7 +25,6 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { type RunInteractiveOptions, TestHarness } from '../../harness';
@@ -1885,7 +1884,7 @@ describe('auth status', () => {
         },
       });
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(
         "Connected, but organization 'my-org' is not accessible with this token",
       );
@@ -1920,16 +1919,24 @@ describe('auth status', () => {
   it(
     'reports connected when SQC credentials are set via environment variables',
     async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('env-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
       const result = await harness.run('auth status', {
         extraEnv: {
           [ENV_TOKEN]: 'env-token',
           [ENV_ORG]: 'my-org',
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
         },
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `[✓ Connected]\nServer  ${SONARCLOUD_URL}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}`,
+        `[✓ Connected]\nServer  ${server.baseUrl()}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}`,
       );
     },
     { timeout: 15000 },
@@ -1938,17 +1945,25 @@ describe('auth status', () => {
   it(
     'reports connected when SQC US credentials are set via environment variables',
     async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('env-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+
       const result = await harness.run('auth status', {
         extraEnv: {
           [ENV_TOKEN]: 'env-token',
           [ENV_ORG]: 'my-org',
-          [ENV_SERVER]: SONARCLOUD_US_URL,
+          [ENV_SERVER]: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_US_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_US_API_URL: server.baseUrl(),
         },
       });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `[✓ Connected]\nServer  ${SONARCLOUD_US_URL}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`,
+        `[✓ Connected]\nServer  ${server.baseUrl()}\nOrg     my-org\nSource  env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`,
       );
     },
     { timeout: 15000 },
