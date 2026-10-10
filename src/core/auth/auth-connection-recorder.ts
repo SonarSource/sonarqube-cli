@@ -84,7 +84,7 @@ export async function recordConnectionFromAuth(
   const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
     orgKey: auth.orgKey,
     region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: options.tokenName,
+    tokenName: options.tokenName ?? seedConnection?.tokenName,
     envOnly,
   });
 
