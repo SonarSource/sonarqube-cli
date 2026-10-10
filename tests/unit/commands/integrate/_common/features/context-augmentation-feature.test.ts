@@ -55,14 +55,14 @@ describe('createContextAugmentationSkillSubfeature', () => {
     expect(subfeature.dependencies).toHaveLength(1);
   });
 
-  it('is installed by default', () => {
-    expect(subfeature.shouldInstall?.({} as never)).toMatchObject({ action: 'install' });
+  it('is available by default', async () => {
+    expect(await subfeature.isAvailable?.({} as never)).toEqual({ available: true });
   });
 
-  it('is skipped when Context augmentation is disabled by the dev flag', () => {
+  it('is unavailable when Context augmentation is disabled by the dev flag', async () => {
     process.env[SKIP_ENV] = '1';
 
-    expect(subfeature.shouldInstall?.({} as never)).toMatchObject({ action: 'skip' });
+    expect(await subfeature.isAvailable?.({} as never)).toEqual({ available: false });
   });
 
   it('runs the tool integration only for a project-scope install with a project key', () => {
