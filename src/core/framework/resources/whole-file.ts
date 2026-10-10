@@ -21,6 +21,7 @@
 import { rm } from 'node:fs/promises';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { assertSafeWritePath } from '@/core/io/safe-write-path.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 import {
@@ -80,6 +81,7 @@ export class WholeFileResource implements ResourceDeclaration {
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
+    await assertSafeWritePath(path);
     const content = await this.resolveContent(context);
     await this.assertOverwriteAllowed(path, content, context);
     await writeFileIfChanged(path, content, this.options.executable);
