@@ -29,11 +29,28 @@ import type {
   FeatureContainer,
   FeatureDeclaration,
 } from '@/core/framework/features/types.ts';
+import { isFeatureContainer } from '@/core/framework/features/types.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
-function application(feature: FeatureDeclaration): FeatureApplication {
-  return { feature, targetRoot: '/repo', scope: 'project' };
+function application(
+  feature: FeatureDeclaration,
+  activeSubfeatureIds?: string[],
+): FeatureApplication {
+  const subfeatures = isFeatureContainer(feature) ? feature.subfeatures : [];
+  return {
+    feature,
+    targetRoot: '/repo',
+    scope: 'project',
+    installed: false,
+    available: true,
+    subfeatureApplications: subfeatures.map((subfeature) => ({
+      subfeature,
+      installed: false,
+      available: true,
+      active: activeSubfeatureIds?.includes(subfeature.id) ?? true,
+    })),
+  };
 }
 
 let fake: FakeConsole;
@@ -88,11 +105,9 @@ describe('install preview', () => {
       ]);
 
       // Secrets-only: the handler omits the dependency clause.
-      const secretsOnlyContainer: FeatureContainer = {
-        ...container,
-        subfeatures: [container.subfeatures[0]],
-      };
-      const secretsOnly = buildInstallPreviewLines([application(secretsOnlyContainer)]);
+      const secretsOnly = buildInstallPreviewLines([
+        application(container, ['pre-commit-secrets']),
+      ]);
       expect(secretsOnly).toEqual([
         'pre-commit code scanning hook',
         '  Scans files for secrets before each commit.',
