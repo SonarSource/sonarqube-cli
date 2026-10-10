@@ -92,7 +92,7 @@ describe('integrateCodex', () => {
       okAsync(true),
     );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
-      disposition: 'preserve',
+      disposition: { action: 'preserve' },
     });
   });
 

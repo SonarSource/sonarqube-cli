@@ -21,13 +21,12 @@
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import type {
+  FeatureAvailability,
   FeatureContainer,
-  InstallDecision,
   IntegrationContext,
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { askUser, skip, uninstall } from '@/core/framework/features';
 import { wholeFileRemover } from '@/core/framework/resources';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -61,9 +60,8 @@ export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
  * subfeature ids are the ids those capabilities had as standalone features, so
  * `replacedIds` migrates installs recorded before the unification into this one.
  *
- * A subfeature only evaluates once its container has resolved to `install`
- * (`selectActiveSubfeatures` in `core/framework/features/selection.ts`), so a
- * subfeature with no condition of its own can just unconditionally `install()`.
+ * A subfeature's availability is only evaluated once its container is available,
+ * so a subfeature with no condition of its own needs no `isAvailable`.
  *
  * An agent absorbing a formerly-standalone *sibling* top-level feature (not
  * just standalone subfeatures) needs a fresh id instead of `VORTEX_FEATURE_ID`
@@ -81,7 +79,7 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     displayName: 'Vortex',
     benefitDescription: VORTEX_FEATURE_BENEFIT,
     previewDescription: VORTEX_FEATURE_PREVIEW,
-    shouldInstall: vortexShouldInstall,
+    isAvailable: vortexAvailability,
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
     legacyCleanups: legacyCagSkillPath
@@ -96,30 +94,24 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   };
 }
 
-function vortexShouldInstall<TOptions extends IntegrateAgentOptions>({
+function vortexAvailability<TOptions extends IntegrateAgentOptions>({
   options,
-}: IntegrationInvocation<TOptions>): InstallDecision {
-  if (options.vortexDisposition === 'install') {
-    return askUser();
+}: IntegrationInvocation<TOptions>): FeatureAvailability {
+  const disposition = options.vortexDisposition;
+  if (disposition?.action === 'install') {
+    return { available: true };
   }
-  if (options.vortexDisposition === 'remove') {
-    return uninstall(VORTEX_UNINSTALL_MESSAGE);
+  if (disposition?.action === 'remove') {
+    return { available: false, unavailableReason: disposition.unavailableReason };
   }
-  return skip();
+  return { available: undefined };
 }
 
 export const VORTEX_PROMOTION_MESSAGE = `Vortex is not enabled for this organization. Learn more: ${VORTEX_PRODUCT_URL}`;
 
-export const VORTEX_SERVER_UNAVAILABLE_MESSAGE =
-  'Vortex requires SonarQube Server 2026.5 Enterprise or later.';
+export const VORTEX_SERVER_UNAVAILABLE_MESSAGE = `Vortex requires SonarQube Server 2026.5 Enterprise or later. Learn more: ${VORTEX_PRODUCT_URL}`;
 
-export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE =
-  'Vortex is not licensed on this SonarQube Server. Ask your administrator.';
-
-export const VORTEX_UNINSTALL_MESSAGE =
-  'Vortex is no longer available. Removing the existing Vortex integration.';
-
-export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement; skipping.';
+export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE = `Vortex is not licensed on this SonarQube Server. Ask your administrator. Learn more: ${VORTEX_PRODUCT_URL}`;
 
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
   'The Vortex usage limit has been reached. Installing it anyway. Vortex will resume once usage resets.';
@@ -161,20 +153,26 @@ export async function resolveVortexSetup(
   };
   const { status } = await resolveVortexEntitlement(connection);
   const isServer = !isSonarQubeCloud(auth.serverUrl);
-  const settled = (disposition: VortexDisposition): ResolvedVortexSetup => ({ disposition });
+  const settled = (
+    action: VortexDisposition['action'],
+    unavailableReason?: string,
+  ): ResolvedVortexSetup => ({ disposition: { action, unavailableReason } });
 
   if (status === 'not_applicable') {
-    console.info(isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE);
-    return settled('remove');
+    return settled(
+      'remove',
+      isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE,
+    );
   }
 
   if (status === 'check_failed' || status === 'organization_not_accessible') {
-    console.warn(VORTEX_CHECK_FAILED_MESSAGE);
     return settled('preserve');
   }
   if (status === 'not_entitled') {
-    console.info(isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE);
-    return settled('remove');
+    return settled(
+      'remove',
+      isServer ? VORTEX_SERVER_NOT_ENTITLED_MESSAGE : VORTEX_PROMOTION_MESSAGE,
+    );
   }
   if (status === 'over_consumption') {
     console.warn(VORTEX_OVER_CONSUMPTION_MESSAGE);

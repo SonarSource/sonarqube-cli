@@ -32,7 +32,13 @@ import type { Console } from '@/core/ui/console.ts';
 import { findInstalledIntegration } from './installation-recorder.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import type { FeatureApplication, FeatureDeclaration, IntegrationDeclaration } from './types.ts';
+import type {
+  FeatureApplication,
+  FeatureContainer,
+  FeatureDeclaration,
+  IntegrationDeclaration,
+  SubfeatureApplication,
+} from './types.ts';
 import { isFeatureContainer } from './types.ts';
 
 /**
@@ -131,6 +137,7 @@ function buildReconcileApplications(
       installedFeature.targetRoot,
       installedFeature.scope,
       installedFeature.attrs,
+      true,
     );
     if (application) {
       applications.push(application);
@@ -175,6 +182,7 @@ function migrateReplacedFeatures(
         targetRoot,
         scope,
         mergeFeatureAttrs(predecessors),
+        false,
       );
       if (application) {
         applications.push(application);
@@ -255,35 +263,6 @@ function mergeFeatureAttrs(
   return Object.keys(attrs).length > 0 ? attrs : undefined;
 }
 
-function getFeature(
-  featuresById: Map<string, FeatureDeclaration>,
-  featureId: string,
-  subfeatureIds: string[] | undefined,
-  attrs: InstalledIntegrationFeature['attrs'],
-): FeatureDeclaration | undefined {
-  const feature = featuresById.get(featureId);
-  if (!feature) {
-    return undefined;
-  }
-
-  let applicationFeature = feature;
-  if (isFeatureContainer(feature)) {
-    const defaultIds =
-      subfeatureIds ??
-      feature.defaultInstallSubfeatureIds.filter((id) => {
-        const subfeature = feature.subfeatures.find((s) => s.id === id);
-        return subfeature?.migrationEligible?.(attrs) ?? true;
-      });
-    const activeIds = new Set(defaultIds);
-    const filteredContainer = {
-      ...feature,
-      subfeatures: feature.subfeatures.filter((s) => activeIds.has(s.id)),
-    };
-    applicationFeature = filteredContainer;
-  }
-  return applicationFeature;
-}
-
 function createFeatureApplication(
   featuresById: Map<string, FeatureDeclaration>,
   featureId: string,
@@ -291,8 +270,9 @@ function createFeatureApplication(
   targetRoot: string,
   scope: InstalledIntegrationFeature['scope'],
   attrs: InstalledIntegrationFeature['attrs'],
+  installed: boolean,
 ): FeatureApplication | undefined {
-  const feature = getFeature(featuresById, featureId, subfeatureIds, attrs);
+  const feature = featuresById.get(featureId);
   if (!feature) {
     return undefined;
   }
@@ -304,5 +284,35 @@ function createFeatureApplication(
     return undefined;
   }
 
-  return { feature, targetRoot, scope, attrs };
+  return {
+    feature,
+    targetRoot,
+    scope,
+    attrs,
+    installed,
+    available: undefined,
+    subfeatureApplications: isFeatureContainer(feature)
+      ? buildReconcileSubfeatureApplications(feature, subfeatureIds, attrs)
+      : [],
+  };
+}
+
+function buildReconcileSubfeatureApplications(
+  container: FeatureContainer,
+  recordedIds: string[] | undefined,
+  attrs: InstalledIntegrationFeature['attrs'],
+): SubfeatureApplication[] {
+  const activeIds = new Set(
+    recordedIds ??
+      container.defaultInstallSubfeatureIds.filter((id) => {
+        const subfeature = container.subfeatures.find((s) => s.id === id);
+        return subfeature?.migrationEligible?.(attrs) ?? true;
+      }),
+  );
+  return container.subfeatures.map((subfeature) => ({
+    subfeature,
+    installed: recordedIds?.includes(subfeature.id) ?? false,
+    available: undefined,
+    active: activeIds.has(subfeature.id),
+  }));
 }
