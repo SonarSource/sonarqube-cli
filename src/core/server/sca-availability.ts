@@ -36,6 +36,14 @@ export interface ScaAvailabilityCheck {
   ): Promise<boolean>;
 }
 
+/** The server version could not be fetched, so SCA availability is unknown rather than denied. */
+export class ScaServerVersionUnknownError extends CommandFailedError {
+  constructor(message: string, options: { cause: unknown; remediationHint: string }) {
+    super(message, options);
+    this.name = 'ScaServerVersionUnknownError';
+  }
+}
+
 export async function assertScaAvailable(
   client: ScaAvailabilityCheck,
   auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
@@ -45,7 +53,7 @@ export async function assertScaAvailable(
     try {
       serverVersion = await fetchServerVersion(auth.serverUrl);
     } catch (err) {
-      throw new CommandFailedError(
+      throw new ScaServerVersionUnknownError(
         `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
         {
           cause: err,

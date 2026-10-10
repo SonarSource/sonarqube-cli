@@ -24,11 +24,17 @@ import {
   scaScannerBinaryDependency,
   sonarSecretsBinaryDependency,
 } from '@/core/framework/dependencies';
-import { askUser, install, skip } from '@/core/framework/features/selection.ts';
-import type { FeaturePreview, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
+import type {
+  FeatureAvailability,
+  FeaturePreview,
+  SubfeatureDeclaration,
+} from '@/core/framework/features/types.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
-import { assertScaAvailable } from '@/core/server/sca-availability.ts';
+import {
+  assertScaAvailable,
+  ScaServerVersionUnknownError,
+} from '@/core/server/sca-availability.ts';
 
 import type { GitHookType, IntegrateGitOptions } from '../options.ts';
 
@@ -45,19 +51,22 @@ export function gitHookPreview(hook: GitHookType): FeaturePreview {
   };
 }
 
-async function scaSkipReason(auth: ResolvedAuth) {
+async function scaAvailability(auth: ResolvedAuth): Promise<FeatureAvailability> {
   const client = new ScaClient(new SonarHttpClient(auth.serverUrl, auth.token));
   try {
     await assertScaAvailable(
       { checkScaEnabled: (ct, orgKey) => client.checkScaEnabled(ct, orgKey).orThrow() },
       auth,
     );
-    return null;
+    return { available: true };
   } catch (err) {
-    if (err instanceof CommandFailedError) {
-      return skip(err.message);
+    if (err instanceof CommandFailedError && !(err instanceof ScaServerVersionUnknownError)) {
+      return {
+        available: false,
+        unavailableReason: [err.message, err.remediationHint].filter(Boolean).join(' '),
+      };
     }
-    throw err;
+    return { available: undefined };
   }
 }
 
@@ -65,8 +74,7 @@ export function createSecretsSubfeature(): SubfeatureDeclaration<IntegrateGitOpt
   return {
     id: 'pre-commit-secrets',
     displayName: 'pre-commit secrets scan',
-    shouldInstall: () =>
-      install('Secrets scan is required for other hook types and is enabled by default'),
+    required: true,
     dependencies: [sonarSecretsBinaryDependency],
   };
 }
@@ -76,11 +84,8 @@ export function createDepRisksSubfeature(): SubfeatureDeclaration<IntegrateGitOp
     id: PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID,
     displayName: 'pre-commit dependency-risks scan',
     // Project key is optional; unresolved falls back to discoverProject() at hook run time.
-    shouldInstall: async ({ auth }) => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const skipDecision = await scaSkipReason(auth!);
-      return skipDecision ?? askUser();
-    },
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    isAvailable: ({ auth }) => scaAvailability(auth!),
     dependencies: [sonarSecretsBinaryDependency, scaScannerBinaryDependency],
   };
 }

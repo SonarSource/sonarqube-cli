@@ -438,7 +438,7 @@ describe('integrate claude — Context Augmentation', () => {
       const state = loadState(harness);
       expect(findRecordedCagFeature(state)).toBeUndefined();
       expectVortexHookAbsent(harness.cwd, 'claude');
-      expect(result.stderr).toContain('Could not determine Vortex entitlement');
+      expect(result.stderr).toContain('Could not check whether Vortex is available.');
     },
     { timeout: 30000 },
   );
