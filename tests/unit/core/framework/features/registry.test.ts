@@ -734,6 +734,40 @@ describe('declarative integration framework', () => {
     expect(fake.findCall('warn', 'Could not check whether Feature is available.')).toBeDefined();
   });
 
+  it('keeps a subfeature with unknown availability active only when it is recorded', async () => {
+    const unknown = () => ({ available: undefined });
+    const container: FeatureContainer = {
+      id: 'container',
+      displayName: 'Container',
+      subfeatures: [
+        { id: 'recorded', displayName: 'Recorded', isAvailable: unknown },
+        { id: 'fresh', displayName: 'Fresh', isAvailable: unknown },
+      ],
+      defaultInstallSubfeatureIds: [],
+    };
+    const integration = makeIntegration({ features: [container] });
+    const state = getDefaultState('test');
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [makeApplication(container, tempDir, ['recorded'])],
+      { console: fake },
+    );
+
+    const selected = await selectForInvocation(integration, {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project',
+      nonInteractive: true,
+      state,
+    });
+
+    expect(activeSubfeatureIds(selected.toInstall[0])).toEqual(['recorded']);
+    expect(fake.findCall('warn', 'Could not check whether Recorded is available.')).toBeDefined();
+    expect(fake.findCall('warn', 'Could not check whether Fresh is available.')).toBeDefined();
+    expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toEqual([]);
+  });
+
   it('records active subfeatures nested under the container feature in state', async () => {
     const dep = sonarSourceBinary({ id: 'sub-dep', spec: SECRETS_SPEC });
     const container: FeatureContainer = {
