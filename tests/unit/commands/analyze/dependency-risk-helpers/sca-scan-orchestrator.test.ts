@@ -27,6 +27,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SecretsInstaller } from '@/core/host/install/secrets.ts';
+import type { ScaEnablement } from '@/core/server/sca.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 
 import { ScaScanOrchestrator } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
@@ -45,12 +46,12 @@ const EMPTY_RESPONSE = { releases: [], parsedFiles: [], errors: [] };
 
 function makeClient(
   overrides: {
-    checkScaEnabled?: () => Promise<boolean>;
+    getScaEnablement?: () => Promise<ScaEnablement>;
     getProjectSettings?: () => Promise<SettingsValue[]>;
   } = {},
 ): ScaScanApi {
   return {
-    checkScaEnabled: overrides.checkScaEnabled ?? (() => Promise.resolve(true)),
+    getScaEnablement: overrides.getScaEnablement ?? (() => Promise.resolve('enabled')),
     getProjectSettings: overrides.getProjectSettings ?? (() => Promise.resolve([])),
   };
 }
@@ -95,7 +96,7 @@ describe('ScaScanOrchestrator', () => {
 
   it('throws when SCA is not available for the connection', async () => {
     const orchestrator = new ScaScanOrchestrator(
-      makeClient({ checkScaEnabled: () => Promise.resolve(false) }),
+      makeClient({ getScaEnablement: () => Promise.resolve('not_enabled') }),
       okInstaller,
       { spawn: mockSpawner(EMPTY_RESPONSE) },
       noopSecretsInstaller,
