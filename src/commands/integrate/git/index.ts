@@ -261,6 +261,10 @@ export async function resolveProjectKey(
   return options;
 }
 
+function otherHookFeatureId(hook: GitHookType): string {
+  return `${hook === 'pre-commit' ? 'pre-push' : 'pre-commit'}-hook`;
+}
+
 async function installGitFeatures(
   options: IntegrateGitOptions,
   targetRoot: string,
@@ -279,6 +283,7 @@ async function installGitFeatures(
     auth,
     force: options.force,
     nonInteractive: options.nonInteractive,
+    excludedFeatureIds: options.hook ? [otherHookFeatureId(options.hook)] : undefined,
     // Attrs are project-scope only; global hooks do not support a project key.
     attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
     onSuccess: (facts) => {

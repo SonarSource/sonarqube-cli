@@ -72,7 +72,7 @@ export function buildRecordedIntegrationAttrs(params: {
   orgKey: string | undefined;
   contextAugmentation: ResolvedVortexSetup | null;
 }): Record<string, IntegrationStateAttribute> {
-  return params.contextAugmentation?.disposition === 'install'
+  return params.contextAugmentation?.disposition.action === 'install'
     ? buildContextAugmentationAttrs(
         params.serverUrl,
         params.orgKey,

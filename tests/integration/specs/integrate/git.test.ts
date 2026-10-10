@@ -32,6 +32,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { CliState } from '@/core/state/state.ts';
+
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -190,6 +192,10 @@ function expectInstalledOperation(feature: InstalledFeatureJson, id: string): vo
   const operation = feature.operations.find((entry) => entry.id === id);
   expect(operation).toBeDefined();
   expect(operation?.id).toBe(id);
+}
+
+function preCommitHookPath(harness: TestHarness): string {
+  return harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit').path;
 }
 
 type SetupAuthOptions = { withSecretsBinary?: boolean; scaEnabled?: boolean };
@@ -420,14 +426,16 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'skips dep-risks silently when SCA is not enabled on the server',
+    'skips dep-risks with the unsupported-version reason when the server is too old for SCA',
     async () => {
-      // No scaEnabled: true → fake server returns 404 for the SCA endpoint → check_failed → skip.
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const result = await harness.run('integrate git --hook pre-commit --non-interactive');
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'requires SonarQube Server 2026.4 or later (server is 25.1.0.102122)',
+      );
       const hookContent = readFileSync(
         harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit').path,
         'utf-8',
@@ -463,9 +471,11 @@ describe('integrate git (native hooks)', () => {
       const result = await harness.run('integrate git --hook pre-commit --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain(
+      const output = result.stdout + result.stderr;
+      expect(output).toContain(
         'Software Composition Analysis is not available for the current connection.',
       );
+      expect(output).toContain('https://docs.sonarsource.com/sonarqube-cli/analysis/sca');
       const hookContent = readFileSync(
         harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit').path,
         'utf-8',
@@ -490,6 +500,9 @@ describe('integrate git (native hooks)', () => {
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).not.toContain('Install pre-commit secrets scan?');
+      expect(output).not.toContain('Secrets scan is required');
       const hookContent = readFileSync(
         harness.userHome.file('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit').path,
         'utf-8',
@@ -500,9 +513,95 @@ describe('integrate git (native hooks)', () => {
       const gitIntegration = getInstalledIntegration(state, 'native-git');
       const feature = gitIntegration.features[0];
       expect(feature.featureId).toBe('pre-commit-hook');
+      expectSubfeatureHasDependency(feature, 'pre-commit-secrets', 'sonar-secrets');
       expect(feature.subfeatures?.some((s) => s.featureId === 'pre-commit-dependency-risks')).toBe(
         false,
       );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'asks to install only the hook named by --hook in interactive mode',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const session = harness.runInteractive('integrate git --hook pre-commit');
+      await session.accept('Proceed with global installation?');
+      await session.accept('Install pre-commit code scanning hook?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('Install pre-push code scanning hook?');
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not remove an installed pre-push hook when re-run with --hook pre-commit',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+
+      const first = await harness.run('integrate git --non-interactive');
+      expect(first.exitCode).toBe(0);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
+
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      const second = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(second.exitCode).toBe(0);
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(true);
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const featureIds = getInstalledIntegration(state, 'native-git')
+        .features.map((feature) => feature.featureId)
+        .sort((a, b) => a.localeCompare(b));
+      expect(featureIds).toEqual(['pre-commit-hook', 'pre-push-hook']);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'warns and keeps an installed dependency-risks scan when the server version cannot be checked',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
+      const first = await harness.run('integrate git --hook pre-commit --non-interactive');
+      expect(first.exitCode).toBe(0);
+      expect(readFileSync(preCommitHookPath(harness), 'utf-8')).toContain('--dependency-risks');
+
+      const persisted = harness.stateJsonFile.asJson() as CliState;
+      const failing = await harness
+        .newFakeServer()
+        .withAuthToken(INTEGRATION_TEST_TOKEN)
+        .withSystemStatusCode(500)
+        .start();
+      const connection = persisted.auth.connections.find(
+        (entry) => entry.id === persisted.auth.activeConnectionId,
+      );
+      expect(connection).toBeDefined();
+      connection!.serverUrl = failing.baseUrl();
+      harness
+        .state()
+        .withActiveConnection(failing.baseUrl())
+        .withKeychainToken(failing.baseUrl(), INTEGRATION_TEST_TOKEN)
+        .withSecretsBinaryInstalled()
+        .withScaScannerBinaryInstalled()
+        .withRawState(JSON.stringify(persisted));
+
+      const second = await harness.run('integrate git --hook pre-commit --non-interactive');
+
+      expect(second.exitCode).toBe(0);
+      const output = second.stdout + second.stderr;
+      expect(output).toContain(
+        'Could not check whether pre-commit dependency-risks scan is available.',
+      );
+      expect(output).not.toContain('no longer available');
+      expect(readFileSync(preCommitHookPath(harness), 'utf-8')).toContain('--dependency-risks');
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const feature = getInstalledIntegration(state, 'native-git').features[0];
+      expectSubfeatureHasDependency(feature, 'pre-commit-dependency-risks', 'sca-scanner-cli');
     },
     { timeout: 30000 },
   );

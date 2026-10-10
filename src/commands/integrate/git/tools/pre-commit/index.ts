@@ -37,7 +37,7 @@ import {
   createSecretsSubfeature,
   gitHookPreview,
 } from '../git-integration-subfeatures.ts';
-import { gitCombinedHookExample, gitHookExample, shouldInstallHook } from '../shared.ts';
+import { gitCombinedHookExample, gitHookExample } from '../shared.ts';
 import {
   activatePreCommitFramework,
   garbageCollectPreCommitFramework,
@@ -65,7 +65,6 @@ function createPreCommitFeature(
     id: `${hook}-hook`,
     displayName: `${hook} code scanning hook`,
     previewDescription: gitHookPreview(hook),
-    shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [
       yamlPatch({

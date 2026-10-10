@@ -22,15 +22,15 @@ import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
 import type {
+  FeatureAvailability,
   FeatureContainer,
-  InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
+import { jsonPatch, wholeFile } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
@@ -89,7 +89,7 @@ const sqaaPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> 
   id: 'sqaa-posttooluse',
   displayName: 'Vortex analysis',
   matcher: 'Edit|Write',
-  shouldInstall: () => install(),
+  required: true,
 };
 
 const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
@@ -97,7 +97,8 @@ const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> =
   displayName: 'Vortex context augmentation hook',
   matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
   dependencies: [contextAugmentationBinaryDependency],
-  shouldInstall: (invocation) => shouldInstallCagHook(invocation),
+  required: true,
+  isAvailable: (invocation) => isCagHookAvailable(invocation),
   migrationEligible: isCagHookAllowedForAttrs,
 };
 
@@ -207,17 +208,10 @@ function isCagHookAllowedForAttrs(
   return isCagHookOrgAllowed(orgKey);
 }
 
-function shouldInstallCagHook(
+function isCagHookAvailable(
   invocation: IntegrationInvocation<ClaudeIntegrationOptions>,
-): InstallDecision {
-  // The allowlist only withholds a new install; it never tears an existing hook down.
-  if (
-    invocation.options.vortexDisposition === 'install' &&
-    !isCagHookAllowedForAttrs(invocation.attrs)
-  ) {
-    return skip();
-  }
-  return install();
+): FeatureAvailability {
+  return { available: isCagHookAllowedForAttrs(invocation.attrs) };
 }
 
 function createCagHookConfigResource(): ResourceDeclaration {
@@ -254,8 +248,9 @@ function createSessionStartHookEntry(
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
-    displayName: 'Vortex context augmentation hook',
-    shouldInstall: (invocation) => shouldInstallCagHook(invocation),
+    displayName: 'Vortex context augmentation failure hook',
+    required: true,
+    isAvailable: (invocation) => isCagHookAvailable(invocation),
     migrationEligible: isCagHookAllowedForAttrs,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [
