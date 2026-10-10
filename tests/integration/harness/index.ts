@@ -318,6 +318,7 @@ export class TestHarness {
       ...fakeBinariesEnv,
       ...fakeSonarcloudEnv,
       ...fakeUpdateScriptEnv,
+      SONARQUBE_CLI_INTEGRATION_LOOPBACK_CLOUD: '1',
       SONARQUBE_CLI_KEYCHAIN_FILE: this.keychainJsonFile,
       CI: 'true',
       SONARQUBE_CLI_DISABLE_BROWSER: 'true',
