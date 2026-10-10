@@ -19,10 +19,12 @@
  */
 
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+
+import { assertSafeWritePath, writeRegularFile } from '@/core/io/safe-write-path.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -64,6 +66,7 @@ export async function writeFileIfChanged(
   content: string,
   executable?: boolean,
 ): Promise<void> {
+  await assertSafeWritePath(path);
   const mode = executable ? EXECUTABLE_FILE_MODE : undefined;
   if (existsSync(path)) {
     const existing = await readFile(path, 'utf-8');
@@ -75,7 +78,7 @@ export async function writeFileIfChanged(
     }
   }
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, content, mode === undefined ? undefined : { mode });
+  await writeRegularFile(path, content, mode);
 }
 
 export async function readTextFile(path: string): Promise<string | undefined> {
