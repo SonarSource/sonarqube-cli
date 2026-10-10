@@ -183,6 +183,14 @@ sonar list projects
 Set both variables — if only `SONARQUBE_CLI_TOKEN` is present, the CLI prints a warning on stderr and falls back to keychain credentials, which is rarely what automation wants.
 Never commit the token or pass it as a CLI argument.
 
+For a local Vortex Context development build, set
+`SONAR_CONTEXT_AUGMENTATION_BINARY_PATH` to the absolute executable path. The CLI
+uses that file for `sonar context` and agent context hooks, including guideline
+retrieval. Integration setup also reuses it instead of downloading the released
+engine. Unset the variable to return to the pinned release. This override selects
+the executable only; normal authentication, project resolution, networking and
+Vortex entitlement checks still apply.
+
 ### Step 3: Try Basic Commands
 
 **List your projects:**

@@ -32,6 +32,7 @@ import type {
 import {
   installContextAugmentationBinary,
   resolveContextAugmentationBinaryPath,
+  resolveReleasedContextAugmentationBinaryPath,
 } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
@@ -71,7 +72,7 @@ export class ContextAugmentationBinaryDependency implements DependencyDeclaratio
   }
 
   async remove(_context: IntegrationContext): Promise<void> {
-    const binaryPath = resolveContextAugmentationBinaryPath();
+    const binaryPath = resolveReleasedContextAugmentationBinaryPath();
     if (binaryPath === null) {
       return;
     }
