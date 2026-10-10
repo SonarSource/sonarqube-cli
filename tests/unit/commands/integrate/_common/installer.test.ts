@@ -130,7 +130,8 @@ describe('generic integration installer', () => {
       {
         id: 'main',
         displayName: 'Main feature',
-        shouldInstall: ({ options }) => options.installMain === true,
+        isAvailable: ({ options }) => ({ available: options.installMain === true }),
+        required: true,
         resources: [
           wholeFile({
             id: 'main-file',
@@ -143,7 +144,8 @@ describe('generic integration installer', () => {
       {
         id: 'project',
         displayName: 'Project feature',
-        shouldInstall: ({ options }) => options.installProject === true,
+        isAvailable: ({ options }) => ({ available: options.installProject === true }),
+        required: true,
         targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
         scope: 'project',
         resources: [
@@ -442,7 +444,8 @@ describe('generic integration installer', () => {
         {
           id: 'feature',
           displayName: 'Feature',
-          shouldInstall: ({ options }) => options.enabled === true,
+          isAvailable: ({ options }) => ({ available: options.enabled === true }),
+          required: true,
         },
       ],
     );
@@ -637,7 +640,7 @@ describe('generic integration installer', () => {
     expect(hasUiCall('text', '       - Subfeature Two')).toBe(true);
   });
 
-  it('only lists active subfeatures when some are filtered out by shouldInstall', async () => {
+  it('only lists active subfeatures when some are unavailable', async () => {
     const container: FeatureContainer<{ enableOptional?: boolean }> = {
       id: 'container',
       displayName: 'Container Feature',
@@ -647,7 +650,8 @@ describe('generic integration installer', () => {
         {
           id: 'subfeature-2',
           displayName: 'Subfeature Two',
-          shouldInstall: ({ options }) => options.enableOptional === true,
+          isAvailable: ({ options }) => ({ available: options.enableOptional === true }),
+          required: true,
         },
       ],
       resources: [

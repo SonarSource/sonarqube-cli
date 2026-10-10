@@ -157,7 +157,7 @@ beforeEach(() => {
   spawnSpy = spyOn(Bun, 'spawn').mockReturnValue({ unref: () => {} } as ReturnType<
     typeof Bun.spawn
   >);
-  process.exitCode = undefined;
+  process.exitCode = 0;
 });
 
 afterEach(() => {
@@ -183,7 +183,7 @@ afterEach(() => {
   delete process.env[ENV_ORG];
   delete process.env[ENV_SERVER];
   delete process.env.SONARQUBE_CLI_SERVER;
-  process.exitCode = undefined;
+  process.exitCode = 0;
   rmSync(testDir, { recursive: true, force: true });
 });
 
