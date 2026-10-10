@@ -39,6 +39,7 @@ import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import type { IntegrationDeclaration } from '@/core/framework/features';
 import { recordInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
+import { isFeatureContainer } from '@/core/framework/features/types.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import {
   type BinarySpec,
@@ -498,7 +499,7 @@ export class EnvironmentBuilder {
 
   /**
    * Seeds a previously-installed integration feature in the state file so
-   * `shouldInstall` state probes see it as already installed.
+   * availability and state probes see it as already installed.
    */
   withInstalledIntegrationFeature<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
@@ -523,6 +524,7 @@ export class EnvironmentBuilder {
         },
         integration,
         feature,
+        isFeatureContainer(feature) ? feature.subfeatures : [],
         { dependencies: [], resources: [], operations: [] },
       );
     });

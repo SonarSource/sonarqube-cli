@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 
 import type {
   ContainerIntegrationContext,
+  FeatureApplication,
   FeatureContainer,
   FeatureDeclaration,
   IntegrationContext,
@@ -46,21 +47,18 @@ void mock.module('@/core/host/install/binary.ts', () => ({
 }));
 
 const {
-  askUser,
   buildApplications,
   createIntegrationRegistry,
-  install,
   IntegrationInstaller,
   IntegrationRegistry,
   isFeatureContainer,
   jsonPatch,
-  selectFeaturesForInvocation,
-  skip,
+  reportFeatureAvailability,
+  resolveFeatureSelection,
   sonarSourceBinary,
   textSnippet,
   textSnippetRemover,
   tomlPatch,
-  uninstall,
   wholeFile,
   yamlPatch,
 } = await import('@/core/framework/features');
@@ -68,13 +66,21 @@ const { SECRETS_SPEC } = await import('@/core/host/install/secrets.ts');
 
 type Installer = InstanceType<typeof IntegrationInstaller>;
 
-/** Build applications for the invocation, then run interactive selection (mirrors install-integration). */
+/** Build, report and resolve like installIntegration does. */
 async function selectForInvocation<TOptions>(
   integration: IntegrationDeclaration<TOptions>,
   invocation: IntegrationInvocation<TOptions>,
+  excludedFeatureIds: string[] = [],
 ) {
-  const applications = await buildApplications(invocation, integration.features);
-  return selectFeaturesForInvocation(integration, invocation, applications, fake);
+  const applications = await buildApplications(invocation, integration, excludedFeatureIds);
+  reportFeatureAvailability(applications, fake);
+  return resolveFeatureSelection(applications, invocation.nonInteractive === true, fake);
+}
+
+function activeSubfeatureIds(application: FeatureApplication<any>): string[] {
+  return application.subfeatureApplications
+    .filter((sub) => sub.active)
+    .map((sub) => sub.subfeature.id);
 }
 
 let fake: FakeConsole;
@@ -432,23 +438,17 @@ describe('declarative integration framework', () => {
     expect(isFeatureContainer(container)).toBe(true);
   });
 
-  it('selectFeaturesForInvocation filters subfeatures by shouldInstall (install/skip)', async () => {
+  it('resolveFeatureSelection activates subfeatures by availability', async () => {
     const dep = sonarSourceBinary({ id: 'test-dep', spec: SECRETS_SPEC });
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
       displayName: 'Container',
-      shouldInstall: () => install(),
       subfeatures: [
-        {
-          id: 'mandatory',
-          displayName: 'Mandatory',
-          shouldInstall: () => install(),
-          dependencies: [dep],
-        },
+        { id: 'mandatory', displayName: 'Mandatory', dependencies: [dep] },
         {
           id: 'optional',
           displayName: 'Optional',
-          shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
+          isAvailable: ({ options }) => ({ available: options.enableSca === true }),
         },
       ],
       defaultInstallSubfeatureIds: [],
@@ -462,11 +462,7 @@ describe('declarative integration framework', () => {
       nonInteractive: true,
       state: getDefaultState('test'),
     });
-    expect(
-      (
-        withoutSca.toInstall[0].feature as FeatureContainer<{ enableSca?: boolean }>
-      ).subfeatures.map((s) => s.id),
-    ).toEqual(['mandatory']);
+    expect(activeSubfeatureIds(withoutSca.toInstall[0])).toEqual(['mandatory']);
 
     const withSca = await selectForInvocation(integration, {
       options: { enableSca: true },
@@ -475,25 +471,17 @@ describe('declarative integration framework', () => {
       nonInteractive: true,
       state: getDefaultState('test'),
     });
-    expect(
-      (withSca.toInstall[0].feature as FeatureContainer<{ enableSca?: boolean }>).subfeatures.map(
-        (s) => s.id,
-      ),
-    ).toEqual(['mandatory', 'optional']);
+    expect(activeSubfeatureIds(withSca.toInstall[0])).toEqual(['mandatory', 'optional']);
   });
 
   it('populates activeSubfeatures in context for container operations', async () => {
     let integrationContext: IntegrationContext | undefined;
-    const container: FeatureContainer<{ enableSca?: boolean }> = {
+    const container: FeatureContainer = {
       id: 'container',
       displayName: 'Container',
       subfeatures: [
-        { id: 'mandatory', displayName: 'Mandatory', shouldInstall: () => install() },
-        {
-          id: 'optional',
-          displayName: 'Optional',
-          shouldInstall: ({ options }) => (options.enableSca ? install() : skip()),
-        },
+        { id: 'mandatory', displayName: 'Mandatory' },
+        { id: 'optional', displayName: 'Optional' },
       ],
       defaultInstallSubfeatureIds: [],
       operations: [
@@ -505,14 +493,13 @@ describe('declarative integration framework', () => {
         },
       ],
     };
-    const integration = makeIntegration<{ enableSca?: boolean }>({ features: [container] });
+    const integration = makeIntegration({ features: [container] });
     const state = getDefaultState('test');
 
-    const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(container, tempDir, ['mandatory'])],
       { console: fake },
     );
 
@@ -523,22 +510,14 @@ describe('declarative integration framework', () => {
     ).toEqual(['mandatory']);
   });
 
-  it('selectFeaturesForInvocation prompts for subfeature askUser, installing on confirm and skipping on decline', async () => {
+  it('resolveFeatureSelection prompts for each subfeature, activating on confirm and declining otherwise', async () => {
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
-      shouldInstall: () => install(),
+      required: true,
       subfeatures: [
-        {
-          id: 'opted-in',
-          displayName: 'Opted-in feature',
-          shouldInstall: () => askUser('Enable it?'),
-        },
-        {
-          id: 'declined',
-          displayName: 'Declined feature',
-          shouldInstall: () => askUser('Enable other?'),
-        },
+        { id: 'opted-in', displayName: 'Opted-in feature' },
+        { id: 'declined', displayName: 'Declined feature' },
       ],
       defaultInstallSubfeatureIds: [],
     };
@@ -554,28 +533,19 @@ describe('declarative integration framework', () => {
       state: getDefaultState('test'),
     });
 
-    const selected = (result.toInstall[0].feature as FeatureContainer<Record<string, unknown>>)
-      .subfeatures;
-    expect(selected).toHaveLength(1);
-    expect(selected[0]?.id).toBe('opted-in');
+    expect(activeSubfeatureIds(result.toInstall[0])).toEqual(['opted-in']);
     expect(result.declined).toEqual(['declined']);
     const confirmCalls = fake.calls.filter((c) => c.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
-    expect(confirmCalls[0]?.args[0]).toBe('Enable it?');
+    expect(confirmCalls[0]?.args[0]).toBe('Install Opted-in feature?');
   });
 
-  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
+  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
-      shouldInstall: () => install(),
-      subfeatures: [
-        {
-          id: 'optional',
-          displayName: 'Optional feature',
-          shouldInstall: () => askUser('Enable it?'),
-        },
-      ],
+      required: true,
+      subfeatures: [{ id: 'optional', displayName: 'Optional feature' }],
       defaultInstallSubfeatureIds: [],
     };
     const integration = makeIntegration({ features: [container] });
@@ -597,14 +567,14 @@ describe('declarative integration framework', () => {
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
-  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
+  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     // Seed the feature as already installed so the keep/remove flow kicks in.
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(integration.features[0], tempDir)],
       { console: fake },
     );
     fake.queueResponse(null); // Ctrl+C at "Keep?"
@@ -625,13 +595,13 @@ describe('declarative integration framework', () => {
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
-  it('selectFeaturesForInvocation throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
+  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(integration.features[0], tempDir)],
       { console: fake },
     );
     fake.queueResponse(false); // decline "Keep?"
@@ -659,7 +629,7 @@ describe('declarative integration framework', () => {
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(integration.features[0], tempDir)],
       { console: fake },
     );
     fake.queueResponse(false); // decline "Keep?"
@@ -679,14 +649,14 @@ describe('declarative integration framework', () => {
   });
 
   it.each([true, false])(
-    'selects an installed feature for removal when shouldInstall returns uninstall (nonInteractive: %p)',
+    'removes an installed feature that is no longer available, reporting reason and removal (nonInteractive: %p)',
     async (nonInteractive) => {
       const integration = makeIntegration({
         features: [
           {
             id: 'feature',
             displayName: 'Feature',
-            shouldInstall: () => uninstall('Removing feature'),
+            isAvailable: () => ({ available: false, unavailableReason: 'Not offered anymore' }),
           },
         ],
       });
@@ -694,7 +664,7 @@ describe('declarative integration framework', () => {
       await installer.applyAndRecordFeatures(
         state,
         integration,
-        [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+        [makeApplication(integration.features[0], tempDir)],
         { console: fake },
       );
 
@@ -709,17 +679,18 @@ describe('declarative integration framework', () => {
       expect(selected.toRemove.map((application) => application.feature.id)).toEqual(['feature']);
       expect(selected.toInstall).toEqual([]);
       expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toEqual([]);
-      expect(fake.findCall('info', 'Removing feature')).toBeDefined();
+      expect(fake.findCall('info', 'Not offered anymore')).toBeDefined();
+      expect(fake.findCall('info', 'Feature is no longer available. Removing it.')).toBeDefined();
     },
   );
 
-  it('leaves an absent feature absent when its decision is uninstall', async () => {
+  it('reports the reason but not a removal for an unavailable feature that is not installed', async () => {
     const integration = makeIntegration({
       features: [
         {
           id: 'feature',
           displayName: 'Feature',
-          shouldInstall: () => uninstall('Removing feature'),
+          isAvailable: () => ({ available: false, unavailableReason: 'Not offered' }),
         },
       ],
     });
@@ -733,18 +704,21 @@ describe('declarative integration framework', () => {
 
     expect(selected.toInstall).toEqual([]);
     expect(selected.toRemove).toEqual([]);
-    expect(fake.findCall('info', 'Removing feature')).toBeUndefined();
+    expect(fake.findCall('info', 'Not offered')).toBeDefined();
+    expect(fake.findCall('info', 'no longer available')).toBeUndefined();
   });
 
-  it('preserves an installed feature when its decision is skip', async () => {
+  it('warns and leaves an installed feature untouched when its availability is unknown', async () => {
     const integration = makeIntegration({
-      features: [{ id: 'feature', displayName: 'Feature', shouldInstall: () => skip() }],
+      features: [
+        { id: 'feature', displayName: 'Feature', isAvailable: () => ({ available: undefined }) },
+      ],
     });
     const state = getDefaultState('test');
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: integration.features[0], targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(integration.features[0], tempDir)],
       { console: fake },
     );
 
@@ -757,6 +731,7 @@ describe('declarative integration framework', () => {
 
     expect(selected.toInstall).toEqual([]);
     expect(selected.toRemove).toEqual([]);
+    expect(fake.findCall('warn', 'Could not check whether Feature is available.')).toBeDefined();
   });
 
   it('records active subfeatures nested under the container feature in state', async () => {
@@ -765,8 +740,8 @@ describe('declarative integration framework', () => {
       id: 'container',
       displayName: 'Container',
       subfeatures: [
-        { id: 'sub-a', displayName: 'Sub A', shouldInstall: () => install(), dependencies: [dep] },
-        { id: 'sub-b', displayName: 'Sub B', shouldInstall: () => skip() },
+        { id: 'sub-a', displayName: 'Sub A', dependencies: [dep] },
+        { id: 'sub-b', displayName: 'Sub B' },
       ],
       defaultInstallSubfeatureIds: [],
     };
@@ -774,11 +749,10 @@ describe('declarative integration framework', () => {
     const state = getDefaultState('test');
     const context = makeContext(state, tempDir);
 
-    const filteredContainer = { ...container, subfeatures: [container.subfeatures[0]] };
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: filteredContainer, targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(container, tempDir, ['sub-a'])],
       { console: fake },
     );
 
@@ -810,7 +784,7 @@ describe('declarative integration framework', () => {
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: makeContainer(depOld), targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(makeContainer(depOld), tempDir)],
       { console: fake },
     );
     expect(state.integrations.installed[0]?.features[0]?.subfeatures?.[0]?.dependencies).toEqual([
@@ -821,7 +795,7 @@ describe('declarative integration framework', () => {
     await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature: makeContainer(depNew), targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(makeContainer(depNew), tempDir)],
       { console: fake },
     );
     const subfeature = state.integrations.installed[0]?.features[0]?.subfeatures?.[0];
@@ -935,21 +909,14 @@ describe('declarative integration framework', () => {
       defaultInstallSubfeatureIds: [],
     };
     const state = getDefaultState('test');
-    const context = makeContext(state, tempDir);
 
-    /** Install the container with only `activeSubfeatureIds` selected, as feature selection does. */
-    const integrate = (activeSubfeatureIds: string[]) => {
-      const selected: FeatureContainer = {
-        ...container,
-        subfeatures: container.subfeatures.filter((sub) => activeSubfeatureIds.includes(sub.id)),
-      };
-      return applyAndRecord(
-        installer,
-        context,
+    const integrate = (activeSubfeatureIds: string[]) =>
+      installer.applyAndRecordFeatures(
+        state,
         makeIntegration({ features: [container] }),
-        selected,
+        [makeApplication(container, tempDir, activeSubfeatureIds)],
+        { console: fake },
       );
-    };
 
     await integrate(['sub-a']);
     expect(existsSync(subPath)).toBe(true);
@@ -987,62 +954,68 @@ describe('declarative integration framework', () => {
     expect(registry.list()).toEqual([first, second]);
   });
 
-  it('selects features matching an invocation, honoring boolean and decision results', async () => {
-    interface GitOptions {
-      hook?: 'pre-commit' | 'pre-push';
-    }
-    const integration: IntegrationDeclaration<GitOptions> = makeIntegration({
-      features: [
-        {
-          id: 'pre-commit',
-          displayName: 'Pre-commit',
-          shouldInstall: ({ options }) => !options.hook || options.hook === 'pre-commit',
-        },
-        {
-          id: 'pre-push',
-          displayName: 'Pre-push',
-          shouldInstall: ({ options }) => options.hook === 'pre-push',
-        },
-        {
-          id: 'always',
-          displayName: 'Always',
-          shouldInstall: () => install(),
-        },
-        {
-          id: 'never',
-          displayName: 'Never',
-          shouldInstall: () => skip(),
-        },
-      ],
-    });
-
-    expect(
-      (
-        await selectForInvocation(integration, {
-          options: {},
-          targetRoot: tempDir,
-          scope: 'project',
-          state: getDefaultState('test'),
-        })
-      ).toInstall.map((application) => application.feature.id),
-    ).toEqual(['pre-commit', 'always']);
-    expect(
-      (
-        await selectForInvocation(integration, {
-          options: { hook: 'pre-push' },
-          targetRoot: tempDir,
-          scope: 'project',
-          state: getDefaultState('test'),
-        })
-      ).toInstall.map((application) => application.feature.id),
-    ).toEqual(['pre-push', 'always']);
-  });
-
-  it('reports an optional reason when a feature is skipped, and stays silent otherwise', async () => {
+  it('selects available features and drops excluded ones', async () => {
     const integration = makeIntegration({
       features: [
-        { id: 'with-reason', displayName: 'With reason', shouldInstall: () => skip('covered') },
-        { id: 'silent', displayName: 'Silent', shouldInstall: () => skip() },
+        { id: 'pre-commit', displayName: 'Pre-commit' },
+        { id: 'pre-push', displayName: 'Pre-push' },
+        { id: 'never', displayName: 'Never', isAvailable: () => ({ available: false }) },
+      ],
+    });
+    const invocation = {
+      options: {},
+      targetRoot: tempDir,
+      scope: 'project' as const,
+      nonInteractive: true,
+      state: getDefaultState('test'),
+    };
+
+    expect(
+      (await selectForInvocation(integration, invocation)).toInstall.map(
+        (application) => application.feature.id,
+      ),
+    ).toEqual(['pre-commit', 'pre-push']);
+    expect(
+      (await selectForInvocation(integration, invocation, ['pre-commit'])).toInstall.map(
+        (application) => application.feature.id,
+      ),
+    ).toEqual(['pre-push']);
+  });
+
+  it('leaves an installed excluded feature untouched and silent', async () => {
+    const integration = makeIntegration({
+      features: [
+        { id: 'kept', displayName: 'Kept' },
+        { id: 'other', displayName: 'Other' },
+      ],
+    });
+    const state = getDefaultState('test');
+    await installer.applyAndRecordFeatures(
+      state,
+      integration,
+      [makeApplication(integration.features[1], tempDir)],
+      { console: fake },
+    );
+
+    const selected = await selectForInvocation(
+      integration,
+      { options: {}, targetRoot: tempDir, scope: 'project', nonInteractive: true, state },
+      ['other'],
+    );
+
+    expect(selected.toInstall.map((application) => application.feature.id)).toEqual(['kept']);
+    expect(selected.toRemove).toEqual([]);
+  });
+
+  it('prints an unavailable reason only when one is provided', async () => {
+    const integration = makeIntegration({
+      features: [
+        {
+          id: 'with-reason',
+          displayName: 'With reason',
+          isAvailable: () => ({ available: false, unavailableReason: 'covered' }),
+        },
+        { id: 'silent', displayName: 'Silent', isAvailable: () => ({ available: false }) },
       ],
     });
 
@@ -1059,42 +1032,11 @@ describe('declarative integration framework', () => {
     expect(fake.calls.filter((call) => call.method === 'info')).toHaveLength(1);
   });
 
-  it('prints an optional message when a feature is installed, and stays silent otherwise', async () => {
+  it('prompts the user for each feature, installing on confirm and declining otherwise', async () => {
     const integration = makeIntegration({
       features: [
-        {
-          id: 'with-message',
-          displayName: 'With message',
-          shouldInstall: () => install('auto-configured'),
-        },
-        { id: 'silent', displayName: 'Silent', shouldInstall: () => install() },
-      ],
-    });
-
-    const selected = await selectForInvocation(integration, {
-      options: {},
-      targetRoot: tempDir,
-      scope: 'project',
-      state: getDefaultState('test'),
-    });
-
-    expect(selected.toInstall.map((application) => application.feature.id)).toEqual([
-      'with-message',
-      'silent',
-    ]);
-    expect(fake.findCall('discreetSuccess', 'auto-configured')).toBeDefined();
-    expect(fake.calls.filter((call) => call.method === 'discreetSuccess')).toHaveLength(1);
-  });
-
-  it('prompts the user when a feature asks, installing on confirm and skipping on decline', async () => {
-    const integration = makeIntegration({
-      features: [
-        { id: 'accepted', displayName: 'Accepted', shouldInstall: () => askUser() },
-        {
-          id: 'declined',
-          displayName: 'Declined',
-          shouldInstall: () => askUser('Install the thing?'),
-        },
+        { id: 'accepted', displayName: 'Accepted' },
+        { id: 'declined', displayName: 'Declined', benefitDescription: 'some benefit' },
       ],
     });
     fake.queueResponse(true);
@@ -1112,80 +1054,42 @@ describe('declarative integration framework', () => {
     expect(selected.toRemove).toEqual([]);
     const confirmCalls = fake.calls.filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
-    expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
+    expect(confirmCalls[0]?.args[0]).toBe('Install Accepted?');
+    expect(confirmCalls[1]?.args[0]).toBe('Install Declined? (some benefit)');
   });
 
-  it('appends the feature description to the default prompt but not to a custom one', async () => {
+  it('auto-confirms in non-interactive mode and never prompts for required features', async () => {
     const integration = makeIntegration({
       features: [
-        {
-          id: 'default-prompt',
-          displayName: 'Some feature',
-          benefitDescription: 'some benefit',
-          shouldInstall: () => askUser(),
-        },
-        {
-          id: 'custom-prompt',
-          displayName: 'Other',
-          benefitDescription: 'ignored hint',
-          shouldInstall: () => askUser('Install the thing?'),
-        },
+        { id: 'asked', displayName: 'Asked' },
+        { id: 'required', displayName: 'Required', required: true },
       ],
     });
-    fake.queueResponse(true);
-    fake.queueResponse(true);
-
-    await selectForInvocation(integration, {
+    const invocation = {
       options: {},
       targetRoot: tempDir,
-      scope: 'project',
+      scope: 'project' as const,
       state: getDefaultState('test'),
-    });
+    };
 
-    const confirmCalls = fake.calls.filter((call) => call.method === 'confirmPrompt');
-    expect(confirmCalls[0]?.args[0]).toBe('Install Some feature? (some benefit)');
-    expect(confirmCalls[1]?.args[0]).toBe('Install the thing?');
-  });
-
-  it('defaults to asking the user when a feature omits shouldInstall', async () => {
-    const integration = makeIntegration({
-      features: [{ id: 'feature', displayName: 'Feature' }],
-    });
-    fake.queueResponse(false);
-
-    const selected = await selectForInvocation(integration, {
-      options: {},
-      targetRoot: tempDir,
-      scope: 'project',
-      state: getDefaultState('test'),
-    });
-
-    expect(selected.toInstall).toEqual([]);
-    expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
-  });
-
-  it('auto-confirms ask decisions in non-interactive mode without prompting', async () => {
-    const integration = makeIntegration({
-      features: [
-        { id: 'asked', displayName: 'Asked', shouldInstall: () => askUser() },
-        { id: 'defaulted', displayName: 'Defaulted' },
-      ],
-    });
-
-    const selected = await selectForInvocation(integration, {
-      options: {},
-      targetRoot: tempDir,
-      scope: 'project',
+    const nonInteractive = await selectForInvocation(integration, {
+      ...invocation,
       nonInteractive: true,
-      state: getDefaultState('test'),
     });
-
-    expect(selected.toInstall.map((application) => application.feature.id)).toEqual([
+    expect(nonInteractive.toInstall.map((application) => application.feature.id)).toEqual([
       'asked',
-      'defaulted',
+      'required',
     ]);
-    expect(selected.declined).toEqual([]);
+    expect(nonInteractive.declined).toEqual([]);
     expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(0);
+
+    fake.queueResponse(true);
+    const interactive = await selectForInvocation(integration, invocation);
+    expect(interactive.toInstall.map((application) => application.feature.id)).toEqual([
+      'asked',
+      'required',
+    ]);
+    expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
   });
 
   it('runs legacy cleanups unconditionally even when state records resource at a higher version', async () => {
@@ -1428,13 +1332,11 @@ async function applyAndRecord<TOptions>(
     context.state,
     integration,
     [
-      {
-        feature,
-        targetRoot: context.targetRoot,
+      makeApplication(feature, context.targetRoot, undefined, {
         scope: context.scope,
         force: context.force,
         attrs: context.attrs,
-      },
+      }),
     ],
     { console: context.console },
   );
@@ -1444,4 +1346,27 @@ async function applyAndRecord<TOptions>(
   }
 
   return installed[0];
+}
+
+function makeApplication<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+  targetRoot: string,
+  activeSubfeatureIds?: string[],
+  overrides: Partial<FeatureApplication<TOptions>> = {},
+): FeatureApplication<TOptions> {
+  const subfeatures = isFeatureContainer(feature) ? feature.subfeatures : [];
+  return {
+    feature,
+    targetRoot,
+    scope: 'project',
+    installed: false,
+    available: true,
+    subfeatureApplications: subfeatures.map((subfeature) => ({
+      subfeature,
+      installed: false,
+      available: true,
+      active: activeSubfeatureIds?.includes(subfeature.id) ?? true,
+    })),
+    ...overrides,
+  };
 }
