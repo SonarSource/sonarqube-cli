@@ -1506,7 +1506,7 @@ describe('integrate claude — interactive feature selection', () => {
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Could not determine Vortex entitlement');
+      expect(output).toContain('Could not check whether Vortex is available.');
       expect(output).not.toContain('Install Vortex?');
       expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
     },
