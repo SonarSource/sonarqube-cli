@@ -1885,7 +1885,7 @@ describe('auth status', () => {
         },
       });
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain(
         "Connected, but organization 'my-org' is not accessible with this token",
       );
