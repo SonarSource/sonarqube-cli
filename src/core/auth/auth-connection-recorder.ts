@@ -84,7 +84,7 @@ export async function recordConnectionFromAuth(
   const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
     orgKey: auth.orgKey,
     region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: options.tokenName ?? seedConnection?.tokenName,
+    tokenName: resolveRecordedTokenName(options, seedConnection?.tokenName),
     envOnly,
   });
 
@@ -93,6 +93,19 @@ export async function recordConnectionFromAuth(
 
   saveState(state);
   return connection;
+}
+
+function resolveRecordedTokenName(
+  options: RecordConnectionOptions,
+  seedTokenName: string | undefined,
+): string | undefined {
+  if ('tokenName' in options) {
+    return options.tokenName;
+  }
+  if (options.envOnly) {
+    return seedTokenName;
+  }
+  return undefined;
 }
 
 async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
