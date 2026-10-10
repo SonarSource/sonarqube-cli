@@ -75,6 +75,7 @@ export class TextSnippet implements ResourceDeclaration {
       path,
       await this.renderContent(path, content),
       this.options.executable,
+      context.targetRoot,
     );
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
@@ -222,7 +223,7 @@ class TextSnippetRemover implements RemovableResource {
       if (updated.trim().length === 0) {
         await rm(path);
       } else {
-        await writeFileIfChanged(path, updated);
+        await writeFileIfChanged(path, updated, undefined, context.targetRoot);
       }
     }
   }
