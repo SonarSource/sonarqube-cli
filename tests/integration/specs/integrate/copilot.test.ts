@@ -41,6 +41,7 @@ import {
   obstructHooksJson,
   obstructInstructionsFile,
 } from './copilot-test-helpers';
+import { chooseCustomize } from './integrate-test-helpers';
 
 describe('integrate copilot', () => {
   let harness: TestHarness;
@@ -374,6 +375,7 @@ describe('integrate copilot', () => {
         const session = harness.runInteractive('integrate copilot', {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
+        await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install Vortex?');
@@ -482,6 +484,7 @@ describe('integrate copilot', () => {
         // is not_applicable. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const session = harness.runInteractive('integrate copilot');
+        await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install MCP server?');
@@ -523,6 +526,7 @@ describe('integrate copilot', () => {
         let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
+          await chooseCustomize(session);
           await session.accept('Install pre-tool-use hook?');
           await session.accept('Install prompt-secrets instructions?');
           await session.accept('Install MCP server?');
@@ -546,6 +550,7 @@ describe('integrate copilot', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate copilot');
+        await chooseCustomize(session);
         await session.decline('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install MCP server?');

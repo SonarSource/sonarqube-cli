@@ -40,6 +40,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 const MCP_JSON_DIRS = ['.cursor', 'mcp.json'];
@@ -499,6 +500,7 @@ describe('integrate cursor', () => {
         const session = harness.runInteractive('integrate cursor', {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
@@ -535,6 +537,7 @@ describe('integrate cursor', () => {
           const session = harness.runInteractive('integrate cursor', {
             extraEnv: runEnv,
           });
+          await chooseCustomize(session);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install Vortex?');
           await session.accept('Install MCP server?');
