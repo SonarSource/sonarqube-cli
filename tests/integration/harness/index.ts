@@ -304,6 +304,7 @@ export class TestHarness {
       fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = activeFakeServer.baseUrl();
       if (activeFakeServer.impersonatesSonarCloud()) {
         fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = activeFakeServer.baseUrl();
+        fakeSonarcloudEnv.SONARQUBE_CLI_INTEGRATION_LOOPBACK_CLOUD = '1';
       }
     }
 
