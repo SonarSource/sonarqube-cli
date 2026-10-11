@@ -37,7 +37,11 @@ import { buildApplications } from './feature-target.ts';
 import { renderInstallPreviewAndConfirm } from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import { reportFeatureAvailability, resolveFeatureSelection } from './selection.ts';
+import {
+  customizeFeatureSelection,
+  reportFeatureAvailability,
+  resolveRecommendedFeatures,
+} from './selection.ts';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
@@ -97,11 +101,9 @@ export async function installIntegration<TOptions>({
   };
   const applications = await buildApplications(invocation, integration, excludedFeatureIds);
   reportFeatureAvailability(applications, console);
-  const { toInstall, toRemove, declined } = await resolveFeatureSelection(
-    applications,
-    nonInteractive === true,
-    console,
-  );
+  const recommended = resolveRecommendedFeatures(applications);
+  const { toInstall, toRemove, declined } =
+    nonInteractive === true ? recommended : await customizeFeatureSelection(recommended, console);
   if (toInstall.length === 0 && toRemove.length === 0) {
     throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
   }
