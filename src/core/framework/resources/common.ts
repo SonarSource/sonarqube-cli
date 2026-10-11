@@ -19,12 +19,10 @@
  */
 
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, rm } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-
-import { assertSafeWritePath, writeRegularFile } from '@/core/io/safe-write-path.ts';
 
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
@@ -65,9 +63,7 @@ export async function writeFileIfChanged(
   path: string,
   content: string,
   executable?: boolean,
-  trustedRoot?: string,
 ): Promise<void> {
-  await assertSafeWritePath(path, { trustedRoot });
   const mode = executable ? EXECUTABLE_FILE_MODE : undefined;
   if (existsSync(path)) {
     const existing = await readFile(path, 'utf-8');
@@ -79,7 +75,7 @@ export async function writeFileIfChanged(
     }
   }
   await mkdir(dirname(path), { recursive: true });
-  await writeRegularFile(path, content, mode, trustedRoot);
+  await writeFile(path, content, mode === undefined ? undefined : { mode });
 }
 
 export async function readTextFile(path: string): Promise<string | undefined> {
@@ -195,12 +191,7 @@ export abstract class RemoveablePatchResource<TDoc = unknown> implements Removab
     if (isRemovableEmptyDocument(updatedDocument, this.options.defaultValue)) {
       await rm(path);
     } else {
-      await writeFileIfChanged(
-        path,
-        this.serializeDocument(updatedDocument),
-        undefined,
-        context.targetRoot,
-      );
+      await writeFileIfChanged(path, this.serializeDocument(updatedDocument));
     }
   }
 
@@ -234,12 +225,7 @@ export abstract class PatchResource<
 
   async apply(context: IntegrationContext): Promise<AppliedResource> {
     const path = await resolvePath(context, this.options.targetPath);
-    await writeFileIfChanged(
-      path,
-      await this.renderContent(path, context),
-      undefined,
-      context.targetRoot,
-    );
+    await writeFileIfChanged(path, await this.renderContent(path, context));
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
