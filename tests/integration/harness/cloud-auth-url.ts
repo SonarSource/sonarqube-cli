@@ -54,3 +54,21 @@ export function normalizeCloudAuthServerUrl(
   }
   return recordedCloudAuthServerUrl(region);
 }
+
+/** Makes loopback URLs resolvable as SonarCloud inside the compiled CLI under test. */
+export function applyLoopbackSonarCloudEnvOverrides(
+  target: Record<string, string>,
+  serverUrl: string,
+  region: RecordedCloudRegion = 'eu',
+): void {
+  if (!isLoopbackTestServerUrl(serverUrl)) {
+    return;
+  }
+  if (region === 'us') {
+    target.SONARQUBE_CLI_SONARCLOUD_US_URL = serverUrl;
+    target.SONARQUBE_CLI_SONARCLOUD_US_API_URL = serverUrl;
+  } else {
+    target.SONARQUBE_CLI_SONARCLOUD_URL = serverUrl;
+    target.SONARQUBE_CLI_SONARCLOUD_API_URL = serverUrl;
+  }
+}

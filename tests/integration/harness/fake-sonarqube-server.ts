@@ -1029,7 +1029,10 @@ export class FakeSonarQubeServerBuilder {
           // only the spelling the current mode actually uses, so a client sending the wrong one
           // fails the lookup instead of being silently tolerated. The same param carries either
           // the bare project key, or a `project:path` component key when --file scopes the search.
-          const scopeValue = treatAsCloud ? query.componentKeys : query.components;
+          const scopeValue =
+            query.componentKeys !== undefined && String(query.componentKeys).length > 0
+              ? query.componentKeys
+              : query.components;
           const { projectKey, componentFilterKey } = resolveIssuesSearchScope(scopeValue, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
