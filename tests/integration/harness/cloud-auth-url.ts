@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/** Canonical SonarQube Cloud URLs used in auth state while HTTP is routed to loopback fakes. */
+/** Canonical SonarQube Cloud host URLs (e.g. fake-server region hints). */
 
 export const RECORDED_SONARCLOUD_EU_URL = 'https://sonarcloud.io';
 export const RECORDED_SONARCLOUD_US_URL = 'https://sonarqube.us';
@@ -43,16 +43,6 @@ export function inferRecordedCloudRegion(env: Record<string, string>): RecordedC
 
 export function recordedCloudAuthServerUrl(region: RecordedCloudRegion = 'eu'): string {
   return region === 'us' ? RECORDED_SONARCLOUD_US_URL : RECORDED_SONARCLOUD_EU_URL;
-}
-
-export function normalizeCloudAuthServerUrl(
-  serverUrl: string,
-  region: RecordedCloudRegion,
-): string {
-  if (!isLoopbackTestServerUrl(serverUrl)) {
-    return serverUrl;
-  }
-  return recordedCloudAuthServerUrl(region);
 }
 
 /** Makes loopback URLs resolvable as SonarCloud inside the compiled CLI under test. */
