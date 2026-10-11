@@ -61,6 +61,48 @@ import {
   revokeServerTokenIfPossible,
 } from './revoke-server-token.ts';
 
+const CANONICAL_SONARCLOUD_EU_URL = 'https://sonarcloud.io';
+const CANONICAL_SONARCLOUD_US_URL = 'https://sonarqube.us';
+
+function canonicalCloudServerUrlForAuthState(serverHint: string): string {
+  const region = cloudRegionFromUrl(serverHint);
+  if (region === 'us') {
+    return CANONICAL_SONARCLOUD_US_URL;
+  }
+  if (region === 'eu') {
+    return CANONICAL_SONARCLOUD_EU_URL;
+  }
+  return CANONICAL_SONARCLOUD_EU_URL;
+}
+
+function resolveLoginConnection(
+  server: string,
+  orgOption: string | undefined,
+): {
+  validationServer: string;
+  recordedServer: string;
+  isCloud: boolean;
+  org: string | undefined;
+} {
+  const org = orgOption?.trim() || undefined;
+  const isCloudByUrl = isSonarQubeCloud(server);
+  if (org && isCloudByUrl) {
+    return {
+      validationServer: server,
+      recordedServer: canonicalCloudServerUrlForAuthState(server),
+      isCloud: true,
+      org,
+    };
+  }
+  const isCloud = isCloudByUrl;
+  return {
+    validationServer: server,
+    recordedServer: isCloud ? canonicalCloudServerUrlForAuthState(server) : server,
+    isCloud,
+    org: undefined,
+  };
+}
+
 /**
  * Login command - authenticate and save token with organization
  */
@@ -81,33 +123,40 @@ export async function authLogin(
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options, console);
-  await confirmServerTrust(server, console);
+  const connection = resolveLoginConnection(server, options.org);
+  if (!connection.isCloud) {
+    await confirmServerTrust(connection.validationServer, console);
+  }
 
-  const isCloud = isSonarQubeCloud(server);
-  // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
-  // keeps the keychain account, the recorded connection and the resolved organization consistent.
-  const orgOption = isCloud ? options.org?.trim() : undefined;
+  const orgOption = connection.isCloud ? connection.org : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption, console);
+    const auth = await getOrGenerateToken(
+      connection.validationServer,
+      connection.recordedServer,
+      orgOption,
+      console,
+    );
     const { token, tokenName, reusedExistingToken } = auth;
 
     const org = await resolveOrganization(
-      server,
-      isCloud,
+      connection.validationServer,
+      connection.isCloud,
       orgOption,
       auth,
       console,
       invocationAuth?.orgKey,
     );
 
-    await persistLoginCredentials(server, isCloud, org, token, {
+    await persistLoginCredentials(connection.recordedServer, connection.isCloud, org, token, {
       tokenName,
       reusedExistingToken,
       console,
     });
 
-    const displayServer = isCloud ? `${server} (${org})` : server;
+    const displayServer = connection.isCloud
+      ? `${connection.recordedServer} (${org})`
+      : connection.validationServer;
     console.success(`Authentication successful for: ${displayServer}`);
     if (invocationAuth?.comesFromEnv()) {
       console.warn(
@@ -146,29 +195,41 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
   if (server === undefined) {
     throw new InvalidOptionError('--server is required with --with-token.');
   }
-  const isCloud = isSonarQubeCloud(server);
-  const org = isCloud ? options.org?.trim() : undefined;
-  const tokenStatus = await checkTokenStatus(server, token);
+  const connection = resolveLoginConnection(server, options.org);
+  const tokenStatus = await checkTokenStatus(connection.validationServer, token);
   if (tokenStatus.status === 'invalid') {
-    throw new CommandFailedError(`The supplied token is invalid for ${server}.`);
+    throw new CommandFailedError(
+      `The supplied token is invalid for ${connection.validationServer}.`,
+    );
   }
   if (tokenStatus.status === 'unreachable') {
-    throw new CommandFailedError(`Could not validate the supplied token against ${server}.`, {
-      remediationHint: 'Check the server URL, network connection, and server status, then retry.',
-    });
-  }
-
-  if (org) {
-    await assertOrganizationAccessible(
-      new OrganizationsClient(new SonarHttpClient(server, token)),
-      org,
+    throw new CommandFailedError(
+      `Could not validate the supplied token against ${connection.validationServer}.`,
+      {
+        remediationHint: 'Check the server URL, network connection, and server status, then retry.',
+      },
     );
-    console.print(`Using organization: ${org}`);
   }
 
-  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true, console });
+  if (connection.org) {
+    await assertOrganizationAccessible(
+      new OrganizationsClient(new SonarHttpClient(connection.validationServer, token)),
+      connection.org,
+    );
+    console.print(`Using organization: ${connection.org}`);
+  }
 
-  const displayServer = isCloud ? `${server} (${org})` : server;
+  await persistLoginCredentials(
+    connection.recordedServer,
+    connection.isCloud,
+    connection.org,
+    token,
+    { refreshIdentity: true, console },
+  );
+
+  const displayServer = connection.isCloud
+    ? `${connection.recordedServer} (${connection.org})`
+    : server;
   console.success(`Authentication successful for: ${displayServer}`);
 }
 
@@ -345,20 +406,23 @@ async function discardGeneratedToken(
  * Get token for authentication
  */
 async function getOrGenerateToken(
-  server: string,
+  validationServer: string,
+  keychainServer: string,
   org: string | undefined,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const existingToken = await getKeystoreToken(server, org);
+  const existingToken = await getKeystoreToken(keychainServer, org);
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
+    const displayServer = isSonarQubeCloud(validationServer)
+      ? `${keychainServer} (${org})`
+      : validationServer;
     console.print(`Token already exists for: ${displayServer}`);
     console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
   }
 
-  console.print(`\nAuthenticating with: ${server}`);
-  const authResult = await generateTokenViaBrowser(server, console);
+  console.print(`\nAuthenticating with: ${validationServer}`);
+  const authResult = await generateTokenViaBrowser(validationServer, console);
   console.discreetSuccess('Token received');
   return { ...authResult, reusedExistingToken: false };
 }
