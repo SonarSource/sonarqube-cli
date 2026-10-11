@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { authStatus } from '@/commands/auth/status.ts';
 import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -29,6 +29,7 @@ import { CommandInvocationContext } from '@/core/commands/invocation-context.ts'
 import * as keychain from '@/core/host/keychain.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { okAsync } from '@/core/result.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -36,6 +37,13 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('authStatus with FakeConsole', () => {
   const restorers: Array<() => void> = [];
+
+  beforeEach(() => {
+    const membershipSpy = spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue(
+      { status: 'member' },
+    );
+    restorers.push(() => membershipSpy.mockRestore());
+  });
 
   afterEach(() => {
     restorers.splice(0).forEach((restore) => restore());
