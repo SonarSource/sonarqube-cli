@@ -30,6 +30,7 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
+import { inferRecordedCloudRegion } from './cloud-auth-url.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -301,9 +302,25 @@ export class TestHarness {
     const activeFakeServer = this.servers.at(-1);
     const fakeSonarcloudEnv: Record<string, string> = {};
     if (activeFakeServer) {
-      fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = activeFakeServer.baseUrl();
-      if (activeFakeServer.impersonatesSonarCloud()) {
-        fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = activeFakeServer.baseUrl();
+      const fakeBase = activeFakeServer.baseUrl();
+      const regionHint = inferRecordedCloudRegion({
+        ...this.systemEnvVars,
+        ...builderExtraEnv,
+        ...options?.extraEnv,
+      });
+      if (this._envBuilder?.usesLoopbackCloudAuth()) {
+        if (regionHint === 'us') {
+          fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_US_URL = fakeBase;
+          fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_US_API_URL = fakeBase;
+        } else {
+          fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = fakeBase;
+          fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = fakeBase;
+        }
+      } else {
+        fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = fakeBase;
+        if (activeFakeServer.impersonatesSonarCloud()) {
+          fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = fakeBase;
+        }
       }
     }
 
