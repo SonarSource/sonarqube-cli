@@ -218,7 +218,7 @@ describe('authLogin organization prompt', () => {
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toMatchObject({
       message:
-        'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
+        'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters or embedded credentials.',
       remediationHint: 'Fix serverUrl in .sonar-config.json or pass --server <url>.',
     });
 

@@ -25,11 +25,13 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
+import { applyLoopbackSonarCloudEnvOverrides, inferRecordedCloudRegion } from './cloud-auth-url.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -300,7 +302,7 @@ export class TestHarness {
 
     const activeFakeServer = this.servers.at(-1);
     const fakeSonarcloudEnv: Record<string, string> = {};
-    if (activeFakeServer) {
+    if (activeFakeServer && !this._envBuilder?.usesLoopbackCloudAuth()) {
       fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = activeFakeServer.baseUrl();
       if (activeFakeServer.impersonatesSonarCloud()) {
         fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = activeFakeServer.baseUrl();
@@ -338,6 +340,18 @@ export class TestHarness {
     if (this._envBuilder?.telemetryEnabled) {
       composed[ENV_DO_NOT_TRACK] = '0';
     }
+
+    const regionHint = inferRecordedCloudRegion(composed);
+    const loopbackCloudFromState =
+      activeFakeServer?.baseUrl() ?? this._envBuilder?.loopbackCloudAuthServerUrl();
+    if (loopbackCloudFromState && this._envBuilder?.usesLoopbackCloudAuth()) {
+      applyLoopbackSonarCloudEnvOverrides(composed, loopbackCloudFromState, regionHint);
+    }
+    const envServer = composed[ENV_SERVER];
+    if (composed[ENV_TOKEN] && composed[ENV_ORG] && envServer) {
+      applyLoopbackSonarCloudEnvOverrides(composed, envServer, regionHint);
+    }
+
     return applyIsolatedSpawnEnv(composed);
   }
 

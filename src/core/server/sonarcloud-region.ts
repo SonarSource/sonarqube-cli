@@ -30,11 +30,18 @@ import {
 } from '../config-constants.ts';
 import type { CloudRegion } from '../state/state.ts';
 
+const CANONICAL_SONARCLOUD_EU_HOST = 'sonarcloud.io';
+const CANONICAL_SONARCLOUD_US_HOST = 'sonarqube.us';
+
 export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
   try {
     const { hostname } = new URL(serverUrl);
-    if (hostname === SONARCLOUD_US_HOSTNAME) return 'us';
-    if (hostname === SONARCLOUD_HOSTNAME) return 'eu';
+    if (hostname === CANONICAL_SONARCLOUD_US_HOST || hostname === SONARCLOUD_US_HOSTNAME) {
+      return 'us';
+    }
+    if (hostname === CANONICAL_SONARCLOUD_EU_HOST || hostname === SONARCLOUD_HOSTNAME) {
+      return 'eu';
+    }
     return undefined;
   } catch {
     return undefined;

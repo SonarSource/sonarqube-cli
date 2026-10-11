@@ -49,6 +49,7 @@ import {
 import { discoverServer } from '@/core/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
@@ -80,9 +81,11 @@ export async function authLogin(
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options, console);
-  await confirmServerTrust(server, console);
-
   const isCloud = isSonarQubeCloud(server);
+  if (!isCloud) {
+    await confirmServerTrust(server, console);
+  }
+
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
   // keeps the keychain account, the recorded connection and the resolved organization consistent.
   const orgOption = isCloud ? options.org?.trim() : undefined;
@@ -103,6 +106,7 @@ export async function authLogin(
     await persistLoginCredentials(server, isCloud, org, token, {
       tokenName,
       reusedExistingToken,
+      console,
     });
 
     const displayServer = isCloud ? `${server} (${org})` : server;
@@ -164,7 +168,7 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
     console.print(`Using organization: ${org}`);
   }
 
-  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true });
+  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true, console });
 
   const displayServer = isCloud ? `${server} (${org})` : server;
   console.success(`Authentication successful for: ${displayServer}`);
@@ -174,6 +178,7 @@ interface PersistLoginOptions {
   tokenName?: string;
   reusedExistingToken?: boolean;
   refreshIdentity?: boolean;
+  console?: Console;
 }
 
 async function persistLoginCredentials(
@@ -185,6 +190,27 @@ async function persistLoginCredentials(
 ): Promise<void> {
   const state = loadState();
   const existingConnection = getActiveConnection(state);
+
+  const previousToken = await getKeystoreToken(server, org);
+  if (
+    !options.reusedExistingToken &&
+    existingConnection?.tokenName &&
+    previousToken &&
+    previousToken !== token &&
+    existingConnection.serverUrl === server &&
+    existingConnection.orgKey === org
+  ) {
+    const outcome = await revokeServerTokenIfPossible(
+      { serverUrl: server, tokenName: existingConnection.tokenName },
+      previousToken,
+    );
+    if (options.console) {
+      reportRevokeServerTokenOutcome(outcome, {
+        continuingMessage: 'Continuing with login.',
+        console: options.console,
+      });
+    }
+  }
 
   await deleteStaleTokens(state.auth.connections, server, org);
   await saveToken(server, token, org);
@@ -418,7 +444,7 @@ function validateLoginOptions(options: AuthLoginOptions): void {
 
   if (options.server !== undefined && !isValidServerUrl(options.server)) {
     throw new InvalidOptionError(
-      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
+      `Invalid server URL. ${INVALID_SERVER_URL_MESSAGE}`,
       'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
     );
   }

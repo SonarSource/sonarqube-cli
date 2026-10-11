@@ -34,6 +34,7 @@ import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
+const FAKE_CLOUD_SERVER = 'http://localhost:19999';
 const MANIFEST_DISCOVERY_FAILURE_PREFIX = 'Manifest discovery error: sca-scanner exited with code';
 
 describe('analyze dependency-risks', () => {
@@ -211,7 +212,7 @@ describe('analyze dependency-risks', () => {
   );
 
   it('rejects an unknown --statuses value', async () => {
-    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+    harness.withAuth(FAKE_CLOUD_SERVER, VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks --project demo --statuses bogus');
     const output = result.stdout + result.stderr;
@@ -224,7 +225,7 @@ describe('analyze dependency-risks', () => {
   });
 
   it('rejects an unknown --min-severity value', async () => {
-    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+    harness.withAuth(FAKE_CLOUD_SERVER, VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run(
       'analyze dependency-risks --project demo --min-severity bogus',
@@ -352,7 +353,7 @@ describe('analyze dependency-risks', () => {
   });
 
   it('exits with code 1 when no project key can be resolved', async () => {
-    harness.withAuth('http://unused.example', VALID_TOKEN, TEST_ORG);
+    harness.withAuth(FAKE_CLOUD_SERVER, VALID_TOKEN, TEST_ORG);
 
     const result = await harness.run('analyze dependency-risks');
 
