@@ -48,7 +48,14 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
 
   const server = active.serverUrl;
   const org = active.orgKey;
-  const token = (await getToken(server, org)) ?? undefined;
+  let token: string | undefined;
+  try {
+    token = (await getToken(server, org)) ?? undefined;
+  } catch (err) {
+    console.warn(
+      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
 
   const revokeOutcome = await revokeServerTokenIfPossible(active, token);
   reportRevokeServerTokenOutcome(revokeOutcome, {
@@ -56,7 +63,13 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
     console,
   });
 
-  await deleteToken(server, org);
+  try {
+    await deleteToken(server, org);
+  } catch (err) {
+    console.warn(
+      `Could not delete the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
 
   removeConnection(state, active.id);
 

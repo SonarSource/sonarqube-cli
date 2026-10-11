@@ -66,6 +66,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { FakeConsole } from '../../_common/fake-console.ts';
+import { normalizeCloudAuthServerUrl, type RecordedCloudRegion } from './cloud-auth-url.js';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
@@ -249,12 +250,18 @@ export class EnvironmentBuilder {
    * Convenience: sets up both an active connection and a keychain token in one call.
    * Infers the connection type: 'cloud' when org is provided, 'on-premise' otherwise.
    */
-  withAuth(serverUrl: string, token: string, org?: string): this {
+  withAuth(
+    serverUrl: string,
+    token: string,
+    org?: string,
+    cloudRegion: RecordedCloudRegion = 'eu',
+  ): this {
+    const normalized = org ? normalizeCloudAuthServerUrl(serverUrl, cloudRegion) : serverUrl;
     return this.withActiveConnection(
-      serverUrl,
+      normalized,
       org ? 'cloud' : 'on-premise',
       org,
-    ).withKeychainToken(serverUrl, token, org);
+    ).withKeychainToken(normalized, token, org);
   }
 
   /**
