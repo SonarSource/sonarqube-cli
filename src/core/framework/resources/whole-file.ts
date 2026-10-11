@@ -82,7 +82,7 @@ export class WholeFileResource implements ResourceDeclaration {
     const path = await resolvePath(context, this.options.targetPath);
     const content = await this.resolveContent(context);
     await this.assertOverwriteAllowed(path, content, context);
-    await writeFileIfChanged(path, content, this.options.executable, context.targetRoot);
+    await writeFileIfChanged(path, content, this.options.executable);
     return { id: this.id, resourceType: this.resourceType, version: this.version, path };
   }
 
