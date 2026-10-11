@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { hookScriptName, TestHarness } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature } from './state-helpers';
 
 describe('integrate (bare command)', () => {
@@ -98,6 +99,7 @@ describe('integrate (bare command)', () => {
       // There is no scope prompt anymore — every integration installs globally.
       const session = harness.runInteractive('integrate');
       await session.accept('Select the tool you want to integrate with');
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
