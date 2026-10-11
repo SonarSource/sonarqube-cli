@@ -105,6 +105,26 @@ function resolveRecommendedSubfeatures<TOptions>(
 }
 
 /**
+ * Whether prompting over these available features could change the outcome:
+ * something isn't `required`, and there is more than one thing to choose between.
+ */
+export function hasCustomizableChoices<TOptions>(
+  features: FeatureApplication<TOptions>[],
+): boolean {
+  const availableSubfeatures = features.map((application) =>
+    application.subfeatureApplications.filter((sub) => sub.available === true),
+  );
+  const hasOptionalItem = features.some(
+    (application, index) =>
+      application.feature.required !== true ||
+      availableSubfeatures[index].some((sub) => sub.subfeature.required !== true),
+  );
+  const hasChoice =
+    features.length > 1 || (features.length === 1 && availableSubfeatures[0].length > 1);
+  return hasOptionalItem && hasChoice;
+}
+
+/**
  * Refine the recommended selection by prompting per available feature and
  * non-required subfeature. Features already moved to `toRemove` are carried over.
  */
