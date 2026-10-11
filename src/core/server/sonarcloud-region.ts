@@ -30,28 +30,18 @@ import {
 } from '../config-constants.ts';
 import type { CloudRegion } from '../state/state.ts';
 
-const INTEGRATION_LOOPBACK_CLOUD_ENV = 'SONARQUBE_CLI_INTEGRATION_LOOPBACK_CLOUD';
-
-export function isLoopbackCloudTestHost(serverUrl: string): boolean {
-  if (process.env[INTEGRATION_LOOPBACK_CLOUD_ENV] !== '1') {
-    return false;
-  }
-  try {
-    const { hostname } = new URL(serverUrl);
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'api.localhost';
-  } catch {
-    return false;
-  }
-}
+const CANONICAL_SONARCLOUD_EU_HOST = 'sonarcloud.io';
+const CANONICAL_SONARCLOUD_US_HOST = 'sonarqube.us';
 
 export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
-  if (isLoopbackCloudTestHost(serverUrl)) {
-    return 'eu';
-  }
   try {
     const { hostname } = new URL(serverUrl);
-    if (hostname === SONARCLOUD_US_HOSTNAME) return 'us';
-    if (hostname === SONARCLOUD_HOSTNAME) return 'eu';
+    if (hostname === CANONICAL_SONARCLOUD_US_HOST || hostname === SONARCLOUD_US_HOSTNAME) {
+      return 'us';
+    }
+    if (hostname === CANONICAL_SONARCLOUD_EU_HOST || hostname === SONARCLOUD_HOSTNAME) {
+      return 'eu';
+    }
     return undefined;
   } catch {
     return undefined;

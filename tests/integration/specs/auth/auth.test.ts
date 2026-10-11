@@ -28,6 +28,10 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { type RunInteractiveOptions, TestHarness } from '../../harness';
+import {
+  RECORDED_SONARCLOUD_EU_URL,
+  RECORDED_SONARCLOUD_US_URL,
+} from '../../harness/cloud-auth-url.js';
 
 async function confirmTrust(
   harness: TestHarness,
@@ -509,7 +513,8 @@ describe('auth login --with-token', () => {
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`Authentication successful for: ${server.baseUrl()} (${org})`);
+    const recordedUrl = region === 'us' ? RECORDED_SONARCLOUD_US_URL : RECORDED_SONARCLOUD_EU_URL;
+    expect(result.stdout).toContain(`Authentication successful for: ${recordedUrl} (${org})`);
     const connection = harness.stateJsonFile.asJson().auth.connections[0] as {
       orgKey?: string;
       region?: string;
@@ -574,9 +579,9 @@ describe('auth login --with-token', () => {
     const server = await harness.newFakeServer().withAuthToken('replacement-token').start();
     harness
       .state()
-      .withActiveConnection(server.baseUrl(), 'cloud', 'missing-org')
+      .withActiveConnection(RECORDED_SONARCLOUD_EU_URL, 'cloud', 'missing-org')
       .withTokenName('browser-token-name')
-      .withKeychainToken(server.baseUrl(), 'previous-token', 'missing-org');
+      .withKeychainToken(RECORDED_SONARCLOUD_EU_URL, 'previous-token', 'missing-org');
 
     const result = await harness.runWithStdin(
       `auth login --with-token --server ${server.baseUrl()} --org missing-org`,
@@ -590,7 +595,7 @@ describe('auth login --with-token', () => {
     expect(
       readKeychainToken(
         harness.keychainJsonFile,
-        generateKeychainAccount(server.baseUrl(), 'missing-org'),
+        generateKeychainAccount(RECORDED_SONARCLOUD_EU_URL, 'missing-org'),
       ),
     ).toBe('previous-token');
     expect(
@@ -707,7 +712,7 @@ describe('auth login — organization selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (open-source-org)`,
+        `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (open-source-org)`,
       );
     },
     { timeout: 15000 },
@@ -776,7 +781,7 @@ describe('auth login — organization selection', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+      `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (my-org-2)`,
     );
   });
 
@@ -801,7 +806,7 @@ describe('auth login — organization selection', () => {
       expect(result.stdout).toMatch(new RegExp(pickerRowsSource(expectedRows)));
       expect(/\bactive\b/.test(result.stdout)).toBe(hasActiveRow(expectedRows));
       expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (${firstOptionKey})`,
+        `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (${firstOptionKey})`,
       );
     },
   );
@@ -832,7 +837,7 @@ describe('auth login — organization selection', () => {
       ),
     );
     expect(result.stdout).toContain(
-      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+      `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (my-org-2)`,
     );
   });
 
@@ -863,7 +868,9 @@ describe('auth login — organization selection', () => {
     expect(result.stdout).toContain(
       `Showing first 10 of ${LARGE_ORG_TOTAL} organizations. Use manual entry to select a different organization.`,
     );
-    expect(result.stdout).toContain(`Authentication successful for: ${server.baseUrl()} (org-2)`);
+    expect(result.stdout).toContain(
+      `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (org-2)`,
+    );
   });
 
   it('should remove the "waiting for authorization..." line when token is received', async () => {
@@ -890,7 +897,7 @@ describe('auth login — organization selection', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
-      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+      `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (my-org-2)`,
     );
     expect(result.stdout).not.toContain('Waiting for authorization...');
   });
@@ -957,7 +964,7 @@ describe('auth login — organization validation', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (public-org)`,
+        `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (public-org)`,
       );
     },
     { timeout: 15000 },
@@ -1093,7 +1100,7 @@ describe('auth login — organization validation', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (my-org)`,
+        `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (my-org)`,
       );
     },
     { timeout: 15000 },
@@ -1139,11 +1146,13 @@ describe('auth login — organization validation', () => {
     'leaves an already-stored token alone when the organization is rejected',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('existing-token').start();
-      harness.state().withKeychainToken(server.baseUrl(), 'existing-token', 'nonexistent-org');
+      harness
+        .state()
+        .withKeychainToken(RECORDED_SONARCLOUD_EU_URL, 'existing-token', 'nonexistent-org');
 
       const result = await harness.run(
         `auth login --org nonexistent-org --server ${server.baseUrl()}`,
-        { extraEnv: cloudEnv(server.baseUrl()) },
+        { extraEnv: cloudEnv(server.baseUrl()), browserToken: 'existing-token' },
       );
 
       expect(result.exitCode).toBe(1);
@@ -1153,7 +1162,7 @@ describe('auth login — organization validation', () => {
       expect(
         readKeychainToken(
           harness.keychainJsonFile,
-          generateKeychainAccount(server.baseUrl(), 'nonexistent-org'),
+          generateKeychainAccount(RECORDED_SONARCLOUD_EU_URL, 'nonexistent-org'),
         ),
       ).toBe('existing-token');
       const state = harness.stateJsonFile.asJson() as { auth: { connections: unknown[] } };
@@ -1264,7 +1273,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+        `Authentication successful for: ${RECORDED_SONARCLOUD_EU_URL} (my-org-2)`,
       );
     },
     { timeout: 15000 },
