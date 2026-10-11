@@ -30,7 +30,6 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
-import { inferRecordedCloudRegion, type RecordedCloudRegion } from './cloud-auth-url.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -109,14 +108,8 @@ export class TestHarness {
    * Infers the connection type: 'cloud' when org is provided, 'on-premise' otherwise.
    * Equivalent to harness.state().withAuth(serverUrl, token, org).
    */
-  withAuth(
-    serverUrl: string,
-    token: string,
-    org?: string,
-    cloudRegion?: RecordedCloudRegion,
-  ): this {
-    const region = cloudRegion ?? inferRecordedCloudRegion(this.systemEnvVars);
-    this.state().withAuth(serverUrl, token, org, region);
+  withAuth(serverUrl: string, token: string, org?: string): this {
+    this.state().withAuth(serverUrl, token, org);
     return this;
   }
 
