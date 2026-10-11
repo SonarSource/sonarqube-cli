@@ -42,6 +42,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
@@ -1331,6 +1332,7 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1381,6 +1383,7 @@ describe('integrate claude — interactive feature selection', () => {
       let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install MCP server?');
         result = await session.waitFinish();
@@ -1410,8 +1413,10 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
+      await session.accept('Press Enter to install');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1446,6 +1451,7 @@ describe('integrate claude — interactive feature selection', () => {
           __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install Vortex?');
       await session.accept('Install MCP server?');
@@ -1500,6 +1506,7 @@ describe('integrate claude — interactive feature selection', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1557,6 +1564,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
@@ -1588,6 +1596,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.decline('Proceed with removal?');
@@ -1612,6 +1621,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
@@ -1657,6 +1667,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
@@ -1724,6 +1735,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.decline('MCP server (currently installed)  Keep?');
@@ -1789,6 +1801,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('Vortex (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
@@ -1829,6 +1842,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.decline('Install Vortex?');
       await session.accept('Install MCP server?');
