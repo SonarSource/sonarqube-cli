@@ -35,6 +35,10 @@ import {
   ResolvedAuth,
   resolveFromEndpoint,
 } from '@/core/auth/auth-resolver.ts';
+import {
+  INVALID_SERVER_URL_MESSAGE,
+  invalidCloudServerUrlMessage,
+} from '@/core/server/server-url-validation.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -123,9 +127,7 @@ describe('AuthResolver', () => {
 
       const result = await new AuthResolver().resolveAuth();
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe(
-        'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-      );
+      expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
       expect(result._unsafeUnwrapErr()).toMatchObject({
         remediationHint: 'Set SONARQUBE_CLI_SERVER to an HTTP(S) URL with a host.',
       });
@@ -276,9 +278,7 @@ describe('AuthResolver', () => {
       try {
         const result = await new AuthResolver().resolveAuth();
         expect(result.isErr()).toBe(true);
-        expect(result._unsafeUnwrapErr().message).toBe(
-          'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-        );
+        expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
         expect(result._unsafeUnwrapErr()).toMatchObject({
           remediationHint: "Run 'sonar auth logout', then 'sonar auth login'.",
         });
@@ -339,6 +339,96 @@ describe('isValidServerUrl', () => {
       expect(isValidServerUrl(serverUrl)).toBe(true);
     },
   );
+
+  it.each([
+    'https://sonarcloud.io@evil.com/',
+    'https://user:pass@sonarqube.example.com',
+    'https://:password@sonarqube.example.com',
+  ])('rejects URLs with embedded credentials: %s', (serverUrl) => {
+    expect(isValidServerUrl(serverUrl)).toBe(false);
+  });
+});
+
+describe('AuthResolver cloud server URL validation', () => {
+  let recordConnectionSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    handle.setup();
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
+    recordConnectionSpy = spyOn(
+      authConnectionRecorder,
+      'recordConnectionFromAuth',
+    ).mockResolvedValue(undefined as never);
+  });
+
+  afterEach(() => {
+    handle.teardown();
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
+    recordConnectionSpy.mockRestore();
+  });
+
+  it('rejects a deceptive SonarQube Cloud URL in SONARQUBE_CLI_SERVER with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://sonarcloud.io@evil.com/';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
+  });
+
+  it('rejects a non-canonical cloud host with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://not-sonarcloud.example.com';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toBe(invalidCloudServerUrlMessage());
+  });
+
+  it('accepts SonarQube Cloud US with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://sonarqube.us';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toMatchObject({
+      serverUrl: 'https://sonarqube.us',
+      connectionType: 'cloud',
+    });
+  });
+
+  it('rejects a saved cloud connection with a non-canonical host', async () => {
+    const state = getDefaultState('test');
+    state.auth.connections = [
+      {
+        id: 'conn-1',
+        type: 'cloud',
+        serverUrl: 'https://evil.example.com',
+        orgKey: 'my-org',
+        authenticatedAt: new Date().toISOString(),
+      },
+    ];
+    state.auth.activeConnectionId = 'conn-1';
+    state.auth.isAuthenticated = true;
+
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+    await handle.seedToken('https://evil.example.com', FAKE_TOKEN, 'my-org');
+
+    try {
+      const result = await new AuthResolver().resolveAuth();
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe(invalidCloudServerUrlMessage());
+    } finally {
+      loadStateSpy.mockRestore();
+    }
+  });
 });
 
 describe('resolveBaseUrl', () => {

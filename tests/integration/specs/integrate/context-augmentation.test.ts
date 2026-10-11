@@ -374,8 +374,13 @@ describe('integrate claude — Context Augmentation', () => {
         ].join('\n'),
       );
 
+      const serverUrl = server.baseUrl();
       const result = await harness.run('integrate claude --non-interactive', {
-        extraEnv: { __SQCLI_DEV_SKIP_CAG: '1' },
+        extraEnv: {
+          __SQCLI_DEV_SKIP_CAG: '1',
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
       });
 
       expect(result.exitCode).toBe(0);
