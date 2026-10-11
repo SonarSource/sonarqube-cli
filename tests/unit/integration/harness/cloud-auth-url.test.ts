@@ -21,21 +21,28 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
-  normalizeCloudAuthServerUrl,
-  RECORDED_SONARCLOUD_EU_URL,
-  RECORDED_SONARCLOUD_US_URL,
+  applyLoopbackSonarCloudEnvOverrides,
+  isLoopbackTestServerUrl,
 } from '../../../integration/harness/cloud-auth-url.js';
 
 describe('cloud-auth-url harness helpers', () => {
-  it('normalizes loopback cloud auth URLs to canonical hosts', () => {
-    expect(normalizeCloudAuthServerUrl('http://localhost:9000', 'eu')).toBe(
-      RECORDED_SONARCLOUD_EU_URL,
-    );
-    expect(normalizeCloudAuthServerUrl('http://localhost:9000', 'us')).toBe(
-      RECORDED_SONARCLOUD_US_URL,
-    );
-    expect(normalizeCloudAuthServerUrl('https://sonarcloud.io', 'eu')).toBe(
-      'https://sonarcloud.io',
-    );
+  it('detects loopback server URLs', () => {
+    expect(isLoopbackTestServerUrl('http://localhost:9000')).toBe(true);
+    expect(isLoopbackTestServerUrl('http://127.0.0.1:9000')).toBe(true);
+    expect(isLoopbackTestServerUrl('https://sonarcloud.io')).toBe(false);
+  });
+
+  it('injects SonarCloud env overrides for loopback EU cloud auth', () => {
+    const env: Record<string, string> = {};
+    applyLoopbackSonarCloudEnvOverrides(env, 'http://localhost:9000', 'eu');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_URL).toBe('http://localhost:9000');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_API_URL).toBe('http://localhost:9000');
+  });
+
+  it('injects SonarCloud env overrides for loopback US cloud auth', () => {
+    const env: Record<string, string> = {};
+    applyLoopbackSonarCloudEnvOverrides(env, 'http://127.0.0.1:9000', 'us');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_US_URL).toBe('http://127.0.0.1:9000');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_US_API_URL).toBe('http://127.0.0.1:9000');
   });
 });
