@@ -547,6 +547,37 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
+    'asks how to proceed when --hook leaves the dependency-risks scan to customize in interactive mode',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
+
+      const session = harness.runInteractive('integrate git --hook pre-commit');
+      await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
+      await session.accept('Install pre-commit code scanning hook?');
+      await session.decline('Install pre-commit dependency-risks scan?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('How would you like to proceed?');
+      expect(output).toContain('Install pre-commit dependency-risks scan?');
+      expect(output).not.toContain('Press Enter to install');
+      expect(output).not.toContain('Install pre-push code scanning hook?');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const feature = getInstalledIntegration(state, 'native-git').features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expect(feature.subfeatures?.some((s) => s.featureId === 'pre-commit-dependency-risks')).toBe(
+        false,
+      );
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'does not remove an installed pre-push hook when re-run with --hook pre-commit',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
