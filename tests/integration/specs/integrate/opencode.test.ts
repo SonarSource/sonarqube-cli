@@ -36,6 +36,7 @@ import type { CliState } from '@/core/state/state.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
 import { readCagInvocations } from '../../harness/cag-helpers';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const TEST_ORG = 'my-org';
@@ -473,6 +474,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
       );
 
       const session = harness.runInteractive('integrate opencode');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
