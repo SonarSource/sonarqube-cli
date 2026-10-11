@@ -43,6 +43,7 @@ import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { type CliResult, type FakeSonarQubeServerBuilder, TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+import { chooseCustomize } from './integrate-test-helpers';
 
 const PATH_DELIM = IS_WINDOWS ? ';' : ':';
 function pathWithoutNodeModules(envPath: string | undefined): string {
@@ -375,6 +376,7 @@ describe('integrate git (native hooks)', () => {
       // Accept pre-commit and pre-push. Dep-risks is auto-skipped (SCA unavailable).
       const session = harness.runInteractive('integrate git');
       await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
       await session.accept('Install pre-commit code scanning hook?');
       await session.accept('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
@@ -494,6 +496,7 @@ describe('integrate git (native hooks)', () => {
 
       const session = harness.runInteractive('integrate git');
       await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
       await session.accept('Install pre-commit code scanning hook?');
       await session.decline('Install pre-commit dependency-risks scan?');
       await session.decline('Install pre-push code scanning hook?');
@@ -522,21 +525,56 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'asks to install only the hook named by --hook in interactive mode',
+    'asks for confirmation when --hook leaves nothing to customize in interactive mode',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const session = harness.runInteractive('integrate git --hook pre-commit');
       await session.accept('Proceed with global installation?');
-      await session.accept('Install pre-commit code scanning hook?');
+      await session.accept('Press Enter to install');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).not.toContain('Install pre-push code scanning hook?');
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Press Enter to install');
+      expect(output).not.toContain('How would you like to proceed?');
+      expect(output).not.toContain('Install pre-commit code scanning hook?');
+      expect(output).not.toContain('Install pre-push code scanning hook?');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'asks how to proceed when --hook leaves the dependency-risks scan to customize in interactive mode',
+    async () => {
+      await setupAuthenticated(harness, { withSecretsBinary: true, scaEnabled: true });
+      harness.state().withScaScannerBinaryInstalled();
+
+      const session = harness.runInteractive('integrate git --hook pre-commit');
+      await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
+      await session.accept('Install pre-commit code scanning hook?');
+      await session.decline('Install pre-commit dependency-risks scan?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('How would you like to proceed?');
+      expect(output).toContain('Install pre-commit dependency-risks scan?');
+      expect(output).not.toContain('Press Enter to install');
+      expect(output).not.toContain('Install pre-push code scanning hook?');
+
+      const state = harness.stateJsonFile.asJson() as InstalledStateJson;
+      const feature = getInstalledIntegration(state, 'native-git').features[0];
+      expect(feature.featureId).toBe('pre-commit-hook');
+      expect(feature.subfeatures?.some((s) => s.featureId === 'pre-commit-dependency-risks')).toBe(
+        false,
+      );
+      expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
+    },
+    { timeout: 30000 },
   );
 
   it(
@@ -620,6 +658,7 @@ describe('integrate git (native hooks)', () => {
 
       const session = harness.runInteractive('integrate git');
       await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
       await session.decline('Install pre-commit code scanning hook?');
       await session.decline('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
@@ -641,6 +680,7 @@ describe('integrate git (native hooks)', () => {
 
       const session = harness.runInteractive('integrate git');
       await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
       await session.accept('Install pre-commit code scanning hook?');
       await session.decline('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
@@ -668,6 +708,7 @@ describe('integrate git (native hooks)', () => {
       if (isInteractive) {
         const session = harness.runInteractive('integrate git', { extraEnv });
         await session.accept('Proceed with global installation?');
+        await chooseCustomize(session);
         await session.accept('Install pre-commit code scanning hook?');
         await session.decline('Install pre-push code scanning hook?');
         result = await session.waitFinish();
@@ -713,6 +754,7 @@ describe('integrate git (native hooks)', () => {
 
       const session = harness.runInteractive('integrate git');
       await session.accept('Proceed with global installation?');
+      await chooseCustomize(session);
       await session.decline('Install pre-commit code scanning hook?');
       await session.accept('Install pre-push code scanning hook?');
       const result = await session.waitFinish();
