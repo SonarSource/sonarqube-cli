@@ -66,6 +66,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { FakeConsole } from '../../_common/fake-console.ts';
+import { isLoopbackTestServerUrl } from './cloud-auth-url.js';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
@@ -255,6 +256,14 @@ export class EnvironmentBuilder {
       org ? 'cloud' : 'on-premise',
       org,
     ).withKeychainToken(serverUrl, token, org);
+  }
+
+  /** Seeded Cloud auth on a loopback fake (needs SONARQUBE_CLI_SONARCLOUD_* URL overrides). */
+  usesLoopbackCloudAuth(): boolean {
+    if (this.activeConnectionType !== 'cloud' || !this.activeConnectionUrl) {
+      return false;
+    }
+    return isLoopbackTestServerUrl(this.activeConnectionUrl);
   }
 
   /**
