@@ -266,6 +266,10 @@ export class EnvironmentBuilder {
     return isLoopbackTestServerUrl(this.activeConnectionUrl);
   }
 
+  loopbackCloudAuthServerUrl(): string | undefined {
+    return this.usesLoopbackCloudAuth() ? this.activeConnectionUrl : undefined;
+  }
+
   /**
    * Resets the active connection and any seeded keychain tokens. Use to undo
    * a previously-configured `withAuth(...)` (e.g. when the outer `beforeEach`
