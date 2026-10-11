@@ -30,6 +30,7 @@ import type {
   SonarQubeIssue,
 } from '@/core/server/types.ts';
 
+import { recordedCloudAuthServerUrl } from './cloud-auth-url.js';
 import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;
@@ -451,6 +452,17 @@ export class FakeSonarQubeServer {
     // `api.127.0.0.1` would not resolve, breaking any test that exercises
     // Cloud-mode CAG.
     return `http://localhost:${this.server.port}`;
+  }
+
+  /**
+   * SonarQube Cloud URL stored in auth state / passed to `--server` for Cloud fakes.
+   * HTTP still targets {@link baseUrl} via SONARQUBE_CLI_SONARCLOUD_* env overrides.
+   */
+  recordedAuthServerUrl(region: 'eu' | 'us' = 'eu'): string {
+    if (!this.treatAsCloud) {
+      return this.baseUrl();
+    }
+    return recordedCloudAuthServerUrl(region);
   }
 
   getRecordedRequests(): RecordedRequest[] {
@@ -1017,7 +1029,10 @@ export class FakeSonarQubeServerBuilder {
           // only the spelling the current mode actually uses, so a client sending the wrong one
           // fails the lookup instead of being silently tolerated. The same param carries either
           // the bare project key, or a `project:path` component key when --file scopes the search.
-          const scopeValue = treatAsCloud ? query.componentKeys : query.components;
+          const scopeValue =
+            query.componentKeys !== undefined && String(query.componentKeys).length > 0
+              ? query.componentKeys
+              : query.components;
           const { projectKey, componentFilterKey } = resolveIssuesSearchScope(scopeValue, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
