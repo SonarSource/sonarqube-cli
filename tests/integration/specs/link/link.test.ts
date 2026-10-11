@@ -164,7 +164,7 @@ describe('sonar link', () => {
       const result = await harness.run('link my_project --path .');
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('region');
+      expect(result.stdout + result.stderr).toContain('SonarQube Cloud server URL host');
     });
 
     it('fails with a helpful message when --path escapes the repository root', async () => {
