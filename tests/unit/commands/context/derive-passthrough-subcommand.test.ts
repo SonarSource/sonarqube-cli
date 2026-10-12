@@ -103,7 +103,7 @@ describe('runContextPassthrough', () => {
       projectKey: 'project-key',
       projectRoot: process.cwd(),
       serverUrl: 'https://regional.sonarcloud.io',
-    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    });
     spyOn(keychain, 'getToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
@@ -149,7 +149,7 @@ describe('runContextPassthrough', () => {
       projectKey: 'project-key',
       projectRoot: process.cwd(),
       serverUrl: 'https://regional.sonarcloud.io',
-    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    });
     spyOn(keychain, 'getToken').mockResolvedValue(null);
     const ctx = {
       console: {},
