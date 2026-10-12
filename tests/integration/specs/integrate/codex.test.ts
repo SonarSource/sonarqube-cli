@@ -50,6 +50,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -566,6 +567,7 @@ describe('integrate codex', () => {
         // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask.
         const session = harness.runInteractive('integrate codex');
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -612,6 +614,7 @@ describe('integrate codex', () => {
         let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
+          await chooseCustomize(session);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install secrets-on-read instructions?');
           await session.accept('Install MCP server?');
@@ -634,6 +637,7 @@ describe('integrate codex', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate codex');
+        await chooseCustomize(session);
         await session.decline('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -675,6 +679,7 @@ describe('integrate codex', () => {
             __SQCLI_DEV_SKIP_CAG: '1',
           },
         });
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install Vortex?');
         await session.accept('Install secrets-on-read instructions?');

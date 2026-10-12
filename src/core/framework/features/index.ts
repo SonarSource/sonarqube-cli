@@ -76,7 +76,11 @@ export {
   IntegrationRegistry,
   registerIntegrations,
 } from './registry.ts';
-export { reportFeatureAvailability, resolveFeatureSelection } from './selection.ts';
+export {
+  customizeFeatureSelection,
+  reportFeatureAvailability,
+  resolveRecommendedFeatures,
+} from './selection.ts';
 export type {
   AppliedFeature,
   AppliedOperation,
