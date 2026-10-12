@@ -39,28 +39,39 @@ export interface ScaAvailabilityCheck {
   ): Promise<ScaEnablement>;
 }
 
-export async function checkScaAvailability(
+const SCA_PREREQUISITES_HINT =
+  'Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites';
+
+type ScaAuth = Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>;
+
+/** Throws `CommandFailedError` when availability cannot be determined. */
+async function resolveScaAvailability(
   client: ScaAvailabilityCheck,
-  auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
+  auth: ScaAuth,
 ): Promise<FeatureAvailability> {
   if (auth.connectionType !== 'cloud') {
     let serverVersion: string;
     try {
       serverVersion = await fetchServerVersion(auth.serverUrl);
     } catch (err) {
-      logger.debug(`Could not determine SonarQube Server version: ${(err as Error).message}`);
-      return { available: undefined };
+      throw new CommandFailedError(
+        `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
+        { cause: err, remediationHint: SCA_PREREQUISITES_HINT },
+      );
     }
     if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
       return {
         available: false,
-        unavailableReason: `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}). Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites`,
+        unavailableReason: `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}). ${SCA_PREREQUISITES_HINT}`,
       };
     }
   }
   const enablement = await client.getScaEnablement(auth.connectionType, auth.orgKey);
   if (enablement === 'check_failed') {
-    return { available: undefined };
+    throw new CommandFailedError(
+      'Could not check whether Software Composition Analysis is available for the current connection.',
+      { remediationHint: SCA_PREREQUISITES_HINT },
+    );
   }
   if (enablement === 'not_enabled') {
     return {
@@ -72,16 +83,23 @@ export async function checkScaAvailability(
   return { available: true };
 }
 
+export async function checkScaAvailability(
+  client: ScaAvailabilityCheck,
+  auth: ScaAuth,
+): Promise<FeatureAvailability> {
+  try {
+    return await resolveScaAvailability(client, auth);
+  } catch (err) {
+    logger.debug((err as Error).message);
+    return { available: undefined };
+  }
+}
+
 export async function assertScaAvailable(
   client: ScaAvailabilityCheck,
-  auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
+  auth: ScaAuth,
 ): Promise<void> {
-  const { available, unavailableReason } = await checkScaAvailability(client, auth);
-  if (available === undefined) {
-    throw new CommandFailedError(
-      'Could not check whether Software Composition Analysis is available for the current connection.',
-    );
-  }
+  const { available, unavailableReason } = await resolveScaAvailability(client, auth);
   if (!available) {
     throw new CommandFailedError(
       unavailableReason ??
