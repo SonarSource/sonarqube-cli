@@ -44,6 +44,7 @@ import {
   GLOBAL_MCP_CONFIG_PATH,
   writeExistingGlobalGeminiRules,
 } from './antigravity-test-helpers';
+import { chooseCustomize } from './integrate-test-helpers';
 
 const TEST_PROJECT = 'my-project';
 const TEST_ORG = 'my-org';
@@ -194,6 +195,7 @@ describe('integrate antigravity', () => {
           const session = harness.runInteractive('integrate antigravity', {
             extraEnv,
           });
+          await chooseCustomize(session);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install MCP server?');
           await session.accept('Install prompt-secrets global rules?');
