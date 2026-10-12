@@ -159,6 +159,7 @@ const INTEGRATION_TO_COMMAND: Record<string, string> = {
   cursor: 'sonar integrate cursor',
   antigravity: 'sonar integrate antigravity',
   opencode: 'sonar integrate opencode',
+  pi: 'sonar integrate pi',
 };
 
 interface McpFeatureRecord {
