@@ -117,11 +117,17 @@ export function isRoot(): boolean {
   return process.getuid?.() === 0;
 }
 
+let diagnosticLogPath: string | undefined;
+
 export async function eventually(check: () => boolean, timeoutMs = SELF_REPLACE_SETTLE_MS) {
   const deadline = Date.now() + timeoutMs;
   while (!check()) {
     if (Date.now() > deadline) {
-      throw new Error('Condition not met in time');
+      const log =
+        diagnosticLogPath && existsSync(diagnosticLogPath)
+          ? readFileSync(diagnosticLogPath, 'utf8')
+          : '<no self-replace log written>';
+      throw new Error(`Condition not met in time. Self-replace log:\n${log}`);
     }
     await Bun.sleep(POLL_INTERVAL_MS);
   }
@@ -147,12 +153,14 @@ export class MdmSandbox {
     this.tempDir = this.root.dir('tmp').path;
     mkdirSync(this.pathDir, { recursive: true });
     mkdirSync(this.tempDir, { recursive: true });
+    diagnosticLogPath = this.root.file('self-replace.log').path;
   }
 
   env(): Record<string, string> {
     const systemPath = IS_WINDOWS ? WINDOWS_SYSTEM_PATH : UNIX_SYSTEM_PATH;
     return {
       [ENV_MDM_BINARY_PATH]: this.binaryPath,
+      SONAR_SELF_REPLACE_LOG: this.root.file('self-replace.log').path,
       [ENV_MDM_USER_HOMES]: this.homes.join(delimiter),
       PATH: [this.pathDir, systemPath].join(delimiter),
       ...(IS_WINDOWS

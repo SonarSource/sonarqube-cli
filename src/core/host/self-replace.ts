@@ -20,6 +20,7 @@
 
 import { spawn } from 'node:child_process';
 import {
+  appendFileSync,
   chmodSync,
   copyFileSync,
   existsSync,
@@ -33,6 +34,7 @@ import { basename, dirname, join } from 'node:path';
 import { isWindows, windowsPowerShellPath } from '@/core/host/environment/platform-detector.ts';
 
 const DELETE_TARGET_ENV = 'SONAR_SELF_REPLACE_DELETE_TARGET';
+const DIAGNOSTIC_LOG_ENV = 'SONAR_SELF_REPLACE_LOG';
 export const EXECUTABLE_MODE = 0o755;
 
 function asideSuffix(): string {
@@ -52,22 +54,49 @@ function removeStaleAsideFiles(target: string): void {
   }
 }
 
+function logDiagnostic(message: string): void {
+  const logPath = process.env[DIAGNOSTIC_LOG_ENV];
+  if (logPath) {
+    appendFileSync(logPath, `${new Date().toISOString()} cli: ${message}\n`);
+  }
+}
+
 function deleteAfterExit(path: string): void {
-  const script =
-    `Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue; ` +
-    `for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); $i++) { ` +
-    `Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction SilentlyContinue; ` +
-    `if (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}) { Start-Sleep -Seconds 1 } }`;
-  spawn(windowsPowerShellPath(), ['-NoProfile', '-NonInteractive', '-Command', script], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true,
-    env: {
-      SystemRoot: process.env.SystemRoot ?? String.raw`C:\Windows`,
-      ...process.env,
-      [DELETE_TARGET_ENV]: path,
+  const script = `
+function L($m) { if ($env:${DIAGNOSTIC_LOG_ENV}) { Add-Content -LiteralPath $env:${DIAGNOSTIC_LOG_ENV} -Value "$(Get-Date -Format o) helper: $m" } }
+L "started pid=$PID waiting for ${process.pid} target=$env:${DELETE_TARGET_ENV}"
+L "parent alive: $($null -ne (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue))"
+Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue
+L "parent exited"
+for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); $i++) {
+  try { Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction Stop } catch { L "attempt $i failed: $($_.Exception.Message)" }
+  if (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}) { Start-Sleep -Seconds 1 }
+}
+L "done, target exists: $(Test-Path -LiteralPath $env:${DELETE_TARGET_ENV})"
+`;
+  const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
+  const child = spawn(
+    windowsPowerShellPath(),
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedScript],
+    {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      env: {
+        SystemRoot: process.env.SystemRoot ?? String.raw`C:\Windows`,
+        ...process.env,
+        [DELETE_TARGET_ENV]: path,
+      },
     },
-  }).unref();
+  );
+  child.on('error', (error) => {
+    logDiagnostic(`helper error: ${error.message}`);
+  });
+  child.on('exit', (code, signal) => {
+    logDiagnostic(`helper exited code=${String(code)} signal=${String(signal)}`);
+  });
+  logDiagnostic(`spawned helper pid=${String(child.pid)} for ${path}`);
+  child.unref();
 }
 
 export function replaceBinary(sourcePath: string, targetPath: string): void {
