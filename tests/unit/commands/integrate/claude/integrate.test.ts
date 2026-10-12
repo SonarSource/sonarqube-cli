@@ -171,7 +171,7 @@ describe('integrateCommand', () => {
         integrationId: 'claude-code',
         auth: CLOUD_AUTH,
         options: expect.objectContaining({
-          vortexDisposition: 'install',
+          vortexDisposition: { action: 'install' },
         }),
         scope: 'global',
         targetRoot: homedir(),
@@ -193,7 +193,7 @@ describe('integrateCommand', () => {
       targetRoot: homedir(),
       scope: 'global',
       auth: CLOUD_AUTH,
-      vortexDisposition: 'remove',
+      vortexDisposition: { action: 'remove', unavailableReason: expect.any(String) },
     });
   });
 
@@ -221,7 +221,7 @@ describe('integrateCommand', () => {
 
     await integrateClaude({}, CLOUD_CTX);
 
-    assertMigrationAndHookInstallationRan('install');
+    assertMigrationAndHookInstallationRan({ action: 'install' });
   });
 
   it('aborts integration when sonar-secrets installation fails', async () => {
@@ -270,7 +270,7 @@ describe('integrateCommand', () => {
     // The connection attrs are recorded only when Vortex is installed: its
     // context augmentation subfeature reads them back at runtime.
     const attrs = {
-      ...(vortexDisposition === 'install'
+      ...(vortexDisposition.action === 'install'
         ? { orgKey: auth.orgKey ?? null, scaEnabled: false, serverUrl: auth.serverUrl }
         : {}),
     };
