@@ -17,7 +17,14 @@ ARTIFACT_BASE_URL_OVERRIDE={{SONARQUBE_CLI_ARTIFACT_BASE_URL}}
 [[ "$ARTIFACT_BASE_URL_OVERRIDE" == \{\{*\}\} ]] && ARTIFACT_BASE_URL_OVERRIDE=""
 ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL_OVERRIDE:-$DEFAULT_ARTIFACT_BASE_URL}"
 ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL%/}"
-[[ "$ARTIFACT_BASE_URL" =~ ^https://[A-Za-z0-9._~:/?#@!\&\'\(\)*+,\;=%-]+$ ]] || { echo "Error: SONARQUBE_CLI_ARTIFACT_BASE_URL must be an https:// URL: $ARTIFACT_BASE_URL" >&2; exit 1; }
+URL_CHARS="[A-Za-z0-9._~:/?#@!&'()*+,;=%-]+"
+LOOPBACK_HTTP_PATTERN="^http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/$URL_CHARS$"
+FETCH_PROTOCOLS='=https'
+if [[ "$ARTIFACT_BASE_URL" =~ $LOOPBACK_HTTP_PATTERN ]]; then
+    FETCH_PROTOCOLS='=http,https'
+elif ! [[ "$ARTIFACT_BASE_URL" =~ ^https://$URL_CHARS$ ]]; then
+    echo "Error: SONARQUBE_CLI_ARTIFACT_BASE_URL must be an https:// URL: $ARTIFACT_BASE_URL" >&2; exit 1
+fi
 
 ALLOW_MISSING_CHECKSUM=false
 STABLE_VERSION_PATTERN='^[0-9][0-9.]*$'
@@ -25,7 +32,7 @@ RUNNER=""
 WORK_DIR=""
 trap '[[ -n "$WORK_DIR" ]] && rm -rf "$WORK_DIR"' EXIT
 
-fetch() { curl -fsSL --proto '=https' --proto-redir '=https' "$@"; }
+fetch() { curl -fsSL --proto "$FETCH_PROTOCOLS" --proto-redir "$FETCH_PROTOCOLS" "$@"; }
 
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'

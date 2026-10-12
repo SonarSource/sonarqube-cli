@@ -28,6 +28,7 @@ import { spawnProcess } from '@/core/process/process.ts';
 export interface MdmEnvironment {
   binaryPath: string;
   listUserHomes(): Promise<string[]>;
+  skipMachineIntegration?: boolean;
 }
 
 const UNIX_BINARY_PATH = '/usr/local/bin/sonar';
@@ -66,7 +67,11 @@ export function defaultMdmEnvironment(): MdmEnvironment {
   const binaryPathOverride = process.env[ENV_MDM_BINARY_PATH];
   if (binaryPathOverride) {
     const userHomes = (process.env[ENV_MDM_USER_HOMES] ?? '').split(delimiter).filter(Boolean);
-    return { binaryPath: binaryPathOverride, listUserHomes: () => Promise.resolve(userHomes) };
+    return {
+      binaryPath: binaryPathOverride,
+      listUserHomes: () => Promise.resolve(userHomes),
+      skipMachineIntegration: true,
+    };
   }
   if (isWindows()) {
     return {

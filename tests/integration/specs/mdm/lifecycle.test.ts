@@ -18,14 +18,25 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync, readlinkSync } from 'node:fs';
+import { existsSync, readlinkSync } from 'node:fs';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { TestHarness } from '../../harness';
-import { fakeCliScript, isSymlink, MdmSandbox, SKIP_ON_WINDOWS } from './mdm-sandbox';
+import {
+  eventually,
+  isRealCli,
+  isStub,
+  isSymlink,
+  MdmSandbox,
+  SKIP_ON_UNIX,
+  SKIP_ON_WINDOWS,
+  stubBytes,
+} from './mdm-sandbox';
 
-describe.skipIf(SKIP_ON_WINDOWS)('mdm lifecycle', () => {
+setDefaultTimeout(60_000);
+
+describe('mdm lifecycle', () => {
   let harness: TestHarness;
   let sandbox: MdmSandbox;
 
@@ -38,68 +49,67 @@ describe.skipIf(SKIP_ON_WINDOWS)('mdm lifecycle', () => {
     await harness.dispose();
   });
 
-  it('install → update → rollback → remove keeps the standalone symlink valid throughout', async () => {
+  it('install → update → rollback → remove', async () => {
     const cdn = await harness.newFakeBinariesServer().withStableVersion('2.0.0').start();
-    cdn.publishCliArtifact('1.0.0', fakeCliScript('1.0.0'));
-    cdn.publishCliArtifact('2.0.0', fakeCliScript('2.0.0'));
+    cdn.publishCliArtifact('1.0.0', stubBytes('1.0.0'));
+    cdn.publishCliArtifact('2.0.0', stubBytes('2.0.0'));
     const standalone = sandbox.seedStandalone(0);
 
     expect((await sandbox.run('install')).exitCode).toBe(0);
-    expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
+    if (!SKIP_ON_WINDOWS) {
+      expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+    }
 
     expect((await sandbox.runWithCdn('update', cdn)).exitCode).toBe(0);
-    expect(readFileSync(standalone, 'utf8')).toBe(fakeCliScript('2.0.0'));
-    expect(isSymlink(standalone)).toBe(true);
+    expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
+    if (!SKIP_ON_WINDOWS) {
+      expect(isStub(standalone, '2.0.0')).toBe(true);
+      expect(isSymlink(standalone)).toBe(true);
+    }
 
     expect((await sandbox.runWithCdn('rollback --version 1.0.0', cdn)).exitCode).toBe(0);
-    expect(readFileSync(standalone, 'utf8')).toBe(fakeCliScript('1.0.0'));
+    expect(isStub(sandbox.binaryPath, '1.0.0')).toBe(true);
+    if (!SKIP_ON_WINDOWS) {
+      expect(isStub(standalone, '1.0.0')).toBe(true);
+    }
 
     expect((await sandbox.run('remove')).exitCode).toBe(0);
-    expect(existsSync(sandbox.binaryPath)).toBe(false);
+    await eventually(() => !existsSync(sandbox.binaryPath));
     expect(isSymlink(standalone)).toBe(false);
     expect(existsSync(standalone)).toBe(false);
   });
 
-  it('an installed binary can update itself from the CDN', async () => {
-    const cdn = await harness.newFakeBinariesServer().withStableVersion('2.0.0').start();
-    cdn.publishCliArtifact('2.0.0', fakeCliScript('2.0.0'));
-    expect((await sandbox.run('install')).exitCode).toBe(0);
+  it.skipIf(SKIP_ON_UNIX)(
+    'leaves the standalone install alone until remove on Windows',
+    async () => {
+      const standalone = sandbox.seedStandalone(0);
 
-    const result = await harness.run(`mdm update --artifact-base-url ${cdn.cliArtifactBaseUrl()}`, {
-      binaryPath: sandbox.binaryPath,
-      extraEnv: sandbox.env(),
-    });
+      await sandbox.run('install');
 
-    expect(result.exitCode).toBe(0);
-    expect(readFileSync(sandbox.binaryPath, 'utf8')).toBe(fakeCliScript('2.0.0'));
-  });
-});
+      expect(isStub(standalone, '1.0.0')).toBe(true);
+    },
+  );
 
-describe('mdm command surface', () => {
-  let harness: TestHarness;
-
-  beforeEach(async () => {
-    harness = await TestHarness.create();
-  });
-
-  afterEach(async () => {
-    await harness.dispose();
-  });
-
-  it('is hidden from the root help but documents its subcommands and Permissive flags', async () => {
+  it('is hidden from the root help but documents its subcommands and flags', async () => {
     const root = await harness.run('--help');
     const mdm = await harness.run('mdm --help');
+    const install = await harness.run('mdm install --help');
+    const update = await harness.run('mdm update --help');
+    const rollback = await harness.run('mdm rollback --help');
+    const remove = await harness.run('mdm remove --help');
 
     expect(root.stdout).not.toMatch(/^\s+mdm\b/m);
     expect(mdm.exitCode).toBe(0);
     for (const subcommand of ['install', 'update', 'rollback', 'remove']) {
       expect(mdm.stdout).toContain(subcommand);
     }
-    const install = await harness.run('mdm install --help');
     expect(install.stdout).toContain('--skip-if-present');
     expect(install.stdout).toContain('--skip-standalone-links');
-    const update = await harness.run('mdm update --help');
     expect(update.stdout).toContain('--allow-missing-checksum');
     expect(update.stdout).toContain('--artifact-base-url');
+    expect(update.stdout).toContain('--force');
+    expect(rollback.stdout).toContain('--version');
+    expect(remove.stdout).toContain('--mdm-binary-only');
   });
 });

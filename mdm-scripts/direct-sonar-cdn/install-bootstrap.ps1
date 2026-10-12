@@ -64,7 +64,7 @@ function Select-Runner {
     $script:TempRunner
 }
 $ArtifactBaseUrl = if ($ArtifactBaseUrlOverride) { $ArtifactBaseUrlOverride.TrimEnd('/') } else { $DefaultArtifactBaseUrl }
-if ($ArtifactBaseUrl -notmatch '^https://[^\s"''`$]+$') { Write-Error "SONARQUBE_CLI_ARTIFACT_BASE_URL must be an https:// URL: $ArtifactBaseUrl"; exit 1 }
+if ($ArtifactBaseUrl -notmatch '^(https://|http://(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/)[^\s"''`$]+$') { Write-Error "SONARQUBE_CLI_ARTIFACT_BASE_URL must be an https:// URL: $ArtifactBaseUrl"; exit 1 }
 
 $version = if ($ApprovedVersion) { $ApprovedVersion } else { Get-StableVersion }
 Write-Host "Target version: $version"

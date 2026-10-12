@@ -18,14 +18,25 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { chmodSync, existsSync, readFileSync, readlinkSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, readlinkSync } from 'node:fs';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { TestHarness } from '../../harness';
-import { fakeCliScript, isSymlink, MdmSandbox, SKIP_ON_WINDOWS } from './mdm-sandbox';
+import {
+  isRealCli,
+  isRoot,
+  isStub,
+  isSymlink,
+  MdmSandbox,
+  modeOf,
+  SKIP_ON_UNIX,
+  SKIP_ON_WINDOWS,
+} from './mdm-sandbox';
 
-describe.skipIf(SKIP_ON_WINDOWS)('mdm install', () => {
+setDefaultTimeout(60_000);
+
+describe('mdm install', () => {
   let harness: TestHarness;
   let sandbox: MdmSandbox;
 
@@ -38,80 +49,159 @@ describe.skipIf(SKIP_ON_WINDOWS)('mdm install', () => {
     await harness.dispose();
   });
 
-  it('copies the running binary to the system path as an executable that runs', async () => {
+  async function installedVersion(binaryPath = sandbox.binaryPath): Promise<string> {
+    return (await harness.run('--version', { binaryPath })).stdout;
+  }
+
+  it('copies the running CLI to the system path and the copy runs', async () => {
     const reference = await harness.run('--version');
 
     const result = await sandbox.run('install');
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout + result.stderr).toContain(sandbox.binaryPath);
-    expect(statSync(sandbox.binaryPath).mode & 0o777).toBe(0o755);
-    const installed = await harness.run('--version', { binaryPath: sandbox.binaryPath });
-    expect(installed.exitCode).toBe(0);
-    expect(installed.stdout).toBe(reference.stdout);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
+    expect(await installedVersion()).toBe(reference.stdout);
   });
 
-  it('replaces existing standalone installs with symlinks and leaves users without one alone', async () => {
+  it.skipIf(SKIP_ON_WINDOWS)('installs with mode 755', async () => {
+    await sandbox.run('install');
+
+    expect(modeOf(sandbox.binaryPath)).toBe(0o755);
+  });
+
+  it.skipIf(SKIP_ON_WINDOWS)(
+    'replaces existing standalone installs with symlinks and leaves users without one alone',
+    async () => {
+      const standalone = sandbox.seedStandalone(0);
+
+      const result = await sandbox.run('install');
+
+      expect(result.exitCode).toBe(0);
+      expect(isSymlink(standalone)).toBe(true);
+      expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+      expect(existsSync(sandbox.standalonePath(1))).toBe(false);
+    },
+  );
+
+  it.skipIf(SKIP_ON_UNIX)('never links standalone installs on Windows', async () => {
     const standalone = sandbox.seedStandalone(0);
 
     const result = await sandbox.run('install');
 
     expect(result.exitCode).toBe(0);
-    expect(isSymlink(standalone)).toBe(true);
-    expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
-    expect(existsSync(sandbox.standalonePath(1))).toBe(false);
+    expect(isSymlink(standalone)).toBe(false);
+    expect(isStub(standalone, '1.0.0')).toBe(true);
   });
 
-  it('is idempotent: a second run skips symlinks that already point at the system binary', async () => {
-    const standalone = sandbox.seedStandalone(0);
+  it.skipIf(SKIP_ON_WINDOWS)(
+    'is idempotent: symlinks that already point at the system binary are skipped',
+    async () => {
+      const standalone = sandbox.seedStandalone(0);
+      await sandbox.run('install');
+
+      const result = await sandbox.run('install');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain('already symlinked');
+      expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+    },
+  );
+
+  it('can be run twice and leaves a single working binary', async () => {
     await sandbox.run('install');
 
     const result = await sandbox.run('install');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain('already symlinked');
-    expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
+    expect(sandbox.extraEntriesNextToBinary().filter((name) => name.endsWith('.new'))).toEqual([]);
   });
 
-  it('--skip-standalone-links installs without touching standalone installs', async () => {
-    const standalone = sandbox.seedStandalone(0);
+  it.skipIf(SKIP_ON_WINDOWS)(
+    '--skip-standalone-links installs without touching standalone installs',
+    async () => {
+      const standalone = sandbox.seedStandalone(0);
 
-    const result = await sandbox.run('install', '--skip-standalone-links');
+      const result = await sandbox.run('install --skip-standalone-links');
 
-    expect(result.exitCode).toBe(0);
-    expect(existsSync(sandbox.binaryPath)).toBe(true);
-    expect(isSymlink(standalone)).toBe(false);
-    expect(readFileSync(standalone, 'utf8')).toContain('standalone');
-  });
+      expect(result.exitCode).toBe(0);
+      expect(isRealCli(sandbox.binaryPath)).toBe(true);
+      expect(isSymlink(standalone)).toBe(false);
+      expect(isStub(standalone, '1.0.0')).toBe(true);
+    },
+  );
 
-  it('--skip-if-present keeps the existing binary and restores its permissions', async () => {
-    sandbox.seedSystemBinary('1.0.0', 0o700);
+  it('--skip-if-present keeps the existing binary', async () => {
+    sandbox.seedSystemBinary('1.0.0');
 
-    const result = await sandbox.run('install', '--skip-if-present');
+    const result = await sandbox.run('install --skip-if-present');
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout + result.stderr).toContain('already present');
-    expect(readFileSync(sandbox.binaryPath, 'utf8')).toContain('1.0.0');
-    expect(statSync(sandbox.binaryPath).mode & 0o777).toBe(0o755);
+    expect(isStub(sandbox.binaryPath, '1.0.0')).toBe(true);
+  });
+
+  it.skipIf(SKIP_ON_WINDOWS)('--skip-if-present restores mode 755', async () => {
+    sandbox.seedSystemBinary('1.0.0', 0o700);
+
+    await sandbox.run('install --skip-if-present');
+
+    expect(modeOf(sandbox.binaryPath)).toBe(0o755);
   });
 
   it('--skip-if-present installs when nothing is present yet', async () => {
-    const result = await sandbox.run('install', '--skip-if-present');
+    const result = await sandbox.run('install --skip-if-present');
 
     expect(result.exitCode).toBe(0);
-    expect(existsSync(sandbox.binaryPath)).toBe(true);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
   });
 
-  it('overwrites an older system binary without --skip-if-present', async () => {
-    sandbox.seedSystemBinary('1.0.0');
-    chmodSync(sandbox.binaryPath, 0o600);
+  it('overwrites an older system binary', async () => {
+    sandbox.seedSystemBinary('1.0.0', 0o600);
 
     const result = await sandbox.run('install');
 
     expect(result.exitCode).toBe(0);
-    expect(readFileSync(sandbox.binaryPath).equals(Buffer.from(fakeCliScript('1.0.0')))).toBe(
-      false,
-    );
-    expect(statSync(sandbox.binaryPath).mode & 0o777).toBe(0o755);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
+    if (!SKIP_ON_WINDOWS) {
+      expect(modeOf(sandbox.binaryPath)).toBe(0o755);
+    }
   });
+
+  it.skipIf(SKIP_ON_WINDOWS)('replaces a dangling standalone symlink', async () => {
+    const standalone = sandbox.seedStandaloneSymlink(0, `${sandbox.root.path}/missing-target`);
+
+    const result = await sandbox.run('install');
+
+    expect(result.exitCode).toBe(0);
+    expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
+  });
+
+  it('is a no-op copy when the installed binary installs itself', async () => {
+    await sandbox.run('install');
+
+    const result = await sandbox.run('install', { binaryPath: sandbox.binaryPath });
+
+    expect(result.exitCode).toBe(0);
+    expect(isRealCli(sandbox.binaryPath)).toBe(true);
+    expect(sandbox.extraEntriesNextToBinary()).toEqual([]);
+  });
+
+  it.skipIf(SKIP_ON_WINDOWS || isRoot())(
+    'fails with a readable message when the target directory is not writable',
+    async () => {
+      const lockedParent = sandbox.root.dir('locked').path;
+      sandbox.seedFile(`${lockedParent}/placeholder`, '');
+      chmodSync(lockedParent, 0o555);
+
+      const result = await harness.run('mdm install', {
+        extraEnv: { ...sandbox.env(), SONARQUBE_CLI_MDM_BINARY_PATH: `${lockedParent}/bin/sonar` },
+      });
+
+      chmodSync(lockedParent, 0o755);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('EACCES');
+    },
+  );
 });

@@ -36,6 +36,7 @@ import {
 } from '@/core/host/install/install-types.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { IS_WINDOWS } from './platform';
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
@@ -89,7 +90,7 @@ export class FakeBinariesServer {
    * Publishes a CLI release the way `sonar mdm update|rollback` expects to find it:
    * `<version>/<os>/sonarqube-cli-<version>-<os>-<arch>.{bin,exe}` plus a `.sha256` sidecar.
    * `checksum` overrides the computed digest (`null` omits the sidecar); `suffix` selects the
-   * artifact extension, `.exe` being the pre-`.bin` convention.
+   * artifact extension (default `.exe` on Windows, `.bin` elsewhere), `.exe` on Unix being the pre-`.bin` convention.
    */
   publishCliArtifact(
     version: string,
@@ -97,7 +98,7 @@ export class FakeBinariesServer {
     options: { checksum?: string | null; suffix?: '.bin' | '.exe' } = {},
   ): void {
     const { os, arch } = detectPlatform();
-    const path = `/Distribution/sonarqube-cli/${version}/${os}/sonarqube-cli-${version}-${os}-${arch}${options.suffix ?? '.bin'}`;
+    const path = `/Distribution/sonarqube-cli/${version}/${os}/sonarqube-cli-${version}-${os}-${arch}${options.suffix ?? (IS_WINDOWS ? '.exe' : '.bin')}`;
     this.extraFiles.set(path, Buffer.from(body));
     if (options.checksum !== null) {
       const digest = options.checksum ?? createHash('sha256').update(body).digest('hex');

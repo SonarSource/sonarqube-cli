@@ -47,7 +47,11 @@ import {
   type MdmEnvironment,
   standaloneBinaryPath,
 } from './mdm-environment.ts';
-import { addToMachinePath, grantReadExecuteToAllUsers } from './windows-machine.ts';
+import {
+  addToMachinePath,
+  grantReadExecuteToAllUsers,
+  removeFromMachinePath,
+} from './windows-machine.ts';
 
 export interface MdmInstallOptions {
   skipIfPresent?: boolean;
@@ -83,9 +87,16 @@ async function readVersionOutput(binaryPath: string): Promise<string | null> {
   }
 }
 
-async function placeBinary(sourcePath: string, targetPath: string): Promise<void> {
+async function placeBinary(
+  sourcePath: string,
+  targetPath: string,
+  env: MdmEnvironment,
+): Promise<void> {
   replaceBinary(sourcePath, targetPath);
   if (isWindows()) {
+    if (env.skipMachineIntegration) {
+      return;
+    }
     await grantReadExecuteToAllUsers(targetPath);
   } else if (process.platform === 'darwin') {
     await spawnProcess('xattr', ['-d', MACOS_QUARANTINE_ATTRIBUTE, targetPath]);
@@ -188,9 +199,11 @@ async function downloadAndPlace(
       console.warn(message);
     },
   };
-  await withVerifiedBinary(artifactBaseUrl, version, downloadOptions, (downloaded) =>
-    placeBinary(downloaded, env.binaryPath),
-  );
+  await withVerifiedBinary(artifactBaseUrl, version, downloadOptions, async (downloaded) => {
+    restoreExecutableMode(downloaded);
+    await verifyInstallation(downloaded);
+    await placeBinary(downloaded, env.binaryPath, env);
+  });
   await verifyInstallation(env.binaryPath);
 }
 
@@ -208,9 +221,9 @@ export async function mdmInstall(
   console.info(`Installing SonarQube CLI to ${env.binaryPath}...`);
 
   if (!isSameFile(process.execPath, env.binaryPath)) {
-    await placeBinary(process.execPath, env.binaryPath);
+    await placeBinary(process.execPath, env.binaryPath, env);
   }
-  if (isWindows()) {
+  if (isWindows() && !env.skipMachineIntegration) {
     await addToMachinePath(dirname(env.binaryPath));
   }
   if (!options.skipStandaloneLinks && !isWindows()) {
@@ -267,6 +280,9 @@ export async function mdmRemove(
     throw new CommandFailedError(`Failed to remove ${env.binaryPath}.`);
   }
   console.text(`MDM binary removed from ${env.binaryPath}.`);
+  if (isWindows() && !env.skipMachineIntegration) {
+    await removeFromMachinePath(dirname(env.binaryPath));
+  }
   if (options.mdmBinaryOnly) {
     return;
   }
