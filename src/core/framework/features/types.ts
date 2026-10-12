@@ -24,7 +24,6 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { DependencyDeclaration } from '../dependencies';
 import type { RemovableResource, ResourceDeclaration, ResourceIdentity } from '../resources';
-import type { InstallDecision } from './selection.ts';
 
 export type MaybePromise<T> = T | Promise<T>;
 export type IntegrationExecutionMode = 'install' | 'update';
@@ -62,6 +61,13 @@ export interface IntegrationInvocation<TOptions = Record<string, unknown>> {
   state: CliState;
 }
 
+export interface FeatureAvailability {
+  /** `undefined` means the availability check failed. */
+  available: boolean | undefined;
+  /** Shown only when `available` is `false`. */
+  unavailableReason?: string;
+}
+
 export type FeatureTargetRoot<TOptions = Record<string, unknown>> =
   string | ((invocation: IntegrationInvocation<TOptions>) => MaybePromise<string>);
 
@@ -90,7 +96,7 @@ export interface PostInstallExample {
 
 /**
  * A feature paired with its resolved per-invocation execution context (target
- * root, scope, auth, …).
+ * root, scope, auth, …), recorded install state and availability.
  */
 export interface FeatureApplication<TOptions = Record<string, unknown>> {
   feature: FeatureDeclaration<TOptions>;
@@ -99,6 +105,18 @@ export interface FeatureApplication<TOptions = Record<string, unknown>> {
   auth?: ResolvedAuth;
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
+  installed: boolean;
+  available: boolean | undefined;
+  unavailableReason?: string;
+  subfeatureApplications: SubfeatureApplication<TOptions>[];
+}
+
+export interface SubfeatureApplication<TOptions = Record<string, unknown>> {
+  subfeature: SubfeatureDeclaration<TOptions>;
+  installed: boolean;
+  available: boolean | undefined;
+  unavailableReason?: string;
+  active: boolean;
 }
 
 export interface FeatureSelectionResult<TOptions = Record<string, unknown>> {
@@ -115,9 +133,10 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   displayName: string;
   benefitDescription?: string;
   previewDescription?: FeaturePreview;
-  shouldInstall?: (
-    invocation: IntegrationInvocation<TOptions>,
-  ) => MaybePromise<boolean | InstallDecision>;
+  /** Omitted means available. */
+  isAvailable?: (invocation: IntegrationInvocation<TOptions>) => MaybePromise<FeatureAvailability>;
+  /** Installed whenever available, never prompted. */
+  required?: boolean;
   targetRoot?: FeatureTargetRoot<TOptions>;
   scope?: FeatureScope<TOptions>;
   dependencies?: DependencyDeclaration[];
@@ -137,15 +156,15 @@ export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
 }
 
 /**
- * Subfeature declaration — metadata, install condition, and the dependencies,
+ * Subfeature declaration — metadata, availability, and the dependencies,
  * resources, and operations owned by that subfeature. Scope, target root, and
  * attrs always come from the owning {@link FeatureContainer}.
  */
 export type SubfeatureDeclaration<TOptions = Record<string, unknown>> = Pick<
   FeatureDeclaration<TOptions>,
-  'id' | 'displayName' | 'shouldInstall' | 'dependencies' | 'resources' | 'operations'
+  'id' | 'displayName' | 'isAvailable' | 'required' | 'dependencies' | 'resources' | 'operations'
 > & {
-  /** Gates inclusion in `defaultInstallSubfeatureIds` during reconcile migration, where `shouldInstall`'s `options` don't exist yet. Defaults to eligible. */
+  /** Gates inclusion in `defaultInstallSubfeatureIds` during reconcile migration, where `isAvailable`'s `options` don't exist yet. Defaults to eligible. */
   migrationEligible?: (attrs: Record<string, IntegrationStateAttribute> | undefined) => boolean;
 };
 
