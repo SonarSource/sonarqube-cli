@@ -95,7 +95,7 @@ describe('mdm update and rollback', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
-      expect(sandbox.extraEntriesNextToBinary()).toEqual([]);
+      await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
     });
 
     it('does not download anything when already at the target version', async () => {

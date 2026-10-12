@@ -50,7 +50,7 @@ import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const MDM_STUBS_DIR = join(RESOURCES_DIR, 'mdm-stubs');
-const MDM_STUB_VERSIONS = ['1.0.0', '2.0.0', '3.0.0'];
+const MDM_STUB_VERSIONS = ['1.0.0', '2.0.0', '3.0.0', 'impostor'];
 const platform = detectPlatform();
 
 const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];

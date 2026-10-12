@@ -33,8 +33,6 @@ import {
   stubPath,
 } from './mdm-sandbox';
 
-const IMPOSTOR_PATH = `${import.meta.dir}/../../resources/cag-stub${process.platform === 'win32' ? '.exe' : ''}`;
-
 setDefaultTimeout(60_000);
 
 describe('mdm remove', () => {
@@ -93,7 +91,7 @@ describe('mdm remove', () => {
   });
 
   it('refuses to delete a PATH entry that does not look like the CLI', async () => {
-    const impostor = sandbox.seedPathCopy(IMPOSTOR_PATH);
+    const impostor = sandbox.seedPathCopy(stubPath('impostor'));
 
     const result = await sandbox.run('remove');
 

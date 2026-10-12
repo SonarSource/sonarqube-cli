@@ -55,12 +55,18 @@ function removeStaleAsideFiles(target: string): void {
 function deleteAfterExit(path: string): void {
   const script =
     `Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue; ` +
-    `Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction SilentlyContinue`;
+    `for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); $i++) { ` +
+    `Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction SilentlyContinue; ` +
+    `if (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}) { Start-Sleep -Seconds 1 } }`;
   spawn(windowsPowerShellPath(), ['-NoProfile', '-NonInteractive', '-Command', script], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
-    env: { ...process.env, [DELETE_TARGET_ENV]: path },
+    env: {
+      SystemRoot: process.env.SystemRoot ?? String.raw`C:\Windows`,
+      ...process.env,
+      [DELETE_TARGET_ENV]: path,
+    },
   }).unref();
 }
 
