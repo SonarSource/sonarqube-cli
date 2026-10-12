@@ -49,6 +49,8 @@ import {
 import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
+const MDM_STUBS_DIR = join(RESOURCES_DIR, 'mdm-stubs');
+const MDM_STUB_VERSIONS = ['1.0.0', '2.0.0', '3.0.0'];
 const platform = detectPlatform();
 
 const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];
@@ -164,4 +166,37 @@ if (shouldCompileCagStub) {
     throw new Error(`Failed to compile CAG stub: bun build exited with ${result.status}`);
   }
   console.log(`  CAG stub ready at ${cagStubOutfile}`);
+}
+
+// CLI stand-ins for the `sonar mdm` suites: one executable per fake release version, each
+// printing its own version for `--version` (see tests/integration/resources/cli-stub.ts).
+mkdirSync(MDM_STUBS_DIR, { recursive: true });
+const cliStubSource = join(RESOURCES_DIR, 'cli-stub.ts');
+for (const version of MDM_STUB_VERSIONS) {
+  const outfile = join(
+    MDM_STUBS_DIR,
+    `cli-stub-${version}${platform.os === 'windows' ? '.exe' : ''}`,
+  );
+  if (existsSync(outfile) && statSync(cliStubSource).mtimeMs <= statSync(outfile).mtimeMs) {
+    continue;
+  }
+  console.log(`Compiling CLI stub ${version} for ${platform.os}-${platform.arch}`);
+  const result = spawnSync(
+    process.execPath,
+    [
+      'build',
+      '--compile',
+      '--define',
+      `process.env.MDM_STUB_VERSION=${JSON.stringify(version)}`,
+      cliStubSource,
+      '--outfile',
+      outfile,
+    ],
+    { stdio: 'inherit' },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to compile CLI stub ${version}: bun build exited with ${result.status}`,
+    );
+  }
 }
