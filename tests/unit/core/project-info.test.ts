@@ -34,12 +34,9 @@ import {
   discoverOrganization,
   discoverProject,
   discoverServer,
-  KNOWN_SERVER_PROJECT_MAPPING_SOURCE,
   resolveProjectKey,
-  SHARED_PROJECT_CONFIG_SOURCE,
 } from '@/core/project-info.ts';
 import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
-import { GIT_REMOTE_BINDING_SOURCE } from '@/core/server/discover-project-by-remote.ts';
 import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
@@ -240,7 +237,6 @@ describe('discoverProject', () => {
 
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
-    expect(result.configSources).toEqual([]);
   });
 
   it('does not treat a .sonarlint dir with no usable binding file as a match', async () => {
@@ -250,10 +246,9 @@ describe('discoverProject', () => {
 
     expect(result.serverUrl).toBeUndefined();
     expect(result.projectKey).toBeUndefined();
-    expect(result.configSources).toEqual([]);
   });
 
-  it('maps sonar-project.properties to DiscoveredProject and updates configSources', async () => {
+  it('maps sonar-project.properties to DiscoveredProject', async () => {
     fakeFs.writeFile(
       join(testDir, 'sonar-project.properties'),
       'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\nsonar.organization=my-org\n',
@@ -262,7 +257,6 @@ describe('discoverProject', () => {
     expect(result.serverUrl).toBe('https://sonarcloud.io');
     expect(result.projectKey).toBe('my_project');
     expect(result.organization).toBe('my-org');
-    expect(result.configSources).toEqual(['sonar-project.properties']);
   });
 
   it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
@@ -283,7 +277,7 @@ describe('discoverProject', () => {
     },
   );
 
-  it('maps SonarQube Server connected mode to DiscoveredProject and updates configSources', async () => {
+  it('maps SonarQube Server connected mode to DiscoveredProject', async () => {
     fakeFs.writeFile(
       join(testDir, '.sonarlint', 'connectedMode.json'),
       JSON.stringify({
@@ -296,7 +290,6 @@ describe('discoverProject', () => {
     expect(result.serverUrl).toBe('https://sonarqube.example.com');
     expect(result.projectKey).toBe('lint_project');
     expect(result.organization).toBeUndefined();
-    expect(result.configSources).toEqual([join('.sonarlint', 'connectedMode.json')]);
   });
 
   it('maps SonarQube Cloud connected mode to DiscoveredProject (region EU / US)', async () => {
@@ -365,22 +358,6 @@ describe('discoverProject', () => {
     ).toBe('lint-org');
   });
 
-  it('updates configSources when both sonar-project.properties and .sonarlint exist', async () => {
-    fakeFs.writeFile(
-      join(testDir, 'sonar-project.properties'),
-      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
-    );
-    fakeFs.writeFile(
-      join(testDir, '.sonarlint', 'connectedMode.json'),
-      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
-    );
-    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
-    expect(result.configSources).toEqual([
-      'sonar-project.properties',
-      join('.sonarlint', 'connectedMode.json'),
-    ]);
-  });
-
   it('resolves projectKey from git remote when authenticated and no local project key', async () => {
     fakeFs.mkdir(join(testDir, '.git'));
     getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
@@ -402,7 +379,6 @@ describe('discoverProject', () => {
     });
     expect(result.projectKey).toBe('from-remote');
     expect(result.organization).toBe('my-org');
-    expect(result.configSources).toEqual([GIT_REMOTE_BINDING_SOURCE]);
     expect(remoteSpy).toHaveBeenCalledWith(
       expect.objectContaining({ orgKey: 'my-org' }),
       'https://github.com/example/remote-bound.git',
@@ -457,7 +433,6 @@ describe('discoverProject', () => {
 
     expect(result.projectKey).toBeUndefined();
     expect(result.projectRoot).toBe(canonicalizePath(testDir));
-    expect(result.configSources).toEqual([]);
   });
 
   describe('shared project config', () => {
@@ -497,7 +472,6 @@ describe('discoverProject', () => {
       expect(result.projectKey).toBe('shared-project');
       expect(result.serverUrl).toBe(SONARCLOUD_URL);
       expect(result.organization).toBe('shared-org');
-      expect(result.configSources).toEqual([SHARED_PROJECT_CONFIG_SOURCE]);
       expect(result.projectRoot).toBe(canonicalizePath(testDir));
       expect(loadSpy).toHaveBeenCalledWith(canonicalizePath(testDir));
     });
@@ -575,7 +549,6 @@ describe('discoverProject', () => {
       });
 
       expect(result.projectKey).toBe('shared-project');
-      expect(result.configSources).toEqual([SHARED_PROJECT_CONFIG_SOURCE]);
     });
 
     it('falls through to the next source when the repository has no match', async () => {
@@ -604,7 +577,6 @@ describe('discoverProject', () => {
       });
 
       expect(result.projectKey).toBe('known-project');
-      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
     });
 
     it('stops climbing once the repository resolves a match, never checking farther directories', async () => {
@@ -639,7 +611,6 @@ describe('discoverProject', () => {
       expect(result.projectKey).toBe('known-project');
       expect(result.serverUrl).toBe('https://known.example.com');
       expect(result.organization).toBe('known-org');
-      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
       expect(result.projectRoot).toBe(canonicalizePath(testDir));
       expect(result.integrationDir).toBe(canonicalizePath(testDir));
     });
@@ -749,7 +720,6 @@ describe('discoverProject', () => {
 
       expect(result.projectKey).toBe('known-project');
       expect(result.serverUrl).toBe('https://known.example.com');
-      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
     });
 
     it('is checked before, and short-circuits, the git-remote binding network lookup', async () => {
@@ -846,7 +816,6 @@ describe('discoverProject', () => {
 
       expect(result.projectKey).toBe('live-project');
       expect(result.serverUrl).toBe('https://live.example.com');
-      expect(result.configSources).toEqual([KNOWN_SERVER_PROJECT_MAPPING_SOURCE]);
     });
 
     it('prefers the live fallback over a stale persisted-table entry for the same targetRoot', async () => {
@@ -992,7 +961,6 @@ describe('discoverProject', () => {
         const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
 
         expect(result.projectKey).toBe('props_project');
-        expect(result.configSources).toEqual(['sonar-project.properties']);
       });
 
       it("prefers the caller's own resolved auth over the active connection in state", async () => {
