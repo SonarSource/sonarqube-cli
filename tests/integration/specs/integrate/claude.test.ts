@@ -1416,7 +1416,6 @@ describe('integrate claude — interactive feature selection', () => {
       await chooseCustomize(session);
       await session.decline('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
-      await session.accept('Press Enter to install');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
