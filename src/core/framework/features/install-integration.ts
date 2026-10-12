@@ -34,11 +34,21 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { renderCompletionSummary } from './completion-summary.ts';
 import { buildApplications } from './feature-target.ts';
-import { renderInstallPreviewAndConfirm } from './install-preview.ts';
+import {
+  promptInstallConfirmation,
+  promptUseRecommended,
+  renderInstallPreview,
+} from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import { reportFeatureAvailability, resolveFeatureSelection } from './selection.ts';
+import {
+  customizeFeatureSelection,
+  hasCustomizableChoices,
+  reportFeatureAvailability,
+  resolveRecommendedFeatures,
+} from './selection.ts';
 import type {
+  FeatureSelectionResult,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
@@ -97,24 +107,24 @@ export async function installIntegration<TOptions>({
   };
   const applications = await buildApplications(invocation, integration, excludedFeatureIds);
   reportFeatureAvailability(applications, console);
-  const { toInstall, toRemove, declined } = await resolveFeatureSelection(
-    applications,
-    nonInteractive === true,
+  const recommended = resolveRecommendedFeatures(applications);
+  assertFeaturesSelected(recommended, integration.displayName);
+
+  renderInstallPreview(recommended.toInstall, console);
+  console.text('');
+  const featureSelection = await confirmFeatureSelection(
+    recommended,
+    integration.displayName,
+    nonInteractive,
     console,
   );
-  if (toInstall.length === 0 && toRemove.length === 0) {
-    throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
-  }
-
-  console.text('');
-  await renderInstallPreviewAndConfirm(toInstall, nonInteractive, console);
   console.text('');
 
   try {
     const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
       state,
       integration,
-      toInstall,
+      featureSelection.toInstall,
       {
         callbacks: {
           onFeatureApplyStart: (application) => {
@@ -140,7 +150,7 @@ export async function installIntegration<TOptions>({
     const removedFeatures = await integrationInstaller.removeAndRecordFeatures(
       state,
       integration,
-      toRemove,
+      featureSelection.toRemove,
       {
         callbacks: {
           onFeatureRemoveStart: (feature) => {
@@ -163,8 +173,8 @@ export async function installIntegration<TOptions>({
     if (stateSaved) {
       await onSuccess?.({
         installedFeatures,
-        featuresDeclined: declined,
-        featuresUninstalled: toRemove.map((application) => application.feature.id),
+        featuresDeclined: featureSelection.declined,
+        featuresUninstalled: featureSelection.toRemove.map((application) => application.feature.id),
         repoRoot: resolveRepoRootForScope(scope, targetRoot),
       });
     }
@@ -174,6 +184,41 @@ export async function installIntegration<TOptions>({
     saveInstalledFeatures(state, console);
     throw error;
   }
+}
+
+function assertFeaturesSelected<TOptions>(
+  selection: FeatureSelectionResult<TOptions>,
+  displayName: string,
+): void {
+  if (selection.toInstall.length === 0 && selection.toRemove.length === 0) {
+    throw new CommandFailedError(`No feature selected for ${displayName}`);
+  }
+}
+
+async function confirmFeatureSelection<TOptions>(
+  recommended: FeatureSelectionResult<TOptions>,
+  displayName: string,
+  nonInteractive: boolean | undefined,
+  console: Console,
+): Promise<FeatureSelectionResult<TOptions>> {
+  if (nonInteractive === true || recommended.toInstall.length === 0) {
+    return recommended;
+  }
+  if (!hasCustomizableChoices(recommended.toInstall)) {
+    await promptInstallConfirmation(console);
+    return recommended;
+  }
+  if (await promptUseRecommended(console)) {
+    return recommended;
+  }
+  const customized = await customizeFeatureSelection(recommended, console);
+  assertFeaturesSelected(customized, displayName);
+  if (customized.toInstall.length > 0) {
+    console.text('');
+    renderInstallPreview(customized.toInstall, console);
+    await promptInstallConfirmation(console);
+  }
+  return customized;
 }
 
 export function makeContext(
