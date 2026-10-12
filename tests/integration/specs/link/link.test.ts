@@ -156,9 +156,21 @@ describe('sonar link', () => {
       expect(file.project.projectKey).toBe('my_project');
     });
 
-    it('fails when the Cloud connection URL does not resolve to a known region', async () => {
-      // A 'cloud' connection type (inferred from the org) whose serverUrl isn't
-      // a recognized SonarCloud host — cloudRegionFromUrl() can't derive a region.
+    it.each(['https://sc-staging.io', `${SONARCLOUD_URL}:8443`])(
+      'retains the Cloud URL %s in the shared configuration',
+      async (serverUrl) => {
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('link my_project --path .');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, organization: 'my-org', projectKey: 'my_project', path: '.' },
+        });
+      },
+    );
+
+    it('fails when the Cloud connection URL host is not a known Cloud host', async () => {
       harness.withAuth('https://custom-cloud.example.com', 'test-token', 'my-org');
 
       const result = await harness.run('link my_project --path .');

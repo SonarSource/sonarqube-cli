@@ -678,6 +678,7 @@ export class FakeSonarQubeServerBuilder {
   /**
    * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
    * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
+   * An empty string body produces a response with no body at all.
    */
   withSqaaStatusCode(status: number, body?: string): this {
     this.sqaaStatusCode = status;
@@ -1869,6 +1870,9 @@ export class FakeSonarQubeServerBuilder {
           req.method === 'POST'
         ) {
           if (sqaaStatusCode !== undefined) {
+            if (sqaaStatusBody === '') {
+              return new Response('', { status: sqaaStatusCode });
+            }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,
               headers: { 'Content-Type': 'application/json' },
