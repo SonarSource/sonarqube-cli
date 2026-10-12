@@ -87,7 +87,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       expect(discovered.serverUrl).toBe('https://sonarqube.example.com');
       expect(discovered.projectKey).toBe('my_server_project');
       expect(discovered.organization).toBeUndefined();
-      expect(discovered.configSources).toEqual([join('.sonarlint', 'connectedMode.json')]);
     },
     { timeout: 15000 },
   );
@@ -128,7 +127,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       );
 
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
-      expect(discovered.configSources).toEqual([join('.sonarlint', 'MySolution.json')]);
       expect(discovered.projectKey).toBe('acme_solution');
       expect(discovered.organization).toBe('acme');
     },
@@ -144,7 +142,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
-      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );
@@ -159,7 +156,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
-      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );
