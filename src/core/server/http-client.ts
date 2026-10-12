@@ -124,7 +124,7 @@ export class SonarHttpClient {
       return new ServiceUnavailableError();
     }
     if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
-      return await parseBadRequestError(response);
+      return await parseBadRequestError(response, this.isCloud);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
@@ -145,7 +145,7 @@ export class SonarHttpClient {
         return new AccessDeniedError(response.status);
       }
       if (response.status === HTTP_STATUS_BAD_REQUEST) {
-        return await parseBadRequestError(response);
+        return await parseBadRequestError(response, this.isCloud);
       }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
@@ -460,13 +460,15 @@ function apiErrorFallbackMessage(response: Response, text: string, emptyBodyHint
   return `SonarQube API error: ${response.status} ${response.statusText}${suffix}`;
 }
 
-async function parseBadRequestError(response: Response): Promise<BadRequestError> {
+async function parseBadRequestError(
+  response: Response,
+  isCloud: boolean,
+): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = apiErrorFallbackMessage(
-    response,
-    text,
-    'Check the request parameters and organization.',
-  );
+  const emptyBodyHint = isCloud
+    ? 'Check the request parameters and organization.'
+    : 'Check the request parameters.';
+  const fallback = apiErrorFallbackMessage(response, text, emptyBodyHint);
   if (!body) {
     return new BadRequestError(fallback);
   }

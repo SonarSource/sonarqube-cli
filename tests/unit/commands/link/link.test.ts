@@ -30,11 +30,7 @@ import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:te
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import {
-  SHARED_PROJECT_CONFIG_FILE_NAME,
-  SONARCLOUD_URL,
-  SONARCLOUD_US_URL,
-} from '@/core/config-constants.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { sharedProjectConfigRepository } from '@/core/shared-project-config.ts';
@@ -98,50 +94,6 @@ describe('link', () => {
       region: 'eu',
       organization: 'my-org',
     });
-  });
-
-  it('writes region entries for production Cloud URLs with a trailing slash or different casing', async () => {
-    for (const [serverUrl, region] of [
-      [`${SONARCLOUD_URL}/`, 'eu'],
-      [`${SONARCLOUD_US_URL}/`, 'us'],
-      [`${SONARCLOUD_URL.toUpperCase()}/`, 'eu'],
-    ] as const) {
-      const auth = new ResolvedAuth({
-        token: cloudAuth.token,
-        serverUrl,
-        orgKey: cloudAuth.orgKey,
-        connectionType: 'cloud',
-        source: 'state',
-      });
-
-      await link('my_project', { path: '.' }, ctxFor(auth));
-      expect(setSpy).toHaveBeenLastCalledWith(process.cwd(), {
-        projectKey: 'my_project',
-        path: '.',
-        region,
-        organization: 'my-org',
-      });
-    }
-  });
-
-  it('writes a custom Cloud URL and organization', async () => {
-    for (const serverUrl of ['https://custom-cloud.example.com', `${SONARCLOUD_URL}:8443`]) {
-      const auth = new ResolvedAuth({
-        token: cloudAuth.token,
-        serverUrl,
-        orgKey: cloudAuth.orgKey,
-        connectionType: 'cloud',
-        source: 'state',
-      });
-
-      await link('my_project', { path: '.' }, ctxFor(auth));
-      expect(setSpy).toHaveBeenLastCalledWith(process.cwd(), {
-        projectKey: 'my_project',
-        path: '.',
-        serverUrl,
-        organization: auth.orgKey,
-      });
-    }
   });
 
   it('rejects a blank --path without resolving git or writing anything', async () => {

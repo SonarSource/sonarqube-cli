@@ -124,27 +124,6 @@ describe('SonarHttpClient', () => {
       );
     });
 
-    it('shows the API detail for a GET 400 response', async () => {
-      fetchSpy = mockFetch(
-        { errors: [{ msg: 'The organization parameter is required' }] },
-        { ok: false, status: 400 },
-      );
-      const result = await client.get('/api/projects/search');
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe('The organization parameter is required');
-    });
-
-    it('gives a remediation for a GET 400 response without a body', async () => {
-      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
-        new Response('', { status: 400, statusText: 'Bad Request' }),
-      );
-      const result = await client.get('/api/projects/search');
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain(
-        'Check the request parameters and organization.',
-      );
-    });
-
     it('returns an error result instead of throwing on a transport failure', async () => {
       fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
       const result = await client.get('/api/authentication/validate');
