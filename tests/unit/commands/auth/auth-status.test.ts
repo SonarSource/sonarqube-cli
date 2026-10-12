@@ -81,7 +81,6 @@ describe('authStatus with FakeConsole', () => {
   // broken tool and sends people hunting in the wrong place.
   it('warns when the project records a connection the current credentials do not match', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      configSources: [],
       organization: 'another-org',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
@@ -105,7 +104,6 @@ describe('authStatus with FakeConsole', () => {
 
   it('says nothing extra when the project records the same connection', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      configSources: [],
       organization: 'sonarsource',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
@@ -121,7 +119,6 @@ describe('authStatus with FakeConsole', () => {
 
   it('uses the current organization when the project only records the current server', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      configSources: [],
       organization: undefined,
       projectKey: 'a-project',
       projectRoot: process.cwd(),
@@ -137,7 +134,6 @@ describe('authStatus with FakeConsole', () => {
 
   it('uses the current server when the project only records a different organization', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      configSources: [],
       organization: 'another-org',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
@@ -160,7 +156,6 @@ describe('authStatus with FakeConsole', () => {
 
   it('does not warn when the recorded connection has a stored token', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      configSources: [],
       organization: 'another-org',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
