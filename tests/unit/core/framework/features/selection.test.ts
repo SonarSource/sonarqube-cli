@@ -57,43 +57,30 @@ describe('hasCustomizableChoices', () => {
     ['no features', [], false],
     [
       'only required items',
-      [
-        feature('a', { required: true, subfeatures: [subfeature('a1', { required: true })] }),
-        feature('b', { required: true }),
-      ],
+      [feature('a', { required: true, subfeatures: [subfeature('a1', { required: true })] })],
       false,
     ],
     [
-      'a required container with one optional subfeature',
+      'an available optional subfeature',
       [feature('a', { required: true, subfeatures: [subfeature('a1')] })],
+      true,
+    ],
+    ['an optional feature', [feature('a')], true],
+    [
+      'an unavailable optional subfeature',
+      [feature('a', { required: true, subfeatures: [subfeature('a1', { available: false })] })],
       false,
     ],
     [
-      'a required container with two optional subfeatures',
-      [feature('a', { required: true, subfeatures: [subfeature('a1'), subfeature('a2')] })],
-      true,
-    ],
-    ['one optional feature without subfeatures', [feature('a')], false],
-    [
-      'one feature with two available subfeatures',
-      [feature('a', { subfeatures: [subfeature('a1'), subfeature('a2')] })],
-      true,
-    ],
-    [
-      'one feature with one available and one unavailable subfeature',
-      [feature('a', { subfeatures: [subfeature('a1'), subfeature('a2', { available: false })] })],
-      false,
-    ],
-    [
-      'one feature with one available and one unknown subfeature',
+      'an optional subfeature with unknown availability',
       [
         feature('a', {
-          subfeatures: [subfeature('a1'), { ...subfeature('a2'), available: undefined }],
+          required: true,
+          subfeatures: [{ ...subfeature('a1'), available: undefined }],
         }),
       ],
       false,
     ],
-    ['two features', [feature('a'), feature('b')], true],
   ])('%s → %p', (_, features, expected) => {
     expect(hasCustomizableChoices(features)).toBe(expected);
   });
