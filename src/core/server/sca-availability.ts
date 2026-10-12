@@ -90,7 +90,9 @@ export async function checkScaAvailability(
   try {
     return await resolveScaAvailability(client, auth);
   } catch (err) {
-    logger.debug((err as Error).message);
+    const error = err as Error;
+    const cause = error.cause instanceof Error ? `: ${error.cause.message}` : '';
+    logger.debug(`${error.message}${cause}`);
     return { available: undefined };
   }
 }
