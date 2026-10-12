@@ -34,6 +34,8 @@ import { integrateDevin } from './devin';
 import { DEVIN_INTEGRATION_ID } from './devin/declaration.ts';
 import { integrateOpenCode } from './opencode';
 import { OPENCODE_INTEGRATION_ID } from './opencode/declaration.ts';
+import { integratePi } from './pi';
+import { PI_INTEGRATION_ID } from './pi/declaration.ts';
 
 /**
  * Agent integrate handlers the global-integrations migration reruns, keyed by integration id. Git is
@@ -48,4 +50,5 @@ export const AGENT_INTEGRATION_HANDLERS: AgentIntegrationHandlers = {
   [ANTIGRAVITY_INTEGRATION_ID]: integrateAntigravity,
   [OPENCODE_INTEGRATION_ID]: integrateOpenCode,
   [DEVIN_INTEGRATION_ID]: integrateDevin,
+  [PI_INTEGRATION_ID]: integratePi,
 };
