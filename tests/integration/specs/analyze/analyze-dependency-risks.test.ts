@@ -310,7 +310,10 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(output).toContain(
-      'Could not check whether Software Composition Analysis is available for the current connection.',
+      'Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server 2026.4 or later.',
+    );
+    expect(output).toContain(
+      'https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
     );
   });
 
