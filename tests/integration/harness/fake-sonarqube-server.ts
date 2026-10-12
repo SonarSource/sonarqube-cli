@@ -527,6 +527,8 @@ export class FakeSonarQubeServerBuilder {
   private orgsLookupReturnsNotFound = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
+  private projectsSearchErrorStatusCode?: number;
+  private projectsSearchErrorBody?: string;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -675,9 +677,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withProjectsSearchError(statusCode: number, body = ''): this {
+    this.projectsSearchErrorStatusCode = statusCode;
+    this.projectsSearchErrorBody = body;
+    return this;
+  }
+
   /**
    * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
    * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
+   * An empty string body produces a response with no body at all.
    */
   withSqaaStatusCode(status: number, body?: string): this {
     this.sqaaStatusCode = status;
@@ -908,6 +917,8 @@ export class FakeSonarQubeServerBuilder {
       orgsLookupReturnsNotFound,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
+      projectsSearchErrorStatusCode,
+      projectsSearchErrorBody,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -1487,6 +1498,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/components/search' || path === '/api/projects/search') {
+          if (projectsSearchErrorStatusCode !== undefined) {
+            return new Response(projectsSearchErrorBody, { status: projectsSearchErrorStatusCode });
+          }
           const allProjects = [...projects.values()].map((p) => ({
             key: p.key,
             name: p.name,
@@ -1869,6 +1883,9 @@ export class FakeSonarQubeServerBuilder {
           req.method === 'POST'
         ) {
           if (sqaaStatusCode !== undefined) {
+            if (sqaaStatusBody === '') {
+              return new Response('', { status: sqaaStatusCode });
+            }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,
               headers: { 'Content-Type': 'application/json' },
