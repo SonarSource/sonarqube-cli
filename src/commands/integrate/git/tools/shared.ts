@@ -22,15 +22,11 @@ import { platform } from 'node:os';
 
 import { REMOTE_NAME_ENV } from '@/commands/hook/git-pre-push.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type {
-  InstallDecision,
-  IntegrationContext,
-  PostInstallExample,
-} from '@/core/framework/features';
-import { askUser, install, isContainerIntegrationContext, skip } from '@/core/framework/features';
+import type { IntegrationContext, PostInstallExample } from '@/core/framework/features';
+import { isContainerIntegrationContext } from '@/core/framework/features';
 
 import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks.ts';
-import type { GitHookType, IntegrateGitOptions } from '../options.ts';
+import type { GitHookType } from '../options.ts';
 import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures.ts';
 
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
@@ -55,15 +51,6 @@ export function resolveDepRisksArgs(
   return ` --dependency-risks -p ${shellQuote ? shellQuoteBash(projectKey) : projectKey}`;
 }
 
-export function shouldInstallHook(
-  hook: GitHookType,
-  options: IntegrateGitOptions,
-): InstallDecision {
-  if (options.hook !== undefined) {
-    return options.hook === hook ? install() : skip();
-  }
-  return askUser();
-}
 export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
 
 export function resolveSonarHookCommand(hook: GitHookType): string {
