@@ -525,20 +525,20 @@ describe('integrate git (native hooks)', () => {
   );
 
   it(
-    'asks for confirmation when --hook leaves nothing to customize in interactive mode',
+    'allows customizing a single optional hook in interactive mode',
     async () => {
       await setupAuthenticated(harness, { withSecretsBinary: true });
 
       const session = harness.runInteractive('integrate git --hook pre-commit');
       await session.accept('Proceed with global installation?');
-      await session.accept('Press Enter to install');
+      await chooseCustomize(session);
+      await session.accept('Install pre-commit code scanning hook?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Press Enter to install');
-      expect(output).not.toContain('How would you like to proceed?');
-      expect(output).not.toContain('Install pre-commit code scanning hook?');
+      expect(output).toContain('How would you like to proceed?');
+      expect(output).toContain('Install pre-commit code scanning hook?');
       expect(output).not.toContain('Install pre-push code scanning hook?');
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-commit')).toBe(true);
       expect(harness.userHome.exists('.sonar', 'sonarqube-cli', 'hooks', 'pre-push')).toBe(false);
