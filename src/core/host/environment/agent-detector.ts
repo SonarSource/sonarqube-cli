@@ -24,7 +24,7 @@
  */
 
 export type CallerAgent =
-  'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode' | 'devin';
+  'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode' | 'devin' | 'pi';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -70,6 +70,10 @@ export function isOpenCodeAgentEnv(env: NodeJS.ProcessEnv = process.env): boolea
   return Boolean(env.OPENCODE);
 }
 
+export function isPiAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.PI_CODING_AGENT);
+}
+
 /**
  * Devin CLI marker, documented as set in the environment of every hook Devin runs. Devin also runs
  * Claude's hook files, so those hooks execute with this variable set.
@@ -79,12 +83,12 @@ export function isDevinAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Precedence: Codex > Copilot CLI > Devin > Antigravity > OpenCode > Claude Code > Cursor.
+ * Precedence: Codex > Copilot CLI > Devin > Antigravity > OpenCode > Pi > Claude Code > Cursor.
  * Antigravity sets Claude-compat env vars, and Devin runs Claude's hook files, so both must be
- * checked before Claude. OpenCode's `OPENCODE` marker is checked before Claude's
- * and Cursor's generic integrated-terminal markers (`CLAUDE_PROJECT_DIR`, `CURSOR_TRACE_ID`, ...),
- * which OpenCode inherits when launched from inside a Claude Code or Cursor terminal and would
- * otherwise misattribute the caller.
+ * checked before Claude. OpenCode's `OPENCODE` and Pi's `PI_CODING_AGENT` markers are checked
+ * before Claude's and Cursor's generic integrated-terminal markers (`CLAUDE_PROJECT_DIR`,
+ * `CURSOR_TRACE_ID`, ...), which those agents inherit when launched from inside a Claude Code or
+ * Cursor terminal and would otherwise misattribute the caller.
  *
  * @param env - Defaults to `process.env`; inject a custom object for tests.
  */
@@ -94,6 +98,7 @@ export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerA
   if (isDevinAgentEnv(env)) return 'devin';
   if (isAntigravityAgentEnv(env)) return 'antigravity';
   if (isOpenCodeAgentEnv(env)) return 'opencode';
+  if (isPiAgentEnv(env)) return 'pi';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
   return null;
