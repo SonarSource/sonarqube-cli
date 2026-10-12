@@ -20,58 +20,72 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { FeatureAvailability } from '@/core/framework/features/types.ts';
+import logger from '@/core/observability/logger.ts';
+import type { ScaEnablement } from '@/core/server/sca.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 export const MIN_SCA_SQS_VERSION = '2026.4';
 
 /**
- * The one call this module needs, expressed as a plain `Promise<boolean>`. `ScaClient`
+ * The one call this module needs, expressed as a plain `Promise`. `ScaClient`
  * returns `ResultAsync`, so callers collapse it first (e.g. `ScaScanApi` in `sca-api.ts`,
  * or an inline adapter) before handing it here.
  */
 export interface ScaAvailabilityCheck {
-  checkScaEnabled(
+  getScaEnablement(
     connectionType: ResolvedAuth['connectionType'],
     orgKey?: string,
-  ): Promise<boolean>;
+  ): Promise<ScaEnablement>;
+}
+
+export async function checkScaAvailability(
+  client: ScaAvailabilityCheck,
+  auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
+): Promise<FeatureAvailability> {
+  if (auth.connectionType !== 'cloud') {
+    let serverVersion: string;
+    try {
+      serverVersion = await fetchServerVersion(auth.serverUrl);
+    } catch (err) {
+      logger.debug(`Could not determine SonarQube Server version: ${(err as Error).message}`);
+      return { available: undefined };
+    }
+    if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
+      return {
+        available: false,
+        unavailableReason: `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}). Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites`,
+      };
+    }
+  }
+  const enablement = await client.getScaEnablement(auth.connectionType, auth.orgKey);
+  if (enablement === 'check_failed') {
+    return { available: undefined };
+  }
+  if (enablement === 'not_enabled') {
+    return {
+      available: false,
+      unavailableReason:
+        'Software Composition Analysis is not available for the current connection. It must be enabled by an administrator and requires an eligible SonarQube plan. Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca',
+    };
+  }
+  return { available: true };
 }
 
 export async function assertScaAvailable(
   client: ScaAvailabilityCheck,
   auth: Pick<ResolvedAuth, 'connectionType' | 'serverUrl' | 'orgKey'>,
 ): Promise<void> {
-  if (auth.connectionType !== 'cloud') {
-    let serverVersion: string;
-    try {
-      serverVersion = await fetchServerVersion(auth.serverUrl);
-    } catch (err) {
-      throw new CommandFailedError(
-        `Could not determine SonarQube Server version. Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later.`,
-        {
-          cause: err,
-          remediationHint:
-            'Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
-        },
-      );
-    }
-    if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
-      throw new CommandFailedError(
-        `Running Software Composition Analysis from this CLI requires SonarQube Server ${MIN_SCA_SQS_VERSION} or later (server is ${serverVersion}).`,
-        {
-          remediationHint:
-            'Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca#prerequisites',
-        },
-      );
-    }
-  }
-  const enabled = await client.checkScaEnabled(auth.connectionType, auth.orgKey);
-  if (!enabled) {
+  const { available, unavailableReason } = await checkScaAvailability(client, auth);
+  if (available === undefined) {
     throw new CommandFailedError(
-      'Software Composition Analysis is not available for the current connection.',
-      {
-        remediationHint:
-          'Software Composition Analysis must be enabled by an administrator and requires an eligible SonarQube plan. Learn more: https://docs.sonarsource.com/sonarqube-cli/analysis/sca',
-      },
+      'Could not check whether Software Composition Analysis is available for the current connection.',
+    );
+  }
+  if (!available) {
+    throw new CommandFailedError(
+      unavailableReason ??
+        'Software Composition Analysis is not available for the current connection.',
     );
   }
 }
