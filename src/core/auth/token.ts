@@ -42,7 +42,7 @@ const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;
 export const MAX_TOKEN_INPUT_BYTES = 4096;
 
-export type TokenStatus = 'valid' | 'invalid' | 'unreachable';
+type TokenStatus = 'valid' | 'invalid' | 'unreachable';
 
 export interface TokenCheckResult {
   status: TokenStatus;

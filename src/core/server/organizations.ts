@@ -190,17 +190,6 @@ export class OrganizationsClient {
   }
 
   /**
-   * Check if organization exists and is accessible.
-   *
-   * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
-   */
-  isOrganizationAccessible(organizationKey: string): Promise<boolean> {
-    return this.resolveOrganizationAccess(organizationKey).then(
-      (access) => access.status === 'accessible',
-    );
-  }
-
-  /**
    * Fetch a single organization's full record by key via `/api/organizations/search`'s
    * `organizations` filter param, without listing every org the user is a member of.
    * Used by the `sonar import --org` fast path to resolve `alm.key` and
