@@ -21,6 +21,7 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { FeatureAvailability } from '@/core/framework/features/types.ts';
+import logger from '@/core/observability/logger.ts';
 import type { ScaEnablement } from '@/core/server/sca.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
@@ -46,7 +47,8 @@ export async function checkScaAvailability(
     let serverVersion: string;
     try {
       serverVersion = await fetchServerVersion(auth.serverUrl);
-    } catch {
+    } catch (err) {
+      logger.debug(`Could not determine SonarQube Server version: ${(err as Error).message}`);
       return { available: undefined };
     }
     if (!isAtLeast(serverVersion, MIN_SCA_SQS_VERSION)) {
@@ -81,6 +83,9 @@ export async function assertScaAvailable(
     );
   }
   if (!available) {
-    throw new CommandFailedError(unavailableReason ?? '');
+    throw new CommandFailedError(
+      unavailableReason ??
+        'Software Composition Analysis is not available for the current connection.',
+    );
   }
 }
