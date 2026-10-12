@@ -79,6 +79,12 @@ describe('detectInstalledAgents', () => {
     expect(detectInstalledAgents(home)).toEqual(['opencode']);
   });
 
+  it('detects Pi from its own global agent directory', () => {
+    mkdirSync(join(home, '.pi', 'agent'), { recursive: true });
+
+    expect(detectInstalledAgents(home)).toEqual(['pi']);
+  });
+
   it('defaults to the real user home directory when none is given', () => {
     expect(Array.isArray(detectInstalledAgents())).toBe(true);
   });
@@ -98,6 +104,7 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('copilot')).toBe('Copilot');
     expect(agentDisplayName('antigravity')).toBe('Antigravity');
     expect(agentDisplayName('opencode')).toBe('OpenCode');
+    expect(agentDisplayName('pi')).toBe('Pi');
   });
 });
 
