@@ -211,11 +211,13 @@ async function confirmFeatureSelection<TOptions>(
   if (await promptUseRecommended(console)) {
     return recommended;
   }
-  console.text('');
   const customized = await customizeFeatureSelection(recommended, console);
   assertFeaturesSelected(customized, displayName);
-  console.text('');
-  await promptInstallConfirmation(console);
+  if (customized.toInstall.length > 0) {
+    console.text('');
+    renderInstallPreview(customized.toInstall, console);
+    await promptInstallConfirmation(console);
+  }
   return customized;
 }
 
