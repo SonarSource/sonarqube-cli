@@ -27,7 +27,6 @@ import { isValidServerUrl, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
-import { resolveMainWorktreeRoot } from '@/core/host/git/worktree.ts';
 import {
   type FeatureMatch,
   type RecordedFeatureCandidate,
@@ -55,8 +54,8 @@ import { canonicalizePath } from './io/fs-utils.ts';
 import { parseProperties } from './io/properties.ts';
 import logger from './observability/logger.ts';
 
-export const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
-export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
+const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
+const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 /** Local config files found at exactly one directory — no git, no root resolution. */
 interface LocalProjectConfig {
@@ -76,12 +75,8 @@ export interface DiscoveredProject {
   organization?: string;
   /** Current git worktree root, or undefined outside git. Not a stand-in for `projectRoot` — a monorepo's project is routinely a subdirectory of the repo. */
   repoRoot?: string;
-  /** The repository's main working tree, or undefined outside git — same regardless of which worktree resolved it. */
-  mainRepoRoot?: string;
   /** Where `sonar integrate` was run for the matched mapping/feature (its own `targetRoot`), possibly a different worktree; undefined when nothing in state matched. */
   integrationDir?: string;
-  /** Config files that contributed to the discovered project, in order found. */
-  configSources: string[];
 }
 
 export interface DiscoverProjectOptions {
@@ -177,7 +172,6 @@ export async function discoverProject(
   const invocationDir = canonicalizePath(startDir);
   const config: DiscoveredProject = {
     projectRoot: invocationDir, // stay in place unless a source below resolves something more specific
-    configSources: [],
   };
 
   try {
@@ -190,11 +184,6 @@ export async function discoverProject(
     logger.debug(
       `Project discovery lookup paths (nearest first): ${lookupPaths.map((p) => p.checkPath).join(', ')}`,
     );
-
-    // Cache hit, not a second spawn: resolveLookupPaths() already resolved this above.
-    config.mainRepoRoot = isGit
-      ? ((await resolveMainWorktreeRoot(invocationDir)) ?? repoRoot)
-      : undefined;
 
     const resolved =
       (await applySharedProjectConfig(config, lookupPaths, options)) ||
@@ -270,7 +259,6 @@ function applyLocalSonarProperties(
     return;
   }
 
-  config.configSources.push('sonar-project.properties');
   config.serverUrl = selectValidServerUrl(undefined, local.sonarPropsData.hostURL);
   config.projectKey = local.sonarPropsData.projectKey;
   config.organization = local.sonarPropsData.organization;
@@ -294,7 +282,6 @@ function applySonarLintConfig(
     return !!config.projectKey;
   }
 
-  config.configSources.push(local.sonarLintConfigPath);
   config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
@@ -348,7 +335,6 @@ function applySharedProjectConfigEntry(
   mapping: SharedProjectConfigMapping,
   options: DiscoverProjectOptions,
 ): void {
-  config.configSources.push(SHARED_PROJECT_CONFIG_SOURCE);
   config.projectKey = mapping.projectKey;
   config.serverUrl = selectValidServerUrl(undefined, mapping.serverUrl);
   config.organization = mapping.organization;
@@ -469,7 +455,6 @@ function applyKnownServerProjectMapping(
     return false;
   }
 
-  config.configSources.push(KNOWN_SERVER_PROJECT_MAPPING_SOURCE);
   config.projectKey = match.feature.projectKey;
   config.serverUrl = serverUrl;
   config.organization = orgKey;
@@ -514,7 +499,6 @@ async function applyGitRemoteBinding(
     return;
   }
 
-  config.configSources.push(GIT_REMOTE_BINDING_SOURCE);
   config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
