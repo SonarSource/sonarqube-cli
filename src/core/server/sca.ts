@@ -51,7 +51,7 @@ export class ScaClient {
 
   /**
    * Query Sonar Advanced Security (SCA) enablement on the connected server.
-   * SonarCloud exposes this at `/sca/feature-enabled?organization=<key>`
+   * SonarQube Cloud exposes this at `/sca/feature-enabled?organization=<key>`
    * (api.sonarcloud.io); SonarQube Server at `/api/v2/sca/feature-enabled`.
    *
    * Returns a 3-state value so callers can distinguish "not enabled" (a definitive
