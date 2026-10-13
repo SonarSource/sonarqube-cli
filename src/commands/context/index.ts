@@ -228,6 +228,9 @@ export async function runContextPassthrough(
     });
 
     if (stdinPayload !== undefined) {
+      child.stdin?.on('error', () => {
+        // A child that stops reading its input (EPIPE) reports the outcome through its own exit code.
+      });
       child.stdin?.end(stdinPayload);
     }
   });
