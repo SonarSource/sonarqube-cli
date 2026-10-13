@@ -32,7 +32,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';

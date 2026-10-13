@@ -30,7 +30,7 @@ import {
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { SharedProjectConfigRepositoryImpl } from '@/core/shared-project-config.ts';
+import { SharedProjectConfigRepositoryImpl } from '@/core/project-discovery/shared-project-config.ts';
 
 function tempDir(name: string): string {
   const dir = join(tmpdir(), `shared-project-config-ut-${name}-${Date.now()}`);

@@ -37,7 +37,10 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 
 export interface McpRunOptions {
   debug?: boolean;

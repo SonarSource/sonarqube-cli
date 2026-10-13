@@ -27,13 +27,16 @@ import {
   type RecordedFeatureCandidate,
   selectFeatureForLookupPaths,
 } from '@/core/host/recorded-feature-resolver.ts';
+import logger from '@/core/observability/logger.ts';
 import {
   buildKnownServerProjectMappings,
   mergeKnownServerProjectMappings,
-} from '@/core/known-server-project-mappings.ts';
-import logger from '@/core/observability/logger.ts';
-import { formatConfigFields } from '@/core/project-discovery-format.ts';
-import type { DiscoveredProject, DiscoverProjectOptions } from '@/core/project-info.ts';
+} from '@/core/project-discovery/known-server-project-mappings.ts';
+import { formatConfigFields } from '@/core/project-discovery/project-discovery-format.ts';
+import type {
+  DiscoveredProject,
+  DiscoverProjectOptions,
+} from '@/core/project-discovery/project-info.ts';
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
