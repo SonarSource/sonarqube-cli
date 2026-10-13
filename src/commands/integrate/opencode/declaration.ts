@@ -27,10 +27,7 @@ import type {
 } from '@/core/framework/features';
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import { createContextAugmentationSkillSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
@@ -121,7 +118,6 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
     {
       id: SONAR_SECRETS_HOOKS_FEATURE_ID,
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       postInstallExample: secretsScanningExample(OPENCODE_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
       dependencies: [sonarSecretsBinaryDependency],
