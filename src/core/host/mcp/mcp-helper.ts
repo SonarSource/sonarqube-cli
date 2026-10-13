@@ -18,8 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -51,6 +59,7 @@ export interface McpContainerCommand {
   command: string;
   args: string[];
   env: Record<string, string>;
+  cachedCaCertPath?: string;
 }
 export interface McpServerOptions {
   debug?: boolean;
@@ -171,6 +180,54 @@ export function clientCertCachePath(clientCert: ClientCertConfig): string {
 const DOCKER_READABLE = 0o644;
 const NON_TRAVERSABLE = 0o700;
 
+export function caCertCachePath(contents: Buffer): string {
+  const certHash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+  return join(CLI_TMP_DIR, `mcp-ca-${certHash}-${process.pid}-${randomUUID()}.crt`);
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+function removeOrphanedCaCertCopies(): void {
+  for (const name of readdirSync(CLI_TMP_DIR)) {
+    const match = /^mcp-ca-[0-9a-f]{16}-(\d+)-[0-9a-f-]{36}\.crt$/.exec(name);
+    if (!match) {
+      continue;
+    }
+    const pid = Number(match[1]);
+    if (!Number.isSafeInteger(pid) || pid === process.pid || isProcessRunning(pid)) {
+      continue;
+    }
+    try {
+      rmSync(join(CLI_TMP_DIR, name), { force: true });
+    } catch {
+      // A container runtime can still hold this file on Windows; retry on the next run.
+    }
+  }
+}
+
+function resolveCaCertMount(path: string): { hostPath: string; cachedPath?: string } {
+  let contents: Buffer;
+  try {
+    contents = readFileSync(path);
+  } catch {
+    return { hostPath: normalizePath(path) };
+  }
+
+  const cachedPath = caCertCachePath(contents);
+  mkdirSync(dirname(cachedPath), { recursive: true, mode: NON_TRAVERSABLE });
+  removeOrphanedCaCertCopies();
+  writeFileSync(cachedPath, contents, { flag: 'wx' });
+  chmodSync(cachedPath, DOCKER_READABLE);
+  return { hostPath: normalizePath(cachedPath), cachedPath };
+}
+
 function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
   if (clientCert.format === 'pkcs12') {
     return {
@@ -213,8 +270,8 @@ function buildDockerRunArgsAndEnv(
   mountSource: string | undefined,
   options: McpServerOptions,
   network: ResolvedNetworkConfig,
-  certMountSources: { caCert?: string; clientCert?: string } = {},
-): { args: string[]; env: Record<string, string> } {
+  certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {},
+): { args: string[]; env: Record<string, string>; cachedCaCertPath?: string } {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -259,14 +316,10 @@ function buildDockerRunArgsAndEnv(
   env.SONARQUBE_TOOLSETS = toolsets;
 
   const javaOpts: string[] = [];
+  let cachedCaCertPath: string | undefined;
 
   if (network.proxy) {
     javaOpts.push(...collectProxyJavaOpts(network.proxy));
-  }
-
-  if (network.caCert) {
-    const hostPath = certMountSources.caCert ?? normalizePath(network.caCert.path);
-    args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
   }
 
   if (network.clientCert) {
@@ -276,6 +329,14 @@ function buildDockerRunArgsAndEnv(
     javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
   }
 
+  if (network.caCert) {
+    const mount = certMountSources.caCert
+      ? { hostPath: certMountSources.caCert, cachedPath: certMountSources.cachedCaCertPath }
+      : resolveCaCertMount(network.caCert.path);
+    args.push('-v', `${mount.hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+    cachedCaCertPath = mount.cachedPath;
+  }
+
   if (javaOpts.length > 0) {
     args.push('-e', 'JAVA_OPTS');
     env.JAVA_OPTS = javaOpts.join(' ');
@@ -283,7 +344,7 @@ function buildDockerRunArgsAndEnv(
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
-  return { args, env };
+  return cachedCaCertPath ? { args, env, cachedCaCertPath } : { args, env };
 }
 
 export function getMcpContainerCommand(
@@ -294,8 +355,8 @@ export function getMcpContainerCommand(
   network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
-  return { command: runtime, args, env };
+  const config = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
+  return { command: runtime, ...config };
 }
 
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
@@ -315,12 +376,11 @@ function getMcpWslContainerCommand(
   // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
   // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
   // it as "$VAR" (quoted to handle spaces) in the docker run args.
-  const certMountSources: { caCert?: string; clientCert?: string } = {};
+  const certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {};
   const wslPathEnv: Record<string, string> = {};
 
   if (network.caCert) {
     certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
-    wslPathEnv[WSL_CA_PATH_ENV_VAR] = normalizePath(network.caCert.path);
   }
 
   if (network.clientCert) {
@@ -332,7 +392,7 @@ function getMcpWslContainerCommand(
     wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
   }
 
-  const { args, env } = buildDockerRunArgsAndEnv(
+  const config = buildDockerRunArgsAndEnv(
     auth,
     context,
     mountSource,
@@ -340,6 +400,14 @@ function getMcpWslContainerCommand(
     network,
     certMountSources,
   );
+  const { args, env } = config;
+  let cachedCaCertPath: string | undefined;
+
+  if (network.caCert) {
+    const mount = resolveCaCertMount(network.caCert.path);
+    wslPathEnv[WSL_CA_PATH_ENV_VAR] = mount.hostPath;
+    cachedCaCertPath = mount.cachedPath;
+  }
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
@@ -355,7 +423,12 @@ function getMcpWslContainerCommand(
 
   env.WSLENV = wslenv.join(':');
 
-  return { command: 'wsl.exe', args: ['sh', '-c', [runtime, ...args].join(' ')], env };
+  return {
+    command: 'wsl.exe',
+    args: ['sh', '-c', [runtime, ...args].join(' ')],
+    env,
+    ...(cachedCaCertPath ? { cachedCaCertPath } : {}),
+  };
 }
 
 export function resolveMcpContainerCommand(
