@@ -126,6 +126,8 @@ import type { HookCommandResult } from './hook/hook-command-result.ts';
 import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
 import { opencodePostToolUse } from './hook/opencode-post-tool-use.ts';
 import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
+import { piChatMessage } from './hook/pi-chat-message.ts';
+import { piPreToolUse } from './hook/pi-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
 import { supportedIntegrations } from './integrate';
@@ -615,7 +617,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   integrateCommand
     .command('pi', { hidden: true })
-    .description('Setup SonarQube integration for Pi.')
+    .description('Setup SonarQube integration for Pi. This will install secrets scanning hooks.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
       new SonarOption(
@@ -1045,6 +1047,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'OpenCode tool.execute.after handler: run Vortex analysis after agent edits or writes a file',
     )
     .anonymousAction(handleHookInvocation(opencodePostToolUse));
+
+  hookCommand
+    .command('pi-pre-tool-use')
+    .description('Pi tool_call handler: scan files for secrets before agent reads them')
+    .anonymousAction(handleHookInvocation(piPreToolUse));
+
+  hookCommand
+    .command('pi-chat-message')
+    .description('Pi message_end handler: mask secrets in a user message before it is sent')
+    .anonymousAction(handleHookInvocation(piChatMessage));
 
   hookCommand
     .command('claude-post-tool-use')

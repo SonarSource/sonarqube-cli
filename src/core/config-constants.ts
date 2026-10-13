@@ -303,6 +303,8 @@ export const SECRETS_CALLER_COMMANDS = {
   cursorPreToolUse: 'cursor-pre-tool-use',
   opencodePreToolUse: 'opencode-pre-tool-use',
   opencodeChatMessage: 'opencode-chat-message',
+  piPreToolUse: 'pi-pre-tool-use',
+  piChatMessage: 'pi-chat-message',
 } as const;
 
 /** Union of the valid sonar-secrets `caller_command` values. */
@@ -325,6 +327,7 @@ export const SECRETS_STOP_POINT_BY_CALLER_COMMAND: Readonly<Record<string, strin
   [SECRETS_CALLER_COMMANDS.cursorPreFileRead]: 'file-read',
   [SECRETS_CALLER_COMMANDS.cursorPreToolUse]: 'file-read',
   [SECRETS_CALLER_COMMANDS.opencodePreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.piPreToolUse]: 'file-read',
 };
 
 // ---------------------------------------------------------------------------
