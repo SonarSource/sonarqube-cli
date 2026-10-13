@@ -617,7 +617,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   integrateCommand
     .command('pi', { hidden: true })
-    .description('Setup SonarQube integration for Pi.')
+    .description('Setup SonarQube integration for Pi. This will install secrets scanning hooks.')
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
       new SonarOption(
