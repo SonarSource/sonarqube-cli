@@ -1,0 +1,137 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Integration tests for `sonar integrate devin`.
+
+import { join, relative } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
+
+import { TestHarness } from '../../harness';
+import { buildHomeEnv } from '../../harness/platform';
+
+// Devin's config dir is per-OS (~/.config/devin, %APPDATA%\devin on Windows); resolve it with the
+// same env the harness gives the CLI so the test sets up what the detector will look for.
+function writeDevinConfig(harness: TestHarness): void {
+  const home = harness.userHome.path;
+  const configDir = resolveDevinConfigDir(home, buildHomeEnv(home));
+  harness.userHome.writeFile(join(relative(home, configDir), 'config.json'), '{}');
+}
+
+describe('integrate devin', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+    await harness.newFakeBinariesServer().start();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'is hidden from help output but still runs when typed explicitly',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const rootHelp = await harness.run('');
+      const integrateHelp = await harness.run('integrate --help');
+      expect(rootHelp.stdout).not.toMatch(/devin/i);
+      expect(integrateHelp.stdout + integrateHelp.stderr).not.toMatch(/devin/i);
+
+      const result = await harness.run('integrate devin --non-interactive');
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain('No feature selected for Devin');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'rejects the project and global scope options',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const project = await harness.run('integrate devin -p my-project --non-interactive');
+      const global = await harness.run('integrate devin -g --non-interactive');
+
+      expect(project.exitCode).not.toBe(0);
+      expect(global.exitCode).not.toBe(0);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'is not offered in the bare integrate agent picker',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).not.toContain('Devin');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not list Devin as detected while its integration is unreleased',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.userHome.writeFile('.codex/config.toml', '');
+      writeDevinConfig(harness);
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Detected agents on your machine: Codex');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).not.toContain('Devin');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not warn about a Claude and Devin conflict while Devin is unreleased',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.userHome.writeFile('.claude.json', '{}');
+      writeDevinConfig(harness);
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).not.toContain('Devin');
+    },
+    { timeout: 15000 },
+  );
+});
