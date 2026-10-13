@@ -25,6 +25,7 @@ import { claudeIntegration } from './claude/declaration.ts';
 import { codexIntegration } from './codex/declaration.ts';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { cursorIntegration } from './cursor/declaration.ts';
+import { devinIntegration } from './devin/declaration.ts';
 import { GIT_INTEGRATIONS } from './git/tools';
 import { openCodeIntegration } from './opencode/declaration.ts';
 
@@ -35,6 +36,7 @@ export const ALL_INTEGRATIONS = [
   codexIntegration,
   cursorIntegration,
   openCodeIntegration,
+  devinIntegration,
   ...GIT_INTEGRATIONS,
 ] as const;
 
