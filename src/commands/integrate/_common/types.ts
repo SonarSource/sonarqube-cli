@@ -24,8 +24,6 @@ export interface IntegrateAgentOptions {
   nonInteractive?: boolean;
   /** Set by the bare `sonar integrate` router; forwarded to telemetry only. */
   isFromRouter?: boolean;
-  /** Used by Vortex. */
-  projectRoot?: string;
   vortexDisposition?: VortexDisposition;
 }
 

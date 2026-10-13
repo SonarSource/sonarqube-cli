@@ -37,11 +37,10 @@ export async function integrateOpenCode(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate opencode --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('OpenCode', auth, console);
+  await displayAgentIntegratePrelude('OpenCode', auth, console);
 
   await finalizeAgentInstall<OpenCodeIntegrationOptions>({
     integrationId: OPENCODE_INTEGRATION_ID,
-    context: integrateCtx,
     options,
     auth,
     ctx,
