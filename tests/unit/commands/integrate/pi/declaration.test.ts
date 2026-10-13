@@ -30,10 +30,6 @@ describe('piIntegration', () => {
     expect(piIntegration.displayName).toBe('Pi');
   });
 
-  it('declares no feature yet', () => {
-    expect(piIntegration.features).toHaveLength(0);
-  });
-
   it('is registered with the supported integrations', () => {
     expect(supportedIntegrations.get(PI_INTEGRATION_ID)).toBe(piIntegration);
   });
