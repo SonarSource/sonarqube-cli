@@ -28,10 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -120,7 +117,6 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       postInstallExample: secretsScanningExample('Cursor'),
       dependencies: [sonarSecretsBinaryDependency],

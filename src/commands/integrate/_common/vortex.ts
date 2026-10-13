@@ -36,7 +36,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
-import { VORTEX_FEATURE_BENEFIT, VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
+import { VORTEX_FEATURE_PREVIEW } from './feature-constants.ts';
 import type { IntegrateAgentOptions, VortexDisposition } from './types.ts';
 
 export const VORTEX_FEATURE_ID = 'vortex';
@@ -77,7 +77,6 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   return {
     id: VORTEX_FEATURE_ID,
     displayName: 'Vortex',
-    benefitDescription: VORTEX_FEATURE_BENEFIT,
     previewDescription: VORTEX_FEATURE_PREVIEW,
     isAvailable: vortexAvailability,
     replacedIds: subfeatureIds,
