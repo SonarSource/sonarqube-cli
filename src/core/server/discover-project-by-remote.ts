@@ -21,8 +21,14 @@
 import type { ResolvedAuth } from '../auth/auth-resolver.ts';
 import { getGitRemote } from '../host/git/discover.ts';
 import logger from '../observability/logger.ts';
-import { formatConfigFields, selectValidServerUrl } from '../project-discovery-format.ts';
-import type { DiscoveredProject, DiscoverProjectOptions } from '../project-info.ts';
+import {
+  formatConfigFields,
+  selectValidServerUrl,
+} from '../project-discovery/project-discovery-format.ts';
+import type {
+  DiscoveredProject,
+  DiscoverProjectOptions,
+} from '../project-discovery/project-info.ts';
 import { SonarHttpClient } from './http-client.ts';
 import { ProjectBindingsClient } from './project-bindings.ts';
 

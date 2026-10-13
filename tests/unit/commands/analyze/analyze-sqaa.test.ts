@@ -33,7 +33,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -188,7 +188,7 @@ describe('analyzeSqaa: auth resolution', () => {
 
 // Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
 // lives entirely inside discoverProject/selectFeatureForLookupPaths, which this
-// suite mocks away via discoverProjectSpy — see tests/unit/core/project-info.test.ts
+// suite mocks away via discoverProjectSpy — see tests/unit/core/project-discovery/project-info.test.ts
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {

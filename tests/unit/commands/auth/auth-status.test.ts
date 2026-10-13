@@ -27,7 +27,7 @@ import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as keychain from '@/core/host/keychain.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getDefaultState } from '@/core/state/state.ts';
