@@ -22,9 +22,11 @@ import { spawn } from 'node:child_process';
 import {
   appendFileSync,
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -75,12 +77,13 @@ for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); 
 L "done, target exists: $(Test-Path -LiteralPath $env:${DELETE_TARGET_ENV})"
 `;
   const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
+  const logPath = process.env[DIAGNOSTIC_LOG_ENV];
+  const helperOutput = logPath ? openSync(logPath, 'a') : 'ignore';
   const child = spawn(
     windowsPowerShellPath(),
     ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedScript],
     {
-      detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', helperOutput, helperOutput],
       windowsHide: true,
       env: {
         SystemRoot: process.env.SystemRoot ?? String.raw`C:\Windows`,
@@ -95,6 +98,9 @@ L "done, target exists: $(Test-Path -LiteralPath $env:${DELETE_TARGET_ENV})"
   child.on('exit', (code, signal) => {
     logDiagnostic(`helper exited code=${String(code)} signal=${String(signal)}`);
   });
+  if (typeof helperOutput === 'number') {
+    closeSync(helperOutput);
+  }
   logDiagnostic(`spawned helper pid=${String(child.pid)} for ${path}`);
   child.unref();
 }
