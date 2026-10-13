@@ -63,6 +63,21 @@ describe('sonar context passthrough', () => {
     await harness.dispose();
   });
 
+  it('reports failed input delivery when the context child exits before reading', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), 'expected-token', ORG_KEY);
+    harness.state().withContextAugmentationBinaryInstalled();
+
+    const result = await harness.runWithStdin(
+      'hook claude-post-tool-use-failure',
+      'input'.repeat(1_000_000),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain('EPIPE');
+    expect(readInvocations(harness)).toHaveLength(1);
+  });
+
   it.each([
     [
       'forwards args verbatim and injects Sonar context env from auth',
