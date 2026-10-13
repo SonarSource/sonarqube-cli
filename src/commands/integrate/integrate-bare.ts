@@ -38,6 +38,8 @@ import { integrateCopilot } from './copilot';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration.ts';
+import { integrateFactory } from './factory';
+import { factoryIntegration } from './factory/declaration.ts';
 import { integrateGit } from './git';
 import {
   HUSKY_INTEGRATION_ID,
@@ -65,6 +67,7 @@ const TOOLS: { label: string; handler: Handler }[] = [
   { label: cursorIntegration.displayName, handler: integrateCursor },
   { label: antigravityIntegration.displayName, handler: integrateAntigravity },
   { label: openCodeIntegration.displayName, handler: integrateOpenCode },
+  { label: factoryIntegration.displayName, handler: integrateFactory },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
   { label: 'Git', handler: integrateGit },
@@ -78,6 +81,7 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [cursorIntegration.id]: cursorIntegration.displayName,
   [antigravityIntegration.id]: antigravityIntegration.displayName,
   [openCodeIntegration.id]: openCodeIntegration.displayName,
+  [factoryIntegration.id]: factoryIntegration.displayName,
   [NATIVE_GIT_INTEGRATION_ID]: 'Git',
   [HUSKY_INTEGRATION_ID]: 'Git',
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',

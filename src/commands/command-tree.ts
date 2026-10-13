@@ -135,6 +135,7 @@ import { integrateClaude } from './integrate/claude';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
+import { integrateFactory } from './integrate/factory';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
@@ -611,6 +612,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate opencode' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
+
+  integrateCommand
+    .command('factory')
+    .description('Setup SonarQube integration for Factory. MCP server support is added separately.')
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateFactory(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
