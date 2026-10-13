@@ -119,7 +119,7 @@ export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE =
 export const VORTEX_UNINSTALL_MESSAGE =
   'Vortex is no longer available. Removing the existing Vortex integration.';
 
-export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement; skipping.';
+export const VORTEX_CHECK_FAILED_MESSAGE = 'Could not determine Vortex entitlement, skipping.';
 
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
   'The Vortex usage limit has been reached. Installing it anyway. Vortex will resume once usage resets.';
