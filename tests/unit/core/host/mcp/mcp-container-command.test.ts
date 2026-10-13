@@ -19,7 +19,16 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
@@ -29,6 +38,7 @@ import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-cons
 import type { ClientCertConfig, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
 import {
+  caCertCachePath,
   getMcpContainerCommand,
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
@@ -57,6 +67,20 @@ const CLOUD_US_AUTH = new ResolvedAuth({
 });
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
+
+function withCaCertificate(assertMount: (sourcePath: string, cachedPath: string) => void): void {
+  const sourceDir = mkdtempSync(join(tmpdir(), 'sonar-mcp-ca-'));
+  const sourcePath = join(sourceDir, 'corp-ca.pem');
+  const contents = Buffer.from('test CA certificate');
+  const cachedPath = caCertCachePath(contents);
+  writeFileSync(sourcePath, contents);
+  try {
+    assertMount(sourcePath, cachedPath);
+  } finally {
+    rmSync(sourceDir, { recursive: true, force: true });
+    rmSync(cachedPath, { force: true });
+  }
+}
 
 describe('getMcpContainerConfig', () => {
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
@@ -394,6 +418,54 @@ describe('resolveMcpContainerCommand (via WSL)', () => {
     expect(config.args[2]).toContain('-e SONARQUBE_PROJECT_KEY');
     expect(config.env.SONARQUBE_PROJECT_KEY).toBe('my-project');
     expect(config.env.WSLENV).toContain('SONARQUBE_PROJECT_KEY/u');
+  });
+});
+
+describe('getMcpContainerCommand — CA cert mount', () => {
+  it('mounts a readable cached copy of the CA certificate', () => {
+    withCaCertificate((sourcePath, cachedPath) => {
+      const config = getMcpContainerCommand(
+        ON_PREMISE_AUTH,
+        'docker',
+        { withFsMount: false },
+        {},
+        {
+          proxy: null,
+          caCert: { source: 'sonar-env', explicit: true, path: sourcePath },
+          clientCert: null,
+        },
+      );
+
+      expect(config.args).toContain(
+        `${normalizePath(cachedPath)}:/usr/local/share/ca-certificates/sonar-ca.crt:ro`,
+      );
+      expect(config.cachedCaCertPath).toBe(cachedPath);
+      expect(config.args.join(' ')).not.toContain(sourcePath);
+      expect(readFileSync(cachedPath)).toEqual(readFileSync(sourcePath));
+      if (process.platform !== 'win32') {
+        expect(statSync(cachedPath).mode & 0o777).toBe(0o644);
+        expect(statSync(dirname(cachedPath)).mode & 0o777).toBe(0o700);
+      }
+    });
+  });
+
+  it('keeps the original mount path when the CA cannot be read', () => {
+    const sourcePath = join(tmpdir(), 'missing-sonar-mcp-ca.pem');
+    const config = getMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      'docker',
+      { withFsMount: false },
+      {},
+      {
+        proxy: null,
+        caCert: { source: 'sonar-env', explicit: true, path: sourcePath },
+        clientCert: null,
+      },
+    );
+
+    expect(config.args).toContain(
+      `${normalizePath(sourcePath)}:/usr/local/share/ca-certificates/sonar-ca.crt:ro`,
+    );
   });
 });
 
