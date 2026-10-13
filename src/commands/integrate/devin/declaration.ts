@@ -18,8 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationDeclaration } from '@/core/framework/features';
+import { join } from 'node:path';
 
+import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
+
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 
 export const DEVIN_INTEGRATION_ID = 'devin';
@@ -27,10 +31,23 @@ const DEVIN_DISPLAY_NAME = 'Devin';
 
 export type DevinIntegrationOptions = IntegrateAgentOptions;
 
-// No features yet: until the epic CLI-1250 features land, `sonar integrate devin` fails with
-// "No feature selected for Devin" because the framework rejects an integration with no feature.
+const DEVIN_MCP_CONFIG_FILE = 'mcp_config.json';
+
+export function resolveDevinMcpConfigPath(
+  context: IntegrationContext,
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return join(resolveDevinConfigDir(context.targetRoot, env, platform), DEVIN_MCP_CONFIG_FILE);
+}
+
 export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> = {
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
-  features: [],
+  features: [
+    createMcpServerFeature<DevinIntegrationOptions>({
+      resolveConfigPath: resolveDevinMcpConfigPath,
+      alwaysGlobal: true,
+    }),
+  ],
 };
