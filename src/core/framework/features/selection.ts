@@ -180,13 +180,10 @@ async function resolveAvailableFeatureAction<TOptions>(
 }
 
 async function confirmInstall(
-  feature: Pick<FeatureDeclaration, 'displayName' | 'benefitDescription'>,
+  feature: Pick<FeatureDeclaration, 'displayName'>,
   console: Console,
 ): Promise<boolean> {
-  const question = feature.benefitDescription
-    ? `Install ${feature.displayName}? (${feature.benefitDescription})`
-    : `Install ${feature.displayName}?`;
-  const confirmed = await console.confirmPrompt(question, true);
+  const confirmed = await console.confirmPrompt(`Install ${feature.displayName}?`, true);
   if (confirmed === null) {
     throw new CommandFailedError('Installation cancelled');
   }
