@@ -280,7 +280,7 @@ describe('authStatus with FakeConsole', () => {
       await authStatus({ format: 'json' }, ctx);
       expect(process.exitCode).toBe(1);
     } finally {
-      process.exitCode = originalExitCode;
+      process.exitCode = originalExitCode ?? 0;
     }
     const printed = fake.calls.find((c) => c.method === 'print');
     expect(printed).toBeDefined();
