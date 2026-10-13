@@ -144,7 +144,7 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(written).toHaveLength(1);
     expect(produced).toBeLessThan(5);
 
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
   });
 
@@ -176,7 +176,7 @@ describe('spawnProcess stdin, against a mocked child', () => {
     // The generator is returned rather than abandoned, so anything it holds is released.
     expect(cleanedUp).toBe(true);
 
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
   });
 
@@ -204,7 +204,7 @@ describe('spawnProcess stdin, against a mocked child', () => {
 
     const running = spawnProcess('child', [], { stdin: 'pipe', stdinData: 'hello' });
     await Bun.sleep(10);
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
 
     expect(Buffer.concat(written).toString()).toBe('hello');
