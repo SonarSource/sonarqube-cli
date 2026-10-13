@@ -61,6 +61,7 @@ export async function cursorPreToolUse(ctx: CommandInvocationContext): Promise<H
   }
 
   const agentSessionId = payload.conversation_id ?? null;
+  ctx.setAgentSessionId(agentSessionId);
 
   if (payload.tool_name !== 'Read') return { agentSessionId };
 
