@@ -28,6 +28,8 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import type { SqaaProject } from './sqaa-types.ts';
+
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
   '  --staged          analyze only staged files\n' +
@@ -38,14 +40,14 @@ const LARGE_CHANGESET_HINT =
 /**
  * Outcome of resolving a connection + project key for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
- * - `resolved`: usable connection and project key.
+ * - `resolved`: usable connection, project key, and the root that key is anchored at.
  * - `no-org`: Cloud is authenticated but has no organization. `explicitProject` tells the
  *   caller whether the user named a project, which is what makes this fatal rather than a skip.
  * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaResolution =
-  | { kind: 'resolved'; connection: SonarConnection; projectKey: string }
+  | ({ kind: 'resolved'; connection: SonarConnection } & SqaaProject)
   | { kind: 'no-org'; explicitProject: boolean }
   | { kind: 'no-project' };
 
@@ -61,43 +63,53 @@ export type SqaaResolution =
  */
 export async function resolveSqaaConnectionAndProject(
   connection: SonarConnection,
-  explicitProject: string | undefined,
+  project: string | SqaaProject | undefined,
   console: Console,
-  projectRoot?: string,
+  startDir?: string,
 ): Promise<SqaaResolution> {
   const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
-    return { kind: 'no-org', explicitProject: Boolean(explicitProject) };
+    return { kind: 'no-org', explicitProject: Boolean(project) };
   }
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, console, projectRoot));
-  if (!projectKey) return { kind: 'no-project' };
+  const resolved =
+    typeof project === 'object'
+      ? project
+      : await discoverSqaaProject(auth, console, project, startDir ?? process.cwd());
+  if (!resolved) return { kind: 'no-project' };
 
-  noteProject(auth, projectKey);
-  return { kind: 'resolved', connection, projectKey };
+  noteProject(auth, resolved.projectKey);
+  return { kind: 'resolved', connection, ...resolved };
 }
 
 /**
- * Look up the project key for the current project via the shared project-discovery
- * pipeline (`discoverProject`): the known-server-project-mapping cache, local config
- * files, then a git-remote-binding lookup against the server. Falls back to
- * `process.cwd()` when no `projectRoot` is given so the single-file path still
- * works, including from a subdirectory or outside git.
+ * Resolves the key and the root A3S paths must be relative to. An explicit key
+ * skips git-remote binding, the only source that calls the server, and keeps the discovered
+ * root only when discovery found that same key: another project's root would misbase paths.
  */
-export async function resolveSqaaProjectKey(
+async function discoverSqaaProject(
   auth: ResolvedAuth,
   console: Console,
-  projectRoot?: string,
-): Promise<string | null> {
-  const discovered = await discoverProject(projectRoot ?? process.cwd(), {
-    auth,
+  explicitKey: string | undefined,
+  startDir: string,
+): Promise<SqaaProject | null> {
+  const discovered = await discoverProject(startDir, {
+    auth: explicitKey === undefined ? auth : null,
     silent: true,
     console,
   });
-  if (!discovered.projectKey) {
+  const projectKey = explicitKey ?? discovered.projectKey;
+  if (!projectKey) {
     logger.debug('Vortex analysis skipped: no project key found');
+    return null;
   }
-  return discovered.projectKey ?? null;
+  if (discovered.projectKey === projectKey) {
+    return { projectKey, projectRoot: discovered.projectRoot };
+  }
+  logger.debug(
+    `Project ${projectKey} is not the discovered ${discovered.projectKey ?? 'project'}; paths are relative to ${startDir}`,
+  );
+  return { projectKey, projectRoot: startDir };
 }
 
 /**

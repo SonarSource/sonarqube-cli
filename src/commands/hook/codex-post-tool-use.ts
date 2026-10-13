@@ -66,7 +66,7 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   }
   const { auth } = connection;
 
-  const { projectKey } = await discoverProject(process.cwd(), {
+  const { projectKey, projectRoot } = await discoverProject(process.cwd(), {
     auth,
     silent: true,
     console: ctx.console,
@@ -79,7 +79,12 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   let report: SqaaJsonReport | null;
   try {
     report = await buildSqaaJsonReport(
-      { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
+      {
+        discoveredProject: { projectKey, projectRoot },
+        force: true,
+        format: 'json',
+        forcedDepth: 'STANDARD',
+      },
       connection,
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,

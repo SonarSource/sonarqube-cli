@@ -30,7 +30,7 @@ import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-mess
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
-import { runAnalyses } from './sqaa-analysis.ts';
+import { runAnalyses, withDisplayPath } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
@@ -57,6 +57,7 @@ import type {
   SingleFileRunOptions,
   SqaaBatchRunOptions,
   SqaaResolvedContext,
+  SqaaRunPaths,
 } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -159,18 +160,16 @@ function displaySingleFileReport(
 }
 
 export async function runSqaaAnalysesTallyForResolved(
-  files: string[],
-  allPaths: string[],
+  paths: SqaaRunPaths,
   resolved: SqaaResolvedContext,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
   console: Console,
 ): Promise<RunTally> {
-  const silentProgress = new SqaaProgress({ files: allPaths, silent: true, console });
+  const silentProgress = new SqaaProgress({ files: paths.allPaths, silent: true, console });
   const ctx: RunContext = {
-    files,
-    allPaths,
+    ...paths,
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -181,22 +180,38 @@ export async function runSqaaAnalysesTallyForResolved(
   return runAnalyses(ctx);
 }
 
+/**
+ * `projectRoot` is required rather than defaulted: it is the base the wire path is relative
+ * to, and a silent `process.cwd()` fallback would misbase it.
+ * The returned report keeps cwd-relative paths, which is what the user should read.
+ */
 export async function fetchSingleFileReport(
   connection: SonarConnection,
   projectKey: string,
   file: string,
   fileContent: string,
-  branch?: string,
-  wireDepth?: SqaaDeepWireDepth,
-  displayDepth: SqaaAnalysisDepth = 'STANDARD',
+  branch: string | undefined,
+  options: {
+    projectRoot: string;
+    wireDepth?: SqaaDeepWireDepth;
+    displayDepth?: SqaaAnalysisDepth;
+  },
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
-  const filePath = toRelativePosixPath(file);
+  const { projectRoot, wireDepth, displayDepth = 'STANDARD' } = options;
+  const wirePath = toRelativePosixPath(file, projectRoot);
+  const filePath = toRelativePosixPathOrNull(file, process.cwd()) ?? wirePath;
   try {
     const response = await fetchWithRetry(connection, projectKey, file, fileContent, branch, {
+      pathBase: projectRoot,
       analysisDepth: wireDepth,
     });
     return {
-      report: singleFileSuccessReport(filePath, response.issues, response.errors, displayDepth),
+      report: singleFileSuccessReport(
+        filePath,
+        withDisplayPath(response.issues, filePath),
+        response.errors,
+        displayDepth,
+      ),
     };
   } catch (err) {
     const error = err as Error;
@@ -233,20 +248,16 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  const { connection, projectKey } = resolved;
+  const { connection, projectKey, projectRoot } = resolved;
   const { auth } = connection;
   const fileContent = readSqaaFileContent(file);
 
   const { result: fetchResult, durationMs } = await timed(() =>
-    fetchSingleFileReport(
-      connection,
-      projectKey,
-      file,
-      fileContent,
-      branch,
+    fetchSingleFileReport(connection, projectKey, file, fileContent, branch, {
+      projectRoot,
       wireDepth,
       displayDepth,
-    ),
+    }),
   );
   const { report, error } = fetchResult;
   const filePath = toRelativePosixPath(file);
@@ -280,12 +291,14 @@ export async function runSqaaAnalysisOnExplicitFiles(
   const cwd = process.cwd();
   const files = entries.map((e) => e.absolutePath);
   const allPaths = files.map((f) => toRelativePosixPath(f, cwd));
+  // Throws for a file outside the project: the user named it explicitly, so a silent skip
+  // would be worse than telling them it cannot be analyzed against this project.
+  const wirePaths = files.map((f) => toRelativePosixPath(f, resolved.projectRoot));
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
       runSqaaAnalysesTallyForResolved(
-        files,
-        allPaths,
+        { files, allPaths, wirePaths },
         resolved,
         branch,
         wireDepth,
@@ -303,6 +316,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
   const ctx: RunContext = {
     files,
     allPaths,
+    wirePaths,
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -332,14 +346,16 @@ export async function runSqaaAnalysisOnFiles(
     console,
   } = options;
   const { files, ignored, repoRoot } = changeSet;
-  const { connection, projectKey } = resolved;
+  const { connection, projectKey, projectRoot } = resolved;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  // Safe to throw-relativize: `excludeFilesOutsideProject` has already removed every file
+  // that has no path relative to the project root.
+  const wirePaths = files.map((f) => toRelativePosixPath(f, projectRoot));
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
       runSqaaAnalysesTallyForResolved(
-        files,
-        allPaths,
+        { files, allPaths, wirePaths },
         resolved,
         branch,
         wireDepth,
@@ -364,6 +380,7 @@ export async function runSqaaAnalysisOnFiles(
   const ctx: RunContext = {
     files,
     allPaths,
+    wirePaths,
     connection,
     projectKey,
     branch,

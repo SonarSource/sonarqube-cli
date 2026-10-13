@@ -42,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized' | 'outside-repository';
+  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -91,6 +91,39 @@ export async function resolveChangeSet(
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
   return { files, ignored: [...outsideIgnored, ...binaryIgnored, ...oversizedIgnored], repoRoot };
+}
+
+/**
+ * Moves change-set files that sit outside `projectRoot` into `ignored`.
+ *
+ * A change set is resolved against the git repository, but a project can be anchored in a
+ * subdirectory of it. A file outside that subdirectory has no path relative to the project
+ * root, so A3S could not restore its context even if we sent one — reporting it
+ * as excluded is honest, where sending a repository-relative path only looked like coverage.
+ *
+ * Kept separate from `resolveChangeSet` because the project root is discovered *from* the
+ * repository root this returns, so the filter cannot run until resolution has happened.
+ */
+export function excludeFilesOutsideProject(
+  changeSet: ChangeSetResult,
+  projectRoot: string,
+): ChangeSetResult {
+  const canonicalRoot = canonicalizePath(projectRoot);
+  const inProject: string[] = [];
+  const outsideProject: IgnoredFile[] = [];
+  for (const file of changeSet.files) {
+    if (isAncestorOrSelf(canonicalRoot, canonicalizePath(file))) {
+      inProject.push(file);
+    } else {
+      outsideProject.push({ path: file, reason: 'outside-project' });
+    }
+  }
+
+  return {
+    ...changeSet,
+    files: inProject,
+    ignored: [...changeSet.ignored, ...outsideProject],
+  };
 }
 
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */

@@ -77,11 +77,16 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
-function makeDiscoveredProject(projectKey: string | undefined) {
+/**
+ * discoverProject result carrying just enough for `resolveSqaaConnectionAndProject` to
+ * resolve `projectKey`. `projectRoot` defaults to the repository root but must be
+ * overridable: the two diverge for a project anchored in a subdirectory, which is the only
+ * configuration that can detect a wrongly based file path.
+ */
+function makeDiscoveredProject(projectKey: string | undefined, projectRoot = process.cwd()) {
   return {
     repoRoot: process.cwd(),
-    projectRoot: process.cwd(),
+    projectRoot,
     projectKey,
     configSources: [],
   };
@@ -273,6 +278,83 @@ describe('analyzeSqaa: path normalization', () => {
     const request = createAnalysisSpy.mock.calls[0][0];
     expect(request.files[0].path).toBe('python/scripts/check_md_code_blocks.py');
   });
+  it('sends the path relative to the project root, not the invocation directory', async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, join(process.cwd(), 'packages', 'foo')),
+    );
+
+    await analyzeSqaa({ file: ['packages/foo/src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.files[0].path).toBe('src/index.ts');
+  });
+
+  it('keeps the discovered root for --project when discovery found that same project', async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, join(process.cwd(), 'packages', 'foo')),
+    );
+
+    await analyzeSqaa(
+      { file: ['packages/foo/src/index.ts'], project: TEST_PROJECT },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
+
+    expect(createAnalysisSpy.mock.calls[0][0].files[0].path).toBe('src/index.ts');
+    expect(discoverProjectSpy.mock.calls[0][1].auth).toBeNull();
+  });
+
+  it("ignores another project's root when --project names a different project", async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject('other-project', join(process.cwd(), 'packages', 'foo')),
+    );
+
+    await analyzeSqaa(
+      { file: ['packages/foo/src/index.ts'], project: TEST_PROJECT },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
+
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.projectKey).toBe(TEST_PROJECT);
+    expect(request.files[0].path).toBe('packages/foo/src/index.ts');
+  });
+
+  it('reuses a discovered project instead of running discovery again', async () => {
+    await buildSqaaJsonReport(
+      {
+        file: ['packages/foo/src/index.ts'],
+        discoveredProject: {
+          projectKey: TEST_PROJECT,
+          projectRoot: join(process.cwd(), 'packages', 'foo'),
+        },
+      },
+      FAKE_AUTHENTICATED_CONTEXT.connection,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
+
+    expect(discoverProjectSpy).not.toHaveBeenCalled();
+    expect(createAnalysisSpy.mock.calls[0][0].files[0].path).toBe('src/index.ts');
+  });
+
+  it('reports issues under the displayed path, not the path sent to A3S', async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, join(process.cwd(), 'packages', 'foo')),
+    );
+    createAnalysisSpy.mockResolvedValue({
+      id: 'analysis-1',
+      issues: [{ rule: 'ts:S1', message: 'issue', filePath: 'src/index.ts', id: '1' }],
+      errors: null,
+    });
+
+    const report = await buildSqaaJsonReport(
+      { file: ['packages/foo/src/index.ts'] },
+      FAKE_AUTHENTICATED_CONTEXT.connection,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
+
+    expect(report?.files[0].path).toBe('packages/foo/src/index.ts');
+    expect(report?.files[0].issues[0].filePath).toBe('packages/foo/src/index.ts');
+  });
+
   it('throws InvalidOptionError when file is outside the current working directory', async () => {
     const differentDrive =
       process.platform === 'win32'
@@ -461,6 +543,41 @@ describe('analyzeSqaa: change-set mode', () => {
 
     expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy.mock.calls[0][0].analysisDepth).toBe('DEEP');
+  });
+
+  it('sends change-set paths relative to the project root, not the repository root', async () => {
+    const projectRoot = join(process.cwd(), 'packages', 'foo');
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(TEST_PROJECT, projectRoot));
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [join(projectRoot, 'src', 'index.ts')],
+      ignored: [],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(createAnalysisSpy.mock.calls[0][0].files[0].path).toBe('src/index.ts');
+  });
+
+  it('excludes a change-set file that sits outside the project root', async () => {
+    const projectRoot = join(process.cwd(), 'packages', 'foo');
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(TEST_PROJECT, projectRoot));
+    const outside = join(process.cwd(), 'tools', 'script.ts');
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [join(projectRoot, 'src', 'index.ts'), outside],
+      ignored: [],
+      repoRoot: process.cwd(),
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
+
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.files.map((f: { path: string }) => f.path)).toEqual(['src/index.ts']);
+    // Reported as excluded, displayed relative to the repository root the user ran from.
+    const output = fake.calls.map((c) => String(c.args[0])).join('\n');
+    expect(output).toContain('tools/script.ts');
+    expect(output).toContain('IGNORED');
   });
 
   it('does not abort when an ignored change-set file is outside the repository', async () => {
