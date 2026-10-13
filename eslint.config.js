@@ -115,9 +115,14 @@ export default tseslint.config(
           patterns: [
             {
               group: ['**/config-constants.ts'],
-              importNames: ['TELEMETRY_ENDPOINT', 'TELEMETRY_API_KEY', 'SENTRY_DSN'],
+              importNames: ['TELEMETRY_ENDPOINT', 'SENTRY_DSN'],
               message:
                 'Telemetry/Sentry destinations are confined to src/core/telemetry/telemetry-events.ts and src/core/observability/sentry.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+            },
+            {
+              group: ['**/telemetry-ingest-key.ts'],
+              message:
+                'The telemetry ingest key is confined to src/core/telemetry/telemetry-events.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
             },
           ],
         },
