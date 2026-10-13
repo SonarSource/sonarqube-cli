@@ -20,29 +20,94 @@
 
 import type { IntegrationScope } from '@/core/state/state.ts';
 
-import type { FeatureApplication, FeatureDeclaration, IntegrationInvocation } from './types.ts';
+import { findInstalledFeature } from './installation-recorder.ts';
+import type {
+  FeatureApplication,
+  FeatureAvailability,
+  FeatureDeclaration,
+  IntegrationDeclaration,
+  IntegrationInvocation,
+  SubfeatureApplication,
+  SubfeatureDeclaration,
+} from './types.ts';
+import { isFeatureContainer } from './types.ts';
 
 /**
  * Resolve every feature into a {@link FeatureApplication} for the invocation,
- * pairing the declaration with its resolved target root and scope plus the
- * invocation's auth/force/attrs.
+ * pairing the declaration with its resolved target root and scope, the
+ * invocation's auth/force/attrs, recorded install state and availability.
  */
 export async function buildApplications<TOptions>(
   invocation: IntegrationInvocation<TOptions>,
-  features: FeatureDeclaration<TOptions>[],
+  integration: IntegrationDeclaration<TOptions>,
+  excludedFeatureIds: readonly string[] = [],
 ): Promise<FeatureApplication<TOptions>[]> {
   const applications: FeatureApplication<TOptions>[] = [];
-  for (const feature of features) {
+  for (const feature of integration.features) {
+    if (excludedFeatureIds.includes(feature.id)) {
+      continue;
+    }
+    const targetRoot = await resolveFeatureTargetRoot(invocation, feature);
+    const scope = await resolveFeatureScope(invocation, feature);
+    const installedFeature = findInstalledFeature(
+      invocation.state,
+      { scope, targetRoot },
+      integration,
+      feature,
+    );
+    const { available, unavailableReason } = await checkAvailability(invocation, feature);
     applications.push({
       feature,
-      targetRoot: await resolveFeatureTargetRoot(invocation, feature),
-      scope: await resolveFeatureScope(invocation, feature),
+      targetRoot,
+      scope,
       auth: invocation.auth,
       force: invocation.force,
       attrs: invocation.attrs,
+      installed: installedFeature !== undefined,
+      available,
+      unavailableReason,
+      subfeatureApplications: isFeatureContainer(feature)
+        ? await buildSubfeatureApplications(
+            invocation,
+            feature.subfeatures,
+            available,
+            installedFeature?.subfeatures?.map((recorded) => recorded.featureId) ?? [],
+          )
+        : [],
     });
   }
   return applications;
+}
+
+async function buildSubfeatureApplications<TOptions>(
+  invocation: IntegrationInvocation<TOptions>,
+  subfeatures: SubfeatureDeclaration<TOptions>[],
+  containerAvailable: boolean | undefined,
+  recordedIds: readonly string[],
+): Promise<SubfeatureApplication<TOptions>[]> {
+  const applications: SubfeatureApplication<TOptions>[] = [];
+  for (const subfeature of subfeatures) {
+    // Not checked while the container is unavailable or unknown: it cannot install them.
+    const { available, unavailableReason } =
+      containerAvailable === true
+        ? await checkAvailability(invocation, subfeature)
+        : { available: undefined, unavailableReason: undefined };
+    applications.push({
+      subfeature,
+      installed: recordedIds.includes(subfeature.id),
+      available,
+      unavailableReason,
+      active: false,
+    });
+  }
+  return applications;
+}
+
+async function checkAvailability<TOptions>(
+  invocation: IntegrationInvocation<TOptions>,
+  declaration: Pick<FeatureDeclaration<TOptions>, 'isAvailable'>,
+): Promise<FeatureAvailability> {
+  return (await declaration.isAvailable?.(invocation)) ?? { available: true };
 }
 
 /**

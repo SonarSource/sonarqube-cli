@@ -249,7 +249,7 @@ describe('analyze dependency-risks', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain(
-      'Software Composition Analysis is not available for the current connection.',
+      'Could not check whether Software Composition Analysis is available for the current connection.',
     );
   });
 
