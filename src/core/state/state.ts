@@ -28,7 +28,7 @@ import { randomUUID } from 'node:crypto';
 import type { CallerAgent } from '@/core/host/environment/agent-detector.ts';
 
 /**
- * Region for SonarCloud instances
+ * Region for SonarQube Cloud instances
  */
 export type CloudRegion = 'eu' | 'us';
 
@@ -137,7 +137,7 @@ export interface BaseAgentExtension {
   global: boolean;
   /** SonarQube project key associated with this extension, if known */
   projectKey?: string;
-  /** Organization key (SonarCloud only) */
+  /** Organization key (SonarQube Cloud only) */
   orgKey?: string;
   /** Server URL */
   serverUrl?: string;

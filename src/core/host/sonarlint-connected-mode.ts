@@ -29,7 +29,7 @@ import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../config-constants.ts';
 export interface SonarLintConfig {
   serverURL: string;
   projectKey: string;
-  /** Present for SonarCloud bindings only. */
+  /** Present for SonarQube Cloud bindings only. */
   organization?: string;
 }
 
