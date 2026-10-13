@@ -209,11 +209,8 @@ export async function runContextPassthrough(
       env,
       argv0: SONAR_CONTEXT_INVOCATION,
     });
-    let stdinBroken = false;
-    let spawnFailed = false;
 
     child.on('error', (err: NodeJS.ErrnoException) => {
-      spawnFailed = true;
       if (err.code === 'ENOENT') {
         reject(
           new CommandFailedError('Vortex Context is not installed.', {
@@ -225,20 +222,14 @@ export async function runContextPassthrough(
         reject(err);
       }
     });
-    child.on('close', (code) => {
-      // A failed spawn still emits 'close' (with a negative code), which must not overwrite the rejection's exit code.
-      if (spawnFailed) return;
-      process.exitCode = stdinBroken ? code || 1 : (code ?? 1);
+    child.on('exit', (code) => {
+      process.exitCode = code ?? 1;
       resolve();
     });
 
     if (stdinPayload !== undefined) {
-      child.stdin?.on('error', (error: NodeJS.ErrnoException) => {
-        if (error.code === 'EPIPE') {
-          stdinBroken = true;
-        } else {
-          reject(error);
-        }
+      child.stdin?.on('error', () => {
+        // A child that stops reading its input (EPIPE) reports the outcome through its own exit code.
       });
       child.stdin?.end(stdinPayload);
     }
