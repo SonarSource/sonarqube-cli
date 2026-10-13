@@ -39,7 +39,7 @@ Each command lives in `src/commands/`. The command tree is built by `createComma
 The rest of this documentation loads on demand, never at session start. Content whose scope is a directory is a nested `CLAUDE.md`, pulled in when Claude reads a file in that directory. Content whose callers do not line up with a directory is a `.claude/rules/` file with a `paths:` list, pulled in when Claude reads a file that list matches.
 
 - `src/commands/CLAUDE.md` — command framework (lifecycle stages, telemetry recording, root help) and per-command notes.
-- `src/commands/integrate/CLAUDE.md` — agent secrets hooks and Vortex (SQAA + Context Augmentation) across Claude, Codex, Cursor, Copilot and Antigravity.
+- `src/commands/integrate/CLAUDE.md` — agent integration behavior, including Factory's MCP-only scope and secrets hooks and Vortex (SQAA + Context Augmentation) for other agents.
 - `src/commands/quality-gate/CLAUDE.md` — `quality-gate status`, including file/directory scoping.
 - `src/core/framework/CLAUDE.md` — the declarative integration engine behind `sonar integrate`.
 - `src/core/telemetry/CLAUDE.md` — events, egress, identity resolution, `project_uuid`, `arguments`.
