@@ -128,6 +128,22 @@ function openCodeMcpState(targetRoot: string): Record<string, unknown> {
   });
 }
 
+function devinMcpState(targetRoot: string): Record<string, unknown> {
+  return baseState({
+    integrations: {
+      installed: [
+        makeInstallEntry('test-id', 'devin', 'mcp-server', targetRoot, [
+          makeResource(
+            'mcp-config',
+            'json-patch',
+            join(targetRoot, '.config', 'devin', 'mcp_config.json'),
+          ),
+        ]),
+      ],
+    },
+  });
+}
+
 function mcpStateWithFeature(targetRoot: string, mcpConfigPath: string): Record<string, unknown> {
   return baseState({
     integrations: {
@@ -768,6 +784,22 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('NOT CONFIGURED');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows MCP configured when valid Devin mcp_config.json exists',
+    async () => {
+      harness.userHome.writeFile(join('.config', 'devin', 'mcp_config.json'), VALID_MCP_CONFIG);
+      harness.state().withRawState(JSON.stringify(devinMcpState(harness.userHome.path)));
+
+      const result = await harness.run('system status');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Devin');
+      expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).not.toContain('NOT CONFIGURED');
     },
     { timeout: 15000 },
   );
