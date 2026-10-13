@@ -39,9 +39,7 @@ import {
 } from '@/core/framework/features';
 
 import {
-  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
@@ -99,7 +97,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
       postInstallExample: secretsScanningExample('Antigravity'),
       dependencies: [sonarSecretsBinaryDependency],
@@ -143,7 +140,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-project-rules',
       displayName: 'prompt-secrets workspace rules',
-      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       isAvailable: ({ scope }) => ({ available: scope === 'project' }),
       resources: [
@@ -167,7 +163,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-global-rules',
       displayName: 'prompt-secrets global rules',
-      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       isAvailable: ({ scope }) => ({ available: scope === 'global' }),
       resources: [
