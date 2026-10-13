@@ -18,10 +18,49 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
-import { PI_INTEGRATION_ID, piIntegration } from '@/commands/integrate/pi/declaration.ts';
+import {
+  PI_INTEGRATION_ID,
+  piIntegration,
+  resolvePiSecretsExtensionPath,
+} from '@/commands/integrate/pi/declaration.ts';
+import {
+  PI_EXTENSION_MANAGED_MARKER,
+  PI_SECRETS_EXTENSION_CONTENT,
+} from '@/commands/integrate/pi/secrets-extension-content.ts';
+import type { IntegrationContext } from '@/core/framework/features';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
+function fakeContext(scope: IntegrationContext['scope'], targetRoot: string): IntegrationContext {
+  return {
+    targetRoot,
+    scope,
+    attrs: {},
+    state: {} as never,
+    executionMode: 'install',
+    console: new FakeConsole(),
+    resolvedDependencies: new Map(),
+  };
+}
+
+describe('resolvePiSecretsExtensionPath', () => {
+  it('writes to ~/.pi/agent/extensions for the global scope', () => {
+    expect(resolvePiSecretsExtensionPath(fakeContext('global', '/home/jonathan'))).toBe(
+      join('/home/jonathan', '.pi', 'agent', 'extensions', 'sonar-secrets.ts'),
+    );
+  });
+
+  it('writes to <project>/.pi/extensions for the project scope', () => {
+    expect(resolvePiSecretsExtensionPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'extensions', 'sonar-secrets.ts'),
+    );
+  });
+});
 
 describe('piIntegration', () => {
   it('is declared as the pi integration, displayed as Pi', () => {
@@ -30,11 +69,37 @@ describe('piIntegration', () => {
     expect(piIntegration.displayName).toBe('Pi');
   });
 
-  it('declares no feature yet', () => {
-    expect(piIntegration.features).toHaveLength(0);
+  it('declares the secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
+    const feature = piIntegration.features.find(
+      (candidate) => candidate.id === 'sonar-secrets-hooks',
+    );
+
+    expect(feature?.dependencies).toHaveLength(1);
+    expect(feature?.resources).toHaveLength(1);
   });
 
   it('is registered with the supported integrations', () => {
     expect(supportedIntegrations.get(PI_INTEGRATION_ID)).toBe(piIntegration);
+  });
+});
+
+describe('PI_SECRETS_EXTENSION_CONTENT', () => {
+  it('wires tool_call to the pi-pre-tool-use hook subcommand', () => {
+    expect(PI_SECRETS_EXTENSION_CONTENT).toContain("'tool_call'");
+    expect(PI_SECRETS_EXTENSION_CONTENT).toContain('pi-pre-tool-use');
+  });
+
+  it('wires message_end to the pi-chat-message hook subcommand', () => {
+    expect(PI_SECRETS_EXTENSION_CONTENT).toContain("'message_end'");
+    expect(PI_SECRETS_EXTENSION_CONTENT).toContain('pi-chat-message');
+  });
+
+  it('carries the managed marker so the file can be removed safely', () => {
+    expect(PI_SECRETS_EXTENSION_CONTENT).toContain(PI_EXTENSION_MANAGED_MARKER);
+  });
+
+  it('is valid, parseable TypeScript', () => {
+    const transpiler = new Bun.Transpiler({ loader: 'ts' });
+    expect(() => transpiler.transformSync(PI_SECRETS_EXTENSION_CONTENT)).not.toThrow();
   });
 });
