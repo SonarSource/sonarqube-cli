@@ -34,12 +34,7 @@ import {
   createSecretsSubfeature,
   gitHookPreview,
 } from '../git-integration-subfeatures.ts';
-import {
-  gitCombinedHookExample,
-  gitHookExample,
-  LEGACY_HOOK_MARKER,
-  shouldInstallHook,
-} from '../shared.ts';
+import { gitCombinedHookExample, gitHookExample, LEGACY_HOOK_MARKER } from '../shared.ts';
 import { getHuskyBeginMarker, getHuskySnippetContent } from './shell-fragments.ts';
 
 export function getHuskyEndMarker(hook: GitHookType): string {
@@ -67,7 +62,6 @@ function createHuskyFeature(
     id: `${hook}-hook`,
     displayName: `${hook} code scanning hook`,
     previewDescription: gitHookPreview(hook),
-    shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [
       textSnippet({
