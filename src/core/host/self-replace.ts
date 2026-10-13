@@ -40,7 +40,7 @@ const DELETE_ON_REBOOT_SCRIPT = `
 $sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
 public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);'
 Add-Type -MemberDefinition $sig -Name 'Win32MoveFile' -Namespace 'NativeMethods'
-if (-not [NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, $null, ${MOVEFILE_DELAY_UNTIL_REBOOT})) {
+if (-not [NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, [NullString]::Value, ${MOVEFILE_DELAY_UNTIL_REBOOT})) {
   exit [Runtime.InteropServices.Marshal]::GetLastWin32Error()
 }
 `;
