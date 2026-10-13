@@ -23,7 +23,7 @@
 import { checkTokenStatus, type TokenCheckResult, type TokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { GitRepo } from '@/core/host/git/hooks.ts';
-import type { DiscoveredProject } from '@/core/project-info.ts';
+import type { DiscoveredProject } from '@/core/project-discovery/project-info.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';

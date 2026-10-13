@@ -24,12 +24,17 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { LookupPath } from '@/core/host/git/lookup-path-resolver.ts';
+import { loadSonarLintConfig, type SonarLintConfig } from '@/core/host/sonarlint-connected-mode.ts';
 import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
-import { formatConfigFields, selectValidServerUrl } from '@/core/project-discovery-format.ts';
-import type { DiscoveredProject, DiscoverProjectOptions } from '@/core/project-info.ts';
-
-import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
+import {
+  formatConfigFields,
+  selectValidServerUrl,
+} from '@/core/project-discovery/project-discovery-format.ts';
+import type {
+  DiscoveredProject,
+  DiscoverProjectOptions,
+} from '@/core/project-discovery/project-info.ts';
 
 export interface SonarProperties {
   hostURL: string;

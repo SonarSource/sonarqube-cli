@@ -30,7 +30,7 @@ import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {

@@ -25,24 +25,23 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
 import { resolveMainWorktreeRoot } from '@/core/host/git/worktree.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import {
   applyKnownServerProjectMapping,
   collectKnownRoots,
   loadKnownMappings,
-} from '@/core/known-server-project-mapping-resolution.ts';
-import { applyLocalConfigAcrossLookupPaths } from '@/core/local-project-config.ts';
-import { formatConfigFields } from '@/core/project-discovery-format.ts';
-import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.ts';
+} from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
+import { applyLocalConfigAcrossLookupPaths } from '@/core/project-discovery/local-project-config.ts';
+import { formatConfigFields } from '@/core/project-discovery/project-discovery-format.ts';
 import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
-} from '@/core/shared-project-config.ts';
+} from '@/core/project-discovery/shared-project-config.ts';
+import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { canonicalizePath, isAncestorOrSelf } from './io/fs-utils.ts';
-import logger from './observability/logger.ts';
-
-export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/known-server-project-mapping-resolution.ts';
+export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
 export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 export interface DiscoveredProject {

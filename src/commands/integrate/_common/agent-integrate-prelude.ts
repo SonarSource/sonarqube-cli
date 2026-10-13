@@ -24,7 +24,7 @@ import { homedir } from 'node:os';
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
+import { type DiscoveredProject, discoverProject } from '@/core/project-discovery/project-info.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
 
