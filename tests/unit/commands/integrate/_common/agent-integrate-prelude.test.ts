@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import type { DiscoveredProject } from '@/core/project-info.ts';
+import type { DiscoveredProject } from '@/core/project-discovery/project-info.ts';
 
 import {
   assertSonarCloudOrganization,

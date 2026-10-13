@@ -30,7 +30,7 @@ import {
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { SharedProjectConfigRepositoryImpl } from '@/core/shared-project-config.ts';
+import { SharedProjectConfigRepositoryImpl } from '@/core/project-discovery/shared-project-config.ts';
 
 function tempDir(name: string): string {
   const dir = join(tmpdir(), `shared-project-config-ut-${name}-${Date.now()}`);
@@ -329,6 +329,130 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
     try {
       expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('SharedProjectConfigFileRepository.loadAll', () => {
+  it('resolves a legacy single "project" field as a one-element array', async () => {
+    const dir = tempDir('load-all-legacy');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: '.',
+    });
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().loadAll(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: dir,
+          projectKey: 'x',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves every entry in a "projects" array (monorepo)', async () => {
+    const dir = tempDir('load-all-projects');
+    mkdirSync(join(dir, 'project1'));
+    mkdirSync(join(dir, 'project2'));
+    writeConfig(
+      dir,
+      JSON.stringify({
+        projects: [
+          { serverUrl: 'https://sq.example', projectKey: 'proj1', path: 'project1' },
+          { serverUrl: 'https://sq.example', projectKey: 'proj2', path: 'project2' },
+        ],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().loadAll(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, 'project1')),
+          projectKey: 'proj1',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+        {
+          projectRoot: canonicalizePath(join(dir, 'project2')),
+          projectKey: 'proj2',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prefers "projects" over a stray "project" field when both are present', async () => {
+    const dir = tempDir('load-all-precedence');
+    writeConfig(
+      dir,
+      JSON.stringify({
+        project: { serverUrl: 'https://sq.example', projectKey: 'legacy', path: '.' },
+        projects: [{ serverUrl: 'https://sq.example', projectKey: 'monorepo', path: '.' }],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().loadAll(dir);
+      expect(mappings.map((m) => m.projectKey)).toEqual(['monorepo']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips an individually-invalid entry inside "projects" without dropping the others', async () => {
+    const dir = tempDir('load-all-partial-invalid');
+    mkdirSync(join(dir, 'project2'));
+    writeConfig(
+      dir,
+      JSON.stringify({
+        projects: [
+          { serverUrl: 'https://sq.example', projectKey: 'missing-path' },
+          { serverUrl: 'https://sq.example', projectKey: 'proj2', path: 'project2' },
+        ],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().loadAll(dir);
+      expect(mappings.map((m) => m.projectKey)).toEqual(['proj2']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an empty array when the file is missing', async () => {
+    const dir = tempDir('load-all-missing');
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().loadAll(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an empty array for invalid JSON', async () => {
+    const dir = tempDir('load-all-bad-json');
+    writeConfig(dir, '{ not valid json ]');
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().loadAll(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an empty array when "projects" is present but not an array', async () => {
+    const dir = tempDir('load-all-projects-not-array');
+    writeConfig(dir, JSON.stringify({ projects: 'nope' }));
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().loadAll(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

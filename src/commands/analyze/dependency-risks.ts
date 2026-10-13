@@ -27,7 +27,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
-import { resolveProjectKey } from '@/core/project-info.ts';
+import { resolveProjectKey } from '@/core/project-discovery/project-info.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 

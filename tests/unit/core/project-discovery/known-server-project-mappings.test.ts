@@ -23,7 +23,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   buildKnownServerProjectMappings,
   mergeKnownServerProjectMappings,
-} from '@/core/known-server-project-mappings.ts';
+} from '@/core/project-discovery/known-server-project-mappings.ts';
 import type {
   AuthConnection,
   CliState,

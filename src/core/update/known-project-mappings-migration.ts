@@ -29,7 +29,7 @@
 import {
   buildKnownServerProjectMappings,
   mergeKnownServerProjectMappings,
-} from '@/core/known-server-project-mappings.ts';
+} from '@/core/project-discovery/known-server-project-mappings.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
 import logger from '../observability/logger.ts';
