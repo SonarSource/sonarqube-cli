@@ -49,7 +49,7 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
