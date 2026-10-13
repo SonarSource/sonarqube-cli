@@ -22,7 +22,7 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
 import * as readline from 'node:readline';
@@ -98,9 +98,12 @@ function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
   };
 }
 
-function makeFakeChild(exitCode = 0): childProcess.ChildProcess {
+function makeFakeChild(exitCode = 0, beforeExit?: () => void): childProcess.ChildProcess {
   const emitter = new EventEmitter();
-  setImmediate(() => emitter.emit('exit', exitCode));
+  setImmediate(() => {
+    beforeExit?.();
+    emitter.emit('exit', exitCode);
+  });
   return emitter as unknown as childProcess.ChildProcess;
 }
 
@@ -396,6 +399,44 @@ describe('runMcp', () => {
       rmSync(cachedPath, { force: true });
     }
   });
+
+  it('deletes the cached CA certificate after the MCP container exits', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    const sourceDir = mkdtempSync(join(os.tmpdir(), 'sonar-mcp-ca-cleanup-'));
+    const sourcePath = join(sourceDir, 'corp-ca.pem');
+    const contents = Buffer.from('cleanup-test-ca');
+    let cachedPath = '';
+    let cachedAtExit = false;
+    writeFileSync(sourcePath, contents);
+    spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(
+      makeFakeChild(0, () => {
+        const mountSuffix = `:${MCP_CONTAINER_CA_CERT_PATH}:ro`;
+        const args = spawnSpy.mock.calls[0][1] as string[];
+        const mount = args.find((arg) => arg.endsWith(mountSuffix)) ?? '';
+        cachedPath = mount.slice(0, -mountSuffix.length);
+        cachedAtExit = existsSync(cachedPath);
+        writeFileSync(sourcePath, 'changed during the run');
+      }),
+    );
+
+    try {
+      await runMcp(FAKE_CTX, {}, makeCaCertNetwork(sourcePath));
+
+      expect(cachedAtExit).toBe(true);
+      expect(spawnSpy.mock.calls[0][1]).toContain(
+        `${normalizePath(cachedPath)}:${MCP_CONTAINER_CA_CERT_PATH}:ro`,
+      );
+      expect(existsSync(cachedPath)).toBe(false);
+    } finally {
+      rmSync(sourceDir, { recursive: true, force: true });
+      if (cachedPath) {
+        rmSync(cachedPath, { force: true });
+      }
+    }
+  });
 });
 
 describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
@@ -639,20 +680,35 @@ describe('resolveMcpContainerCommand — WSL cert path forwarding', () => {
   const WSL_DETECTION = { runtime: 'docker', viaWsl: true } as const;
   const context = { withFsMount: false } as const;
 
-  it('forwards CA cert path via WSLENV /p translation instead of embedding it literally', () => {
-    const result = resolveMcpContainerCommand(
-      FAKE_AUTH,
-      WSL_DETECTION,
-      context,
-      {},
-      makeCaCertNetwork('/home/user/sonar-ca.pem'),
-    );
+  it('forwards the cached CA path via WSLENV /p translation', () => {
+    const sourceDir = mkdtempSync(join(os.tmpdir(), 'sonar-mcp-ca-wsl-'));
+    const sourcePath = join(sourceDir, 'corp-ca.pem');
+    const contents = Buffer.from('wsl-test-ca');
+    let cachedPath = '';
+    writeFileSync(sourcePath, contents);
 
-    expect(result.command).toBe('wsl.exe');
-    expect(result.env.SONARQUBE_MCP_CA_PATH).toBe('/home/user/sonar-ca.pem');
-    expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CA_PATH/p');
-    expect(result.args[2]).toContain(`"$SONARQUBE_MCP_CA_PATH":${MCP_CONTAINER_CA_CERT_PATH}:ro`);
-    expect(result.args[2]).not.toContain('/home/user/sonar-ca.pem');
+    try {
+      const result = resolveMcpContainerCommand(
+        FAKE_AUTH,
+        WSL_DETECTION,
+        context,
+        {},
+        makeCaCertNetwork(sourcePath),
+      );
+      cachedPath = result.env.SONARQUBE_MCP_CA_PATH;
+
+      expect(result.command).toBe('wsl.exe');
+      expect(result.env.SONARQUBE_MCP_CA_PATH).toBe(normalizePath(cachedPath));
+      expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CA_PATH/p');
+      expect(result.args[2]).toContain(`"$SONARQUBE_MCP_CA_PATH":${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+      expect(result.args[2]).not.toContain(sourcePath);
+      expect(readFileSync(cachedPath)).toEqual(contents);
+    } finally {
+      rmSync(sourceDir, { recursive: true, force: true });
+      if (cachedPath) {
+        rmSync(cachedPath, { force: true });
+      }
+    }
   });
 
   it('forwards PKCS12 client cert path via WSLENV /p translation instead of embedding it literally', () => {
