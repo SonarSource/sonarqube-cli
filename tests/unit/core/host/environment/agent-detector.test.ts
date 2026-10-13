@@ -27,6 +27,7 @@ import {
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
+  isDevinAgentEnv,
   isOpenCodeAgentEnv,
 } from '@/core/host/environment/agent-detector.ts';
 
@@ -170,6 +171,23 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isDevinAgentEnv', () => {
+    it('is true when DEVIN_PROJECT_DIR is non-empty', () => {
+      expect(isDevinAgentEnv(env({ DEVIN_PROJECT_DIR: '/x' }))).toBe(true);
+    });
+
+    it('is false when DEVIN_PROJECT_DIR is absent or empty', () => {
+      expect(isDevinAgentEnv(env({}))).toBe(false);
+      expect(isDevinAgentEnv(env({ DEVIN_PROJECT_DIR: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('DEVIN_PROJECT_DIR', '/x', () => {
+        expect(isDevinAgentEnv()).toBe(true);
+      });
+    });
+  });
+
   describe('isOpenCodeAgentEnv', () => {
     it('is true when OPENCODE is set, regardless of value', () => {
       expect(isOpenCodeAgentEnv(env({ OPENCODE: '1' }))).toBe(true);
@@ -191,6 +209,18 @@ describe('agent-detector', () => {
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
+    });
+
+    it('detects devin when only its marker is set', () => {
+      expect(detectCallerAgent(env({ DEVIN_PROJECT_DIR: '/x' }))).toBe('devin');
+    });
+
+    it('prefers devin over claude when both markers are set (Devin loads Claude hook files)', () => {
+      expect(
+        detectCallerAgent(
+          env({ DEVIN_PROJECT_DIR: '/x', CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/x' }),
+        ),
+      ).toBe('devin');
     });
 
     it('detects opencode when only its marker is set', () => {
