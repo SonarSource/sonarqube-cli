@@ -23,11 +23,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
 import {
   CLAUDE_VORTEX_FEATURE_ID,
-  VORTEX_CHECK_FAILED_MESSAGE,
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
+  VORTEX_SERVER_NOT_ENTITLED_MESSAGE,
   VORTEX_SERVER_UNAVAILABLE_MESSAGE,
-  VORTEX_UNINSTALL_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
@@ -44,6 +43,8 @@ const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
+const VORTEX_CHECK_FAILED_MESSAGE = 'Could not check whether Vortex is available.';
+const VORTEX_REMOVED_MESSAGE = 'Vortex is no longer available. Removing it.';
 
 describe('integrate claude — Vortex entitlement', () => {
   let harness: TestHarness;
@@ -272,6 +273,24 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it(
+    'skips Vortex with the not-licensed message on a Server that is not entitled',
+    async () => {
+      const result = await runIntegrateClaude({
+        sqaa: 'not_entitled',
+        cag: 'enabled',
+        cloud: false,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(isVortexInstalled()).toBe(false);
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(output).toContain(VORTEX_SERVER_NOT_ENTITLED_MESSAGE);
+      expect(output).not.toContain(VORTEX_REMOVED_MESSAGE);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'installs Vortex on a licensed SonarQube Server when both hubs are entitled',
     async () => {
       const result = await runIntegrateClaude({
@@ -337,7 +356,9 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(sqaaHookScriptExists()).toBe(false);
       expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
       expectVortexHookAbsent(harness.userHome, 'claude');
-      expect(`${repointed.stdout}\n${repointed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
+      const output = `${repointed.stdout}\n${repointed.stderr}`;
+      expect(output).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+      expect(output).toContain(VORTEX_REMOVED_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -357,7 +378,9 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(removed.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expect(`${removed.stdout}\n${removed.stderr}`).toContain(VORTEX_UNINSTALL_MESSAGE);
+      const output = `${removed.stdout}\n${removed.stderr}`;
+      expect(output).toContain(VORTEX_PROMOTION_MESSAGE);
+      expect(output).toContain(VORTEX_REMOVED_MESSAGE);
 
       const state = harness.stateJsonFile.asJson() as CliState;
       const claude = state.integrations.installed.find(
@@ -396,7 +419,7 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(preserved.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
       expect(`${preserved.stdout}\n${preserved.stderr}`).toContain(VORTEX_CHECK_FAILED_MESSAGE);
-      expect(`${preserved.stdout}\n${preserved.stderr}`).not.toContain(VORTEX_UNINSTALL_MESSAGE);
+      expect(`${preserved.stdout}\n${preserved.stderr}`).not.toContain(VORTEX_REMOVED_MESSAGE);
     },
     { timeout: 60000 },
   );

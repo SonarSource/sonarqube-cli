@@ -25,7 +25,7 @@ import type {
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
+import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
@@ -95,7 +95,7 @@ function createSqaaPluginSubfeature(): SubfeatureDeclaration<OpenCodeIntegration
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
+    required: true,
     resources: [
       wholeFile({
         id: 'opencode-sqaa-plugin',
