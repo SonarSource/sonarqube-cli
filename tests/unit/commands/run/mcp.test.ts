@@ -134,7 +134,6 @@ describe('runMcp', () => {
       projectKey: undefined,
       repoRoot: undefined,
       projectRoot: '/tmp/non-git-dir',
-      configSources: [],
     });
   });
 
@@ -334,7 +333,6 @@ describe('runMcp', () => {
       projectKey: undefined,
       repoRoot: '/tmp/git-repo',
       projectRoot: '/tmp/git-repo',
-      configSources: [],
     });
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
