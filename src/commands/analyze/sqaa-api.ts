@@ -126,7 +126,8 @@ async function postSqaaAnalysis(
 
   if (valid.length === 0) {
     throw (
-      rejected[0]?.error ?? sqaaCommandFailedError('files[] must contain at least one valid file.')
+      rejected[0]?.error ??
+      sqaaCommandFailedError('At least one valid file is required in files[].')
     );
   }
 
