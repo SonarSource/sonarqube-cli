@@ -1074,7 +1074,7 @@ describe('declarative integration framework', () => {
     const integration = makeIntegration({
       features: [
         { id: 'accepted', displayName: 'Accepted' },
-        { id: 'declined', displayName: 'Declined', benefitDescription: 'some benefit' },
+        { id: 'declined', displayName: 'Declined' },
       ],
     });
     fake.queueResponse(true);
@@ -1093,7 +1093,7 @@ describe('declarative integration framework', () => {
     const confirmCalls = fake.calls.filter((call) => call.method === 'confirmPrompt');
     expect(confirmCalls).toHaveLength(2);
     expect(confirmCalls[0]?.args[0]).toBe('Install Accepted?');
-    expect(confirmCalls[1]?.args[0]).toBe('Install Declined? (some benefit)');
+    expect(confirmCalls[1]?.args[0]).toBe('Install Declined?');
   });
 
   it('auto-confirms in non-interactive mode and never prompts for required features', async () => {
