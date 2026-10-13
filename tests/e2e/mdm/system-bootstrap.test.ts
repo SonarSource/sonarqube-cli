@@ -20,6 +20,8 @@
 
 // Real-system e2e for the MDM install bootstrap scripts (see _helpers.ts for the run gate).
 
+import { existsSync, statSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import type { FakeBinariesServer } from '../../integration/harness/fake-binaries-server.js';
@@ -63,7 +65,11 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('MDM install bootstrap on the real system',
     );
 
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-    expect(isRealCli(SYSTEM_BINARY)).toBe(true);
+    const installedSize = existsSync(SYSTEM_BINARY) ? statSync(SYSTEM_BINARY).size : 'missing';
+    expect(
+      isRealCli(SYSTEM_BINARY),
+      `installed size ${String(installedSize)}, expected ${String(cliBytes().length)}\n${result.stdout}${result.stderr}`,
+    ).toBe(true);
     const version = await runUnelevated(SYSTEM_BINARY, ['--version'], home);
     expect(version.exitCode).toBe(0);
   });

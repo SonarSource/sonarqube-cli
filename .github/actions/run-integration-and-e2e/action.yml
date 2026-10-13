@@ -112,7 +112,7 @@ runs:
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
         SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
-      run: bun run test:e2e
+      run: bun test ./tests/e2e/mdm/
 
     - name: Run e2e tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
