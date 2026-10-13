@@ -19,27 +19,6 @@
  */
 
 /**
- * Short, user-facing hints appended in parentheses to the interactive install
- * prompts for `sonar integrate` features (see `FeatureDeclaration.benefitDescription`).
- */
-
-/** Combined prompt + pre-tool-use secrets scanning. */
-export const SECRETS_COMBINED_FEATURE_BENEFIT =
-  'prevents leaked secrets in AI prompts and file reads';
-
-/** Prompt-only secrets scanning. */
-export const SECRETS_PROMPT_FEATURE_BENEFIT = 'prevents leaked secrets in AI prompts';
-
-/** pre-tool-use secrets scanning. */
-export const SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT =
-  'prevents the agent from reading files with secrets';
-
-/** Agentic analysis and context augmentation, installed as one Vortex unit. */
-export const VORTEX_FEATURE_BENEFIT = 'analyzes edits and enriches prompts';
-
-export const MCP_SERVER_FEATURE_BENEFIT = 'gives your AI agent access to SonarQube data';
-
-/**
  * Longer, full-sentence copy for the pre-install "What will be installed"
  * preview box (see `FeatureDeclaration.previewDescription`).
  */
