@@ -20,52 +20,28 @@
 
 // Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-
-import { isValidServerUrl, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
+import { findGitRoot } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import {
-  type FeatureMatch,
-  type RecordedFeatureCandidate,
-  selectFeatureForLookupPaths,
-} from '@/core/host/recorded-feature-resolver.ts';
-import {
-  buildKnownServerProjectMappings,
-  mergeKnownServerProjectMappings,
-} from '@/core/known-server-project-mappings.ts';
-import {
-  discoverProjectKeyByGitRemote,
-  GIT_REMOTE_BINDING_SOURCE,
-} from '@/core/server/discover-project-by-remote.ts';
+  applyKnownServerProjectMapping,
+  collectKnownRoots,
+  loadKnownMappings,
+} from '@/core/known-server-project-mapping-resolution.ts';
+import { applyLocalConfigAcrossLookupPaths } from '@/core/local-project-config.ts';
+import { formatConfigFields } from '@/core/project-discovery-format.ts';
 import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
 } from '@/core/shared-project-config.ts';
-import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
-import { getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState } from '@/core/state/state-repository.ts';
+import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { loadSonarLintConfig, type SonarLintConfig } from './host/sonarlint-connected-mode.ts';
-import { canonicalizePath } from './io/fs-utils.ts';
-import { parseProperties } from './io/properties.ts';
-import logger from './observability/logger.ts';
-
-const KNOWN_SERVER_PROJECT_MAPPING_SOURCE = 'known project mapping';
-const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
-
-/** Local config files found at exactly one directory — no git, no root resolution. */
-interface LocalProjectConfig {
-  hasSonarProps: boolean;
-  sonarPropsData: SonarProperties | null;
-  hasSonarLintConfig: boolean;
-  sonarLintData: SonarLintConfig | null;
-  /** Relative path from project root, e.g. `.sonarlint/connectedMode.json` or `.sonarlint/MySolution.json` */
-  sonarLintConfigPath: string | null;
-}
+export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/known-server-project-mapping-resolution.ts';
+export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 export interface DiscoveredProject {
   /** Where the discovered project is anchored — what nearly every caller should use. */
@@ -77,6 +53,26 @@ export interface DiscoveredProject {
   repoRoot?: string;
   /** Where `sonar integrate` was run for the matched mapping/feature (its own `targetRoot`), possibly a different worktree; undefined when nothing in state matched. */
   integrationDir?: string;
+}
+
+/** One resolved project binding — what `ProjectDiscoveryResult.projects` holds, possibly more than one per call. */
+export interface ProjectMapping {
+  projectRoot: string;
+  projectKey: string;
+  serverUrl?: string;
+  organization?: string;
+}
+
+export interface ProjectDiscoveryResult {
+  repoRoot?: string;
+  /** Only ever set by the known-server-project-mapping source, which is inherently single-valued — not on `ProjectMapping` since it never varies per-project. */
+  integrationDir?: string;
+  /** Best-effort server/org found even without a project key (single-valued sources only, never shared config) — `discoverServer()`/`discoverOrganization()` need this. */
+  serverUrl?: string;
+  organization?: string;
+  projects: ProjectMapping[];
+  /** Projects on the same ancestry line as `directory`, either direction — narrows deep inside one project, broadens above several siblings. */
+  scope(directory: string): ProjectMapping[];
 }
 
 export interface DiscoverProjectOptions {
@@ -94,20 +90,6 @@ export interface DiscoverProjectOptions {
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
-}
-
-export interface SonarProperties {
-  hostURL: string;
-  projectKey: string;
-  projectName: string;
-  organization: string;
-}
-
-function selectValidServerUrl(
-  currentServerUrl: string | undefined,
-  candidate: string,
-): string | undefined {
-  return currentServerUrl ?? (isValidServerUrl(candidate) ? candidate : undefined);
 }
 
 async function discoverLocalConfig(
@@ -145,39 +127,33 @@ export async function discoverOrganization(console: Console): Promise<string | n
   }
 }
 
-/** Loads sonar-project.properties/.sonarlint from exactly `dir` — no git, no root resolution. */
-async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> {
-  const sonarProps = await loadSonarProperties(dir);
-  const sonarLintLoaded = await loadSonarLintConfig(dir);
-
-  return {
-    hasSonarProps: sonarProps !== null,
-    sonarPropsData: sonarProps,
-    hasSonarLintConfig: sonarLintLoaded !== null,
-    sonarLintData: sonarLintLoaded?.config ?? null,
-    sonarLintConfigPath: sonarLintLoaded?.relativePath ?? null,
-  };
-}
-
 /**
- * Tries each source in turn — shared project config, then known-server-project-mapping,
- * then local config files, then git-remote binding (a single repo-level last resort) — the
- * first three walking the same nearest-first `resolveLookupPaths` list, so "closer wins"
- * uniformly.
+ * Tries each source in turn — shared project config (the only one that can resolve more
+ * than one project), then known-server-project-mapping, local config, then git-remote
+ * binding — the first three walking the same nearest-first `resolveLookupPaths` list, so
+ * "closer wins" uniformly. Never throws — degrades to whatever was already resolved.
  */
-export async function discoverProject(
+export async function discoverProjects(
   startDir: string,
   options: DiscoverProjectOptions,
-): Promise<DiscoveredProject> {
-  const invocationDir = canonicalizePath(startDir);
-  const config: DiscoveredProject = {
-    projectRoot: invocationDir, // stay in place unless a source below resolves something more specific
+): Promise<ProjectDiscoveryResult> {
+  const result: ProjectDiscoveryResult = {
+    projects: [],
+    scope(directory: string): ProjectMapping[] {
+      const target = canonicalizePath(directory);
+      return result.projects.filter(
+        (project) =>
+          isAncestorOrSelf(project.projectRoot, target) ||
+          isAncestorOrSelf(target, project.projectRoot),
+      );
+    },
   };
 
   try {
+    const invocationDir = canonicalizePath(startDir);
     const { gitRoot, isGit } = findGitRoot(startDir);
     const repoRoot = isGit ? canonicalizePath(gitRoot) : undefined;
-    config.repoRoot = repoRoot;
+    result.repoRoot = repoRoot;
 
     const knownMappings = loadKnownMappings();
     const lookupPaths = await resolveLookupPaths(startDir, collectKnownRoots(knownMappings));
@@ -185,15 +161,36 @@ export async function discoverProject(
       `Project discovery lookup paths (nearest first): ${lookupPaths.map((p) => p.checkPath).join(', ')}`,
     );
 
-    const resolved =
-      (await applySharedProjectConfig(config, lookupPaths, options)) ||
-      (options.useKnownMappings !== false &&
-        knownMappings !== undefined &&
-        applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
-      (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
+    const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    if (sharedConfigProjects) {
+      result.projects = sharedConfigProjects;
+    } else {
+      // The other three sources stay single-valued: same DiscoveredProject-shaped accumulator as before.
+      const single: DiscoveredProject = { projectRoot: invocationDir };
 
-    if (!resolved) {
-      await applyGitRemoteBinding(config, repoRoot, options);
+      const resolved =
+        (options.useKnownMappings !== false &&
+          knownMappings !== undefined &&
+          applyKnownServerProjectMapping(single, lookupPaths, knownMappings, options)) ||
+        (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options));
+
+      if (!resolved) {
+        await applyGitRemoteBinding(single, repoRoot, options);
+      }
+
+      if (single.projectKey) {
+        result.projects = [
+          {
+            projectRoot: single.projectRoot,
+            projectKey: single.projectKey,
+            serverUrl: single.serverUrl,
+            organization: single.organization,
+          },
+        ];
+        result.integrationDir = single.integrationDir;
+      }
+      result.serverUrl = single.serverUrl;
+      result.organization = single.organization;
     }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
@@ -201,8 +198,33 @@ export async function discoverProject(
     logger.debug(`Project discovery failed, returning partial result: ${(error as Error).message}`);
   }
 
-  logger.debug(`Discovered project: ${JSON.stringify(config)}`);
-  return config;
+  logger.debug(`Discovered projects: ${JSON.stringify(result.projects)}`);
+  return result;
+}
+
+/**
+ * Resolves exactly one project for `startDir`: `discoverProjects()` + `scope(startDir)`.
+ * Zero matches and more than one match both degrade to "nothing resolved" — ambiguous and
+ * missing are the same unusable answer to every current caller, none of which can act on
+ * the distinction (hooks/passthroughs run unattended; the few commands with a `--project`
+ * flag already print one generic "could not determine project key" message for both).
+ */
+export async function discoverProject(
+  startDir: string,
+  options: DiscoverProjectOptions,
+): Promise<DiscoveredProject> {
+  const invocationDir = canonicalizePath(startDir);
+  const result = await discoverProjects(startDir, options);
+  const scoped = result.scope(invocationDir);
+  const mapping = scoped.length > 1 ? undefined : scoped.at(0);
+  return {
+    projectRoot: mapping?.projectRoot ?? invocationDir,
+    projectKey: mapping?.projectKey,
+    serverUrl: mapping?.serverUrl ?? result.serverUrl,
+    organization: mapping?.organization ?? result.organization,
+    repoRoot: result.repoRoot,
+    integrationDir: result.integrationDir,
+  };
 }
 
 /**
@@ -225,7 +247,11 @@ export async function resolveProjectKey(
     return explicitProject;
   }
 
-  const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
+  const discovered = await discoverProject(process.cwd(), {
+    auth,
+    silent: true,
+    console,
+  });
   if (discovered.projectKey) {
     assertSingleLineProjectKey(discovered.projectKey);
     if (!silent) {
@@ -250,311 +276,43 @@ export function assertSingleLineProjectKey(projectKey: string): void {
   });
 }
 
-function applyLocalSonarProperties(
-  config: DiscoveredProject,
-  local: LocalProjectConfig,
+function printSharedProjectConfigMapping(
+  mapping: ProjectMapping,
   options: DiscoverProjectOptions,
 ): void {
-  if (!local.hasSonarProps || !local.sonarPropsData) {
-    return;
-  }
-
-  config.serverUrl = selectValidServerUrl(undefined, local.sonarPropsData.hostURL);
-  config.projectKey = local.sonarPropsData.projectKey;
-  config.organization = local.sonarPropsData.organization;
-
   if (options.silent) {
     return;
   }
-  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
-  if (fields) {
-    options.console.print(`Found sonar-project.properties: ${fields}`);
-  }
-}
-
-/** Returns true once `config.projectKey` is resolved, so the caller can stop checking further sources. */
-function applySonarLintConfig(
-  config: DiscoveredProject,
-  local: LocalProjectConfig,
-  options: DiscoverProjectOptions,
-): boolean {
-  if (!local.hasSonarLintConfig || !local.sonarLintData || !local.sonarLintConfigPath) {
-    return !!config.projectKey;
-  }
-
-  config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
-  config.projectKey = config.projectKey || local.sonarLintData.projectKey;
-  config.organization = config.organization || local.sonarLintData.organization;
-
-  if (!options.silent) {
-    const fields = formatConfigFields(
-      local.sonarLintData.serverURL,
-      local.sonarLintData.projectKey,
-      local.sonarLintData.organization,
-    );
-    if (fields) {
-      options.console.print(`Found ${local.sonarLintConfigPath}: ${fields}`);
-    }
-  }
-
-  return !!config.projectKey;
-}
-
-/** Walks `lookupPaths` nearest-first for a `sonar-project.properties`/`.sonarlint` hit; a partial match doesn't stop the climb. */
-async function applyLocalConfigAcrossLookupPaths(
-  config: DiscoveredProject,
-  lookupPaths: LookupPath[],
-  options: DiscoverProjectOptions,
-): Promise<boolean> {
-  for (const { checkPath, projectRoot } of lookupPaths) {
-    let local: LocalProjectConfig;
-    try {
-      local = await loadLocalProjectConfig(checkPath);
-    } catch (error) {
-      // e.g. EACCES on a directory further up the climb — don't let one unreadable
-      // path abort discovery for the whole call, same as the other two sources.
-      logger.debug(`Local config lookup skipped for ${checkPath}: ${(error as Error).message}`);
-      continue;
-    }
-    if (!local.hasSonarProps && !local.hasSonarLintConfig) {
-      continue;
-    }
-
-    applyLocalSonarProperties(config, local, options);
-    if (applySonarLintConfig(config, local, options)) {
-      config.projectRoot = projectRoot;
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function applySharedProjectConfigEntry(
-  config: DiscoveredProject,
-  mapping: SharedProjectConfigMapping,
-  options: DiscoverProjectOptions,
-): void {
-  config.projectKey = mapping.projectKey;
-  config.serverUrl = selectValidServerUrl(undefined, mapping.serverUrl);
-  config.organization = mapping.organization;
-  config.projectRoot = mapping.projectRoot;
-
-  if (options.silent) {
-    return;
-  }
-  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  const fields = formatConfigFields(mapping.serverUrl, mapping.projectKey, mapping.organization);
   if (fields) {
     options.console.print(`Found ${SHARED_PROJECT_CONFIG_SOURCE}: ${fields}`);
   }
 }
 
-/** Walks lookupPaths nearest-first for the first `.sonar-config.json` found; it always applies — one file holds exactly one mapping, so there's no "found but doesn't match" case. */
-async function applySharedProjectConfig(
-  config: DiscoveredProject,
+/** Walks lookupPaths nearest-first for the first `.sonar-config.json` found; it always applies — one file holds its mapping(s), so there's no "found but doesn't match" case. */
+async function resolveSharedProjectConfigMappings(
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
-): Promise<boolean> {
+): Promise<ProjectMapping[] | null> {
   for (const { checkPath } of lookupPaths) {
-    let mapping: SharedProjectConfigMapping | null;
+    let mappings: SharedProjectConfigMapping[];
     try {
-      mapping = await sharedProjectConfigRepository.load(checkPath);
+      mappings = await sharedProjectConfigRepository.load(checkPath);
     } catch (error) {
       logger.debug(
         `Shared project config lookup skipped for ${checkPath}: ${(error as Error).message}`,
       );
       continue;
     }
-    if (mapping === null) {
+    if (mappings.length === 0) {
       continue;
     }
 
-    applySharedProjectConfigEntry(config, mapping, options);
-    return true;
-  }
-
-  return false;
-}
-
-function matchKnownServerProjectMapping(
-  lookupPaths: LookupPath[],
-  mappings: KnownServerProjectMapping[],
-): FeatureMatch<KnownServerProjectMapping> | undefined {
-  if (mappings.length === 0) {
-    return undefined;
-  }
-
-  const candidates: RecordedFeatureCandidate<KnownServerProjectMapping>[] = mappings.map(
-    (mapping) => ({
-      feature: mapping,
-      targetRoot: mapping.targetRoot,
-      repoRoot: mapping.repoRoot,
-    }),
-  );
-
-  return selectFeatureForLookupPaths(candidates, lookupPaths);
-}
-
-/** Prefers the caller's own resolved auth over state, so per-invocation env-var auth resolves correctly even if it hasn't been persisted yet. */
-function resolveMappingConnection(
-  mapping: KnownServerProjectMapping,
-  state: CliState,
-  auth?: ResolvedAuth | null,
-): { serverUrl: string | undefined; orgKey: string | undefined } {
-  if (mapping.serverUrl) {
-    return { serverUrl: mapping.serverUrl, orgKey: mapping.orgKey };
-  }
-  if (auth) {
-    return { serverUrl: auth.serverUrl, orgKey: auth.orgKey };
-  }
-  const activeConnection = getActiveConnection(state);
-  return { serverUrl: activeConnection?.serverUrl, orgKey: activeConnection?.orgKey };
-}
-
-interface KnownMappingsResult {
-  state: CliState;
-  mappings: KnownServerProjectMapping[];
-}
-
-/** Loaded upfront so `discoverProject()` can derive knownRoots and share one lookupPaths list. */
-function loadKnownMappings(): KnownMappingsResult | undefined {
-  try {
-    const state = loadState();
-    const mappings = mergeKnownServerProjectMappings(
-      state.knownServerProjectMappings ?? [],
-      buildKnownServerProjectMappings(state),
-    );
-    return { state, mappings };
-  } catch (error) {
-    logger.debug(`Known project mapping lookup skipped: ${(error as Error).message}`);
-    return undefined;
-  }
-}
-
-/** Passed raw to resolveLookupPaths() — it picks the shallowest matching one itself. */
-function collectKnownRoots(known: KnownMappingsResult | undefined): string[] {
-  return (known?.mappings ?? []).flatMap((mapping) =>
-    mapping.repoRoot ? [mapping.targetRoot, mapping.repoRoot] : [mapping.targetRoot],
-  );
-}
-
-/** Matches against the combined persisted + live-derived mapping table, caller-loaded once above. */
-function applyKnownServerProjectMapping(
-  config: DiscoveredProject,
-  lookupPaths: LookupPath[],
-  known: KnownMappingsResult,
-  options: DiscoverProjectOptions,
-): boolean {
-  const match = matchKnownServerProjectMapping(lookupPaths, known.mappings);
-  if (!match) {
-    return false;
-  }
-
-  const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, options.auth);
-  if (!serverUrl || !isValidServerUrl(serverUrl)) {
-    return false;
-  }
-
-  config.projectKey = match.feature.projectKey;
-  config.serverUrl = serverUrl;
-  config.organization = orgKey;
-  config.projectRoot = match.matchedPath;
-  config.integrationDir = match.feature.targetRoot;
-
-  if (!options.silent) {
-    const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
-    if (fields) {
-      options.console.print(`Found ${KNOWN_SERVER_PROJECT_MAPPING_SOURCE}: ${fields}`);
+    for (const mapping of mappings) {
+      printSharedProjectConfigMapping(mapping, options);
     }
+    return mappings;
   }
 
-  return true;
+  return null;
 }
-
-function resolveDiscoverProjectAuth(options: DiscoverProjectOptions): ResolvedAuth | null {
-  return options.auth ?? null;
-}
-
-async function applyGitRemoteBinding(
-  config: DiscoveredProject,
-  repoRoot: string | undefined,
-  options: DiscoverProjectOptions,
-): Promise<void> {
-  if (options.auth === null) {
-    return;
-  }
-
-  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
-  if (!gitRemote) {
-    return;
-  }
-
-  const auth = resolveDiscoverProjectAuth(options);
-  if (!auth) {
-    return;
-  }
-
-  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
-  if (!remoteBinding) {
-    return;
-  }
-
-  config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
-  config.projectKey = remoteBinding.projectKey;
-  config.organization = config.organization || remoteBinding.organization;
-
-  if (options.silent) {
-    return;
-  }
-
-  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
-  if (fields) {
-    options.console.print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
-  }
-}
-
-function formatConfigFields(
-  serverUrl?: string,
-  projectKey?: string,
-  organization?: string,
-): string {
-  return Object.entries({ project: projectKey, server: serverUrl, org: organization })
-    .filter(([, v]) => v !== undefined)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(', ');
-}
-
-const SONAR_PROPERTY_FIELDS = new Map<string, keyof SonarProperties>([
-  ['sonar.host.url', 'hostURL'],
-  ['sonar.projectKey', 'projectKey'],
-  ['sonar.projectName', 'projectName'],
-  ['sonar.organization', 'organization'],
-]);
-
-async function loadSonarProperties(projectRoot: string): Promise<SonarProperties | null> {
-  const propPath = join(projectRoot, 'sonar-project.properties');
-
-  if (!existsSync(propPath)) {
-    return null;
-  }
-
-  const fs = await import('node:fs/promises');
-  const content = await fs.readFile(propPath, 'utf-8');
-
-  const props: Partial<SonarProperties> = {};
-
-  for (const [key, value] of parseProperties(content)) {
-    const field = SONAR_PROPERTY_FIELDS.get(key);
-    if (field) {
-      props[field] = value;
-    }
-  }
-
-  if (!props.hostURL && !props.projectKey) {
-    return null;
-  }
-
-  return props as SonarProperties;
-}
-
-export { type SonarLintConfig } from './host/sonarlint-connected-mode.ts';

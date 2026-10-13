@@ -33,6 +33,7 @@ import logger from '@/core/observability/logger.ts';
 import {
   discoverOrganization,
   discoverProject,
+  discoverProjects,
   discoverServer,
   resolveProjectKey,
 } from '@/core/project-info.ts';
@@ -437,12 +438,12 @@ describe('discoverProject', () => {
 
   describe('shared project config', () => {
     // The repository's own load()/set() logic (parsing, region resolution, path
-    // containment) is covered by tests/unit/core/shared-project-config.test.ts;
+    // containment) is covered by tests/unit/core/project-discovery/shared-project-config.test.ts;
     // discoverProject() only needs to be tested against the interface it depends on.
     let loadSpy: Mock<typeof sharedProjectConfigRepository.load>;
 
     beforeEach(() => {
-      loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockResolvedValue(null);
+      loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockResolvedValue([]);
     });
 
     afterEach(() => {
@@ -452,7 +453,7 @@ describe('discoverProject', () => {
     function mockMappingAt(dir: string, mapping: SharedProjectConfigMapping): void {
       const target = canonicalizePath(dir);
       loadSpy.mockImplementation((checkPath) =>
-        Promise.resolve(checkPath === target ? mapping : null),
+        Promise.resolve(checkPath === target ? [mapping] : []),
       );
     }
 
@@ -552,7 +553,7 @@ describe('discoverProject', () => {
     });
 
     it('falls through to the next source when the repository has no match', async () => {
-      // loadSpy already defaults to resolving null (set in beforeEach).
+      // loadSpy already defaults to resolving [] (set in beforeEach).
       mockKnownMappings(loadStateSpy, [
         makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
       ]);
@@ -594,6 +595,68 @@ describe('discoverProject', () => {
 
       expect(result.projectKey).toBe('nearest-project');
       expect(loadSpy.mock.calls).toEqual([[canonicalizePath(subDir)], [canonicalizePath(nested)]]);
+    });
+
+    it('resolves multiple sibling projects from one "projects" array, none ambiguous for their own directory', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      fakeFs.mkdir(project1);
+      fakeFs.mkdir(project2);
+      loadSpy.mockImplementation((checkPath) =>
+        Promise.resolve(
+          checkPath === canonicalizePath(testDir)
+            ? [
+                {
+                  projectRoot: canonicalizePath(project1),
+                  projectKey: 'proj1',
+                  serverUrl: 'https://shared.example.com',
+                  organization: undefined,
+                },
+                {
+                  projectRoot: canonicalizePath(project2),
+                  projectKey: 'proj2',
+                  serverUrl: 'https://shared.example.com',
+                  organization: undefined,
+                },
+              ]
+            : [],
+        ),
+      );
+      mockClimb(lookupPathsSpy, project1, testDir);
+
+      const result = await discoverProject(project1, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('proj1');
+      expect(result.projectRoot).toBe(canonicalizePath(project1));
+    });
+
+    it('degrades to "nothing resolved" when invoked from above several sibling projects', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      loadSpy.mockResolvedValue([
+        {
+          projectRoot: canonicalizePath(project1),
+          projectKey: 'proj1',
+          serverUrl: 'https://shared.example.com',
+          organization: undefined,
+        },
+        {
+          projectRoot: canonicalizePath(project2),
+          projectKey: 'proj2',
+          serverUrl: 'https://shared.example.com',
+          organization: undefined,
+        },
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
     });
   });
 
@@ -1121,6 +1184,134 @@ describe('discoverProject', () => {
   });
 });
 
+describe('discoverProjects', () => {
+  let testDir: string;
+  let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
+  let loadSpy: Mock<typeof sharedProjectConfigRepository.load>;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+
+  beforeEach(() => {
+    fakeFs.setup();
+    testDir = join(tmpdir(), `sonarqube-cli-test-discover-projects-${Date.now()}`);
+    fakeFs.mkdir(testDir);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
+    lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
+      defaultLookupPaths,
+    );
+    loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    fakeFs.teardown();
+    loadStateSpy.mockRestore();
+    lookupPathsSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
+
+  function mockSiblingProjects(dir: string, project1: string, project2: string): void {
+    const target = canonicalizePath(dir);
+    loadSpy.mockImplementation((checkPath) =>
+      Promise.resolve(
+        checkPath === target
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+            ]
+          : [],
+      ),
+    );
+  }
+
+  it('resolves every project from one "projects" array into .projects', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projects.map((p) => p.projectKey)).toEqual(['proj1', 'proj2']);
+  });
+
+  it('scope() broadens to every sibling when invoked from an ancestor directory', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(testDir).map((p) => p.projectKey)).toEqual(['proj1', 'proj2']);
+  });
+
+  it('scope() narrows to one project when invoked from deep inside its own subdirectory (bidirectional ancestry)', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    const deepInsideProject1 = join(project1, 'src', 'components');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(deepInsideProject1).map((p) => p.projectKey)).toEqual(['proj1']);
+  });
+
+  it('scope() narrows to one project when invoked exactly at its own root', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(project1).map((p) => p.projectKey)).toEqual(['proj1']);
+  });
+
+  it('scope() resolves to nothing for a directory unrelated to any known project', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(join(tmpdir(), 'unrelated-directory'))).toEqual([]);
+  });
+
+  describe('discoverProject() ambiguity handling', () => {
+    it('degrades an ambiguous match (several sibling projects) to "nothing resolved"', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      mockSiblingProjects(testDir, project1, project2);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
+    });
+
+    it('resolves normally when there is no ambiguity', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+    });
+  });
+});
+
 describe('discoverOrganization', () => {
   let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
   let cwdSpy: Mock<typeof process.cwd>;
@@ -1157,13 +1348,15 @@ describe('discoverOrganization', () => {
     const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
       Promise.resolve(
         canonicalizePath(dir) === canonicalizePath(testDir)
-          ? {
-              projectRoot: canonicalizePath(testDir),
-              projectKey: 'shared-project',
-              serverUrl: 'https://shared.example.com',
-              organization: 'shared-org',
-            }
-          : null,
+          ? [
+              {
+                projectRoot: canonicalizePath(testDir),
+                projectKey: 'shared-project',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
       ),
     );
 
@@ -1298,13 +1491,15 @@ describe('discoverServer', () => {
     const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
       Promise.resolve(
         canonicalizePath(dir) === canonicalizePath(testDir)
-          ? {
-              projectRoot: canonicalizePath(testDir),
-              projectKey: 'shared-project',
-              serverUrl: 'https://shared.example.com',
-              organization: 'shared-org',
-            }
-          : null,
+          ? [
+              {
+                projectRoot: canonicalizePath(testDir),
+                projectKey: 'shared-project',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
       ),
     );
 
