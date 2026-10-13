@@ -93,9 +93,9 @@ export default tseslint.config(
   },
 
   // Telemetry/Sentry destinations are reachable only from the two modules that own the
-  // outbound call, and `neverthrow` is reachable only from the one module that patches its
-  // prototype with `orThrow()` as a side effect of being loaded; the owners are exempted
-  // in the blocks that follow. Two separate `no-restricted-imports` config objects on the
+  // outbound call (the telemetry ingest key only from telemetry-events.ts), and `neverthrow`
+  // is reachable only from the one module that patches its prototype with `orThrow()` as a
+  // side effect of being loaded; the owners are exempted in the blocks that follow. Two separate `no-restricted-imports` config objects on the
   // same files would silently overwrite each other in flat config, so both restrictions
   // for `src/**/*.ts` are combined into this one block.
   {
