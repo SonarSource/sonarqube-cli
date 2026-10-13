@@ -26,22 +26,37 @@ import { expect, it } from 'bun:test';
 import { ISOLATED_CLI_SPAWN_ENV } from '../../../_common/isolated-cli-env.ts';
 import { getCliBinaryPath } from '../../harness/cli-runner.ts';
 
-it.each([
-  { args: ['--help'], stream: 'stdout', exitCode: 0 },
-  { args: ['analyze', 'secrets'], stream: 'stderr', exitCode: 2 },
-] as const)('does not crash when $stream closes early', async ({ args, stream, exitCode }) => {
-  const child = spawn(getCliBinaryPath(), args, {
-    env: {
-      ...process.env,
-      ...ISOLATED_CLI_SPAWN_ENV,
-      SONARQUBE_CLI_TOKEN: 'placeholder',
-      SONARQUBE_CLI_ORG: 'example',
-    },
+const cliEnv = {
+  ...process.env,
+  ...ISOLATED_CLI_SPAWN_ENV,
+  SONARQUBE_CLI_TOKEN: 'placeholder',
+  SONARQUBE_CLI_ORG: 'example',
+};
+
+it.skipIf(process.platform === 'win32')('does not crash when stdout closes early', async () => {
+  // The reader exits before the CLI starts, so the CLI's first stdout write hits a broken pipe.
+  const child = spawn('sh', ['-c', '{ sleep 0.5; "$0" config list; } | true', getCliBinaryPath()], {
+    env: cliEnv,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.on('data', (chunk: Buffer) => {
+    stderr += chunk.toString();
+  });
+
+  await once(child, 'close');
+
+  expect(stderr).not.toContain('EPIPE');
+});
+
+it('does not crash when stderr closes early', async () => {
+  const child = spawn(getCliBinaryPath(), ['analyze', 'secrets'], {
+    env: cliEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  child[stream].destroy();
+  child.stderr.destroy();
   const [code] = await once(child, 'close');
 
-  expect(code).toBe(exitCode);
+  expect(code).toBe(2);
 });

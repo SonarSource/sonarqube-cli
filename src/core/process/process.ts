@@ -117,7 +117,7 @@ export async function spawnProcess(
 
     proc.on('error', reject);
 
-    proc.on('close', (code) => {
+    proc.on('exit', (code) => {
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
         stdout: (stdout + stdoutDecoder.end()).trim(),
