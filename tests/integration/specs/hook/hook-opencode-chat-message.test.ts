@@ -31,6 +31,7 @@ import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import { TestHarness } from '../../harness';
+import { IS_WINDOWS } from '../../harness/platform';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -246,6 +247,25 @@ describe('sonar hook opencode-chat-message', () => {
       const decision = parseDecision(result.stdout);
       expect(decision.block).toBe(true);
       expect(decision.reason).toContain('failed unexpectedly');
+    },
+    { timeout: 10000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'exits 0 and allows when the scanner exits with an unexpected code',
+    async () => {
+      harness.withAuth(FAKE_SERVER, FAKE_TOKEN);
+      const binaryName = buildLocalBinaryName(detectPlatform());
+      harness.cliHome.writeFile(`bin/${binaryName}`, '#!/bin/sh\nexit 2\n');
+      chmodSync(harness.cliHome.file('bin', binaryName).path, 0o755);
+
+      const result = await harness.runWithStdin(
+        'hook opencode-chat-message',
+        messagePayload('please help me refactor this function'),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(parseDecision(result.stdout)).toEqual({ block: false });
     },
     { timeout: 10000 },
   );
