@@ -24,21 +24,27 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { disableHandleInheritance } from '@/core/host/windows-handle-inheritance.ts';
 
 const HANDLE_FLAG_INHERIT = 0x1;
+const FILE_TYPE_DISK = 0x1;
+const FILE_TYPE_PIPE = 0x3;
+const FILE_TYPE_UNKNOWN = 0x0;
 
 describe('disableHandleInheritance', () => {
   let handleFlags: Map<bigint, number>;
+  let fileTypes: Map<bigint, number>;
   let setHandleInformation: ReturnType<typeof mock>;
   let close: ReturnType<typeof mock>;
   let dlopenSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     handleFlags = new Map();
+    fileTypes = new Map();
     setHandleInformation = mock(() => true);
     close = mock(() => undefined);
     dlopenSpy = spyOn(ffi, 'dlopen').mockImplementation(
       () =>
         ({
           symbols: {
+            GetFileType: (handle: bigint) => fileTypes.get(handle) ?? FILE_TYPE_UNKNOWN,
             GetHandleInformation: (handle: bigint, flags: Uint32Array) => {
               const value = handleFlags.get(handle);
               if (value === undefined) return false;
@@ -56,10 +62,16 @@ describe('disableHandleInheritance', () => {
     dlopenSpy.mockRestore();
   });
 
-  it('clears the inherit flag only on inheritable handles', () => {
+  it('clears the inherit flag only on inheritable pipe handles', () => {
     handleFlags.set(8n, HANDLE_FLAG_INHERIT);
+    fileTypes.set(8n, FILE_TYPE_PIPE);
     handleFlags.set(12n, 0);
+    fileTypes.set(12n, FILE_TYPE_PIPE);
     handleFlags.set(16n, HANDLE_FLAG_INHERIT | 0x2);
+    fileTypes.set(16n, FILE_TYPE_PIPE);
+    handleFlags.set(20n, HANDLE_FLAG_INHERIT);
+    fileTypes.set(20n, FILE_TYPE_DISK);
+    handleFlags.set(24n, HANDLE_FLAG_INHERIT);
 
     disableHandleInheritance();
 
@@ -72,6 +84,7 @@ describe('disableHandleInheritance', () => {
 
   it('closes kernel32 when clearing a handle fails', () => {
     handleFlags.set(8n, HANDLE_FLAG_INHERIT);
+    fileTypes.set(8n, FILE_TYPE_PIPE);
     setHandleInformation.mockImplementation(() => {
       throw new Error('access denied');
     });

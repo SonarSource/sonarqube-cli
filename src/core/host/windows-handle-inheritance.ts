@@ -21,11 +21,12 @@
 import { dlopen, FFIType } from 'bun:ffi';
 
 const HANDLE_FLAG_INHERIT = 0x1;
+const FILE_TYPE_PIPE = 0x3;
 const HANDLE_VALUE_STEP = 4n;
 const MAX_SCANNED_HANDLE_VALUE = 0x10000n;
 
 /**
- * Stop processes spawned from now on inheriting any of this process's handles. Bun.spawn on
+ * Stop processes spawned from now on inheriting any of this process's pipe handles. Bun.spawn on
  * Windows hands every inheritable handle to the child regardless of its `stdio` option, and the
  * process holds inheritable duplicates of the caller's stdio pipes, so a detached child would
  * otherwise keep those pipes open after we exit.
@@ -36,6 +37,7 @@ const MAX_SCANNED_HANDLE_VALUE = 0x10000n;
  */
 export function disableHandleInheritance(): void {
   const kernel32 = dlopen('kernel32.dll', {
+    GetFileType: { args: [FFIType.u64], returns: FFIType.u32 },
     GetHandleInformation: { args: [FFIType.u64, FFIType.ptr], returns: FFIType.bool },
     SetHandleInformation: {
       args: [FFIType.u64, FFIType.u32, FFIType.u32],
@@ -49,7 +51,11 @@ export function disableHandleInheritance(): void {
       handle < MAX_SCANNED_HANDLE_VALUE;
       handle += HANDLE_VALUE_STEP
     ) {
-      if (kernel32.symbols.GetHandleInformation(handle, flags) && flags[0] & HANDLE_FLAG_INHERIT) {
+      if (
+        kernel32.symbols.GetHandleInformation(handle, flags) &&
+        flags[0] & HANDLE_FLAG_INHERIT &&
+        kernel32.symbols.GetFileType(handle) === FILE_TYPE_PIPE
+      ) {
         kernel32.symbols.SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
       }
     }
