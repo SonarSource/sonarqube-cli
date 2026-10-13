@@ -37,17 +37,17 @@ import {
   discoverProjects,
   discoverServer,
   resolveProjectKey,
-} from '@/core/project-info.ts';
-import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
+} from '@/core/project-discovery/project-info.ts';
 import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
-} from '@/core/shared-project-config.ts';
+} from '@/core/project-discovery/shared-project-config.ts';
+import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
 import type { KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
-import { FakeConsole } from '../../_common/fake-console.ts';
+import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
 
 const fakeFs = createFakeFsTestHandle();
