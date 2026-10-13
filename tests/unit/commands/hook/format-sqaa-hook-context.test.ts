@@ -20,8 +20,8 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { SqaaJsonReport } from '../../../../src/commands/analyze/sqaa-display.ts';
-import { formatSqaaJsonReportForHook } from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
+import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
+import { formatSqaaJsonReportForHook } from '@/commands/hook/format-sqaa-hook-context.ts';
 
 function emptyReport(overrides: Partial<SqaaJsonReport> = {}): SqaaJsonReport {
   return {
@@ -78,7 +78,7 @@ describe('formatSqaaJsonReportForHook', () => {
     );
 
     expect(text).not.toContain('no issues found');
-    expect(text).toContain('excluded (binary, oversized, or outside the repository)');
+    expect(text).toContain('excluded (binary, oversized, or outside the project)');
     expect(text).toContain('image.png');
     expect(text).toContain('binary');
   });

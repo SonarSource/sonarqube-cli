@@ -24,6 +24,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
 import {
+  excludeFilesOutsideProject,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -71,8 +72,11 @@ async function buildSqaaJsonReportFromEntries(
         absolutePath,
         fileContent,
         branch,
-        wireDepth,
-        displayDepth,
+        {
+          projectRoot: resolved.projectRoot,
+          wireDepth,
+          displayDepth,
+        },
       ),
     );
     finishSqaaTelemetryFromReport(fetchResult.report, runOptions, durationMs);
@@ -82,10 +86,10 @@ async function buildSqaaJsonReportFromEntries(
   const cwd = process.cwd();
   const absolutePaths = entries.map((e) => e.absolutePath);
   const allPaths = absolutePaths.map((f) => toRelativePosixPath(f, cwd));
+  const wirePaths = absolutePaths.map((f) => toRelativePosixPath(f, resolved.projectRoot));
   const { result: tally, durationMs } = await timed(() =>
     runSqaaAnalysesTallyForResolved(
-      absolutePaths,
-      allPaths,
+      { files: absolutePaths, allPaths, wirePaths },
       resolved,
       branch,
       wireDepth,
@@ -105,7 +109,8 @@ async function buildSqaaJsonReportFromChangeSet(
   forcedDepth: SqaaAnalysisDepth | undefined,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
-  const { staged, base, branch, project, force } = options;
+  const { staged, base, branch, force } = options;
+  const project = options.discoveredProject ?? options.project;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
@@ -128,9 +133,18 @@ async function buildSqaaJsonReportFromChangeSet(
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
+  const projectChangeSet = excludeFilesOutsideProject(changeSet, resolved.projectRoot);
+  if (projectChangeSet.files.length === 0) {
+    return makeReport(
+      [],
+      [],
+      projectChangeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
+    );
+  }
+
   if (
     !(await confirmLargeRunIfNeeded(
-      changeSet.files.length,
+      projectChangeSet.files.length,
       console,
       force,
       options.format ?? 'text',
@@ -139,12 +153,12 @@ async function buildSqaaJsonReportFromChangeSet(
     return null;
   }
 
-  const { files, ignored, repoRoot } = changeSet;
+  const { files, ignored, repoRoot } = projectChangeSet;
   const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  const wirePaths = files.map((f) => toRelativePosixPath(f, resolved.projectRoot));
   const { result: tally, durationMs } = await timed(() =>
     runSqaaAnalysesTallyForResolved(
-      files,
-      allPaths,
+      { files, allPaths, wirePaths },
       resolved,
       resolvedBranch,
       wireDepth,
@@ -168,7 +182,8 @@ export async function buildSqaaJsonReport(
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
   const telemetryOptions = { ...runOptions, auth: connection.auth };
-  const { file: rawFiles, branch, project, force, depth: rawDepth, forcedDepth } = options;
+  const { file: rawFiles, branch, force, depth: rawDepth, forcedDepth } = options;
+  const project = options.discoveredProject ?? options.project;
 
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);

@@ -27,6 +27,7 @@ import { resolveFormatOption } from '@/core/commands/params.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {
+  excludeFilesOutsideProject,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -184,6 +185,9 @@ async function analyzeSqaaExplicitFiles(
   });
 }
 
+const ALL_FILES_EXCLUDED_REASONS =
+  'All change set files were excluded (binary, oversized, or outside the project).';
+
 async function analyzeSqaaChangeSet(params: {
   connection: SonarConnection;
   staged?: boolean;
@@ -224,9 +228,7 @@ async function analyzeSqaaChangeSet(params: {
   }
 
   if (changeSet.files.length === 0) {
-    console.text(
-      'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository).',
-    );
+    console.text(`Vortex analysis: no files to analyze. ${ALL_FILES_EXCLUDED_REASONS}`);
     return;
   }
 
@@ -239,9 +241,17 @@ async function analyzeSqaaChangeSet(params: {
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, console, force, format))) return;
+  // Only now is the project root known, so only now can files outside it be excluded.
+  const projectChangeSet = excludeFilesOutsideProject(changeSet, resolved.projectRoot);
+  if (projectChangeSet.files.length === 0) {
+    console.text(`Vortex analysis: no files to analyze. ${ALL_FILES_EXCLUDED_REASONS}`);
+    return;
+  }
 
-  await runSqaaAnalysisOnFiles(changeSet, {
+  if (!(await confirmLargeRunIfNeeded(projectChangeSet.files.length, console, force, format)))
+    return;
+
+  await runSqaaAnalysisOnFiles(projectChangeSet, {
     resolved,
     branch: resolvedBranch,
     format,

@@ -71,7 +71,7 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), {
+  const { projectKey, projectRoot } = await discoverProject(process.cwd(), {
     auth,
     silent: true,
     console: ctx.console,
@@ -83,11 +83,13 @@ async function handleSqaaPostToolUse(
   noteProject(auth, projectKey);
 
   const canonicalPath = canonicalizePath(filePath);
-  const normalizedPath = toRelativePosixPath(canonicalPath);
-  if (normalizedPath == null) {
-    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
+  // Gate on the project root, not the cwd: that is the base A3S needs the path relative to
+  const wirePath = toRelativePosixPath(canonicalPath, projectRoot);
+  if (wirePath == null) {
+    logger.debug(`PostToolUse SQAA skipped: file outside project root ${projectRoot}: ${filePath}`);
     return { decision: 'none' };
   }
+  const normalizedPath = toRelativePosixPath(canonicalPath) ?? wirePath;
 
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
@@ -96,15 +98,10 @@ async function handleSqaaPostToolUse(
     const branch = await resolveSqaaBranch(undefined, canonicalPath);
 
     const timedFetch = await timed(() =>
-      fetchSingleFileReport(
-        connection,
-        projectKey,
-        canonicalPath,
-        fileContent,
-        branch,
-        undefined,
-        'STANDARD',
-      ),
+      fetchSingleFileReport(connection, projectKey, canonicalPath, fileContent, branch, {
+        projectRoot,
+        displayDepth: 'STANDARD',
+      }),
     );
     fetchResult = timedFetch.result;
 

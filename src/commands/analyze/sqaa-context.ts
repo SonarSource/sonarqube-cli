@@ -58,7 +58,11 @@ export function resolveSqaaContext(
 ): SqaaResolvedContext | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { connection: resolution.connection, projectKey: resolution.projectKey };
+      return {
+        connection: resolution.connection,
+        projectKey: resolution.projectKey,
+        projectRoot: resolution.projectRoot,
+      };
     case 'no-org':
       if (resolution.explicitProject) {
         throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {

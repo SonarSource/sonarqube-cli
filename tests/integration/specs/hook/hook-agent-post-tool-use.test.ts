@@ -223,7 +223,7 @@ describe('sonar hook claude-post-tool-use', () => {
   );
 
   it(
-    'silently skips SQAA when the file is outside the current working directory',
+    'silently skips SQAA when the file is outside the project root',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -236,6 +236,9 @@ describe('sonar hook claude-post-tool-use', () => {
       // harness tempDir (sibling of cwd) and is cleaned up by dispose().
       harness.cwd.writeFile('../outside.ts', 'const x = 1;');
       const outsidePath = join(harness.cwd.path, '..', 'outside.ts');
+      // Here the project root resolves to cwd, so a file above cwd is also outside the
+      // project — which is the condition the handler now gates on.
+      const projectRoot = harness.cwd.path;
 
       const result = await harness.runWithStdin(
         'hook claude-post-tool-use',
@@ -252,7 +255,7 @@ describe('sonar hook claude-post-tool-use', () => {
       const logFile = harness.cliHome.dir('logs').file('sonarqube-cli.log');
       expect(logFile.exists()).toBe(true);
       expect(logFile.asText()).toContain(
-        `PostToolUse SQAA skipped: file outside cwd: ${outsidePath}`,
+        `PostToolUse SQAA skipped: file outside project root ${projectRoot}: ${outsidePath}`,
       );
     },
     { timeout: 15000 },
