@@ -42,6 +42,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, getInstalledIntegration } from './state-helpers';
 
 function findClaudeFeature(harness: TestHarness, featureId: string, scope?: string) {
@@ -1331,6 +1332,7 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1381,6 +1383,7 @@ describe('integrate claude — interactive feature selection', () => {
       let result: CliResult;
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install MCP server?');
         result = await session.waitFinish();
@@ -1410,6 +1413,7 @@ describe('integrate claude — interactive feature selection', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1421,6 +1425,82 @@ describe('integrate claude — interactive feature selection', () => {
       // The accepted MCP feature still installs.
       expect(harness.userHome.exists('.claude.json')).toBe(true);
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'installs the recommended set without per-feature prompts',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const session = harness.runInteractive('integrate claude');
+      await session.waitText('How would you like to proceed?');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const output = `${result.stdout}
+${result.stderr}`;
+      expect(output).toContain('What will be installed');
+      expect(output).not.toContain('Install secret scanning hooks?');
+      expect(output).not.toContain('Install MCP server?');
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails when the user declines every feature under Customize',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
+      await session.decline('Install secret scanning hooks?');
+      await session.decline('Install MCP server?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(`${result.stdout}
+${result.stderr}`).toContain('No feature selected');
+      expect(result.stdout + result.stderr).not.toContain('Press Enter to install');
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'cancels the installation on Ctrl+C at the mode prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const session = harness.runInteractive('integrate claude');
+      await session.waitText('How would you like to proceed?');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(`${result.stdout}
+${result.stderr}`).toContain('Installation cancelled');
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -1446,6 +1526,7 @@ describe('integrate claude — interactive feature selection', () => {
           __SQCLI_DEV_SKIP_CAG: '1',
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install Vortex?');
       await session.accept('Install MCP server?');
@@ -1500,6 +1581,7 @@ describe('integrate claude — interactive feature selection', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1557,6 +1639,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
@@ -1588,6 +1671,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.decline('Proceed with removal?');
@@ -1612,6 +1696,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
@@ -1657,6 +1742,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
@@ -1713,6 +1799,31 @@ describe('integrate claude — keep/remove already-installed features', () => {
   );
 
   it(
+    'keeps every installed feature without Keep? prompts when installing recommended',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      seedInstalledFeatures();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+
+      const session = harness.runInteractive('integrate claude');
+      await session.waitText('How would you like to proceed?');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(`${result.stdout}
+${result.stderr}`).not.toContain('Keep?');
+      expect(findClaudeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'drops the integration entry from state when its last feature is removed',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
@@ -1724,6 +1835,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
       );
 
       const session = harness.runInteractive('integrate claude');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.decline('MCP server (currently installed)  Keep?');
@@ -1789,6 +1901,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('Vortex (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
@@ -1829,6 +1942,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
           SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
         },
       });
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.decline('Install Vortex?');
       await session.accept('Install MCP server?');
