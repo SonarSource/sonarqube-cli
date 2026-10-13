@@ -42,6 +42,7 @@ import { SonarCommand, SonarOption } from '@/core/commands/sonar-command.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
+import * as handleInheritance from '@/core/host/windows-handle-inheritance.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -775,6 +776,30 @@ describe('CliCommandExecuted', () => {
   });
 
   describe('flush worker', () => {
+    const originalPlatform = process.platform;
+    let disableSpy: ReturnType<typeof spyOn>;
+
+    function setPlatform(platform: NodeJS.Platform): void {
+      Object.defineProperty(process, 'platform', { value: platform });
+    }
+
+    async function commitAs(command: string): Promise<void> {
+      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand(command))], {
+        command: command.split(' ')[0],
+      });
+    }
+
+    beforeEach(() => {
+      disableSpy = spyOn(handleInheritance, 'disableHandleInheritance').mockImplementation(
+        () => undefined,
+      );
+    });
+
+    afterEach(() => {
+      disableSpy.mockRestore();
+      setPlatform(originalPlatform);
+    });
+
     it('keeps a recorded event when the flush worker cannot start', async () => {
       spawnSpy.mockImplementation(() => {
         throw new Error('ENOENT');
@@ -806,6 +831,45 @@ describe('CliCommandExecuted', () => {
 
       expect(spawnSpy).not.toHaveBeenCalled();
       expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
+
+    it('disables handle inheritance before spawning the worker for a hook on Windows', async () => {
+      setPlatform('win32');
+      await commitAs('hook agent-session-start');
+
+      expect(disableSpy).toHaveBeenCalledTimes(1);
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+      const [disableOrder] = disableSpy.mock.invocationCallOrder as number[];
+      const [spawnOrder] = spawnSpy.mock.invocationCallOrder as number[];
+      expect(disableOrder).toBeLessThan(spawnOrder);
+    });
+
+    it('does not spawn the worker when disabling handle inheritance fails', async () => {
+      setPlatform('win32');
+      disableSpy.mockImplementation(() => {
+        throw new Error('dlopen failed');
+      });
+
+      await commitAs('hook agent-session-start');
+
+      expect(spawnSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
+
+    it('leaves handle inheritance alone for a non-hook command on Windows', async () => {
+      setPlatform('win32');
+      await commitAs('auth login');
+
+      expect(disableSpy).not.toHaveBeenCalled();
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves handle inheritance alone for a hook outside Windows', async () => {
+      setPlatform('linux');
+      await commitAs('hook agent-session-start');
+
+      expect(disableSpy).not.toHaveBeenCalled();
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
