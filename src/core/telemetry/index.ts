@@ -19,6 +19,7 @@
  */
 
 import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
+import { disableHandleInheritance } from '@/core/host/windows-handle-inheritance.ts';
 
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
@@ -30,6 +31,10 @@ import {
 
 export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
 
+export type CommitTelemetryOptions = IdentityEmitOptions & {
+  command?: string;
+};
+
 /**
  * Drain recorded telemetry facts through the generic telemetry emit, then spawn
  * the detached flush worker. Identity / invocation correlation are applied in
@@ -39,7 +44,7 @@ export const TELEMETRY_FLUSH_MODE_ENV = '__SQ_CLI_TELEMETRY_FLUSH__';
  */
 export async function commitTelemetryFacts(
   facts: readonly TelemetryFact[],
-  options?: IdentityEmitOptions,
+  options?: CommitTelemetryOptions,
 ): Promise<void> {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
 
@@ -55,18 +60,18 @@ export async function commitTelemetryFacts(
     }
   }
 
-  scheduleTelemetryFlush();
+  scheduleTelemetryFlush(options?.command);
 }
 
 /**
  * Spawn the detached flush worker when consent and egress allow it.
  * Called by {@link commitTelemetryFacts} after appending events.
  */
-function scheduleTelemetryFlush(): void {
+function scheduleTelemetryFlush(command: string | undefined): void {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
   if (!isTelemetryEnabled()) return;
   if (resolveTelemetryEgress().kind !== 'off') {
-    spawnFlushWorker();
+    spawnFlushWorker(command);
   }
 }
 
@@ -74,7 +79,7 @@ function scheduleTelemetryFlush(): void {
  * Spawn a detached child process that runs `sonar flush telemetry`.
  * proc.unref() lets the parent exit without waiting for the worker.
  */
-function spawnFlushWorker() {
+function spawnFlushWorker(command: string | undefined) {
   const env = { ...process.env, [TELEMETRY_FLUSH_MODE_ENV]: '1' };
 
   // In dev mode we run bun directly
@@ -84,6 +89,14 @@ function spawnFlushWorker() {
     ? [process.execPath, process.argv[1], 'flush-telemetry']
     : [process.execPath, 'flush-telemetry'];
 
+  if (command === 'hook' && process.platform === 'win32') {
+    try {
+      disableHandleInheritance();
+    } catch {
+      // The worker would hold the agent's pipe open after we exit.
+      return;
+    }
+  }
   try {
     const proc = Bun.spawn(cmd, { env, stdio: ['ignore', 'ignore', 'ignore'], detached: true });
     proc.unref();
