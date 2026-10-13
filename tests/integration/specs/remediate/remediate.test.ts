@@ -128,7 +128,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -152,7 +152,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not enabled for your organisation');
+      expect(output).toContain('Remediation Agent is not enabled for your organization');
       expect(output).toContain('Contact your admin to enable it');
       expect(output).not.toContain('Which issues');
     },
@@ -176,7 +176,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -226,7 +226,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -857,7 +857,7 @@ describe('sonar remediate', () => {
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Remediation Agent is not enabled for your organisation');
+        expect(output).toContain('Remediation Agent is not enabled for your organization');
         expect(output).toContain('Contact your admin to enable it');
 
         const agentJobCalls = server
