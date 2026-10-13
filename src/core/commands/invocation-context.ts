@@ -90,6 +90,7 @@ const DISABLED_RUNTIME: CliRuntime = createCliRuntime({ authResolver: new NullAu
 export class CommandInvocationContext {
   private readonly telemetryFactsBuffer: TelemetryFact[] = [];
   private readonly statsFactsBuffer: StatsFact[] = [];
+  private agentSessionId: string | null = null;
   private pendingConnection?: Promise<SonarConnection | null>;
 
   constructor(
@@ -181,6 +182,16 @@ export class CommandInvocationContext {
   /** Snapshot of stats facts recorded during this invocation. */
   statsFacts(): readonly StatsFact[] {
     return this.statsFactsBuffer.slice();
+  }
+
+  /** Store the agent session id for telemetry emitted after a hook completes. */
+  setAgentSessionId(agentSessionId: string | null): void {
+    this.agentSessionId = agentSessionId;
+  }
+
+  /** Return the session id supplied by the current agent hook. */
+  currentAgentSessionId(): string | null {
+    return this.agentSessionId;
   }
 }
 

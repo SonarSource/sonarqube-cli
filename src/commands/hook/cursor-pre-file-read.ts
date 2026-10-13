@@ -61,6 +61,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   }
 
   const agentSessionId = payload.conversation_id ?? null;
+  ctx.setAgentSessionId(agentSessionId);
 
   const filePath = payload.file_path;
   const content = await resolveFileContent(payload, filePath);
@@ -73,7 +74,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
     deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      await denyCursor(ctx, err.message);
+      await denyCursor(err.message);
       return { agentSessionId };
     }
     throw err;
@@ -94,7 +95,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   }
 
   if (secretsFoundInScan(scan.result)) {
-    await denyCursorFileAccess(ctx, filePath, workspaceRoots);
+    await denyCursorFileAccess(filePath, workspaceRoots);
   }
 
   return { agentSessionId };
