@@ -47,7 +47,7 @@ export async function discoverIntegrateProject(
   console: Console,
 ): Promise<DiscoveredProject> {
   return console.withSpinner('Discovering project...', () =>
-    discoverProject(process.cwd(), { auth, silent: true, console }),
+    discoverProject(process.cwd(), { auth, silent: true, console, requireSingleProject: true }),
   );
 }
 

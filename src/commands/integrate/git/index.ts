@@ -247,7 +247,12 @@ export async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverProject(root, { auth, silent: true, console });
+  const discovered = await discoverProject(root, {
+    auth,
+    silent: true,
+    console,
+    requireSingleProject: true,
+  });
   if (discovered.projectKey) {
     assertSingleLineProjectKey(discovered.projectKey);
     console.phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
