@@ -119,7 +119,6 @@ export interface SonarSecretsHooksFeatureConfig {
   featureId?: string;
   /** Feature display name shown during install. Defaults to `secret scanning hooks`. */
   displayName?: string;
-  benefitDescription?: string;
   previewDescription?: FeaturePreview;
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
@@ -150,7 +149,6 @@ export function createSonarSecretsHooksFeature<TOptions>(
   return {
     id: featureId,
     displayName: config.displayName ?? 'secret scanning hooks',
-    benefitDescription: config.benefitDescription,
     previewDescription: config.previewDescription,
     postInstallExample: secretsScanningExample(config.agentDisplayName),
     dependencies: [sonarSecretsBinaryDependency],
