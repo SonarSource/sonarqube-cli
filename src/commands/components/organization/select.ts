@@ -20,7 +20,7 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { toOrganizationSummary } from '@/core/domain/organization.ts';
-import { discoverOrganization } from '@/core/project-info.ts';
+import { discoverOrganization } from '@/core/project-discovery/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import {
   type Organization,

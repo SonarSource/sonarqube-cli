@@ -30,12 +30,12 @@ import {
 } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
   resolveContainedPath,
   type SharedProjectConfigEntry,
   sharedProjectConfigRepository,
-} from '@/core/shared-project-config.ts';
+} from '@/core/project-discovery/shared-project-config.ts';
+import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 export interface LinkOptions {
   path: string;
