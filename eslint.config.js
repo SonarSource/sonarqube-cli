@@ -115,9 +115,14 @@ export default tseslint.config(
           patterns: [
             {
               group: ['**/config-constants.ts'],
-              importNames: ['TELEMETRY_ENDPOINT', 'TELEMETRY_API_KEY', 'SENTRY_DSN'],
+              importNames: ['TELEMETRY_ENDPOINT', 'SENTRY_DSN'],
               message:
                 'Telemetry/Sentry destinations are confined to src/core/telemetry/telemetry-events.ts and src/core/observability/sentry.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+            },
+            {
+              group: ['**/telemetry-ingest-key.ts'],
+              message:
+                'The telemetry ingest key is confined to src/core/telemetry/telemetry-events.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
             },
           ],
         },
@@ -125,13 +130,28 @@ export default tseslint.config(
     },
   },
   {
-    files: [
-      'src/core/telemetry/telemetry-events.ts',
-      'src/core/observability/sentry.ts',
-      'src/core/result.ts',
-    ],
+    files: ['src/core/telemetry/telemetry-events.ts'],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+  // sentry.ts and result.ts are exempt from the destination and neverthrow restrictions,
+  // but not from the ingest key: only telemetry-events.ts may import it.
+  {
+    files: ['src/core/observability/sentry.ts', 'src/core/result.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/telemetry-ingest-key.ts'],
+              message:
+                'The telemetry ingest key is confined to src/core/telemetry/telemetry-events.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+            },
+          ],
+        },
+      ],
     },
   },
 
