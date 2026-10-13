@@ -28,10 +28,6 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import * as token from '@/core/auth/token.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as registry from '@/core/framework/features';
-import type { DiscoveredProject } from '@/core/project-info.ts';
-import * as discovery from '@/core/project-info.ts';
-import { okAsync } from '@/core/result.ts';
-import { ComponentsClient } from '@/core/server/components.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -44,13 +40,6 @@ const SERVER_AUTH = new ResolvedAuth({
 
 let SERVER_CTX: CommandAuthenticatedInvocationContext;
 
-const BASE_PROJECT: DiscoveredProject = {
-  repoRoot: '/project/root',
-  projectRoot: '/project/root',
-  configSources: [],
-  projectKey: 'my-project',
-};
-
 let fake: FakeConsole;
 
 beforeEach(() => {
@@ -62,14 +51,8 @@ describe('integrateOpenCode', () => {
   let checkTokenStatusSpy: Mock<
     Extract<(typeof token)['checkTokenStatus'], (...args: never[]) => unknown>
   >;
-  let discoverProjectSpy: Mock<
-    Extract<(typeof discovery)['discoverProject'], (...args: never[]) => unknown>
-  >;
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: never[]) => unknown>
-  >;
-  let componentExistsSpy: Mock<
-    Extract<(typeof ComponentsClient.prototype)['componentExists'], (...args: never[]) => unknown>
   >;
   let resolveVortexSetupSpy: Mock<
     Extract<(typeof vortex)['resolveVortexSetup'], (...args: never[]) => unknown>
@@ -77,11 +60,7 @@ describe('integrateOpenCode', () => {
 
   beforeEach(() => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
-    discoverProjectSpy = spyOn(discovery, 'discoverProject').mockResolvedValue(BASE_PROJECT);
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
-    componentExistsSpy = spyOn(ComponentsClient.prototype, 'componentExists').mockReturnValue(
-      okAsync(true),
-    );
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
       disposition: 'preserve',
     });
@@ -89,9 +68,7 @@ describe('integrateOpenCode', () => {
 
   afterEach(() => {
     checkTokenStatusSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
     installIntegrationSpy.mockRestore();
-    componentExistsSpy.mockRestore();
     resolveVortexSetupSpy.mockRestore();
   });
 
