@@ -55,6 +55,7 @@ import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { commitTelemetryFacts } from '@/core/telemetry';
 import { emitTelemetryEvent, flushTelemetryEvents } from '@/core/telemetry/telemetry-events.ts';
+import { TELEMETRY_API_KEY } from '@/core/telemetry/telemetry-ingest-key.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -562,7 +563,7 @@ describe('flushTelemetryEvents()', () => {
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('POST');
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-      expect((init.headers as Record<string, string>)['x-api-key']).toBeTruthy();
+      expect((init.headers as Record<string, string>)['x-api-key']).toBe(TELEMETRY_API_KEY);
     } finally {
       fetchSpy.mockRestore();
     }

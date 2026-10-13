@@ -30,12 +30,13 @@ import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { getTelemetryDir, TELEMETRY_API_KEY, TELEMETRY_ENDPOINT } from '../config-constants.ts';
+import { getTelemetryDir, TELEMETRY_ENDPOINT } from '../config-constants.ts';
 import type { StoredTelemetryEvent, TelemetryEventIdentityPayload } from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
 import { resolveCommandTelemetryIdentity, resolveStoreEventTelemetryIdentity } from './identity.ts';
+import { TELEMETRY_API_KEY } from './telemetry-ingest-key.ts';
 import { getOrCreateUserId } from './user.ts';
 
 const TELEMETRY_EVENTS_FILENAME = 'telemetry-events.ndjson';
