@@ -20,14 +20,24 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { piIntegration } from '@/commands/integrate/pi/declaration.ts';
+import { PI_EXTENSION_MANAGED_MARKER } from '@/commands/integrate/pi/secrets-extension-content.ts';
+
+import { type CliResult, TestHarness } from '../../harness';
 import { findInstalledFeature } from './state-helpers';
 
-describe('integrate pi — scaffold', () => {
+const SECRETS_EXTENSION_PATH = '.pi/agent/extensions/sonar-secrets.ts';
+
+function findPiFeature(harness: TestHarness, featureId: string) {
+  return findInstalledFeature(harness, 'pi', featureId);
+}
+
+describe('integrate pi — secrets scanning extension', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
   });
 
   afterEach(async () => {
@@ -35,17 +45,51 @@ describe('integrate pi — scaffold', () => {
   });
 
   it(
-    'reports that no feature is available yet and installs nothing',
+    'installs the managed secrets extension in ~/.pi/agent/extensions',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
 
       const result = await harness.run('integrate pi --non-interactive');
 
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('No feature selected for Pi');
-      expect(findInstalledFeature(harness, 'pi', 'sonar-secrets-hooks')).toBeUndefined();
-      expect(harness.userHome.exists('.pi')).toBe(false);
+      expect(result.exitCode).toBe(0);
+      expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      const extension = harness.userHome.file(...SECRETS_EXTENSION_PATH.split('/')).asText();
+      expect(extension).toContain(PI_EXTENSION_MANAGED_MARKER);
+      expect(extension).toContain('pi-pre-tool-use');
+      expect(extension).toContain('pi-chat-message');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'removes only the secrets extension when the user declines to keep the feature',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          piIntegration,
+          'sonar-secrets-hooks',
+          'global',
+          harness.userHome.path,
+        );
+      harness.userHome.writeFile(
+        SECRETS_EXTENSION_PATH,
+        `// ${PI_EXTENSION_MANAGED_MARKER} — do not edit by hand.\n`,
+      );
+      harness.userHome.writeFile('.pi/agent/extensions/other.ts', 'export default () => {};\n');
+
+      const session = harness.runInteractive('integrate pi');
+      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Proceed with removal?');
+      const result: CliResult = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+      expect(harness.userHome.exists(SECRETS_EXTENSION_PATH)).toBe(false);
+      expect(harness.userHome.exists('.pi/agent/extensions/other.ts')).toBe(true);
     },
     { timeout: 30000 },
   );
