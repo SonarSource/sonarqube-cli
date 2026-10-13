@@ -78,7 +78,7 @@ runs:
     - name: Run integration tests (Windows)
       if: ${{ inputs.os == 'windows' }}
       shell: bash
-      run: bun run test:integration
+      run: bun test --parallel=4 ./tests/integration/specs/mdm/
 
     - name: Run integration tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
