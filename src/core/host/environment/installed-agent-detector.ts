@@ -41,6 +41,7 @@ const AGENT_LABELS: Record<CallerAgent, string> = {
   copilot: 'Copilot',
   antigravity: 'Antigravity',
   opencode: 'OpenCode',
+  factory: 'Factory',
 };
 
 export const SUPPORTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
@@ -61,6 +62,7 @@ const AGENT_HOME_MARKERS: Record<DetectedAgentId, string[]> = {
   copilot: ['.copilot'],
   antigravity: [join('.gemini', 'config')],
   opencode: [join('.config', 'opencode')],
+  factory: ['.factory'],
 };
 
 export function detectInstalledAgents(home: string = homedir()): DetectedAgentId[] {

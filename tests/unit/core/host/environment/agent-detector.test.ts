@@ -27,6 +27,7 @@ import {
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
+  isFactoryAgentEnv,
   isOpenCodeAgentEnv,
 } from '@/core/host/environment/agent-detector.ts';
 
@@ -188,6 +189,16 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isFactoryAgentEnv', () => {
+    it.each([
+      ['factory', true],
+      ['Factory', false],
+      ['', false],
+    ])('returns %s only for the Factory marker', (marker, expected) => {
+      expect(isFactoryAgentEnv(env({ SONARQUBE_CLI_CALLER_AGENT: marker }))).toBe(expected);
+    });
+  });
+
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
@@ -195,6 +206,18 @@ describe('agent-detector', () => {
 
     it('detects opencode when only its marker is set', () => {
       expect(detectCallerAgent(env({ OPENCODE: '1' }))).toBe('opencode');
+    });
+
+    it('attributes Factory ahead of Claude and Cursor terminal markers', () => {
+      expect(
+        detectCallerAgent(
+          env({
+            SONARQUBE_CLI_CALLER_AGENT: 'factory',
+            CLAUDECODE: '1',
+            CURSOR_TRACE_ID: 't',
+          }),
+        ),
+      ).toBe('factory');
     });
 
     it('prefers opencode over cursor when both markers are set (opencode launched from a Cursor terminal)', () => {
