@@ -27,6 +27,7 @@ import {
   SECRETS_COMBINED_FEATURE_BENEFIT,
   SECRETS_COMBINED_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
+import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {
@@ -38,6 +39,7 @@ const PI_PROJECT_CONFIG_DIR = '.pi';
 const PI_GLOBAL_CONFIG_DIR = join('.pi', 'agent');
 const EXTENSIONS_DIR = 'extensions';
 const SECRETS_EXTENSION_FILE = 'sonar-secrets.ts';
+const MCP_CONFIG_FILE = 'mcp.json';
 
 export const PI_INTEGRATION_ID = 'pi';
 const PI_DISPLAY_NAME = 'Pi';
@@ -48,6 +50,11 @@ const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 export function resolvePiSecretsExtensionPath(context: IntegrationContext): string {
   const configDir = context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR;
   return join(context.targetRoot, configDir, EXTENSIONS_DIR, SECRETS_EXTENSION_FILE);
+}
+
+export function resolvePiMcpConfigPath(context: IntegrationContext): string {
+  const configDir = context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR;
+  return join(context.targetRoot, configDir, MCP_CONFIG_FILE);
 }
 
 export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
@@ -71,5 +78,6 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
         }),
       ],
     },
+    createMcpServerFeature<IntegrateAgentOptions>({ resolveConfigPath: resolvePiMcpConfigPath }),
   ],
 };
