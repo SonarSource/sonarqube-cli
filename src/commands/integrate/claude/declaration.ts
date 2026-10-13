@@ -35,10 +35,7 @@ import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -156,7 +153,6 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
       configDir: CLAUDE_CONFIG_DIR,
       hooksConfigFileName: SETTINGS_FILE,
       hooksPatchId: 'claude-settings-secrets-hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
       scripts: [
