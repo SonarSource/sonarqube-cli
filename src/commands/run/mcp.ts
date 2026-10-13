@@ -60,6 +60,7 @@ export async function runMcp(
   network?: ResolvedNetworkConfig,
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
+  let cachedCaCertPath: string | undefined;
   try {
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const authResult = await ctx.resolveAuth();
@@ -111,6 +112,7 @@ export async function runMcp(
       : { withFsMount: false, projectKey };
 
     const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
+    cachedCaCertPath = config.cachedCaCertPath;
 
     if (options.debug) {
       debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
@@ -151,6 +153,13 @@ export async function runMcp(
   }
 
   function cleanup(network: ResolvedNetworkConfig) {
+    if (cachedCaCertPath) {
+      try {
+        rmSync(cachedCaCertPath, { force: true });
+      } catch (err) {
+        logger.warn(`Could not remove cached CA certificate: ${String(err)}`);
+      }
+    }
     if (network.clientCert?.format === 'pem') {
       try {
         rmSync(clientCertCachePath(network.clientCert), { force: true });
