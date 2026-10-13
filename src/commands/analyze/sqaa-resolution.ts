@@ -93,6 +93,7 @@ export async function resolveSqaaProjectKey(
     auth,
     silent: true,
     console,
+    requireSingleProject: true,
   });
   if (!discovered.projectKey) {
     logger.debug('Vortex analysis skipped: no project key found');

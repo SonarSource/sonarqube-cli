@@ -160,7 +160,11 @@ async function resolveProjectKey(
     assertSingleLineProjectKey(options.project);
     return options.project;
   }
-  const discovered = await discoverProject(process.cwd(), { auth, console });
+  const discovered = await discoverProject(process.cwd(), {
+    auth,
+    console,
+    requireSingleProject: true,
+  });
   if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',

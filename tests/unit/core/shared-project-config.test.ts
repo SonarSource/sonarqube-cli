@@ -59,13 +59,15 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
 
     try {
-      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
-      expect(mapping).toEqual({
-        projectRoot: canonicalizePath(join(dir, 'services/eu')),
-        projectKey: 'acme_eu',
-        serverUrl: SONARCLOUD_URL,
-        organization: 'acme',
-      });
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, 'services/eu')),
+          projectKey: 'acme_eu',
+          serverUrl: SONARCLOUD_URL,
+          organization: 'acme',
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -81,8 +83,8 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
 
     try {
-      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
-      expect(mapping?.serverUrl).toBe(SONARCLOUD_US_URL);
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings[0]?.serverUrl).toBe(SONARCLOUD_US_URL);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -97,13 +99,15 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: '.',
     });
     try {
-      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
-      expect(mapping).toEqual({
-        projectRoot: dir,
-        projectKey: 'acme_staging',
-        serverUrl: 'https://sc-staging.io',
-        organization: 'acme',
-      });
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: dir,
+          projectKey: 'acme_staging',
+          serverUrl: 'https://sc-staging.io',
+          organization: 'acme',
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -119,104 +123,106 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
 
     try {
-      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
-      expect(mapping).toEqual({
-        projectRoot: canonicalizePath(join(dir, 'services/onprem')),
-        projectKey: 'onprem_key',
-        serverUrl: 'https://sonarqube.internal',
-        organization: undefined,
-      });
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, 'services/onprem')),
+          projectKey: 'onprem_key',
+          serverUrl: 'https://sonarqube.internal',
+          organization: undefined,
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when the file is missing', async () => {
+  it('returns an empty array when the file is missing', async () => {
     const dir = tempDir('missing');
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null for invalid JSON', async () => {
+  it('returns an empty array for invalid JSON', async () => {
     const dir = tempDir('bad-json');
     writeConfig(dir, '{ not valid json ]');
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when the root is an array (the old multi-entry format)', async () => {
+  it('returns an empty array when the root is an array (the old multi-entry format)', async () => {
     const dir = tempDir('array-root');
     writeConfig(
       dir,
       JSON.stringify([{ serverUrl: 'https://sq.example', projectKey: 'x', path: '.' }]),
     );
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when the root has no "project" field (the old unwrapped format)', async () => {
+  it('returns an empty array when the root has no "project" field (the old unwrapped format)', async () => {
     const dir = tempDir('no-project-field');
     writeConfig(
       dir,
       JSON.stringify({ serverUrl: 'https://sq.example', projectKey: 'x', path: '.' }),
     );
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "project" is not an object', async () => {
+  it('returns an empty array when "project" is not an object', async () => {
     const dir = tempDir('project-not-object');
     writeConfig(dir, JSON.stringify({ project: 'nope' }));
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when the project entry is missing projectKey or path', async () => {
+  it('returns an empty array when the project entry is missing projectKey or path', async () => {
     const dir = tempDir('missing-fields');
     writeProjectConfig(dir, { serverUrl: 'https://sq.example', projectKey: 'x' });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null for an invalid region value', async () => {
+  it('returns an empty array for an invalid region value', async () => {
     const dir = tempDir('bad-region');
     writeProjectConfig(dir, { region: 'mars', organization: 'acme', projectKey: 'x', path: '.' });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null for a project entry with neither serverUrl nor region/organization', async () => {
+  it('returns an empty array for a project entry with neither serverUrl nor region/organization', async () => {
     const dir = tempDir('neither');
     writeProjectConfig(dir, { projectKey: 'x', path: '.' });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null for a project entry mixing serverUrl with region/organization', async () => {
+  it('returns an empty array for a project entry mixing serverUrl with region/organization', async () => {
     const dir = tempDir('mixed');
     writeProjectConfig(dir, {
       serverUrl: 'https://sq.example',
@@ -226,13 +232,13 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: '.',
     });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" escapes the directory holding the config via "../"', async () => {
+  it('returns an empty array when "path" escapes the directory holding the config via "../"', async () => {
     const dir = tempDir('escape-relative');
     writeProjectConfig(dir, {
       serverUrl: 'https://sq.example',
@@ -240,13 +246,13 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: '../../../../etc',
     });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" is absolute', async () => {
+  it('returns an empty array when "path" is absolute', async () => {
     const dir = tempDir('escape-absolute');
     writeProjectConfig(dir, {
       serverUrl: 'https://sq.example',
@@ -254,7 +260,7 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: process.platform === 'win32' ? 'C:\\Windows' : '/etc',
     });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -269,24 +275,24 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: 'a/../b',
     });
     try {
-      const mapping = await new SharedProjectConfigRepositoryImpl().load(dir);
-      expect(mapping?.projectRoot).toBe(canonicalizePath(join(dir, 'b')));
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings[0]?.projectRoot).toBe(canonicalizePath(join(dir, 'b')));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" is empty', async () => {
+  it('returns an empty array when "path" is empty', async () => {
     const dir = tempDir('empty-path');
     writeProjectConfig(dir, { serverUrl: 'https://sq.example', projectKey: 'x', path: '' });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" escapes through a symlinked intermediate directory', async () => {
+  it('returns an empty array when "path" escapes through a symlinked intermediate directory', async () => {
     const dir = tempDir('escape-symlink');
     const outside = tempDir('escape-symlink-outside');
     mkdirSync(join(outside, 'secret'));
@@ -298,14 +304,14 @@ describe('SharedProjectConfigFileRepository.load', () => {
     });
     symlinkSync(outside, join(dir, 'vendor'));
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" points to a directory that does not exist', async () => {
+  it('returns an empty array when "path" points to a directory that does not exist', async () => {
     const dir = tempDir('missing-target');
     writeProjectConfig(dir, {
       serverUrl: 'https://sq.example',
@@ -313,13 +319,13 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: 'services/never-created',
     });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('returns null when "path" points to a regular file rather than a directory', async () => {
+  it('returns an empty array when "path" points to a regular file rather than a directory', async () => {
     const dir = tempDir('path-is-file');
     writeFileSync(join(dir, 'not-a-directory'), 'x');
     writeProjectConfig(dir, {
@@ -328,7 +334,110 @@ describe('SharedProjectConfigFileRepository.load', () => {
       path: 'not-a-directory',
     });
     try {
-      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toBeNull();
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a legacy single "project" field as a one-element array', async () => {
+    const dir = tempDir('load-legacy');
+    writeProjectConfig(dir, {
+      serverUrl: 'https://sq.example',
+      projectKey: 'x',
+      path: '.',
+    });
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: dir,
+          projectKey: 'x',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves every entry in a "projects" array (monorepo)', async () => {
+    const dir = tempDir('load-projects');
+    mkdirSync(join(dir, 'project1'));
+    mkdirSync(join(dir, 'project2'));
+    writeConfig(
+      dir,
+      JSON.stringify({
+        projects: [
+          { serverUrl: 'https://sq.example', projectKey: 'proj1', path: 'project1' },
+          { serverUrl: 'https://sq.example', projectKey: 'proj2', path: 'project2' },
+        ],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, 'project1')),
+          projectKey: 'proj1',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+        {
+          projectRoot: canonicalizePath(join(dir, 'project2')),
+          projectKey: 'proj2',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prefers "projects" over a stray "project" field when both are present', async () => {
+    const dir = tempDir('load-precedence');
+    writeConfig(
+      dir,
+      JSON.stringify({
+        project: { serverUrl: 'https://sq.example', projectKey: 'legacy', path: '.' },
+        projects: [{ serverUrl: 'https://sq.example', projectKey: 'monorepo', path: '.' }],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings.map((m) => m.projectKey)).toEqual(['monorepo']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips an individually-invalid entry inside "projects" without dropping the others', async () => {
+    const dir = tempDir('load-partial-invalid');
+    mkdirSync(join(dir, 'project2'));
+    writeConfig(
+      dir,
+      JSON.stringify({
+        projects: [
+          { serverUrl: 'https://sq.example', projectKey: 'missing-path' },
+          { serverUrl: 'https://sq.example', projectKey: 'proj2', path: 'project2' },
+        ],
+      }),
+    );
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings.map((m) => m.projectKey)).toEqual(['proj2']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an empty array when "projects" is present but not an array', async () => {
+    const dir = tempDir('load-projects-not-array');
+    writeConfig(dir, JSON.stringify({ projects: 'nope' }));
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -347,12 +456,14 @@ describe('SharedProjectConfigFileRepository.set', () => {
         serverUrl: 'https://sonarqube.internal',
       });
 
-      expect(await repo.load(dir)).toEqual({
-        projectRoot: canonicalizePath(join(dir, 'services/onprem')),
-        projectKey: 'onprem_key',
-        serverUrl: 'https://sonarqube.internal',
-        organization: undefined,
-      });
+      expect(await repo.load(dir)).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, 'services/onprem')),
+          projectKey: 'onprem_key',
+          serverUrl: 'https://sonarqube.internal',
+          organization: undefined,
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -369,12 +480,14 @@ describe('SharedProjectConfigFileRepository.set', () => {
         organization: 'acme',
       });
 
-      expect(await repo.load(dir)).toEqual({
-        projectRoot: canonicalizePath(join(dir, '.')),
-        projectKey: 'acme_us',
-        serverUrl: SONARCLOUD_US_URL,
-        organization: 'acme',
-      });
+      expect(await repo.load(dir)).toEqual([
+        {
+          projectRoot: canonicalizePath(join(dir, '.')),
+          projectKey: 'acme_us',
+          serverUrl: SONARCLOUD_US_URL,
+          organization: 'acme',
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -387,9 +500,9 @@ describe('SharedProjectConfigFileRepository.set', () => {
       await repo.set(dir, { projectKey: 'first', path: '.', serverUrl: 'https://a.example' });
       await repo.set(dir, { projectKey: 'second', path: '.', serverUrl: 'https://b.example' });
 
-      const mapping = await repo.load(dir);
-      expect(mapping?.projectKey).toBe('second');
-      expect(mapping?.serverUrl).toBe('https://b.example');
+      const mappings = await repo.load(dir);
+      expect(mappings[0]?.projectKey).toBe('second');
+      expect(mappings[0]?.serverUrl).toBe('https://b.example');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
