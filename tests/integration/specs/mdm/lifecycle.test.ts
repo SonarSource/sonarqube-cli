@@ -24,7 +24,6 @@ import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from '
 
 import { TestHarness } from '../../harness';
 import {
-  eventually,
   isRealCli,
   isStub,
   isSymlink,
@@ -75,7 +74,7 @@ describe('mdm lifecycle', () => {
     }
 
     expect((await sandbox.run('remove')).exitCode).toBe(0);
-    await eventually(() => !existsSync(sandbox.binaryPath));
+    expect(existsSync(sandbox.binaryPath)).toBe(false);
     expect(isSymlink(standalone)).toBe(false);
     expect(existsSync(standalone)).toBe(false);
   });

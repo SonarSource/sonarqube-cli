@@ -40,7 +40,7 @@ Artifacts: harness tests publish tiny compiled stubs (`cli-stub.ts`, versions 1.
 | U13 | Valid checksum but not an executable: aborts **before** the swap, installed binary untouched | H | U W |
 | U14 | Unpublished version, missing/garbage `stable.version`, unreachable CDN: exit 1, binary untouched | H | U W |
 | U15 | Temp download directory is removed on success and on failure | H | U W |
-| U16 | Installed CLI updates itself (replacing the running binary); on Windows the `.old` file disappears after exit | H, E | U W |
+| U16 | Installed CLI updates itself (replacing the running binary); on Windows the renamed `.old` is registered in `PendingFileRenameOperations` (deleted at next reboot) | H, E | U W |
 | U17 | Real CDN: stable version downloads, real `.sha256` sidecar verifies, `--version` works | E | U W |
 | **Rollback** | | | |
 | R1 | Replaces a newer binary with the requested version | H | U W |
@@ -55,7 +55,7 @@ Artifacts: harness tests publish tiny compiled stubs (`cli-stub.ts`, versions 1.
 | D3 | A `sonar` on `PATH` that is not the CLI is refused and kept | H | U W |
 | D4 | Nothing to remove succeeds | H | U W |
 | D5 | `--mdm-binary-only` keeps PATH copies and standalone installs | H | U W |
-| D6 | Installed CLI removes itself; on Windows the renamed `.old` is gone after exit | H, E | U W |
+| D6 | Installed CLI removes itself; on Windows the renamed `.old` is registered in `PendingFileRenameOperations` (deleted at next reboot) | H, E | U W |
 | D7 | Dangling standalone symlink is removed | H | U |
 | D8 | Windows machine `PATH` entry is **not** reverted (documents current behaviour) | E | W |
 | **Lifecycle** | | | |

@@ -22,7 +22,7 @@
 // Skipped unless elevated on CI (see _helpers.ts).
 
 import { existsSync, lstatSync, mkdirSync, readlinkSync } from 'node:fs';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import {
   afterAll,
@@ -41,8 +41,8 @@ import { getCliBinaryPath } from '../../integration/harness/cli-runner.js';
 import type { FakeBinariesServer } from '../../integration/harness/fake-binaries-server.js';
 import { FakeBinariesServerBuilder } from '../../integration/harness/fake-binaries-server.js';
 import {
-  eventually,
   isRealCli,
+  isScheduledForRebootDelete,
   isStub,
   stubBytes,
   stubPath,
@@ -111,6 +111,13 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('sonar mdm on the real system', () => {
   function staleEntries(): string[] {
     return directoryEntries(dirname(SYSTEM_BINARY)).filter((name) =>
       name.startsWith(`${basename(SYSTEM_BINARY)}.`),
+    );
+  }
+
+  function unscheduledStaleEntries(): string[] {
+    return staleEntries().filter(
+      (name) =>
+        !name.endsWith('.old') || !isScheduledForRebootDelete(join(dirname(SYSTEM_BINARY), name)),
     );
   }
 
@@ -191,7 +198,7 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('sonar mdm on the real system', () => {
 
       expect(result.exitCode, result.stdout + result.stderr).toBe(0);
       expect(isStub(SYSTEM_BINARY, '2.0.0')).toBe(true);
-      await eventually(() => staleEntries().length === 0);
+      expect(unscheduledStaleEntries()).toEqual([]);
     });
 
     it('rolls the running system binary back to an older version', async () => {
@@ -215,8 +222,8 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('sonar mdm on the real system', () => {
       const result = await runMdm(['remove'], env, SYSTEM_BINARY);
 
       expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-      await eventually(() => !existsSync(SYSTEM_BINARY));
-      await eventually(() => staleEntries().length === 0);
+      expect(existsSync(SYSTEM_BINARY)).toBe(false);
+      expect(unscheduledStaleEntries()).toEqual([]);
     });
 
     it.skipIf(IS_WINDOWS || STANDALONE_ENUMERABLE_HOME === null)(

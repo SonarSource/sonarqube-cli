@@ -18,15 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { spawn } from 'node:child_process';
 import {
-  appendFileSync,
   chmodSync,
-  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
-  openSync,
   readdirSync,
   renameSync,
   rmSync,
@@ -34,16 +30,29 @@ import {
 import { basename, dirname, join } from 'node:path';
 
 import { isWindows, windowsPowerShellPath } from '@/core/host/environment/platform-detector.ts';
+import { spawnProcess } from '@/core/process/process.ts';
 
 const DELETE_TARGET_ENV = 'SONAR_SELF_REPLACE_DELETE_TARGET';
-const DIAGNOSTIC_LOG_ENV = 'SONAR_SELF_REPLACE_LOG';
+const MOVEFILE_DELAY_UNTIL_REBOOT = 4;
 export const EXECUTABLE_MODE = 0o755;
+
+const DELETE_ON_REBOOT_SCRIPT = `
+$sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);'
+Add-Type -MemberDefinition $sig -Name 'Win32MoveFile' -Namespace 'NativeMethods'
+if (-not [NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, $null, ${MOVEFILE_DELAY_UNTIL_REBOOT})) {
+  exit [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+}
+`;
 
 function asideSuffix(): string {
   return `.${Date.now()}.old`;
 }
 
 function removeStaleAsideFiles(target: string): void {
+  if (!existsSync(dirname(target))) {
+    return;
+  }
   const prefix = `${basename(target)}.`;
   for (const name of readdirSync(dirname(target))) {
     if (name.startsWith(prefix) && name.endsWith('.old')) {
@@ -56,56 +65,20 @@ function removeStaleAsideFiles(target: string): void {
   }
 }
 
-function logDiagnostic(message: string): void {
-  const logPath = process.env[DIAGNOSTIC_LOG_ENV];
-  if (logPath) {
-    appendFileSync(logPath, `${new Date().toISOString()} cli: ${message}\n`);
-  }
-}
-
-function deleteAfterExit(path: string): void {
-  const script = `
-function L($m) { if ($env:${DIAGNOSTIC_LOG_ENV}) { Add-Content -LiteralPath $env:${DIAGNOSTIC_LOG_ENV} -Value "$(Get-Date -Format o) helper: $m" } }
-L "started pid=$PID waiting for ${process.pid} target=$env:${DELETE_TARGET_ENV}"
-L "parent alive: $($null -ne (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue))"
-Wait-Process -Id ${process.pid} -ErrorAction SilentlyContinue
-L "parent exited"
-for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); $i++) {
-  try { Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction Stop } catch { L "attempt $i failed: $($_.Exception.Message)" }
-  if (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}) { Start-Sleep -Seconds 1 }
-}
-L "done, target exists: $(Test-Path -LiteralPath $env:${DELETE_TARGET_ENV})"
-`;
-  const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
-  const logPath = process.env[DIAGNOSTIC_LOG_ENV];
-  const helperOutput = logPath ? openSync(logPath, 'a') : 'ignore';
-  const child = spawn(
+async function deleteOnReboot(path: string): Promise<void> {
+  const result = await spawnProcess(
     windowsPowerShellPath(),
-    ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedScript],
-    {
-      stdio: ['ignore', helperOutput, helperOutput],
-      windowsHide: true,
-      env: {
-        SystemRoot: process.env.SystemRoot ?? String.raw`C:\Windows`,
-        ...process.env,
-        [DELETE_TARGET_ENV]: path,
-      },
-    },
+    ['-NoProfile', '-NonInteractive', '-Command', DELETE_ON_REBOOT_SCRIPT],
+    { env: { [DELETE_TARGET_ENV]: path } },
   );
-  child.on('error', (error) => {
-    logDiagnostic(`helper error: ${error.message}`);
-  });
-  child.on('exit', (code, signal) => {
-    logDiagnostic(`helper exited code=${String(code)} signal=${String(signal)}`);
-  });
-  if (typeof helperOutput === 'number') {
-    closeSync(helperOutput);
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Scheduling ${path} for deletion failed with exit code ${String(result.exitCode)}: ${result.stderr}`,
+    );
   }
-  logDiagnostic(`spawned helper pid=${String(child.pid)} for ${path}`);
-  child.unref();
 }
 
-export function replaceBinary(sourcePath: string, targetPath: string): void {
+export async function replaceBinary(sourcePath: string, targetPath: string): Promise<void> {
   mkdirSync(dirname(targetPath), { recursive: true });
   const incomingPath = `${targetPath}.new`;
   rmSync(incomingPath, { force: true });
@@ -132,11 +105,14 @@ export function replaceBinary(sourcePath: string, targetPath: string): void {
     throw error;
   }
   if (hadPrevious) {
-    deleteAfterExit(asidePath);
+    await deleteOnReboot(asidePath);
   }
 }
 
-export function removeBinary(targetPath: string): void {
+export async function removeBinary(targetPath: string): Promise<void> {
+  if (isWindows()) {
+    removeStaleAsideFiles(targetPath);
+  }
   try {
     rmSync(targetPath, { force: true });
     return;
@@ -147,5 +123,5 @@ export function removeBinary(targetPath: string): void {
   }
   const asidePath = `${targetPath}${asideSuffix()}`;
   renameSync(targetPath, asidePath);
-  deleteAfterExit(asidePath);
+  await deleteOnReboot(asidePath);
 }

@@ -338,6 +338,12 @@ guaranteed-eventually cleanup is acceptable — note this leaves a stale file
 until the next reboot, flag as a tradeoff to decide explicitly, not silently
 picked).
 
+Decision: the delayed delete is used for both `update` and `remove`. A detached
+helper that waits for the parent was implemented first, but it never ran under
+Bun `--compile` on the Windows CI runner. The renamed `.old` therefore stays on
+disk until the next reboot; stale `.old` files are swept by the next
+`update`/`rollback`/`remove`.
+
 Land this as its own small module (e.g. `src/core/host/self-replace.ts`) with
 a Unix branch (trivial: rename/unlink) and a Windows branch (the above),
 rather than inlining it into the `mdm update`/`mdm rollback`/`mdm remove`

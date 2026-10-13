@@ -62,8 +62,7 @@ const WINDOWS_SYSTEM_PATH = [
   join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0'),
 ].join(delimiter);
 const UNIX_SYSTEM_PATH = ['/usr/bin', '/bin'].join(delimiter);
-const SELF_REPLACE_SETTLE_MS = 20_000;
-const POLL_INTERVAL_MS = 100;
+const PENDING_RENAMES_SCRIPT = String.raw`(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -Name PendingFileRenameOperations -ErrorAction SilentlyContinue).PendingFileRenameOperations`;
 
 export const STUB_VERSIONS = ['1.0.0', '2.0.0', '3.0.0'] as const;
 export const NOT_AN_EXECUTABLE = Buffer.from('this is not an executable');
@@ -117,20 +116,18 @@ export function isRoot(): boolean {
   return process.getuid?.() === 0;
 }
 
-let diagnosticLogPath: string | undefined;
-
-export async function eventually(check: () => boolean, timeoutMs = SELF_REPLACE_SETTLE_MS) {
-  const deadline = Date.now() + timeoutMs;
-  while (!check()) {
-    if (Date.now() > deadline) {
-      const log =
-        diagnosticLogPath && existsSync(diagnosticLogPath)
-          ? readFileSync(diagnosticLogPath, 'utf8')
-          : '<no self-replace log written>';
-      throw new Error(`Condition not met in time. Self-replace log:\n${log}`);
-    }
-    await Bun.sleep(POLL_INTERVAL_MS);
+export function isScheduledForRebootDelete(path: string): boolean {
+  if (!IS_WINDOWS) {
+    return false;
   }
+  const result = Bun.spawnSync([
+    join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    PENDING_RENAMES_SCRIPT,
+  ]);
+  return result.stdout.toString().toLowerCase().includes(path.toLowerCase());
 }
 
 export interface BootstrapOptions {
@@ -153,14 +150,12 @@ export class MdmSandbox {
     this.tempDir = this.root.dir('tmp').path;
     mkdirSync(this.pathDir, { recursive: true });
     mkdirSync(this.tempDir, { recursive: true });
-    diagnosticLogPath = this.root.file('self-replace.log').path;
   }
 
   env(): Record<string, string> {
     const systemPath = IS_WINDOWS ? WINDOWS_SYSTEM_PATH : UNIX_SYSTEM_PATH;
     return {
       [ENV_MDM_BINARY_PATH]: this.binaryPath,
-      SONAR_SELF_REPLACE_LOG: this.root.file('self-replace.log').path,
       [ENV_MDM_USER_HOMES]: this.homes.join(delimiter),
       PATH: [this.pathDir, systemPath].join(delimiter),
       ...(IS_WINDOWS
@@ -227,6 +222,13 @@ export class MdmSandbox {
     }
     return readdirSync(dirname(this.binaryPath)).filter(
       (name) => name !== basename(this.binaryPath),
+    );
+  }
+
+  unscheduledEntriesNextToBinary(): string[] {
+    return this.extraEntriesNextToBinary().filter(
+      (name) =>
+        !name.endsWith('.old') || !isScheduledForRebootDelete(join(dirname(this.binaryPath), name)),
     );
   }
 

@@ -92,7 +92,7 @@ async function placeBinary(
   targetPath: string,
   env: MdmEnvironment,
 ): Promise<void> {
-  replaceBinary(sourcePath, targetPath);
+  await replaceBinary(sourcePath, targetPath);
   if (isWindows()) {
     if (env.skipMachineIntegration) {
       return;
@@ -133,7 +133,7 @@ async function linkStandaloneInstalls(
       continue;
     }
     console.text(`  ${standalone} — replacing with symlink to ${env.binaryPath}`);
-    removeBinary(standalone);
+    await removeBinary(standalone);
     mkdirSync(dirname(standalone), { recursive: true });
     symlinkSync(env.binaryPath, standalone);
   }
@@ -147,7 +147,7 @@ async function removeStandaloneInstalls(
     const standalone = standaloneBinaryPath(home);
     if (pathExistsOrLinked(standalone)) {
       console.text(`  ${standalone} — removing...`);
-      removeBinary(standalone);
+      await removeBinary(standalone);
     }
   }
 }
@@ -173,7 +173,7 @@ async function removeRemainingBinariesOnPath({ console }: CommandInvocationConte
       );
     }
     console.text(`sonar still resolves to: ${found} — removing...`);
-    removeBinary(found);
+    await removeBinary(found);
     if (pathExistsOrLinked(found)) {
       throw new CommandFailedError(`Failed to remove ${found}.`);
     }
@@ -275,7 +275,7 @@ export async function mdmRemove(
   env: MdmEnvironment = defaultMdmEnvironment(),
 ): Promise<void> {
   const { console } = ctx;
-  removeBinary(env.binaryPath);
+  await removeBinary(env.binaryPath);
   if (pathExistsOrLinked(env.binaryPath)) {
     throw new CommandFailedError(`Failed to remove ${env.binaryPath}.`);
   }

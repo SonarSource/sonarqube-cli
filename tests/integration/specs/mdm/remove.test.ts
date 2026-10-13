@@ -23,15 +23,8 @@ import { delimiter } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
-import {
-  eventually,
-  isStub,
-  isSymlink,
-  MdmSandbox,
-  SKIP_ON_WINDOWS,
-  stubPath,
-} from './mdm-sandbox';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { isStub, isSymlink, MdmSandbox, SKIP_ON_WINDOWS, stubPath } from './mdm-sandbox';
 
 setDefaultTimeout(60_000);
 
@@ -127,8 +120,9 @@ describe('mdm remove', () => {
     const result = await sandbox.run('remove', { binaryPath: sandbox.binaryPath });
 
     expect(result.exitCode).toBe(0);
-    await eventually(() => !existsSync(sandbox.binaryPath));
-    await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
+    expect(existsSync(sandbox.binaryPath)).toBe(false);
+    expect(sandbox.unscheduledEntriesNextToBinary()).toEqual([]);
+    expect(sandbox.extraEntriesNextToBinary()).toHaveLength(IS_WINDOWS ? 1 : 0);
   });
 
   it('keeps unrelated files in the user homes', async () => {
