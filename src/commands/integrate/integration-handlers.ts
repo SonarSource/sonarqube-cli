@@ -30,6 +30,8 @@ import { integrateCopilot } from './copilot';
 import { COPILOT_INTEGRATION_ID } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { CURSOR_INTEGRATION_ID } from './cursor/declaration.ts';
+import { integrateFactory } from './factory';
+import { FACTORY_INTEGRATION_ID } from './factory/declaration.ts';
 import { integrateOpenCode } from './opencode';
 import { OPENCODE_INTEGRATION_ID } from './opencode/declaration.ts';
 
@@ -45,4 +47,5 @@ export const AGENT_INTEGRATION_HANDLERS: AgentIntegrationHandlers = {
   [CURSOR_INTEGRATION_ID]: integrateCursor,
   [ANTIGRAVITY_INTEGRATION_ID]: integrateAntigravity,
   [OPENCODE_INTEGRATION_ID]: integrateOpenCode,
+  [FACTORY_INTEGRATION_ID]: integrateFactory,
 };

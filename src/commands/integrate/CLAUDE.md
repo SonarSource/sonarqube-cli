@@ -1,6 +1,8 @@
 # Integrations (`sonar integrate`)
 
-Every integration installs globally. Bare `sonar integrate` (no subcommand) detects installed agents and mentions them, then prompts the user to pick one (Claude, Copilot, Codex, Cursor, Antigravity, OpenCode, or Git) and delegates to its handler. `--non-interactive` with no agent errors instead of guessing. Implementation in `src/commands/integrate/integrate-bare.ts`.
+Every integration installs globally. Bare `sonar integrate` (no subcommand) detects installed agents and mentions them, then prompts the user to pick one (Claude, Copilot, Codex, Cursor, Antigravity, OpenCode, Factory, or Git) and delegates to its handler. `--non-interactive` with no agent errors instead of guessing. Implementation in `src/commands/integrate/integrate-bare.ts`.
+
+The Factory declaration records a resource-free feature so `sonar integrate factory` can save its state. It does not install MCP configuration, secrets blocking, or Vortex hooks. Factory's intended integration surface is the SonarQube MCP server. The Factory config directory is `~/.factory` on macOS and Linux and `%USERPROFILE%\.factory` on Windows. Its shared resolver is in `factory/declaration.ts`.
 
 `sonar integrate git` installs globally by default too. `--local` installs the project-scoped hook instead — a workaround for setups where a global hook doesn't fit (e.g. an existing Husky config), not a first-class alternative: it has no interactive path. `resolveGitIntegrationId()` picks `husky`/`pre-commit`/`native-git` the same way it always did; only `native-git` is reachable globally. Project-scope hook-dir resolution (`resolveLocalGitHooksDir` in `src/core/host/git/hooks.ts`, used by `GitRepo` and the native hook's `targetPath`) reads `core.hooksPath` with `--local` only, never falling back to an inherited global/system value — a `--local` install must never follow or overwrite the global hook that a prior plain `sonar integrate git` installed.
 

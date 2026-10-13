@@ -23,7 +23,8 @@
  * Best-effort: hook subprocesses often omit variables present in the agent's integrated terminal.
  */
 
-export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode';
+export type CallerAgent =
+  'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode' | 'factory';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -69,8 +70,13 @@ export function isOpenCodeAgentEnv(env: NodeJS.ProcessEnv = process.env): boolea
   return Boolean(env.OPENCODE);
 }
 
+/** Marker set by the Factory MCP server entry. */
+export function isFactoryAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SONARQUBE_CLI_CALLER_AGENT === 'factory';
+}
+
 /**
- * Precedence: Codex > Copilot CLI > Antigravity > OpenCode > Claude Code > Cursor.
+ * Precedence: Codex > Copilot CLI > Antigravity > OpenCode > Factory > Claude Code > Cursor.
  * Antigravity sets Claude-compat env vars, so it must be checked before Claude. OpenCode's
  * `OPENCODE` marker is checked before Claude's and Cursor's generic integrated-terminal markers
  * (`CLAUDE_PROJECT_DIR`, `CURSOR_TRACE_ID`, ...), which OpenCode inherits when launched from
@@ -83,6 +89,7 @@ export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerA
   if (isCopilotCliAgentEnv(env)) return 'copilot';
   if (isAntigravityAgentEnv(env)) return 'antigravity';
   if (isOpenCodeAgentEnv(env)) return 'opencode';
+  if (isFactoryAgentEnv(env)) return 'factory';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
   return null;
