@@ -140,7 +140,6 @@ describe('cursorPreFileRead', () => {
     expect(output.permission).toBe('deny');
     expect(ctx.telemetryFacts()).toHaveLength(1);
     expect(ctx.currentAgentSessionId()).toBe('cursor-session');
-    expect(ctx.currentCommandResult()).toBe('success');
   });
 
   it('keeps the stats fact for postAction to commit on deny', async () => {

@@ -74,7 +74,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
     deps = await resolveAuthAndSecrets(ctx);
   } catch (err) {
     if (err instanceof MissingDependenciesError) {
-      await denyCursor(ctx, err.message);
+      await denyCursor(err.message);
       return { agentSessionId };
     }
     throw err;
@@ -95,7 +95,7 @@ export async function cursorPreFileRead(ctx: CommandInvocationContext): Promise<
   }
 
   if (secretsFoundInScan(scan.result)) {
-    await denyCursorFileAccess(ctx, filePath, workspaceRoots);
+    await denyCursorFileAccess(filePath, workspaceRoots);
   }
 
   return { agentSessionId };

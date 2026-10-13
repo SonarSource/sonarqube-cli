@@ -21,7 +21,6 @@
 // Shared deny helpers for Cursor secrets hook handlers.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
 
 import { runSecretsBinaryOnText } from '../analyze/secrets.ts';
@@ -49,10 +48,10 @@ export function secretsFoundInScan(result: { exitCode: number | null }): boolean
   return (result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND;
 }
 
-export async function denyCursor(ctx: CommandInvocationContext, message: string): Promise<never> {
-  // process.stdout.write() is buffered and async on pipes; calling process.exit() immediately
-  // after can truncate the deny JSON before Cursor reads it. Awaiting the write callback
-  // guarantees the payload is fully flushed before the command reports the required exit code.
+export async function denyCursor(message: string): Promise<never> {
+  // process.stdout.write() is buffered and async on pipes, so the process can end before Cursor
+  // reads the deny JSON. Awaiting the write callback guarantees the payload is fully flushed
+  // before the command reports the required exit code.
   await new Promise<void>((resolve) => {
     process.stdout.write(
       JSON.stringify({ permission: 'deny', user_message: message, agent_message: message }) + '\n',
@@ -61,7 +60,6 @@ export async function denyCursor(ctx: CommandInvocationContext, message: string)
       },
     );
   });
-  ctx.setCommandResult('success');
   throw new CommandFailedError('Cursor blocked file access.', {
     exitCode: CURSOR_BLOCK_EXIT_CODE,
   });
@@ -69,7 +67,6 @@ export async function denyCursor(ctx: CommandInvocationContext, message: string)
 
 /** Deny access because secrets were found in `filePath`, adding it to `.cursorignore`. */
 export async function denyCursorFileAccess(
-  ctx: CommandInvocationContext,
   filePath: string | undefined,
   workspaceRoots: string[],
 ): Promise<never> {
@@ -82,5 +79,5 @@ export async function denyCursorFileAccess(
   } else {
     message = `${SECRETS_IN_FILE_MESSAGE}: ${filePath}.`;
   }
-  return denyCursor(ctx, message);
+  return denyCursor(message);
 }

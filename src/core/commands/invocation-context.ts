@@ -91,7 +91,6 @@ export class CommandInvocationContext {
   private readonly telemetryFactsBuffer: TelemetryFact[] = [];
   private readonly statsFactsBuffer: StatsFact[] = [];
   private agentSessionId: string | null = null;
-  private commandResult: 'success' | 'failure' | undefined;
   private pendingConnection?: Promise<SonarConnection | null>;
 
   constructor(
@@ -193,16 +192,6 @@ export class CommandInvocationContext {
   /** Return the session id supplied by the current agent hook. */
   currentAgentSessionId(): string | null {
     return this.agentSessionId;
-  }
-
-  /** Override the command result reported in the command-executed telemetry fact. */
-  setCommandResult(commandResult: 'success' | 'failure'): void {
-    this.commandResult = commandResult;
-  }
-
-  /** Return an explicit command result when a handler defines its own outcome. */
-  currentCommandResult(): 'success' | 'failure' | undefined {
-    return this.commandResult;
   }
 }
 
