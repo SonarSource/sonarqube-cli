@@ -390,7 +390,17 @@ describe('integrate codex', () => {
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).toContain(SQAA_HEADING);
+        expect(body).toContain("installed by `sonar integrate` at the user's request");
+        expect(body).toContain('At the end of a turn that changed file contents');
         expect(body).toContain('sonar analyze agentic --depth DEEP');
+        expect(body).toContain('fix them and re-run the same scope');
+        expect(body).toContain('A routine skip needs no mention');
+        expect(body).toContain('If the user asks for Vortex analysis or configures a project');
+        expect(body).toContain('run the analysis again and report any error');
+        expect(body).toContain('continue without retrying this session');
+        expect(body).not.toContain('Non-negotiable rules');
+        expect(body).not.toContain('Overrides every rule below');
+        expect(body).not.toContain('say **nothing** about it');
         expect(
           findInstalledSubfeature(
             harness,
