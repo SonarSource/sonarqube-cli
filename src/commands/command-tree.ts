@@ -159,6 +159,14 @@ import {
   type ListProjectsOptions,
   VALID_FORMATS as PROJECTS_VALID_FORMATS,
 } from './list/projects.ts';
+import type {
+  MdmInstallOptions,
+  MdmRemoveOptions,
+  MdmRollbackOptions,
+  MdmUpdateOptions,
+} from './mdm';
+import { mdmInstall, mdmRemove, mdmRollback, mdmUpdate } from './mdm';
+import { parseArtifactBaseUrlOption, parseVersionOption } from './mdm/mdm-artifact.ts';
 import {
   DEFAULT_TOP as QUALITY_GATE_DEFAULT_TOP,
   qualityGateStatus,
@@ -937,6 +945,69 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .anonymousAction((ctx, options: UpdateVersionOptions) => updateVersion(options, ctx))
       .hook('preAction', retryGlobalIntegrationsMigration);
   }
+
+  const mdmApprovedVersionOption = (): SonarOption =>
+    new SonarOption(
+      '--approved-version <version>',
+      'Install this version instead of the published stable version',
+    ).argParser(parseVersionOption);
+  const mdmArtifactBaseUrlOption = (): SonarOption =>
+    new SonarOption(
+      '--artifact-base-url <url>',
+      'Fetch stable.version, artifacts and checksums from this mirror of https://binaries.sonarsource.com/Distribution/sonarqube-cli',
+    ).argParser(parseArtifactBaseUrlOption);
+
+  const ALLOW_MISSING_CHECKSUM_FLAG = '--allow-missing-checksum';
+  const ALLOW_MISSING_CHECKSUM_DESCRIPTION =
+    'Proceed with a warning when the .sha256 file cannot be fetched (a mismatch still aborts)';
+
+  const mdm = COMMAND_TREE.command('mdm', { hidden: true }).description(
+    'Manage the SonarQube CLI on machines deployed through an MDM system (run as root/SYSTEM)',
+  );
+
+  mdm
+    .command('install')
+    .description('Install the running binary system-wide and replace per-user standalone installs')
+    .addOption(mdmApprovedVersionOption())
+    .addOption(mdmArtifactBaseUrlOption())
+    .option(
+      '--skip-if-present',
+      'Do nothing except restoring permissions when a binary is already installed',
+    )
+    .option('--skip-standalone-links', 'Do not replace per-user standalone installs with symlinks')
+    .anonymousAction((ctx, options: MdmInstallOptions) => mdmInstall(options, ctx));
+
+  mdm
+    .command('update')
+    .description('Update the system-wide binary to the stable or approved version')
+    .addOption(mdmApprovedVersionOption())
+    .option('--force', 'Replace the binary even when it is already at the target version')
+    .addOption(mdmArtifactBaseUrlOption())
+    .option(ALLOW_MISSING_CHECKSUM_FLAG, ALLOW_MISSING_CHECKSUM_DESCRIPTION)
+    .anonymousAction((ctx, options: MdmUpdateOptions) => mdmUpdate(options, ctx));
+
+  mdm
+    .command('rollback')
+    .description('Replace the system-wide binary with a specific version')
+    .addOption(
+      new SonarOption('--version <version>', 'Version to install')
+        .makeOptionMandatory()
+        .argParser(parseVersionOption),
+    )
+    .addOption(mdmArtifactBaseUrlOption())
+    .option(ALLOW_MISSING_CHECKSUM_FLAG, ALLOW_MISSING_CHECKSUM_DESCRIPTION)
+    .anonymousAction((ctx, options: MdmRollbackOptions) => mdmRollback(options, ctx));
+
+  mdm
+    .command('remove')
+    .description(
+      'Remove the system-wide binary, other copies on PATH and per-user standalone installs',
+    )
+    .option(
+      '--mdm-binary-only',
+      'Keep other copies on PATH (e.g. Homebrew) and per-user standalone installs',
+    )
+    .anonymousAction((ctx, options: MdmRemoveOptions) => mdmRemove(options, ctx));
 
   const runCommand = COMMAND_TREE.command('run', { hidden: true }).description(
     'Run SonarQube services',
