@@ -66,6 +66,8 @@ export interface McpServerOptions {
   debug?: boolean;
   readOnly?: boolean;
   toolsets?: string;
+  containerNetwork?: string;
+  containerAddHost?: string;
 }
 
 export type McpServerContext =
@@ -312,6 +314,13 @@ function buildDockerRunArgsAndEnv(
   ];
   const env: Record<string, string> = { SONARQUBE_TOKEN: token, SONARQUBE_URL: serverUrl };
 
+  if (options.containerNetwork) {
+    args.push('--network', options.containerNetwork);
+  }
+  if (options.containerAddHost) {
+    args.push('--add-host', options.containerAddHost);
+  }
+
   if (auth.connectionType === 'cloud') {
     args.push('-e', 'SONARQUBE_ORG');
     env.SONARQUBE_ORG = org ?? '';
@@ -387,6 +396,8 @@ export function getMcpContainerCommand(
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
 const WSL_CA_PATH_ENV_VAR = 'SONARQUBE_MCP_CA_PATH';
 const WSL_CLIENT_CERT_PATH_ENV_VAR = 'SONARQUBE_MCP_CLIENT_CERT_PATH';
+const WSL_NETWORK_ENV_VAR = 'SONARQUBE_MCP_NETWORK';
+const WSL_ADD_HOST_ENV_VAR = 'SONARQUBE_MCP_ADD_HOST';
 
 function getMcpWslContainerCommand(
   auth: ResolvedAuth,
@@ -417,11 +428,19 @@ function getMcpWslContainerCommand(
     wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
   }
 
+  const wslOptions = { ...options };
+  if (options.containerNetwork) {
+    wslOptions.containerNetwork = `"$${WSL_NETWORK_ENV_VAR}"`;
+  }
+  if (options.containerAddHost) {
+    wslOptions.containerAddHost = `"$${WSL_ADD_HOST_ENV_VAR}"`;
+  }
+
   const config = buildDockerRunArgsAndEnv(
     auth,
     context,
     mountSource,
-    options,
+    wslOptions,
     network,
     certMountSources,
   );
@@ -439,6 +458,15 @@ function getMcpWslContainerCommand(
   if (context.withFsMount) {
     env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
     wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
+  }
+
+  if (options.containerNetwork) {
+    env[WSL_NETWORK_ENV_VAR] = options.containerNetwork;
+    wslenv.push(`${WSL_NETWORK_ENV_VAR}/u`);
+  }
+  if (options.containerAddHost) {
+    env[WSL_ADD_HOST_ENV_VAR] = options.containerAddHost;
+    wslenv.push(`${WSL_ADD_HOST_ENV_VAR}/u`);
   }
 
   for (const [key, value] of Object.entries(wslPathEnv)) {
