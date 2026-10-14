@@ -222,7 +222,12 @@ async function getPushedCommitBlobs(
     ...(await knownRemoteTips(refs)),
     remotesExclusion,
   ];
-  const lines = (await tryRunGitLines(args, process.cwd())) ?? [];
+  const lines = await tryRunGitLines(args, process.cwd());
+  if (lines === undefined) {
+    throw new CommandFailedError(
+      'Secrets scan could not run because pushed blobs could not be listed by Git.',
+    );
+  }
 
   const groups: CommitBlobs[] = [];
   for (const line of lines) {
