@@ -33,7 +33,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { sharedProjectConfigRepository } from '@/core/shared-project-config.ts';
+import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 
 import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
