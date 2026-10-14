@@ -198,7 +198,7 @@ function isProcessRunning(pid: number): boolean {
 // The container reads the CA copy only while it starts. A copy older than this window is
 // safe to remove even when the PID check is wrong, as when ~/.sonar is shared across
 // sandboxes that each have their own process list.
-const ORPHAN_MIN_AGE_MS = 15 * 60 * 1000;
+const ORPHAN_MIN_AGE_MS = 900_000; // 15 minutes
 
 function isOlderThanOrphanWindow(path: string): boolean {
   try {
