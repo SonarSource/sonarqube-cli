@@ -30,7 +30,8 @@ void mock.module('@/core/host/environment/platform-detector.ts', () => ({
   isWindows: isWindowsMock,
 }));
 
-const { detectContainerRuntime } = await import('@/core/host/environment/tool-detector.ts');
+const { checkContainerRuntimeHealth, detectContainerRuntime } =
+  await import('@/core/host/environment/tool-detector.ts');
 
 describe('detectContainerRuntime', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -84,7 +85,7 @@ describe('detectContainerRuntime', () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
-    expect(spawnSpy).not.toHaveBeenCalledWith('wsl.exe', expect.anything());
+    expect(spawnSpy.mock.calls.some((call: unknown[]) => call[0] === 'wsl.exe')).toBe(false);
   });
 
   it('returns "docker" when docker daemon is running even if other runtimes are also available', async () => {
@@ -95,7 +96,6 @@ describe('detectContainerRuntime', () => {
     });
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
-    // Should not have checked podman/nerdctl since docker succeeded
     expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -146,5 +146,166 @@ describe('detectContainerRuntime', () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
+  });
+
+  it('reports an installed runtime whose daemon is unavailable', async () => {
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) =>
+        Promise.resolve({
+          exitCode: cmd === 'podman' && args[0] === '--version' ? 0 : 1,
+          stdout: '',
+          stderr: '',
+        }),
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'podman',
+      viaWsl: false,
+    });
+  });
+
+  it('reports missing when no runtime executable is installed', async () => {
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockRejectedValue(new Error('ENOENT'));
+
+    expect(await checkContainerRuntimeHealth()).toEqual({ status: 'not_found' });
+  });
+
+  it('reports docker as not responding instead of selecting a ready podman', async () => {
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) => {
+        if (cmd === 'docker' && args[0] === 'info') {
+          return Promise.reject(new Error('Container runtime probe timed out'));
+        }
+        return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
+      },
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: false,
+      reason: 'timeout',
+    });
+    expect(spawnSpy.mock.calls.map((call: unknown[]) => call[0])).toEqual(['docker']);
+  });
+
+  it('does not probe WSL when native docker does not respond on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation((cmd: string) =>
+      cmd === 'docker'
+        ? Promise.reject(new Error('Container runtime probe timed out'))
+        : Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }),
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: false,
+      reason: 'timeout',
+    });
+    expect(spawnSpy.mock.calls.map((call: unknown[]) => call[0])).toEqual(['docker']);
+  });
+
+  it('reports a ready WSL runtime when native runtimes are unavailable on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) =>
+        Promise.resolve({
+          exitCode:
+            (cmd === 'docker' && args[0] === '--version') ||
+            (cmd === 'wsl.exe' && args[0] === 'docker' && args[1] === 'info')
+              ? 0
+              : 1,
+          stdout: '',
+          stderr: '',
+        }),
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'ready',
+      runtime: 'docker',
+      viaWsl: true,
+    });
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'wsl.exe',
+      ['docker', 'info'],
+      {},
+      3000,
+      expect.any(String),
+    );
+  });
+
+  it('keeps native unavailable when WSL runtimes are missing on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) => {
+        if (cmd === 'wsl.exe') return Promise.reject(new Error('ENOENT'));
+        return Promise.resolve({
+          exitCode: cmd === 'docker' && args[0] === '--version' ? 0 : 1,
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    expect(spawnSpy.mock.calls.some((call: unknown[]) => call[0] === 'wsl.exe')).toBe(true);
+  });
+
+  it('reports a WSL timeout ahead of a native unavailable runtime on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) => {
+        if (cmd === 'wsl.exe') {
+          return Promise.reject(new Error('Container runtime probe timed out'));
+        }
+        return Promise.resolve({
+          exitCode: cmd === 'docker' && args[0] === '--version' ? 0 : 1,
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: true,
+      reason: 'timeout',
+    });
+    expect(spawnSpy.mock.calls.filter((call: unknown[]) => call[0] === 'wsl.exe')).toHaveLength(1);
+  });
+
+  it('reports WSL unavailable when native runtimes are missing on Windows', async () => {
+    isWindowsMock.mockImplementation(() => true);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) => {
+        if (cmd !== 'wsl.exe') return Promise.reject(new Error('ENOENT'));
+        return Promise.resolve({
+          exitCode: args[0] === 'docker' && args[1] === '--version' ? 0 : 1,
+          stdout: '',
+          stderr: '',
+        });
+      },
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'not_ready',
+      runtime: 'docker',
+      viaWsl: true,
+    });
+  });
+
+  it('does not probe WSL for runtime health on non-Windows platforms', async () => {
+    isWindowsMock.mockImplementation(() => false);
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockRejectedValue(new Error('ENOENT'));
+
+    expect(await checkContainerRuntimeHealth()).toEqual({ status: 'not_found' });
+    expect(spawnSpy.mock.calls.some((call: unknown[]) => call[0] === 'wsl.exe')).toBe(false);
   });
 });

@@ -656,7 +656,7 @@ describe('system status', () => {
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP not running when docker available but container absent',
+    'reports a ready Docker runtime for configured MCP',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
       harness.state().withDockerMock(false);
@@ -669,14 +669,16 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('Runtime: READY (docker)');
     },
     { timeout: 15000 },
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP configured status without checking docker',
+    'reports a Docker runtime that is not ready and a remedy',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness.state().withDockerMock(false, 1);
       harness
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
@@ -686,6 +688,36 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('MCP Runtime: NOT READY (docker)');
+      expect(result.stdout).toContain('docker is not ready. Start or repair it.');
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'reports a container runtime that was not found for configured MCP in JSON',
+    async () => {
+      const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+
+      const result = await harness.run('system status --json', {
+        extraEnv: { PATH: harness.cwd.path },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        mcpRuntime: { status: string };
+        healthy: boolean;
+        recommendations: string[];
+      };
+      expect(json.mcpRuntime.status).toBe('not_found');
+      expect(json.healthy).toBe(false);
+      expect(json.recommendations).toContain(
+        'SonarQube MCP Server needs Docker, Podman, or nerdctl. Install and start one to use the MCP server.',
+      );
     },
     { timeout: 15000 },
   );
@@ -1254,7 +1286,7 @@ describe('system status', () => {
       expect(result.exitCode).toBe(0);
       // Should not contain any "MCP Server" line when no MCP is configured
       const lines = result.stdout.split('\n');
-      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      const mcpLines = lines.filter((line) => line.includes('• MCP Server:'));
       expect(mcpLines).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1297,8 +1329,9 @@ describe('system status', () => {
 
       // Count MCP Server lines — should be 2 (one for each integration)
       const lines = stdout.split('\n');
-      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      const mcpLines = lines.filter((line) => line.includes('• MCP Server:'));
       expect(mcpLines).toHaveLength(2);
+      expect(lines.filter((line) => line.includes('MCP Runtime:'))).toHaveLength(1);
 
       // Both should show CONFIGURED status
       mcpLines.forEach((line) => {
