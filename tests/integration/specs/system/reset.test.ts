@@ -32,7 +32,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -209,6 +209,7 @@ describe('system reset --force', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Cleaning up SonarQube CLI environment');
       expect(result.stdout).toContain('Authentication: 0 tokens removed from keychain.');
+      expect(result.stderr).not.toContain('A token stored before this upgrade');
       expect(result.stdout).toContain('CLI has been successfully reset to factory settings.');
     },
     { timeout: 15000 },
@@ -235,6 +236,65 @@ describe('system reset --force', () => {
     },
     { timeout: 15000 },
   );
+
+  it('deletes a legacy token locally on reset and prints the notice only when present', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.state().withActiveConnection(server.baseUrl()).withTokenName('old-token-name');
+    const legacyAccount = new URL(server.baseUrl()).hostname;
+    mkdirSync(dirname(harness.keychainJsonFile), { recursive: true });
+    writeFileSync(
+      harness.keychainJsonFile,
+      JSON.stringify({ tokens: { [legacyAccount]: 'legacy-token' } }),
+    );
+
+    const result = await harness.run('system reset --force');
+
+    expect(result.exitCode).toBe(0);
+    expect(readKeychainTokens(harness.keychainJsonFile)[legacyAccount]).toBeUndefined();
+    expect(result.stderr).toContain('A token stored before this upgrade may still be valid');
+    expect(result.stderr).toContain('My Account > Security');
+    expect(
+      server.getRecordedRequests().filter((request) => request.path === '/api/user_tokens/revoke'),
+    ).toHaveLength(0);
+    expect(result.stdout + result.stderr).not.toContain('legacy-token');
+  });
+
+  it('prints one legacy-token notice when reset deletes keys for multiple connections', async () => {
+    const now = new Date().toISOString();
+    const raw = JSON.parse(buildRawState({})) as Record<string, unknown>;
+    raw.auth = {
+      isAuthenticated: true,
+      activeConnectionId: 'conn-a',
+      connections: [
+        {
+          id: 'conn-a',
+          type: 'on-premise',
+          serverUrl: 'https://sonar-a.example',
+          authenticatedAt: now,
+        },
+        {
+          id: 'conn-b',
+          type: 'on-premise',
+          serverUrl: 'https://sonar-b.example',
+          authenticatedAt: now,
+        },
+      ],
+    };
+    harness.state().withRawState(JSON.stringify(raw));
+    mkdirSync(dirname(harness.keychainJsonFile), { recursive: true });
+    writeFileSync(
+      harness.keychainJsonFile,
+      JSON.stringify({ tokens: { 'sonar-a.example': 'legacy-a', 'sonar-b.example': 'legacy-b' } }),
+    );
+
+    const result = await harness.run('system reset --force');
+
+    expect(result.exitCode).toBe(0);
+    expect(Object.keys(readKeychainTokens(harness.keychainJsonFile))).toHaveLength(0);
+    expect(result.stderr.match(/A token stored before this upgrade/g)).toHaveLength(1);
+    expect(result.stdout + result.stderr).not.toContain('legacy-a');
+    expect(result.stdout + result.stderr).not.toContain('legacy-b');
+  });
 
   it(
     'warns and still removes local auth when server-side token revocation fails',

@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import { reportLegacyTokenRemoval } from '@/commands/auth/legacy-token-cleanup.ts';
+import { deleteLegacyTokens, deleteToken, getToken } from '@/core/host/keychain.ts';
 import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import { type Console, type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
@@ -35,13 +36,18 @@ export interface AuthResetResult {
 interface ConnectionOutcome {
   connectionId: string;
   keychainWarnings: string[];
+  removedLegacy: boolean;
 }
 
 function formatConnectionTarget(conn: AuthConnection): string {
   return conn.orgKey ? `${conn.serverUrl} (${conn.orgKey})` : conn.serverUrl;
 }
 
-function formatKeychainWarning(target: string, operation: 'read' | 'delete', err: unknown): string {
+function formatKeychainWarning(
+  target: string,
+  operation: 'read' | 'delete' | 'delete pre-upgrade',
+  err: unknown,
+): string {
   const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
   return `${target}: could not ${operation} keychain entry (${detail})`;
 }
@@ -73,7 +79,14 @@ async function purgeConnectionAuth(
     keychainWarnings.push(formatKeychainWarning(target, 'delete', err));
   }
 
-  return { connectionId: conn.id, keychainWarnings };
+  let removedLegacy = false;
+  try {
+    removedLegacy = await deleteLegacyTokens(conn.serverUrl, conn.orgKey);
+  } catch (err) {
+    keychainWarnings.push(formatKeychainWarning(target, 'delete pre-upgrade', err));
+  }
+
+  return { connectionId: conn.id, keychainWarnings, removedLegacy };
 }
 
 function buildKeychainWarningDetail(
@@ -116,6 +129,10 @@ export async function purgeAuth(state: CliState, console: Console): Promise<Auth
   for (const conn of state.auth.connections) {
     outcomes.push(await purgeConnectionAuth(conn, console));
   }
+  reportLegacyTokenRemoval(
+    outcomes.some((outcome) => outcome.removedLegacy),
+    console,
+  );
 
   const authConnectionIds = outcomes.map((outcome) => outcome.connectionId);
   const keychainWarnings = outcomes.flatMap((outcome) => outcome.keychainWarnings);

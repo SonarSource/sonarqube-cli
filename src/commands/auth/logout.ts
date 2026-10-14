@@ -19,10 +19,11 @@
  */
 
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import { deleteLegacyTokens, deleteToken, getToken } from '@/core/host/keychain.ts';
 import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
 
+import { reportLegacyTokenRemoval } from './legacy-token-cleanup.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
@@ -68,6 +69,14 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   } catch (err) {
     console.warn(
       `Could not delete the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
+
+  try {
+    reportLegacyTokenRemoval(await deleteLegacyTokens(server, org), console);
+  } catch (err) {
+    console.warn(
+      `Could not delete the pre-upgrade local token: ${(err as Error).message}. Continuing with local logout.`,
     );
   }
 

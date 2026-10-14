@@ -148,20 +148,19 @@ function getBackend(): KeychainBackend {
 
 /**
  * Generate keychain account key
- * SonarQube Cloud: "sonarcloud.io:org-key"
- * SonarQube Server: "hostname"
+ * SonarQube Cloud: "https://sonarcloud.io:org-key"
+ * SonarQube Server: "https://hostname/base-path"
  */
 export function generateKeychainAccount(serverURL: string, org?: string): string {
   try {
     const url = new URL(serverURL);
-    const hostname = url.hostname;
+    const server = url.origin + url.pathname.replace(/\/$/, '');
 
     // SonarQube Cloud with organization
     if (org) {
-      return `${hostname}:${org}`;
+      return `${server}:${org}`;
     }
-    // SonarQube Server or hostname without organization
-    return hostname;
+    return server;
   } catch {
     return serverURL;
   }
@@ -220,7 +219,7 @@ export async function deleteStaleTokens(
   connections: ReadonlyArray<{ serverUrl: string; orgKey?: string }>,
   newServerURL: string,
   newOrg?: string,
-): Promise<void> {
+): Promise<boolean> {
   const newAccount = generateKeychainAccount(newServerURL, newOrg);
   for (const conn of connections) {
     const account = generateKeychainAccount(conn.serverUrl, conn.orgKey);
@@ -228,6 +227,23 @@ export async function deleteStaleTokens(
       await removeSecret(account);
     }
   }
+  return connections.reduce(async (previous, conn) => {
+    const alreadyRemoved = await previous;
+    return (await deleteLegacyTokens(conn.serverUrl, conn.orgKey)) || alreadyRemoved;
+  }, Promise.resolve(false));
+}
+
+export async function deleteLegacyTokens(serverURL: string, org?: string): Promise<boolean> {
+  let hostname: string;
+  try {
+    hostname = new URL(serverURL).hostname;
+  } catch {
+    return false;
+  }
+
+  const removedHostToken = await removeSecret(hostname);
+  const removedOrgToken = org ? await removeSecret(`${hostname}:${org}`) : false;
+  return removedHostToken || removedOrgToken;
 }
 
 /**
