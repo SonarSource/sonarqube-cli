@@ -38,6 +38,7 @@ import { integrateCopilot } from './copilot';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration.ts';
+import { devinIntegration } from './devin/declaration.ts';
 import { integrateGit } from './git';
 import {
   HUSKY_INTEGRATION_ID,
@@ -78,15 +79,20 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [cursorIntegration.id]: cursorIntegration.displayName,
   [antigravityIntegration.id]: antigravityIntegration.displayName,
   [openCodeIntegration.id]: openCodeIntegration.displayName,
+  [devinIntegration.id]: devinIntegration.displayName,
   [NATIVE_GIT_INTEGRATION_ID]: 'Git',
   [HUSKY_INTEGRATION_ID]: 'Git',
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
 };
 
+/** Agents whose integration is not released yet: kept out of the detected list and the warnings. */
+const UNRELEASED_AGENT_IDS: ReadonlySet<DetectedAgentId> = new Set(['devin']);
+
 /** Agent pairs known to fight over hook execution when both are integrated on the same machine. */
 const CONFLICTING_AGENT_PAIRS: readonly (readonly [DetectedAgentId, DetectedAgentId])[] = [
   ['claude', 'cursor'],
   ['claude', 'copilot'],
+  ['claude', 'devin'],
 ];
 
 /** Tools already integrated (any recorded feature), for display alongside detected agents. */
@@ -125,7 +131,7 @@ export async function integrateBare(
     );
   }
 
-  const detected = detectInstalledAgents();
+  const detected = detectInstalledAgents().filter((id) => !UNRELEASED_AGENT_IDS.has(id));
   if (detected.length > 0) {
     console.info(`Detected agents on your machine: ${detected.map(agentDisplayName).join(', ')}`);
   }
