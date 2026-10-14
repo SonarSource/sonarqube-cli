@@ -35,8 +35,10 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as keychainModule from '@/core/host/keychain.ts';
+import type { CliState } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
+import * as identityFetchModule from '@/core/telemetry/identity-fetch.ts';
 
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
@@ -52,6 +54,12 @@ function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
     orgKey,
     connectionType: 'cloud',
     source: 'state',
+  });
+}
+
+function writeStateFixture(state: CliState): void {
+  updateState((latest) => {
+    Object.assign(latest, state);
   });
 }
 
@@ -93,7 +101,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe();
 
@@ -108,7 +116,7 @@ describe('recordConnectionFromAuth', () => {
   it('replaces a mismatched active connection and fetches fresh identity', async () => {
     const state = loadState();
     addOrUpdateConnection(state, 'https://old.example.com', 'on-premise');
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'fresh-user' }],
@@ -128,6 +136,44 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('records login after another process changes the prior connection during identity lookup', async () => {
+    const initial = loadState();
+    addOrUpdateConnection(initial, 'https://old.example.com', 'on-premise');
+    writeStateFixture(initial);
+    const identitySpy = spyOn(identityFetchModule, 'resolveTelemetryIdentity').mockImplementation(
+      () => {
+        const concurrent = loadState();
+        addOrUpdateConnection(concurrent, 'https://old.example.com', 'on-premise', {
+          envOnly: true,
+        });
+        concurrent.config.cliVersion = '2.0.0';
+        writeStateFixture(concurrent);
+        return Promise.resolve({
+          user_uuid: 'new-user',
+          organization_uuid_v4: null,
+          sqs_installation_id: 'new-server',
+        });
+      },
+    );
+
+    try {
+      const connection = await recordConnectionFromAuth(
+        serverAuth('new-token', 'https://new.example.com'),
+        {
+          force: true,
+          tokenName: 'new-token',
+        },
+      );
+      const saved = loadState();
+      expect(connection.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.tokenName).toBe('new-token');
+      expect(saved.config.cliVersion).toBe('2.0.0');
+    } finally {
+      identitySpy.mockRestore();
+    }
+  });
+
   it('without force, a matching complete connection wins over a new tokenName', async () => {
     const state = loadState();
     const existing = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
@@ -137,7 +183,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
       tokenName: 'ignored-token-name',
@@ -155,7 +201,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe();
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
@@ -176,7 +222,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'old-user';
     existing.organizationUuidV4 = 'old-org';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'new-user' }],
@@ -222,7 +268,7 @@ describe('recordConnectionFromAuth', () => {
     const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
-    saveState(state);
+    writeStateFixture(state);
     const getSafeSpy = mockIdentityGetSafe();
 
     const connection = await recordConnectionFromAuth(serverAuth('t7'), { envOnly: true });
@@ -238,7 +284,7 @@ describe('recordConnectionFromAuth', () => {
     const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
-    saveState(state);
+    writeStateFixture(state);
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe();
 
@@ -253,7 +299,7 @@ describe('recordConnectionFromAuth', () => {
   it('does not stamp envOnly on a keychain-backed connection that still needs identity', async () => {
     const state = loadState();
     addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
-    saveState(state);
+    writeStateFixture(state);
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
 

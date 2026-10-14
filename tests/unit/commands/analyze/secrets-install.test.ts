@@ -61,14 +61,16 @@ describe('resolveSecretsBinary: happy path', () => {
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
   let spawnSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
   let tempBinDir: string;
 
   beforeEach(() => {
     tempBinDir = join(tmpdir(), `sonar-install-test-${Date.now()}`);
     mkdirSync(tempBinDir, { recursive: true });
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
     downloadBinarySpy = spyOn(releases, 'downloadBinary').mockImplementation(
       (_url: string, path: string) => {
         writeFileSync(path, '');
@@ -90,7 +92,7 @@ describe('resolveSecretsBinary: happy path', () => {
     verifyBinarySignatureSpy.mockRestore();
     spawnSpy.mockRestore();
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     rmSync(tempBinDir, { recursive: true, force: true });
   });
 
@@ -102,7 +104,7 @@ describe('resolveSecretsBinary: happy path', () => {
 
     expect(result.freshlyInstalled).toBe(true);
     expect(result.binaryPath).toContain('sonar-secrets');
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
   });
 
   it('returns freshlyInstalled: false when binary is already at the correct version', async () => {
@@ -151,7 +153,7 @@ describe('resolveSecretsBinary: error paths', () => {
   let downloadBinarySpy: ReturnType<typeof spyOn>;
   let verifyBinarySignatureSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
   let tempBinDir: string;
 
   beforeEach(() => {
@@ -164,7 +166,7 @@ describe('resolveSecretsBinary: error paths', () => {
     downloadBinarySpy?.mockRestore();
     verifyBinarySignatureSpy?.mockRestore();
     loadStateSpy?.mockRestore();
-    saveStateSpy?.mockRestore();
+    updateStateSpy?.mockRestore();
     rmSync(tempBinDir, { recursive: true, force: true });
   });
 
@@ -234,7 +236,7 @@ describe('resolveSecretsBinary: error paths', () => {
       stderr: '',
     });
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation(() => {
       throw new Error('disk full');
     });
 
