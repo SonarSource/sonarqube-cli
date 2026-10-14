@@ -27,6 +27,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
+import { Database } from 'bun:sqlite';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 
@@ -38,6 +40,7 @@ import {
   type InstalledIntegrationDependency,
   type InstalledTool,
 } from './state.ts';
+import { mergeStateValue } from './state-merge.ts';
 
 function getCliDir(): string {
   return resolveCliDir();
@@ -149,6 +152,40 @@ export const STATE_READ_MAX_ATTEMPTS = 5;
 const STATE_READ_RETRY_DELAY_MS = 100;
 
 let cachedReadFailure: { fingerprint: string; error: CommandFailedError } | null = null;
+const stateBaselines = new WeakMap<CliState, CliState>();
+const STATE_LOCK_WAIT_MS = 10_000;
+const STATE_FILE_MODE = 0o600;
+
+function rememberBaseline(state: CliState): CliState {
+  stateBaselines.set(state, structuredClone(state));
+  return state;
+}
+
+function withStateLock<T>(action: () => T): T {
+  const db = new Database(`${getStateFile()}.lock.sqlite`, { create: true });
+  try {
+    db.run(`PRAGMA busy_timeout = ${STATE_LOCK_WAIT_MS}`);
+    return db.transaction(action).immediate();
+  } finally {
+    db.close();
+  }
+}
+
+function replaceStateFile(state: CliState): void {
+  const tempFile = `${getStateFile()}.${randomUUID()}.tmp`;
+  try {
+    const fd = fs.openSync(tempFile, 'wx', STATE_FILE_MODE);
+    try {
+      fs.writeFileSync(fd, JSON.stringify(state, null, 2), 'utf-8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tempFile, getStateFile());
+  } finally {
+    fs.rmSync(tempFile, { force: true });
+  }
+}
 
 function stateFileFingerprint(): string | null {
   try {
@@ -167,7 +204,7 @@ export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
 
   if (!fs.existsSync(getStateFile())) {
-    return getDefaultState(cliVersion ?? VERSION);
+    return rememberBaseline(getDefaultState(cliVersion ?? VERSION));
   }
 
   if (cachedReadFailure !== null && cachedReadFailure.fingerprint === stateFileFingerprint()) {
@@ -180,7 +217,7 @@ export function loadState(cliVersion?: string): CliState {
       const content = fs.readFileSync(getStateFile(), 'utf-8');
       const raw = JSON.parse(content) as Record<string, unknown>;
       cachedReadFailure = null;
-      return migrateState(raw);
+      return rememberBaseline(migrateState(raw));
     } catch (error) {
       lastError = error;
       if (attempt + 1 < STATE_READ_MAX_ATTEMPTS) {
@@ -216,21 +253,43 @@ export function tryLoadState(cliVersion?: string): CliState | null {
  */
 export function saveState(state: CliState): void {
   ensureStateDir();
-
-  state.lastUpdated = new Date().toISOString();
-
   try {
-    fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
+    withStateLock(() => {
+      const existing = fs.existsSync(getStateFile());
+      const baseline = stateBaselines.get(state);
+      if (existing && baseline === undefined) {
+        throw new Error('State was not loaded from the current state file');
+      }
+      const current = existing ? loadState() : undefined;
+      const merged = (
+        current && baseline ? mergeStateValue(baseline, state, current) : state
+      ) as CliState;
+      merged.lastUpdated = new Date().toISOString();
+      replaceStateFile(merged);
+      state.lastUpdated = merged.lastUpdated;
+      rememberBaseline(state);
+    });
   } catch (error) {
     throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
   }
 }
 
-/**
- * Save state without overwriting `dependencies.installed`: binary installers record there
- * themselves, writing straight to disk after the caller loaded its snapshot. Callers that
- * install binaries between their `loadState()` and their save must use this.
- */
+export function updateState<T>(update: (state: CliState) => T): T {
+  ensureStateDir();
+  try {
+    return withStateLock(() => {
+      const state = loadState();
+      const result = update(state);
+      state.lastUpdated = new Date().toISOString();
+      replaceStateFile(state);
+      return result;
+    });
+  } catch (error) {
+    throw new Error(`Failed to update state in ${getStateFile()}: ${String(error)}`);
+  }
+}
+
+/** Save state while preserving dependency updates written after the caller loaded its snapshot. */
 export function saveStateKeepingInstalledDependencies(state: CliState): void {
   try {
     state.dependencies.installed = loadState().dependencies.installed;
