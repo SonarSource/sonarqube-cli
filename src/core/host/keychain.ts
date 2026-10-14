@@ -148,20 +148,19 @@ function getBackend(): KeychainBackend {
 
 /**
  * Generate keychain account key
- * SonarQube Cloud: "sonarcloud.io:org-key"
- * SonarQube Server: "hostname"
+ * SonarQube Cloud: "https://sonarcloud.io:org-key"
+ * SonarQube Server: "https://hostname/base-path"
  */
 export function generateKeychainAccount(serverURL: string, org?: string): string {
   try {
     const url = new URL(serverURL);
-    const hostname = url.hostname;
+    const server = url.origin + url.pathname.replace(/\/$/, '');
 
     // SonarQube Cloud with organization
     if (org) {
-      return `${hostname}:${org}`;
+      return `${server}:${org}`;
     }
-    // SonarQube Server or hostname without organization
-    return hostname;
+    return server;
   } catch {
     return serverURL;
   }
