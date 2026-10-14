@@ -30,7 +30,8 @@ void mock.module('@/core/host/environment/platform-detector.ts', () => ({
   isWindows: isWindowsMock,
 }));
 
-const { detectContainerRuntime } = await import('@/core/host/environment/tool-detector.ts');
+const { checkContainerRuntimeHealth, detectContainerRuntime } =
+  await import('@/core/host/environment/tool-detector.ts');
 
 describe('detectContainerRuntime', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
@@ -84,7 +85,7 @@ describe('detectContainerRuntime', () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
-    expect(spawnSpy).not.toHaveBeenCalledWith('wsl.exe', expect.anything());
+    expect(spawnSpy.mock.calls.some((call: unknown[]) => call[0] === 'wsl.exe')).toBe(false);
   });
 
   it('returns "docker" when docker daemon is running even if other runtimes are also available', async () => {
@@ -95,7 +96,6 @@ describe('detectContainerRuntime', () => {
     });
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
-    // Should not have checked podman/nerdctl since docker succeeded
     expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -146,5 +146,28 @@ describe('detectContainerRuntime', () => {
     spawnSpy = spyOn(process, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
+  });
+
+  it('reports an installed runtime whose daemon is unavailable', async () => {
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockImplementation(
+      (cmd: string, args: string[]) =>
+        Promise.resolve({
+          exitCode: cmd === 'podman' && args[0] === '--version' ? 0 : 1,
+          stdout: '',
+          stderr: '',
+        }),
+    );
+
+    expect(await checkContainerRuntimeHealth()).toEqual({
+      status: 'unavailable',
+      runtime: 'podman',
+      viaWsl: false,
+    });
+  });
+
+  it('reports missing when no runtime executable is installed', async () => {
+    spawnSpy = spyOn(process, 'spawnProcessWithTimeout').mockRejectedValue(new Error('ENOENT'));
+
+    expect(await checkContainerRuntimeHealth()).toEqual({ status: 'missing' });
   });
 });
