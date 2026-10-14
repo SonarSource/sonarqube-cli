@@ -34,6 +34,7 @@ import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
+import type { SqaaRunPaths } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {
@@ -45,11 +46,15 @@ export type FileSuccess = {
 export type FileFailure = { file: string; filePath: string; failure: Error };
 export type FileResult = FileSuccess | FileFailure;
 
-type ChunkPath = { file: string; filePath: string };
+/**
+ * `filePath` is what the user reads (relative to the invocation directory or repository
+ * root); `wirePath` is what was sent to A3S (relative to the project root) and is therefore
+ * the spelling the response echoes back. They differ whenever the project root is not the
+ * directory the paths are displayed against — a monorepo subpackage, typically.
+ */
+type ChunkPath = { file: string; filePath: string; wirePath: string };
 
-export interface RunContext {
-  files: string[];
-  allPaths: string[];
+export interface RunContext extends SqaaRunPaths {
   connection: SonarConnection;
   projectKey: string;
   branch: string | undefined;
@@ -124,11 +129,11 @@ function prepareChunks(
     try {
       readableChunkFiles.push({
         absolutePath: file,
-        relativePath: ctx.allPaths[idx],
+        relativePath: ctx.wirePaths[idx],
         content: readSqaaFileContent(file),
       });
     } catch (err) {
-      recordFileFailure(progress, tally, idx, { file, filePath: ctx.allPaths[idx] }, err as Error);
+      recordFileFailure(progress, tally, idx, chunkPathAt(ctx, idx), err as Error);
     }
   }
 
@@ -161,17 +166,18 @@ function chunkPathsForFiles(
     if (idx === undefined) {
       continue;
     }
-    partPaths.push({ file: chunkFile.absolutePath, filePath: ctx.allPaths[idx] });
+    partPaths.push(chunkPathAt(ctx, idx));
     partIndices.push(idx);
   }
   return { partPaths, partIndices };
 }
 
+function chunkPathAt(ctx: RunContext, idx: number): ChunkPath {
+  return { file: ctx.files[idx], filePath: ctx.allPaths[idx], wirePath: ctx.wirePaths[idx] };
+}
+
 function chunkPathsForIndices(ctx: RunContext, fileIndices: number[]): ChunkPath[] {
-  return fileIndices.map((idx) => ({
-    file: ctx.files[idx],
-    filePath: ctx.allPaths[idx],
-  }));
+  return fileIndices.map((idx) => chunkPathAt(ctx, idx));
 }
 
 function recordSuccessfulParts(
@@ -203,13 +209,7 @@ function recordGroupFetchErrors(
       if (idx === undefined) {
         continue;
       }
-      recordFileFailure(
-        progress,
-        tally,
-        idx,
-        { file: failed.absolutePath, filePath: ctx.allPaths[idx] },
-        error,
-      );
+      recordFileFailure(progress, tally, idx, chunkPathAt(ctx, idx), error);
     }
   }
 }
@@ -352,14 +352,19 @@ function sortResultsByFileOrder(tally: RunTally, files: string[]): void {
   );
 }
 
+/** A3S echoes the path it was sent on each issue; reports show the display path instead. */
+export function withDisplayPath(issues: SqaaIssue[], filePath: string): SqaaIssue[] {
+  return issues.map((issue) => (issue.filePath ? { ...issue, filePath } : issue));
+}
+
 export function distributeChunkResponse(
   issues: SqaaIssue[],
   errors: Array<{ code: string; message: string }> | null | undefined,
   chunkPaths: ChunkPath[],
 ): FileSuccess[] {
   const issuesByPath = new Map<string, SqaaIssue[]>();
-  const knownPaths = new Set(chunkPaths.map((p) => p.filePath));
-  const fallbackPath = chunkPaths[0]?.filePath;
+  const knownPaths = new Set(chunkPaths.map((p) => p.wirePath));
+  const fallbackPath = chunkPaths[0]?.wirePath;
 
   for (const issue of issues) {
     const path = issue.filePath && knownPaths.has(issue.filePath) ? issue.filePath : fallbackPath;
@@ -369,10 +374,10 @@ export function distributeChunkResponse(
     issuesByPath.set(path, list);
   }
 
-  return chunkPaths.map(({ file, filePath }, index) => ({
+  return chunkPaths.map(({ file, filePath, wirePath }, index) => ({
     file,
     filePath,
-    issues: issuesByPath.get(filePath) ?? [],
+    issues: withDisplayPath(issuesByPath.get(wirePath) ?? [], filePath),
     errors: index === 0 ? errors : null,
   }));
 }
