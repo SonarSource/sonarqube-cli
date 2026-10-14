@@ -33,17 +33,27 @@ import { isWindows, windowsPowerShellPath } from '@/core/host/environment/platfo
 import { spawnProcess } from '@/core/process/process.ts';
 
 const DELETE_TARGET_ENV = 'SONAR_SELF_REPLACE_DELETE_TARGET';
+const PARENT_PID_ENV = 'SONAR_SELF_REPLACE_PARENT_PID';
 const MOVEFILE_DELAY_UNTIL_REBOOT = 4;
+const HELPER_RETRY_COUNT = 120;
+const HELPER_RETRY_DELAY_MS = 500;
 export const EXECUTABLE_MODE = 0o755;
 
-const DELETE_ON_REBOOT_SCRIPT = `
-$sig = '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
-public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);'
-Add-Type -MemberDefinition $sig -Name 'Win32MoveFile' -Namespace 'NativeMethods'
-if (-not [NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, [NullString]::Value, ${MOVEFILE_DELAY_UNTIL_REBOOT})) {
-  exit [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+const DELETE_HELPER_SCRIPT = `
+Wait-Process -Id $env:${PARENT_PID_ENV} -ErrorAction SilentlyContinue
+for ($i = 0; $i -lt ${HELPER_RETRY_COUNT} -and (Test-Path -LiteralPath $env:${DELETE_TARGET_ENV}); $i++) {
+  try { Remove-Item -LiteralPath $env:${DELETE_TARGET_ENV} -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds ${HELPER_RETRY_DELAY_MS} }
 }
 `;
+
+function deleteAfterExitLauncherScript(): string {
+  const helper = Buffer.from(DELETE_HELPER_SCRIPT, 'utf16le').toString('base64');
+  return `
+Add-Type -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);' -Name 'Win32MoveFile' -Namespace 'NativeMethods'
+[NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, [NullString]::Value, ${MOVEFILE_DELAY_UNTIL_REBOOT}) | Out-Null
+Start-Process -FilePath '${windowsPowerShellPath()}' -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','${helper}' -WindowStyle Hidden
+`;
+}
 
 function asideSuffix(): string {
   return `.${Date.now()}.old`;
@@ -65,16 +75,21 @@ function removeStaleAsideFiles(target: string): void {
   }
 }
 
-async function deleteOnReboot(path: string): Promise<void> {
-  const result = await spawnProcess(
-    windowsPowerShellPath(),
-    ['-NoProfile', '-NonInteractive', '-Command', DELETE_ON_REBOOT_SCRIPT],
-    { env: { [DELETE_TARGET_ENV]: path } },
-  );
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `Scheduling ${path} for deletion failed with exit code ${String(result.exitCode)}: ${result.stderr}`,
+async function discardAside(path: string): Promise<void> {
+  try {
+    rmSync(path);
+    return;
+  } catch {
+    // the aside is still locked by the running binary: hand it to the helper
+  }
+  try {
+    await spawnProcess(
+      windowsPowerShellPath(),
+      ['-NoProfile', '-NonInteractive', '-Command', deleteAfterExitLauncherScript()],
+      { env: { [DELETE_TARGET_ENV]: path, [PARENT_PID_ENV]: String(process.pid) } },
     );
+  } catch {
+    return;
   }
 }
 
@@ -105,7 +120,7 @@ export async function replaceBinary(sourcePath: string, targetPath: string): Pro
     throw error;
   }
   if (hadPrevious) {
-    await deleteOnReboot(asidePath);
+    await discardAside(asidePath);
   }
 }
 
@@ -123,5 +138,5 @@ export async function removeBinary(targetPath: string): Promise<void> {
   }
   const asidePath = `${targetPath}${asideSuffix()}`;
   renameSync(targetPath, asidePath);
-  await deleteOnReboot(asidePath);
+  await discardAside(asidePath);
 }

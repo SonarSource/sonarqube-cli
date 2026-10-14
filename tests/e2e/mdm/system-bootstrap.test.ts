@@ -70,15 +70,10 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('MDM install bootstrap on the real system',
     );
 
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
-    const waitStartedAt = Date.now();
-    while (!existsSync(SYSTEM_BINARY) && Date.now() - waitStartedAt < 30_000) {
-      await Bun.sleep(500);
-    }
-    const waitedMs = Date.now() - waitStartedAt;
     const installedSize = existsSync(SYSTEM_BINARY) ? statSync(SYSTEM_BINARY).size : 'missing';
     expect(
       isRealCli(SYSTEM_BINARY),
-      `waited ${String(waitedMs)} ms, installed size ${String(installedSize)}, expected ${String(cliBytes().length)}\ninstall dir: ${listing(dirname(SYSTEM_BINARY))}\nhome: ${listing(home)}\n${result.stdout}${result.stderr}`,
+      `installed size ${String(installedSize)}, expected ${String(cliBytes().length)}\ninstall dir: ${listing(dirname(SYSTEM_BINARY))}\nhome: ${listing(home)}\n${result.stdout}${result.stderr}`,
     ).toBe(true);
     const version = await runUnelevated(SYSTEM_BINARY, ['--version'], home);
     expect(version.exitCode).toBe(0);

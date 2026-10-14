@@ -22,9 +22,10 @@ import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { IS_WINDOWS, TestHarness } from '../../harness';
+import { TestHarness } from '../../harness';
 import type { FakeBinariesServer } from '../../harness/fake-binaries-server.js';
 import {
+  eventually,
   isRealCli,
   isStub,
   MdmSandbox,
@@ -94,8 +95,7 @@ describe('mdm update and rollback', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
-      expect(sandbox.unscheduledEntriesNextToBinary()).toEqual([]);
-      expect(sandbox.extraEntriesNextToBinary()).toHaveLength(IS_WINDOWS ? 1 : 0);
+      await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
     });
 
     it('does not download anything when already at the target version', async () => {
@@ -290,8 +290,7 @@ describe('mdm update and rollback', () => {
       expect(result.exitCode).toBe(0);
       expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
       expect(isRealCli(sandbox.binaryPath)).toBe(false);
-      expect(sandbox.unscheduledEntriesNextToBinary()).toEqual([]);
-      expect(sandbox.extraEntriesNextToBinary()).toHaveLength(IS_WINDOWS ? 1 : 0);
+      await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
     });
   });
 

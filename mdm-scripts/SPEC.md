@@ -338,11 +338,13 @@ guaranteed-eventually cleanup is acceptable — note this leaves a stale file
 until the next reboot, flag as a tradeoff to decide explicitly, not silently
 picked).
 
-Decision: the delayed delete is used for both `update` and `remove`. A detached
-helper that waits for the parent was implemented first, but it never ran under
-Bun `--compile` on the Windows CI runner. The renamed `.old` therefore stays on
-disk until the next reboot; stale `.old` files are swept by the next
-`update`/`rollback`/`remove`.
+Decision: the renamed `.old` is deleted at once when possible. When the running
+binary still locks it, one awaited PowerShell call registers it with
+`MOVEFILE_DELAY_UNTIL_REBOOT` (safety net) and starts a hidden `Start-Process`
+helper that waits for the CLI pid and deletes it with retries. A helper spawned
+with `child_process.spawn({ detached })` from the compiled CLI never ran on the
+Windows CI runner; the same helper started by `Start-Process` from PowerShell
+does. Stale `.old` files are swept by the next `update`/`rollback`/`remove`.
 
 Land this as its own small module (e.g. `src/core/host/self-replace.ts`) with
 a Unix branch (trivial: rename/unlink) and a Windows branch (the above),

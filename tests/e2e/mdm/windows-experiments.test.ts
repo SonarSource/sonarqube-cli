@@ -79,6 +79,14 @@ async function ps(script: string, env: Record<string, string> = {}): Promise<PsR
   };
 }
 
+function bootstrapEnv(home: string, withPathext: boolean): Record<string, string> {
+  const env = isolatedEnv(home);
+  if (!withPathext) {
+    delete env.PATHEXT;
+  }
+  return env;
+}
+
 function attempt(action: () => void): string {
   try {
     action();
@@ -252,8 +260,13 @@ describe.skipIf(!IS_WINDOWS || !CAN_RUN_SYSTEM_E2E)('windows self-replace experi
     });
   }
 
-  for (let round = 1; round <= 3; round++) {
-    it(`bootstrap script round ${String(round)}: timeline of runner and installed binary`, async () => {
+  for (const [pathext, round] of [
+    ['without PATHEXT', 1],
+    ['without PATHEXT', 2],
+    ['with PATHEXT', 1],
+    ['with PATHEXT', 2],
+  ] as const) {
+    it(`bootstrap script ${pathext} round ${String(round)}: timeline of runner and installed binary`, async () => {
       removeSystemInstall();
       const home = makeIsolatedHome();
       const cdn = await new FakeBinariesServerBuilder().withStableVersion('9.9.9').start();
@@ -272,7 +285,7 @@ describe.skipIf(!IS_WINDOWS || !CAN_RUN_SYSTEM_E2E)('windows self-replace experi
       const result = await runBootstrapElevated(
         'install-bootstrap.ps1',
         { baseUrl: cdn.cliArtifactBaseUrl() },
-        isolatedEnv(home),
+        bootstrapEnv(home, pathext === 'with PATHEXT'),
       );
       const returnedAfterMs = Date.now() - startedAt;
       const snapshot = await ps(
@@ -281,7 +294,7 @@ describe.skipIf(!IS_WINDOWS || !CAN_RUN_SYSTEM_E2E)('windows self-replace experi
       const existsAtReturn = existsSync(SYSTEM_BINARY);
       await Bun.sleep(5000);
       await watcher;
-      report(`bootstrap-round-${String(round)}`, {
+      report(`bootstrap-${pathext.replaceAll(' ', '-')}-${String(round)}`, {
         exit: result.exitCode,
         returnedAfterMs,
         binaryAppearedAfterMs: appearedAt.value,

@@ -92,7 +92,7 @@ export function isolatedEnv(
   extra: Record<string, string> = {},
 ): Record<string, string> {
   return {
-    ...(IS_WINDOWS ? { SystemRoot: SYSTEM_ROOT, USERPROFILE: home } : {}),
+    ...(IS_WINDOWS ? { SystemRoot: SYSTEM_ROOT, USERPROFILE: home, PATHEXT: '.EXE' } : {}),
     HOME: home,
     PATH: SYSTEM_PATH,
     ...ISOLATED_CLI_SPAWN_ENV,
