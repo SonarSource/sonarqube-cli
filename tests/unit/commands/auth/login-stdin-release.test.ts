@@ -51,7 +51,7 @@ beforeEach(() => {
 describe('authLogin stdin release', () => {
   let spies: ReturnType<typeof spyOn>[] = [];
   let pauseSpy: ReturnType<typeof spyOn>;
-  let resolveAccessSpy: ReturnType<typeof spyOn>;
+  let checkMembershipSpy: ReturnType<typeof spyOn>;
   let revokeSpy: ReturnType<typeof spyOn>;
   let generateTokenSpy: ReturnType<typeof spyOn>;
   const originalIsTTY = process.stdin.isTTY;
@@ -62,12 +62,12 @@ describe('authLogin stdin release', () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     pauseSpy = spyOn(process.stdin, 'pause').mockReturnValue(process.stdin);
     revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockReturnValue(okAsync(undefined));
-    resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
+    checkMembershipSpy = spyOn(OrganizationsClient.prototype, 'checkMembership');
     generateTokenSpy = spyOn(tokenModule, 'generateTokenViaBrowser').mockResolvedValue({
       token: 'minted-token',
       tokenName: 'cli-browser-token',
     });
-    spies = [pauseSpy, revokeSpy, resolveAccessSpy, generateTokenSpy];
+    spies = [pauseSpy, revokeSpy, checkMembershipSpy, generateTokenSpy];
   });
 
   afterEach(() => {
@@ -95,7 +95,7 @@ describe('authLogin stdin release', () => {
   });
 
   it('pauses stdin when the organization is rejected', async () => {
-    resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
+    checkMembershipSpy.mockResolvedValue({ status: 'not_member' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -103,13 +103,13 @@ describe('authLogin stdin release', () => {
         { server: SONARCLOUD_URL, org: 'nonexistent-org' },
         new CommandInvocationContext(fake),
       ),
-    ).rejects.toThrow("Organization 'nonexistent-org' not found or not accessible.");
+    ).rejects.toThrow("You are not a member of organization 'nonexistent-org'.");
 
     expect(pauseSpy).toHaveBeenCalled();
   });
 
   it('pauses stdin when the organization lookup could not be completed', async () => {
-    resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
+    checkMembershipSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -120,7 +120,7 @@ describe('authLogin stdin release', () => {
   });
 
   it('revokes the freshly minted token when the organization is rejected', async () => {
-    resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
+    checkMembershipSpy.mockResolvedValue({ status: 'not_member' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
