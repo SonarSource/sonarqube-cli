@@ -20,9 +20,24 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { fetchServerVersion, isAtLeast, normalizeVersion } from '@/core/server/server-info.ts';
+import {
+  fetchServerVersion,
+  isAtLeast,
+  isFullYearVersion,
+  normalizeVersion,
+} from '@/core/server/server-info.ts';
 
 describe('server-info', () => {
+  describe('isFullYearVersion', () => {
+    it.each([
+      ['2026.2', true],
+      ['2026.2-SNAPSHOT', true],
+      ['26.2', false],
+    ])('classifies %s by version format', (version, expected) => {
+      expect(isFullYearVersion(version)).toBe(expected);
+    });
+  });
+
   describe('normalizeVersion', () => {
     it('shortens 4-digit year to 2-digit', () => {
       expect(normalizeVersion('2026.2')).toBe('26.2');
