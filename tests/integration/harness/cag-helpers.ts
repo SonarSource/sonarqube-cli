@@ -22,7 +22,7 @@
 // (resources/cag-stub.ts), and the on-disk shape of the session-start hook
 // the Vortex Context subfeature installs.
 
-import { basename, join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 
 import { expect } from 'bun:test';
 
@@ -32,12 +32,13 @@ import {
   VORTEX_HOOK_MARKER,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { HOOKS_DIR } from '@/commands/integrate/_common/hooks.ts';
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 
 import type { Dir } from './dir';
 import type { File } from './file';
 import type { TestHarness } from './index';
-import { IS_WINDOWS, SCRIPT_EXT } from './platform';
+import { buildHomeEnv, IS_WINDOWS, SCRIPT_EXT } from './platform';
 
 // ---------------------------------------------------------------------------
 // CAG invocation log
@@ -79,6 +80,12 @@ interface VortexHookInstallShape {
   globalHookConfigPath?: string[];
   expectHookEntries: (config: any) => void;
 }
+
+const REFERENCE_HOME = join('reference', 'home');
+const DEVIN_CONFIG_DIR = relative(
+  REFERENCE_HOME,
+  resolveDevinConfigDir(REFERENCE_HOME, buildHomeEnv(REFERENCE_HOME)),
+);
 
 const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallShape> = {
   claude: {
@@ -132,6 +139,18 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
       expect(hooks.sessionStart[0].command).toContain(SESSION_START_SCRIPT_NAME);
       expect(hooks.sessionStart[0].matcher).toBeUndefined();
       expect(hooks.subagentStart).toBeUndefined();
+    },
+  },
+  devin: {
+    configDir: DEVIN_CONFIG_DIR,
+    hookConfigPath: [DEVIN_CONFIG_DIR, 'config.json'],
+    expectHookEntries: ({ hooks }) => {
+      expect(hooks.SessionStart).toHaveLength(1);
+      expect(hooks.SessionStart[0].matcher).toBe('');
+      expect(hooks.SessionStart[0].hooks[0].type).toBe('command');
+      expect(hooks.SessionStart[0].hooks[0].timeout).toBe(60);
+      expect(hooks.SessionStart[0].hooks[0].command).toContain(SESSION_START_SCRIPT_NAME);
+      expect(hooks.SubagentStart).toBeUndefined();
     },
   },
 };
