@@ -19,7 +19,7 @@
  */
 
 import {
-  assertOrganizationAccessible,
+  assertOrganizationMember,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
@@ -161,7 +161,7 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
   }
 
   if (org) {
-    await assertOrganizationAccessible(
+    await assertOrganizationMember(
       new OrganizationsClient(new SonarHttpClient(server, token)),
       org,
     );
