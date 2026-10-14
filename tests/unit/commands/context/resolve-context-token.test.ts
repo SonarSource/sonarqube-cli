@@ -26,7 +26,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { clearSecretCache } from '@/core/host/keychain.ts';
 
 const auth = {
-  serverUrl: 'https://active.example.com',
+  serverUrl: 'https://recorded.example.com',
   orgKey: 'active-org',
   token: 'active-token',
 } as ResolvedAuth;
