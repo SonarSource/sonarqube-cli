@@ -40,4 +40,6 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar self-update` is a deprecated, hidden alias for `sonar update` (only when `CURRENT_DISTRIBUTION.enableSelfUpdate` is true; see `src/core/host/distribution.ts`), staged with `Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' })`. Calling it prints a deprecation warning, then runs the same `updateVersion()` logic. Both are registered in `src/commands/command-tree.ts`.
 
+`sonar update` runs the standalone installer only when `process.execPath` matches that installer's per-user destination: `$HOME/.local/share/sonarqube-cli/bin/sonar` on Unix or `%LOCALAPPDATA%\sonarqube-cli\bin\sonar.exe` on Windows. Other installation paths fail before the version check, including with `--force`. `update status` and the deprecated `--status` flag remain read-only and available from any path. The build distribution marker alone does not identify how a binary was installed.
+
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
