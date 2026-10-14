@@ -20,7 +20,7 @@
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Command } from 'commander';
@@ -190,7 +190,34 @@ describe('updateNotifier.maybeNotify', () => {
     expect(output).toContain(
       `A new version of SonarQube CLI is available: ${major}.${minor}.${patch} → 99.0.0`,
     );
-    expect(output).toContain('Run `sonar update` to update to v99.0.0');
+    expect(output).toContain(
+      'Update it through your organization, package manager, or the method used to install it.',
+    );
+  });
+
+  it('recommends sonar update for a standalone installer location', async () => {
+    const originalExecPath = process.execPath;
+    const originalHome = process.env.HOME;
+    const originalLocalAppData = process.env.LOCALAPPDATA;
+    try {
+      if (process.platform === 'win32') {
+        process.env.LOCALAPPDATA = tempHome;
+        process.execPath = win32.join(tempHome, 'sonarqube-cli', 'bin', 'sonar.exe');
+      } else {
+        process.env.HOME = tempHome;
+        process.execPath = join(tempHome, '.local', 'share', 'sonarqube-cli', 'bin', 'sonar');
+      }
+
+      await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
+
+      expect(notificationOutput()).toContain('Run `sonar update` to update to v99.0.0');
+    } finally {
+      process.execPath = originalExecPath;
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+      else process.env.LOCALAPPDATA = originalLocalAppData;
+    }
   });
 
   it('persists fetch metadata in state', async () => {
@@ -220,7 +247,9 @@ describe('updateNotifier.maybeNotify', () => {
 
     const output = notificationOutput();
     expect(output).toContain('A new version of SonarQube CLI is available');
-    expect(output).toContain('Run `sonar update` to update to v99.0.0');
+    expect(output).toContain(
+      'Update it through your organization, package manager, or the method used to install it.',
+    );
   });
 
   it('does not re-fetch within 24h after a failed check', async () => {
