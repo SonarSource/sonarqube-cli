@@ -90,6 +90,15 @@ function runLoginPicker(harness: TestHarness, serverUrl: string) {
   });
 }
 
+async function selectManualOrganization(session: ReturnType<TestHarness['runInteractive']>) {
+  await session.waitText('Select an organization');
+  for (let i = 0; i < PICKER_ORGS.length; i++) {
+    session.keyDown();
+  }
+  session.keyEnter();
+  await session.waitText('Enter organization key');
+}
+
 function toRowSource([name, key, status]: PickerRow): string {
   return `${name}\\s+${key}\\s+\\S*${status}`;
 }
@@ -263,7 +272,7 @@ describe('auth login', () => {
       );
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain("Organization 'nonexistent-org' not found or not accessible");
+      expect(result.stderr).toContain("You are not a member of organization 'nonexistent-org'");
     },
     { timeout: 15000 },
   );
@@ -518,6 +527,23 @@ describe('auth login --with-token', () => {
     expect(connection.region).toBe(region);
   });
 
+  it('rejects a public organization without membership for --with-token', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('cloud-token')
+      .withVisibleOrganizations([{ key: 'public-org', name: 'Public Org' }])
+      .start();
+
+    const result = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()} --org public-org`,
+      'cloud-token\n',
+      { extraEnv: cloudEnv(server.baseUrl()) },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("You are not a member of organization 'public-org'");
+  });
+
   it('replaces an existing token, clears its token name, and refreshes the user identity', async () => {
     const server = await harness
       .newFakeServer()
@@ -585,7 +611,7 @@ describe('auth login --with-token', () => {
     );
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("Organization 'missing-org' not found or not accessible");
+    expect(result.stderr).toContain("You are not a member of organization 'missing-org'");
     expect(result.stdout + result.stderr).not.toContain('replacement-token');
     expect(
       readKeychainToken(
@@ -685,47 +711,54 @@ describe('auth login — organization selection', () => {
   );
 
   it(
-    'prompts for manual org key when user is not a member of any organization',
+    'rejects a public manual org key when the user is not a member',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
+        .withOrganizations(PICKER_ORGS)
         .withVisibleOrganizations([{ key: 'open-source-org', name: 'Open Source Org' }])
         .start();
 
-      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
-        },
-        browserToken: 'my-token',
-      });
-      await session.waitText('Enter organization key');
+      const session = runLoginPicker(harness, server.baseUrl());
+      await selectManualOrganization(session);
       session.write('open-source-org');
       session.keyEnter();
       const result = await session.waitFinish();
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (open-source-org)`,
-      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("You are not a member of organization 'open-source-org'");
     },
     { timeout: 15000 },
   );
 
+  it('fails without a prompt when the token has no organization memberships', async () => {
+    const server = await harness.newFakeServer().withAuthToken('my-token').start();
+
+    const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+      extraEnv: {
+        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+      browserToken: 'my-token',
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('You are not a member of any organization.');
+    expect(result.stdout).not.toContain('Enter organization key');
+  });
+
   it(
     'exits with error when user cancels the organization prompt',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations(PICKER_ORGS)
+        .start();
 
-      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
-        },
-        browserToken: 'my-token',
-      });
-      await session.waitText('Enter organization key');
+      const session = runLoginPicker(harness, server.baseUrl());
+      await selectManualOrganization(session);
       session.keyCtrlC();
       const result = await session.waitFinish();
 
@@ -736,15 +769,14 @@ describe('auth login — organization selection', () => {
   );
 
   it('exits with error when user enters an empty organization key', async () => {
-    const server = await harness.newFakeServer().withAuthToken('my-token').start();
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('my-token')
+      .withOrganizations(PICKER_ORGS)
+      .start();
 
-    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
-      extraEnv: {
-        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
-      },
-      browserToken: 'my-token',
-    });
+    const session = runLoginPicker(harness, server.baseUrl());
+    await selectManualOrganization(session);
     await session.accept('Enter organization key');
     const result = await session.waitFinish();
 
@@ -941,7 +973,7 @@ describe('auth login — organization validation', () => {
   });
 
   it(
-    'accepts a public organization the user is not a member of',
+    'rejects a public organization the user is not a member of',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -955,10 +987,8 @@ describe('auth login — organization validation', () => {
         browserToken: 'my-token',
       });
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(
-        `Authentication successful for: ${server.baseUrl()} (public-org)`,
-      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("You are not a member of organization 'public-org'");
     },
     { timeout: 15000 },
   );
@@ -966,30 +996,32 @@ describe('auth login — organization validation', () => {
   it(
     'rejects a manually entered organization that does not exist',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations(PICKER_ORGS)
+        .start();
 
-      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
-        extraEnv: cloudEnv(server.baseUrl()),
-        browserToken: 'my-token',
-      });
-      await session.waitText('Enter organization key');
+      const session = runLoginPicker(harness, server.baseUrl());
+      await selectManualOrganization(session);
       session.write('hgfjhgfhj');
       session.keyEnter();
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain("Organization 'hgfjhgfhj' not found or not accessible");
+      expect(result.stderr).toContain("You are not a member of organization 'hgfjhgfhj'");
     },
     { timeout: 15000 },
   );
 
   it(
-    'falls back to the memberships when the organization in sonar-project.properties does not exist',
+    'falls back to the memberships when a public organization in sonar-project.properties is not a membership',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .withVisibleOrganizations([{ key: 'stale-org', name: 'Public Org' }])
         .start();
 
       harness.cwd.writeFile(
@@ -1004,7 +1036,9 @@ describe('auth login — organization validation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain("Organization 'stale-org' from project config");
+      expect(result.stderr).toContain(
+        "You are not a member of organization 'stale-org' from project config",
+      );
       expect(result.stdout).toContain('Using organization (only member): my-org');
     },
     { timeout: 15000 },
@@ -1016,7 +1050,7 @@ describe('auth login — organization validation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withOrgsLookupError(500)
+        .withOrganizationsSearchError(500)
         .start();
 
       harness.cwd.writeFile(
@@ -1041,7 +1075,7 @@ describe('auth login — organization validation', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withOrgsLookupError(500)
+        .withOrganizationsSearchError(500)
         .start();
 
       const result = await harness.run(`auth login --org my-org --server ${server.baseUrl()}`, {
@@ -1051,7 +1085,7 @@ describe('auth login — organization validation', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("Could not verify organization 'my-org'");
-      expect(result.stderr).not.toContain('not found or not accessible');
+      expect(result.stderr).not.toContain('not a member');
     },
     { timeout: 15000 },
   );

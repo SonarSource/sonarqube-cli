@@ -57,7 +57,7 @@ let fake: FakeConsole;
 
 describe('authLogin organization prompt', () => {
   let spies: ReturnType<typeof spyOn>[] = [];
-  let resolveAccessSpy: ReturnType<typeof spyOn>;
+  let checkMembershipSpy: ReturnType<typeof spyOn>;
   let discoverOrgSpy: ReturnType<typeof spyOn>;
   let listOrgsSpy: ReturnType<typeof spyOn>;
   let revokeSpy: ReturnType<typeof spyOn>;
@@ -68,15 +68,22 @@ describe('authLogin organization prompt', () => {
 
   beforeEach(() => {
     fake = new FakeConsole();
+    fake.queueResponse('__manual__');
     keychain.setup();
     // A login that succeeds persists a connection; without this it would land in the real
     // ~/.sonar, whose queued events a later genuine `sonar` command would pick up and send.
     userHome = mkdtempSync(join(tmpdir(), 'sonar-login-org-'));
     process.env.SONAR_USER_HOME = userHome;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
-    resolveAccessSpy = spyOn(OrganizationsClient.prototype, 'resolveOrganizationAccess');
+    checkMembershipSpy = spyOn(OrganizationsClient.prototype, 'checkMembership');
     listOrgsSpy = spyOn(OrganizationsClient.prototype, 'listUserOrganizations').mockReturnValue(
-      okAsync({ organizations: [], paging: { pageIndex: 1, pageSize: 10, total: 0 } }),
+      okAsync({
+        organizations: [
+          { key: 'first-org', name: 'First Org' },
+          { key: 'second-org', name: 'Second Org' },
+        ],
+        paging: { pageIndex: 1, pageSize: 10, total: 2 },
+      }),
     );
     // This repository has its own sonar-project.properties; without these the discovered key
     // would short-circuit the prompt under test.
@@ -92,7 +99,7 @@ describe('authLogin organization prompt', () => {
       spyOn(projectInfo, 'discoverServer').mockResolvedValue(null),
       discoverOrgSpy,
       listOrgsSpy,
-      resolveAccessSpy,
+      checkMembershipSpy,
     ];
   });
 
@@ -113,8 +120,8 @@ describe('authLogin organization prompt', () => {
   it('asks again when the typed organization does not exist', async () => {
     fake.queueResponse('typo-org');
     fake.queueResponse('unreachable-org');
-    resolveAccessSpy
-      .mockResolvedValueOnce({ status: 'not_found' })
+    checkMembershipSpy
+      .mockResolvedValueOnce({ status: 'not_member' })
       .mockResolvedValueOnce({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
@@ -125,12 +132,27 @@ describe('authLogin organization prompt', () => {
     expect(textPrompts()).toHaveLength(2);
   });
 
+  it('fails before prompting when the token has no memberships', async () => {
+    listOrgsSpy.mockReturnValueOnce(
+      okAsync({ organizations: [], paging: { pageIndex: 1, pageSize: 10, total: 0 } }),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(
+      authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
+    ).rejects.toThrow('You are not a member of any organization.');
+
+    expect(fake.findCall('selectPrompt', 'Select an organization')).toBeUndefined();
+    expect(textPrompts()).toHaveLength(0);
+    expect(checkMembershipSpy).not.toHaveBeenCalled();
+  });
+
   it('completes the login on the second key and keeps the minted token', async () => {
     fake.queueResponse('typo-org');
     fake.queueResponse('my-org');
-    resolveAccessSpy
-      .mockResolvedValueOnce({ status: 'not_found' })
-      .mockResolvedValueOnce({ status: 'accessible' });
+    checkMembershipSpy
+      .mockResolvedValueOnce({ status: 'not_member' })
+      .mockResolvedValueOnce({ status: 'member' });
 
     await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake));
 
@@ -143,7 +165,7 @@ describe('authLogin organization prompt', () => {
   it('gives up after a bounded number of unusable answers', async () => {
     // The mocked prompt answers with an empty string once its queue is drained, so an unbounded
     // loop would spin here until the test timed out instead of reporting a failure.
-    resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
+    checkMembershipSpy.mockResolvedValue({ status: 'not_member' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -156,7 +178,7 @@ describe('authLogin organization prompt', () => {
   it('asks again when the answer is empty', async () => {
     fake.queueResponse('');
     fake.queueResponse('unreachable-org');
-    resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
+    checkMembershipSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -170,8 +192,8 @@ describe('authLogin organization prompt', () => {
   it('falls back to the organization list when the project config key does not exist', async () => {
     discoverOrgSpy.mockResolvedValue('stale-org');
     fake.queueResponse('unreachable-org');
-    resolveAccessSpy
-      .mockResolvedValueOnce({ status: 'not_found' })
+    checkMembershipSpy
+      .mockResolvedValueOnce({ status: 'not_member' })
       .mockResolvedValueOnce({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
@@ -186,7 +208,7 @@ describe('authLogin organization prompt', () => {
 
   it('aborts when the project config key could not be looked up', async () => {
     discoverOrgSpy.mockResolvedValue('stale-org');
-    resolveAccessSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
+    checkMembershipSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -200,12 +222,12 @@ describe('authLogin organization prompt', () => {
   it('aborts on the first rejection when stdin is not a terminal', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
     fake.queueResponse('typo-org');
-    resolveAccessSpy.mockResolvedValue({ status: 'not_found' });
+    checkMembershipSpy.mockResolvedValue({ status: 'not_member' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
       authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake)),
-    ).rejects.toThrow("Organization 'typo-org' not found or not accessible.");
+    ).rejects.toThrow("You are not a member of organization 'typo-org'.");
 
     expect(textPrompts()).toHaveLength(1);
   });
