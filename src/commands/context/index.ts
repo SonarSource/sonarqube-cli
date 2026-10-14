@@ -228,6 +228,12 @@ export async function runContextPassthrough(
     });
 
     if (stdinPayload !== undefined) {
+      // Rejecting here would let the child's later exit overwrite the failure, so its exit code reports the outcome.
+      child.stdin?.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          logger.warn(`Could not deliver input to Vortex Context: ${err.message}`);
+        }
+      });
       child.stdin?.end(stdinPayload);
     }
   });
