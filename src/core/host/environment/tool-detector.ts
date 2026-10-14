@@ -20,35 +20,85 @@
 
 // Tool detector - checks presence and availability of system tools
 
-import { spawnProcess } from '../../process/process.ts';
+import { spawnProcess, spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
 const WSL_EXECUTABLE = 'wsl.exe';
+const RUNTIME_PROBE_TIMEOUT_MS = 3000;
+const RUNTIME_PROBE_TIMEOUT_MESSAGE = 'Container runtime probe timed out';
 
-async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
+type RuntimeProbeResult = 'ready' | 'failed' | 'timed_out';
+
+async function probeRuntime(
+  runtime: ContainerRuntime,
+  viaWsl: boolean,
+  args: string[],
+): Promise<RuntimeProbeResult> {
+  const command = viaWsl ? WSL_EXECUTABLE : runtime;
   try {
-    const result = await spawnProcess(runtime, ['info']);
-    return result.exitCode === 0;
-  } catch {
-    return false;
+    const result = await spawnProcessWithTimeout(
+      command,
+      viaWsl ? [runtime, ...args] : args,
+      {},
+      RUNTIME_PROBE_TIMEOUT_MS,
+      RUNTIME_PROBE_TIMEOUT_MESSAGE,
+    );
+    return result.exitCode === 0 ? 'ready' : 'failed';
+  } catch (error) {
+    return error instanceof Error && error.message === RUNTIME_PROBE_TIMEOUT_MESSAGE
+      ? 'timed_out'
+      : 'failed';
   }
 }
 
-async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<boolean> {
-  try {
-    const result = await spawnProcess(WSL_EXECUTABLE, [runtime, 'info']); // only support the default distro
-    return result.exitCode === 0;
-  } catch {
-    return false;
-  }
-}
+export type ContainerRuntimeHealth =
+  | { status: 'ready'; runtime: ContainerRuntime; viaWsl: boolean }
+  | { status: 'unavailable'; runtime: ContainerRuntime; viaWsl: boolean; reason?: 'timeout' }
+  | { status: 'missing' };
 
 export interface ContainerRuntimeDetection {
   runtime: ContainerRuntime | null;
   viaWsl: boolean;
+}
+
+async function isRuntimeAvailable(runtime: ContainerRuntime, viaWsl: boolean): Promise<boolean> {
+  try {
+    const command = viaWsl ? WSL_EXECUTABLE : runtime;
+    const args = viaWsl ? [runtime, 'info'] : ['info'];
+    return (await spawnProcess(command, args)).exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+async function probeRuntimeSet(viaWsl: boolean): Promise<ContainerRuntimeHealth> {
+  for (const runtime of CONTAINER_RUNTIMES) {
+    const result = await probeRuntime(runtime, viaWsl, ['info']);
+    if (result === 'ready') return { status: 'ready', runtime, viaWsl };
+    if (result === 'timed_out') {
+      return { status: 'unavailable', runtime, viaWsl, reason: 'timeout' };
+    }
+  }
+  const installed = await Promise.all(
+    CONTAINER_RUNTIMES.map((runtime) => probeRuntime(runtime, viaWsl, ['--version'])),
+  );
+  const installedIndex = installed.indexOf('ready');
+  return installedIndex >= 0
+    ? { status: 'unavailable', runtime: CONTAINER_RUNTIMES[installedIndex], viaWsl }
+    : { status: 'missing' };
+}
+
+export async function checkContainerRuntimeHealth(): Promise<ContainerRuntimeHealth> {
+  const native = await probeRuntimeSet(false);
+  if (native.status === 'ready' || !isWindows()) return native;
+  if (native.status === 'unavailable' && native.reason === 'timeout') return native;
+  const viaWsl = await probeRuntimeSet(true);
+  if (viaWsl.status === 'ready') return viaWsl;
+  if (viaWsl.status === 'unavailable' && viaWsl.reason === 'timeout') return viaWsl;
+  return native.status === 'unavailable' ? native : viaWsl;
 }
 
 /**
@@ -59,14 +109,14 @@ export interface ContainerRuntimeDetection {
  */
 export async function detectContainerRuntime(): Promise<ContainerRuntimeDetection> {
   for (const runtime of CONTAINER_RUNTIMES) {
-    if (await isRuntimeAvailable(runtime)) {
+    if (await isRuntimeAvailable(runtime, false)) {
       return { runtime, viaWsl: false };
     }
   }
 
   if (isWindows()) {
     for (const runtime of CONTAINER_RUNTIMES) {
-      if (await isRuntimeAvailableViaWsl(runtime)) {
+      if (await isRuntimeAvailable(runtime, true)) {
         return { runtime, viaWsl: true };
       }
     }

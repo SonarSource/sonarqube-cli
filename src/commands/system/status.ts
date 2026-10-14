@@ -42,6 +42,10 @@ import type {
 } from '@/core/host/connectivity/types.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import {
+  checkContainerRuntimeHealth,
+  type ContainerRuntimeHealth,
+} from '@/core/host/environment/tool-detector.ts';
+import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
 } from '@/core/host/install/install-types.ts';
@@ -122,6 +126,7 @@ type IntegrationConfigStatus = 'configured' | 'invalid' | 'not_configured';
 
 interface McpStatus {
   config: IntegrationConfigStatus;
+  runtime?: ContainerRuntimeHealth;
 }
 
 interface HooksStatus {
@@ -391,6 +396,14 @@ function mcpStatusLine(mcp: McpStatus): string {
   return integrationConfigStatusLine(mcp.config);
 }
 
+export function runtimeStatusLine(runtime: ContainerRuntimeHealth): string {
+  if (runtime.status === 'missing') return 'NOT INSTALLED';
+  if (runtime.status === 'unavailable' && runtime.reason === 'timeout') {
+    return `NOT RESPONDING (${runtime.runtime}${runtime.viaWsl ? ' via WSL' : ''})`;
+  }
+  return `${runtime.status.toUpperCase()} (${runtime.runtime}${runtime.viaWsl ? ' via WSL' : ''})`;
+}
+
 function integrationConfigStatusLine(status: IntegrationConfigStatus): string {
   if (status === 'not_configured') return 'NOT CONFIGURED';
   if (status === 'invalid') return 'CONFIGURED / INVALID CONFIG';
@@ -438,10 +451,18 @@ export async function systemStatus(
     integration.features.some(isVortexFeature),
   );
 
-  const [connection, updateResult] = await Promise.all([
+  const [connection, updateResult, runtime] = await Promise.all([
     ctx.resolveConnection(),
     getCliUpdateInfo(),
+    integrations.some((integration) => integration.mcp?.config === 'configured')
+      ? checkContainerRuntimeHealth()
+      : null,
   ]);
+  if (runtime) {
+    for (const integration of integrations) {
+      if (integration.mcp?.config === 'configured') integration.mcp.runtime = runtime;
+    }
+  }
   const auth = connection?.auth ?? null;
 
   const { tokenStatus, vortex } = await resolveAuthenticatedChecks(connection);
@@ -475,7 +496,9 @@ export async function systemStatus(
     present: existsSync(path) && statSync(path).isDirectory(),
   }));
 
-  const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
+  const hasMcpIssues = integrations.some(
+    (i) => i.mcp?.config === 'invalid' || (i.mcp?.runtime && i.mcp.runtime.status !== 'ready'),
+  );
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
 
   const network = await getNetworkConfig();
@@ -538,6 +561,16 @@ interface StatusData {
   recommendations: string[];
 }
 
+export function runtimeRecommendation(runtime: ContainerRuntimeHealth | undefined): string | null {
+  if (runtime?.status === 'missing') {
+    return 'Install and start Docker, Podman, or nerdctl to run the MCP server';
+  }
+  if (runtime?.status !== 'unavailable') return null;
+  return runtime.reason === 'timeout'
+    ? `${runtime.runtime} is not responding. Check it before running the MCP server`
+    : `Start or repair ${runtime.runtime} to run the MCP server`;
+}
+
 function buildRecommendations(
   tokenStatus: TokenCheckResult | null,
   updateResult: UpdateCheckResult | null,
@@ -575,6 +608,10 @@ function buildRecommendations(
     const integrateCmd = INTEGRATION_TO_COMMAND[integration.id] ?? 'sonar integrate claude';
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
+
+  const runtime = integrations.find((integration) => integration.mcp?.runtime)?.mcp?.runtime;
+  const runtimeAdvice = runtimeRecommendation(runtime);
+  if (runtimeAdvice) recommendations.push(runtimeAdvice);
 
   const seenHooksIntegrations = new Set<string>();
   for (const integration of integrations) {
@@ -654,6 +691,7 @@ function printJsonStatus(version: string, data: StatusData, console: Console): v
                 mcp: {
                   configured: mcp.config !== 'not_configured',
                   valid: mcp.config === 'configured',
+                  ...(mcp.runtime ? { runtime: mcp.runtime } : {}),
                 },
               }
             : {}),
@@ -755,6 +793,9 @@ function renderIntegrationsSection(integrations: IntegrationInfo[], console: Con
     console.text(`  • ${line}`);
     if (i.mcp) {
       console.text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
+      if (i.mcp.runtime) {
+        console.text(`      Runtime: ${runtimeStatusLine(i.mcp.runtime)}`);
+      }
     }
     if (i.hooks) {
       console.text(`    • Secrets Hook: ${integrationConfigStatusLine(i.hooks.config)}`);
