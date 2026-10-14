@@ -238,11 +238,12 @@ describe('recordConnectionFromAuth', () => {
     const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
+    existing.envOnly = true;
     saveState(state);
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe();
 
-    const connection = await recordConnectionFromAuth(serverAuth('t7-keychain'), { envOnly: true });
+    const connection = await recordConnectionFromAuth(serverAuth('login-token'), { envOnly: true });
 
     expect(connection.envOnly).toBeUndefined();
     expect(connection.sqsInstallationId).toBe('sqs-existing');
@@ -257,7 +258,7 @@ describe('recordConnectionFromAuth', () => {
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
 
-    const connection = await recordConnectionFromAuth(serverAuth('t-env-keychain'), {
+    const connection = await recordConnectionFromAuth(serverAuth('login-token'), {
       envOnly: true,
     });
 
@@ -266,7 +267,22 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('still records the connection when the keychain is unreachable, without stamping envOnly', async () => {
+  it('marks an env connection envOnly when its token differs from the stored token', async () => {
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-env' }] });
+
+    try {
+      const connection = await recordConnectionFromAuth(serverAuth('different-env-token'), {
+        envOnly: true,
+      });
+
+      expect(connection.envOnly).toBe(true);
+    } finally {
+      getSafeSpy.mockRestore();
+    }
+  });
+
+  it('records an envOnly connection when the keychain is unreachable', async () => {
     const getTokenSpy = spyOn(keychainModule, 'getToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
@@ -278,7 +294,7 @@ describe('recordConnectionFromAuth', () => {
       });
 
       expect(connection.serverUrl).toBe('https://sq.example.com');
-      expect(connection.envOnly).toBeUndefined();
+      expect(connection.envOnly).toBe(true);
       expect(getActiveConnection(loadState())?.serverUrl).toBe('https://sq.example.com');
     } finally {
       getTokenSpy.mockRestore();
