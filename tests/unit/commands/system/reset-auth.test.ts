@@ -57,11 +57,13 @@ describe('purgeAuth keychain read failures', () => {
   afterEach(() => {
     spyOn(keychain, 'getToken').mockRestore();
     spyOn(keychain, 'deleteToken').mockRestore();
+    spyOn(keychain, 'deleteLegacyTokens').mockRestore();
     spyOn(revokeServerToken, 'revokeServerTokenIfPossible').mockRestore();
     spyOn(revokeServerToken, 'reportRevokeServerTokenOutcome').mockRestore();
   });
 
   beforeEach(() => {
+    spyOn(keychain, 'deleteLegacyTokens').mockResolvedValue(false);
     spyOn(revokeServerToken, 'revokeServerTokenIfPossible').mockResolvedValue({
       status: 'success',
     });
