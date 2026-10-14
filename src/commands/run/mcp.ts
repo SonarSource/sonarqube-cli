@@ -38,6 +38,12 @@ import {
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import {
+  isLoopbackServerUrl,
+  mcpLoopbackAdvice,
+  readMcpContainerSettings,
+  resolveMcpContainerNetworking,
+} from '@/core/host/mcp/mcp-network.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -113,7 +119,20 @@ export async function runMcp(
       ? { withFsMount: true, projectRoot, projectKey }
       : { withFsMount: false, projectKey };
 
-    const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
+    const settings = await readMcpContainerSettings();
+    const container = resolveMcpContainerNetworking(auth, detection, settings);
+    const config = resolveMcpContainerCommand(
+      auth,
+      detection,
+      context,
+      {
+        ...options,
+        containerNetwork: container.network,
+        containerAddHost: container.addHost,
+        containerServerUrl: container.serverUrl,
+      },
+      resolvedNetwork,
+    );
     cachedCaCertPath = config.cachedCaCertPath;
 
     if (options.debug) {
@@ -132,6 +151,12 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
+        if (code !== null && code !== 0 && isLoopbackServerUrl(auth.serverUrl)) {
+          const networkHint = mcpLoopbackAdvice(auth, settings);
+          process.stderr.write(
+            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint ?? ''}\n`,
+          );
+        }
         resolve();
       });
     });
