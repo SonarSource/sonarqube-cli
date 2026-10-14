@@ -71,7 +71,7 @@ describe('integrateCodex', () => {
       'hasVortexEntitlement',
     ).mockResolvedValue({ status: 'not_entitled' });
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
-      disposition: 'preserve',
+      disposition: { action: 'preserve' },
     });
   });
 

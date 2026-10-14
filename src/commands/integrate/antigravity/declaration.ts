@@ -31,9 +31,7 @@ import {
 } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import {
-  askUser,
   jsonPatch,
-  skip,
   sonarSecretsBinaryDependency,
   textSnippet,
   textSnippetRemover,
@@ -65,7 +63,6 @@ import {
 } from './hooks.ts';
 import {
   buildAntigravityAlwaysOnRule,
-  globalAntigravityPromptSecretsRuleExists,
   PROMPT_SECRETS_BODY,
   PROMPT_SECRETS_RULE_MARKER,
   resolveLegacyGlobalInstructionsPath,
@@ -148,16 +145,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       displayName: 'prompt-secrets workspace rules',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) => {
-        if (scope !== 'project') {
-          return skip();
-        }
-        return globalAntigravityPromptSecretsRuleExists()
-          ? askUser(
-              'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
-            )
-          : askUser();
-      },
+      isAvailable: ({ scope }) => ({ available: scope === 'project' }),
       resources: [
         wholeFile({
           id: 'prompt-secrets-rule-file',
@@ -181,7 +169,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       displayName: 'prompt-secrets global rules',
       benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) => (scope === 'global' ? askUser() : skip()),
+      isAvailable: ({ scope }) => ({ available: scope === 'global' }),
       resources: [
         textSnippet({
           id: 'prompt-secrets-gemini-snippet',

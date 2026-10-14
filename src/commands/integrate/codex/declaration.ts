@@ -26,7 +26,7 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, textSnippet, wholeFile } from '@/core/framework/features';
+import { jsonPatch, textSnippet, wholeFile } from '@/core/framework/features';
 
 import {
   SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
@@ -175,7 +175,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
+    required: true,
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',

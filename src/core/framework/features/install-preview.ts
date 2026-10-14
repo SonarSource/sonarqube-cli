@@ -24,8 +24,7 @@
 import { bold, dim } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { FeatureApplication, FeatureDeclaration } from './types.ts';
-import { isFeatureContainer } from './types.ts';
+import type { FeatureApplication } from './types.ts';
 
 const PREVIEW_BOX_TITLE = 'What will be installed';
 const INSTALL_PROMPT = 'Press Enter to install…';
@@ -59,9 +58,9 @@ function wrapText(content: string, width: number): string[] {
 export function buildInstallPreviewLines<TOptions>(
   toInstall: FeatureApplication<TOptions>[],
 ): string[] {
-  const blocks = toInstall.map(({ feature }) => {
-    const block = [bold(feature.displayName)];
-    const description = resolvePreviewDescription(feature);
+  const blocks = toInstall.map((application) => {
+    const block = [bold(application.feature.displayName)];
+    const description = resolvePreviewDescription(application);
     if (description) {
       for (const line of wrapText(description, DESCRIPTION_WRAP_WIDTH)) {
         block.push(dim(`${DESCRIPTION_INDENT}${line}`));
@@ -74,15 +73,15 @@ export function buildInstallPreviewLines<TOptions>(
 }
 
 function resolvePreviewDescription<TOptions>(
-  feature: FeatureDeclaration<TOptions>,
+  application: FeatureApplication<TOptions>,
 ): string | undefined {
-  const { previewDescription } = feature;
+  const { previewDescription } = application.feature;
   if (typeof previewDescription !== 'function') {
     return previewDescription;
   }
-  const activeSubfeatureIds = isFeatureContainer(feature)
-    ? feature.subfeatures.map((subfeature) => subfeature.id)
-    : [];
+  const activeSubfeatureIds = application.subfeatureApplications
+    .filter((subfeatureApplication) => subfeatureApplication.active)
+    .map((subfeatureApplication) => subfeatureApplication.subfeature.id);
   return previewDescription(activeSubfeatureIds);
 }
 

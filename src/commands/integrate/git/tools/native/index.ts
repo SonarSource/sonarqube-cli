@@ -39,12 +39,7 @@ import {
   createSecretsSubfeature,
   gitHookPreview,
 } from '../git-integration-subfeatures.ts';
-import {
-  gitCombinedHookExample,
-  gitHookExample,
-  LEGACY_HOOK_MARKER,
-  shouldInstallHook,
-} from '../shared.ts';
+import { gitCombinedHookExample, gitHookExample, LEGACY_HOOK_MARKER } from '../shared.ts';
 import { getHookScript, getNativeHookMarker } from './shell-fragments.ts';
 
 export const NATIVE_GIT_INTEGRATION_ID = 'native-git';
@@ -67,7 +62,6 @@ function createNativeGitFeature(
     id: `${hook}-hook`,
     displayName: `${hook} code scanning hook`,
     previewDescription: gitHookPreview(hook),
-    shouldInstall: ({ options }) => shouldInstallHook(hook, options),
     postInstallExample: gitHookExample(hook),
     resources: [
       wholeFile({

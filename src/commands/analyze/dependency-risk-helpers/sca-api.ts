@@ -22,11 +22,11 @@
 
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
-import { ScaClient } from '@/core/server/sca.ts';
+import { ScaClient, type ScaEnablement } from '@/core/server/sca.ts';
 import type { SettingsValue } from '@/core/server/settings-value.ts';
 
 export interface ScaScanApi {
-  checkScaEnabled(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<boolean>;
+  getScaEnablement(connectionType: 'cloud' | 'on-premise', orgKey?: string): Promise<ScaEnablement>;
   getProjectSettings(projectKey: string): Promise<SettingsValue[]>;
 }
 
@@ -34,8 +34,8 @@ export function createScaScanApi(http: SonarHttpClient): ScaScanApi {
   const sca = new ScaClient(http);
   const components = new ComponentsClient(http);
   return {
-    checkScaEnabled: (connectionType, orgKey) =>
-      sca.checkScaEnabled(connectionType, orgKey).orThrow(),
+    getScaEnablement: (connectionType, orgKey) =>
+      sca.getScaEnablement(connectionType, orgKey).orThrow(),
     getProjectSettings: (projectKey) => components.getProjectSettings(projectKey).orThrow(),
   };
 }
