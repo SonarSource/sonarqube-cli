@@ -37,6 +37,7 @@ import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as keychainModule from '@/core/host/keychain.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState, saveState } from '@/core/state/state-repository.ts';
+import * as identityFetchModule from '@/core/telemetry/identity-fetch.ts';
 
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
@@ -126,6 +127,44 @@ describe('recordConnectionFromAuth', () => {
     expect(reloaded.auth.connections).toHaveLength(1);
     expect(getActiveConnection(reloaded)?.serverUrl).toBe('https://sonarcloud.io');
     getSafeSpy.mockRestore();
+  });
+
+  it('records login after another process changes the prior connection during identity lookup', async () => {
+    const initial = loadState();
+    addOrUpdateConnection(initial, 'https://old.example.com', 'on-premise');
+    saveState(initial);
+    const identitySpy = spyOn(identityFetchModule, 'resolveTelemetryIdentity').mockImplementation(
+      () => {
+        const concurrent = loadState();
+        addOrUpdateConnection(concurrent, 'https://old.example.com', 'on-premise', {
+          envOnly: true,
+        });
+        concurrent.config.cliVersion = '2.0.0';
+        saveState(concurrent);
+        return Promise.resolve({
+          user_uuid: 'new-user',
+          organization_uuid_v4: null,
+          sqs_installation_id: 'new-server',
+        });
+      },
+    );
+
+    try {
+      const connection = await recordConnectionFromAuth(
+        serverAuth('new-token', 'https://new.example.com'),
+        {
+          force: true,
+          tokenName: 'new-token',
+        },
+      );
+      const saved = loadState();
+      expect(connection.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.tokenName).toBe('new-token');
+      expect(saved.config.cliVersion).toBe('2.0.0');
+    } finally {
+      identitySpy.mockRestore();
+    }
   });
 
   it('without force, a matching complete connection wins over a new tokenName', async () => {
