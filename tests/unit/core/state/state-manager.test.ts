@@ -614,6 +614,118 @@ describe('saveState', () => {
 
     expect(() => saveState(getDefaultState('1.0.0'))).toThrow('Failed to save state');
   });
+
+  it('preserves independent changes from stale state snapshots', () => {
+    saveState(getDefaultState('1.0.0'));
+    const authWriter = loadState();
+    const dependencyWriter = loadState();
+
+    addOrUpdateConnection(authWriter, 'https://sonarcloud.io', 'cloud', { orgKey: 'my-org' });
+    saveState(authWriter);
+    dependencyWriter.dependencies.installed.push({
+      id: 'sonar-secrets',
+      version: '1.0.0',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      updatedByCliVersion: '1.0.0',
+    });
+    saveState(dependencyWriter);
+
+    const loaded = loadState();
+    expect(loaded.auth.isAuthenticated).toBe(true);
+    expect(loaded.dependencies.installed.map((dependency) => dependency.id)).toEqual([
+      'sonar-secrets',
+    ]);
+  });
+
+  it('combines independent entries in the same registry', () => {
+    saveState(getDefaultState('1.0.0'));
+    const first = loadState();
+    const second = loadState();
+    first.dependencies.installed.push({
+      id: 'sonar-secrets',
+      updatedAt: '2026-01-01',
+      updatedByCliVersion: '1.0.0',
+    });
+    second.dependencies.installed.push({
+      id: 'sca-scanner-cli',
+      updatedAt: '2026-01-01',
+      updatedByCliVersion: '1.0.0',
+    });
+
+    saveState(first);
+    saveState(second);
+
+    expect(loadState().dependencies.installed.map((dependency) => dependency.id)).toEqual([
+      'sonar-secrets',
+      'sca-scanner-cli',
+    ]);
+  });
+
+  it('leaves the file intact when two writers change the same value', () => {
+    saveState(getDefaultState('1.0.0'));
+    const first = loadState();
+    const second = loadState();
+    first.config.cliVersion = '2.0.0';
+    second.config.cliVersion = '3.0.0';
+
+    saveState(first);
+    expect(() => saveState(second)).toThrow('Concurrent state change conflicts');
+    expect(loadState().config.cliVersion).toBe('2.0.0');
+  });
+
+  it('keeps the old file readable if replacement is interrupted', () => {
+    saveState(getDefaultState('1.0.0'));
+    const changed = loadState();
+    changed.config.cliVersion = '2.0.0';
+    const renameSpy = spyOn(fs, 'renameSync').mockImplementation(() => {
+      expect(loadState().config.cliVersion).toBe('1.0.0');
+      throw new Error('interrupted');
+    });
+
+    try {
+      expect(() => saveState(changed)).toThrow('interrupted');
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    expect(loadState().config.cliVersion).toBe('1.0.0');
+    expect(fs.readdirSync(testCliDir)).toEqual(['state.json']);
+  });
+
+  it('preserves both changes from processes that load the same version', async () => {
+    saveState(getDefaultState('1.0.0'));
+    const repositoryModule = join(
+      import.meta.dir,
+      '../../../../src/core/state/state-repository.ts',
+    );
+    const readyDir = join(testCliDir, 'ready');
+    mkdirSync(readyDir);
+
+    const startWorker = (name: string, other: string) => {
+      const code = `
+        import fs from 'node:fs';
+        import { join } from 'node:path';
+        import { loadState, saveState } from ${JSON.stringify(repositoryModule)};
+        const state = loadState();
+        fs.writeFileSync(join(${JSON.stringify(readyDir)}, ${JSON.stringify(name)}), 'ready');
+        const deadline = Date.now() + 5000;
+        while (!fs.existsSync(join(${JSON.stringify(readyDir)}, ${JSON.stringify(other)}))) {
+          if (Date.now() > deadline) throw new Error('Other writer did not start');
+          Bun.sleepSync(5);
+        }
+        state.config.betaCommandWarnings = { ...state.config.betaCommandWarnings, [${JSON.stringify(name)}]: '1.0.0' };
+        saveState(state);
+      `;
+      return Bun.spawn([process.execPath, '-e', code], {
+        env: { ...process.env, SONAR_USER_HOME: testSonarUserHome },
+      });
+    };
+
+    const first = startWorker('first', 'second');
+    const second = startWorker('second', 'first');
+    expect(await Promise.all([first.exited, second.exited])).toEqual([0, 0]);
+    expect(loadState().config.betaCommandWarnings).toEqual({ first: '1.0.0', second: '1.0.0' });
+  });
 });
 
 // =============================================================================
