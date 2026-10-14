@@ -20,35 +20,68 @@
 
 // Tool detector - checks presence and availability of system tools
 
-import { spawnProcess } from '../../process/process.ts';
+import { spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
 const WSL_EXECUTABLE = 'wsl.exe';
+const RUNTIME_PROBE_TIMEOUT_MS = 3000;
 
-async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
+async function probeRuntime(
+  runtime: ContainerRuntime,
+  viaWsl: boolean,
+  args: string[],
+): Promise<boolean> {
+  const command = viaWsl ? WSL_EXECUTABLE : runtime;
   try {
-    const result = await spawnProcess(runtime, ['info']);
+    const result = await spawnProcessWithTimeout(
+      command,
+      viaWsl ? [runtime, ...args] : args,
+      {},
+      RUNTIME_PROBE_TIMEOUT_MS,
+      'Container runtime probe timed out',
+    );
     return result.exitCode === 0;
   } catch {
     return false;
   }
 }
 
-async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<boolean> {
-  try {
-    const result = await spawnProcess(WSL_EXECUTABLE, [runtime, 'info']); // only support the default distro
-    return result.exitCode === 0;
-  } catch {
-    return false;
-  }
-}
+export type ContainerRuntimeHealth =
+  | { status: 'ready'; runtime: ContainerRuntime; viaWsl: boolean }
+  | { status: 'unavailable'; runtime: ContainerRuntime; viaWsl: boolean }
+  | { status: 'missing' };
 
 export interface ContainerRuntimeDetection {
   runtime: ContainerRuntime | null;
   viaWsl: boolean;
+}
+
+async function probeRuntimeSet(viaWsl: boolean): Promise<ContainerRuntimeHealth> {
+  const ready = await Promise.all(
+    CONTAINER_RUNTIMES.map((runtime) => probeRuntime(runtime, viaWsl, ['info'])),
+  );
+  const readyIndex = ready.findIndex(Boolean);
+  if (readyIndex >= 0) {
+    return { status: 'ready', runtime: CONTAINER_RUNTIMES[readyIndex], viaWsl };
+  }
+  const installed = await Promise.all(
+    CONTAINER_RUNTIMES.map((runtime) => probeRuntime(runtime, viaWsl, ['--version'])),
+  );
+  const installedIndex = installed.findIndex(Boolean);
+  return installedIndex >= 0
+    ? { status: 'unavailable', runtime: CONTAINER_RUNTIMES[installedIndex], viaWsl }
+    : { status: 'missing' };
+}
+
+export async function checkContainerRuntimeHealth(): Promise<ContainerRuntimeHealth> {
+  const native = await probeRuntimeSet(false);
+  if (native.status === 'ready' || !isWindows()) return native;
+  const viaWsl = await probeRuntimeSet(true);
+  if (viaWsl.status === 'ready') return viaWsl;
+  return native.status === 'unavailable' ? native : viaWsl;
 }
 
 /**
@@ -58,19 +91,8 @@ export interface ContainerRuntimeDetection {
  * in a WSL distro without Docker Desktop's Windows integration).
  */
 export async function detectContainerRuntime(): Promise<ContainerRuntimeDetection> {
-  for (const runtime of CONTAINER_RUNTIMES) {
-    if (await isRuntimeAvailable(runtime)) {
-      return { runtime, viaWsl: false };
-    }
-  }
-
-  if (isWindows()) {
-    for (const runtime of CONTAINER_RUNTIMES) {
-      if (await isRuntimeAvailableViaWsl(runtime)) {
-        return { runtime, viaWsl: true };
-      }
-    }
-  }
-
-  return { runtime: null, viaWsl: false };
+  const health = await checkContainerRuntimeHealth();
+  return health.status === 'ready'
+    ? { runtime: health.runtime, viaWsl: health.viaWsl }
+    : { runtime: null, viaWsl: false };
 }
