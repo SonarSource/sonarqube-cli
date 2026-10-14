@@ -63,6 +63,9 @@ describe('update command', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(`Update available: v${newerVersion}`);
+      expect(result.stdout + result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
       expect(result.stderr).not.toContain('deprecated');
     },
     { timeout: 15000 },
@@ -99,6 +102,18 @@ describe('update command', () => {
     },
     { timeout: 15000 },
   );
+
+  it('sonar update rejects a binary outside the standalone installer path', async () => {
+    const result = await harness.run('update');
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(result.stdout + result.stderr).toContain(
+      'Update it through your organization, package manager, or the method used to install it.',
+    );
+  });
 
   it(
     'sonar self-update --status still works but warns that it is deprecated',
