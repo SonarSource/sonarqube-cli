@@ -25,6 +25,7 @@ import { homedir } from 'node:os';
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -63,6 +64,10 @@ export async function displayAgentIntegratePrelude(
     throw new CommandFailedError('Token is invalid.', {
       remediationHint: "Run 'sonar auth login' to obtain a fresh token.",
     });
+  }
+  const mcpAdvice = mcpLoopbackAdvice(auth, await readMcpContainerSettings());
+  if (mcpAdvice) {
+    console.warn(`MCP container networking: ${mcpAdvice}`);
   }
 }
 
