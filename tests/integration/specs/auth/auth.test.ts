@@ -20,7 +20,8 @@
 
 // Integration tests for `sonar auth login`, `auth logout`, and `auth status`
 
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -111,6 +112,11 @@ function readKeychainToken(keychainFile: string, account: string): string | unde
   } catch {
     return undefined;
   }
+}
+
+function writeLegacyToken(keychainFile: string, account: string): void {
+  mkdirSync(dirname(keychainFile), { recursive: true });
+  writeFileSync(keychainFile, JSON.stringify({ tokens: { [account]: 'legacy-token' } }));
 }
 
 describe('auth login', () => {
@@ -490,6 +496,33 @@ describe('auth login --with-token', () => {
     expect(
       readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
     ).toBe('imported-token');
+  });
+
+  it('removes a recorded server legacy token on re-login and warns only when it existed', async () => {
+    const server = await harness.newFakeServer().withAuthToken('new-token').start();
+    harness.state().withActiveConnection(server.baseUrl()).withTokenName('old-token-name');
+    const legacyAccount = new URL(server.baseUrl()).hostname;
+    writeLegacyToken(harness.keychainJsonFile, legacyAccount);
+
+    const first = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      'new-token',
+    );
+
+    expect(first.exitCode).toBe(0);
+    expect(readKeychainToken(harness.keychainJsonFile, legacyAccount)).toBeUndefined();
+    expect(first.stderr).toContain('A token stored before this upgrade may still be valid');
+    expect(first.stderr).toContain('My Account > Security');
+    expect(
+      server.getRecordedRequests().filter((request) => request.path === '/api/user_tokens/revoke'),
+    ).toHaveLength(0);
+
+    const second = await harness.runWithStdin(
+      `auth login --with-token --server ${server.baseUrl()}`,
+      'new-token',
+    );
+    expect(second.exitCode).toBe(0);
+    expect(second.stderr).not.toContain('A token stored before this upgrade');
   });
 
   it.each([
@@ -1580,6 +1613,24 @@ describe('auth logout', () => {
     { timeout: 15000 },
   );
 
+  it('deletes a legacy token locally without reading or sending it and prints the notice', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.state().withActiveConnection(server.baseUrl()).withTokenName('old-token-name');
+    const legacyAccount = new URL(server.baseUrl()).hostname;
+    writeLegacyToken(harness.keychainJsonFile, legacyAccount);
+
+    const result = await harness.run('auth logout');
+
+    expect(result.exitCode).toBe(0);
+    expect(readKeychainToken(harness.keychainJsonFile, legacyAccount)).toBeUndefined();
+    expect(result.stderr).toContain('A token stored before this upgrade may still be valid');
+    expect(result.stderr).toContain('My Account > Security');
+    expect(
+      server.getRecordedRequests().filter((request) => request.path === '/api/user_tokens/revoke'),
+    ).toHaveLength(0);
+    expect(result.stdout + result.stderr).not.toContain('legacy-token');
+  });
+
   it(
     'clears state when a connection exists but the keychain has no token',
     async () => {
@@ -1593,6 +1644,7 @@ describe('auth logout', () => {
         'The server-side token name is unknown for this connection, so the token could not be revoked automatically. Revoke it manually on the server if needed.',
       );
       expect(result.stdout).toContain(`Logged out from: ${server.baseUrl()}`);
+      expect(result.stderr).not.toContain('A token stored before this upgrade');
       const authState = harness.stateJsonFile.asJson().auth as {
         connections: unknown[];
         activeConnectionId: string | undefined;
