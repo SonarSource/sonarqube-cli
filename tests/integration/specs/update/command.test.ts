@@ -23,7 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
 
 describe('update command', () => {
   let harness: TestHarness;
@@ -113,6 +113,29 @@ describe('update command', () => {
       expect(result.stderr).toContain(
         "'sonar self-update' is deprecated since 1.4 and will be removed in a future version. Use 'sonar update' instead.",
       );
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'sonar self-update installs a fake executable on the standalone Unix build',
+    async () => {
+      const newerVersion = '99.0.0';
+      await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+      const updateServer = harness.newFakeUpdateScriptServer(newerVersion);
+
+      const result = await harness.run('self-update');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(`Updated to v${newerVersion}`);
+      expect(updateServer.getRequestedPaths()).toEqual(['/install.sh', '/fake-executable']);
+
+      const executable = harness.userHome.file('.local', 'share', 'sonarqube-cli', 'bin', 'sonar');
+      expect(executable.exists()).toBe(true);
+      expect(executable.isExecutable).toBe(true);
+      const installed = Bun.spawnSync([executable.path]);
+      expect(installed.exitCode).toBe(0);
+      expect(installed.stdout.toString().trim()).toBe(`fake sonar v${newerVersion}`);
     },
     { timeout: 15000 },
   );

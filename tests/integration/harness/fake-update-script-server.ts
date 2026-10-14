@@ -18,29 +18,52 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Minimal HTTP server that mimics the GitHub-hosted install script endpoint.
-// Used when tests need a fetchable installer script without hitting GitHub.
+// Serves an installer script and fake executable over loopback for update integration tests.
 
 export class FakeUpdateScriptServer {
   private server: ReturnType<typeof Bun.serve> | null = null;
   private readonly version: string;
+  private readonly requestedPaths: string[] = [];
 
   constructor(version: string) {
     this.version = version;
   }
 
   start(): this {
-    const scriptContent = `#!/usr/bin/env bash\nversion="${this.version}"\necho "fake install script"\n`;
+    const scriptContent = ['#!/bin/sh', `echo "fake sonar v${this.version}"`].join('\n') + '\n';
     this.server = Bun.serve({
       port: 0,
-      fetch: () => new Response(scriptContent, { status: 200 }),
+      hostname: '127.0.0.1',
+      fetch: (request) => {
+        const path = new URL(request.url).pathname;
+        this.requestedPaths.push(path);
+        if (path === '/install.sh') {
+          const installer = [
+            '#!/usr/bin/env bash',
+            'set -euo pipefail',
+            'install_dir="$HOME/.local/share/sonarqube-cli/bin"',
+            'mkdir -p "$install_dir"',
+            `curl -fsSL "${this.baseUrl()}/fake-executable" -o "$install_dir/sonar"`,
+            'chmod +x "$install_dir/sonar"',
+          ].join('\n');
+          return new Response(`${installer}\n`, { status: 200 });
+        }
+        if (path === '/fake-executable') {
+          return new Response(scriptContent, { status: 200 });
+        }
+        return new Response('Not Found', { status: 404 });
+      },
     });
     return this;
   }
 
+  getRequestedPaths(): string[] {
+    return [...this.requestedPaths];
+  }
+
   baseUrl(): string {
     if (!this.server) throw new Error('Server not started');
-    return `http://localhost:${this.server.port}`;
+    return `http://127.0.0.1:${this.server.port}`;
   }
 
   async stop(): Promise<void> {
