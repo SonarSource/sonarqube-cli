@@ -86,6 +86,16 @@ describe('spawnProcess stdin source', () => {
     // Without backpressure every chunk would be produced and buffered in memory.
     expect(produced.n).toBeLessThan(100);
   });
+
+  it('returns a failed result when a child exits before reading its input', async () => {
+    const result = await spawnProcess(
+      process.execPath,
+      ['-e', 'process.stdin.destroy(); setTimeout(() => process.exit(0), 100)'],
+      { stdin: 'pipe', stdinData: 'input'.repeat(1_000_000) },
+    );
+
+    expect(result.exitCode).toBe(1);
+  });
 });
 
 describe('spawnProcess stdin, against a mocked child', () => {
