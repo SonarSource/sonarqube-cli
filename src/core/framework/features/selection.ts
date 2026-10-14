@@ -69,41 +69,70 @@ function reportAvailability(
 }
 
 /**
- * Decide which applications to install or remove from their availability and
- * install state, prompting per feature unless `useRecommended`. Reporting is
- * done separately by {@link reportFeatureAvailability}.
+ * Installs every available feature and removes installed ones that are no
+ * longer available; unknown availability is left as is. Never prompts.
  */
-export async function resolveFeatureSelection<TOptions>(
+export function resolveRecommendedFeatures<TOptions>(
   applications: FeatureApplication<TOptions>[],
-  useRecommended: boolean,
-  console: Console,
-): Promise<FeatureSelectionResult<TOptions>> {
+): FeatureSelectionResult<TOptions> {
   const toInstall: FeatureApplication<TOptions>[] = [];
   const toRemove: FeatureApplication<TOptions>[] = [];
-  const declined: string[] = [];
 
   for (const application of applications) {
-    const { feature } = application;
     if (application.available === undefined) {
       continue;
     }
-    if (!application.available) {
-      if (application.installed) {
-        toRemove.push(application);
-      }
-      continue;
+    if (application.available) {
+      toInstall.push(resolveRecommendedSubfeatures(application));
+    } else if (application.installed) {
+      toRemove.push(application);
     }
+  }
 
-    const action = await resolveAvailableFeatureAction(
-      feature,
-      application.installed,
-      useRecommended,
-      console,
-    );
+  return { toInstall, toRemove, declined: [] };
+}
+
+function resolveRecommendedSubfeatures<TOptions>(
+  application: FeatureApplication<TOptions>,
+): FeatureApplication<TOptions> {
+  const subfeatureApplications = application.subfeatureApplications.map(
+    (subfeatureApplication) => ({
+      ...subfeatureApplication,
+      active: subfeatureApplication.available ?? subfeatureApplication.installed,
+    }),
+  );
+  return { ...application, subfeatureApplications };
+}
+
+export function hasCustomizableChoices<TOptions>(
+  features: FeatureApplication<TOptions>[],
+): boolean {
+  return features.some(
+    ({ feature, subfeatureApplications }) =>
+      feature.required !== true ||
+      subfeatureApplications.some(
+        ({ available, subfeature }) => available === true && subfeature.required !== true,
+      ),
+  );
+}
+
+/**
+ * Refine the recommended selection by prompting per available feature and
+ * non-required subfeature. Features already moved to `toRemove` are carried over.
+ */
+export async function customizeFeatureSelection<TOptions>(
+  recommended: FeatureSelectionResult<TOptions>,
+  console: Console,
+): Promise<FeatureSelectionResult<TOptions>> {
+  const toInstall: FeatureApplication<TOptions>[] = [];
+  const toRemove = [...recommended.toRemove];
+  const declined = [...recommended.declined];
+
+  for (const application of recommended.toInstall) {
+    const { feature } = application;
+    const action = await resolveAvailableFeatureAction(feature, application.installed, console);
     if (action === 'install') {
-      toInstall.push(
-        await resolveSubfeatureSelection(application, useRecommended, declined, console),
-      );
+      toInstall.push(await customizeSubfeatureSelection(application, declined, console));
     } else if (action === 'uninstall') {
       toRemove.push(application);
     } else {
@@ -114,25 +143,17 @@ export async function resolveFeatureSelection<TOptions>(
   return { toInstall, toRemove, declined };
 }
 
-async function resolveSubfeatureSelection<TOptions>(
+async function customizeSubfeatureSelection<TOptions>(
   application: FeatureApplication<TOptions>,
-  useRecommended: boolean,
   declined: string[],
   console: Console,
 ): Promise<FeatureApplication<TOptions>> {
   const subfeatureApplications: SubfeatureApplication<TOptions>[] = [];
   for (const subfeatureApplication of application.subfeatureApplications) {
     const { subfeature } = subfeatureApplication;
-    let active: boolean;
-    if (subfeatureApplication.available === undefined) {
-      active = subfeatureApplication.installed;
-    } else if (!subfeatureApplication.available) {
-      active = false;
-    } else {
-      active =
-        subfeature.required === true ||
-        useRecommended ||
-        (await confirmInstall(subfeature, console));
+    let { active } = subfeatureApplication;
+    if (subfeatureApplication.available === true && subfeature.required !== true) {
+      active = await confirmInstall(subfeature, console);
       if (!active) {
         declined.push(subfeature.id);
       }
@@ -147,10 +168,9 @@ type AvailableFeatureAction = 'install' | 'uninstall' | 'declined';
 async function resolveAvailableFeatureAction<TOptions>(
   feature: FeatureDeclaration<TOptions>,
   installed: boolean,
-  useRecommended: boolean,
   console: Console,
 ): Promise<AvailableFeatureAction> {
-  if (feature.required || useRecommended) {
+  if (feature.required) {
     return 'install';
   }
   if (installed) {
