@@ -465,6 +465,47 @@ describe('generic integration installer', () => {
     expect(noFeatureError?.message).toBe('No feature selected for Test Integration');
   });
 
+  it('removes without prompting in an interactive run that has nothing to install', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const targetPath = join(tempDir, 'config.txt');
+    const integration = registerIntegration<{ enabled?: boolean }>(
+      registry,
+      'installer-removal-only',
+      [
+        {
+          id: 'feature',
+          displayName: 'Feature',
+          isAvailable: ({ options }) => ({ available: options.enabled === true }),
+          resources: [wholeFile({ id: 'file', targetPath, content: 'enabled=true\n' })],
+        },
+      ],
+    );
+    const run = (enabled: boolean, nonInteractive: boolean) =>
+      installIntegration({
+        registry,
+        integrationId: integration.id,
+        options: { enabled },
+        targetRoot: tempDir,
+        scope: 'project',
+        console: fake,
+        nonInteractive,
+      });
+
+    await run(true, true);
+    expect(await Bun.file(targetPath).exists()).toBe(true);
+    fake = new FakeConsole();
+
+    await run(false, false);
+
+    const methods = fake.calls.map((call) => call.method);
+    expect(methods).not.toContain('selectPrompt');
+    expect(methods).not.toContain('pressAnyKeyPrompt');
+    expect(methods).not.toContain('confirmPrompt');
+    expect(hasUiCall('text', '     Removing Feature...')).toBe(true);
+    expect(await Bun.file(targetPath).exists()).toBe(false);
+  });
+
   it('passes force through the integration context for protected whole files', async () => {
     const targetPath = join(tempDir, 'hook.sh');
     await Bun.write(targetPath, '#!/bin/sh\necho user-defined\n');
