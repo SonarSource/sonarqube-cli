@@ -26,14 +26,21 @@ import { join, relative } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
+  CONTEXT_AUGMENTATION_FEATURE_ID,
+  SESSION_START_SCRIPT_REL,
+} from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
+import {
   SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
+import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
-import { buildHomeEnv, hookScriptName, hookScriptPath } from '../../harness/platform';
+import { buildHomeEnv, hookScriptName, hookScriptPath, SCRIPT_EXT } from '../../harness/platform';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const TEST_ORG = 'my-org';
@@ -459,6 +466,30 @@ describe('integrate devin', () => {
       hooks: [{ type: 'command', command: './scripts/check.sh', timeout: 5 }],
     };
 
+    const USER_SESSION_START_HOOK = {
+      matcher: '',
+      hooks: [{ type: 'command', command: './scripts/session.sh', timeout: 5 }],
+    };
+
+    function sessionStartScriptRelPath(): string {
+      return devinConfigRelPath(harness, join('hooks', SESSION_START_SCRIPT_REL)) + SCRIPT_EXT;
+    }
+
+    function isSecretsEntry(entry: { hooks?: Array<{ command?: string }> }): boolean {
+      return entry.hooks?.some((hook) => hook.command?.includes('sonar-secrets')) === true;
+    }
+
+    function readConfig(configPath: string): DevinConfigFile {
+      const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+      return config;
+    }
+
+    function sessionStartEntries(config: DevinConfigFile) {
+      return (config.hooks?.SessionStart ?? []).filter((entry) =>
+        entry.hooks?.some((hook) => hook.command?.includes('sonar-vortex')),
+      );
+    }
+
     async function startEntitledCloudServer(): Promise<{ extraEnv: Record<string, string> }> {
       const server = await harness
         .newFakeServer()
@@ -617,11 +648,16 @@ describe('integrate devin', () => {
         const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
         harness.userHome.writeFile(
           configPath,
-          JSON.stringify({ theme: 'dark', hooks: { PostToolUse: [USER_HOOK] } }),
+          JSON.stringify({
+            theme: 'dark',
+            hooks: { PostToolUse: [USER_HOOK], SessionStart: [USER_SESSION_START_HOOK] },
+          }),
         );
         harness.userHome.writeFile(agentsPath, '# My rules\n');
         await harness.run('integrate devin --non-interactive', { extraEnv });
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(true);
+        expect(harness.userHome.exists(sessionStartScriptRelPath())).toBe(true);
+        expect(sessionStartEntries(readConfig(configPath))).toHaveLength(1);
         expect(harness.userHome.file(agentsPath).asText()).toContain(SQAA_HEADING);
 
         const installedState = harness.stateJsonFile.asJson();
@@ -650,11 +686,117 @@ describe('integrate devin', () => {
         const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
         expect(config.theme).toBe('dark');
         expect(config.hooks?.PostToolUse).toEqual([USER_HOOK]);
+        expect(config.hooks?.SessionStart).toEqual([USER_SESSION_START_HOOK]);
+        expect(config.hooks?.UserPromptSubmit?.some(isSecretsEntry)).toBe(true);
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(false);
+        expect(harness.userHome.exists(sessionStartScriptRelPath())).toBe(false);
         expect(harness.userHome.file(agentsPath).asText()).not.toContain(SQAA_HEADING);
         expect(harness.userHome.file(agentsPath).asText()).toContain('# My rules');
       },
       { timeout: 30000 },
     );
+    describe('session-start announcement', () => {
+      it(
+        'adds the SessionStart hook to config.json and keeps the user settings and hooks',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const configPath = devinConfigRelPath(harness, 'config.json');
+          harness.userHome.writeFile(
+            configPath,
+            JSON.stringify({
+              theme: 'dark',
+              hooks: { SessionStart: [USER_SESSION_START_HOOK], PostToolUse: [USER_HOOK] },
+            }),
+          );
+
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+          expect(config.theme).toBe('dark');
+          expect(config.hooks?.PostToolUse?.[0]).toEqual(USER_HOOK);
+          expect(config.hooks?.SessionStart?.[0]).toEqual(USER_SESSION_START_HOOK);
+          const entries = sessionStartEntries(config);
+          expect(entries).toHaveLength(1);
+          expect(entries[0].matcher).toBe('');
+          const [hook] = entries[0].hooks ?? [];
+          expect(hook.type).toBe('command');
+          expect(hook.timeout).toBe(60);
+          expect(hookScriptPath(hook.command ?? '')).toBe(
+            join(harness.userHome.path, sessionStartScriptRelPath()).replaceAll('\\', '/'),
+          );
+          expect(config.hooks).not.toHaveProperty('SubagentStart');
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'writes the hook script that runs sonar hook agent-session-start --agent devin and installs the CAG binary',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const cagBinary = harness.cliHome.file('bin', buildLocalCagBinaryName(detectPlatform()));
+          expect(cagBinary.exists()).toBe(false);
+
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          const script = harness.userHome.file(sessionStartScriptRelPath());
+          expect(script.exists()).toBe(true);
+          expect(script.isExecutable).toBe(true);
+          expect(script.asText()).toContain('sonar hook agent-session-start --agent devin');
+          expect(cagBinary.exists()).toBe(true);
+          const state = harness.stateJsonFile.asJson() as CliState;
+          expect(
+            state.dependencies.installed.some((d) => d.id === 'sonar-context-augmentation'),
+          ).toBe(true);
+          expect(
+            findInstalledSubfeature(
+              harness,
+              'devin',
+              VORTEX_FEATURE_ID,
+              CONTEXT_AUGMENTATION_FEATURE_ID,
+            ),
+          ).toBeDefined();
+          expect(harness.userHome.exists(devinConfigRelPath(harness, 'skills'))).toBe(false);
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'is idempotent: re-running leaves one SessionStart entry',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const configPath = devinConfigRelPath(harness, 'config.json');
+
+          await harness.run('integrate devin --non-interactive', { extraEnv });
+          expect(sessionStartEntries(readConfig(configPath))).toHaveLength(1);
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          expect(sessionStartEntries(readConfig(configPath))).toHaveLength(1);
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'installs no session-start hook, script or CAG binary when the organization has no Vortex',
+        async () => {
+          const server = await harness.newFakeServer().withAuthToken('tok').start();
+          harness.withAuth(server.baseUrl(), 'tok');
+
+          const result = await harness.run('integrate devin --non-interactive');
+
+          expect(result.exitCode).toBe(0);
+          const configPath = devinConfigRelPath(harness, 'config.json');
+          const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+          expect(config.hooks?.SessionStart).toBeUndefined();
+          expect(harness.userHome.exists(sessionStartScriptRelPath())).toBe(false);
+          expect(
+            harness.cliHome.file('bin', buildLocalCagBinaryName(detectPlatform())).exists(),
+          ).toBe(false);
+        },
+        { timeout: 30000 },
+      );
+    });
   });
 });
