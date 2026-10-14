@@ -99,6 +99,24 @@ function withCaCertificate(
 }
 
 describe('getMcpContainerConfig', () => {
+  it.each(['docker', 'podman', 'nerdctl'] as const)(
+    'passes configured network and host mapping to %s',
+    (runtime) => {
+      const config = getMcpContainerCommand(
+        ON_PREMISE_AUTH,
+        runtime,
+        { withFsMount: false },
+        { containerNetwork: 'host', containerAddHost: 'sonarqube.local:host-gateway' },
+        NO_NETWORK,
+      );
+      expect(config.args).toContain('--network');
+      expect(config.args[config.args.indexOf('--network') + 1]).toBe('host');
+      expect(config.args).toContain('--add-host');
+      expect(config.args[config.args.indexOf('--add-host') + 1]).toBe(
+        'sonarqube.local:host-gateway',
+      );
+    },
+  );
   it('returns a docker command with SONARQUBE_TOKEN and SONARQUBE_URL for on-premise', () => {
     const config = getMcpContainerCommand(
       ON_PREMISE_AUTH,
@@ -347,6 +365,21 @@ describe('getMcpContainerConfig', () => {
 });
 
 describe('resolveMcpContainerCommand (via WSL)', () => {
+  it('forwards configured network and host mapping through WSLENV', () => {
+    const config = resolveMcpContainerCommand(
+      ON_PREMISE_AUTH,
+      { runtime: 'podman', viaWsl: true },
+      { withFsMount: false },
+      { containerNetwork: 'my network', containerAddHost: 'sonarqube.local:host-gateway' },
+      NO_NETWORK,
+    );
+    expect(config.args[2]).toContain('--network "$SONARQUBE_MCP_NETWORK"');
+    expect(config.args[2]).toContain('--add-host "$SONARQUBE_MCP_ADD_HOST"');
+    expect(config.env.SONARQUBE_MCP_NETWORK).toBe('my network');
+    expect(config.env.SONARQUBE_MCP_ADD_HOST).toBe('sonarqube.local:host-gateway');
+    expect(config.env.WSLENV).toContain('SONARQUBE_MCP_NETWORK/u');
+    expect(config.env.WSLENV).toContain('SONARQUBE_MCP_ADD_HOST/u');
+  });
   it('returns a wsl.exe/sh -c command with SONARQUBE_TOKEN and SONARQUBE_URL forwarded via WSLENV', () => {
     const config = resolveMcpContainerCommand(
       ON_PREMISE_AUTH,

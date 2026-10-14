@@ -549,6 +549,30 @@ describe('system status', () => {
   );
 
   it(
+    'recommends container networking for a configured MCP server with a loopback connection',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      harness.state().withAuth(server.baseUrl(), 'my-token');
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness.state().withRawState(
+        JSON.stringify({
+          ...mcpClaudeIntegrationState(harness.userHome.path),
+          auth: harness.state().build().auth,
+        }),
+      );
+
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as { recommendations: string[] };
+      expect(json.recommendations.some((item) => item.includes('mcp.container.serverUrl'))).toBe(
+        true,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'shows INVALID CONFIG status and recommends re-integration when claude.json has malformed sonarqube entry',
     async () => {
       harness.userHome.writeFile(

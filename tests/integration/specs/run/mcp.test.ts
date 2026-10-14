@@ -216,6 +216,55 @@ describe('run mcp', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Check that its SonarQube URL is reachable');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses persistent container network settings on launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      expect((await harness.run('config set mcp.container.network sonar-net')).exitCode).toBe(0);
+      expect(
+        (await harness.run('config set mcp.container.addHost sonarqube.local:host-gateway'))
+          .exitCode,
+      ).toBe(0);
+      expect(
+        (await harness.run('config set mcp.container.serverUrl http://sonarqube:9000')).exitCode,
+      ).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--network sonar-net');
+      expect(result.stdout).toContain('--add-host sonarqube.local:host-gateway');
+      expect(result.stdout).toContain('ENV_URL=http://sonarqube:9000');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'checks configured networking after a failed loopback launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker(1);
+
+      expect((await harness.run('config set mcp.container.network host')).exitCode).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Set mcp.container.serverUrl');
+      expect(result.stderr).not.toContain('configure mcp.container.network');
     },
     { timeout: 15000 },
   );

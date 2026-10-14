@@ -50,6 +50,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
+import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -496,6 +497,12 @@ export async function systemStatus(
     vortexInstalled,
     auth,
   );
+  if (auth && integrations.some((integration) => integration.mcp?.config === 'configured')) {
+    const mcpAdvice = mcpLoopbackAdvice(auth, await readMcpContainerSettings());
+    if (mcpAdvice) {
+      recommendations.push(`MCP container networking: ${mcpAdvice}`);
+    }
+  }
 
   const data: StatusData = {
     auth,
