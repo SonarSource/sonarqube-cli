@@ -27,6 +27,7 @@ import {
   recordSqaaAnalysisTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
+  type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -51,9 +52,10 @@ import type { HookCommandResult } from './hook-command-result.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
-async function handleSqaaPostToolUse(
+export async function handleSqaaPostToolUse(
   payload: ClaudePostToolUsePayload,
   ctx: CommandInvocationContext,
+  callerCommand: SqaaTelemetryCallerCommand,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) {
@@ -111,7 +113,7 @@ async function handleSqaaPostToolUse(
     finishSqaaTelemetryFromReport(
       fetchResult.report,
       {
-        telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+        telemetryCallerCommand: callerCommand,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
         telemetryCtx: ctx,
         auth,
@@ -122,7 +124,7 @@ async function handleSqaaPostToolUse(
     recordSqaaAnalysisTelemetry(
       ctx,
       auth,
-      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      callerCommand,
       { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
@@ -156,7 +158,8 @@ function createSqaaPostToolUseSubscriber(
   return {
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
-    handle: (payload) => handleSqaaPostToolUse(payload, ctx),
+    handle: (payload) =>
+      handleSqaaPostToolUse(payload, ctx, SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND),
   };
 }
 
