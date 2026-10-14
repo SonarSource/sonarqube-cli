@@ -20,6 +20,7 @@
 
 // Integration tests for `sonar integrate devin`.
 
+import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -38,6 +39,9 @@ import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 const TEST_ORG = 'my-org';
 const SQAA_HEADING = '# Vortex analysis protocol';
 const SQAA_BEGIN_MARKER = '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->';
+const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
+const SECRETS_BEGIN_MARKER = '<!-- sonar:begin:devin-secrets-on-read -->';
+const SECRETS_END_MARKER = '<!-- sonar:end:devin-secrets-on-read -->';
 
 interface DevinConfigFile {
   theme?: string;
@@ -260,6 +264,195 @@ describe('integrate devin', () => {
     { timeout: 30000 },
   );
 
+  describe('secrets hooks', () => {
+    const USER_PRE_HOOK = {
+      matcher: '^exec$',
+      hooks: [{ type: 'command', command: './scripts/check.sh', timeout: 5 }],
+    };
+    const USER_PROMPT_HOOK = {
+      matcher: '',
+      hooks: [{ type: 'command', command: './scripts/log-prompt.sh', timeout: 5 }],
+    };
+
+    function secretsScriptRelPath(name: string): string {
+      return devinConfigRelPath(
+        harness,
+        join('hooks', 'sonar-secrets', 'build-scripts', hookScriptName(name)),
+      );
+    }
+
+    async function authenticate(): Promise<void> {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+    }
+
+    function secretsEntries(config: DevinConfigFile, event: string) {
+      return (config.hooks?.[event] ?? []).filter((entry) =>
+        entry.hooks?.some((hook) => hook.command?.includes('sonar-secrets')),
+      );
+    }
+
+    it(
+      'adds the PreToolUse read and UserPromptSubmit hooks to config.json and keeps the user settings and hooks',
+      async () => {
+        await authenticate();
+        const configPath = devinConfigRelPath(harness, 'config.json');
+        harness.userHome.writeFile(
+          configPath,
+          JSON.stringify({
+            theme: 'dark',
+            hooks: { PreToolUse: [USER_PRE_HOOK], UserPromptSubmit: [USER_PROMPT_HOOK] },
+          }),
+        );
+
+        const result = await harness.run('integrate devin --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+        expect(config.theme).toBe('dark');
+        expect(config.hooks?.PreToolUse?.[0]).toEqual(USER_PRE_HOOK);
+        expect(config.hooks?.UserPromptSubmit?.[0]).toEqual(USER_PROMPT_HOOK);
+
+        const preEntries = secretsEntries(config, 'PreToolUse');
+        expect(preEntries).toHaveLength(1);
+        expect(preEntries[0].matcher).toBe('^read$');
+        const [preHook] = preEntries[0].hooks ?? [];
+        expect(preHook.type).toBe('command');
+        expect(preHook.timeout).toBe(60);
+        expect(hookScriptPath(preHook.command ?? '')).toBe(
+          join(harness.userHome.path, secretsScriptRelPath('pretool-secrets')).replaceAll(
+            '\\',
+            '/',
+          ),
+        );
+
+        const promptEntries = secretsEntries(config, 'UserPromptSubmit');
+        expect(promptEntries).toHaveLength(1);
+        expect(promptEntries[0].matcher).toBe('');
+        const [promptHook] = promptEntries[0].hooks ?? [];
+        expect(hookScriptPath(promptHook.command ?? '')).toBe(
+          join(harness.userHome.path, secretsScriptRelPath('prompt-secrets')).replaceAll('\\', '/'),
+        );
+        expect(harness.userHome.exists(devinConfigRelPath(harness, 'hooks.v1.json'))).toBe(false);
+        expect(
+          findInstalledFeature(harness, 'devin', 'sonar-secrets-hooks', 'global'),
+        ).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'creates config.json when the Devin config directory has none',
+      async () => {
+        await authenticate();
+        const configPath = devinConfigRelPath(harness, 'config.json');
+        expect(harness.userHome.exists(configPath)).toBe(false);
+
+        const result = await harness.run('integrate devin --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+        expect(secretsEntries(config, 'PreToolUse')).toHaveLength(1);
+        expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes the hook scripts that run the devin secrets handlers',
+      async () => {
+        await authenticate();
+
+        const result = await harness.run('integrate devin --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const preScript = harness.userHome.file(secretsScriptRelPath('pretool-secrets'));
+        const promptScript = harness.userHome.file(secretsScriptRelPath('prompt-secrets'));
+        expect(preScript.isExecutable).toBe(true);
+        expect(promptScript.isExecutable).toBe(true);
+        expect(preScript.asText()).toContain('sonar hook devin-pre-tool-use');
+        expect(promptScript.asText()).toContain('sonar hook devin-prompt-submit');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'writes the secrets-on-read instructions to the global AGENTS.md and keeps the user content',
+      async () => {
+        await authenticate();
+        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
+        const userContent = '# My rules\n\nAlways use tabs.\n';
+        harness.userHome.writeFile(agentsPath, userContent);
+
+        const result = await harness.run('integrate devin --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        const body = harness.userHome.file(agentsPath).asText();
+        expect(body.startsWith(userContent)).toBe(true);
+        expect(body).toContain(SECRETS_BEGIN_MARKER);
+        expect(body).toContain(SECRETS_HEADING);
+        expect(body).toContain('sonar analyze secrets <path/to/file>');
+        expect(harness.cwd.exists('AGENTS.md')).toBe(false);
+        expect(
+          findInstalledFeature(harness, 'devin', 'secrets-instructions', 'global'),
+        ).toBeDefined();
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'is idempotent: re-running leaves one entry per event and one instructions block',
+      async () => {
+        await authenticate();
+        const configPath = devinConfigRelPath(harness, 'config.json');
+        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
+
+        await harness.run('integrate devin --non-interactive');
+        const firstConfig = harness.userHome.file(configPath).asJson();
+        const firstAgents = harness.userHome.file(agentsPath).asText();
+        const result = await harness.run('integrate devin --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.userHome.file(configPath).asJson()).toEqual(firstConfig);
+        expect(harness.userHome.file(agentsPath).asText()).toBe(firstAgents);
+        expect(firstAgents.split(SECRETS_BEGIN_MARKER)).toHaveLength(2);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'system reset removes only the secrets hooks, scripts and instructions block',
+      async () => {
+        await authenticate();
+        const configPath = devinConfigRelPath(harness, 'config.json');
+        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
+        harness.userHome.writeFile(
+          configPath,
+          JSON.stringify({ theme: 'dark', hooks: { PreToolUse: [USER_PRE_HOOK] } }),
+        );
+        harness.userHome.writeFile(agentsPath, '# My rules\n');
+        await harness.run('integrate devin --non-interactive');
+        expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(true);
+        expect(harness.userHome.file(agentsPath).asText()).toContain(SECRETS_END_MARKER);
+        harness.state().withRawState(readFileSync(harness.stateJsonFile.path, 'utf-8'));
+
+        const result = await harness.run('system reset --force');
+
+        expect(result.exitCode).toBe(0);
+        const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+        expect(config.theme).toBe('dark');
+        expect(config.hooks?.PreToolUse).toEqual([USER_PRE_HOOK]);
+        expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(0);
+        expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(false);
+        expect(harness.userHome.exists(secretsScriptRelPath('prompt-secrets'))).toBe(false);
+        const agents = harness.userHome.file(agentsPath).asText();
+        expect(agents).toContain('# My rules');
+        expect(agents).not.toContain(SECRETS_HEADING);
+      },
+      { timeout: 30000 },
+    );
+  });
+
   describe('Vortex per-edit analysis', () => {
     const USER_HOOK = {
       matcher: '^exec$',
@@ -401,9 +594,13 @@ describe('integrate devin', () => {
         const result = await harness.run('integrate devin --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.file(configPath).asJson()).toEqual({ theme: 'dark' });
+        const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+        expect(config.theme).toBe('dark');
+        expect(config.hooks?.PostToolUse).toBeUndefined();
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(false);
-        expect(harness.userHome.exists(devinConfigRelPath(harness, 'AGENTS.md'))).toBe(false);
+        expect(
+          harness.userHome.file(devinConfigRelPath(harness, 'AGENTS.md')).asText(),
+        ).not.toContain(SQAA_HEADING);
         expect(findInstalledFeature(harness, 'devin', VORTEX_FEATURE_ID)).toBeUndefined();
         expect(result.stdout + result.stderr).toContain(
           'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
