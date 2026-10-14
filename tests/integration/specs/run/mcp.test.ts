@@ -216,6 +216,51 @@ describe('run mcp', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('A localhost SonarQube URL can point back to the container');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses persistent container network settings on launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      expect((await harness.run('config set mcp.container.network host')).exitCode).toBe(0);
+      expect(
+        (await harness.run('config set mcp.container.addHost sonarqube.local:host-gateway'))
+          .exitCode,
+      ).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--network host');
+      expect(result.stdout).toContain('--add-host sonarqube.local:host-gateway');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'checks configured networking after a failed loopback launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker(1);
+
+      expect((await harness.run('config set mcp.container.network host')).exitCode).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Check that the configured MCP container networking');
+      expect(result.stderr).not.toContain('configure mcp.container.network');
     },
     { timeout: 15000 },
   );
