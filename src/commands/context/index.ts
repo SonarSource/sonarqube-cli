@@ -26,7 +26,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken } from '@/core/host/keychain.ts';
+import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -109,7 +109,7 @@ async function resolveRecordedContextAugmentationConfig(
   };
 }
 
-async function resolveContextToken(
+export async function resolveContextToken(
   auth: ResolvedAuth,
   serverUrl: string,
   organization: string | undefined,
@@ -123,6 +123,9 @@ async function resolveContextToken(
   try {
     token = await getToken(serverUrl, organization);
   } catch (err) {
+    if (!(err instanceof MissingKeychainError)) {
+      throw err;
+    }
     // Treat an unavailable keychain as no stored token so the recorded-connection error below
     // surfaces. Remember that it was unavailable, because it changes what the user should do.
     keychainUnavailable = true;

@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as keychain from '@/core/host/keychain.ts';
+import { MissingKeychainError } from '@/core/host/keychain.ts';
 import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
 import * as projectInfo from '@/core/project-info.ts';
 
@@ -105,7 +106,7 @@ describe('runContextPassthrough', () => {
       serverUrl: 'https://regional.sonarcloud.io',
     });
     spyOn(keychain, 'getToken').mockRejectedValue(
-      new CommandFailedError('Failed to access the system keychain.'),
+      new MissingKeychainError('libsecret not available'),
     );
     const ctx = {
       console: {},
@@ -132,9 +133,10 @@ describe('runContextPassthrough', () => {
     expect((error as Error).message).toContain(
       'Not authenticated for the recorded Vortex Context connection',
     );
-    expect(debugMessages).toEqual([
-      'Keychain lookup failed for https://regional.sonarcloud.io: Failed to access the system keychain.',
-    ]);
+    expect(debugMessages).toHaveLength(1);
+    expect(debugMessages[0]).toContain(
+      'Keychain lookup failed for https://regional.sonarcloud.io: No system keychain is available on this machine (libsecret is not installed).',
+    );
     const hint = (error as CommandFailedError).remediationHint ?? '';
     expect(hint).toContain('SONARQUBE_CLI_TOKEN');
     expect(hint).toContain('SONARQUBE_CLI_SERVER=https://regional.sonarcloud.io');

@@ -38,19 +38,34 @@ interface KeychainBackend {
 
 const secretCache = new Map<string, string | null>();
 
-const KEYCHAIN_UNAVAILABLE_MESSAGE = 'Failed to access the system keychain.';
-const KEYCHAIN_UNAVAILABLE_HINT =
-  "Make sure your system's keychain or credential manager is available and unlocked, then try again. " +
-  'Alternatively, authenticate via environment variables instead of the keychain: SONARQUBE_CLI_TOKEN ' +
+const KEYCHAIN_FAILURE_MESSAGE = 'Failed to access the system keychain.';
+const MISSING_KEYCHAIN_MESSAGE =
+  'No system keychain is available on this machine (libsecret is not installed).';
+const KEYCHAIN_REPAIR_HINT =
+  "Make sure your system's keychain or credential manager is available and unlocked, then try again.";
+const MISSING_KEYCHAIN_HINT =
+  'Authenticate via environment variables: SONARQUBE_CLI_TOKEN ' +
   'plus either SONARQUBE_CLI_SERVER (SonarQube Server) or SONARQUBE_CLI_ORG (SonarQube Cloud).';
+
+export class MissingKeychainError extends CommandFailedError {
+  constructor(detail: string) {
+    super(`${MISSING_KEYCHAIN_MESSAGE}\n\nUnderlying error: ${detail}`, {
+      remediationHint: MISSING_KEYCHAIN_HINT,
+    });
+    this.name = 'MissingKeychainError';
+  }
+}
 
 async function wrapBunSecrets<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new CommandFailedError(`${KEYCHAIN_UNAVAILABLE_MESSAGE}\n\nUnderlying error: ${detail}`, {
-      remediationHint: KEYCHAIN_UNAVAILABLE_HINT,
+    if (process.platform === 'linux' && detail === 'libsecret not available') {
+      throw new MissingKeychainError(detail);
+    }
+    throw new CommandFailedError(`${KEYCHAIN_FAILURE_MESSAGE}\n\nUnderlying error: ${detail}`, {
+      remediationHint: KEYCHAIN_REPAIR_HINT,
     });
   }
 }
