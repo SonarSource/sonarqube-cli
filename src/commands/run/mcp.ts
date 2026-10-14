@@ -27,6 +27,7 @@ import { createInterface } from 'node:readline';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { getConfigValue } from '@/core/config/config-repository.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import { detectContainerRuntime } from '@/core/host/environment/tool-detector.ts';
@@ -111,7 +112,15 @@ export async function runMcp(
       ? { withFsMount: true, projectRoot, projectKey }
       : { withFsMount: false, projectKey };
 
-    const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
+    const containerNetwork = await getConfigValue('mcp.container.network');
+    const containerAddHost = await getConfigValue('mcp.container.addHost');
+    const config = resolveMcpContainerCommand(
+      auth,
+      detection,
+      context,
+      { ...options, containerNetwork, containerAddHost },
+      resolvedNetwork,
+    );
     cachedCaCertPath = config.cachedCaCertPath;
 
     if (options.debug) {
@@ -130,6 +139,15 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
+        if (process.exitCode !== 0 && isLoopbackServerUrl(auth.serverUrl)) {
+          const networkHint =
+            containerNetwork || containerAddHost
+              ? 'Check that the configured MCP container networking lets the container reach the SonarQube URL.'
+              : 'If SonarQube runs on the host, configure mcp.container.network (for example, host) or mcp.container.addHost with sonar config set, and use a URL reachable from the container.';
+          process.stderr.write(
+            `[sonarqube-cli] The MCP container exited with an error. A localhost SonarQube URL can point back to the container. ${networkHint}\n`,
+          );
+        }
         resolve();
       });
     });
@@ -168,6 +186,15 @@ export async function runMcp(
         logger.warn(`Could not remove cached client certificate: ${String(err)}`);
       }
     }
+  }
+}
+
+function isLoopbackServerUrl(serverUrl: string): boolean {
+  try {
+    const hostname = new URL(serverUrl).hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
   }
 }
 

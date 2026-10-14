@@ -37,6 +37,16 @@ const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
 
 export const CONFIG_KEY_DEFINITIONS = [
   {
+    key: 'mcp.container.network',
+    sensitive: false,
+    description: 'Container network used by the SonarQube MCP server.',
+  },
+  {
+    key: 'mcp.container.addHost',
+    sensitive: false,
+    description: 'Host mapping for the SonarQube MCP container (name:address).',
+  },
+  {
     key: 'network.proxy.http',
     sensitive: true,
     description: 'HTTP proxy URL used for outbound HTTP requests.',
