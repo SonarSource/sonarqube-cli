@@ -114,8 +114,16 @@ async function resolveContextToken(
   serverUrl: string,
   organization: string | undefined,
 ): Promise<string> {
+  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   if (auth.serverUrl === serverUrl && auth.orgKey === organization) {
     return auth.token;
+  }
+
+  if (auth.serverUrl !== serverUrl) {
+    throw new CommandFailedError(
+      `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
+      { remediationHint: 'Connect to the recorded server before running sonar context.' },
+    );
   }
 
   let token: string | null = null;
@@ -132,7 +140,6 @@ async function resolveContextToken(
     return token;
   }
 
-  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
