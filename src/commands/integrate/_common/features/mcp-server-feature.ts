@@ -27,7 +27,7 @@ import { jsonPatch, tomlPatch } from '@/core/framework/features';
 import { getMcpConfig, type McpServerConfig } from '@/core/host/mcp/mcp-helper.ts';
 
 import { getOptionalStringAttr } from '../attrs.ts';
-import { MCP_SERVER_FEATURE_BENEFIT, MCP_SERVER_FEATURE_PREVIEW } from '../feature-constants.ts';
+import { MCP_SERVER_FEATURE_PREVIEW } from '../feature-constants.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
 
 export const MCP_CONFIG_RESOURCE_ID = 'mcp-config';
@@ -46,7 +46,6 @@ export function createMcpServerFeature<TOptions extends IntegrateAgentOptions>(
   return {
     id: 'mcp-server',
     displayName: 'MCP server',
-    benefitDescription: MCP_SERVER_FEATURE_BENEFIT,
     previewDescription: MCP_SERVER_FEATURE_PREVIEW,
     resources: [createMcpConfigResource(config)],
   };
