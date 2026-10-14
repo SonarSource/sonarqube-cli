@@ -20,11 +20,14 @@
 
 // Integration tests for `sonar hook agent-session-start`.
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { CliResult } from '../../harness';
 import { TestHarness } from '../../harness';
 import { type CagInvocation, readCagInvocations } from '../../harness/cag-helpers';
+import { initGitRepo } from './git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -170,6 +173,18 @@ describe('sonar hook agent-session-start', () => {
       }),
       expected: { additional_context: EXPECTED_CONTEXT },
     },
+    {
+      name: 'Devin SessionStart (no cwd in the payload)',
+      agent: 'devin',
+      stdin: () => ({
+        session_id: 'sess-1',
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      }),
+      expected: {
+        hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: EXPECTED_CONTEXT },
+      },
+    },
   ]) {
     it(
       `reads the ${invocation.name} payload and emits that agent's envelope`,
@@ -211,6 +226,30 @@ describe('sonar hook agent-session-start', () => {
         SONAR_CONTEXT_URL: serverUrl,
       });
       expect(invocations[0].env.SONAR_CONTEXT_WORKSPACE_ROOT).toBeDefined();
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'resolves the project from a subdirectory of the repository when Devin sends no cwd',
+    async () => {
+      await setup();
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('packages/app/index.ts', '');
+
+      const result = await harness.runWithStdin(
+        'hook agent-session-start --agent devin',
+        JSON.stringify({ session_id: 'sess-1', hook_event_name: 'SessionStart' }),
+        { cwd: join(harness.cwd.path, 'packages', 'app') },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout.trim()).hookSpecificOutput.additionalContext).toBe(
+        EXPECTED_CONTEXT,
+      );
+      const invocations = cagSessionStartInvocations();
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBe(TEST_PROJECT);
     },
     TEST_TIMEOUT,
   );
