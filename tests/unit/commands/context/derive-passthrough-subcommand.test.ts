@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as keychain from '@/core/host/keychain.ts';
+import { clearSecretCache, MissingKeychainError } from '@/core/host/keychain.ts';
 import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
 import * as projectInfo from '@/core/project-info.ts';
 
@@ -87,6 +88,72 @@ describe('derivePassthroughSubcommand', () => {
 });
 
 describe('runContextPassthrough', () => {
+  async function runWithBunSecretsFailure(message: string): Promise<CommandFailedError> {
+    const savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    clearSecretCache();
+    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'recorded-org',
+      projectKey: 'project-key',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    });
+    const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(new Error(message));
+    const ctx = {
+      console: {},
+      resolveAuth: () =>
+        Promise.resolve({
+          isErr: () => false,
+          value: {
+            orgKey: 'environment-org',
+            serverUrl: 'https://sonarcloud.io',
+            token: 'environment-token',
+          },
+        }),
+    } as unknown as CommandInvocationContext;
+
+    try {
+      const caught = await runContextPassthrough('__hook', ['Claude'], {
+        stdinPayload: '{}',
+        ctx,
+      }).then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+      expect(caught).toBeInstanceOf(CommandFailedError);
+      return caught as CommandFailedError;
+    } finally {
+      getSpy.mockRestore();
+      if (savedKeychainFile === undefined) {
+        delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+      } else {
+        process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
+      }
+      clearSecretCache();
+    }
+  }
+
+  it('propagates keychain access failures with repair advice', async () => {
+    const error = await runWithBunSecretsFailure('keychain locked');
+    expect(error.message).toContain('keychain locked');
+    expect(error.message).not.toContain('Not authenticated for the recorded');
+    expect(error.remediationHint).toContain('unlocked');
+  });
+
+  if (process.platform === 'linux') {
+    it('uses recorded-connection advice when libsecret cannot be loaded', async () => {
+      const error = await runWithBunSecretsFailure('libsecret not available');
+      expect(error.message).toContain(
+        'Not authenticated for the recorded Vortex Context connection',
+      );
+      expect(error.remediationHint).toContain('Install or repair libsecret');
+      expect(error.remediationHint).toContain('SONARQUBE_CLI_TOKEN');
+      expect(error.remediationHint).toContain(
+        'SONARQUBE_CLI_SERVER=https://regional.sonarcloud.io',
+      );
+    });
+  }
+
   it('uses the recorded-connection error when the keychain is unavailable', async () => {
     const debugMessages: string[] = [];
     configureLogger({ level: 'DEBUG' });
@@ -105,7 +172,7 @@ describe('runContextPassthrough', () => {
       serverUrl: 'https://regional.sonarcloud.io',
     });
     spyOn(keychain, 'getToken').mockRejectedValue(
-      new CommandFailedError('Failed to access the system keychain.'),
+      new MissingKeychainError('libsecret not available'),
     );
     const ctx = {
       console: {},
@@ -132,9 +199,10 @@ describe('runContextPassthrough', () => {
     expect((error as Error).message).toContain(
       'Not authenticated for the recorded Vortex Context connection',
     );
-    expect(debugMessages).toEqual([
-      'Keychain lookup failed for https://regional.sonarcloud.io: Failed to access the system keychain.',
-    ]);
+    expect(debugMessages).toHaveLength(1);
+    expect(debugMessages[0]).toContain(
+      'Keychain lookup failed for https://regional.sonarcloud.io: No usable system keychain is available: libsecret could not be loaded.',
+    );
     const hint = (error as CommandFailedError).remediationHint ?? '';
     expect(hint).toContain('SONARQUBE_CLI_TOKEN');
     expect(hint).toContain('SONARQUBE_CLI_SERVER=https://regional.sonarcloud.io');
