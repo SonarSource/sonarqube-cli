@@ -198,7 +198,6 @@ describe('runDepRisksStage', () => {
     fake = new FakeConsole();
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
     });
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
@@ -327,7 +326,6 @@ describe('runDepRisksStage', () => {
   it('scans under the discovered project key when no -p was baked', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
       projectKey: 'discovered-key',
     });
 
@@ -352,7 +350,6 @@ describe('runDepRisksStage', () => {
   it('rejects a multiline discovered project key before scanning', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
       projectKey: 'first\nsecond',
     });
 

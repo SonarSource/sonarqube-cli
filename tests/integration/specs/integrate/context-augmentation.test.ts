@@ -21,8 +21,7 @@
 // Integration tests for the Context Augmentation step inside `sonar integrate
 // claude`, `sonar integrate copilot`, and `sonar integrate codex`.
 
-import { writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -35,7 +34,6 @@ import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.j
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
-import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.ts';
 
 import { TestHarness } from '../../harness';
@@ -44,7 +42,6 @@ import {
   expectVortexHookInstalled,
   readCagInvocations as readInvocations,
 } from '../../harness/cag-helpers';
-import { commitFile, git, initGitRepo } from '../hook/git-test-helpers';
 
 function loadState(harness: TestHarness): CliState {
   return harness.stateJsonFile.asJson() as CliState;
@@ -105,7 +102,6 @@ function expectRecordedCagFeature(
   expect(entry.feature.targetRoot).toBe(args.targetRoot);
   expect(entry.feature.attrs).toMatchObject({
     orgKey: ORG_KEY,
-    projectKey: PROJECT_KEY,
     scaEnabled: args.scaEnabled,
     serverUrl: args.serverUrl,
   });
@@ -173,64 +169,6 @@ describe('integrate claude — Context Augmentation', () => {
         scaEnabled: true,
         serverUrl,
       });
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'keys CAG state on the main working tree when integrate runs inside a linked worktree',
-    async () => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(TOKEN)
-        .withProject(PROJECT_KEY)
-        .withVortexEntitlement(ORG_KEY, ORG_UUID)
-        .withScaEnabled(true)
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
-      harness.state().withContextAugmentationBinaryInstalled();
-
-      // Main checkout = harness.cwd; add a linked worktree beside it and run
-      // integrate from there.
-      initGitRepo(harness.cwd.path);
-      commitFile(harness.cwd.path, 'README.md', '# test\n');
-      const worktreePath = join(dirname(harness.cwd.path), 'linked-worktree');
-      git(['worktree', 'add', worktreePath, '-b', 'feature/x'], harness.cwd.path);
-      writeFileSync(
-        join(worktreePath, 'sonar-project.properties'),
-        [
-          `sonar.host.url=${serverUrl}`,
-          `sonar.projectKey=${PROJECT_KEY}`,
-          `sonar.organization=${ORG_KEY}`,
-        ].join('\n'),
-      );
-
-      const integrateResult = await harness.run('integrate claude --non-interactive', {
-        cwd: worktreePath,
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-      expect(integrateResult.exitCode).toBe(0);
-
-      // targetRoot is the global root regardless of worktree; repoRoot records the
-      // stable main working tree, which is the key `sonar context` matches against
-      // from any worktree. (The read side is covered deterministically in the
-      // context passthrough spec — the harness re-applies its state builder on
-      // every run, so an integrate-then-context flow in one test cannot share
-      // state here.)
-      const entry = findRecordedCagFeature(loadState(harness), CLAUDE_INTEGRATION_ID);
-      expect(entry).toBeDefined();
-      const targetRoot = entry?.feature.targetRoot ?? '';
-      const repoRoot = entry?.feature.attrs?.repoRoot;
-      expect(typeof repoRoot).toBe('string');
-      // Compare full canonical paths (not just basenames): repoRoot resolves to
-      // the main working tree even though integrate ran from the linked worktree.
-      expect(pathComparisonKey(targetRoot)).toBe(pathComparisonKey(harness.userHome.path));
-      expect(pathComparisonKey(repoRoot as string)).toBe(pathComparisonKey(harness.cwd.path));
-      expect(repoRoot).not.toBe(targetRoot);
     },
     { timeout: 30000 },
   );

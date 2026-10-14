@@ -104,7 +104,6 @@ describe('opencodePostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: 'my-project',
-      configSources: [],
     });
     createAnalysisSpy = spyOn(
       clientModule.SqaaAnalysisClient.prototype,
@@ -297,7 +296,6 @@ describe('opencodePostToolUse', () => {
         repoRoot: process.cwd(),
         projectRoot: process.cwd(),
         projectKey: undefined,
-        configSources: [],
       });
 
       await opencodePostToolUse(ctx);

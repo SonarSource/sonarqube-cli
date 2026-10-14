@@ -80,7 +80,6 @@ describe('codexPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: 'my-project',
-      configSources: [],
     });
   });
 
@@ -191,7 +190,6 @@ describe('codexPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: undefined,
-      configSources: [],
     });
 
     await codexPostToolUse(ctx);

@@ -144,23 +144,6 @@ describe('OrganizationsClient', () => {
     });
   });
 
-  describe('isOrganizationAccessible', () => {
-    it('returns true when the organization is in the results', async () => {
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-      expect(await client.isOrganizationAccessible('my-org')).toBe(true);
-    });
-
-    it('returns false when the organization is not in the results', async () => {
-      fetchSpy = mockFetch([], { ok: false, status: 404 });
-      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
-    });
-
-    it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 500 });
-      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
-    });
-  });
-
   describe('checkMembership', () => {
     it('checks later pages when the organization is not in the first page', async () => {
       fetchSpy = mockFetchSeq(

@@ -37,11 +37,10 @@ export async function integrateCodex(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate codex --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Codex', auth, console);
+  await displayAgentIntegratePrelude('Codex', auth, console);
 
   await finalizeAgentInstall<CodexIntegrationOptions>({
     integrationId: CODEX_INTEGRATION_ID,
-    context: integrateCtx,
     options,
     auth,
     ctx,
