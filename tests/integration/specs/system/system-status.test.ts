@@ -686,7 +686,10 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('RECOMMENDATIONS');
-      expect(result.stdout).toContain('sonar update');
+      expect(result.stdout).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
+      expect(result.stdout).not.toContain("Run 'sonar update'");
       expect(result.stdout).toContain(newerVersion);
     },
     { timeout: 15000 },

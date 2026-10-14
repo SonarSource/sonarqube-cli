@@ -31,6 +31,7 @@ import { runSecretsAllowlistCommand } from '@/commands/allowlist/secrets/spawn-s
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as installationLocation from '@/core/update/installation-location.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -39,6 +40,7 @@ const FAKE_BINARY_PATH = '/fake/bin/sonar-secrets';
 let fake: FakeConsole;
 let installSecretsBinarySpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
+let locationSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
   fake = new FakeConsole();
@@ -50,6 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   installSecretsBinarySpy.mockRestore();
   spawnSpy.mockRestore();
+  locationSpy?.mockRestore();
 });
 
 describe('runSecretsAllowlistCommand', () => {
@@ -85,15 +88,30 @@ describe('runSecretsAllowlistCommand', () => {
     expect((error as Error).message).toContain('sonar-secrets allowlist remove exited with code 2');
   });
 
-  it('throws a CommandFailedError with a remediation hint when the binary cannot be executed', async () => {
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(
-      Object.assign(new Error('spawn EACCES'), { code: 'EACCES' }),
-    );
+  it.each([
+    {
+      standalone: true,
+      hint: `Check that ${FAKE_BINARY_PATH} is executable, or run 'sonar update' to reinstall it.`,
+    },
+    {
+      standalone: false,
+      hint: `Check that ${FAKE_BINARY_PATH} is executable. ${installationLocation.EXTERNAL_UPDATE_GUIDANCE}`,
+    },
+  ])(
+    'shows the correct spawn failure hint for standalone=$standalone',
+    async ({ standalone, hint }) => {
+      locationSpy = spyOn(installationLocation, 'isStandaloneInstallerLocation').mockReturnValue(
+        standalone,
+      );
+      spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(
+        Object.assign(new Error('spawn EACCES'), { code: 'EACCES' }),
+      );
 
-    const error = await runSecretsAllowlistCommand(['show'], fake).catch((err: unknown) => err);
+      const error = await runSecretsAllowlistCommand(['show'], fake).catch((err: unknown) => err);
 
-    expect(error).toBeInstanceOf(CommandFailedError);
-    expect((error as Error).message).toContain('Failed to run sonar-secrets: spawn EACCES');
-    expect((error as CommandFailedError).remediationHint).toContain(FAKE_BINARY_PATH);
-  });
+      expect(error).toBeInstanceOf(CommandFailedError);
+      expect((error as Error).message).toContain('Failed to run sonar-secrets: spawn EACCES');
+      expect((error as CommandFailedError).remediationHint).toBe(hint);
+    },
+  );
 });
