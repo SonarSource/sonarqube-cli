@@ -26,6 +26,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -194,8 +195,28 @@ function isProcessRunning(pid: number): boolean {
   }
 }
 
+// The container reads the CA copy only while it starts. A copy older than this window is
+// safe to remove even when the PID check is wrong, as when ~/.sonar is shared across
+// sandboxes that each have their own process list.
+const ORPHAN_MIN_AGE_MS = 15 * 60 * 1000;
+
+function isOlderThanOrphanWindow(path: string): boolean {
+  try {
+    return Date.now() - statSync(path).mtimeMs >= ORPHAN_MIN_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+// Best effort: a cleanup failure must never prevent the MCP server from starting.
 function removeOrphanedCaCertCopies(): void {
-  for (const name of readdirSync(CLI_TMP_DIR)) {
+  let names: string[];
+  try {
+    names = readdirSync(CLI_TMP_DIR);
+  } catch {
+    return;
+  }
+  for (const name of names) {
     const match = /^mcp-ca-[0-9a-f]{16}-(\d+)-[0-9a-f-]{36}\.crt$/.exec(name);
     if (!match) {
       continue;
@@ -204,8 +225,12 @@ function removeOrphanedCaCertCopies(): void {
     if (!Number.isSafeInteger(pid) || pid === process.pid || isProcessRunning(pid)) {
       continue;
     }
+    const path = join(CLI_TMP_DIR, name);
+    if (!isOlderThanOrphanWindow(path)) {
+      continue;
+    }
     try {
-      rmSync(join(CLI_TMP_DIR, name), { force: true });
+      rmSync(path, { force: true });
     } catch {
       // A container runtime can still hold this file on Windows; retry on the next run.
     }

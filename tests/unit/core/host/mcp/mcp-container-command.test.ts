@@ -27,6 +27,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -508,6 +509,9 @@ describe('getMcpContainerCommand — CA cert mount', () => {
       const activePath = join(CLI_TMP_DIR, `mcp-ca-${certHash}-${process.pid}-${suffix}`);
       writeFileSync(orphanPath, contents);
       writeFileSync(activePath, contents);
+      const sixteenMinutesAgo = new Date(Date.now() - 16 * 60 * 1000);
+      utimesSync(orphanPath, sixteenMinutesAgo, sixteenMinutesAgo);
+      utimesSync(activePath, sixteenMinutesAgo, sixteenMinutesAgo);
 
       try {
         const config = getMcpContainerCommand(
@@ -528,6 +532,35 @@ describe('getMcpContainerCommand — CA cert mount', () => {
       } finally {
         rmSync(orphanPath, { force: true });
         rmSync(activePath, { force: true });
+      }
+    });
+  });
+
+  it('keeps a recent CA copy whose owner looks dead, since another sandbox may still be starting it', () => {
+    withCaCertificate((sourcePath, contents, track) => {
+      mkdirSync(CLI_TMP_DIR, { recursive: true });
+      const certHash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+      const suffix = '00000000-0000-4000-8000-000000000001.crt';
+      const recentPath = join(CLI_TMP_DIR, `mcp-ca-${certHash}-2147483647-${suffix}`);
+      writeFileSync(recentPath, contents);
+
+      try {
+        const config = getMcpContainerCommand(
+          ON_PREMISE_AUTH,
+          'docker',
+          { withFsMount: false },
+          {},
+          {
+            proxy: null,
+            caCert: { source: 'sonar-env', explicit: true, path: sourcePath },
+            clientCert: null,
+          },
+        );
+        track(config.cachedCaCertPath);
+
+        expect(existsSync(recentPath)).toBe(true);
+      } finally {
+        rmSync(recentPath, { force: true });
       }
     });
   });
