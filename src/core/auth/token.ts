@@ -30,7 +30,7 @@ import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
+import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
 import { UsersClient } from '@/core/server/users.ts';
 import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -176,7 +176,8 @@ export function parseBrowserAuthCallback(body: string): BrowserAuthResult | unde
  */
 export function buildAuthURL(serverURL: string, port: number, serverVersion?: string): string {
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, '26.2')) {
+  const minVersion = isFullYearVersion(serverVersion ?? '') ? '2026.2' : '26.4';
+  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, minVersion)) {
     return `${cleanServerURL}/auth?product=cli&port=${port}`;
   }
 

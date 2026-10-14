@@ -30,7 +30,7 @@ const FETCH_TIMEOUT_MS = 2000;
 // "2026.3.0.121998" → "2026.3.0.121998", "26.2-SNAPSHOT" → "26.2", "2026.2.SNAPSHOT" → "2026.2"
 const LEADING_NUMERIC_VERSION = /^[\d.]*\d/;
 
-function hasFullYearPrefix(version: string): boolean {
+export function isFullYearVersion(version: string): boolean {
   return version.indexOf('.') === 4;
 }
 
@@ -40,7 +40,7 @@ function hasFullYearPrefix(version: string): boolean {
  */
 export function normalizeVersion(version: string): string {
   const numeric = LEADING_NUMERIC_VERSION.exec(version)?.[0] ?? version;
-  return hasFullYearPrefix(numeric) ? numeric.slice(2) : numeric;
+  return isFullYearVersion(numeric) ? numeric.slice(2) : numeric;
 }
 
 /**
