@@ -57,11 +57,13 @@ describe('purgeAuth keychain read failures', () => {
   afterEach(() => {
     spyOn(keychain, 'getToken').mockRestore();
     spyOn(keychain, 'deleteToken').mockRestore();
+    spyOn(keychain, 'deleteLegacyTokens').mockRestore();
     spyOn(revokeServerToken, 'revokeServerTokenIfPossible').mockRestore();
     spyOn(revokeServerToken, 'reportRevokeServerTokenOutcome').mockRestore();
   });
 
   beforeEach(() => {
+    spyOn(keychain, 'deleteLegacyTokens').mockResolvedValue(false);
     spyOn(revokeServerToken, 'revokeServerTokenIfPossible').mockResolvedValue({
       status: 'success',
     });
@@ -97,5 +99,20 @@ describe('purgeAuth keychain read failures', () => {
     expect(result.item.detail).toContain('2 keychain operations failed');
     expect(result.item.detail).toContain('could not read keychain entry');
     expect(result.item.detail).toContain('could not delete keychain entry');
+  });
+
+  it('distinguishes a failed pre-upgrade deletion from a current-token deletion', async () => {
+    spyOn(keychain, 'getToken').mockResolvedValue(null);
+    spyOn(keychain, 'deleteToken').mockRejectedValue(new Error('current failure'));
+    spyOn(keychain, 'deleteLegacyTokens').mockRejectedValue(new Error('legacy failure'));
+
+    const result = await purgeAuth(stateWithConnection(), fake);
+
+    expect(result.item.status).toBe('warn');
+    expect(result.item.detail).toContain('could not delete keychain entry (current failure)');
+    expect(result.item.detail).toContain(
+      'could not delete pre-upgrade keychain entry (legacy failure)',
+    );
+    expect(result.item.detail).toContain('2 keychain operations failed');
   });
 });

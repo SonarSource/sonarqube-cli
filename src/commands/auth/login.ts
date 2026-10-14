@@ -56,6 +56,7 @@ import { loadState, saveState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { reportLegacyTokenRemoval } from './legacy-token-cleanup.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
@@ -212,7 +213,10 @@ async function persistLoginCredentials(
     }
   }
 
-  await deleteStaleTokens(state.auth.connections, server, org);
+  const removedLegacyServerUrls = await deleteStaleTokens(state.auth.connections, server, org);
+  if (options.console) {
+    reportLegacyTokenRemoval(removedLegacyServerUrls, options.console);
+  }
   await saveToken(server, token, org);
 
   const connectionTokenName =
