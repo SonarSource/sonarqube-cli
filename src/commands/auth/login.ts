@@ -44,6 +44,7 @@ import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
   deleteStaleTokens,
   getToken as getKeystoreToken,
+  normalizeServerUrl,
   saveToken,
 } from '@/core/host/keychain.ts';
 import { discoverServer } from '@/core/project-info.ts';
@@ -191,24 +192,24 @@ async function persistLoginCredentials(
   const state = loadState();
   const existingConnection = getActiveConnection(state);
 
-  const previousToken = await getKeystoreToken(server, org);
   if (
     !options.reusedExistingToken &&
     existingConnection?.tokenName &&
-    previousToken &&
-    previousToken !== token &&
     existingConnection.serverUrl === server &&
     existingConnection.orgKey === org
   ) {
-    const outcome = await revokeServerTokenIfPossible(
-      { serverUrl: server, tokenName: existingConnection.tokenName },
-      previousToken,
-    );
-    if (options.console) {
-      reportRevokeServerTokenOutcome(outcome, {
-        continuingMessage: 'Continuing with login.',
-        console: options.console,
-      });
+    const previousToken = await getKeystoreToken(server, org);
+    if (previousToken && previousToken !== token) {
+      const outcome = await revokeServerTokenIfPossible(
+        { serverUrl: server, tokenName: existingConnection.tokenName },
+        previousToken,
+      );
+      if (options.console) {
+        reportRevokeServerTokenOutcome(outcome, {
+          continuingMessage: 'Continuing with login.',
+          console: options.console,
+        });
+      }
     }
   }
 
@@ -351,7 +352,10 @@ async function getOrGenerateToken(
   org: string | undefined,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const existingToken = await getKeystoreToken(server, org);
+  const recordedConnection = loadState().auth.connections.some(
+    (connection) => normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
+  );
+  const existingToken = recordedConnection ? await getKeystoreToken(server, org) : null;
   if (existingToken) {
     const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
     console.print(`Token already exists for: ${displayServer}`);

@@ -247,6 +247,53 @@ describe('auth login', () => {
   );
 
   it(
+    'does not reuse a hostname token for a different server port',
+    async () => {
+      const previousServer = await harness.newFakeServer().start();
+      const requestedServer = await harness.newFakeServer().withAuthToken('new-token').start();
+      harness
+        .state()
+        .withActiveConnection(previousServer.baseUrl())
+        .withKeychainToken(previousServer.baseUrl(), 'previous-token');
+
+      const result = await confirmTrust(
+        harness,
+        `auth login --server ${requestedServer.baseUrl()}`,
+        { browserToken: 'new-token' },
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Authenticating with: ${requestedServer.baseUrl()}`);
+      expect(result.stdout).not.toContain('Token already exists');
+      expect(
+        readKeychainToken(
+          harness.keychainJsonFile,
+          generateKeychainAccount(requestedServer.baseUrl()),
+        ),
+      ).toBe('new-token');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reuses a token when the recorded server URL has an extra trailing slash',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(`${server.baseUrl()}/`)
+        .withKeychainToken(server.baseUrl(), 'recorded-token');
+
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Token already exists for: ${server.baseUrl()}`);
+      expect(result.stdout).not.toContain('Authenticating with:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when organization is not found on SonarCloud',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
