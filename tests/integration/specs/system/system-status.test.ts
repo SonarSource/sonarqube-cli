@@ -686,8 +686,29 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('RECOMMENDATIONS');
-      expect(result.stdout).toContain('sonar update');
+      expect(result.stdout).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
+      expect(result.stdout).not.toContain("Run 'sonar update'");
       expect(result.stdout).toContain(newerVersion);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'recommends sonar update when the CLI runs from the installer path',
+    async () => {
+      const newerVersion = '99.0.0';
+      const sqServer = await harness.newFakeServer().withAuthToken('my-token').start();
+      binariesServer.setStableVersion(newerVersion);
+      harness.state().withAuth(sqServer.baseUrl(), 'my-token', 'my-org');
+
+      const result = await harness.run('system status', {
+        binaryPath: harness.installerManagedBinaryPath(),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(`Run 'sonar update' to update to v${newerVersion}`);
     },
     { timeout: 15000 },
   );

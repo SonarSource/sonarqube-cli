@@ -56,8 +56,28 @@ describe('update notification', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain(NOTICE_TEXT);
-      expect(result.stderr).toContain('Run `sonar update` to update to v99.0.0');
+      expect(result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
       expect(result.stdout).not.toContain(NOTICE_TEXT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'recommends sonar update in the notice for an installer binary',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      await harness.newFakeBinariesServer().withStableVersion('99.0.0').start();
+
+      const result = await harness.run('auth status', {
+        extraEnv: INTERACTIVE_ENV,
+        binaryPath: harness.installerManagedBinaryPath(),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Run `sonar update` to update to v99.0.0');
     },
     { timeout: 15000 },
   );

@@ -20,10 +20,13 @@
 
 // Integration tests for the `sonar update` command and the deprecated `sonar self-update` alias
 
+import { chmodSync, copyFileSync, mkdirSync, symlinkSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { getCliBinaryPath } from '../../harness/cli-runner.js';
 
 describe('update command', () => {
   let harness: TestHarness;
@@ -63,6 +66,9 @@ describe('update command', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain(`Update available: v${newerVersion}`);
+      expect(result.stdout + result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
       expect(result.stderr).not.toContain('deprecated');
     },
     { timeout: 15000 },
@@ -99,6 +105,63 @@ describe('update command', () => {
     },
     { timeout: 15000 },
   );
+
+  it.each(['update', 'update --force', 'self-update'])(
+    '%s rejects a binary outside the standalone installer path',
+    async (command) => {
+      const result = await harness.run(command);
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'This CLI installation cannot be updated by sonar update.',
+      );
+      expect(result.stdout + result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
+    },
+  );
+
+  it.skipIf(IS_WINDOWS)('accepts an installer binary through a symlinked .local', async () => {
+    const realLocal = harness.userHome.dir('real-local');
+    const binaryPath = realLocal.file('share', 'sonarqube-cli', 'bin', 'sonar').path;
+    mkdirSync(realLocal.dir('share', 'sonarqube-cli', 'bin').path, { recursive: true });
+    copyFileSync(getCliBinaryPath(), binaryPath);
+    chmodSync(binaryPath, 0o755);
+    symlinkSync(realLocal.path, harness.userHome.dir('.local').path, 'dir');
+    await harness.newFakeBinariesServer().withStableVersion(CLI_VERSION).start();
+
+    const result = await harness.run('update', { binaryPath });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Already up to date');
+  });
+
+  it.skipIf(IS_WINDOWS)('rejects an installer-path link to an external binary', async () => {
+    const externalBinary = harness.userHome.file('managed-sonar').path;
+    const installDir = harness.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+    mkdirSync(installDir.path, { recursive: true });
+    copyFileSync(getCliBinaryPath(), externalBinary);
+    chmodSync(externalBinary, 0o755);
+    symlinkSync(externalBinary, installDir.file('sonar').path);
+
+    const result = await harness.run('update', { binaryPath: installDir.file('sonar').path });
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout + result.stderr).toContain(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+  });
+
+  it('recommends sonar update from the installer path', async () => {
+    await harness.newFakeBinariesServer().withStableVersion('99.0.0').start();
+
+    const result = await harness.run('update status', {
+      binaryPath: harness.installerManagedBinaryPath(),
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Run: sonar update');
+  });
 
   it(
     'sonar self-update --status still works but warns that it is deprecated',
