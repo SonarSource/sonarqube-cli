@@ -131,15 +131,47 @@ describe('sonar hook git-pre-push', () => {
   );
 
   it(
-    'exits 0 when the push has no files to scan, even when unauthenticated',
+    'exits 0 when local and remote refs point to the same commit, even when unauthenticated',
     async () => {
+      initGitRepo(harness.cwd.path);
       harness.state().withSecretsBinaryInstalled();
-      const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+      const result = await harness.runWithStdin('hook git-pre-push', pushRefLine(sha, sha));
+      expect(result.exitCode).toBe(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits 1 outside a git repo when the files being pushed cannot be listed',
+    async () => {
       const result = await harness.runWithStdin(
         'hook git-pre-push',
-        pushRefLine(sha, GIT_NULL_OID),
+        pushRefLine('a'.repeat(40), GIT_NULL_OID),
       );
-      expect(result.exitCode).toBe(0);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('the files being pushed could not be listed by Git');
+      expect(result.stderr).toContain('Git reported:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows the Git error for a bad pushed ref even when HEAD is valid',
+    async () => {
+      initGitRepo(harness.cwd.path);
+      commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+      const badSha = 'a'.repeat(40);
+
+      const result = await harness.runWithStdin(
+        'hook git-pre-push',
+        pushRefLine(badSha, GIT_NULL_OID),
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Git reported:');
+      expect(result.stderr).toContain(badSha);
     },
     { timeout: 15000 },
   );
