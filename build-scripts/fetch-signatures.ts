@@ -154,7 +154,7 @@ function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
     // e.g. Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz.asc
     return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.${platform.extension}.asc`;
   }
-  // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.52.0.13617-linux-arm64.bin.asc
+  // e.g. CommercialDistribution/sonar-secrets/sonar-secrets-2.53.0.13730-linux-arm64.bin.asc
   //      CommercialDistribution/sonar-secrets/sonar-secrets-2.41.0.10709-macos-arm64.exe.asc
   return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}/${binaryName}-${binary.version}-${platKey}.${platform.extension}.asc`;
 }
