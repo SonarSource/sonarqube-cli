@@ -65,13 +65,16 @@ export type SharedProjectConfigEntry =
   SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry | CustomCloudProjectConfigEntry;
 
 export interface SharedProjectConfigRepository {
-  load(dir: string): Promise<SharedProjectConfigMapping | null>;
+  /** Resolves every mapping found at `dir` — a `projects` array (monorepo) as well as the legacy singular `project`, always as a list. */
+  load(dir: string): Promise<SharedProjectConfigMapping[]>;
   set(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
 
-/** File root — a container so other top-level fields can be added later without disturbing `project`. */
+/** File root — a container so other top-level fields can be added later without disturbing `project`/`projects`. */
 interface SharedProjectConfigFileDto {
   project?: unknown;
+  /** Monorepo form: several mappings in one file. Takes precedence over `project` when present. */
+  projects?: unknown;
 }
 
 const VALID_CLOUD_REGIONS = new Set<CloudRegion>(['eu', 'us']);
@@ -141,9 +144,29 @@ export function resolveContainedPath(dir: string, rawPath: string): string | nul
 }
 
 export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
-  async load(dir: string): Promise<SharedProjectConfigMapping | null> {
+  async load(dir: string): Promise<SharedProjectConfigMapping[]> {
     const root = await this.readRawRoot(dir);
-    return root === null ? null : this.resolveEntry(dir, root.project);
+    if (root === null) {
+      return [];
+    }
+
+    let rawEntries: unknown[];
+    if (Array.isArray(root.projects)) {
+      rawEntries = root.projects;
+    } else if (root.project !== undefined) {
+      rawEntries = [root.project];
+    } else {
+      rawEntries = [];
+    }
+
+    const mappings: SharedProjectConfigMapping[] = [];
+    for (const rawEntry of rawEntries) {
+      const mapping = this.resolveEntry(dir, rawEntry);
+      if (mapping !== null) {
+        mappings.push(mapping);
+      }
+    }
+    return mappings;
   }
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
