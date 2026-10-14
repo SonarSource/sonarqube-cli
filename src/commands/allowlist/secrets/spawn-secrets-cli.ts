@@ -22,6 +22,10 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import type { Console } from '@/core/ui/console.ts';
+import {
+  EXTERNAL_UPDATE_GUIDANCE,
+  isStandaloneInstallerLocation,
+} from '@/core/update/installation-location.ts';
 
 /**
  * Resolve/install sonar-secrets, then run one of its `allowlist` subcommands with inherited
@@ -42,7 +46,9 @@ export async function runSecretsAllowlistCommand(
     });
   } catch (err) {
     throw new CommandFailedError(`Failed to run sonar-secrets: ${(err as Error).message}`, {
-      remediationHint: `Check that ${binaryPath} is executable, or run 'sonar update' to reinstall it.`,
+      remediationHint: isStandaloneInstallerLocation()
+        ? `Check that ${binaryPath} is executable, or run 'sonar update' to reinstall it.`
+        : `Check that ${binaryPath} is executable. ${EXTERNAL_UPDATE_GUIDANCE}`,
     });
   }
 
