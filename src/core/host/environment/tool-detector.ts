@@ -20,6 +20,8 @@
 
 // Tool detector - checks presence and availability of system tools
 
+import { InvalidOptionError } from '../../commands/command-error.ts';
+import logger from '../../observability/logger.ts';
 import { spawnProcess } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
@@ -27,13 +29,43 @@ const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
 const WSL_EXECUTABLE = 'wsl.exe';
+const MAX_RUNTIME_ERROR_LINES = 3;
+const MAX_RUNTIME_ERROR_LENGTH = 1000;
 
-async function isRuntimeAvailable(runtime: ContainerRuntime): Promise<boolean> {
+export interface ContainerRuntimeFailure {
+  runtime: ContainerRuntime;
+  exitCode: number | null;
+  stderr: string;
+}
+
+type NativeRuntimeResult = 'available' | 'missing' | ContainerRuntimeFailure;
+
+function summarizeRuntimeError(stderr: string): string {
+  return (
+    stderr
+      .trim()
+      .split(/\r?\n/)
+      .slice(0, MAX_RUNTIME_ERROR_LINES)
+      .join('\n')
+      .slice(0, MAX_RUNTIME_ERROR_LENGTH) || 'No error output.'
+  );
+}
+
+async function checkNativeRuntime(runtime: ContainerRuntime): Promise<NativeRuntimeResult> {
   try {
     const result = await spawnProcess(runtime, ['info']);
-    return result.exitCode === 0;
-  } catch {
-    return false;
+    return result.exitCode === 0
+      ? 'available'
+      : { runtime, exitCode: result.exitCode, stderr: summarizeRuntimeError(result.stderr) };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return 'missing';
+    }
+    return {
+      runtime,
+      exitCode: null,
+      stderr: summarizeRuntimeError(error instanceof Error ? error.message : String(error)),
+    };
   }
 }
 
@@ -49,28 +81,67 @@ async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<bool
 export interface ContainerRuntimeDetection {
   runtime: ContainerRuntime | null;
   viaWsl: boolean;
+  nativeFailure?: ContainerRuntimeFailure;
+  wslOnly?: boolean;
 }
 
-/**
- * Detect the first available container runtime, checking in priority order:
- * docker, then podman, then nerdctl. On Windows, falls back to checking the same
- * runtimes from inside WSL when none is reachable natively (e.g. Docker installed
- * in a WSL distro without Docker Desktop's Windows integration).
- */
-export async function detectContainerRuntime(): Promise<ContainerRuntimeDetection> {
+function getWslMode(windows: boolean): 'auto' | 'always' | 'never' {
+  if (!windows) return 'never';
+  const mode = process.env.SONARQUBE_CLI_MCP_WSL?.trim().toLowerCase() || 'auto';
+  if (mode !== 'auto' && mode !== 'always' && mode !== 'never') {
+    throw new InvalidOptionError('SONARQUBE_CLI_MCP_WSL must be auto, always, or never.');
+  }
+  return mode;
+}
+
+async function detectNativeRuntime(windows: boolean): Promise<ContainerRuntimeDetection> {
+  let nativeFailure: ContainerRuntimeFailure | undefined;
   for (const runtime of CONTAINER_RUNTIMES) {
-    if (await isRuntimeAvailable(runtime)) {
+    const result = await checkNativeRuntime(runtime);
+    if (result === 'available') {
+      if (windows) logger.info(`Using native ${runtime} on Windows; WSL fallback is not needed.`);
       return { runtime, viaWsl: false };
     }
+    if (result !== 'missing' && windows) nativeFailure ??= result;
   }
+  return nativeFailure
+    ? { runtime: null, viaWsl: false, nativeFailure }
+    : { runtime: null, viaWsl: false };
+}
 
-  if (isWindows()) {
-    for (const runtime of CONTAINER_RUNTIMES) {
-      if (await isRuntimeAvailableViaWsl(runtime)) {
-        return { runtime, viaWsl: true };
-      }
+async function detectWslRuntime(): Promise<ContainerRuntimeDetection> {
+  for (const runtime of CONTAINER_RUNTIMES) {
+    if (await isRuntimeAvailableViaWsl(runtime)) {
+      return { runtime, viaWsl: true };
     }
   }
-
   return { runtime: null, viaWsl: false };
+}
+
+export async function detectContainerRuntime(): Promise<ContainerRuntimeDetection> {
+  const windows = isWindows();
+  const mode = getWslMode(windows);
+  if (mode === 'always') {
+    logger.info('SONARQUBE_CLI_MCP_WSL=always; checking container runtimes through WSL only.');
+    const detection = await detectWslRuntime();
+    return detection.runtime ? detection : { ...detection, wslOnly: true };
+  }
+  if (windows && mode === 'never') {
+    logger.info('SONARQUBE_CLI_MCP_WSL=never; WSL will not be checked.');
+  }
+
+  const native = await detectNativeRuntime(windows);
+  if (native.runtime || !windows) return native;
+  if (native.nativeFailure) {
+    const failure = native.nativeFailure;
+    const exit = failure.exitCode === null ? '' : ` (exit ${failure.exitCode})`;
+    logger.warn(
+      `${failure.runtime} found on Windows but not reachable${exit}: ${failure.stderr}; not falling back to WSL.`,
+    );
+    return native;
+  }
+  if (mode === 'never') return native;
+
+  logger.info('No native container runtime found on Windows; trying WSL.');
+  return detectWslRuntime();
 }
