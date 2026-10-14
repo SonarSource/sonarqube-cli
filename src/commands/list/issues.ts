@@ -26,7 +26,7 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
-import { resolveProjectKey } from '@/core/project-info.ts';
+import { resolveProjectKey } from '@/core/project-discovery/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
