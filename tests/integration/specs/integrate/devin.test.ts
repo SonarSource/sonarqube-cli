@@ -28,6 +28,7 @@ import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.
 
 import { TestHarness } from '../../harness';
 import { buildHomeEnv } from '../../harness/platform';
+import { findInstalledFeature } from './state-helpers';
 
 // Devin's config dir is per-OS (~/.config/devin, %APPDATA%\devin on Windows); resolve it with the
 // same env the harness gives the CLI so the test sets up what the detector will look for.
@@ -35,6 +36,11 @@ function writeDevinConfig(harness: TestHarness): void {
   const home = harness.userHome.path;
   const configDir = resolveDevinConfigDir(home, buildHomeEnv(home));
   harness.userHome.writeFile(join(relative(home, configDir), 'config.json'), '{}');
+}
+
+function devinConfigRelPath(harness: TestHarness, fileName: string): string {
+  const home = harness.userHome.path;
+  return join(relative(home, resolveDevinConfigDir(home, buildHomeEnv(home))), fileName);
 }
 
 describe('integrate devin', () => {
@@ -62,8 +68,57 @@ describe('integrate devin', () => {
       expect(integrateHelp.stdout + integrateHelp.stderr).not.toMatch(/devin/i);
 
       const result = await harness.run('integrate devin --non-interactive');
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('No feature selected for Devin');
+      expect(result.exitCode).toBe(0);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'writes the sonarqube MCP server without a project key and keeps the user entries',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+      );
+      const mcpConfigPath = devinConfigRelPath(harness, 'mcp_config.json');
+      harness.userHome.writeFile(
+        mcpConfigPath,
+        JSON.stringify({
+          theme: 'dark',
+          mcpServers: { other: { command: 'other-mcp', args: ['--flag'] } },
+        }),
+      );
+
+      const result = await harness.run('integrate devin --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.file(mcpConfigPath).asJson()).toEqual({
+        theme: 'dark',
+        mcpServers: {
+          other: { command: 'other-mcp', args: ['--flag'] },
+          sonarqube: { command: 'sonar', args: ['run', 'mcp'] },
+        },
+      });
+      expect(findInstalledFeature(harness, 'devin', 'mcp-server', 'global')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'creates mcp_config.json when the Devin config directory has none',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const result = await harness.run('integrate devin --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      const mcpConfigPath = devinConfigRelPath(harness, 'mcp_config.json');
+      expect(harness.userHome.file(mcpConfigPath).asJson()).toEqual({
+        mcpServers: { sonarqube: { command: 'sonar', args: ['run', 'mcp'] } },
+      });
     },
     { timeout: 30000 },
   );
@@ -83,7 +138,7 @@ describe('integrate devin', () => {
     );
 
     it(
-      'warns that --global is deprecated',
+      'warns that --global is deprecated but still completes the (already global) install',
       async () => {
         const server = await harness.newFakeServer().withAuthToken('tok').start();
         harness.withAuth(server.baseUrl(), 'tok');
@@ -93,6 +148,7 @@ describe('integrate devin', () => {
         expect(result.stderr).toContain(
           "'--global' is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate devin' instead.",
         );
+        expect(result.exitCode).toBe(0);
       },
       { timeout: 30000 },
     );
@@ -149,5 +205,39 @@ describe('integrate devin', () => {
       expect(result.stdout + result.stderr).not.toContain('Devin');
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'is idempotent: re-running leaves a single identical sonarqube entry',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      const mcpConfigPath = devinConfigRelPath(harness, 'mcp_config.json');
+
+      await harness.run('integrate devin --non-interactive');
+      const first = harness.userHome.file(mcpConfigPath).asJson();
+      const result = await harness.run('integrate devin --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.file(mcpConfigPath).asJson()).toEqual(first);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'fails and leaves the file untouched when mcp_config.json holds invalid JSON',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      const mcpConfigPath = devinConfigRelPath(harness, 'mcp_config.json');
+      harness.userHome.writeFile(mcpConfigPath, '{ invalid json');
+
+      const result = await harness.run('integrate devin --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('mcp_config.json contains invalid JSON');
+      expect(harness.userHome.file(mcpConfigPath).asText()).toBe('{ invalid json');
+    },
+    { timeout: 30000 },
   );
 });
