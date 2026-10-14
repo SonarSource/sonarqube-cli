@@ -640,7 +640,7 @@ describe('system status', () => {
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP not running when docker available but container absent',
+    'reports a ready Docker runtime for configured MCP',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
       harness.state().withDockerMock(false);
@@ -653,14 +653,16 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('Runtime: READY (docker)');
     },
     { timeout: 15000 },
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP configured status without checking docker',
+    'reports an unavailable Docker runtime and a remedy',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness.state().withDockerMock(false, 1);
       harness
         .state()
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
@@ -670,6 +672,36 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('Runtime: UNAVAILABLE (docker)');
+      expect(result.stdout).toContain('Start or repair docker');
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'reports a missing container runtime for configured MCP in JSON',
+    async () => {
+      const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+
+      const result = await harness.run('system status --json', {
+        extraEnv: { PATH: harness.cwd.path },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        integrations: Array<{ mcp: { runtime: { status: string } } }>;
+        healthy: boolean;
+        recommendations: string[];
+      };
+      expect(json.integrations[0].mcp.runtime.status).toBe('missing');
+      expect(json.healthy).toBe(false);
+      expect(json.recommendations).toContain(
+        'Install and start Docker, Podman, or nerdctl to run the MCP server',
+      );
     },
     { timeout: 15000 },
   );
