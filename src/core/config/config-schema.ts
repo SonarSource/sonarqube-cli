@@ -78,6 +78,21 @@ export const CONFIG_KEY_DEFINITIONS = [
     allowedValues: ['DEBUG', 'INFO', 'WARN', 'ERROR', 'SILENT'],
   },
   {
+    key: 'mcp.container.network',
+    sensitive: false,
+    description: 'Container network used by the SonarQube MCP server.',
+  },
+  {
+    key: 'mcp.container.addHost',
+    sensitive: false,
+    description: 'Host mapping for the SonarQube MCP container (name:address).',
+  },
+  {
+    key: 'mcp.container.serverUrl',
+    sensitive: false,
+    description: 'SonarQube URL used only inside the MCP container.',
+  },
+  {
     key: 'telemetry.enabled',
     sensitive: false,
     description: 'Whether anonymous usage telemetry is collected.',
