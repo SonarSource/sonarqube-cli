@@ -22,75 +22,60 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { red } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { findInstalledFeature } from './installation-recorder.ts';
 import type {
   FeatureApplication,
-  FeatureContainer,
   FeatureDeclaration,
   FeatureSelectionResult,
-  IntegrationDeclaration,
-  IntegrationInvocation,
-  SubfeatureDeclaration,
+  SubfeatureApplication,
 } from './types.ts';
-import { isFeatureContainer } from './types.ts';
 
-/**
- * Outcome of a feature's `shouldInstall` evaluation. Integrations declare the
- * intent; the installer resolves it (prompting / skip messaging) centrally.
- */
-export type InstallDecision =
-  | { action: 'install'; message?: string }
-  | { action: 'skip'; message?: string }
-  | { action: 'uninstall'; message?: string }
-  | { action: 'ask'; question?: string };
-
-/** Install the feature without asking, optionally printing a message. */
-export function install(message?: string): InstallDecision {
-  return { action: 'install', message };
-}
-
-/** Skip the feature, optionally explaining why. */
-export function skip(message?: string): InstallDecision {
-  return { action: 'skip', message };
-}
-
-/** Uninstall the feature without asking, optionally printing a message. */
-export function uninstall(message?: string): InstallDecision {
-  return { action: 'uninstall', message };
-}
-
-/** Ask the user whether to install the feature, with an optional custom prompt. */
-export function askUser(question?: string): InstallDecision {
-  return { action: 'ask', question };
-}
-
-/**
- * Coerce a `shouldInstall` result into an {@link InstallDecision}.
- *
- * A missing predicate defaults to asking the user (opt-in). An explicit `true`
- * installs without asking, `false` skips silently, and an explicit
- * {@link InstallDecision} passes through unchanged.
- */
-export function normalizeDecision(result: boolean | InstallDecision | undefined): InstallDecision {
-  if (result === undefined) {
-    return askUser();
-  }
-  if (result === true) {
-    return install();
-  }
-  if (result === false) {
-    return skip();
-  }
-  return result;
-}
-
-/**
- * Interactive feature selection over the pre-resolved `applications`.
- */
-export async function selectFeaturesForInvocation<TOptions>(
-  integration: IntegrationDeclaration<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
+export function reportFeatureAvailability<TOptions>(
   applications: FeatureApplication<TOptions>[],
+  console: Console,
+): void {
+  for (const application of applications) {
+    reportAvailability(application.feature.displayName, application, console);
+    if (application.available !== true) {
+      continue;
+    }
+    for (const subfeatureApplication of application.subfeatureApplications) {
+      reportAvailability(
+        subfeatureApplication.subfeature.displayName,
+        subfeatureApplication,
+        console,
+      );
+    }
+  }
+}
+
+function reportAvailability(
+  displayName: string,
+  item: Pick<FeatureApplication, 'installed' | 'available' | 'unavailableReason'>,
+  console: Console,
+): void {
+  if (item.available === undefined) {
+    console.warn(`Could not check whether ${displayName} is available.`);
+    return;
+  }
+  if (item.available) {
+    return;
+  }
+  if (item.unavailableReason) {
+    console.info(item.unavailableReason);
+  }
+  if (item.installed) {
+    console.info(`${displayName} is no longer available. Removing it.`);
+  }
+}
+
+/**
+ * Decide which applications to install or remove from their availability and
+ * install state, prompting per feature unless `useRecommended`. Reporting is
+ * done separately by {@link reportFeatureAvailability}.
+ */
+export async function resolveFeatureSelection<TOptions>(
+  applications: FeatureApplication<TOptions>[],
+  useRecommended: boolean,
   console: Console,
 ): Promise<FeatureSelectionResult<TOptions>> {
   const toInstall: FeatureApplication<TOptions>[] = [];
@@ -98,14 +83,30 @@ export async function selectFeaturesForInvocation<TOptions>(
   const declined: string[] = [];
 
   for (const application of applications) {
-    const feature = application.feature;
-    const installed = isFeatureInstalled(integration, invocation, application);
-    const outcome = await shouldInstallFeature(feature, invocation, console, installed);
-    if (outcome === 'install') {
-      toInstall.push(await materializeApplication(application, invocation, declined, console));
-    } else if (outcome === 'uninstall' && installed) {
+    const { feature } = application;
+    if (application.available === undefined) {
+      continue;
+    }
+    if (!application.available) {
+      if (application.installed) {
+        toRemove.push(application);
+      }
+      continue;
+    }
+
+    const action = await resolveAvailableFeatureAction(
+      feature,
+      application.installed,
+      useRecommended,
+      console,
+    );
+    if (action === 'install') {
+      toInstall.push(
+        await resolveSubfeatureSelection(application, useRecommended, declined, console),
+      );
+    } else if (action === 'uninstall') {
       toRemove.push(application);
-    } else if (outcome === 'declined') {
+    } else {
       declined.push(feature.id);
     }
   }
@@ -113,15 +114,63 @@ export async function selectFeaturesForInvocation<TOptions>(
   return { toInstall, toRemove, declined };
 }
 
-function isFeatureInstalled<TOptions>(
-  integration: IntegrationDeclaration<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
+async function resolveSubfeatureSelection<TOptions>(
   application: FeatureApplication<TOptions>,
-): boolean {
-  return (
-    findInstalledFeature(invocation.state, application, integration, application.feature) !==
-    undefined
-  );
+  useRecommended: boolean,
+  declined: string[],
+  console: Console,
+): Promise<FeatureApplication<TOptions>> {
+  const subfeatureApplications: SubfeatureApplication<TOptions>[] = [];
+  for (const subfeatureApplication of application.subfeatureApplications) {
+    const { subfeature } = subfeatureApplication;
+    let active: boolean;
+    if (subfeatureApplication.available === undefined) {
+      active = subfeatureApplication.installed;
+    } else if (!subfeatureApplication.available) {
+      active = false;
+    } else {
+      active =
+        subfeature.required === true ||
+        useRecommended ||
+        (await confirmInstall(subfeature, console));
+      if (!active) {
+        declined.push(subfeature.id);
+      }
+    }
+    subfeatureApplications.push({ ...subfeatureApplication, active });
+  }
+  return { ...application, subfeatureApplications };
+}
+
+type AvailableFeatureAction = 'install' | 'uninstall' | 'declined';
+
+async function resolveAvailableFeatureAction<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+  installed: boolean,
+  useRecommended: boolean,
+  console: Console,
+): Promise<AvailableFeatureAction> {
+  if (feature.required || useRecommended) {
+    return 'install';
+  }
+  if (installed) {
+    return (await shouldRemoveInstalledFeature(feature, console)) ? 'uninstall' : 'install';
+  }
+  return (await confirmInstall(feature, console)) ? 'install' : 'declined';
+}
+
+async function confirmInstall(
+  feature: Pick<FeatureDeclaration, 'displayName' | 'benefitDescription'>,
+  console: Console,
+): Promise<boolean> {
+  const question = feature.benefitDescription
+    ? `Install ${feature.displayName}? (${feature.benefitDescription})`
+    : `Install ${feature.displayName}?`;
+  const confirmed = await console.confirmPrompt(question, true);
+  if (confirmed === null) {
+    throw new CommandFailedError('Installation cancelled');
+  }
+  return confirmed;
 }
 
 /**
@@ -131,13 +180,8 @@ function isFeatureInstalled<TOptions>(
  */
 async function shouldRemoveInstalledFeature<TOptions>(
   feature: FeatureDeclaration<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
   console: Console,
 ): Promise<boolean> {
-  if (invocation.nonInteractive) {
-    return false;
-  }
-
   const keep = await console.confirmPrompt(
     `${feature.displayName} (currently installed)  Keep?`,
     true,
@@ -167,100 +211,4 @@ async function shouldRemoveInstalledFeature<TOptions>(
  */
 function warnFeatureRemoval(console: Console, message: string): void {
   console.text(`  ${red('✗')}  ${message}`);
-}
-
-type FeatureSelectionOutcome = 'install' | 'skip' | 'uninstall' | 'declined';
-
-/**
- * For a container application, narrow its subfeatures to those whose
- * `shouldInstall` is active; non-container applications are returned unchanged.
- * Declined subfeature ids are appended to `declined`.
- */
-async function materializeApplication<TOptions>(
-  application: FeatureApplication<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
-  declined: string[],
-  console: Console,
-): Promise<FeatureApplication<TOptions>> {
-  const feature = application.feature;
-  if (!isFeatureContainer(feature)) {
-    return application;
-  }
-  return {
-    ...application,
-    feature: await selectActiveSubfeatures(feature, invocation, declined, console),
-  };
-}
-
-async function selectActiveSubfeatures<TOptions>(
-  container: FeatureContainer<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
-  declined: string[],
-  console: Console,
-): Promise<FeatureContainer<TOptions>> {
-  const active: SubfeatureDeclaration<TOptions>[] = [];
-  for (const subfeature of container.subfeatures) {
-    const outcome = await shouldInstallFeature(subfeature, invocation, console);
-    if (outcome === 'install') {
-      active.push(subfeature);
-    } else if (outcome === 'declined') {
-      declined.push(subfeature.id);
-    }
-  }
-  return { ...container, subfeatures: active };
-}
-
-async function shouldInstallFeature<TOptions>(
-  feature: FeatureDeclaration<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
-  console: Console,
-  installed = false,
-): Promise<FeatureSelectionOutcome> {
-  const decision = normalizeDecision(await feature.shouldInstall?.(invocation));
-  if (decision.action === 'ask') {
-    return resolveAskDecision(feature, invocation, decision.question, installed, console);
-  }
-  displayDecisionMessage(console, decision.action, decision.message, installed);
-  return decision.action;
-}
-
-function displayDecisionMessage(
-  console: Console,
-  action: 'install' | 'skip' | 'uninstall',
-  message: string | undefined,
-  installed: boolean,
-): void {
-  if (!message || (action === 'uninstall' && !installed)) {
-    return;
-  }
-  if (action === 'install') {
-    console.discreetSuccess(message);
-  } else {
-    console.info(message);
-  }
-}
-
-async function resolveAskDecision<TOptions>(
-  feature: FeatureDeclaration<TOptions>,
-  invocation: IntegrationInvocation<TOptions>,
-  question: string | undefined,
-  installed: boolean,
-  console: Console,
-): Promise<FeatureSelectionOutcome> {
-  if (installed) {
-    return (await shouldRemoveInstalledFeature(feature, invocation, console))
-      ? 'uninstall'
-      : 'install';
-  }
-  if (invocation.nonInteractive) {
-    return 'install';
-  }
-  const defaultQuestion = feature.benefitDescription
-    ? `Install ${feature.displayName}? (${feature.benefitDescription})`
-    : `Install ${feature.displayName}?`;
-  const confirmed = await console.confirmPrompt(question ?? defaultQuestion, true);
-  if (confirmed === null) {
-    throw new CommandFailedError('Installation cancelled');
-  }
-  return confirmed ? 'install' : 'declined';
 }

@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import type {
+  FeatureApplication,
   FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
@@ -268,7 +269,7 @@ describe('declarative integration framework - resources and state recording', ()
     const installed = await installer.applyAndRecordFeatures(
       state,
       integration,
-      [{ feature, targetRoot: tempDir, scope: 'project' }],
+      [makeApplication(feature, tempDir)],
       { executionMode: 'update', console: new FakeConsole() },
     );
 
@@ -612,13 +613,11 @@ async function applyAndRecord<TOptions>(
     context.state,
     integration,
     [
-      {
-        feature,
-        targetRoot: context.targetRoot,
+      makeApplication(feature, context.targetRoot, {
         scope: context.scope,
         force: context.force,
         attrs: context.attrs,
-      },
+      }),
     ],
     { console: context.console },
   );
@@ -626,4 +625,20 @@ async function applyAndRecord<TOptions>(
     throw new Error('Feature was not recorded');
   }
   return installed[0];
+}
+
+function makeApplication<TOptions>(
+  feature: FeatureDeclaration<TOptions>,
+  targetRoot: string,
+  overrides: Partial<FeatureApplication<TOptions>> = {},
+): FeatureApplication<TOptions> {
+  return {
+    feature,
+    targetRoot,
+    scope: 'project',
+    installed: false,
+    available: true,
+    subfeatureApplications: [],
+    ...overrides,
+  };
 }

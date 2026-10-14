@@ -37,14 +37,13 @@ import { buildApplications } from './feature-target.ts';
 import { renderInstallPreviewAndConfirm } from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import { selectFeaturesForInvocation } from './selection.ts';
+import { reportFeatureAvailability, resolveFeatureSelection } from './selection.ts';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
   IntegrationInvocation,
 } from './types.ts';
-import { isFeatureContainer } from './types.ts';
 
 /** Facts from a successful install; commands turn these into telemetry. */
 export interface InstallIntegrationSuccessFacts {
@@ -65,6 +64,7 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
+  excludedFeatureIds?: string[];
   /** Called after state is saved; omitted when the save fails. Awaited so emit finishes before the command returns. */
   onSuccess?: (facts: InstallIntegrationSuccessFacts) => void | Promise<void>;
 }
@@ -80,6 +80,7 @@ export async function installIntegration<TOptions>({
   force,
   attrs,
   nonInteractive,
+  excludedFeatureIds,
   onSuccess,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
@@ -94,11 +95,11 @@ export async function installIntegration<TOptions>({
     nonInteractive,
     state,
   };
-  const applications = await buildApplications(invocation, integration.features);
-  const { toInstall, toRemove, declined } = await selectFeaturesForInvocation(
-    integration,
-    invocation,
+  const applications = await buildApplications(invocation, integration, excludedFeatureIds);
+  reportFeatureAvailability(applications, console);
+  const { toInstall, toRemove, declined } = await resolveFeatureSelection(
     applications,
+    nonInteractive === true,
     console,
   );
   if (toInstall.length === 0 && toRemove.length === 0) {
@@ -116,10 +117,10 @@ export async function installIntegration<TOptions>({
       toInstall,
       {
         callbacks: {
-          onFeatureApplyStart: (feature) => {
-            console.text(`     Installing ${feature.displayName}...`);
-            if (isFeatureContainer(feature)) {
-              for (const subfeature of feature.subfeatures) {
+          onFeatureApplyStart: (application) => {
+            console.text(`     Installing ${application.feature.displayName}...`);
+            for (const { subfeature, active } of application.subfeatureApplications) {
+              if (active) {
                 console.text(`       - ${subfeature.displayName}`);
               }
             }
