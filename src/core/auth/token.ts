@@ -176,7 +176,8 @@ export function parseBrowserAuthCallback(body: string): BrowserAuthResult | unde
  */
 export function buildAuthURL(serverURL: string, port: number, serverVersion?: string): string {
   const cleanServerURL = serverURL.replace(/\/$/, '');
-  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, '26.2')) {
+  const minVersion = /^\d{4}\./.test(serverVersion ?? '') ? '2026.2' : '26.4';
+  if (isSonarQubeCloud(serverURL) || isAtLeast(serverVersion, minVersion)) {
     return `${cleanServerURL}/auth?product=cli&port=${port}`;
   }
 
