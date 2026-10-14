@@ -18,9 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { realpathSync } from 'node:fs';
+import { join, normalize, win32 } from 'node:path';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
+import { isWindows } from '@/core/host/environment/platform-detector.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
@@ -34,6 +38,43 @@ export interface UpdateVersionOptions {
 
 export interface UpdateStatusOptions {
   format?: string;
+}
+
+function canonicalPath(path: string, windows: boolean): string {
+  let resolvedPath: string;
+  try {
+    resolvedPath = realpathSync.native(path);
+  } catch {
+    resolvedPath = path;
+  }
+  return windows ? win32.normalize(resolvedPath).toLowerCase() : normalize(resolvedPath);
+}
+
+function assertStandaloneInstallerLocation(): void {
+  const windows = isWindows();
+  let expectedPath: string | undefined;
+  let executablePath: string;
+
+  if (windows) {
+    const installRoot = process.env.LOCALAPPDATA;
+    expectedPath = installRoot
+      ? win32.join(canonicalPath(installRoot, true), 'sonarqube-cli', 'bin', 'sonar.exe')
+      : undefined;
+    executablePath = canonicalPath(process.execPath, true);
+  } else {
+    const installRoot = process.env.HOME;
+    expectedPath = installRoot
+      ? join(canonicalPath(installRoot, false), '.local', 'share', 'sonarqube-cli', 'bin', 'sonar')
+      : undefined;
+    executablePath = canonicalPath(process.execPath, false);
+  }
+
+  if (executablePath !== expectedPath) {
+    throw new CommandFailedError('This CLI installation cannot be updated by sonar update.', {
+      remediationHint:
+        'Update it through your organization, package manager, or the method used to install it.',
+    });
+  }
 }
 
 /** `sonar update status` — reports the current and latest CLI version without installing. */
@@ -81,6 +122,7 @@ export async function updateVersion(
     return;
   }
 
+  assertStandaloneInstallerLocation();
   console.info('Checking for updates...');
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();
