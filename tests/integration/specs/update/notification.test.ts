@@ -56,7 +56,9 @@ describe('update notification', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain(NOTICE_TEXT);
-      expect(result.stderr).toContain('Run `sonar update` to update to v99.0.0');
+      expect(result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
       expect(result.stdout).not.toContain(NOTICE_TEXT);
     },
     { timeout: 15000 },

@@ -39,6 +39,8 @@ import type { AgentIntegrationHandler, PostUpdateDependencies } from './post-upd
 /** These read Claude's hooks too, so a global install beside Claude Code makes the two conflict. */
 const CLAUDE_ID = 'claude-code';
 const AGENTS_SUPERSEDED_BY_CLAUDE = new Set(['cursor', 'copilot-cli']);
+const MANAGED_INSTALL_RETRY_NOTE =
+  ' For an externally managed CLI, the update command exits nonzero after the migration retry.';
 
 /**
  * One attempt per process: `sonar update` reruns the migration through its own hook, and the
@@ -83,7 +85,8 @@ export async function migrateAgentIntegrationsToGlobalScope(
   if (!auth) {
     deps.console.warn(
       `Could not migrate your agent integrations to global scope: you are not logged in. ` +
-        `Run 'sonar auth login', then 'sonar update', to retry.`,
+        `Run 'sonar auth login', then 'sonar update', to retry.` +
+        MANAGED_INSTALL_RETRY_NOTE,
     );
     return;
   }
@@ -102,7 +105,10 @@ export async function migrateAgentIntegrationsToGlobalScope(
   }
 
   if (anyFailed) {
-    deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
+    deps.console.warn(
+      `Some integrations were left at project scope. Run 'sonar update' to retry.` +
+        MANAGED_INSTALL_RETRY_NOTE,
+    );
     return;
   }
   deps.console.info(
@@ -119,7 +125,8 @@ export async function migrateAgentIntegrationsToGlobalScopeSafely(
   } catch (error) {
     deps.console.warn(
       `Could not migrate agent integrations to global scope: ${(error as Error).message}. ` +
-        `Run 'sonar update' to retry.`,
+        `Run 'sonar update' to retry.` +
+        MANAGED_INSTALL_RETRY_NOTE,
     );
   }
 }
