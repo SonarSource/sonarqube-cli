@@ -22,7 +22,7 @@
 
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -560,6 +560,26 @@ describe('analyzeSqaa: change-set mode', () => {
     expect(createAnalysisSpy.mock.calls[0][0].files[0].path).toBe('src/index.ts');
   });
 
+  it('discovers the project from the invocation directory, not the repository root', async () => {
+    const repoRoot = dirname(process.cwd());
+    const projectRoot = join(process.cwd(), 'packages', 'foo');
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(TEST_PROJECT, projectRoot));
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [join(projectRoot, 'src', 'index.ts')],
+      ignored: [],
+      repoRoot,
+    });
+
+    await analyzeSqaa({ staged: true }, FAKE_AUTHENTICATED_CONTEXT);
+    expect(discoverProjectSpy.mock.calls[0][0]).toBe(process.cwd());
+
+    discoverProjectSpy.mockClear();
+    await buildSqaaJsonReport({ staged: true }, FAKE_AUTHENTICATED_CONTEXT.connection, {
+      telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+    });
+    expect(discoverProjectSpy.mock.calls[0][0]).toBe(process.cwd());
+  });
+
   it('excludes a change-set file that sits outside the project root', async () => {
     const projectRoot = join(process.cwd(), 'packages', 'foo');
     discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(TEST_PROJECT, projectRoot));
@@ -578,6 +598,25 @@ describe('analyzeSqaa: change-set mode', () => {
     const output = fake.calls.map((c) => String(c.args[0])).join('\n');
     expect(output).toContain('tools/script.ts');
     expect(output).toContain('IGNORED');
+  });
+
+  it('reports repo-relative ignored paths when every change-set file is outside the project', async () => {
+    const projectRoot = join(process.cwd(), 'packages', 'foo');
+    discoverProjectSpy.mockResolvedValue(makeDiscoveredProject(TEST_PROJECT, projectRoot));
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [join(process.cwd(), 'tools', 'script.ts')],
+      ignored: [],
+      repoRoot: process.cwd(),
+    });
+
+    const report = await buildSqaaJsonReport(
+      { staged: true },
+      FAKE_AUTHENTICATED_CONTEXT.connection,
+      { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
+    );
+
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(report?.ignored).toEqual([{ path: 'tools/script.ts', reason: 'outside-project' }]);
   });
 
   it('does not abort when an ignored change-set file is outside the repository', async () => {

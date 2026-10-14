@@ -35,7 +35,12 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
-import { buildJsonReport, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
+import {
+  buildJsonReport,
+  makeReport,
+  type SqaaJsonReport,
+  toReportIgnored,
+} from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
@@ -116,11 +121,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
   const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
   if (changeSet.files.length === 0) {
-    return makeReport(
-      [],
-      [],
-      changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
-    );
+    return makeReport([], [], toReportIgnored(changeSet.ignored, changeSet.repoRoot));
   }
 
   const { console } = runOptions.telemetryCtx;
@@ -128,18 +129,14 @@ async function buildSqaaJsonReportFromChangeSet(
     connection,
     project,
     console,
-    changeSet.repoRoot,
+    process.cwd(),
   );
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
   const projectChangeSet = excludeFilesOutsideProject(changeSet, resolved.projectRoot);
   if (projectChangeSet.files.length === 0) {
-    return makeReport(
-      [],
-      [],
-      projectChangeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
-    );
+    return makeReport([], [], toReportIgnored(projectChangeSet.ignored, projectChangeSet.repoRoot));
   }
 
   if (

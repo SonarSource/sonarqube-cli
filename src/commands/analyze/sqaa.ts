@@ -236,7 +236,7 @@ async function analyzeSqaaChangeSet(params: {
     connection,
     project,
     console,
-    changeSet.repoRoot,
+    process.cwd(),
   );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
