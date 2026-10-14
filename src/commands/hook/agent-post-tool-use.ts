@@ -33,7 +33,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
