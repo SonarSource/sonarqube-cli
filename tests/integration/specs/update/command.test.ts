@@ -179,4 +179,33 @@ describe('update command', () => {
     },
     { timeout: 15000 },
   );
+
+  describe.skipIf(IS_WINDOWS)('standalone Unix installer', () => {
+    it.each(['update', 'self-update'])(
+      'sonar %s installs a fake executable',
+      async (command) => {
+        const newerVersion = '99.0.0';
+        await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+        const updateServer = harness.newFakeUpdateScriptServer(newerVersion);
+        const installDir = harness.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+        mkdirSync(installDir.path, { recursive: true });
+        const executable = installDir.file('sonar');
+        copyFileSync(getCliBinaryPath(), executable.path);
+        chmodSync(executable.path, 0o755);
+
+        const result = await harness.run(command, { binaryPath: executable.path });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(`Updated to v${newerVersion}`);
+        expect(updateServer.getRequestedPaths()).toEqual(['/install.sh', '/fake-executable']);
+
+        expect(executable.exists()).toBe(true);
+        expect(executable.isExecutable).toBe(true);
+        const installed = Bun.spawnSync([executable.path]);
+        expect(installed.exitCode).toBe(0);
+        expect(installed.stdout.toString().trim()).toBe(`fake sonar v${newerVersion}`);
+      },
+      { timeout: 15000 },
+    );
+  });
 });
