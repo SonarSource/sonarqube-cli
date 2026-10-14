@@ -20,7 +20,7 @@
 
 // Integration tests for the global-integrations migration
 
-import { realpathSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -36,7 +36,8 @@ import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.t
 
 import { version as CURRENT_CLI_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
-import { type CliResult, TestHarness } from '../../harness';
+import { type CliResult, IS_WINDOWS, TestHarness } from '../../harness';
+import { getCliBinaryPath } from '../../harness/cli-runner.js';
 
 const TEST_TIMEOUT = 60000;
 const STALE_CLI_VERSION = '0.5.0';
@@ -76,6 +77,19 @@ describe('global-integrations migration', () => {
     state.config.cliVersion = STALE_CLI_VERSION;
     builder.withRawState(JSON.stringify(state, null, 2));
     return harness.run(POST_UPDATE_TRIGGER_COMMAND);
+  }
+
+  function installerManagedBinaryPath(): string {
+    const installDir = IS_WINDOWS
+      ? harness.userHome.dir('AppData', 'Local', 'sonarqube-cli', 'bin')
+      : harness.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+    mkdirSync(installDir.path, { recursive: true });
+    const binaryPath = installDir.file(IS_WINDOWS ? 'sonar.exe' : 'sonar').path;
+    copyFileSync(getCliBinaryPath(), binaryPath);
+    if (!IS_WINDOWS) {
+      chmodSync(binaryPath, 0o755);
+    }
+    return binaryPath;
   }
 
   function recordedFeatures(integrationId: string): InstalledIntegrationFeature[] {
@@ -347,7 +361,9 @@ describe('global-integrations migration', () => {
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(claudeIntegration);
 
-      const result = await harness.run('update');
+      const result = await harness.run('update', {
+        binaryPath: installerManagedBinaryPath(),
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Already up to date');
