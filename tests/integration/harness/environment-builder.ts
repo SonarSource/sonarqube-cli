@@ -213,6 +213,7 @@ export class EnvironmentBuilder {
   private _telemetryEnabled = false;
   private _statsDisabled = false;
   private _dockerMockRunning?: boolean;
+  private _dockerMockInfoExitCode = 0;
   private _dockerMockBinDir?: string;
   private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
   private readonly sqaaFeatures: SqaaFeatureConfig[] = [];
@@ -423,8 +424,9 @@ export class EnvironmentBuilder {
    * checks will work without a real Docker daemon.
    * `mcpRunning` controls whether `docker ps` reports the MCP container as active.
    */
-  withDockerMock(mcpRunning = false): this {
+  withDockerMock(mcpRunning = false, infoExitCode = 0): this {
     this._dockerMockRunning = mcpRunning;
+    this._dockerMockInfoExitCode = infoExitCode;
     return this;
   }
 
@@ -701,7 +703,7 @@ export class EnvironmentBuilder {
       const script = [
         '#!/bin/bash',
         'case "$1" in',
-        '  info) exit 0 ;;',
+        `  info) exit ${this._dockerMockInfoExitCode} ;;`,
         `  ps) echo "${psOutput}" ;;`,
         '  *) exit 0 ;;',
         'esac',
