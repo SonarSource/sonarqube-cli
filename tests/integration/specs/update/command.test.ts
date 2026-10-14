@@ -20,10 +20,13 @@
 
 // Integration tests for the `sonar update` command and the deprecated `sonar self-update` alias
 
+import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { getCliBinaryPath } from '../../harness/cli-runner.js';
 
 describe('update command', () => {
   let harness: TestHarness;
@@ -128,6 +131,33 @@ describe('update command', () => {
       expect(result.stderr).toContain(
         "'sonar self-update' is deprecated since 1.4 and will be removed in a future version. Use 'sonar update' instead.",
       );
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'sonar self-update installs a fake executable on the standalone Unix build',
+    async () => {
+      const newerVersion = '99.0.0';
+      await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+      const updateServer = harness.newFakeUpdateScriptServer(newerVersion);
+      const installDir = harness.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+      mkdirSync(installDir.path, { recursive: true });
+      const executable = installDir.file('sonar');
+      copyFileSync(getCliBinaryPath(), executable.path);
+      chmodSync(executable.path, 0o755);
+
+      const result = await harness.run('self-update', { binaryPath: executable.path });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(`Updated to v${newerVersion}`);
+      expect(updateServer.getRequestedPaths()).toEqual(['/install.sh', '/fake-executable']);
+
+      expect(executable.exists()).toBe(true);
+      expect(executable.isExecutable).toBe(true);
+      const installed = Bun.spawnSync([executable.path]);
+      expect(installed.exitCode).toBe(0);
+      expect(installed.stdout.toString().trim()).toBe(`fake sonar v${newerVersion}`);
     },
     { timeout: 15000 },
   );
