@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.9.0
+- Version: 1.10.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -55,7 +55,7 @@ Examples:
   sonar auth status
 
 ### sonar list
-List issues and projects from SonarQube Cloud or Server
+List issues, projects and organizations from SonarQube Cloud or Server
 
 ### sonar list issues *
 Search for issues in SonarQube
@@ -91,6 +91,15 @@ Examples:
   sonar list projects
   sonar list projects -q my-project
   sonar list projects --page 2 --page-size 50
+
+### sonar list orgs|org *
+List organizations you have access to (SonarQube Cloud only)
+Usage: sonar list orgs [--format <value>] [--page <value>] [--page-size <value>]
+
+Options:
+  --format  <string>   Output format
+  --page  <number>   Page number
+  --page-size  <number>   Page size (1-500)
 
 ### sonar quality-gate|qg
 Fetch quality gate status from SonarQube Cloud or Server
@@ -205,6 +214,14 @@ Options:
   --non-interactive   Non-interactive mode (no prompts)
   --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate cursor' instead.
 
+### sonar integrate opencode *
+Setup SonarQube integration for OpenCode. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.
+Usage: sonar integrate opencode [--non-interactive] [--global]
+
+Options:
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate opencode' instead.
+
 ### sonar context
 Augment AI agents with context from your codebase
 Usage: sonar context [action] [args]
@@ -280,25 +297,28 @@ Options:
 ### sonar config
 Configure CLI settings
 
-### sonar config telemetry
-Configure telemetry settings
-Usage: sonar config telemetry [--enabled] [--disabled]
+### sonar config get
+Print a stored sonar config value
+Usage: sonar config get [--format <value>] <key>
 
 Options:
-  --enabled   Enable collection of anonymous usage statistics
-  --disabled   Disable collection of anonymous usage statistics
+  --format  <string>   Output format
 
-Examples:
-  sonar config telemetry --enabled
-  sonar config telemetry --disabled
-
-### sonar config stats
-Configure local stats collection settings
-Usage: sonar config stats [--enabled] [--disabled]
+### sonar config list
+Print every sonar config key with its current value
+Usage: sonar config list [--format <value>] [--only-set]
 
 Options:
-  --enabled   Enable local stats collection
-  --disabled   Disable local stats collection
+  --format  <string>   Output format
+  --only-set   Only show keys that currently have a value
+
+### sonar config set
+Store a sonar config value
+Usage: sonar config set <key> [value]
+
+### sonar config unset
+Remove a stored sonar config value
+Usage: sonar config unset <key>
 
 ### sonar system
 System diagnostics and maintenance commands for the SonarQube CLI installation
@@ -312,8 +332,34 @@ Options:
   --json   Output as JSON for machine consumption [DEPRECATED] This option is deprecated since 1.9 and will be removed in a future version. Use '--format json' instead.
 
 ### sonar system reset
-Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Telemetry settings are preserved.
-Usage: sonar system reset [--force]
+Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Pass --all to also remove CLI configuration (sonar config).
+Usage: sonar system reset [--force] [--all]
+
+Options:
+  --force   Skip the interactive confirmation prompt (required for non-interactive use)
+  --all   Also remove CLI configuration (sonar config), including network and telemetry configuration
+
+### sonar allowlist
+Manage local allowlists for SonarQube analyzers
+
+### sonar allowlist secrets
+Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)
+
+### sonar allowlist secrets show
+List entries in the sonar-secrets allowlist
+Usage: sonar allowlist secrets show
+
+### sonar allowlist secrets add
+Add a secret value to the sonar-secrets allowlist (interactive; requires a real terminal, not usable by agents or scripts)
+Usage: sonar allowlist secrets add
+
+### sonar allowlist secrets remove
+Remove an entry from the sonar-secrets allowlist by key
+Usage: sonar allowlist secrets remove <key>
+
+### sonar allowlist secrets clear
+Remove all entries from the sonar-secrets allowlist
+Usage: sonar allowlist secrets clear [--force]
 
 Options:
   --force   Skip the interactive confirmation prompt (required for non-interactive use)
