@@ -46,7 +46,7 @@ import {
   getToken as getKeystoreToken,
   saveToken,
 } from '@/core/host/keychain.ts';
-import { discoverServer } from '@/core/project-info.ts';
+import { discoverServer } from '@/core/project-discovery/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
