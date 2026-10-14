@@ -39,6 +39,7 @@ import {
   type CliResult,
   hookScriptName,
   hookScriptPath,
+  IS_WINDOWS,
   normalizePath,
   TestHarness,
 } from '../../harness';
@@ -62,6 +63,24 @@ describe('integrate claude', () => {
   });
 
   // --- Without --non-interactive (auth succeeds, no repair triggered) ---
+
+  it.skipIf(IS_WINDOWS)(
+    'warns when MCP is configured without a container runtime',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const result = await harness.run('integrate claude --non-interactive', {
+        extraEnv: { PATH: harness.cwd.path },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube MCP Server needs Docker, Podman, or nerdctl',
+      );
+    },
+    { timeout: 30000 },
+  );
 
   it(
     'performs full integration with auth from state and URL from sonar-project.properties',
