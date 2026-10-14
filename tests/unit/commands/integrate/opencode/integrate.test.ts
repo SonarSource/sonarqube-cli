@@ -62,7 +62,7 @@ describe('integrateOpenCode', () => {
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
     resolveVortexSetupSpy = spyOn(vortex, 'resolveVortexSetup').mockResolvedValue({
-      disposition: 'preserve',
+      disposition: { action: 'preserve' },
     });
   });
 

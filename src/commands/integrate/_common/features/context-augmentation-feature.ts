@@ -20,7 +20,6 @@
 
 import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { install, skip } from '@/core/framework/features/selection.ts';
 import type {
   FeatureOperation,
   IntegrationContext,
@@ -63,7 +62,8 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
-    shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
+    required: true,
+    isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [createHookScriptResource(options), options.hookConfigResource],
     operations: [createToolIntegrationOperation()],
@@ -92,7 +92,8 @@ export function createContextAugmentationSkillSubfeature<TOptions extends Integr
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
-    shouldInstall: () => (isContextAugmentationSkipped() ? skip() : install()),
+    required: true,
+    isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
     dependencies: [contextAugmentationBinaryDependency],
     resources: [createSkillResource(options), createInstructionsResource(options)],
     operations: [createToolIntegrationOperation()],

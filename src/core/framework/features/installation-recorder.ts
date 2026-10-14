@@ -111,6 +111,7 @@ export function recordInstalledFeature<TOptions>(
   context: Omit<IntegrationContext, 'state'>,
   integration: IntegrationDeclaration<TOptions>,
   feature: FeatureDeclaration<TOptions>,
+  activeSubfeatures: readonly SubfeatureDeclaration<TOptions>[],
   applied: AppliedFeature,
 ): InstalledIntegrationFeature {
   const now = new Date().toISOString();
@@ -144,7 +145,7 @@ export function recordInstalledFeature<TOptions>(
     ),
     attrs: context.attrs,
     subfeatures: isFeatureContainer(feature)
-      ? feature.subfeatures.map((subfeature) =>
+      ? activeSubfeatures.map((subfeature) =>
           recordSubfeature(
             subfeature,
             existing?.subfeatures?.find((entry) => entry.featureId === subfeature.id),
