@@ -990,7 +990,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
     )
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
-    .addHelpText(`after`, projectKeyExtraHelp)
+    .addHelpText(
+      `after`,
+      `${projectKeyExtraHelp}\nOn Windows, SONAR_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+    )
     .anonymousAction(
       (
         ctx,
