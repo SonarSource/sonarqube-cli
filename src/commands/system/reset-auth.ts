@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import { reportLegacyTokenRemoval } from '@/commands/auth/legacy-token-cleanup.ts';
+import { deleteLegacyTokens, deleteToken, getToken } from '@/core/host/keychain.ts';
 import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import { type Console, type PhaseItem, phaseItem } from '@/core/ui/console.ts';
 
@@ -69,6 +70,12 @@ async function purgeConnectionAuth(
 
   try {
     await deleteToken(conn.serverUrl, conn.orgKey);
+  } catch (err) {
+    keychainWarnings.push(formatKeychainWarning(target, 'delete', err));
+  }
+
+  try {
+    reportLegacyTokenRemoval(await deleteLegacyTokens(conn.serverUrl, conn.orgKey), console);
   } catch (err) {
     keychainWarnings.push(formatKeychainWarning(target, 'delete', err));
   }
