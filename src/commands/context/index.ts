@@ -28,7 +28,7 @@ import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-en
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
