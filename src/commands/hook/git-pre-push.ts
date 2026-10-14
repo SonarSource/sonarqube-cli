@@ -192,7 +192,12 @@ async function resolveAuth(ctx: CommandInvocationContext): Promise<ResolvedAuth>
 async function resolveRemotesExclusion(remoteName: string | undefined): Promise<string> {
   const name = (remoteName ?? process.env[REMOTE_NAME_ENV])?.trim();
   if (!name) return '--remotes';
-  const configured = (await tryRunGitLines(['remote'], process.cwd())) ?? [];
+  const configured = await tryRunGitLines(['remote'], process.cwd());
+  if (configured === undefined) {
+    throw new CommandFailedError(
+      'Secrets scan could not run because Git remotes could not be listed.',
+    );
+  }
   return configured.includes(name) ? `--remotes=${name}` : '--remotes';
 }
 
@@ -222,7 +227,12 @@ async function getPushedCommitBlobs(
     ...(await knownRemoteTips(refs)),
     remotesExclusion,
   ];
-  const lines = (await tryRunGitLines(args, process.cwd())) ?? [];
+  const lines = await tryRunGitLines(args, process.cwd());
+  if (lines === undefined) {
+    throw new CommandFailedError(
+      'Secrets scan could not run because pushed blobs could not be listed by Git.',
+    );
+  }
 
   const groups: CommitBlobs[] = [];
   for (const line of lines) {
