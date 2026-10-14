@@ -34,7 +34,7 @@ import { isStandaloneInstallerLocation } from '@/core/update/installation-locati
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
-import { loadState, saveStateKeepingInstalledDependencies } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import type { AgentIntegrationHandler, PostUpdateDependencies } from './post-update.ts';
 
 /** These read Claude's hooks too, so a global install beside Claude Code makes the two conflict. */
@@ -262,18 +262,18 @@ function installIntegrationAtGlobalScope(
 
 /** Reloads state: the install saved its own copy, so anything held from before it is stale. */
 function pruneProjectScopedRecordsFromState(integrationId: string): void {
-  const state = loadState();
-  const integration = state.integrations.installed.find(
-    (entry) => entry.integrationId === integrationId,
-  );
-  if (!integration) {
-    return;
-  }
-  integration.features = integration.features.filter((feature) => feature.scope !== 'project');
-  if (integration.features.length === 0) {
-    state.integrations.installed = state.integrations.installed.filter(
-      (entry) => entry !== integration,
+  updateState((state) => {
+    const integration = state.integrations.installed.find(
+      (entry) => entry.integrationId === integrationId,
     );
-  }
-  saveStateKeepingInstalledDependencies(state);
+    if (!integration) {
+      return;
+    }
+    integration.features = integration.features.filter((feature) => feature.scope !== 'project');
+    if (integration.features.length === 0) {
+      state.integrations.installed = state.integrations.installed.filter(
+        (entry) => entry !== integration,
+      );
+    }
+  });
 }

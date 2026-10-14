@@ -31,7 +31,7 @@ import {
   authMatchesConnection,
   getActiveConnection,
 } from '../state/state-manager.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import {
   EMPTY_IDENTITY,
   identityFromConnection,
@@ -75,24 +75,29 @@ export async function recordConnectionFromAuth(
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
     if (envOnly && seedConnection.envOnly !== true) {
-      seedConnection.envOnly = true;
-      saveState(state);
+      return updateState((latest) => {
+        const connection = getActiveConnection(latest);
+        if (connection?.id === seedConnection.id) {
+          connection.envOnly = true;
+          return connection;
+        }
+        return seedConnection;
+      });
     }
     return seedConnection;
   }
 
-  const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
-    orgKey: auth.orgKey,
-    region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: resolveRecordedTokenName(options, seedConnection?.tokenName),
-    envOnly,
-  });
-
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
-  applyIdentityToConnection(connection, auth, identity);
-
-  saveState(state);
-  return connection;
+  return updateState((latest) => {
+    const connection = addOrUpdateConnection(latest, auth.serverUrl, auth.connectionType, {
+      orgKey: auth.orgKey,
+      region: cloudRegionFromUrl(auth.serverUrl),
+      tokenName: resolveRecordedTokenName(options, seedConnection?.tokenName),
+      envOnly,
+    });
+    applyIdentityToConnection(connection, auth, identity);
+    return connection;
+  });
 }
 
 function resolveRecordedTokenName(
