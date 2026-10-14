@@ -32,7 +32,7 @@ import {
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 
 import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
@@ -100,7 +100,6 @@ describe('agentPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: 'my-project',
-      configSources: [],
     });
     createAnalysisSpy = spyOn(
       clientModule.SqaaAnalysisClient.prototype,
@@ -273,7 +272,6 @@ describe('agentPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: undefined,
-      configSources: [],
     });
 
     await agentPostToolUse(ctx);

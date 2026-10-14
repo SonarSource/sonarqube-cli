@@ -33,7 +33,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -83,7 +83,6 @@ function makeDiscoveredProject(projectKey: string | undefined) {
     repoRoot: process.cwd(),
     projectRoot: process.cwd(),
     projectKey,
-    configSources: [],
   };
 }
 

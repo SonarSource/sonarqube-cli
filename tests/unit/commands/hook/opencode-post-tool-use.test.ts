@@ -32,7 +32,7 @@ import {
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { vortexUnavailableHookMessage } from '@/core/vortex/availability-messages.ts';
@@ -104,7 +104,6 @@ describe('opencodePostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: 'my-project',
-      configSources: [],
     });
     createAnalysisSpy = spyOn(
       clientModule.SqaaAnalysisClient.prototype,
@@ -297,7 +296,6 @@ describe('opencodePostToolUse', () => {
         repoRoot: process.cwd(),
         projectRoot: process.cwd(),
         projectKey: undefined,
-        configSources: [],
       });
 
       await opencodePostToolUse(ctx);

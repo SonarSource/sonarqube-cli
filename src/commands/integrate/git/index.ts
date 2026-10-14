@@ -35,7 +35,10 @@ import {
   resolveLocalGitHooksDir,
 } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { type Console, phaseItem } from '@/core/ui/console.ts';
@@ -247,7 +250,12 @@ export async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverProject(root, { auth, silent: true, console });
+  const discovered = await discoverProject(root, {
+    auth,
+    silent: true,
+    console,
+    requireSingleProject: true,
+  });
   if (discovered.projectKey) {
     assertSingleLineProjectKey(discovered.projectKey);
     console.phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);

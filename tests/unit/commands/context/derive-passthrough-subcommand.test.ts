@@ -24,7 +24,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as keychain from '@/core/host/keychain.ts';
 import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 
 import {
   derivePassthroughSubcommand,
@@ -103,7 +103,7 @@ describe('runContextPassthrough', () => {
       projectKey: 'project-key',
       projectRoot: process.cwd(),
       serverUrl: 'https://regional.sonarcloud.io',
-    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    });
     spyOn(keychain, 'getToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
@@ -149,7 +149,7 @@ describe('runContextPassthrough', () => {
       projectKey: 'project-key',
       projectRoot: process.cwd(),
       serverUrl: 'https://regional.sonarcloud.io',
-    } as Awaited<ReturnType<typeof projectInfo.discoverProject>>);
+    });
     spyOn(keychain, 'getToken').mockResolvedValue(null);
     const ctx = {
       console: {},

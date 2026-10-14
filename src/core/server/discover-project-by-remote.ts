@@ -19,7 +19,16 @@
  */
 
 import type { ResolvedAuth } from '../auth/auth-resolver.ts';
+import { getGitRemote } from '../host/git/discover.ts';
 import logger from '../observability/logger.ts';
+import {
+  formatConfigFields,
+  selectValidServerUrl,
+} from '../project-discovery/project-discovery-format.ts';
+import type {
+  DiscoveredProject,
+  DiscoverProjectOptions,
+} from '../project-discovery/project-info.ts';
 import { SonarHttpClient } from './http-client.ts';
 import { ProjectBindingsClient } from './project-bindings.ts';
 
@@ -53,4 +62,43 @@ export function discoverProjectKeyByGitRemote(
       return null;
     },
   );
+}
+
+/** A single repo-level last resort for discoverProjects(): never climbs, only ever consults the repo root's own origin remote. */
+export async function applyGitRemoteBinding(
+  config: DiscoveredProject,
+  repoRoot: string | undefined,
+  options: DiscoverProjectOptions,
+): Promise<void> {
+  if (options.auth === null) {
+    return;
+  }
+
+  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
+  if (!gitRemote) {
+    return;
+  }
+
+  const auth = options.auth ?? null;
+  if (!auth) {
+    return;
+  }
+
+  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  if (!remoteBinding) {
+    return;
+  }
+
+  config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
+  config.projectKey = remoteBinding.projectKey;
+  config.organization = config.organization || remoteBinding.organization;
+
+  if (options.silent) {
+    return;
+  }
+
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    options.console.print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
+  }
 }

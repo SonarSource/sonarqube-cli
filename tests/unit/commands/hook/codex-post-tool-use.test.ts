@@ -27,7 +27,7 @@ import {
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
@@ -80,7 +80,6 @@ describe('codexPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: 'my-project',
-      configSources: [],
     });
   });
 
@@ -191,7 +190,6 @@ describe('codexPostToolUse', () => {
       repoRoot: process.cwd(),
       projectRoot: process.cwd(),
       projectKey: undefined,
-      configSources: [],
     });
 
     await codexPostToolUse(ctx);

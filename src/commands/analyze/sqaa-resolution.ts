@@ -22,7 +22,7 @@
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
@@ -93,6 +93,7 @@ export async function resolveSqaaProjectKey(
     auth,
     silent: true,
     console,
+    requireSingleProject: true,
   });
   if (!discovered.projectKey) {
     logger.debug('Vortex analysis skipped: no project key found');

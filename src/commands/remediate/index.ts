@@ -29,7 +29,10 @@ import {
   AI_REMEDIATION_DOCS_URL,
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
@@ -160,7 +163,11 @@ async function resolveProjectKey(
     assertSingleLineProjectKey(options.project);
     return options.project;
   }
-  const discovered = await discoverProject(process.cwd(), { auth, console });
+  const discovered = await discoverProject(process.cwd(), {
+    auth,
+    console,
+    requireSingleProject: true,
+  });
   if (!discovered.projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint: 'Use --project <key> to specify it.',

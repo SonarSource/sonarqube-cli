@@ -24,7 +24,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
@@ -198,7 +198,6 @@ describe('runDepRisksStage', () => {
     fake = new FakeConsole();
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
     });
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
@@ -327,7 +326,6 @@ describe('runDepRisksStage', () => {
   it('scans under the discovered project key when no -p was baked', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
       projectKey: 'discovered-key',
     });
 
@@ -352,7 +350,6 @@ describe('runDepRisksStage', () => {
   it('rejects a multiline discovered project key before scanning', async () => {
     discoverProjectSpy.mockResolvedValue({
       projectRoot: '/repo',
-      configSources: [],
       projectKey: 'first\nsecond',
     });
 
