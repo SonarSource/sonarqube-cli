@@ -75,15 +75,16 @@ describe('sonar hook git-pre-commit', () => {
   );
 
   it(
-    'exits 0 outside of a git repo (graceful skip)',
+    'exits 1 outside of a git repo when staged files cannot be listed',
     async () => {
-      // cwd is not a git repo — git diff --cached will fail, getStagedFiles returns []
+      // cwd is not a git repo, so git diff --cached fails.
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, VALID_TOKEN);
 
       const result = await harness.run('hook git-pre-commit');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('staged files could not be listed by Git');
     },
     { timeout: 15000 },
   );
@@ -146,6 +147,7 @@ describe('sonar hook git-pre-commit', () => {
       const result = await harness.run('hook git-pre-commit');
 
       expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Secrets detected in staged files.');
     },
     { timeout: 30000 },
   );
@@ -208,10 +210,11 @@ describe('sonar hook git-pre-commit', () => {
   );
 
   it(
-    'no longer hard-fails when --dependency-risks is set without -p (dynamic resolution skips gracefully)',
+    'fails when --dependency-risks is set and Git cannot list staged files',
     async () => {
       const result = await harness.run('hook git-pre-commit --dependency-risks');
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('staged files could not be listed by Git');
     },
     { timeout: 15000 },
   );

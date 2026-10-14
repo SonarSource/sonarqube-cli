@@ -239,12 +239,36 @@ describe('gitPreCommit', () => {
     expect(fake.findCall('warn', 'Reason: binary crashed')).toBeDefined();
   });
 
-  it('skips scan when git spawn throws while listing staged files', async () => {
+  it.each(['non-zero exit', 'spawn error'])(
+    'blocks when staged-file lookup has a %s',
+    async (failure) => {
+      if (failure === 'non-zero exit') {
+        spawnProcessSpy.mockResolvedValue({ exitCode: 5, stdout: '', stderr: 'fatal' });
+      } else {
+        spawnProcessSpy.mockRejectedValue(new Error('git not found'));
+      }
+
+      let thrown: unknown;
+      try {
+        await gitPreCommit({}, [], makeCtx());
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(CommandFailedError);
+      expect((thrown as CommandFailedError).message).toBe(
+        'Secrets scan could not run because staged files could not be listed by Git.',
+      );
+      expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses explicit files even when Git cannot list staged files', async () => {
     spawnProcessSpy.mockRejectedValue(new Error('git not found'));
 
-    await gitPreCommit({}, [], makeCtx());
+    await gitPreCommit({}, ['src/foo.ts'], makeCtx());
 
-    expect(runSecretsBinarySpy).not.toHaveBeenCalled();
+    expect(gitArgsFor(spawnProcessSpy, 'diff')).toBeUndefined();
+    expect(runSecretsBinarySpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1031,16 +1055,31 @@ describe('gitPrePush', () => {
     expect(gitArgsFor(spawnProcessSpy, 'cat-file')).toBeUndefined();
   });
 
-  it('skips scan when the commit listing fails during an existing-branch push', async () => {
-    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
-    spawnProcessSpy
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' }) // cat-file
-      .mockRejectedValueOnce(new Error('git log failed'));
+  it.each(['non-zero exit', 'spawn error'])(
+    'blocks when pushed-blob lookup has a %s',
+    async (failure) => {
+      readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+      spawnProcessSpy.mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' });
+      if (failure === 'non-zero exit') {
+        spawnProcessSpy.mockResolvedValueOnce({ exitCode: 5, stdout: '', stderr: 'fatal' });
+      } else {
+        spawnProcessSpy.mockRejectedValueOnce(new Error('git log failed'));
+      }
 
-    await gitPrePush({}, [], makeCtx());
+      let thrown: unknown;
+      try {
+        await gitPrePush({}, [], makeCtx());
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(CommandFailedError);
+      expect((thrown as CommandFailedError).message).toBe(
+        'Secrets scan could not run because pushed blobs could not be listed by Git.',
+      );
 
-    expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
-  });
+      expect(runSecretsBinaryOnStreamSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('scopes the exclusion to the remote when it is one of the configured remotes', async () => {
     spawnProcessSpy
