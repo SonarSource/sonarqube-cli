@@ -24,6 +24,7 @@ import { piIntegration } from '@/commands/integrate/pi/declaration.ts';
 import { PI_EXTENSION_MANAGED_MARKER } from '@/commands/integrate/pi/secrets-extension-content.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature } from './state-helpers';
 
 const SECRETS_EXTENSION_PATH = '.pi/agent/extensions/sonar-secrets.ts';
@@ -82,6 +83,7 @@ describe('integrate pi — secrets scanning extension', () => {
       harness.userHome.writeFile('.pi/agent/extensions/other.ts', 'export default () => {};\n');
 
       const session = harness.runInteractive('integrate pi');
+      await chooseCustomize(session);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       const result: CliResult = await session.waitFinish();
