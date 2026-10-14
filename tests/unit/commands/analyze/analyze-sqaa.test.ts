@@ -22,7 +22,7 @@
 
 import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -598,6 +598,27 @@ describe('analyzeSqaa: change-set mode', () => {
     const output = fake.calls.map((c) => String(c.args[0])).join('\n');
     expect(output).toContain('tools/script.ts');
     expect(output).toContain('IGNORED');
+  });
+
+  it('keeps analyzing the whole change set when --project is not the discovered project', async () => {
+    const repoRoot = dirname(process.cwd());
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject('other-project', join(process.cwd(), 'packages', 'foo')),
+    );
+    resolveChangeSetSpy.mockResolvedValue({
+      files: [join(process.cwd(), 'src', 'index.ts'), join(repoRoot, 'tools', 'script.ts')],
+      ignored: [],
+      repoRoot,
+    });
+
+    await analyzeSqaa({ staged: true, project: TEST_PROJECT }, FAKE_AUTHENTICATED_CONTEXT);
+
+    const request = createAnalysisSpy.mock.calls[0][0];
+    expect(request.projectKey).toBe(TEST_PROJECT);
+    expect(request.files.map((f: { path: string }) => f.path)).toEqual([
+      `${basename(process.cwd())}/src/index.ts`,
+      'tools/script.ts',
+    ]);
   });
 
   it('reports repo-relative ignored paths when every change-set file is outside the project', async () => {

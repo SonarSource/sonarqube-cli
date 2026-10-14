@@ -130,6 +130,7 @@ async function buildSqaaJsonReportFromChangeSet(
     project,
     console,
     process.cwd(),
+    changeSet.repoRoot,
   );
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;

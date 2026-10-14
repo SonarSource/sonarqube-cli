@@ -66,6 +66,7 @@ export async function resolveSqaaConnectionAndProject(
   project: string | SqaaProject | undefined,
   console: Console,
   startDir?: string,
+  fallbackRoot?: string,
 ): Promise<SqaaResolution> {
   const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
@@ -75,7 +76,7 @@ export async function resolveSqaaConnectionAndProject(
   const resolved =
     typeof project === 'object'
       ? project
-      : await discoverSqaaProject(auth, console, project, startDir ?? process.cwd());
+      : await discoverSqaaProject(auth, console, project, startDir ?? process.cwd(), fallbackRoot);
   if (!resolved) return { kind: 'no-project' };
 
   noteProject(auth, resolved.projectKey);
@@ -86,12 +87,15 @@ export async function resolveSqaaConnectionAndProject(
  * Resolves the key and the root A3S paths must be relative to. An explicit key
  * skips git-remote binding, the only source that calls the server, and keeps the discovered
  * root only when discovery found that same key: another project's root would misbase paths.
+ * Otherwise the root is `fallbackRoot` (default `startDir`), which a change set sets to the
+ * repository root so that falling back never narrows what gets analyzed.
  */
 async function discoverSqaaProject(
   auth: ResolvedAuth,
   console: Console,
   explicitKey: string | undefined,
   startDir: string,
+  fallbackRoot: string = startDir,
 ): Promise<SqaaProject | null> {
   const discovered = await discoverProject(startDir, {
     auth: explicitKey === undefined ? auth : null,
@@ -107,9 +111,9 @@ async function discoverSqaaProject(
     return { projectKey, projectRoot: discovered.projectRoot };
   }
   logger.debug(
-    `Project ${projectKey} is not the discovered ${discovered.projectKey ?? 'project'}; paths are relative to ${startDir}`,
+    `Project ${projectKey} is not the discovered ${discovered.projectKey ?? 'project'}; paths are relative to ${fallbackRoot}`,
   );
-  return { projectKey, projectRoot: startDir };
+  return { projectKey, projectRoot: fallbackRoot };
 }
 
 /**
