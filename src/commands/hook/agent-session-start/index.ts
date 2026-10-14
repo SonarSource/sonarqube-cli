@@ -159,6 +159,7 @@ const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
   codex: claudeCodexAdapter,
   copilot: copilotAdapter,
   cursor: cursorAdapter,
+  devin: claudeCodexAdapter,
 };
 
 function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {
