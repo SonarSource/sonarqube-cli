@@ -133,12 +133,10 @@ describe('sonar hook git-pre-push', () => {
   it(
     'exits 0 when the push has no files to scan, even when unauthenticated',
     async () => {
+      initGitRepo(harness.cwd.path);
       harness.state().withSecretsBinaryInstalled();
-      const sha = 'abc1234abc1234abc1234abc1234abc1234abc123';
-      const result = await harness.runWithStdin(
-        'hook git-pre-push',
-        pushRefLine(sha, GIT_NULL_OID),
-      );
+      const sha = commitFile(harness.cwd.path, 'clean.js', CLEAN_CONTENT);
+      const result = await harness.runWithStdin('hook git-pre-push', pushRefLine(sha, sha));
       expect(result.exitCode).toBe(0);
     },
     { timeout: 15000 },

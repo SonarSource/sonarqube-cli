@@ -22,6 +22,7 @@
 // when --dependency-risks is set, runs a dependency-risks scan as a follow-up stage.
 // Replaces the shell logic that was previously embedded in the git hook script.
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { tryRunGitLines } from '@/core/host/git/exec.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -43,6 +44,11 @@ export async function gitPreCommit(
   const connection = await ctx.resolveConnection();
 
   const stagedFiles = files.length > 0 ? files : await getStagedFiles();
+  if (stagedFiles === undefined) {
+    throw new CommandFailedError(
+      'Secrets scan could not run because staged files could not be listed by Git.',
+    );
+  }
   if (stagedFiles.length === 0) return;
 
   if (!connection) {
@@ -64,7 +70,7 @@ export async function gitPreCommit(
   }
 }
 
-async function getStagedFiles(): Promise<string[]> {
+function getStagedFiles(): Promise<string[] | undefined> {
   const args = ['diff', '--cached', '--name-only', '--diff-filter=ACMR'];
-  return (await tryRunGitLines(args, process.cwd())) ?? [];
+  return tryRunGitLines(args, process.cwd());
 }
