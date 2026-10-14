@@ -347,8 +347,34 @@ describe('sonar context passthrough', () => {
       expect(result.stderr).toContain(
         `Not authenticated for the recorded Vortex Context connection: ${recordedServerUrl} (${ORG_KEY}).`,
       );
-      expect(result.stderr).toContain('sonar auth login');
+      expect(result.stderr).toContain('Connect to the recorded server');
       expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not read a stored token for a recorded URL that differs from the active connection',
+    async () => {
+      const activeServer = await harness.newFakeServer().start();
+      const recordedServer = await harness.newFakeServer().start();
+      const recordedServerUrl = recordedServer.baseUrl();
+      harness.withAuth(activeServer.baseUrl(), 'active-token', ORG_KEY);
+      harness
+        .state()
+        .withKeychainToken(recordedServerUrl, 'stored-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'Not authenticated for the recorded Vortex Context connection',
+      );
+      expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
+        false,
+      );
     },
     { timeout: 30000 },
   );

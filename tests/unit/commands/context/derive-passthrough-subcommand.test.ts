@@ -114,7 +114,7 @@ describe('runContextPassthrough', () => {
           isErr: () => false,
           value: {
             orgKey: 'environment-org',
-            serverUrl: 'https://sonarcloud.io',
+            serverUrl: 'https://regional.sonarcloud.io',
             token: 'environment-token',
           },
         }),
@@ -158,7 +158,7 @@ describe('runContextPassthrough', () => {
           isErr: () => false,
           value: {
             orgKey: 'environment-org',
-            serverUrl: 'https://sonarcloud.io',
+            serverUrl: 'https://regional.sonarcloud.io',
             token: 'environment-token',
           },
         }),
