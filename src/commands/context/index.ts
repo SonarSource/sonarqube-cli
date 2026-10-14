@@ -26,7 +26,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken } from '@/core/host/keychain.ts';
+import { generateKeychainAccount, getToken, MissingKeychainError } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -109,13 +109,22 @@ async function resolveRecordedContextAugmentationConfig(
   };
 }
 
-async function resolveContextToken(
+export async function resolveContextToken(
   auth: ResolvedAuth,
   serverUrl: string,
   organization: string | undefined,
 ): Promise<string> {
-  if (auth.serverUrl === serverUrl && auth.orgKey === organization) {
+  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const sameServer = generateKeychainAccount(auth.serverUrl) === generateKeychainAccount(serverUrl);
+  if (sameServer && auth.orgKey === organization) {
     return auth.token;
+  }
+
+  if (!sameServer) {
+    throw new CommandFailedError(
+      `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
+      { remediationHint: 'Connect to the recorded server before running sonar context.' },
+    );
   }
 
   let token: string | null = null;
@@ -123,6 +132,9 @@ async function resolveContextToken(
   try {
     token = await getToken(serverUrl, organization);
   } catch (err) {
+    if (!(err instanceof MissingKeychainError)) {
+      throw err;
+    }
     // Treat an unavailable keychain as no stored token so the recorded-connection error below
     // surfaces. Remember that it was unavailable, because it changes what the user should do.
     keychainUnavailable = true;
@@ -132,7 +144,6 @@ async function resolveContextToken(
     return token;
   }
 
-  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
