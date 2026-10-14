@@ -35,11 +35,10 @@ export async function integratePi(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate pi --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Pi', auth, console);
+  await displayAgentIntegratePrelude('Pi', auth, console);
 
   await finalizeAgentInstall<IntegrateAgentOptions>({
     integrationId: PI_INTEGRATION_ID,
-    context: integrateCtx,
     options,
     auth,
     ctx,
