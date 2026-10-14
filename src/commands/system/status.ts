@@ -54,6 +54,10 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
+import {
+  EXTERNAL_UPDATE_GUIDANCE,
+  isStandaloneInstallerLocation,
+} from '@/core/update/installation-location.ts';
 import { isNewerVersion, stripBuildNumber } from '@/core/version.ts';
 import {
   isVortexEntitlementLoss,
@@ -562,7 +566,9 @@ function buildRecommendations(
   if (vortexRecommendation) recommendations.push(vortexRecommendation);
   if (updateResult && !updateResult.upToDate) {
     recommendations.push(
-      `Run 'sonar update' to update to v${updateResult.latest.version.noBuild.text}`,
+      isStandaloneInstallerLocation()
+        ? `Run 'sonar update' to update to v${updateResult.latest.version.noBuild.text}`
+        : `Update available: v${updateResult.latest.version.noBuild.text}. ${EXTERNAL_UPDATE_GUIDANCE}`,
     );
   }
 
