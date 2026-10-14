@@ -54,7 +54,8 @@ const {
   isFeatureContainer,
   jsonPatch,
   reportFeatureAvailability,
-  resolveFeatureSelection,
+  customizeFeatureSelection,
+  resolveRecommendedFeatures,
   sonarSourceBinary,
   textSnippet,
   textSnippetRemover,
@@ -74,7 +75,10 @@ async function selectForInvocation<TOptions>(
 ) {
   const applications = await buildApplications(invocation, integration, excludedFeatureIds);
   reportFeatureAvailability(applications, fake);
-  return resolveFeatureSelection(applications, invocation.nonInteractive === true, fake);
+  const recommended = resolveRecommendedFeatures(applications);
+  return invocation.nonInteractive === true
+    ? recommended
+    : customizeFeatureSelection(recommended, fake);
 }
 
 function activeSubfeatureIds(application: FeatureApplication<any>): string[] {
@@ -438,7 +442,7 @@ describe('declarative integration framework', () => {
     expect(isFeatureContainer(container)).toBe(true);
   });
 
-  it('resolveFeatureSelection activates subfeatures by availability', async () => {
+  it('resolveRecommendedFeatures activates subfeatures by availability', async () => {
     const dep = sonarSourceBinary({ id: 'test-dep', spec: SECRETS_SPEC });
     const container: FeatureContainer<{ enableSca?: boolean }> = {
       id: 'container',
@@ -510,7 +514,7 @@ describe('declarative integration framework', () => {
     ).toEqual(['mandatory']);
   });
 
-  it('resolveFeatureSelection prompts for each subfeature, activating on confirm and declining otherwise', async () => {
+  it('customizeFeatureSelection prompts for each subfeature, activating on confirm and declining otherwise', async () => {
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
@@ -540,7 +544,7 @@ describe('declarative integration framework', () => {
     expect(confirmCalls[0]?.args[0]).toBe('Install Opted-in feature?');
   });
 
-  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
+  it('customizeFeatureSelection throws CommandFailedError on Ctrl+C at subfeature prompt', async () => {
     const container: FeatureContainer<Record<string, unknown>> = {
       id: 'container',
       displayName: 'Container',
@@ -567,7 +571,7 @@ describe('declarative integration framework', () => {
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
-  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
+  it('customizeFeatureSelection throws CommandFailedError on Ctrl+C at the Keep? prompt', async () => {
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     // Seed the feature as already installed so the keep/remove flow kicks in.
@@ -595,7 +599,7 @@ describe('declarative integration framework', () => {
     expect((caughtError as Error).message).toContain('Installation cancelled');
   });
 
-  it('resolveFeatureSelection throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
+  it('customizeFeatureSelection throws CommandFailedError on Ctrl+C at the removal confirmation', async () => {
     const integration = makeIntegration({ features: [{ id: 'feature', displayName: 'Feature' }] });
     const state = getDefaultState('test');
     await installer.applyAndRecordFeatures(

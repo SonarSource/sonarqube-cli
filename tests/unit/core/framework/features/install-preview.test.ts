@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
   buildInstallPreviewLines,
-  renderInstallPreviewAndConfirm,
+  renderInstallPreview,
 } from '@/core/framework/features/install-preview.ts';
 import type {
   FeatureApplication,
@@ -132,37 +132,17 @@ describe('install preview', () => {
     });
   });
 
-  describe('renderInstallPreviewAndConfirm', () => {
-    beforeEach(() => {});
-
-    afterEach(() => {});
-
-    it('prints the box and waits for Enter in interactive mode', async () => {
-      await renderInstallPreviewAndConfirm(
+  describe('renderInstallPreview', () => {
+    it('prints the box', () => {
+      renderInstallPreview(
         [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
-        false,
         fake,
       );
-
-      const methods = fake.calls.map((call) => call.method);
-      expect(methods).toContain('note');
-      expect(methods).toContain('pressAnyKeyPrompt');
+      expect(fake.calls.map((call) => call.method)).toContain('note');
     });
 
-    it('prints the box but does not wait in non-interactive mode', async () => {
-      await renderInstallPreviewAndConfirm(
-        [application({ id: 'a', displayName: 'Feature A', previewDescription: 'Does A.' })],
-        true,
-        fake,
-      );
-
-      const methods = fake.calls.map((call) => call.method);
-      expect(methods).toContain('note');
-      expect(methods).not.toContain('pressAnyKeyPrompt');
-    });
-
-    it('renders nothing when there is nothing to install', async () => {
-      await renderInstallPreviewAndConfirm([], false, fake);
+    it('renders nothing when there is nothing to install', () => {
+      renderInstallPreview([], fake);
       expect(fake.calls).toHaveLength(0);
     });
   });
