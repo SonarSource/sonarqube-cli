@@ -30,6 +30,7 @@ import {
   SQAA_ANALYZE_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
+  SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_VERIFY_CALLER_COMMAND,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { StatsFact } from '@/core/commands/invocation-context.ts';
@@ -92,6 +93,7 @@ describe('commitStatsFacts: run_trigger classification', () => {
     [SQAA_VERIFY_CALLER_COMMAND, 'manual'],
     [SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND, 'hooks'],
     [SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND, 'hooks'],
+    [SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND, 'hooks'],
     [SCA_CALLER_COMMANDS.analyzeDependencyRisks, 'manual'],
     [SCA_CALLER_COMMANDS.gitPreCommit, 'hooks'],
   ])('classifies "%s" as %s', (callerCommand, expectedTrigger) => {
