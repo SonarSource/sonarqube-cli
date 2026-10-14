@@ -205,10 +205,10 @@ function applyReposFileFilter<T extends GitLabRepo>(
     if (repos.some((r) => relativePath(r) === e)) continue;
     if (allRepos.some((r) => relativePath(r) === e)) {
       console.warn(
-        `→ '${e}' from --repos-file is not eligible (empty repository or pending deletion); skipped`,
+        `→ '${e}' from --repos-file is not eligible (empty repository or pending deletion), skipped`,
       );
     } else {
-      console.warn(`→ '${e}' from --repos-file not found in group; skipped`);
+      console.warn(`→ '${e}' from --repos-file not found in group, skipped`);
     }
   }
 
