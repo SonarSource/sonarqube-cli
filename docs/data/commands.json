@@ -1,5 +1,5 @@
 {
-  "version": "1.9.0",
+  "version": "1.10.0",
   "commands": [
     {
       "id": "sonar",
@@ -29,6 +29,7 @@
         "sonar-link",
         "sonar-config",
         "sonar-system",
+        "sonar-allowlist",
         "sonar-update"
       ]
     },
@@ -165,7 +166,7 @@
       "name": "list",
       "fullName": "sonar list",
       "aliases": [],
-      "description": "List issues and projects from SonarQube Cloud or Server",
+      "description": "List issues, projects and organizations from SonarQube Cloud or Server",
       "isGroup": true,
       "isRoot": false,
       "stage": "stable",
@@ -177,7 +178,8 @@
       "examples": [],
       "children": [
         "sonar-list-issues",
-        "sonar-list-projects"
+        "sonar-list-projects",
+        "sonar-list-orgs"
       ]
     },
     {
@@ -352,6 +354,54 @@
           "description": "Paginate through projects"
         }
       ],
+      "children": []
+    },
+    {
+      "id": "sonar-list-orgs",
+      "name": "orgs",
+      "fullName": "sonar list orgs",
+      "aliases": [
+        "org"
+      ],
+      "description": "List organizations you have access to (SonarQube Cloud only)",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-list",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "table",
+          "allowedValues": [
+            "json",
+            "table"
+          ]
+        },
+        {
+          "flags": "--page <page>",
+          "long": "--page",
+          "description": "Page number",
+          "type": "number",
+          "required": false,
+          "defaultValue": 1
+        },
+        {
+          "flags": "--page-size <page-size>",
+          "long": "--page-size",
+          "description": "Page size (1-500)",
+          "type": "number",
+          "required": false,
+          "defaultValue": 500
+        }
+      ],
+      "examples": [],
       "children": []
     },
     {
@@ -617,7 +667,8 @@
         "sonar-integrate-copilot",
         "sonar-integrate-codex",
         "sonar-integrate-antigravity",
-        "sonar-integrate-cursor"
+        "sonar-integrate-cursor",
+        "sonar-integrate-opencode"
       ]
     },
     {
@@ -880,6 +931,44 @@
           "deprecation": {
             "sinceVersion": "1.9.0",
             "replacement": "sonar integrate cursor"
+          }
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-opencode",
+      "name": "opencode",
+      "fullName": "sonar integrate opencode",
+      "aliases": [],
+      "description": "Setup SonarQube integration for OpenCode. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Backwards compatibility; integrations are installed globally by default",
+          "type": "boolean",
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate opencode"
           }
         }
       ],
@@ -1262,57 +1351,55 @@
       "options": [],
       "examples": [],
       "children": [
-        "sonar-config-telemetry",
-        "sonar-config-stats"
+        "sonar-config-get",
+        "sonar-config-list",
+        "sonar-config-set",
+        "sonar-config-unset"
       ]
     },
     {
-      "id": "sonar-config-telemetry",
-      "name": "telemetry",
-      "fullName": "sonar config telemetry",
+      "id": "sonar-config-get",
+      "name": "get",
+      "fullName": "sonar config get",
       "aliases": [],
-      "description": "Configure telemetry settings",
+      "description": "Print a stored sonar config value",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
       "requiresAuth": false,
       "depth": 2,
       "parentId": "sonar-config",
-      "arguments": [],
+      "arguments": [
+        {
+          "name": "key",
+          "description": "Config key to read",
+          "required": true,
+          "variadic": false
+        }
+      ],
       "options": [
         {
-          "flags": "--enabled",
-          "long": "--enabled",
-          "description": "Enable collection of anonymous usage statistics",
-          "type": "boolean",
-          "required": false
-        },
-        {
-          "flags": "--disabled",
-          "long": "--disabled",
-          "description": "Disable collection of anonymous usage statistics",
-          "type": "boolean",
-          "required": false
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "json"
+          ]
         }
       ],
-      "examples": [
-        {
-          "command": "sonar config telemetry --enabled",
-          "description": "Enable collection of anonymous usage statistics"
-        },
-        {
-          "command": "sonar config telemetry --disabled",
-          "description": "Disable collection of anonymous usage statistics"
-        }
-      ],
+      "examples": [],
       "children": []
     },
     {
-      "id": "sonar-config-stats",
-      "name": "stats",
-      "fullName": "sonar config stats",
+      "id": "sonar-config-list",
+      "name": "list",
+      "fullName": "sonar config list",
       "aliases": [],
-      "description": "Configure local stats collection settings",
+      "description": "Print every sonar config key with its current value",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -1322,20 +1409,80 @@
       "arguments": [],
       "options": [
         {
-          "flags": "--enabled",
-          "long": "--enabled",
-          "description": "Enable local stats collection",
-          "type": "boolean",
-          "required": false
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format",
+          "type": "string",
+          "required": false,
+          "defaultValue": "text",
+          "allowedValues": [
+            "text",
+            "table",
+            "json"
+          ]
         },
         {
-          "flags": "--disabled",
-          "long": "--disabled",
-          "description": "Disable local stats collection",
+          "flags": "--only-set",
+          "long": "--only-set",
+          "description": "Only show keys that currently have a value",
           "type": "boolean",
           "required": false
         }
       ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-config-set",
+      "name": "set",
+      "fullName": "sonar config set",
+      "aliases": [],
+      "description": "Store a sonar config value",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-config",
+      "arguments": [
+        {
+          "name": "key",
+          "description": "Config key to set",
+          "required": true,
+          "variadic": false
+        },
+        {
+          "name": "value",
+          "description": "Value to store; omit to enter it interactively without echoing",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-config-unset",
+      "name": "unset",
+      "fullName": "sonar config unset",
+      "aliases": [],
+      "description": "Remove a stored sonar config value",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-config",
+      "arguments": [
+        {
+          "name": "key",
+          "description": "Config key to unset",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [],
       "examples": [],
       "children": []
     },
@@ -1406,13 +1553,144 @@
       "name": "reset",
       "fullName": "sonar system reset",
       "aliases": [],
-      "description": "Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Telemetry settings are preserved.",
+      "description": "Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, and local stats data. Pass --all to also remove CLI configuration (sonar config).",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
       "requiresAuth": false,
       "depth": 2,
       "parentId": "sonar-system",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Skip the interactive confirmation prompt (required for non-interactive use)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--all",
+          "long": "--all",
+          "description": "Also remove CLI configuration (sonar config), including network and telemetry configuration",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-allowlist",
+      "name": "allowlist",
+      "fullName": "sonar allowlist",
+      "aliases": [],
+      "description": "Manage local allowlists for SonarQube analyzers",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-allowlist-secrets"
+      ]
+    },
+    {
+      "id": "sonar-allowlist-secrets",
+      "name": "secrets",
+      "fullName": "sonar allowlist secrets",
+      "aliases": [],
+      "description": "Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-allowlist",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-allowlist-secrets-show",
+        "sonar-allowlist-secrets-add",
+        "sonar-allowlist-secrets-remove",
+        "sonar-allowlist-secrets-clear"
+      ]
+    },
+    {
+      "id": "sonar-allowlist-secrets-show",
+      "name": "show",
+      "fullName": "sonar allowlist secrets show",
+      "aliases": [],
+      "description": "List entries in the sonar-secrets allowlist",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 3,
+      "parentId": "sonar-allowlist-secrets",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-allowlist-secrets-add",
+      "name": "add",
+      "fullName": "sonar allowlist secrets add",
+      "aliases": [],
+      "description": "Add a secret value to the sonar-secrets allowlist (interactive; requires a real terminal, not usable by agents or scripts)",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 3,
+      "parentId": "sonar-allowlist-secrets",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-allowlist-secrets-remove",
+      "name": "remove",
+      "fullName": "sonar allowlist secrets remove",
+      "aliases": [],
+      "description": "Remove an entry from the sonar-secrets allowlist by key",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 3,
+      "parentId": "sonar-allowlist-secrets",
+      "arguments": [
+        {
+          "name": "key",
+          "description": "Unique key of the allowlist entry to remove",
+          "required": true,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-allowlist-secrets-clear",
+      "name": "clear",
+      "fullName": "sonar allowlist secrets clear",
+      "aliases": [],
+      "description": "Remove all entries from the sonar-secrets allowlist",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 3,
+      "parentId": "sonar-allowlist-secrets",
       "arguments": [],
       "options": [
         {
