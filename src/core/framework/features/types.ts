@@ -131,7 +131,6 @@ export type FeaturePreview = string | ((activeSubfeatureIds: readonly string[]) 
 export interface FeatureDeclaration<TOptions = Record<string, unknown>> {
   id: string;
   displayName: string;
-  benefitDescription?: string;
   previewDescription?: FeaturePreview;
   /** Omitted means available. */
   isAvailable?: (invocation: IntegrationInvocation<TOptions>) => MaybePromise<FeatureAvailability>;
