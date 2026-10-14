@@ -24,9 +24,11 @@
 // artifacts from tests/integration/resources/dependency-artifacts/ — downloaded
 // by setup-integration-resources.ts — and returns 404 for unknown paths.
 
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
@@ -34,6 +36,7 @@ import {
 } from '@/core/host/install/install-types.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
+import { IS_WINDOWS } from './platform';
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
@@ -51,15 +54,18 @@ export class FakeBinariesServer {
   private readonly server: ReturnType<typeof Bun.serve>;
   private readonly requests: RecordedRequest[];
   private readonly state: { stableVersion?: string };
+  private readonly extraFiles: Map<string, Buffer>;
 
   constructor(
     server: ReturnType<typeof Bun.serve>,
     requests: RecordedRequest[],
     state: { stableVersion?: string },
+    extraFiles: Map<string, Buffer>,
   ) {
     this.server = server;
     this.requests = requests;
     this.state = state;
+    this.extraFiles = extraFiles;
   }
 
   /** Base URL to pass as SONARQUBE_CLI_BINARIES_URL. */
@@ -73,6 +79,31 @@ export class FakeBinariesServer {
 
   setStableVersion(version: string): void {
     this.state.stableVersion = version;
+  }
+
+  /** Base URL to pass as `--artifact-base-url` to `sonar mdm`. */
+  cliArtifactBaseUrl(): string {
+    return `${this.baseUrl()}/Distribution/sonarqube-cli`;
+  }
+
+  /**
+   * Publishes a CLI release the way `sonar mdm update|rollback` expects to find it:
+   * `<version>/<os>/sonarqube-cli-<version>-<os>-<arch>.{bin,exe}` plus a `.sha256` sidecar.
+   * `checksum` overrides the computed digest (`null` omits the sidecar); `suffix` selects the
+   * artifact extension (default `.exe` on Windows, `.bin` elsewhere), `.exe` on Unix being the pre-`.bin` convention.
+   */
+  publishCliArtifact(
+    version: string,
+    body: string | Buffer,
+    options: { checksum?: string | null; suffix?: '.bin' | '.exe' } = {},
+  ): void {
+    const { os, arch } = detectPlatform();
+    const path = `/Distribution/sonarqube-cli/${version}/${os}/sonarqube-cli-${version}-${os}-${arch}${options.suffix ?? (IS_WINDOWS ? '.exe' : '.bin')}`;
+    this.extraFiles.set(path, Buffer.from(body));
+    if (options.checksum !== null) {
+      const digest = options.checksum ?? createHash('sha256').update(body).digest('hex');
+      this.extraFiles.set(`${path}.sha256`, Buffer.from(`${digest}  artifact\n`));
+    }
   }
 
   async stop(): Promise<void> {
@@ -101,6 +132,7 @@ export class FakeBinariesServerBuilder {
   start(): Promise<FakeBinariesServer> {
     const requests: RecordedRequest[] = [];
     const state = { stableVersion: this._stableVersion };
+    const extraFiles = new Map<string, Buffer>();
 
     // Load versioned artifacts from resources (sonar-secrets and sca-scanner-cli .exe[.asc],
     // sonar-context-augmentation .tar.gz[.asc]).
@@ -143,6 +175,13 @@ export class FakeBinariesServerBuilder {
           });
         }
 
+        const published = extraFiles.get(path);
+        if (published) {
+          return new Response(published, {
+            headers: { 'Content-Type': 'application/octet-stream' },
+          });
+        }
+
         // Match the requested filename against known artifacts
         const filename = path.split('/').at(-1) ?? '';
         const fileBytes = files.get(filename);
@@ -155,6 +194,6 @@ export class FakeBinariesServerBuilder {
       },
     });
 
-    return Promise.resolve(new FakeBinariesServer(server, requests, state));
+    return Promise.resolve(new FakeBinariesServer(server, requests, state, extraFiles));
   }
 }
