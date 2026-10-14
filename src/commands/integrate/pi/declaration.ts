@@ -23,10 +23,7 @@ import { join } from 'node:path';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import {
@@ -57,7 +54,6 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
     {
       id: SONAR_SECRETS_HOOKS_FEATURE_ID,
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       postInstallExample: secretsScanningExample(PI_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
       dependencies: [sonarSecretsBinaryDependency],
