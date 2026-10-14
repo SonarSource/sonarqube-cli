@@ -78,7 +78,7 @@ runs:
     - name: Run integration tests (Windows)
       if: ${{ inputs.os == 'windows' }}
       shell: bash
-      run: bun test --parallel=4 --rerun-each 3 ./tests/integration/specs/mdm/
+      run: bun run test:integration
 
     - name: Run integration tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
@@ -112,7 +112,7 @@ runs:
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
         SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
-      run: bun test --rerun-each 3 ./tests/e2e/mdm/
+      run: bun run test:e2e
 
     - name: Run e2e tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
