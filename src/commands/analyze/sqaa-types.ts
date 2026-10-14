@@ -52,11 +52,32 @@ export interface AnalyzeSqaaOptions {
   depth?: string;
   /** Internal: hooks force STANDARD without exposing `--depth` on the CLI. */
   forcedDepth?: SqaaAnalysisDepth;
+  /** Internal: a hook that already ran discovery passes its result so it is not repeated. */
+  discoveredProject?: SqaaProject;
 }
 
-export interface SqaaResolvedContext {
-  connection: SonarConnection;
+/** A project key and the root it was discovered at, which A3S paths are relative to. */
+export interface SqaaProject {
   projectKey: string;
+  projectRoot: string;
+}
+
+export interface SqaaResolvedContext extends SqaaProject {
+  connection: SonarConnection;
+}
+
+/**
+ * The three index-aligned views of one file list. Grouped rather than passed as three loose
+ * arrays because their alignment is the invariant: `wirePaths[i]`, `allPaths[i]` and
+ * `files[i]` must describe the same file.
+ */
+export interface SqaaRunPaths {
+  /** Absolute paths. */
+  files: string[];
+  /** Paths shown to the user, relative to the invocation directory or repository root. */
+  allPaths: string[];
+  /** Paths sent to A3S, relative to the discovered project root. */
+  wirePaths: string[];
 }
 
 export interface SqaaBatchRunOptions {

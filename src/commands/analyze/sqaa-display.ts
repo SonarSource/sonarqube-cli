@@ -561,4 +561,5 @@ export {
   makeReport,
   singleFileFailureReport,
   singleFileSuccessReport,
+  toReportIgnored,
 } from './sqaa-display-json.ts';

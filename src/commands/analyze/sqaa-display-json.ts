@@ -82,6 +82,17 @@ export function singleFileFailureReport(
   return makeReport([], [{ path: filePath, message }], [], analysisDepth);
 }
 
+/** Ignored files as the report shows them: relative to `pathBase`, absolute when outside it. */
+export function toReportIgnored(
+  ignored: IgnoredFile[],
+  pathBase?: string,
+): SqaaJsonReport['ignored'] {
+  return ignored.map((f) => ({
+    path: toRelativePosixPathOrNull(f.path, pathBase) ?? normalizePath(f.path),
+    reason: f.reason,
+  }));
+}
+
 export function buildJsonReport(
   tally: RunTally,
   ignored: IgnoredFile[],
@@ -102,10 +113,7 @@ export function buildJsonReport(
 
   const report: SqaaJsonReport = {
     files,
-    ignored: ignored.map((f) => ({
-      path: toRelativePosixPathOrNull(f.path, pathBase) ?? normalizePath(f.path),
-      reason: f.reason,
-    })),
+    ignored: toReportIgnored(ignored, pathBase),
     failures,
     skipped,
     summary: {

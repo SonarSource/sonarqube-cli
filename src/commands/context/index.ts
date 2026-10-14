@@ -83,7 +83,7 @@ interface RecordedContextAugmentationConfig {
 
 /**
  * Resolve org/project/server via the shared project-discovery pipeline (`discoverProject`),
- * the same one SQAA's project-key lookup uses (see resolveSqaaProjectKey). `workspaceDir` is
+ * the same one SQAA's project-key lookup uses (see resolveSqaaConnectionAndProject). `workspaceDir` is
  * `discovered.projectRoot` directly — `discoverProject()` itself always anchors it to the
  * current worktree (never a different one a matched mapping happens to point at), so no
  * extra resolution is needed here.

@@ -25,13 +25,13 @@ import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { codexPostToolUse } from '@/commands/hook/codex-post-tool-use.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
-import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -119,7 +119,12 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
-      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      {
+        discoveredProject: { projectKey: 'my-project', projectRoot: process.cwd() },
+        force: true,
+        format: 'json',
+        forcedDepth: 'STANDARD',
+      },
       expect.objectContaining({ auth: expect.objectContaining({ connectionType: 'cloud' }) }),
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
@@ -215,7 +220,12 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
-      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      {
+        discoveredProject: { projectKey: 'my-project', projectRoot: process.cwd() },
+        force: true,
+        format: 'json',
+        forcedDepth: 'STANDARD',
+      },
       expect.objectContaining({ auth: expect.objectContaining({ connectionType: 'on-premise' }) }),
       expect.objectContaining({
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
