@@ -120,6 +120,8 @@ import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
 import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
 import { devinPostToolUse } from './hook/devin-post-tool-use.ts';
+import { devinPreToolUse } from './hook/devin-pre-tool-use.ts';
+import { devinPromptSubmit } from './hook/devin-prompt-submit.ts';
 import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts';
 import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
@@ -1088,6 +1090,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'PostToolUse handler for Devin: run Vortex analysis after the agent edits or writes a file',
     )
     .anonymousAction(handleHookInvocation(devinPostToolUse));
+
+  hookCommand
+    .command('devin-pre-tool-use')
+    .description('PreToolUse handler for Devin: scan files for secrets before agent reads them')
+    .anonymousAction(handleHookInvocation(devinPreToolUse));
+
+  hookCommand
+    .command('devin-prompt-submit')
+    .description('UserPromptSubmit handler for Devin: scan prompts for secrets before sending')
+    .anonymousAction(handleHookInvocation(devinPromptSubmit));
 
   hookCommand
     .command('git-pre-commit')
