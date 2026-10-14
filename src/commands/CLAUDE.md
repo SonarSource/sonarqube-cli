@@ -1,5 +1,7 @@
 # Commands
 
+`sonar run mcp` reads `mcp.container.network` and `mcp.container.addHost` from persistent config on each launch. These optional settings pass `--network` and `--add-host` to Docker, Podman, or Nerdctl, including the WSL path. Generated agent MCP entries invoke `sonar run mcp`, so the settings also apply to them. With no settings, the container command is unchanged. If a container exits with an error and the saved server URL uses loopback, the command writes a networking hint to stderr.
+
 The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agent integrations that install them: `src/commands/integrate/CLAUDE.md` covers both halves and is the file to read before changing either.
 
 To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
