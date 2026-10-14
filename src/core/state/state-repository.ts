@@ -27,6 +27,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { join } from 'node:path';
 
+import { Database } from 'bun:sqlite';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 
@@ -149,6 +151,82 @@ export const STATE_READ_MAX_ATTEMPTS = 5;
 const STATE_READ_RETRY_DELAY_MS = 100;
 
 let cachedReadFailure: { fingerprint: string; error: CommandFailedError } | null = null;
+const STATE_LOCK_WAIT_MS = 10_000;
+const STATE_FILE_MODE = 0o600;
+const STATE_RENAME_MAX_ATTEMPTS = 5;
+const STATE_RENAME_RETRY_DELAY_MS = 10;
+
+function withStateLock<T>(action: () => T): T {
+  const lockFile = `${getStateFile()}.lock.sqlite`;
+  const actionState = { started: false };
+  try {
+    const db = new Database(lockFile, { create: true });
+    try {
+      db.run(`PRAGMA busy_timeout = ${STATE_LOCK_WAIT_MS}`);
+      return db
+        .transaction(() => {
+          actionState.started = true;
+          return action();
+        })
+        .immediate();
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    if (actionState.started) {
+      throw error;
+    }
+    if (isCorruptStateLock(error)) {
+      throw new CommandFailedError(
+        `State lock database is corrupt at ${lockFile}. Stop all sonar CLI processes. Remove the corrupt lock file, then retry.`,
+        {
+          cause: error,
+        },
+      );
+    }
+    throw new Error(`Failed to acquire state lock at ${lockFile}: ${String(error)}`);
+  }
+}
+
+function isCorruptStateLock(error: unknown): boolean {
+  const code =
+    typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined;
+  return code === 'SQLITE_NOTADB' || code?.startsWith('SQLITE_CORRUPT') === true;
+}
+
+function renameStateFile(tempFile: string): void {
+  for (let attempt = 0; attempt < STATE_RENAME_MAX_ATTEMPTS; attempt++) {
+    try {
+      fs.renameSync(tempFile, getStateFile());
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        !['EPERM', 'EBUSY', 'EACCES'].includes(code ?? '') ||
+        attempt + 1 === STATE_RENAME_MAX_ATTEMPTS
+      ) {
+        throw error;
+      }
+      Bun.sleepSync(STATE_RENAME_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+}
+
+function replaceStateFile(state: CliState): void {
+  const tempFile = `${getStateFile()}.${randomUUID()}.tmp`;
+  try {
+    const fd = fs.openSync(tempFile, 'wx', STATE_FILE_MODE);
+    try {
+      fs.writeFileSync(fd, JSON.stringify(state, null, 2), 'utf-8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    renameStateFile(tempFile);
+  } finally {
+    fs.rmSync(tempFile, { force: true });
+  }
+}
 
 function stateFileFingerprint(): string | null {
   try {
@@ -161,7 +239,7 @@ function stateFileFingerprint(): string | null {
 
 /**
  * Load state from file, or return default if not exists.
- * If an existing file fails to read, retry then throw, so saveState() can't wipe the state. CLI-834.
+ * If an existing file fails to read, retry then throw so an update cannot wipe the state.
  */
 export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
@@ -211,35 +289,22 @@ export function tryLoadState(cliVersion?: string): CliState | null {
   }
 }
 
-/**
- * Save state to file.
- */
-export function saveState(state: CliState): void {
+export function updateState<T>(update: (state: CliState) => T): T {
   ensureStateDir();
-
-  state.lastUpdated = new Date().toISOString();
-
   try {
-    fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
+    return withStateLock(() => {
+      const state = loadState();
+      const result = update(state);
+      state.lastUpdated = new Date().toISOString();
+      replaceStateFile(state);
+      return result;
+    });
   } catch (error) {
-    throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
+    if (error instanceof CommandFailedError) {
+      throw error;
+    }
+    throw new Error(`Failed to update state in ${getStateFile()}: ${String(error)}`);
   }
-}
-
-/**
- * Save state without overwriting `dependencies.installed`: binary installers record there
- * themselves, writing straight to disk after the caller loaded its snapshot. Callers that
- * install binaries between their `loadState()` and their save must use this.
- */
-export function saveStateKeepingInstalledDependencies(state: CliState): void {
-  try {
-    state.dependencies.installed = loadState().dependencies.installed;
-  } catch (error) {
-    logger.debug(
-      `Keeping the in-memory dependency registry; re-read failed: ${(error as Error).message}`,
-    );
-  }
-  saveState(state);
 }
 
 /**

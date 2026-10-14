@@ -31,7 +31,7 @@ import {
   authMatchesConnection,
   getActiveConnection,
 } from '../state/state-manager.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import {
   EMPTY_IDENTITY,
   identityFromConnection,
@@ -61,40 +61,46 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
-  // Never stamp envOnly on a keychain-backed (login-created) connection for the same server.
-  const envOnly =
-    auth.comesFromEnv() &&
-    (seedConnection === undefined || seedConnection.envOnly === true) &&
-    !(await hasMatchingStoredToken(auth));
+  const storedToken = auth.comesFromEnv() ? await readStoredToken(auth) : null;
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (auth.comesFromEnv() && seedConnection.envOnly !== (envOnly || undefined)) {
-      if (envOnly) {
-        seedConnection.envOnly = true;
-      } else {
-        delete seedConnection.envOnly;
+    if (auth.comesFromEnv()) {
+      const envOnly = shouldRecordEnvOnly(auth, seedConnection, storedToken);
+      if (seedConnection.envOnly === (envOnly || undefined)) {
+        return seedConnection;
       }
-      saveState(state);
+      return updateState((latest) => {
+        const connection = getActiveConnection(latest);
+        if (connection?.id === seedConnection.id && authMatchesConnection(auth, connection)) {
+          syncEnvOnly(auth, connection, storedToken);
+          return connection;
+        }
+        return seedConnection;
+      });
     }
     return seedConnection;
   }
 
-  const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
-    orgKey: auth.orgKey,
-    region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: resolveRecordedTokenName(auth, options, seedConnection?.tokenName),
-    envOnly,
-  });
-
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
-  applyIdentityToConnection(connection, auth, identity);
-
-  saveState(state);
-  return connection;
+  return updateState((latest) => {
+    const activeConnection = getActiveConnection(latest);
+    const matchingConnection =
+      activeConnection && authMatchesConnection(auth, activeConnection)
+        ? activeConnection
+        : undefined;
+    const connection = addOrUpdateConnection(latest, auth.serverUrl, auth.connectionType, {
+      orgKey: auth.orgKey,
+      region: cloudRegionFromUrl(auth.serverUrl),
+      tokenName: resolveRecordedTokenName(auth, options, matchingConnection?.tokenName),
+      envOnly: shouldRecordEnvOnly(auth, matchingConnection, storedToken),
+    });
+    applyIdentityToConnection(connection, auth, identity);
+    return connection;
+  });
 }
 
 function resolveRecordedTokenName(
@@ -111,12 +117,36 @@ function resolveRecordedTokenName(
   return undefined;
 }
 
-async function hasMatchingStoredToken(auth: ResolvedAuth): Promise<boolean> {
+function shouldRecordEnvOnly(
+  auth: ResolvedAuth,
+  connection: AuthConnection | undefined,
+  storedToken: string | null,
+): boolean {
+  return (
+    auth.comesFromEnv() &&
+    (connection === undefined || connection.envOnly === true) &&
+    storedToken !== auth.token
+  );
+}
+
+function syncEnvOnly(
+  auth: ResolvedAuth,
+  connection: AuthConnection,
+  storedToken: string | null,
+): void {
+  if (shouldRecordEnvOnly(auth, connection, storedToken)) {
+    connection.envOnly = true;
+  } else {
+    delete connection.envOnly;
+  }
+}
+
+async function readStoredToken(auth: ResolvedAuth): Promise<string | null> {
   try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) === auth.token;
+    return await getToken(auth.serverUrl, auth.orgKey);
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
-    return false;
+    return null;
   }
 }
 
