@@ -26,6 +26,10 @@ import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isWithinCooldown, ONE_DAY_MS } from '@/core/time/cooldown.ts';
 import { cyan } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
+import {
+  EXTERNAL_UPDATE_GUIDANCE,
+  isStandaloneInstallerLocation,
+} from '@/core/update/installation-location.ts';
 import { Version } from '@/core/version.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
@@ -185,7 +189,9 @@ export class UpdateNotifier {
       'stderr',
     );
     this.console.text(
-      `   → Run \`sonar update\` to update to v${latestNoBuild}`,
+      isStandaloneInstallerLocation()
+        ? `   → Run \`sonar update\` to update to v${latestNoBuild}`
+        : `   → ${EXTERNAL_UPDATE_GUIDANCE}`,
       undefined,
       'stderr',
     );
