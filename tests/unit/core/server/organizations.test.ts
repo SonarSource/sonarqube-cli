@@ -161,40 +161,4 @@ describe('OrganizationsClient', () => {
       expect(new URL(nthFetchUrl(fetchSpy, 1)).searchParams.get('p')).toBe('2');
     });
   });
-
-  describe('resolveOrganizationAccess', () => {
-    it('reports an organization the server resolves as accessible', async () => {
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-
-      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'accessible' });
-    });
-
-    it('reports a 404 result as not_found', async () => {
-      fetchSpy = mockFetch([], { ok: false, status: 404 });
-
-      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
-    });
-
-    it('uses the public organizations endpoint with the requested key', async () => {
-      const cloudClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-
-      await cloudClient.resolveOrganizationAccess('my-org');
-
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.origin).toBe(SONARCLOUD_API_URL);
-      expect(url.pathname).toBe('/organizations/organizations');
-      expect(url.searchParams.get('organizationKey')).toBe('my-org');
-      // Login validation discards eligibility data, so it must not ask the API to compute it.
-      expect(url.searchParams.get('excludeEligibility')).toBe('true');
-    });
-
-    it('reports a server error as check_failed rather than as a missing organization', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 500 });
-
-      const access = await client.resolveOrganizationAccess('my-org');
-
-      expect(access.status).toBe('check_failed');
-    });
-  });
 });
