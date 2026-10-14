@@ -58,7 +58,7 @@ let CLOUD_CTX: CommandAuthenticatedInvocationContext;
 
 describe('integrateCommand', () => {
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
   let hasVortexEntitlementSpy: Mock<
     Extract<
       (typeof VortexEntitlementClient.prototype)['hasVortexEntitlement'],
@@ -87,7 +87,9 @@ describe('integrateCommand', () => {
     );
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
 
     checkTokenStatusSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
     installIntegrationSpy = spyOn(registry, 'installIntegration').mockResolvedValue([]);
@@ -95,7 +97,7 @@ describe('integrateCommand', () => {
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
     installIntegrationSpy.mockRestore();

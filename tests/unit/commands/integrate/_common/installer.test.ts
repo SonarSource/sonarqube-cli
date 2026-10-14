@@ -52,18 +52,20 @@ describe('generic integration installer', () => {
   let tempDir: string;
   let registry: IntegrationRegistry;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-installer-'));
     registry = new IntegrationRegistry();
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
   });
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -113,7 +115,7 @@ describe('generic integration installer', () => {
     });
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(hasUiCall('text', '     Installing Feature...')).toBe(true);
   });
 
@@ -610,7 +612,7 @@ describe('generic integration installer', () => {
     expect(thrown.message).toBe('boom');
 
     expect(await readFile(firstPath, 'utf-8')).toBe('first\n');
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(state.integrations.installed).toMatchObject([
       {
         integrationId: integration.id,
@@ -641,10 +643,11 @@ describe('generic integration installer', () => {
       console: fake,
     });
 
-    expect(saveStateSpy).toHaveBeenCalledWith(snapshot);
-    expect(snapshot.dependencies.installed).toMatchObject([
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    expect(disk.dependencies.installed).toMatchObject([
       { id: 'installer-binary', version: '2', path: '/opt/sonar/installer-binary-2' },
     ]);
+    expect(disk.integrations.installed[0].integrationId).toBe(integration.id);
   });
 
   it('prints container display name then each active subfeature on a separate indented line', async () => {
@@ -748,13 +751,13 @@ describe('generic integration installer', () => {
     );
 
     expect(error?.message).toContain('read failed');
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('warns and continues when writing state fails', async () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);
-    saveStateSpy.mockImplementation(() => {
+    updateStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
     const integration = registerIntegration(registry, 'installer-state-write-failure', [
@@ -824,13 +827,13 @@ describe('generic integration installer', () => {
     expect(installedCount).toBe(1);
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(fake.calls).toEqual([]);
     expect(stdout).toBe('');
   });
 
   it('warns through a quiet console when writing state fails', async () => {
-    saveStateSpy.mockImplementation(() => {
+    updateStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
     const integration = registerIntegration(registry, 'installer-quiet-state-failure', [

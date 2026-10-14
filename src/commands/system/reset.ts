@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '@/core/state/state.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console, PhaseItem } from '@/core/ui/console.ts';
 
@@ -87,6 +88,7 @@ export async function systemReset(
 
   const state = loadState();
   const results: StepResult[] = [];
+  let cleanupFailure: { error: unknown } | undefined;
 
   try {
     const authResult = await purgeAuth(state, console);
@@ -119,19 +121,33 @@ export async function systemReset(
       const configResult = await clearConfig();
       results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
     }
-  } finally {
-    if (results.length > 0) {
-      console.phase(
-        'Reset',
-        results.map((r) => r.item),
-      );
+  } catch (error) {
+    cleanupFailure = { error };
+  }
 
-      applyCleanedState(state, mergeCleanedFields(results.map((r) => r.cleaned)));
-      clearLegacyState(state);
-      // Not tied to any step above — would otherwise survive reset indefinitely.
-      state.knownServerProjectMappings = [];
-      saveState(state);
+  if (results.length > 0) {
+    console.phase(
+      'Reset',
+      results.map((r) => r.item),
+    );
+
+    try {
+      updateState((latest) => {
+        applyCleanedState(latest, mergeCleanedFields(results.map((r) => r.cleaned)));
+        clearLegacyState(latest);
+        // Not tied to any step above — would otherwise survive reset indefinitely.
+        latest.knownServerProjectMappings = [];
+      });
+    } catch (error) {
+      throw new CommandFailedError(
+        `Reset removed files, but state could not be updated: ${String(error)}`,
+        { remediationHint: 'Run sonar system reset --force again to finish cleanup.' },
+      );
     }
+  }
+
+  if (cleanupFailure) {
+    throw cleanupFailure.error;
   }
 
   const hasWarnings = results.some((r) => r.item.status === 'warn');
