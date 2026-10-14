@@ -199,6 +199,7 @@ describe('integrate pi — MCP server configuration', () => {
       );
 
       const session = harness.runInteractive('integrate pi');
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
