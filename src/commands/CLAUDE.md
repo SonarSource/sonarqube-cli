@@ -2,6 +2,8 @@
 
 The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agent integrations that install them: `src/commands/integrate/CLAUDE.md` covers both halves and is the file to read before changing either.
 
+`sonar auth login` selects the browser sign-in page in `src/core/auth/token.ts`. SonarQube Cloud uses `/auth`. SonarQube Server uses `/auth` from full-year version 2026.2, while Community Build uses it from short-year version 26.4. Earlier or unknown versions use `/sonarlint/auth`.
+
 To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
 Please declare commands using the type defined in `src/core/commands/sonar-command.ts`.
 Lifecycle stages (`Stage`) live in `src/core/commands/stage.ts` and are re-exported from `sonar-command.ts`. Qualified invocation paths used in lifecycle warnings live in `src/core/commands/path.ts`.
