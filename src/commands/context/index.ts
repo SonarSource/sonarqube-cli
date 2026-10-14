@@ -26,7 +26,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken } from '@/core/host/keychain.ts';
+import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -123,10 +123,13 @@ async function resolveContextToken(
   try {
     token = await getToken(serverUrl, organization);
   } catch (err) {
-    // Treat an unavailable keychain as no stored token so the recorded-connection error below
-    // surfaces. Remember that it was unavailable, because it changes what the user should do.
+    if (!(err instanceof MissingKeychainError)) {
+      throw err;
+    }
+    // Treat a missing keychain as no stored token so the recorded-connection error below
+    // surfaces with guidance that does not require keychain access.
     keychainUnavailable = true;
-    logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
+    logger.debug(`Keychain lookup failed for ${serverUrl}: ${err.message}`);
   }
   if (token) {
     return token;
@@ -137,16 +140,15 @@ async function resolveContextToken(
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
-      // Two situations, two answers. With a working keychain, logging in is the fix. Without
-      // one, and a container never has one, `sonar auth login` stores what it obtains in that
-      // same keychain, so recommending it sends the user back to what just failed.
+      // With a working keychain, logging in is the fix. If libsecret cannot be loaded,
+      // `sonar auth login` cannot store its token in that keychain.
       //
       // Naming the variables is not enough either. This branch is mostly reached when they are
       // already set and simply point elsewhere, since environment credentials only apply when
       // the server and organization match the recorded connection. So the values are named too.
       remediationHint: keychainUnavailable
-        ? 'The system keychain is unavailable, so stored credentials cannot be read or written here. ' +
-          `Authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
+        ? 'The system keychain is unavailable because libsecret could not be loaded. Install or repair libsecret, or ' +
+          `authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
           organizationHint +
           '. ' +
           'Credentials pointing at a different server or organization are ignored, which is the ' +
