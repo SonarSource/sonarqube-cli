@@ -83,7 +83,6 @@ function makeDiscoveredProject(projectKey: string | undefined) {
     repoRoot: process.cwd(),
     projectRoot: process.cwd(),
     projectKey,
-    configSources: [],
   };
 }
 

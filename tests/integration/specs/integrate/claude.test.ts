@@ -141,9 +141,6 @@ describe('integrate claude', () => {
       expect(secretsHooksFeature).toMatchObject({
         scope: 'global',
         dependencies: [{ id: 'sonar-secrets' }],
-        attrs: {
-          projectKey: 'my-project',
-        },
       });
       expect(mcpFeature).toMatchObject({
         resources: [
@@ -735,37 +732,6 @@ describe('integrate claude — Vortex entitlement guard', () => {
           hookScriptName('posttoolusefailure'),
         ),
       ).toBe(false);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'records the project key on the declarative vortex feature after a fresh Vortex install',
-    async () => {
-      harness.state().withContextAugmentationBinaryInstalled();
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken('cloud-token')
-        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
-        .withVortexEntitlement('my-org', 'test-uuid-1234')
-        .withProject('my-project')
-        .start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'cloud-token', 'my-org');
-      harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
-
-      const result = await harness.run(`integrate claude --non-interactive`, {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
-      });
-
-      expect(result.exitCode).toBe(0);
-
-      const vortexFeature = findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID, 'global');
-      expect(vortexFeature).toBeDefined();
-      expect(vortexFeature?.attrs?.projectKey).toBe('my-project');
     },
     { timeout: 30000 },
   );
