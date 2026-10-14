@@ -41,6 +41,7 @@ import {
   getConfigSecret,
   getToken,
   MissingKeychainError,
+  normalizeServerUrl,
   saveConfigSecret,
   saveToken,
 } from '@/core/host/keychain.ts';
@@ -204,6 +205,17 @@ describe('generateKeychainAccount', () => {
 
   it('strips trailing slash via URL hostname extraction', () => {
     expect(generateKeychainAccount('https://sonar.example.com/')).toBe('sonar.example.com');
+  });
+});
+
+describe('normalizeServerUrl', () => {
+  it.each([
+    ['HTTPS://SONAR.EXAMPLE.COM:443/base/', 'https://sonar.example.com/base'],
+    ['https://sonar.example.com/base//', 'https://sonar.example.com/base'],
+    ['http://sonar.example.com:9000/', 'http://sonar.example.com:9000'],
+    ['not-a-valid-url', 'not-a-valid-url'],
+  ])('normalizes %s to %s', (serverUrl, expected) => {
+    expect(normalizeServerUrl(serverUrl)).toBe(expected);
   });
 });
 
