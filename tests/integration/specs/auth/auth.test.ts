@@ -1728,13 +1728,17 @@ describe('auth login — auth URL', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'uses /auth endpoint for SQS Community >= 26.2',
-    async () => {
+  it.each([
+    ['26.2', '/sonarlint/auth?ideName=sonarqube-cli&port='],
+    ['26.3', '/sonarlint/auth?ideName=sonarqube-cli&port='],
+    ['26.4', '/auth?product=cli&port='],
+  ])(
+    'uses the available sign-in page for Community Build %s',
+    async (version, path) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withVersion('26.2')
+        .withVersion(version)
         .start();
 
       const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
@@ -1742,8 +1746,7 @@ describe('auth login — auth URL', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('/auth?product=cli&port=');
-      expect(result.stdout).not.toContain('/sonarlint/auth');
+      expect(result.stdout).toContain(path);
     },
     { timeout: 15000 },
   );
@@ -1754,7 +1757,7 @@ describe('auth login — auth URL', () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withVersion('2025.1')
+        .withVersion('2026.1')
         .start();
 
       const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
@@ -1768,12 +1771,12 @@ describe('auth login — auth URL', () => {
   );
 
   it(
-    'uses legacy /sonarlint/auth endpoint for SQS Community < 26.2',
+    'uses legacy /sonarlint/auth endpoint for SQS Community < 26.4',
     async () => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('my-token')
-        .withVersion('25.1')
+        .withVersion('26.1')
         .start();
 
       const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {

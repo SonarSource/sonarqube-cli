@@ -57,13 +57,17 @@ describe('Auth Helper Functions', () => {
       expect(url).toBe(`${EXAMPLE_SERVER}/auth?product=cli&port=${TEST_PORT_A}`);
     });
 
-    it('should use /auth for SQS Community >= 26.2', () => {
-      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '26.2');
-      expect(url).toBe(`${EXAMPLE_SERVER}/auth?product=cli&port=${TEST_PORT_A}`);
+    it.each([
+      ['26.2', '/sonarlint/auth?ideName=sonarqube-cli'],
+      ['26.3', '/sonarlint/auth?ideName=sonarqube-cli'],
+      ['26.4', '/auth?product=cli'],
+    ])('should use the available sign-in page for Community Build %s', (version, path) => {
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, version);
+      expect(url).toBe(`${EXAMPLE_SERVER}${path}&port=${TEST_PORT_A}`);
     });
 
     it('should use /sonarlint/auth for SQS < 2026.2', () => {
-      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '2025.1');
+      const url = buildAuthURL(EXAMPLE_SERVER, TEST_PORT_A, '2026.1');
       expect(url).toBe(
         `${EXAMPLE_SERVER}/sonarlint/auth?ideName=sonarqube-cli&port=${TEST_PORT_A}`,
       );
