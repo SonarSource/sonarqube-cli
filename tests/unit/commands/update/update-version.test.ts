@@ -288,12 +288,22 @@ describe('updateStatus', () => {
 
 describe('updateVersion (no options)', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
 
   beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     fetchSpy = spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
     fetchSpy.mockRestore();
   });
 
@@ -312,8 +322,14 @@ describe('updateVersion (no options)', () => {
 
 describe('updateVersion --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
+  const originalLocalAppData = process.env.LOCALAPPDATA;
 
   beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.env.LOCALAPPDATA = String.raw`C:\Users\test\AppData\Local`;
+    process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     spawnMock.mockClear();
     spawnMock.mockImplementation((() =>
       createSpawnChild()) as unknown as typeof childProcess.spawn);
@@ -323,6 +339,17 @@ describe('updateVersion --force', () => {
   });
 
   afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+    }
     fetchSpy.mockRestore();
   });
 
@@ -401,6 +428,7 @@ describe('updateVersion --force', () => {
 
   it('confirms update launched in new terminal on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
+    process.execPath = String.raw`C:\Users\test\AppData\Local\sonarqube-cli\bin\sonar.exe`;
     await runForce('2.0.0', 'Write-Host hi\n');
 
     const messages = fake.calls.map((c) => c.args.join(' '));
@@ -418,6 +446,7 @@ describe('updateVersion --force', () => {
 
   it('throws when the Windows updater terminal cannot be launched', async () => {
     isWindowsMock.mockImplementation(() => true);
+    process.execPath = String.raw`C:\Users\test\AppData\Local\sonarqube-cli\bin\sonar.exe`;
     spawnMock.mockImplementation((() =>
       createSpawnChild('error', 'spawn cmd.exe ENOENT')) as unknown as typeof childProcess.spawn);
 
@@ -434,5 +463,65 @@ describe('updateVersion --force', () => {
     expect(messages.some((m) => m.includes('Starting update in a new terminal window...'))).toBe(
       false,
     );
+  });
+});
+
+describe('updateVersion installation guard', () => {
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
+  const originalLocalAppData = process.env.LOCALAPPDATA;
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.env.LOCALAPPDATA = String.raw`C:\Users\test\AppData\Local`;
+    isWindowsMock.mockImplementation(() => false);
+    fetchSpy = spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+    }
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    { path: '/opt/company/sonar', windows: false, options: {} },
+    { path: '/opt/company/sonar', windows: false, options: { force: true } },
+    { path: String.raw`C:\Program Files\Company\sonar.exe`, windows: true, options: {} },
+    {
+      path: String.raw`C:\Program Files\Company\sonar.exe`,
+      windows: true,
+      options: { force: true },
+    },
+  ])('rejects an external installation at $path', async ({ path, windows, options }) => {
+    process.execPath = path;
+    isWindowsMock.mockImplementation(() => windows);
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion(options, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown installer destination', async () => {
+    process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
+    delete process.env.HOME;
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
