@@ -38,6 +38,7 @@ import {
   type InstalledIntegrationDependency,
   type InstalledTool,
 } from './state.ts';
+import { mergeStateValue } from './state-merge.ts';
 
 function getCliDir(): string {
   return resolveCliDir();
@@ -149,6 +150,95 @@ export const STATE_READ_MAX_ATTEMPTS = 5;
 const STATE_READ_RETRY_DELAY_MS = 100;
 
 let cachedReadFailure: { fingerprint: string; error: CommandFailedError } | null = null;
+const stateBaselines = new WeakMap<CliState, CliState>();
+const STATE_LOCK_WAIT_MS = 10_000;
+const STATE_LOCK_RETRY_MS = 25;
+const STATE_FILE_MODE = 0o600;
+const ORPHANED_LOCK_AGE_MS = 5_000;
+
+function rememberBaseline(state: CliState): CliState {
+  stateBaselines.set(state, structuredClone(state));
+  return state;
+}
+
+function lockOwnerIsGone(lockDir: string): boolean {
+  let pid: number;
+  try {
+    pid = Number(fs.readFileSync(join(lockDir, 'pid'), 'utf-8'));
+  } catch {
+    try {
+      return Date.now() - fs.statSync(lockDir).mtimeMs > ORPHANED_LOCK_AGE_MS;
+    } catch {
+      return false;
+    }
+  }
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ESRCH';
+  }
+}
+
+function recoverStaleStateLock(lockDir: string): boolean {
+  const recoveryDir = `${lockDir}.recovery`;
+  try {
+    fs.mkdirSync(recoveryDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+
+  try {
+    if (!fs.existsSync(lockDir) || !lockOwnerIsGone(lockDir)) return false;
+    const staleDir = `${lockDir}.${randomUUID()}.stale`;
+    fs.renameSync(lockDir, staleDir);
+    fs.rmSync(staleDir, { recursive: true, force: true });
+    return true;
+  } finally {
+    fs.rmSync(recoveryDir, { recursive: true, force: true });
+  }
+}
+
+function withStateLock<T>(action: () => T): T {
+  const lockDir = `${getStateFile()}.lock`;
+  const deadline = Date.now() + STATE_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockDir);
+      break;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (recoverStaleStateLock(lockDir)) continue;
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for the state file lock');
+      Bun.sleepSync(STATE_LOCK_RETRY_MS);
+    }
+  }
+
+  try {
+    fs.writeFileSync(join(lockDir, 'pid'), String(process.pid), { flag: 'wx' });
+    return action();
+  } finally {
+    fs.rmSync(lockDir, { recursive: true, force: true });
+  }
+}
+
+function replaceStateFile(state: CliState): void {
+  const tempFile = `${getStateFile()}.${randomUUID()}.tmp`;
+  try {
+    const fd = fs.openSync(tempFile, 'wx', STATE_FILE_MODE);
+    try {
+      fs.writeFileSync(fd, JSON.stringify(state, null, 2), 'utf-8');
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tempFile, getStateFile());
+  } finally {
+    fs.rmSync(tempFile, { force: true });
+  }
+}
 
 function stateFileFingerprint(): string | null {
   try {
@@ -167,7 +257,7 @@ export function loadState(cliVersion?: string): CliState {
   ensureStateDir();
 
   if (!fs.existsSync(getStateFile())) {
-    return getDefaultState(cliVersion ?? VERSION);
+    return rememberBaseline(getDefaultState(cliVersion ?? VERSION));
   }
 
   if (cachedReadFailure !== null && cachedReadFailure.fingerprint === stateFileFingerprint()) {
@@ -180,7 +270,7 @@ export function loadState(cliVersion?: string): CliState {
       const content = fs.readFileSync(getStateFile(), 'utf-8');
       const raw = JSON.parse(content) as Record<string, unknown>;
       cachedReadFailure = null;
-      return migrateState(raw);
+      return rememberBaseline(migrateState(raw));
     } catch (error) {
       lastError = error;
       if (attempt + 1 < STATE_READ_MAX_ATTEMPTS) {
@@ -216,21 +306,43 @@ export function tryLoadState(cliVersion?: string): CliState | null {
  */
 export function saveState(state: CliState): void {
   ensureStateDir();
-
-  state.lastUpdated = new Date().toISOString();
-
   try {
-    fs.writeFileSync(getStateFile(), JSON.stringify(state, null, 2), 'utf-8');
+    withStateLock(() => {
+      const existing = fs.existsSync(getStateFile());
+      const baseline = stateBaselines.get(state);
+      if (existing && baseline === undefined) {
+        throw new Error('State was not loaded from the current state file');
+      }
+      const current = existing ? loadState() : undefined;
+      const merged = (
+        current && baseline ? mergeStateValue(baseline, state, current) : state
+      ) as CliState;
+      merged.lastUpdated = new Date().toISOString();
+      replaceStateFile(merged);
+      state.lastUpdated = merged.lastUpdated;
+      rememberBaseline(state);
+    });
   } catch (error) {
     throw new Error(`Failed to save state to ${getStateFile()}: ${String(error)}`);
   }
 }
 
-/**
- * Save state without overwriting `dependencies.installed`: binary installers record there
- * themselves, writing straight to disk after the caller loaded its snapshot. Callers that
- * install binaries between their `loadState()` and their save must use this.
- */
+export function updateState<T>(update: (state: CliState) => T): T {
+  ensureStateDir();
+  try {
+    return withStateLock(() => {
+      const state = loadState();
+      const result = update(state);
+      state.lastUpdated = new Date().toISOString();
+      replaceStateFile(state);
+      return result;
+    });
+  } catch (error) {
+    throw new Error(`Failed to update state in ${getStateFile()}: ${String(error)}`);
+  }
+}
+
+/** Save state while preserving dependency updates written after the caller loaded its snapshot. */
 export function saveStateKeepingInstalledDependencies(state: CliState): void {
   try {
     state.dependencies.installed = loadState().dependencies.installed;
