@@ -40,6 +40,7 @@ import {
   generateKeychainAccount,
   getConfigSecret,
   getToken,
+  MissingKeychainError,
   saveConfigSecret,
   saveToken,
 } from '@/core/host/keychain.ts';
@@ -363,7 +364,7 @@ describe('OS keychain unavailable (Bun.secrets backend)', () => {
     clearSecretCache();
   });
 
-  it('surfaces a remediation hint mentioning env var auth when the OS keychain is unreachable', async () => {
+  it('gives repair advice when the OS keychain refuses access', async () => {
     const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(new Error('D-Bus not available'));
 
     try {
@@ -378,11 +379,40 @@ describe('OS keychain unavailable (Bun.secrets backend)', () => {
       const commandFailedError = caught as CommandFailedError;
       expect(commandFailedError.message).toContain('Failed to access the system keychain.');
       expect(commandFailedError.message).toContain('D-Bus not available');
-      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_TOKEN');
-      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_SERVER');
-      expect(commandFailedError.remediationHint).toContain('SONARQUBE_CLI_ORG');
+      expect(commandFailedError).not.toBeInstanceOf(MissingKeychainError);
+      expect(commandFailedError.remediationHint).toContain('unlocked');
+      expect(commandFailedError.remediationHint).not.toContain('SONARQUBE_CLI_TOKEN');
     } finally {
       getSpy.mockRestore();
     }
   });
+
+  if (process.platform === 'linux') {
+    it('gives environment authentication advice when libsecret is absent', async () => {
+      const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(
+        new Error('libsecret not available'),
+      );
+
+      try {
+        let caught: unknown;
+        try {
+          await getToken('https://sonarcloud.io', 'my-org');
+        } catch (err) {
+          caught = err;
+        }
+
+        expect(caught).toBeInstanceOf(MissingKeychainError);
+        const missingKeychainError = caught as MissingKeychainError;
+        expect(missingKeychainError.message).toStartWith(
+          'No system keychain is available on this machine (libsecret is not installed).',
+        );
+        expect(missingKeychainError.remediationHint).toContain('SONARQUBE_CLI_TOKEN');
+        expect(missingKeychainError.remediationHint).toContain('SONARQUBE_CLI_SERVER');
+        expect(missingKeychainError.remediationHint).toContain('SONARQUBE_CLI_ORG');
+        expect(missingKeychainError.remediationHint).not.toContain('unlocked');
+      } finally {
+        getSpy.mockRestore();
+      }
+    });
+  }
 });
