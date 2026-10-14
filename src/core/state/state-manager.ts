@@ -26,6 +26,7 @@
 import crypto from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { normalizeServerUrl } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -40,7 +41,7 @@ import { type AuthConnection, type CliState, type CloudRegion } from './state.ts
 
 export function authMatchesConnection(auth: ResolvedAuth, conn: AuthConnection): boolean {
   return (
-    auth.serverUrl === conn.serverUrl &&
+    normalizeServerUrl(auth.serverUrl) === normalizeServerUrl(conn.serverUrl) &&
     (auth.connectionType !== 'cloud' || auth.orgKey === conn.orgKey)
   );
 }

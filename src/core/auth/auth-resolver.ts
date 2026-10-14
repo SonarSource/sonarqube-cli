@@ -138,7 +138,7 @@ export class AuthResolver {
   private async resolveOnce(options: ResolveAuthOptions): Promise<ResolvedAuth | null> {
     const envAuth = this.resolveFromEnv(options);
     if (envAuth) {
-      await recordConnectionFromAuth(envAuth, { envOnly: true }).catch((err: unknown) => {
+      await recordConnectionFromAuth(envAuth).catch((err: unknown) => {
         logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
       });
       return envAuth;
@@ -202,7 +202,7 @@ export class AuthResolver {
     // instead of a misleading "not authenticated".
     const state = loadState();
     const active = getActiveConnection(state);
-    if (!active) {
+    if (!active || active.envOnly) {
       return null;
     }
     const connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
