@@ -517,6 +517,96 @@ describe('updateVersion installation guard', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it.each(
+    ['/opt/homebrew', '/usr/local', '/home/linuxbrew/.linuxbrew', '/custom/brew'].flatMap(
+      (prefix) =>
+        [false, true].map((force) => ({
+          path: `${prefix}/Caskroom/sonarqube-cli/1.11.0/sonarqube-cli-1.11.0-macos-arm64.bin`,
+          force,
+        })),
+    ),
+  )('rejects Homebrew at $path with force=$force', async ({ path, force }) => {
+    process.execPath = path;
+    spawnMock.mockClear();
+    spawnSyncMock.mockClear();
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({ force }, updateCtx())).rejects.toThrow(
+      expect.objectContaining({
+        message: 'Run brew upgrade sonarqube-cli to update it.',
+        remediationHint: expect.stringContaining('side effects on your machine'),
+      }),
+    );
+    expect(
+      fake.calls.some(
+        (call) =>
+          call.method === 'warn' && call.args.includes('This CLI was installed with Homebrew.'),
+      ),
+    ).toBe(true);
+    expect(fake.calls.some((call) => call.method === 'success')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/opt/homebrew/bin/sonar',
+    '/opt/homebrew/Cellar/sonarqube-cli/1.11.0/bin/sonar',
+    '/opt/homebrew/Caskroom/another-tool/1.11.0/sonar',
+    '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0',
+    '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0/nested/sonar',
+  ])('keeps generic guidance for an unverified Homebrew path %s', async (path) => {
+    process.execPath = path;
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')('detects Homebrew through its bin symlink', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'sonar-homebrew-'));
+    try {
+      const binDir = join(tempRoot, 'Caskroom', 'sonarqube-cli', '1.11.0');
+      mkdirSync(binDir, { recursive: true });
+      const binaryPath = join(binDir, 'sonarqube-cli-1.11.0-macos-arm64.bin');
+      writeFileSync(binaryPath, '');
+      mkdirSync(join(tempRoot, 'bin'));
+      const linkPath = join(tempRoot, 'bin', 'sonar');
+      symlinkSync(binaryPath, linkPath);
+      process.execPath = linkPath;
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+        'Run brew upgrade sonarqube-cli to update it.',
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['update status', 'system status'])('recommends Homebrew for %s', async (command) => {
+    process.execPath = '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0/cli.bin';
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0'));
+    const ctx = updateCtx();
+    if (command === 'update status') {
+      await updateStatus({}, ctx);
+    } else {
+      const { systemStatus } = await import('@/commands/system/status.ts');
+      const connectionSpy = spyOn(ctx, 'resolveConnection').mockResolvedValue(null);
+      try {
+        await systemStatus({}, ctx);
+      } finally {
+        connectionSpy.mockRestore();
+      }
+    }
+    expect(fake.calls.map((call) => call.args.join(' ')).join('\n')).toContain(
+      'Run brew upgrade sonarqube-cli to update it.',
+    );
+  });
+
   it('rejects an unknown installer destination', async () => {
     process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     delete process.env.HOME;
