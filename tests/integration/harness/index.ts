@@ -141,6 +141,19 @@ export class TestHarness {
     return this;
   }
 
+  installerManagedBinaryPath(): string {
+    const installDir = IS_WINDOWS
+      ? this.userHome.dir('AppData', 'Local', 'sonarqube-cli', 'bin')
+      : this.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+    mkdirSync(installDir.path, { recursive: true });
+    const binaryPath = installDir.file(IS_WINDOWS ? 'sonar.exe' : 'sonar').path;
+    copyFileSync(getCliBinaryPath(), binaryPath);
+    if (!IS_WINDOWS) {
+      chmodSync(binaryPath, 0o755);
+    }
+    return binaryPath;
+  }
+
   private pathWith(extraDirs: string[], basePath: string | undefined): string {
     const pathSeparator = IS_WINDOWS ? ';' : ':';
     return [...extraDirs, basePath].filter(Boolean).join(pathSeparator);
