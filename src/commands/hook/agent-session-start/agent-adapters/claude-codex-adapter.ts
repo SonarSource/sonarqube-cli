@@ -22,7 +22,7 @@ import type { SessionStartAgentAdapter } from '../types.ts';
 
 interface ClaudeCodexSessionStartPayload {
   session_id: string;
-  cwd: string;
+  cwd?: string;
   hook_event_name: string;
 }
 
