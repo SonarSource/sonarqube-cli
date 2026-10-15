@@ -49,3 +49,5 @@ When an update is available, `update status` and `sonar system status` recommend
 The location check resolves symlinks on the running executable and the installer directory, including symlinked parent directories. It does not follow a symlink at the expected executable leaf, so a link from the installer path to an externally managed binary stays ineligible.
 
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
+
+`sonar update` detects Homebrew installations from the canonical executable path in the `sonar` or `sonarqube-cli` Cellar. It warns and exits with code 1 before checking or installing updates, including with `--force`. It recommends `brew upgrade <formula>` using the detected Cellar formula name, with `sonarqube-cli` as the fallback, and explains package manager side effects. It does not run Homebrew. Read-only update status and standalone updates keep their existing behavior.
