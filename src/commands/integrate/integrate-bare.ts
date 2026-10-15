@@ -38,6 +38,7 @@ import { integrateCopilot } from './copilot';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration.ts';
+import { integrateDevin } from './devin';
 import { devinIntegration } from './devin/declaration.ts';
 import { integrateGit } from './git';
 import {
@@ -66,6 +67,7 @@ const TOOLS: { label: string; handler: Handler }[] = [
   { label: cursorIntegration.displayName, handler: integrateCursor },
   { label: antigravityIntegration.displayName, handler: integrateAntigravity },
   { label: openCodeIntegration.displayName, handler: integrateOpenCode },
+  { label: devinIntegration.displayName, handler: integrateDevin },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
   { label: 'Git', handler: integrateGit },
@@ -84,9 +86,6 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [HUSKY_INTEGRATION_ID]: 'Git',
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
 };
-
-/** Agents whose integration is not released yet: kept out of the detected list and the warnings. */
-const UNRELEASED_AGENT_IDS: ReadonlySet<DetectedAgentId> = new Set(['devin']);
 
 /** Agent pairs known to fight over hook execution when both are integrated on the same machine. */
 const CONFLICTING_AGENT_PAIRS: readonly (readonly [DetectedAgentId, DetectedAgentId])[] = [
@@ -131,7 +130,7 @@ export async function integrateBare(
     );
   }
 
-  const detected = detectInstalledAgents().filter((id) => !UNRELEASED_AGENT_IDS.has(id));
+  const detected = detectInstalledAgents();
   if (detected.length > 0) {
     console.info(`Detected agents on your machine: ${detected.map(agentDisplayName).join(', ')}`);
   }

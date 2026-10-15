@@ -51,15 +51,13 @@ describe('integrate devin', () => {
   });
 
   it(
-    'is hidden from help output but still runs when typed explicitly',
+    'is listed in the integrate help and runs when typed explicitly',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.withAuth(server.baseUrl(), 'tok');
 
-      const rootHelp = await harness.run('');
       const integrateHelp = await harness.run('integrate --help');
-      expect(rootHelp.stdout).not.toMatch(/devin/i);
-      expect(integrateHelp.stdout + integrateHelp.stderr).not.toMatch(/devin/i);
+      expect(integrateHelp.stdout + integrateHelp.stderr).toMatch(/devin/i);
 
       const result = await harness.run('integrate devin --non-interactive');
       expect(result.exitCode).not.toBe(0);
@@ -99,7 +97,7 @@ describe('integrate devin', () => {
   });
 
   it(
-    'is not offered in the bare integrate agent picker',
+    'is offered in the bare integrate agent picker',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -109,13 +107,13 @@ describe('integrate devin', () => {
       session.keyCtrlC();
       const result = await session.waitFinish();
 
-      expect(result.stdout + result.stderr).not.toContain('Devin');
+      expect(result.stdout + result.stderr).toContain('Devin');
     },
     { timeout: 15000 },
   );
 
   it(
-    'does not list Devin as detected while its integration is unreleased',
+    'lists Devin among the detected agents',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -123,17 +121,15 @@ describe('integrate devin', () => {
       writeDevinConfig(harness);
 
       const session = harness.runInteractive('integrate');
-      await session.waitText('Detected agents on your machine: Codex');
+      await session.waitText('Detected agents on your machine: Codex, Devin');
       session.keyCtrlC();
-      const result = await session.waitFinish();
-
-      expect(result.stdout + result.stderr).not.toContain('Devin');
+      await session.waitFinish();
     },
     { timeout: 15000 },
   );
 
   it(
-    'does not warn about a Claude and Devin conflict while Devin is unreleased',
+    'warns about a hook conflict when Claude and Devin are both detected',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -145,7 +141,9 @@ describe('integrate devin', () => {
       session.keyCtrlC();
       const result = await session.waitFinish();
 
-      expect(result.stdout + result.stderr).not.toContain('Devin');
+      expect(result.stdout + result.stderr).toContain(
+        "Both Claude Code and Devin were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
+      );
     },
     { timeout: 15000 },
   );

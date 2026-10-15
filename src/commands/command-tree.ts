@@ -614,9 +614,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
 
   integrateCommand
-    // Stays hidden until epic CLI-1250 (Devin integration) is complete.
-    .command('devin', { hidden: true })
-    .description('Setup SonarQube integration for Devin.')
+    .command('devin')
+    .description(
+      'Setup SonarQube integration for Devin. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
+    )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
       new SonarOption(
