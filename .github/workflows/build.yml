@@ -35,11 +35,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+      - uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: 2026.9.14
 
-      - uses: SonarSource/ci-github-actions/get-build-number@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # 2.2.0
+      - uses: SonarSource/ci-github-actions/get-build-number@62463382a24f2004ffa20adbe9985f6459e031e6 # 2.3.0
         id: get-build-number
 
       - name: Update package.json version with build number
@@ -114,7 +114,7 @@ jobs:
           done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
 
       - name: Upload linux-x86-64 binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-linux-x86-64
           if-no-files-found: error
@@ -123,7 +123,7 @@ jobs:
             dist/*-linux-x86-64.bin.asc
 
       - name: Upload linux-arm64 binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-linux-arm64
           if-no-files-found: error
@@ -132,7 +132,7 @@ jobs:
             dist/*-linux-arm64.bin.asc
 
       - name: Upload macos-arm64 binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-macos-arm64
           if-no-files-found: error
@@ -141,7 +141,7 @@ jobs:
             dist/*-macos-arm64.bin.asc
 
       - name: Upload windows-x86-64 binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-windows-x86-64
           if-no-files-found: error
@@ -161,7 +161,7 @@ jobs:
         uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
 
       - name: Download macos binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: binary-macos-arm64
           path: dist/
@@ -241,7 +241,7 @@ jobs:
           done < <(find dist -maxdepth 1 -type f -name '*-macos-arm64.bin' -print0)
 
       - name: Upload signed macOS binaries
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-macos-signed
           path: |
@@ -285,7 +285,7 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Download all binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: binary-*
           merge-multiple: true
@@ -293,7 +293,7 @@ jobs:
 
       - name: Download signed macOS binaries
         if: needs.sign-macos.result == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: binaries-macos-signed
           path: dist/
@@ -394,7 +394,7 @@ jobs:
         run: bun build-scripts/report-coverage.ts
 
       - name: Upload unit coverage (Linux)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unit-coverage
           path: tests/coverage/reports/unit/
@@ -503,13 +503,13 @@ jobs:
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Download unit coverage
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unit-coverage
           path: tests/coverage/reports/unit/
 
       - name: Download integration coverage
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: integration-coverage
           path: tests/coverage/reports/integration/
@@ -537,7 +537,7 @@ jobs:
       - integration-and-e2e-windows
     if: ${{ !cancelled() && !failure() && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || startsWith(github.ref_name, 'dogfood-on-')) }}
     steps:
-      - uses: SonarSource/ci-github-actions/promote@c3a85ac3a2f67f86966e2fb1fdf9a7c1bdc997dc # 2.2.0
+      - uses: SonarSource/ci-github-actions/promote@62463382a24f2004ffa20adbe9985f6459e031e6 # 2.3.0
         env:
           PROJECT_VERSION: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           ARTIFACTORY_DEPLOY_REPO: sonarsource-public-qa
