@@ -131,6 +131,7 @@ import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
 import { opencodePostToolUse } from './hook/opencode-post-tool-use.ts';
 import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
 import { piChatMessage } from './hook/pi-chat-message.ts';
+import { piPostToolUse } from './hook/pi-post-tool-use.ts';
 import { piPreToolUse } from './hook/pi-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
@@ -1078,6 +1079,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('pi-chat-message')
     .description('Pi message_end handler: mask secrets in a user message before it is sent')
     .anonymousAction(handleHookInvocation(piChatMessage));
+
+  hookCommand
+    .command('pi-post-tool-use')
+    .description('Pi tool_result handler: run Vortex analysis after agent edits or writes a file')
+    .anonymousAction(handleHookInvocation(piPostToolUse));
 
   hookCommand
     .command('claude-post-tool-use')

@@ -45,6 +45,7 @@ export const SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND = 'codex-post-tool-use';
 export const SQAA_OPENCODE_POST_TOOL_USE_CALLER_COMMAND = 'opencode-post-tool-use';
 
 export const SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND = 'devin-post-tool-use';
+export const SQAA_PI_POST_TOOL_USE_CALLER_COMMAND = 'pi-post-tool-use';
 
 export type SqaaTelemetryCallerCommand =
   | typeof SQAA_ANALYZE_CALLER_COMMAND
@@ -53,7 +54,8 @@ export type SqaaTelemetryCallerCommand =
   | typeof SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND
   | typeof SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND
   | typeof SQAA_OPENCODE_POST_TOOL_USE_CALLER_COMMAND
-  | typeof SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND;
+  | typeof SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND
+  | typeof SQAA_PI_POST_TOOL_USE_CALLER_COMMAND;
 
 /**
  * PostToolUse SQAA hooks are non-blocking (process always exits 0). Telemetry should
