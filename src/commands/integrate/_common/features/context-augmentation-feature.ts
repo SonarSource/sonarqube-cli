@@ -54,6 +54,7 @@ export interface ContextAugmentationFeatureOptions {
   agent: SessionStartAgent;
   scriptPath: (context: IntegrationContext) => string;
   hookConfigResource: ResourceDeclaration;
+  additionalResources?: ResourceDeclaration[];
 }
 
 export function createContextAugmentationSubfeature<TOptions extends IntegrateAgentOptions>(
@@ -65,7 +66,11 @@ export function createContextAugmentationSubfeature<TOptions extends IntegrateAg
     required: true,
     isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
     dependencies: [contextAugmentationBinaryDependency],
-    resources: [createHookScriptResource(options), options.hookConfigResource],
+    resources: [
+      createHookScriptResource(options),
+      options.hookConfigResource,
+      ...(options.additionalResources ?? []),
+    ],
     operations: [createToolIntegrationOperation()],
   };
 }
