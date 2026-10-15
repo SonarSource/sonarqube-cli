@@ -27,8 +27,6 @@ const DEVIN_DISPLAY_NAME = 'Devin';
 
 export type DevinIntegrationOptions = IntegrateAgentOptions;
 
-// No features yet: until the epic CLI-1250 features land, `sonar integrate devin` fails with
-// "No feature selected for Devin" because the framework rejects an integration with no feature.
 export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> = {
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,

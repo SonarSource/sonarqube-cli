@@ -68,6 +68,35 @@ describe('integrate devin', () => {
     { timeout: 30000 },
   );
 
+  it(
+    'aborts with "Token is invalid" when the stored token is rejected',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('valid-token').start();
+      harness.withAuth(server.baseUrl(), 'wrong-token');
+
+      const result = await harness.run('integrate devin --non-interactive');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Token is invalid');
+      expect(result.stdout + result.stderr).not.toContain('No feature selected for Devin');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'aborts with "Server is unreachable" when the server cannot be reached',
+    async () => {
+      harness.withAuth('http://127.0.0.1:19999', 'tok');
+
+      const result = await harness.run('integrate devin --non-interactive', { timeoutMs: 10000 });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Server is unreachable');
+      expect(result.stdout + result.stderr).not.toContain('No feature selected for Devin');
+    },
+    { timeout: 15000 },
+  );
+
   describe('-g/--global (deprecated no-op)', () => {
     it(
       'documents --global as deprecated in --help',

@@ -51,7 +51,6 @@ export function agentDisplayName(agentId: DetectedAgentId): string {
   return AGENT_LABELS[agentId];
 }
 
-/** Where to look: the home directory plus the environment and platform that locate per-OS config dirs. */
 interface MarkerLocation {
   home: string;
   env: NodeJS.ProcessEnv;
