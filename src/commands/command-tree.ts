@@ -619,7 +619,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('pi', { hidden: true })
     .description(
-      'Setup SonarQube integration for Pi. This will install secrets scanning hooks and configure the SonarQube MCP Server.',
+      'Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(

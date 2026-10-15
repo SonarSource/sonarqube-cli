@@ -23,17 +23,21 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import {
   PI_INTEGRATION_ID,
   piIntegration,
   resolvePiMcpConfigPath,
   resolvePiSecretsExtensionPath,
+  resolvePiSqaaExtensionPath,
 } from '@/commands/integrate/pi/declaration.ts';
 import {
   PI_EXTENSION_MANAGED_MARKER,
   PI_SECRETS_EXTENSION_CONTENT,
 } from '@/commands/integrate/pi/secrets-extension-content.ts';
+import { PI_SQAA_EXTENSION_CONTENT } from '@/commands/integrate/pi/sqaa-extension-content.ts';
 import type { IntegrationContext } from '@/core/framework/features';
+import { isFeatureContainer } from '@/core/framework/features/types.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -59,6 +63,20 @@ describe('resolvePiSecretsExtensionPath', () => {
   it('writes to <project>/.pi/extensions for the project scope', () => {
     expect(resolvePiSecretsExtensionPath(fakeContext('project', '/project/root'))).toBe(
       join('/project/root', '.pi', 'extensions', 'sonar-secrets.ts'),
+    );
+  });
+});
+
+describe('resolvePiSqaaExtensionPath', () => {
+  it('writes to ~/.pi/agent/extensions for the global scope', () => {
+    expect(resolvePiSqaaExtensionPath(fakeContext('global', '/home/jonathan'))).toBe(
+      join('/home/jonathan', '.pi', 'agent', 'extensions', 'sonar-sqaa.ts'),
+    );
+  });
+
+  it('writes to <project>/.pi/extensions for the project scope', () => {
+    expect(resolvePiSqaaExtensionPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'extensions', 'sonar-sqaa.ts'),
     );
   });
 });
@@ -93,6 +111,24 @@ describe('piIntegration', () => {
     expect(feature?.resources).toHaveLength(1);
   });
 
+  it('declares the shared Vortex container with the SQAA extension as its only subfeature', () => {
+    const feature = piIntegration.features.find((candidate) => candidate.id === VORTEX_FEATURE_ID);
+    if (!feature || !isFeatureContainer(feature)) {
+      throw new Error('Vortex container is not declared');
+    }
+
+    expect(feature.subfeatures.map((subfeature) => subfeature.id)).toEqual(['sonar-sqaa-hook']);
+    const [sqaaHook] = feature.subfeatures;
+    expect(sqaaHook.dependencies).toBeUndefined();
+    expect(sqaaHook.resources).toHaveLength(1);
+  });
+
+  it('has no legacy CAG skill cleanup, since Pi never shipped one', () => {
+    const feature = piIntegration.features.find((candidate) => candidate.id === VORTEX_FEATURE_ID);
+
+    expect(feature?.legacyCleanups).toEqual([]);
+  });
+
   it('declares the mcp-server feature with a single MCP configuration resource', () => {
     const feature = piIntegration.features.find((candidate) => candidate.id === 'mcp-server');
 
@@ -122,5 +158,16 @@ describe('PI_SECRETS_EXTENSION_CONTENT', () => {
   it('is valid, parseable TypeScript', () => {
     const transpiler = new Bun.Transpiler({ loader: 'ts' });
     expect(() => transpiler.transformSync(PI_SECRETS_EXTENSION_CONTENT)).not.toThrow();
+  });
+});
+
+describe('PI_SQAA_EXTENSION_CONTENT', () => {
+  it('carries the managed marker so the file can be removed safely', () => {
+    expect(PI_SQAA_EXTENSION_CONTENT).toContain(PI_EXTENSION_MANAGED_MARKER);
+  });
+
+  it('is valid, parseable TypeScript', () => {
+    const transpiler = new Bun.Transpiler({ loader: 'ts' });
+    expect(() => transpiler.transformSync(PI_SQAA_EXTENSION_CONTENT)).not.toThrow();
   });
 });
