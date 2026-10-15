@@ -35,6 +35,7 @@ import {
 import { CONFIG_KEY_NAMES, type ConfigKey } from '@/core/config/config-schema.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
+import { parseManagedMessageOption } from '@/core/host/managed-installation.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
@@ -975,6 +976,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Do nothing except restoring permissions when a binary is already installed',
     )
     .option('--skip-standalone-links', 'Do not replace per-user standalone installs with symlinks')
+    .addOption(
+      new SonarOption(
+        '--managed-message <text>',
+        'Text that `sonar update` shows on this installation instead of updating it (default: contact your administrator)',
+      ).argParser(parseManagedMessageOption),
+    )
     .anonymousAction((ctx, options: MdmInstallOptions) => mdmInstall(options, ctx));
 
   mdm

@@ -33,6 +33,10 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { isWindows } from '@/core/host/environment/platform-detector.ts';
 import { verifyInstallation } from '@/core/host/install/install-utils.ts';
+import {
+  removeManagedInstallationMarker,
+  writeManagedInstallationMarker,
+} from '@/core/host/managed-installation.ts';
 import { EXECUTABLE_MODE, removeBinary, replaceBinary } from '@/core/host/self-replace.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 import { stripBuildNumber } from '@/core/version.ts';
@@ -56,6 +60,7 @@ import {
 export interface MdmInstallOptions {
   skipIfPresent?: boolean;
   skipStandaloneLinks?: boolean;
+  managedMessage?: string;
 }
 
 export interface MdmUpdateOptions {
@@ -230,6 +235,7 @@ export async function mdmInstall(
     await linkStandaloneInstalls(env, ctx);
   }
   await verifyInstallation(env.binaryPath);
+  writeManagedInstallationMarker(env.binaryPath, options.managedMessage);
 
   const version = await readVersionOutput(env.binaryPath);
   console.success(`SonarQube CLI ${version ?? ''} installed at ${env.binaryPath}`);
@@ -276,6 +282,7 @@ export async function mdmRemove(
 ): Promise<void> {
   const { console } = ctx;
   const installDirectory = dirname(env.binaryPath);
+  removeManagedInstallationMarker(env.binaryPath);
   await removeBinary(
     env.binaryPath,
     isWindows() ? [installDirectory, dirname(installDirectory)] : [],

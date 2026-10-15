@@ -2,6 +2,7 @@
 # Installs the CLI system-wide and replaces per-user standalone installs with symlinks to it.
 # SONARQUBE_CLI_APPROVED_VERSION -- optional JumpCloud variable; pins the install version instead of using stable.version.
 # SONARQUBE_CLI_ARTIFACT_BASE_URL -- optional JumpCloud variable; overrides the download source.
+# SONARQUBE_CLI_MANAGED_MESSAGE -- optional JumpCloud variable; text `sonar update` shows on this machine instead of updating the CLI.
 # Runs `sonar mdm <action>`; when the installed CLI predates `sonar mdm` (or is missing), a verified
 # copy of the stable release is downloaded and used to run the action instead.
 set -euo pipefail
@@ -15,6 +16,8 @@ APPROVED_VERSION={{SONARQUBE_CLI_APPROVED_VERSION}}
 [[ -z "$APPROVED_VERSION" || "$APPROVED_VERSION" =~ ^[0-9][0-9.]*$ ]] || { echo "Error: SONARQUBE_CLI_APPROVED_VERSION has an invalid format: $APPROVED_VERSION" >&2; exit 1; }
 ARTIFACT_BASE_URL_OVERRIDE={{SONARQUBE_CLI_ARTIFACT_BASE_URL}}
 [[ "$ARTIFACT_BASE_URL_OVERRIDE" == \{\{*\}\} ]] && ARTIFACT_BASE_URL_OVERRIDE=""
+MANAGED_MESSAGE={{SONARQUBE_CLI_MANAGED_MESSAGE}}
+[[ "$MANAGED_MESSAGE" == \{\{*\}\} ]] && MANAGED_MESSAGE=""
 ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL_OVERRIDE:-$DEFAULT_ARTIFACT_BASE_URL}"
 ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL%/}"
 URL_CHARS="[A-Za-z0-9._~:/?#@!&'()*+,;=%-]+"
@@ -97,4 +100,5 @@ version="${APPROVED_VERSION:-$(resolve_stable_version)}"
 echo "Target version: $version"
 download_runner "$version"
 install_args=(--approved-version "$version" --artifact-base-url "$ARTIFACT_BASE_URL")
+[[ -n "$MANAGED_MESSAGE" ]] && install_args+=(--managed-message "$MANAGED_MESSAGE")
 run_mdm_action install "${install_args[@]}"

@@ -18,9 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
+
+import { managedInstallationMarkerPath } from '@/core/host/managed-installation.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
 import type { FakeBinariesServer } from '../../harness/fake-binaries-server.js';
@@ -80,6 +82,20 @@ describe('mdm install bootstrap script', () => {
     expect(result.stdout).toContain('Target version: 8.8.8');
     expect(requestedPaths().some((path) => path.endsWith('stable.version'))).toBe(false);
     expect(isRealCli(sandbox.binaryPath)).toBe(true);
+  });
+
+  it('passes the managed message variable to mdm install', async () => {
+    cdn.publishCliArtifact(RUNNER_VERSION, runnerBytes);
+
+    const result = await sandbox.runBootstrap({
+      baseUrl: cdn.cliArtifactBaseUrl(),
+      managedMessage: 'Updates are rolled out by IT.',
+    });
+
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(readFileSync(managedInstallationMarkerPath(sandbox.binaryPath), 'utf8').trim()).toBe(
+      'Updates are rolled out by IT.',
+    );
   });
 
   it('falls back to stable.version when the approved-version variable is empty', async () => {

@@ -21,6 +21,7 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
+import { readManagedInstallationMessage } from '@/core/host/managed-installation.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
@@ -79,6 +80,11 @@ export async function updateVersion(
     // Deprecated flag: delegate to the same logic as the `update status` subcommand.
     await updateStatus({}, ctx);
     return;
+  }
+
+  const managedMessage = readManagedInstallationMessage();
+  if (managedMessage !== null) {
+    throw new CommandFailedError(managedMessage);
   }
 
   console.info('Checking for updates...');

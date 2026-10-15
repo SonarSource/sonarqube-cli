@@ -2,6 +2,7 @@
 # Installs the CLI system-wide and replaces per-user standalone installs with symlinks to it.
 # SONARQUBE_CLI_APPROVED_VERSION -- optional JumpCloud variable; pins the install version instead of using stable.version.
 # SONARQUBE_CLI_ARTIFACT_BASE_URL -- optional JumpCloud variable; overrides the download source.
+# SONARQUBE_CLI_MANAGED_MESSAGE -- optional JumpCloud variable; text `sonar update` shows on this machine instead of updating the CLI.
 # Runs `sonar mdm <action>`; when the installed CLI predates `sonar mdm` (or is missing), a verified
 # copy of the stable release is downloaded and used to run the action instead.
 $ErrorActionPreference = 'Stop'
@@ -13,6 +14,8 @@ $ApprovedVersion = {{SONARQUBE_CLI_APPROVED_VERSION}}
 if ($ApprovedVersion -isnot [string]) { $ApprovedVersion = $null }
 $ArtifactBaseUrlOverride = {{SONARQUBE_CLI_ARTIFACT_BASE_URL}}
 if ($ArtifactBaseUrlOverride -isnot [string]) { $ArtifactBaseUrlOverride = $null }
+$ManagedMessage = {{SONARQUBE_CLI_MANAGED_MESSAGE}}
+if ($ManagedMessage -isnot [string]) { $ManagedMessage = $null }
 if ($ApprovedVersion -and $ApprovedVersion -notmatch '^[0-9][0-9.]*$') { Write-Error "SONARQUBE_CLI_APPROVED_VERSION has an invalid format: $ApprovedVersion"; exit 1 }
 
 $MdmBinary = 'C:\Program Files\sonarqube-cli\bin\sonar.exe'
@@ -71,6 +74,7 @@ Write-Host "Target version: $version"
 $runner = Get-Runner $version
 $script:TempRunner = $runner
 $mdmArgs = @('install', '--approved-version', $version, '--artifact-base-url', $ArtifactBaseUrl)
+if ($ManagedMessage) { $mdmArgs += @('--managed-message', $ManagedMessage) }
 
 try {
     & $runner mdm @mdmArgs

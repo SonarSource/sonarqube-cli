@@ -34,6 +34,7 @@ import { basename, delimiter, dirname, join } from 'node:path';
 
 import { standaloneBinaryPath } from '@/commands/mdm/mdm-environment.ts';
 import { ENV_MDM_BINARY_PATH, ENV_MDM_USER_HOMES } from '@/core/config-constants.ts';
+import { MANAGED_INSTALLATION_MARKER_NAME } from '@/core/host/managed-installation.ts';
 
 import type { TestHarness } from '../../harness';
 import { IS_WINDOWS } from '../../harness';
@@ -131,6 +132,7 @@ export async function eventually(check: () => boolean, timeoutMs = SELF_REPLACE_
 
 export interface BootstrapOptions {
   approvedVersion?: string;
+  managedMessage?: string;
   baseUrl: string;
 }
 
@@ -219,7 +221,7 @@ export class MdmSandbox {
       return [];
     }
     return readdirSync(dirname(this.binaryPath)).filter(
-      (name) => name !== basename(this.binaryPath),
+      (name) => name !== basename(this.binaryPath) && name !== MANAGED_INSTALLATION_MARKER_NAME,
     );
   }
 
@@ -260,13 +262,16 @@ export class MdmSandbox {
 
 export function renderBootstrap(
   script: string,
-  { approvedVersion, baseUrl }: BootstrapOptions,
+  { approvedVersion, baseUrl, managedMessage }: BootstrapOptions,
 ): string {
   const quote = (value: string) => (script.endsWith('.ps1') ? `'${value}'` : `"${value}"`);
   let content = readFileSync(join(BOOTSTRAP_DIR, script), 'utf8');
   content = content.replace('{{SONARQUBE_CLI_ARTIFACT_BASE_URL}}', quote(baseUrl));
   if (approvedVersion !== undefined) {
     content = content.replace('{{SONARQUBE_CLI_APPROVED_VERSION}}', quote(approvedVersion));
+  }
+  if (managedMessage !== undefined) {
+    content = content.replace('{{SONARQUBE_CLI_MANAGED_MESSAGE}}', quote(managedMessage));
   }
   return content;
 }
