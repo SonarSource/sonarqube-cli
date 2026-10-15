@@ -36,6 +36,14 @@ function canonicalPath(path: string, windows: boolean): string {
   return windows ? win32.normalize(resolvedPath).toLowerCase() : normalize(resolvedPath);
 }
 
+export function isHomebrewInstallation(): boolean {
+  if (isWindows()) {
+    return false;
+  }
+  const executablePath = canonicalPath(process.execPath, false);
+  return /\/Cellar\/(?:sonar|sonarqube-cli)\/[^/]+\/bin\/sonar$/.test(executablePath);
+}
+
 export function isStandaloneInstallerLocation(): boolean {
   const windows = isWindows();
   let expectedPath: string | undefined;
