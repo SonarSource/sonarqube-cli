@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// PostToolUse handler for Devin — runs per-file SQAA after Devin's lowercase `edit`/`write` tools.
-
 import { SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
