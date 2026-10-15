@@ -798,5 +798,160 @@ describe('integrate devin', () => {
         { timeout: 30000 },
       );
     });
+
+    describe('subagent announcement', () => {
+      const USER_PRE_TOOL_HOOK = {
+        matcher: '^exec$',
+        hooks: [{ type: 'command', command: './scripts/pre-exec.sh', timeout: 5 }],
+      };
+
+      function subagentScriptRelPath(): string {
+        return (
+          devinConfigRelPath(
+            harness,
+            join('hooks', 'sonar-vortex', 'build-scripts', 'subagent-start-vortex'),
+          ) + SCRIPT_EXT
+        );
+      }
+
+      function subagentEntries(config: DevinConfigFile) {
+        return (config.hooks?.PreToolUse ?? []).filter((entry) =>
+          entry.hooks?.some((hook) => hook.command?.includes('sonar-vortex')),
+        );
+      }
+
+      it(
+        'adds the run_subagent PreToolUse hook next to the secrets read hook and the user hooks',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const configPath = devinConfigRelPath(harness, 'config.json');
+          harness.userHome.writeFile(
+            configPath,
+            JSON.stringify({ theme: 'dark', hooks: { PreToolUse: [USER_PRE_TOOL_HOOK] } }),
+          );
+
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          const config = readConfig(configPath);
+          expect(config.theme).toBe('dark');
+          const preToolUse = config.hooks?.PreToolUse ?? [];
+          expect(preToolUse[0]).toEqual(USER_PRE_TOOL_HOOK);
+          const secrets = preToolUse.filter(isSecretsEntry);
+          expect(secrets).toHaveLength(1);
+          expect(secrets[0].matcher).toBe('^read$');
+          const entries = subagentEntries(config);
+          expect(entries).toHaveLength(1);
+          expect(entries[0].matcher).toBe('^run_subagent$');
+          const [hook] = entries[0].hooks ?? [];
+          expect(hook.type).toBe('command');
+          expect(hook.timeout).toBe(60);
+          expect(hookScriptPath(hook.command ?? '')).toBe(
+            join(harness.userHome.path, subagentScriptRelPath()).replaceAll('\\', '/'),
+          );
+          expect(preToolUse).toHaveLength(3);
+          expect(sessionStartEntries(config)).toHaveLength(1);
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'writes the hook script that runs sonar hook devin-subagent-start',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const script = harness.userHome.file(subagentScriptRelPath());
+          expect(script.exists()).toBe(false);
+
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          expect(script.exists()).toBe(true);
+          expect(script.isExecutable).toBe(true);
+          expect(script.asText()).toContain('sonar hook devin-subagent-start');
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'is idempotent: re-running leaves one run_subagent entry and one secrets read entry',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const configPath = devinConfigRelPath(harness, 'config.json');
+
+          await harness.run('integrate devin --non-interactive', { extraEnv });
+          expect(subagentEntries(readConfig(configPath))).toHaveLength(1);
+          const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+          expect(result.exitCode).toBe(0);
+          const config = readConfig(configPath);
+          expect(subagentEntries(config)).toHaveLength(1);
+          expect(config.hooks?.PreToolUse?.filter(isSecretsEntry)).toHaveLength(1);
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'installs no run_subagent hook or script when the organization has no Vortex',
+        async () => {
+          const server = await harness.newFakeServer().withAuthToken('tok').start();
+          harness.withAuth(server.baseUrl(), 'tok');
+
+          const result = await harness.run('integrate devin --non-interactive');
+
+          expect(result.exitCode).toBe(0);
+          const config = readConfig(devinConfigRelPath(harness, 'config.json'));
+          expect(config.hooks?.PreToolUse?.some(isSecretsEntry)).toBe(true);
+          expect(subagentEntries(config)).toHaveLength(0);
+          expect(harness.userHome.exists(subagentScriptRelPath())).toBe(false);
+        },
+        { timeout: 30000 },
+      );
+
+      it(
+        'removes only the run_subagent hook on entitlement loss, keeping the secrets and user hooks',
+        async () => {
+          const { extraEnv } = await startEntitledCloudServer();
+          const configPath = devinConfigRelPath(harness, 'config.json');
+          harness.userHome.writeFile(
+            configPath,
+            JSON.stringify({ hooks: { PreToolUse: [USER_PRE_TOOL_HOOK] } }),
+          );
+          await harness.run('integrate devin --non-interactive', { extraEnv });
+          expect(subagentEntries(readConfig(configPath))).toHaveLength(1);
+          expect(harness.userHome.exists(subagentScriptRelPath())).toBe(true);
+
+          const installedState = harness.stateJsonFile.asJson();
+          const lostServer = await harness
+            .newFakeServer()
+            .withAuthToken('cloud-token')
+            .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+            .withVortexEntitlement(TEST_ORG, 'test-uuid-1234', {
+              allowed: false,
+              hasEntitlement: false,
+            })
+            .start();
+          const activeConnection = installedState.auth.connections.find(
+            (connection: { id: string }) =>
+              connection.id === installedState.auth.activeConnectionId,
+          );
+          activeConnection.serverUrl = lostServer.baseUrl();
+          harness.state().withRawState(JSON.stringify(installedState));
+          const result = await harness.run('integrate devin --non-interactive', {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: lostServer.baseUrl(),
+              SONARQUBE_CLI_SONARCLOUD_API_URL: lostServer.baseUrl(),
+            },
+          });
+
+          expect(result.exitCode).toBe(0);
+          const config = readConfig(configPath);
+          expect(subagentEntries(config)).toHaveLength(0);
+          expect(config.hooks?.PreToolUse?.[0]).toEqual(USER_PRE_TOOL_HOOK);
+          expect(config.hooks?.PreToolUse?.filter(isSecretsEntry)).toHaveLength(1);
+          expect(harness.userHome.exists(subagentScriptRelPath())).toBe(false);
+        },
+        { timeout: 30000 },
+      );
+    });
   });
 });
