@@ -19,7 +19,7 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { join, normalize, win32 } from 'node:path';
+import { join, normalize, sep, win32 } from 'node:path';
 
 import { isWindows } from '@/core/host/environment/platform-detector.ts';
 
@@ -34,6 +34,19 @@ function canonicalPath(path: string, windows: boolean): string {
     resolvedPath = path;
   }
   return windows ? win32.normalize(resolvedPath).toLowerCase() : normalize(resolvedPath);
+}
+
+function homebrewFormulaFromPath(): string | undefined {
+  const executablePath = canonicalPath(process.execPath, false).split(sep).join('/');
+  return /\/Cellar\/(sonar|sonarqube-cli)\/[^/]+\/bin\/sonar$/.exec(executablePath)?.[1];
+}
+
+export function isHomebrewInstallation(): boolean {
+  return !isWindows() && homebrewFormulaFromPath() !== undefined;
+}
+
+export function getHomebrewFormula(): string {
+  return homebrewFormulaFromPath() ?? 'sonarqube-cli';
 }
 
 export function isStandaloneInstallerLocation(): boolean {

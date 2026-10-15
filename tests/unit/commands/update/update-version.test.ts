@@ -517,6 +517,85 @@ describe('updateVersion installation guard', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it.each(
+    [
+      { path: '/opt/homebrew/Cellar/sonarqube-cli/1.11.0/bin/sonar', formula: 'sonarqube-cli' },
+      { path: '/usr/local/Cellar/sonarqube-cli/1.11.0/bin/sonar', formula: 'sonarqube-cli' },
+      {
+        path: '/home/linuxbrew/.linuxbrew/Cellar/sonarqube-cli/1.11.0/bin/sonar',
+        formula: 'sonarqube-cli',
+      },
+      { path: '/custom/brew/Cellar/sonar/1.11.0/bin/sonar', formula: 'sonar' },
+    ].flatMap(({ path, formula }) => [false, true].map((force) => ({ path, formula, force }))),
+  )('rejects Homebrew at $path with force=$force', async ({ path, formula, force }) => {
+    process.execPath = path;
+    spawnMock.mockClear();
+    spawnSyncMock.mockClear();
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({ force }, updateCtx())).rejects.toThrow(
+      expect.objectContaining({
+        message: `Run brew upgrade ${formula} to update it.`,
+        remediationHint: expect.stringContaining('side effects on your machine'),
+      }),
+    );
+    expect(
+      fake.calls.some(
+        (call) =>
+          call.method === 'warn' && call.args.includes('This CLI was installed with Homebrew.'),
+      ),
+    ).toBe(true);
+    expect(fake.calls.some((call) => call.method === 'success')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/opt/homebrew/bin/sonar',
+    '/opt/homebrew/Cellar/another-tool/1.11.0/bin/sonar',
+    '/opt/homebrew/Cellar/sonarqube-cli/1.11.0/bin/sonar-other',
+  ])('keeps generic guidance for an unverified Homebrew path %s', async (path) => {
+    process.execPath = path;
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')('detects Homebrew through its bin symlink', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'sonar-homebrew-'));
+    try {
+      const binDir = join(tempRoot, 'Cellar', 'sonarqube-cli', '1.11.0', 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const binaryPath = join(binDir, 'sonar');
+      writeFileSync(binaryPath, '');
+      const linkPath = join(tempRoot, 'sonar');
+      symlinkSync(binaryPath, linkPath);
+      process.execPath = linkPath;
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+        'Run brew upgrade sonarqube-cli to update it.',
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['/tmp/sonar', '/opt/homebrew/Cellar/sonarqube-cli/bin/sonar'])(
+    'defaults to the documented formula when the path cannot be parsed: %s',
+    async (path) => {
+      process.execPath = path;
+      const { getHomebrewFormula } = await import('@/core/update/installation-location.ts');
+
+      expect(getHomebrewFormula()).toBe('sonarqube-cli');
+    },
+  );
+
   it('rejects an unknown installer destination', async () => {
     process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     delete process.env.HOME;
