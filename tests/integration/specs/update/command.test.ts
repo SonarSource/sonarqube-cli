@@ -20,7 +20,8 @@
 
 // Integration tests for the `sonar update` command and the deprecated `sonar self-update` alias
 
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -115,6 +116,38 @@ describe('update command', () => {
     );
     expect(result.stdout + result.stderr).toContain(
       'Update it through your organization, package manager, or the method used to install it.',
+    );
+  });
+
+  describe.skipIf(process.platform === 'win32')('Homebrew installation', () => {
+    it.each(['update', 'update --force', 'self-update'])(
+      '%s rejects updating the Homebrew binary',
+      async (command) => {
+        const binDir = join(harness.userHome.path, 'Caskroom', 'sonarqube-cli', CLI_VERSION);
+        mkdirSync(binDir, { recursive: true });
+        const binaryPath = join(binDir, `sonarqube-cli-${CLI_VERSION}-macos-arm64.bin`);
+        copyFileSync(getCliBinaryPath(), binaryPath);
+        chmodSync(binaryPath, 0o755);
+
+        const linkDir = join(harness.userHome.path, 'bin');
+        mkdirSync(linkDir);
+        const linkPath = join(linkDir, 'sonar');
+        symlinkSync(binaryPath, linkPath);
+
+        const result = await harness.run(command, { binaryPath: linkPath });
+        const output = result.stdout + result.stderr;
+
+        expect(result.exitCode).toBe(1);
+        expect(output).toContain('Run `brew upgrade --cask sonarqube-cli` to update it.');
+        expect(output).toContain(
+          'CLI was installed via Homebrew and cannot be updated by `sonar update`.',
+        );
+        expect(output).toContain(
+          "`sonar update` doesn't run Homebrew automatically so you stay in full control of your system updates.",
+        );
+        expect(output).not.toContain('Checking for updates');
+        expect(output).not.toContain('Updated to');
+      },
     );
   });
 
