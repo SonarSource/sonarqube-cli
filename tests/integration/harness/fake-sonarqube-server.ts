@@ -1513,7 +1513,7 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               paging: { pageIndex: page, pageSize, total: allProjects.length },
-              components: allProjects,
+              components: allProjects.slice((page - 1) * pageSize, page * pageSize),
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
