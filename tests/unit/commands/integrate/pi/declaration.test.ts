@@ -28,6 +28,7 @@ import {
   piIntegration,
   resolvePiMcpConfigPath,
   resolvePiSecretsExtensionPath,
+  resolvePiSqaaExtensionPath,
 } from '@/commands/integrate/pi/declaration.ts';
 import {
   PI_EXTENSION_MANAGED_MARKER,
@@ -59,6 +60,14 @@ describe('resolvePiSecretsExtensionPath', () => {
   it('writes to <project>/.pi/extensions for the project scope', () => {
     expect(resolvePiSecretsExtensionPath(fakeContext('project', '/project/root'))).toBe(
       join('/project/root', '.pi', 'extensions', 'sonar-secrets.ts'),
+    );
+  });
+});
+
+describe('resolvePiSqaaExtensionPath', () => {
+  it('writes to <project>/.pi/extensions for the project scope', () => {
+    expect(resolvePiSqaaExtensionPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'extensions', 'sonar-sqaa.ts'),
     );
   });
 });
