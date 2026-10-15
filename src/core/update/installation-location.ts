@@ -19,9 +19,11 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { join, normalize, win32 } from 'node:path';
+import { join, normalize, posix, sep, win32 } from 'node:path';
 
 import { isWindows } from '@/core/host/environment/platform-detector.ts';
+
+export const HOMEBREW_UPDATE_GUIDANCE = 'Run `brew upgrade --cask sonarqube-cli` to update it.';
 
 export const EXTERNAL_UPDATE_GUIDANCE =
   'Update it through your organization, package manager, or the method used to install it.';
@@ -33,7 +35,18 @@ function canonicalPath(path: string, windows: boolean): string {
   } catch {
     resolvedPath = path;
   }
-  return windows ? win32.normalize(resolvedPath).toLowerCase() : normalize(resolvedPath);
+  return windows
+    ? win32.normalize(resolvedPath).toLowerCase()
+    : normalize(resolvedPath).split(sep).join('/');
+}
+
+export function isHomebrewInstallation(): boolean {
+  if (isWindows()) return false;
+  return canonicalPath(process.execPath, false).includes('/Caskroom/sonarqube-cli/');
+}
+
+export function externalUpdateGuidance(): string {
+  return isHomebrewInstallation() ? HOMEBREW_UPDATE_GUIDANCE : EXTERNAL_UPDATE_GUIDANCE;
 }
 
 export function isStandaloneInstallerLocation(): boolean {
@@ -53,7 +66,7 @@ export function isStandaloneInstallerLocation(): boolean {
   } else {
     const installRoot = process.env.HOME;
     expectedPath = installRoot
-      ? join(
+      ? posix.join(
           canonicalPath(join(installRoot, '.local', 'share', 'sonarqube-cli', 'bin'), false),
           'sonar',
         )
