@@ -18,19 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { PI_EXTENSION_HELPERS } from './extension-helpers.ts';
+
 export const PI_EXTENSION_MANAGED_MARKER = 'Managed by `sonar integrate pi`';
 
 export const PI_SECRETS_EXTENSION_CONTENT = String.raw`// ${PI_EXTENSION_MANAGED_MARKER} — do not edit by hand.
-import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-
-const HOOK_TIMEOUT_MS = 60000;
-const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+${PI_EXTENSION_HELPERS}
 const NARROW_NO_BREAK_SPACE = '\u202F';
 const CURLY_APOSTROPHE = '\u2019';
 const NO_BYPASS_SENTENCE =
@@ -55,42 +51,17 @@ function isValidDecision(value: { block?: unknown; redactedText?: unknown } | nu
   );
 }
 
-function runHook<T>(subcommand: string, payload: unknown): Promise<T> {
-  return new Promise((resolvePromise, reject) => {
-    const child = execFile('sonar', ['hook', subcommand], { timeout: HOOK_TIMEOUT_MS }, (error, stdout) => {
-      if (error) return reject(error);
-      try {
-        const decision = JSON.parse(stdout);
-        if (!isValidDecision(decision)) {
-          return reject(new Error('unexpected answer from sonar hook ' + subcommand));
-        }
-        resolvePromise(decision as T);
-      } catch (parseError) {
-        reject(parseError);
-      }
-    });
-    child.stdin?.end(JSON.stringify(payload));
-  });
+async function runDecisionHook<T>(subcommand: string, payload: unknown): Promise<T> {
+  const answer = await runHook<{ block?: unknown; redactedText?: unknown } | null>(subcommand, payload);
+  if (!isValidDecision(answer)) throw new Error('unexpected answer from sonar hook ' + subcommand);
+  return answer as T;
 }
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function resolveToCwd(path: string, cwd: string): string {
-  let normalized = path.replace(UNICODE_SPACES, ' ');
-  if (normalized.startsWith('@')) normalized = normalized.slice(1);
-  if (normalized === '~') {
-    normalized = homedir();
-  } else if (normalized.startsWith('~/')) {
-    normalized = join(homedir(), normalized.slice(2));
-  } else if (/^file:\/\//.test(normalized)) {
-    normalized = fileURLToPath(normalized);
-  }
-  return resolve(cwd, normalized);
-}
-
-function resolveLikePi(path: string, cwd: string): string {
+function resolveReadPath(path: string, cwd: string): string {
   const resolved = resolveToCwd(path, cwd);
   const nfd = resolved.normalize('NFD');
   const candidates = [
@@ -110,7 +81,7 @@ function blockedPlaceholder(reason: string): string {
 async function protectText(text: string, sessionID: string): Promise<string> {
   if (!text) return text;
   try {
-    const decision = await runHook<ChatMessageDecision>('pi-chat-message', { text, sessionID });
+    const decision = await runDecisionHook<ChatMessageDecision>('pi-chat-message', { text, sessionID });
     if (decision.block) return blockedPlaceholder(decision.reason ?? 'Sonar blocked this message.');
     return decision.redactedText ?? text;
   } catch (error) {
@@ -124,9 +95,9 @@ export default function (pi: ExtensionAPI) {
     const path = (event.input as { path?: string }).path;
     if (!path) return;
     try {
-      const decision = await runHook<PreToolUseDecision>('pi-pre-tool-use', {
+      const decision = await runDecisionHook<PreToolUseDecision>('pi-pre-tool-use', {
         tool: 'read',
-        filePath: resolveLikePi(path, ctx.cwd),
+        filePath: resolveReadPath(path, ctx.cwd),
         sessionID: ctx.sessionManager.getSessionId(),
       });
       if (decision.block) {
