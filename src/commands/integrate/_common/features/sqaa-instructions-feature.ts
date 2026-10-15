@@ -36,34 +36,30 @@ const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
 
 export const SQAA_INSTRUCTIONS_BODY = `# Vortex analysis protocol
 
-Vortex analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
+These instructions were installed by \`sonar integrate\` at the user's request. Vortex analysis checks the final change set for issues before you reply.
 
-**Trigger:** the moment before you send your final reply for the turn.
+At the end of a turn that changed file contents in the workspace (create, edit, patch, or format), run Vortex analysis before your final reply or handoff. Analyze all files changed in the turn in one command.
 
-When the trigger fires, you **MUST** run Vortex analysis on the full set of files you modified this turn — **one command, not a per-file loop**.
-
-**Preferred:** pass every path you modified this turn in a single invocation (repeat \`--file\` for each path). Use paths **relative to the project root** (e.g. \`src/foo.ts\`). For end-of-turn analysis, **always** pass \`--depth DEEP\` — even when you changed only one file — so cross-file findings are included.
+Pass each modified path with \`--file\`, relative to the project root (for example, \`src/foo.ts\`). Use \`--depth DEEP\` even for one file so the analysis includes cross-file findings.
 
 \`\`\`bash
 sonar analyze agentic --depth DEEP --file <path/to/file1> --file <path/to/file2>
 \`\`\`
 
-**Fallback:** when you cannot reliably list every modified path (e.g. you did not track them, or git state is the only source of truth), use the git change set with DEEP analysis:
+If you cannot reliably list every modified path, analyze the git change set with DEEP depth:
 
 \`\`\`bash
 sonar analyze agentic --depth DEEP
 \`\`\`
 
-Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always use \`--depth DEEP\` (including a single \`--file\`). Use \`--depth STANDARD\` only for optional faster passes — never for the mandatory end-of-turn run.
+Per-edit hooks use faster STANDARD analysis. The end-of-turn check uses DEEP depth, including when only one file changed.
 
-Non-negotiable rules:
+After the analysis:
 
-1. **Overrides every rule below:** if Vortex analysis reports that no project is configured, discard the output, do not run it again this session, and say **nothing** about it — no skip notice, no mention of Vortex or SonarQube. Reply as if this protocol did not exist. The only exception: once the user asks for Vortex analysis or configures a project, run it again and report any error.
-2. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
-3. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-4. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-5. If Vortex analysis is skipped for any other reason (e.g. no SonarQube Cloud connection), state the skip reason to the user once and continue — do not retry.
-6. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
+1. If no project is configured, stop analysis attempts for this session. A routine skip needs no mention in the final reply unless the user asks about Vortex analysis. If the user asks for Vortex analysis or configures a project, run the analysis again and report any error.
+2. If analysis finds issues on lines you changed this turn, fix them and re-run the same scope. Continue until no touched-line findings remain. Leave findings on untouched lines to their existing owners unless the user asks you to address them.
+3. If analysis is skipped for another reason (for example, no SonarQube Cloud connection), state the reason once in your reply and continue without retrying this session.
+4. Include any remaining Vortex findings verbatim in your reply.
 `;
 
 /** End-of-turn SQAA instructions, written by each agent into its own rules format. */
