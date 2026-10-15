@@ -42,9 +42,6 @@ import type { Dir } from '../../harness/dir';
 import type { FakeBinariesServer } from '../../harness/fake-binaries-server.js';
 import type { CliResult } from '../../harness/types.js';
 
-export const SKIP_ON_WINDOWS = IS_WINDOWS;
-export const SKIP_ON_UNIX = !IS_WINDOWS;
-
 const RESOURCES_DIR = join(import.meta.dir, '..', '..', 'resources');
 const EXECUTABLE_SUFFIX = IS_WINDOWS ? '.exe' : '';
 const BOOTSTRAP_DIR = join(
@@ -56,12 +53,17 @@ const BOOTSTRAP_DIR = join(
   'mdm-scripts',
   'direct-sonar-cdn',
 );
-const SYSTEM_ROOT = process.env.SystemRoot ?? String.raw`C:\Windows`;
-const WINDOWS_SYSTEM_PATH = [
-  join(SYSTEM_ROOT, 'System32'),
-  join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0'),
-].join(delimiter);
-const UNIX_SYSTEM_PATH = ['/usr/bin', '/bin'].join(delimiter);
+export const SYSTEM_ROOT = process.env.SystemRoot ?? String.raw`C:\Windows`;
+export const POWERSHELL = join(
+  SYSTEM_ROOT,
+  'System32',
+  'WindowsPowerShell',
+  'v1.0',
+  'powershell.exe',
+);
+export const SYSTEM_PATH = IS_WINDOWS
+  ? [join(SYSTEM_ROOT, 'System32'), dirname(POWERSHELL)].join(delimiter)
+  : ['/usr/bin', '/bin'].join(delimiter);
 const SELF_REPLACE_SETTLE_MS = 30_000;
 const POLL_INTERVAL_MS = 100;
 
@@ -150,11 +152,10 @@ export class MdmSandbox {
   }
 
   env(): Record<string, string> {
-    const systemPath = IS_WINDOWS ? WINDOWS_SYSTEM_PATH : UNIX_SYSTEM_PATH;
     return {
       [ENV_MDM_BINARY_PATH]: this.binaryPath,
       [ENV_MDM_USER_HOMES]: this.homes.join(delimiter),
-      PATH: [this.pathDir, systemPath].join(delimiter),
+      PATH: [this.pathDir, SYSTEM_PATH].join(delimiter),
       ...(IS_WINDOWS
         ? { PATHEXT: '.EXE', TEMP: this.tempDir, TMP: this.tempDir }
         : { TMPDIR: this.tempDir }),
@@ -232,7 +233,7 @@ export class MdmSandbox {
     this.seedFile(renderedPath, renderBootstrap(script, options));
     const command = IS_WINDOWS
       ? [
-          join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+          POWERSHELL,
           '-NoProfile',
           '-NonInteractive',
           '-ExecutionPolicy',

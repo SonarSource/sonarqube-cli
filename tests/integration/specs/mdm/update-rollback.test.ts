@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
 import type { FakeBinariesServer } from '../../harness/fake-binaries-server.js';
 import {
   eventually,
@@ -32,7 +32,6 @@ import {
   MISMATCHED_CHECKSUM,
   modeOf,
   NOT_AN_EXECUTABLE,
-  SKIP_ON_WINDOWS,
   stubBytes,
 } from './mdm-sandbox';
 
@@ -79,7 +78,7 @@ describe('mdm update and rollback', () => {
       expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
     });
 
-    it.skipIf(SKIP_ON_WINDOWS)('installs with mode 755', async () => {
+    it.skipIf(IS_WINDOWS)('installs with mode 755', async () => {
       publish('2.0.0');
 
       await sandbox.runWithCdn('update', cdn);
@@ -120,7 +119,7 @@ describe('mdm update and rollback', () => {
       expect(artifactRequests()).toEqual([]);
     });
 
-    it.skipIf(SKIP_ON_WINDOWS)('restores mode 755 on an up-to-date binary', async () => {
+    it.skipIf(IS_WINDOWS)('restores mode 755 on an up-to-date binary', async () => {
       sandbox.seedSystemBinary('2.0.0', 0o700);
 
       const result = await sandbox.runWithCdn('update', cdn);
@@ -149,7 +148,7 @@ describe('mdm update and rollback', () => {
       expect(cdn.getRecordedRequests().some((r) => r.path.endsWith('stable.version'))).toBe(false);
     });
 
-    it.skipIf(SKIP_ON_WINDOWS)(
+    it.skipIf(IS_WINDOWS)(
       'falls back to the .exe artifact published before the .bin convention',
       async () => {
         cdn.publishCliArtifact('2.0.0', stubBytes('2.0.0'), { suffix: '.exe' });

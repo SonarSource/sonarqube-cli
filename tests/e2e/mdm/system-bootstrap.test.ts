@@ -25,13 +25,13 @@ import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
+import { IS_WINDOWS } from '../../integration/harness';
 import type { FakeBinariesServer } from '../../integration/harness/fake-binaries-server.js';
 import { FakeBinariesServerBuilder } from '../../integration/harness/fake-binaries-server.js';
 import { cliBytes, isRealCli } from '../../integration/specs/mdm/mdm-sandbox';
 import {
   CAN_RUN_SYSTEM_E2E,
   forceRemove,
-  IS_WINDOWS,
   isolatedEnv,
   makeIsolatedHome,
   removeSystemInstall,

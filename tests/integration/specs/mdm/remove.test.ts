@@ -24,14 +24,7 @@ import { delimiter, dirname } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
-import {
-  eventually,
-  isStub,
-  isSymlink,
-  MdmSandbox,
-  SKIP_ON_WINDOWS,
-  stubPath,
-} from './mdm-sandbox';
+import { eventually, isStub, isSymlink, MdmSandbox, stubPath } from './mdm-sandbox';
 
 setDefaultTimeout(60_000);
 
@@ -64,7 +57,7 @@ describe('mdm remove', () => {
     expect(existsSync(second)).toBe(false);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)('removes standalone symlinks and dangling symlinks', async () => {
+  it.skipIf(IS_WINDOWS)('removes standalone symlinks and dangling symlinks', async () => {
     sandbox.seedSystemBinary('1.0.0');
     const linked = sandbox.seedStandaloneSymlink(0);
     const dangling = sandbox.seedStandaloneSymlink(1, `${sandbox.root.path}/missing-target`);
@@ -129,10 +122,19 @@ describe('mdm remove', () => {
     expect(result.exitCode).toBe(0);
     await eventually(() => !existsSync(sandbox.binaryPath));
     await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
-    if (IS_WINDOWS) {
-      await eventually(() => !existsSync(dirname(sandbox.binaryPath)));
-    }
   });
+
+  it.skipIf(!IS_WINDOWS)(
+    'removes the install directory after the running CLI has deleted itself',
+    async () => {
+      await sandbox.run('install');
+
+      const result = await sandbox.run('remove', { binaryPath: sandbox.binaryPath });
+
+      expect(result.exitCode).toBe(0);
+      await eventually(() => !existsSync(dirname(sandbox.binaryPath)));
+    },
+  );
 
   it('keeps unrelated files in the user homes', async () => {
     sandbox.seedSystemBinary('1.0.0');

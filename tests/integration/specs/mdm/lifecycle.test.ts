@@ -22,16 +22,8 @@ import { existsSync, readlinkSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
-import {
-  isRealCli,
-  isStub,
-  isSymlink,
-  MdmSandbox,
-  SKIP_ON_UNIX,
-  SKIP_ON_WINDOWS,
-  stubBytes,
-} from './mdm-sandbox';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { isRealCli, isStub, isSymlink, MdmSandbox, stubBytes } from './mdm-sandbox';
 
 setDefaultTimeout(60_000);
 
@@ -56,20 +48,20 @@ describe('mdm lifecycle', () => {
 
     expect((await sandbox.run('install')).exitCode).toBe(0);
     expect(isRealCli(sandbox.binaryPath)).toBe(true);
-    if (!SKIP_ON_WINDOWS) {
+    if (!IS_WINDOWS) {
       expect(readlinkSync(standalone)).toBe(sandbox.binaryPath);
     }
 
     expect((await sandbox.runWithCdn('update', cdn)).exitCode).toBe(0);
     expect(isStub(sandbox.binaryPath, '2.0.0')).toBe(true);
-    if (!SKIP_ON_WINDOWS) {
+    if (!IS_WINDOWS) {
       expect(isStub(standalone, '2.0.0')).toBe(true);
       expect(isSymlink(standalone)).toBe(true);
     }
 
     expect((await sandbox.runWithCdn('rollback --version 1.0.0', cdn)).exitCode).toBe(0);
     expect(isStub(sandbox.binaryPath, '1.0.0')).toBe(true);
-    if (!SKIP_ON_WINDOWS) {
+    if (!IS_WINDOWS) {
       expect(isStub(standalone, '1.0.0')).toBe(true);
     }
 
@@ -79,7 +71,7 @@ describe('mdm lifecycle', () => {
     expect(existsSync(standalone)).toBe(false);
   });
 
-  it.skipIf(SKIP_ON_UNIX)(
+  it.skipIf(!IS_WINDOWS)(
     'leaves the standalone install alone until remove on Windows',
     async () => {
       const standalone = sandbox.seedStandalone(0);

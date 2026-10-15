@@ -37,6 +37,7 @@ import {
 
 import { standaloneBinaryPath } from '@/commands/mdm/mdm-environment.ts';
 
+import { IS_WINDOWS } from '../../integration/harness';
 import { getCliBinaryPath } from '../../integration/harness/cli-runner.js';
 import type { FakeBinariesServer } from '../../integration/harness/fake-binaries-server.js';
 import { FakeBinariesServerBuilder } from '../../integration/harness/fake-binaries-server.js';
@@ -51,7 +52,6 @@ import {
   CAN_RUN_SYSTEM_E2E,
   directoryEntries,
   forceRemove,
-  IS_WINDOWS,
   isolatedEnv,
   machinePath,
   makeIsolatedHome,

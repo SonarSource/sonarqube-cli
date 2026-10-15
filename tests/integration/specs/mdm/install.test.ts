@@ -22,17 +22,8 @@ import { chmodSync, existsSync, readlinkSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
-import {
-  isRealCli,
-  isRoot,
-  isStub,
-  isSymlink,
-  MdmSandbox,
-  modeOf,
-  SKIP_ON_UNIX,
-  SKIP_ON_WINDOWS,
-} from './mdm-sandbox';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { isRealCli, isRoot, isStub, isSymlink, MdmSandbox, modeOf } from './mdm-sandbox';
 
 setDefaultTimeout(60_000);
 
@@ -64,13 +55,13 @@ describe('mdm install', () => {
     expect(await installedVersion()).toBe(reference.stdout);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)('installs with mode 755', async () => {
+  it.skipIf(IS_WINDOWS)('installs with mode 755', async () => {
     await sandbox.run('install');
 
     expect(modeOf(sandbox.binaryPath)).toBe(0o755);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)(
+  it.skipIf(IS_WINDOWS)(
     'replaces existing standalone installs with symlinks and leaves users without one alone',
     async () => {
       const standalone = sandbox.seedStandalone(0);
@@ -84,7 +75,7 @@ describe('mdm install', () => {
     },
   );
 
-  it.skipIf(SKIP_ON_UNIX)('never links standalone installs on Windows', async () => {
+  it.skipIf(!IS_WINDOWS)('never links standalone installs on Windows', async () => {
     const standalone = sandbox.seedStandalone(0);
 
     const result = await sandbox.run('install');
@@ -94,7 +85,7 @@ describe('mdm install', () => {
     expect(isStub(standalone, '1.0.0')).toBe(true);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)(
+  it.skipIf(IS_WINDOWS)(
     'is idempotent: symlinks that already point at the system binary are skipped',
     async () => {
       const standalone = sandbox.seedStandalone(0);
@@ -118,7 +109,7 @@ describe('mdm install', () => {
     expect(sandbox.extraEntriesNextToBinary().filter((name) => name.endsWith('.new'))).toEqual([]);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)(
+  it.skipIf(IS_WINDOWS)(
     '--skip-standalone-links installs without touching standalone installs',
     async () => {
       const standalone = sandbox.seedStandalone(0);
@@ -142,7 +133,7 @@ describe('mdm install', () => {
     expect(isStub(sandbox.binaryPath, '1.0.0')).toBe(true);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)('--skip-if-present restores mode 755', async () => {
+  it.skipIf(IS_WINDOWS)('--skip-if-present restores mode 755', async () => {
     sandbox.seedSystemBinary('1.0.0', 0o700);
 
     await sandbox.run('install --skip-if-present');
@@ -164,12 +155,12 @@ describe('mdm install', () => {
 
     expect(result.exitCode).toBe(0);
     expect(isRealCli(sandbox.binaryPath)).toBe(true);
-    if (!SKIP_ON_WINDOWS) {
+    if (!IS_WINDOWS) {
       expect(modeOf(sandbox.binaryPath)).toBe(0o755);
     }
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)('replaces a dangling standalone symlink', async () => {
+  it.skipIf(IS_WINDOWS)('replaces a dangling standalone symlink', async () => {
     const standalone = sandbox.seedStandaloneSymlink(0, `${sandbox.root.path}/missing-target`);
 
     const result = await sandbox.run('install');
@@ -188,7 +179,7 @@ describe('mdm install', () => {
     expect(sandbox.extraEntriesNextToBinary()).toEqual([]);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS || isRoot())(
+  it.skipIf(IS_WINDOWS || isRoot())(
     'fails with a readable message when the target directory is not writable',
     async () => {
       const lockedParent = sandbox.root.dir('locked').path;

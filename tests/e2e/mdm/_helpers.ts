@@ -24,29 +24,22 @@
 
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { ISOLATED_CLI_SPAWN_ENV } from '../../_common/isolated-cli-env.js';
+import { IS_WINDOWS } from '../../integration/harness';
 import { getCliBinaryPath } from '../../integration/harness/cli-runner.js';
-import { renderBootstrap } from '../../integration/specs/mdm/mdm-sandbox';
+import {
+  POWERSHELL,
+  renderBootstrap,
+  SYSTEM_PATH,
+  SYSTEM_ROOT,
+} from '../../integration/specs/mdm/mdm-sandbox';
 
-export const IS_WINDOWS = process.platform === 'win32';
 export const SYSTEM_BINARY = IS_WINDOWS
   ? String.raw`C:\Program Files\sonarqube-cli\bin\sonar.exe`
   : '/usr/local/bin/sonar';
 export const REAL_CDN_BASE_URL = 'https://binaries.sonarsource.com/Distribution/sonarqube-cli';
-
-const SYSTEM_ROOT = process.env.SystemRoot ?? String.raw`C:\Windows`;
-export const POWERSHELL = join(
-  SYSTEM_ROOT,
-  'System32',
-  'WindowsPowerShell',
-  'v1.0',
-  'powershell.exe',
-);
-const SYSTEM_PATH = IS_WINDOWS
-  ? [join(SYSTEM_ROOT, 'System32'), dirname(POWERSHELL)].join(delimiter)
-  : ['/usr/bin', '/bin'].join(delimiter);
 
 export interface RunResult {
   exitCode: number;

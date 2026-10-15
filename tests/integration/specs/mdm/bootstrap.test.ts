@@ -22,15 +22,9 @@ import { existsSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
 import type { FakeBinariesServer } from '../../harness/fake-binaries-server.js';
-import {
-  cliBytes,
-  isRealCli,
-  MdmSandbox,
-  MISMATCHED_CHECKSUM,
-  SKIP_ON_WINDOWS,
-} from './mdm-sandbox';
+import { cliBytes, isRealCli, MdmSandbox, MISMATCHED_CHECKSUM } from './mdm-sandbox';
 
 const RUNNER_VERSION = '9.9.9';
 
@@ -164,7 +158,7 @@ describe('mdm install bootstrap script', () => {
     expect(sandbox.leftoverDownloads()).toEqual([]);
   });
 
-  it.skipIf(SKIP_ON_WINDOWS)(
+  it.skipIf(IS_WINDOWS)(
     'falls back to the .exe artifact published before the .bin convention',
     async () => {
       cdn.publishCliArtifact(RUNNER_VERSION, runnerBytes, { suffix: '.exe' });
