@@ -43,3 +43,5 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 `sonar self-update` is a deprecated, hidden alias for `sonar update` (only when `CURRENT_DISTRIBUTION.enableSelfUpdate` is true; see `src/core/host/distribution.ts`), staged with `Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' })`. Calling it prints a deprecation warning, then runs the same `updateVersion()` logic. Both are registered in `src/commands/command-tree.ts`.
 
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
+
+After an empty Cloud issue search, `sonar list issues` verifies that the exact project key is in the active organization. It searches all matching project pages. A missing project fails with exit code 1. Project lookup failures propagate. Existing projects retain their empty result; Server connections skip this organization check.

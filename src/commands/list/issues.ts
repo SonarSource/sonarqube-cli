@@ -22,14 +22,14 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
-import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
 import type { IssuesSearchParams, SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -145,6 +145,30 @@ function parseSeverities(
   return mode === 'mqr' ? { impactSeverities: values.join(',') } : { severities: values.join(',') };
 }
 
+async function assertProjectInOrganization(
+  projectKey: string,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const organization = ctx.auth.orgKey;
+  if (!ctx.connection.httpClient.isCloud || !organization) return;
+
+  const projectsClient = new ProjectsClient(ctx.connection.httpClient);
+  let page = 1;
+  let hasNextPage: boolean;
+  do {
+    const result = await projectsClient
+      .searchProjects({ organization, q: projectKey, ps: MAX_PAGE_SIZE, p: page })
+      .orThrow();
+    if (result.components.some((project) => project.key === projectKey)) return;
+    hasNextPage = page * result.paging.pageSize < result.paging.total;
+    page += 1;
+  } while (hasNextPage);
+
+  throw new CommandFailedError(
+    `Project '${projectKey}' not found in organization '${organization}'.`,
+  );
+}
+
 /**
  * Issues search command handler
  */
@@ -232,6 +256,10 @@ export async function listIssues(
   };
 
   const result = await issuesClient.searchIssues(params).orThrow();
+
+  if (result.issues.length === 0) {
+    await assertProjectInOrganization(projectKey, ctx);
+  }
 
   let output: string;
 
