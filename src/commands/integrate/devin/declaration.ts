@@ -63,26 +63,16 @@ function resolveDevinMcpConfigPath(context: IntegrationContext): string {
   return join(resolveDevinConfigDir(context.targetRoot), DEVIN_MCP_CONFIG_FILE);
 }
 
-// Global hooks live under the `hooks` key of `config.json`; Devin does not read a standalone
-// global `hooks.v1.json`.
-export function resolveDevinConfigPath(
-  context: IntegrationContext,
-  env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  return join(resolveDevinConfigDir(context.targetRoot, env, platform), DEVIN_CONFIG_FILE);
+// Devin ignores a standalone global `hooks.v1.json`: global hooks live under `hooks` in `config.json`.
+function resolveDevinConfigPath(context: IntegrationContext): string {
+  return join(resolveDevinConfigDir(context.targetRoot), DEVIN_CONFIG_FILE);
 }
 
-export function resolveDevinAgentsMdPath(
-  context: IntegrationContext,
-  env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  return join(resolveDevinConfigDir(context.targetRoot, env, platform), DEVIN_AGENTS_MD_FILE);
+function resolveDevinAgentsMdPath(context: IntegrationContext): string {
+  return join(resolveDevinConfigDir(context.targetRoot), DEVIN_AGENTS_MD_FILE);
 }
 
-// The shared hook helpers join `targetRoot` with a config dir; rooting them at the resolved Devin
-// config dir keeps hook scripts and commands correct where it is not `<home>/<name>` (Windows %APPDATA%).
+// The hook helpers need a context rooted at the Devin config dir, which is `%APPDATA%\devin` on Windows.
 function devinHookContext(context: IntegrationContext): IntegrationContext {
   return { ...context, targetRoot: resolveDevinConfigDir(context.targetRoot) };
 }
