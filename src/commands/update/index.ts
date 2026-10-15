@@ -23,6 +23,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
+  isHomebrewInstallation,
   isStandaloneInstallerLocation,
 } from '@/core/update/installation-location.ts';
 
@@ -95,6 +96,13 @@ export async function updateVersion(
     return;
   }
 
+  if (isHomebrewInstallation()) {
+    console.warn('This CLI was installed with Homebrew.');
+    throw new CommandFailedError('Run brew upgrade sonar to update it.', {
+      remediationHint:
+        'A package manager update can have side effects on your machine, such as upgrading other packages or dependencies. Run the update yourself to stay in control.',
+    });
+  }
   assertStandaloneInstallerLocation();
   console.info('Checking for updates...');
 

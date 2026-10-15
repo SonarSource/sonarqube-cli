@@ -20,10 +20,14 @@
 
 // Integration tests for the `sonar update` command and the deprecated `sonar self-update` alias
 
+import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
+import { getCliBinaryPath } from '../../harness/cli-runner.js';
 
 describe('update command', () => {
   let harness: TestHarness;
@@ -115,6 +119,29 @@ describe('update command', () => {
     );
   });
 
+  describe.skipIf(process.platform === 'win32')('Homebrew installation', () => {
+    it.each(['update', 'update --force', 'self-update'])(
+      '%s warns without updating the Homebrew binary',
+      async (command) => {
+        const binDir = join(harness.userHome.path, 'Cellar', 'sonarqube-cli', CLI_VERSION, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryPath = join(binDir, 'sonar');
+        copyFileSync(getCliBinaryPath(), binaryPath);
+        chmodSync(binaryPath, 0o755);
+
+        const result = await harness.run(command, { binaryPath });
+        const output = result.stdout + result.stderr;
+
+        expect(result.exitCode).toBe(1);
+        expect(output).toContain('This CLI was installed with Homebrew.');
+        expect(output).toContain('brew upgrade sonar');
+        expect(output).toContain('side effects on your machine');
+        expect(output).not.toContain('Checking for updates');
+        expect(output).not.toContain('Updated to');
+      },
+    );
+  });
+
   it(
     'sonar self-update --status still works but warns that it is deprecated',
     async () => {
@@ -131,4 +158,33 @@ describe('update command', () => {
     },
     { timeout: 15000 },
   );
+
+  describe.skipIf(IS_WINDOWS)('standalone Unix installer', () => {
+    it.each(['update', 'self-update'])(
+      'sonar %s installs a fake executable',
+      async (command) => {
+        const newerVersion = '99.0.0';
+        await harness.newFakeBinariesServer().withStableVersion(newerVersion).start();
+        const updateServer = harness.newFakeUpdateScriptServer(newerVersion);
+        const installDir = harness.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+        mkdirSync(installDir.path, { recursive: true });
+        const executable = installDir.file('sonar');
+        copyFileSync(getCliBinaryPath(), executable.path);
+        chmodSync(executable.path, 0o755);
+
+        const result = await harness.run(command, { binaryPath: executable.path });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(`Updated to v${newerVersion}`);
+        expect(updateServer.getRequestedPaths()).toEqual(['/install.sh', '/fake-executable']);
+
+        expect(executable.exists()).toBe(true);
+        expect(executable.isExecutable).toBe(true);
+        const installed = Bun.spawnSync([executable.path]);
+        expect(installed.exitCode).toBe(0);
+        expect(installed.stdout.toString().trim()).toBe(`fake sonar v${newerVersion}`);
+      },
+      { timeout: 15000 },
+    );
+  });
 });
