@@ -151,6 +151,16 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
       expect(hooks.SessionStart[0].hooks[0].timeout).toBe(60);
       expect(hooks.SessionStart[0].hooks[0].command).toContain(SESSION_START_SCRIPT_NAME);
       expect(hooks.SubagentStart).toBeUndefined();
+      const subagentEntries = (
+        hooks.PreToolUse as Array<{
+          matcher: string;
+          hooks: Array<{ command: string; timeout: number }>;
+        }>
+      ).filter((entry) => entry.hooks[0].command.includes(VORTEX_HOOK_MARKER));
+      expect(subagentEntries).toHaveLength(1);
+      expect(subagentEntries[0].matcher).toBe('^run_subagent$');
+      expect(subagentEntries[0].hooks[0].timeout).toBe(60);
+      expect(subagentEntries[0].hooks[0].command).toContain('subagent-start-vortex');
     },
   },
 };
