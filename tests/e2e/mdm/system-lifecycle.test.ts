@@ -217,6 +217,9 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('sonar mdm on the real system', () => {
       expect(result.exitCode, result.stdout + result.stderr).toBe(0);
       await eventually(() => !existsSync(SYSTEM_BINARY));
       await eventually(() => staleEntries().length === 0);
+      if (IS_WINDOWS) {
+        await eventually(() => !existsSync(dirname(SYSTEM_BINARY)));
+      }
     });
 
     it.skipIf(IS_WINDOWS || STANDALONE_ENUMERABLE_HOME === null)(

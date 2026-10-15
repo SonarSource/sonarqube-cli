@@ -19,11 +19,11 @@
  */
 
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
-import { delimiter } from 'node:path';
+import { delimiter, dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
-import { TestHarness } from '../../harness';
+import { IS_WINDOWS, TestHarness } from '../../harness';
 import {
   eventually,
   isStub,
@@ -129,6 +129,9 @@ describe('mdm remove', () => {
     expect(result.exitCode).toBe(0);
     await eventually(() => !existsSync(sandbox.binaryPath));
     await eventually(() => sandbox.extraEntriesNextToBinary().length === 0);
+    if (IS_WINDOWS) {
+      await eventually(() => !existsSync(dirname(sandbox.binaryPath)));
+    }
   });
 
   it('keeps unrelated files in the user homes', async () => {

@@ -275,7 +275,11 @@ export async function mdmRemove(
   env: MdmEnvironment = defaultMdmEnvironment(),
 ): Promise<void> {
   const { console } = ctx;
-  await removeBinary(env.binaryPath);
+  const installDirectory = dirname(env.binaryPath);
+  await removeBinary(
+    env.binaryPath,
+    isWindows() ? [installDirectory, dirname(installDirectory)] : [],
+  );
   if (pathExistsOrLinked(env.binaryPath)) {
     throw new CommandFailedError(`Failed to remove ${env.binaryPath}.`);
   }
