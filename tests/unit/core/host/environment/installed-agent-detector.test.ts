@@ -24,6 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 import {
   agentDisplayName,
   detectInstalledAgents,
@@ -41,22 +42,27 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
+// Keeps the Windows Devin marker under the temp home instead of the real %APPDATA%.
+function hermeticEnv(): NodeJS.ProcessEnv {
+  return { APPDATA: join(home, 'AppData', 'Roaming') };
+}
+
 describe('detectInstalledAgents', () => {
   it('detects nothing in an empty home directory', () => {
-    expect(detectInstalledAgents(home)).toEqual([]);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual([]);
   });
 
   it('detects an agent from its config directory', () => {
     mkdirSync(join(home, '.cursor'));
     mkdirSync(join(home, '.codex'));
 
-    expect(detectInstalledAgents(home)).toEqual(['cursor', 'codex']);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual(['cursor', 'codex']);
   });
 
   it('detects Claude Code from either its directory or its config file', () => {
     writeFileSync(join(home, '.claude.json'), '{}');
 
-    expect(detectInstalledAgents(home)).toEqual(['claude']);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual(['claude']);
   });
 
   it('does not infer Antigravity from the shared .agents directory', () => {
@@ -64,19 +70,37 @@ describe('detectInstalledAgents', () => {
     // read, so it identifies no single agent.
     mkdirSync(join(home, '.agents'));
 
-    expect(detectInstalledAgents(home)).toEqual([]);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual([]);
   });
 
   it('detects Antigravity from its own global config directory', () => {
     mkdirSync(join(home, '.gemini', 'config'), { recursive: true });
 
-    expect(detectInstalledAgents(home)).toEqual(['antigravity']);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual(['antigravity']);
   });
 
   it('detects OpenCode from its own global config directory', () => {
     mkdirSync(join(home, '.config', 'opencode'), { recursive: true });
 
-    expect(detectInstalledAgents(home)).toEqual(['opencode']);
+    expect(detectInstalledAgents(home, hermeticEnv())).toEqual(['opencode']);
+  });
+
+  it('detects Devin from ~/.config/devin on macOS and Linux', () => {
+    mkdirSync(resolveDevinConfigDir(home, {}, 'linux'), { recursive: true });
+
+    expect(detectInstalledAgents(home, {}, 'linux')).toEqual(['devin']);
+    expect(detectInstalledAgents(home, {}, 'darwin')).toEqual(['devin']);
+  });
+
+  it('detects Devin from %APPDATA%\\devin on Windows, not from ~/.config/devin', () => {
+    const env = { APPDATA: join(home, 'AppData', 'Roaming') };
+    mkdirSync(resolveDevinConfigDir(home, {}, 'linux'), { recursive: true });
+
+    expect(detectInstalledAgents(home, env, 'win32')).toEqual([]);
+
+    mkdirSync(resolveDevinConfigDir(home, env, 'win32'), { recursive: true });
+
+    expect(detectInstalledAgents(home, env, 'win32')).toEqual(['devin']);
   });
 
   it('defaults to the real user home directory when none is given', () => {
@@ -98,6 +122,7 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('copilot')).toBe('Copilot');
     expect(agentDisplayName('antigravity')).toBe('Antigravity');
     expect(agentDisplayName('opencode')).toBe('OpenCode');
+    expect(agentDisplayName('devin')).toBe('Devin');
   });
 });
 
