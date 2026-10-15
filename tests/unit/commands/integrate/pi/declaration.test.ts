@@ -26,6 +26,7 @@ import { supportedIntegrations } from '@/commands/integrate';
 import {
   PI_INTEGRATION_ID,
   piIntegration,
+  resolvePiMcpConfigPath,
   resolvePiSecretsExtensionPath,
 } from '@/commands/integrate/pi/declaration.ts';
 import {
@@ -62,6 +63,20 @@ describe('resolvePiSecretsExtensionPath', () => {
   });
 });
 
+describe('resolvePiMcpConfigPath', () => {
+  it('writes to ~/.pi/agent/mcp.json for the global scope', () => {
+    expect(resolvePiMcpConfigPath(fakeContext('global', '/home/jonathan'))).toBe(
+      join('/home/jonathan', '.pi', 'agent', 'mcp.json'),
+    );
+  });
+
+  it('writes to <project>/.pi/mcp.json for the project scope', () => {
+    expect(resolvePiMcpConfigPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'mcp.json'),
+    );
+  });
+});
+
 describe('piIntegration', () => {
   it('is declared as the pi integration, displayed as Pi', () => {
     expect(piIntegration.id).toBe('pi');
@@ -75,6 +90,12 @@ describe('piIntegration', () => {
     );
 
     expect(feature?.dependencies).toHaveLength(1);
+    expect(feature?.resources).toHaveLength(1);
+  });
+
+  it('declares the mcp-server feature with a single MCP configuration resource', () => {
+    const feature = piIntegration.features.find((candidate) => candidate.id === 'mcp-server');
+
     expect(feature?.resources).toHaveLength(1);
   });
 
