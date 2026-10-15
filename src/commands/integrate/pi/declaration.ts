@@ -20,22 +20,30 @@
 
 import { join } from 'node:path';
 
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { SQAA_HOOK_FEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 import {
   PI_EXTENSION_MANAGED_MARKER,
   PI_SECRETS_EXTENSION_CONTENT,
 } from './secrets-extension-content.ts';
+import { PI_SQAA_EXTENSION_CONTENT } from './sqaa-extension-content.ts';
 
 const PI_PROJECT_CONFIG_DIR = '.pi';
 const PI_GLOBAL_CONFIG_DIR = join('.pi', 'agent');
 const EXTENSIONS_DIR = 'extensions';
 const SECRETS_EXTENSION_FILE = 'sonar-secrets.ts';
+const SQAA_EXTENSION_FILE = 'sonar-sqaa.ts';
 const MCP_CONFIG_FILE = 'mcp.json';
 
 export const PI_INTEGRATION_ID = 'pi';
@@ -44,14 +52,39 @@ const SECRETS_EXAMPLE_FOOTER =
   '  Sonar will detect the token and mask it before the message is sent.';
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
-export function resolvePiSecretsExtensionPath(context: IntegrationContext): string {
+function resolveExtensionFilePath(context: IntegrationContext, fileName: string): string {
   const configDir = context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR;
-  return join(context.targetRoot, configDir, EXTENSIONS_DIR, SECRETS_EXTENSION_FILE);
+  return join(context.targetRoot, configDir, EXTENSIONS_DIR, fileName);
+}
+
+export function resolvePiSecretsExtensionPath(context: IntegrationContext): string {
+  return resolveExtensionFilePath(context, SECRETS_EXTENSION_FILE);
+}
+
+export function resolvePiSqaaExtensionPath(context: IntegrationContext): string {
+  return resolveExtensionFilePath(context, SQAA_EXTENSION_FILE);
 }
 
 export function resolvePiMcpConfigPath(context: IntegrationContext): string {
   const configDir = context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR;
   return join(context.targetRoot, configDir, MCP_CONFIG_FILE);
+}
+
+function createSqaaExtensionSubfeature(): SubfeatureDeclaration<IntegrateAgentOptions> {
+  return {
+    id: SQAA_HOOK_FEATURE_ID,
+    displayName: 'Vortex analysis hook',
+    required: true,
+    resources: [
+      wholeFile({
+        id: 'pi-sqaa-extension',
+        displayName: 'Pi Vortex analysis extension',
+        targetPath: resolvePiSqaaExtensionPath,
+        content: PI_SQAA_EXTENSION_CONTENT,
+        managedMarker: PI_EXTENSION_MANAGED_MARKER,
+      }),
+    ],
+  };
 }
 
 export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
@@ -74,6 +107,7 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
         }),
       ],
     },
+    createVortexFeature<IntegrateAgentOptions>([createSqaaExtensionSubfeature()]),
     createMcpServerFeature<IntegrateAgentOptions>({ resolveConfigPath: resolvePiMcpConfigPath }),
   ],
 };
