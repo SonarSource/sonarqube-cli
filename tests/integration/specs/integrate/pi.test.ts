@@ -20,14 +20,20 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
+import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { piIntegration } from '@/commands/integrate/pi/declaration.ts';
 import { PI_EXTENSION_MANAGED_MARKER } from '@/commands/integrate/pi/secrets-extension-content.ts';
+import { PI_SQAA_EXTENSION_CONTENT } from '@/commands/integrate/pi/sqaa-extension-content.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
 import { chooseCustomize } from './integrate-test-helpers';
-import { findInstalledFeature } from './state-helpers';
+import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const SECRETS_EXTENSION_PATH = '.pi/agent/extensions/sonar-secrets.ts';
+const SQAA_EXTENSION_PATH = '.pi/agent/extensions/sonar-sqaa.ts';
+const TEST_ORG = 'my-org';
+const TEST_PROJECT = 'my-project';
 
 function findPiFeature(harness: TestHarness, featureId: string) {
   return findInstalledFeature(harness, 'pi', featureId);
@@ -93,6 +99,76 @@ describe('integrate pi — secrets scanning extension', () => {
       expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
       expect(harness.userHome.exists(SECRETS_EXTENSION_PATH)).toBe(false);
       expect(harness.userHome.exists('.pi/agent/extensions/other.ts')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+});
+
+describe('integrate pi — Vortex SQAA feature', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'writes the SQAA extension when Vortex is entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+      const result = await harness.run('integrate pi --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const extension = harness.userHome.file(...SQAA_EXTENSION_PATH.split('/'));
+      expect(extension.exists()).toBe(true);
+      expect(extension.asText()).toBe(PI_SQAA_EXTENSION_CONTENT);
+      expect(
+        findInstalledSubfeature(harness, 'pi', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),
+      ).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not install Vortex when the organization is not entitled',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('cloud-token')
+        .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
+
+      const result = await harness.run('integrate pi --non-interactive', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.exists(SQAA_EXTENSION_PATH)).toBe(false);
+      expect(findPiFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
   );
