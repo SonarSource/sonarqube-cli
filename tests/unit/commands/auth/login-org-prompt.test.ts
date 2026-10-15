@@ -40,6 +40,7 @@ import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import * as keychainModule from '@/core/host/keychain.ts';
 import * as projectInfo from '@/core/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -138,6 +139,32 @@ describe('authLogin organization prompt', () => {
     // The whole point of asking again: the browser flow the user just went through is not wasted.
     expect(revokeSpy).not.toHaveBeenCalled();
     expect(fake.findCall('success', 'Authentication successful')).toBeDefined();
+  });
+
+  it('warns and saves the new token when legacy cleanup fails', async () => {
+    fake.queueResponse('my-org');
+    resolveAccessSpy.mockResolvedValue({ status: 'accessible' });
+    const cleanupSpy = spyOn(keychainModule, 'deleteStaleTokens').mockImplementation(
+      (_connections, _server, _org, onLegacyDeletionError) => {
+        onLegacyDeletionError?.(SONARCLOUD_URL, new Error('Keychain is locked'));
+        return Promise.resolve([]);
+      },
+    );
+
+    try {
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake));
+
+      expect(fake.findCall('warn', 'Could not delete a pre-upgrade local token')).toEqual({
+        method: 'warn',
+        args: [
+          'Could not delete a pre-upgrade local token: Keychain is locked. Continuing with login.',
+        ],
+      });
+      expect(fake.findCall('success', 'Authentication successful')).toBeDefined();
+      expect(await keychainModule.getToken(SONARCLOUD_URL, 'my-org')).toBe('minted-token');
+    } finally {
+      cleanupSpy.mockRestore();
+    }
   });
 
   it('gives up after a bounded number of unusable answers', async () => {
