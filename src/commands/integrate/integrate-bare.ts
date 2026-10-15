@@ -85,7 +85,6 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
 };
 
-/** Agents whose integration is not released yet: kept out of the detected list and the warnings. */
 const UNRELEASED_AGENT_IDS: ReadonlySet<DetectedAgentId> = new Set(['devin']);
 
 /** Agent pairs known to fight over hook execution when both are integrated on the same machine. */
