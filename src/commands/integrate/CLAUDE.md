@@ -1,6 +1,6 @@
 # Integrations (`sonar integrate`)
 
-Every integration installs globally. Bare `sonar integrate` (no subcommand) detects installed agents and mentions them, then prompts the user to pick one (Claude, Copilot, Codex, Cursor, Antigravity, OpenCode, or Git) and delegates to its handler. `--non-interactive` with no agent errors instead of guessing. Implementation in `src/commands/integrate/integrate-bare.ts`.
+Every integration installs globally. Bare `sonar integrate` (no subcommand) detects installed agents and mentions them (plus the already-integrated tools), then prompts the user to pick one (Claude, Copilot, Codex, Cursor, Antigravity, OpenCode, or Git) and delegates to its handler. `--non-interactive` with no agent errors instead of guessing. When at least one `CONFLICTING_AGENT_PAIRS` pair is fully detected, it prints a single `ℹ` line naming every detected agent that belongs to such a pair (in detected-agents order) as "may conflict at the hook level", followed by an indented `→` hint to re-run `sonar integrate`; adding a pair needs only a new entry in that list. Implementation in `src/commands/integrate/integrate-bare.ts`.
 
 Interactive runs show the `What will be installed` box, then ask **Install recommended** (default) or **Customize**; only Customize runs the per-feature prompts. With nothing to customize (`hasCustomizableChoices`), they ask `Press Enter to install…` instead.
 

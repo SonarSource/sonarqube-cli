@@ -102,14 +102,23 @@ function findAlreadyIntegrated(): string[] {
   return [...labels];
 }
 
-function warnAboutConflictingAgents(detected: DetectedAgentId[], console: Console): void {
-  for (const [first, second] of CONFLICTING_AGENT_PAIRS) {
-    if (detected.includes(first) && detected.includes(second)) {
-      console.warn(
-        `Both ${agentDisplayName(first)} and ${agentDisplayName(second)} were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.`,
-      );
-    }
-  }
+function joinNaturally(names: string[]): string {
+  if (names.length < 2) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+function noteConflictingAgents(detected: DetectedAgentId[], console: Console): void {
+  const conflicting = detected.filter((agent) =>
+    CONFLICTING_AGENT_PAIRS.some(
+      (pair) => pair.includes(agent) && pair.every((member) => detected.includes(member)),
+    ),
+  );
+  if (conflicting.length === 0) return;
+
+  console.info(
+    `${joinNaturally(conflicting.map((agent) => agentDisplayName(agent)))} may conflict at the hook level.`,
+  );
+  console.print("   → Run 'sonar integrate' again anytime to add, customize or remove an agent.");
 }
 
 export async function integrateBare(
@@ -135,7 +144,7 @@ export async function integrateBare(
     console.info(`Already integrated: ${alreadyIntegrated.join(', ')}`);
   }
 
-  warnAboutConflictingAgents(detected, console);
+  noteConflictingAgents(detected, console);
 
   const selected = await console.selectPrompt(
     'Select the tool you want to integrate with',
