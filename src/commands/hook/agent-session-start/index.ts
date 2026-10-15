@@ -80,7 +80,7 @@ export async function agentSessionStart(
   return { agentSessionId: sessionId ?? null };
 }
 
-async function resolveSessionStartContext(
+export async function resolveSessionStartContext(
   ctx: CommandInvocationContext,
   input: SessionStartInput,
 ): Promise<SessionStartOutput | null> {
