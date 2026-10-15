@@ -195,6 +195,22 @@ describe('updateNotifier.maybeNotify', () => {
     );
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'recommends Homebrew for a cask installation',
+    async () => {
+      const originalExecPath = process.execPath;
+      process.execPath = '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0/cli.bin';
+      try {
+        await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
+        expect(notificationOutput()).toContain(
+          'Run brew upgrade --cask sonarqube-cli to update it.',
+        );
+      } finally {
+        process.execPath = originalExecPath;
+      }
+    },
+  );
+
   it('persists fetch metadata in state', async () => {
     await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
 
