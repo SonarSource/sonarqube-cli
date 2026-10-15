@@ -29,6 +29,7 @@ import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as pullRequestAutoResolve from '@/core/pull-request-auto-resolve.ts';
 import { okAsync, type ResultAsync } from '@/core/result.ts';
+import { ComponentsClient } from '@/core/server/components.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -456,6 +457,7 @@ describe('issuesSearchCommand', () => {
   let mockCtx: CommandAuthenticatedInvocationContext;
   let httpClient: SonarHttpClient;
   let autoResolvePullRequestSpy: ReturnType<typeof spyOn>;
+  let getComponentSpy: ReturnType<typeof spyOn>;
 
   const emptyApiResponse = {
     issues: [],
@@ -480,10 +482,14 @@ describe('issuesSearchCommand', () => {
       pullRequestAutoResolve,
       'autoResolvePullRequest',
     ).mockResolvedValue(undefined);
+    getComponentSpy = spyOn(ComponentsClient.prototype, 'getComponent').mockReturnValue(
+      okAsync({ key: 'my-project', qualifier: 'TRK', organization: 'test-org' }),
+    );
   });
 
   afterEach(() => {
     autoResolvePullRequestSpy.mockRestore();
+    getComponentSpy.mockRestore();
   });
 
   it('throws when --format is invalid', async () => {

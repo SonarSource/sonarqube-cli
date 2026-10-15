@@ -160,6 +160,8 @@ function resolveIssuesSearchScope(
 }
 
 interface ProjectData {
+  organization?: string;
+  componentShowStatusCode?: number;
   key: string;
   name: string;
   issues: Required<IssueConfig>[];
@@ -196,6 +198,8 @@ export interface DopRepositoryConfig {
 
 export class ProjectBuilder {
   private readonly projectKey: string;
+  private organization: string | undefined = 'my-org';
+  private componentShowStatusCode?: number;
   private readonly issues: Required<IssueConfig>[] = [];
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
@@ -219,6 +223,16 @@ export class ProjectBuilder {
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
+  }
+
+  withOrganization(organization: string | undefined): this {
+    this.organization = organization;
+    return this;
+  }
+
+  withComponentShowError(statusCode: number): this {
+    this.componentShowStatusCode = statusCode;
+    return this;
   }
 
   withIssue(issue: Partial<IssueConfig>): this {
@@ -390,6 +404,8 @@ export class ProjectBuilder {
 
   getData(): ProjectData {
     return {
+      organization: this.organization,
+      componentShowStatusCode: this.componentShowStatusCode,
       key: this.projectKey,
       name: this.projectKey,
       issues: this.issues,
@@ -1422,9 +1438,21 @@ export class FakeSonarQubeServerBuilder {
             return notFound();
           }
 
+          if (projectData.componentShowStatusCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Component lookup failed' }] }), {
+              status: projectData.componentShowStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
           if (subPath === undefined) {
             return new Response(
-              JSON.stringify({ component: { key: projectData.key, name: projectData.name } }),
+              JSON.stringify({
+                component: {
+                  key: projectData.key,
+                  name: projectData.name,
+                  organization: projectData.organization,
+                },
+              }),
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
