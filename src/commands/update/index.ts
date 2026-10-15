@@ -25,6 +25,9 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
+  externalUpdateGuidance,
+  HOMEBREW_UPDATE_GUIDANCE,
+  isHomebrewInstallation,
   isStandaloneInstallerLocation,
 } from '@/core/update/installation-location.ts';
 
@@ -88,7 +91,7 @@ export async function updateStatus(
   } else {
     console.warn(`Update available: v${latestVersion}`);
     console.text(
-      isStandaloneInstallerLocation() ? '  Run: sonar update' : `  ${EXTERNAL_UPDATE_GUIDANCE}`,
+      isStandaloneInstallerLocation() ? '  Run: sonar update' : `  ${externalUpdateGuidance()}`,
     );
   }
 }
@@ -104,6 +107,15 @@ export async function updateVersion(
     return;
   }
 
+  // Do not run brew ourselves: an external package manager update can have side effects we cannot take responsibility for.
+  if (isHomebrewInstallation()) {
+    throw new CommandFailedError(
+      'CLI was installed via Homebrew and cannot be updated by `sonar update`.',
+      {
+        remediationHint: `${HOMEBREW_UPDATE_GUIDANCE} \`sonar update\` doesn't run Homebrew automatically so you stay in full control of your system updates.`,
+      },
+    );
+  }
   assertStandaloneInstallerLocation();
   console.info('Checking for updates...');
 
