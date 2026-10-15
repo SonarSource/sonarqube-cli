@@ -456,6 +456,7 @@ describe('issuesSearchCommand', () => {
   let mockCtx: CommandAuthenticatedInvocationContext;
   let httpClient: SonarHttpClient;
   let autoResolvePullRequestSpy: ReturnType<typeof spyOn>;
+  let searchProjectsSpy: ReturnType<typeof spyOn>;
 
   const emptyApiResponse = {
     issues: [],
@@ -480,10 +481,14 @@ describe('issuesSearchCommand', () => {
       pullRequestAutoResolve,
       'autoResolvePullRequest',
     ).mockResolvedValue(undefined);
+    searchProjectsSpy = spyOn(ProjectsClient.prototype, 'searchProjects').mockReturnValue(
+      createMockProjectsResponse([createMockProject('my-project')], 1, DEFAULT_PAGE_SIZE, 1),
+    );
   });
 
   afterEach(() => {
     autoResolvePullRequestSpy.mockRestore();
+    searchProjectsSpy.mockRestore();
   });
 
   it('throws when --format is invalid', async () => {
