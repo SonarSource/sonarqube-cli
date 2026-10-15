@@ -27,6 +27,7 @@ import {
   PI_INTEGRATION_ID,
   piIntegration,
   resolvePiMcpConfigPath,
+  resolvePiSqaaExtensionPath,
 } from '@/commands/integrate/pi/declaration.ts';
 import type { IntegrationContext } from '@/core/framework/features';
 
@@ -48,6 +49,14 @@ describe('resolvePiMcpConfigPath', () => {
   it('writes to <project>/.pi/mcp.json for the project scope', () => {
     expect(resolvePiMcpConfigPath(fakeContext('project', '/project/root'))).toBe(
       join('/project/root', '.pi', 'mcp.json'),
+    );
+  });
+});
+
+describe('resolvePiSqaaExtensionPath', () => {
+  it('writes to <project>/.pi/extensions for the project scope', () => {
+    expect(resolvePiSqaaExtensionPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'extensions', 'sonar-sqaa.ts'),
     );
   });
 });
