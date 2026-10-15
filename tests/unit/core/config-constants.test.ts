@@ -25,9 +25,13 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import {
   APP_NAME,
+  ENV_IMPORT_PAT_POLL_INTERVAL_MS,
+  ENV_IMPORT_PAT_WAIT_TIMEOUT_MS,
   ENV_SONAR_USER_HOME,
   ENV_SQAA_RETRY_BASE_DELAY_MS,
   getCliDir,
+  getImportPatPollIntervalMs,
+  getImportPatWaitTimeoutMs,
   getSonarUserHome,
   getSqaaRetry503BaseDelayMs,
   getTelemetryDir,
@@ -102,6 +106,38 @@ describe('config-constants', () => {
     it('falls back to 2000ms for invalid values', () => {
       process.env[ENV_SQAA_RETRY_BASE_DELAY_MS] = 'not-a-number';
       expect(getSqaaRetry503BaseDelayMs()).toBe(2000);
+    });
+  });
+
+  describe.each([
+    ['getImportPatPollIntervalMs', ENV_IMPORT_PAT_POLL_INTERVAL_MS, getImportPatPollIntervalMs],
+    ['getImportPatWaitTimeoutMs', ENV_IMPORT_PAT_WAIT_TIMEOUT_MS, getImportPatWaitTimeoutMs],
+  ])('%s', (_name, envName, getter) => {
+    const previous = process.env[envName];
+
+    afterEach(() => {
+      if (previous === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previous;
+      }
+    });
+
+    it('is undefined (keep the default) when unset', () => {
+      delete process.env[envName];
+      expect(getter()).toBeUndefined();
+    });
+
+    it('uses the env override when valid', () => {
+      process.env[envName] = '250';
+      expect(getter()).toBe(250);
+    });
+
+    it('is undefined for invalid values', () => {
+      process.env[envName] = 'not-a-number';
+      expect(getter()).toBeUndefined();
+      process.env[envName] = '-5';
+      expect(getter()).toBeUndefined();
     });
   });
 });
