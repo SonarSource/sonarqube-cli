@@ -66,6 +66,20 @@ describe('devinIntegration features', () => {
       vortex && isFeatureContainer(vortex) ? vortex.subfeatures.map((s) => s.id) : [];
     expect(subfeatureIds).toEqual(['sonar-sqaa-hook', 'sqaa-instructions', 'context-augmentation']);
   });
+
+  it('ships the subagent hook script and the shared hook config inside context-augmentation', () => {
+    const vortex = devinIntegration.features.find((feature) => feature.id === 'vortex');
+    const cag =
+      vortex && isFeatureContainer(vortex)
+        ? vortex.subfeatures.find((s) => s.id === 'context-augmentation')
+        : undefined;
+
+    expect(cag?.resources?.map((r) => r.id)).toEqual([
+      'session-start-vortex-script',
+      'devin-hooks-config',
+      'subagent-start-vortex-script',
+    ]);
+  });
 });
 
 describe('devinIntegration config paths', () => {

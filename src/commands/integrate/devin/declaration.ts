@@ -75,6 +75,8 @@ const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 const SQAA_HOOK_MARKER = 'sonar-sqaa';
 // Devin tool names are lowercase and the matcher is case-sensitive.
 const SQAA_HOOK_MATCHER = '^(edit|write)$';
+const SUBAGENT_START_SCRIPT_REL = `${VORTEX_HOOK_MARKER}/build-scripts/subagent-start-vortex`;
+const SUBAGENT_START_HOOK_MATCHER = '^run_subagent$';
 // SessionStart has no tool name to match; Devin documents an empty matcher for non-tool events.
 const SESSION_START_HOOK_MATCHER = '';
 const PRETOOL_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
@@ -217,10 +219,24 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<DevinIntegrationOptio
   };
 }
 
+function createCagSubagentScriptResource(): ResourceDeclaration {
+  return wholeFile({
+    id: 'subagent-start-vortex-script',
+    displayName: 'Devin subagent hook script',
+    targetPath: (context) =>
+      resolveAgentHookScriptPath(devinHookContext(context), '', SUBAGENT_START_SCRIPT_REL),
+    content: {
+      unix: buildUnixHookScript('devin-subagent-start'),
+      windows: buildWindowsHookScript('devin-subagent-start'),
+    },
+    executable: true,
+  });
+}
+
 function createCagHookConfigResource(): ResourceDeclaration {
   return jsonPatch({
     id: 'devin-hooks-config',
-    displayName: 'Devin session start hook configuration',
+    displayName: 'Devin Vortex Context hook configuration',
     targetPath: resolveDevinConfigPath,
     defaultValue: { hooks: {} },
     patch: (document, context) =>
@@ -232,6 +248,14 @@ function createCagHookConfigResource(): ResourceDeclaration {
           SESSION_START_HOOK_MATCHER,
           VORTEX_HOOK_MARKER,
           SESSION_START_SCRIPT_REL,
+        ),
+        createAgentHookEntry(
+          devinHookContext(context),
+          '',
+          'PreToolUse',
+          SUBAGENT_START_HOOK_MATCHER,
+          VORTEX_HOOK_MARKER,
+          SUBAGENT_START_SCRIPT_REL,
         ),
       ]),
     removePatch: (document) => removeAgentHooks(document, [VORTEX_HOOK_MARKER]),
@@ -247,6 +271,7 @@ function createDevinVortexFeature(): FeatureContainer<DevinIntegrationOptions> {
       scriptPath: (context) =>
         resolveAgentHookScriptPath(devinHookContext(context), '', SESSION_START_SCRIPT_REL),
       hookConfigResource: createCagHookConfigResource(),
+      additionalResources: [createCagSubagentScriptResource()],
     }),
   ]);
 }
