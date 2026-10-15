@@ -58,13 +58,13 @@ describe('devinIntegration features', () => {
     ]);
   });
 
-  it('puts the Vortex analysis hook and instructions in the vortex container', () => {
+  it('puts the Vortex analysis hook, instructions and context augmentation in the vortex container', () => {
     const vortex = devinIntegration.features.find((feature) => feature.id === 'vortex');
 
     expect(vortex && isFeatureContainer(vortex)).toBe(true);
     const subfeatureIds =
       vortex && isFeatureContainer(vortex) ? vortex.subfeatures.map((s) => s.id) : [];
-    expect(subfeatureIds).toEqual(['sonar-sqaa-hook', 'sqaa-instructions']);
+    expect(subfeatureIds).toEqual(['sonar-sqaa-hook', 'sqaa-instructions', 'context-augmentation']);
   });
 });
 
