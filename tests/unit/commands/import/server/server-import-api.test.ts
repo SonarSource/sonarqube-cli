@@ -266,6 +266,50 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('searchBitbucketCloudRepos', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      await api.searchBitbucketCloudRepos('my-bbc', 2, 50);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketcloud_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-bbc',
+        p: '2',
+        ps: '50',
+      });
+    });
+
+    it('returns the repositories as the server sends them', async () => {
+      const repository = {
+        slug: 'repo-a',
+        uuid: '{uuid-a}',
+        name: 'Repo A',
+        workspace: 'acme',
+        projectKey: 'PRJ',
+        sqProjectKey: 'acme_repo-a',
+      };
+      fetchSpy = mockFetch({
+        paging: { pageIndex: 1, pageSize: 50 },
+        isLastPage: false,
+        repositories: [repository],
+      });
+      expect(await api.searchBitbucketCloudRepos('s', 1, 50)).toEqual({
+        repositories: [repository],
+      });
+    });
+
+    it('treats an empty result as no repositories', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchBitbucketCloudRepos('s', 1, 50)).toEqual({ repositories: [] });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchBitbucketCloudRepos('s', 1, 50).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
   describe('putBoundProject', () => {
     const request = {
       projectKey: 'group_repo',
