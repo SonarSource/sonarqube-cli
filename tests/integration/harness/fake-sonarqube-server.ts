@@ -196,6 +196,7 @@ export interface DopRepositoryConfig {
 
 export class ProjectBuilder {
   private readonly projectKey: string;
+  private projectName?: string;
   private readonly issues: Required<IssueConfig>[] = [];
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
@@ -219,6 +220,11 @@ export class ProjectBuilder {
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
+  }
+
+  withName(name: string): this {
+    this.projectName = name;
+    return this;
   }
 
   withIssue(issue: Partial<IssueConfig>): this {
@@ -391,7 +397,7 @@ export class ProjectBuilder {
   getData(): ProjectData {
     return {
       key: this.projectKey,
-      name: this.projectKey,
+      name: this.projectName ?? this.projectKey,
       issues: this.issues,
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
@@ -1501,11 +1507,14 @@ export class FakeSonarQubeServerBuilder {
           if (projectsSearchErrorStatusCode !== undefined) {
             return new Response(projectsSearchErrorBody, { status: projectsSearchErrorStatusCode });
           }
-          const allProjects = [...projects.values()].map((p) => ({
-            key: p.key,
-            name: p.name,
-            qualifier: 'TRK',
-          }));
+          const q = (query.q ?? '').toLowerCase();
+          const allProjects = [...projects.values()]
+            .filter((p) => p.key.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))
+            .map((p) => ({
+              key: p.key,
+              name: p.name,
+              qualifier: 'TRK',
+            }));
 
           const pageSize = Number.parseInt(query.ps ?? '500', 10);
           const page = Number.parseInt(query.p ?? '1', 10);
@@ -1513,7 +1522,7 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               paging: { pageIndex: page, pageSize, total: allProjects.length },
-              components: allProjects,
+              components: allProjects.slice((page - 1) * pageSize, page * pageSize),
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

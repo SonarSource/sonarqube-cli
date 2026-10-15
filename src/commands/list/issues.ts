@@ -22,14 +22,16 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
+import logger from '@/core/observability/logger.ts';
 import { resolveProjectKey } from '@/core/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
-import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
+import { hasNextPage } from '@/core/server/paging.ts';
+import { MAX_PAGE_SIZE, ProjectsClient } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
 import type { IssuesSearchParams, SonarQubeIssue } from '@/core/server/types.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -145,6 +147,45 @@ function parseSeverities(
   return mode === 'mqr' ? { impactSeverities: values.join(',') } : { severities: values.join(',') };
 }
 
+async function assertProjectInOrganization(
+  projectKey: string,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  const organization = ctx.auth.orgKey;
+  if (!ctx.connection.httpClient.isCloud || !organization) return;
+
+  const projectsClient = new ProjectsClient(ctx.connection.httpClient);
+  let page = 1;
+  let morePages: boolean;
+  do {
+    const lookup = await projectsClient.searchProjects({
+      organization,
+      q: projectKey,
+      ps: MAX_PAGE_SIZE,
+      p: page,
+    });
+    if (lookup.isErr()) {
+      logger.debug(
+        'Project membership lookup failed; keeping the empty issue result.',
+        lookup.error,
+      );
+      return;
+    }
+    const result = lookup.value;
+    if (result.components.some((project) => project.key === projectKey)) return;
+    morePages = hasNextPage(result.paging);
+    page += 1;
+  } while (morePages);
+
+  throw new CommandFailedError(
+    `Project '${projectKey}' not found in organization '${organization}', or you do not have access to it.`,
+    {
+      remediationHint:
+        "Check the key with 'sonar list projects' and the organization with 'sonar auth status'.",
+    },
+  );
+}
+
 /**
  * Issues search command handler
  */
@@ -232,6 +273,10 @@ export async function listIssues(
   };
 
   const result = await issuesClient.searchIssues(params).orThrow();
+
+  if (result.issues.length === 0) {
+    await assertProjectInOrganization(projectKey, ctx);
+  }
 
   let output: string;
 
