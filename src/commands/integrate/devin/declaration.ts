@@ -33,12 +33,8 @@ export type DevinIntegrationOptions = IntegrateAgentOptions;
 
 const DEVIN_MCP_CONFIG_FILE = 'mcp_config.json';
 
-export function resolveDevinMcpConfigPath(
-  context: IntegrationContext,
-  env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
-): string {
-  return join(resolveDevinConfigDir(context.targetRoot, env, platform), DEVIN_MCP_CONFIG_FILE);
+function resolveDevinMcpConfigPath(context: IntegrationContext): string {
+  return join(resolveDevinConfigDir(context.targetRoot), DEVIN_MCP_CONFIG_FILE);
 }
 
 export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> = {
