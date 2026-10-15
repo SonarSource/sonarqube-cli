@@ -35,6 +35,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
   clearSecretCache,
   deleteConfigSecret,
+  deleteLegacyTokens,
   deleteStaleTokens,
   deleteToken,
   generateKeychainAccount,
@@ -96,7 +97,7 @@ describe('token caching', () => {
 
     writeFileSync(
       getKeychainFile(),
-      JSON.stringify({ tokens: { 'sonarcloud.io:missing-org': 'late-token' } }),
+      JSON.stringify({ tokens: { 'https://sonarcloud.io:missing-org': 'late-token' } }),
     );
     expect(await getToken('https://sonarcloud.io', 'missing-org')).toBeNull();
   });
@@ -123,7 +124,7 @@ describe('token caching', () => {
 
     writeFileSync(
       getKeychainFile(),
-      JSON.stringify({ tokens: { 'sonarcloud.io:myorg': 'updated' } }),
+      JSON.stringify({ tokens: { 'https://sonarcloud.io:myorg': 'updated' } }),
     );
     clearSecretCache();
 
@@ -166,12 +167,16 @@ describe('deleteToken', () => {
 describe('account key generation', () => {
   useFileBackend();
 
-  it('uses hostname:org format for SonarCloud with org', () => {
-    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe('sonarcloud.io:my-org');
+  it('uses server URL and org for SonarCloud', () => {
+    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe(
+      'https://sonarcloud.io:my-org',
+    );
   });
 
-  it('uses hostname only for SonarQube without org', () => {
-    expect(generateKeychainAccount('https://sonarqube.example.com')).toBe('sonarqube.example.com');
+  it('uses server URL for SonarQube without org', () => {
+    expect(generateKeychainAccount('https://sonarqube.example.com')).toBe(
+      'https://sonarqube.example.com',
+    );
   });
 
   it('uses raw string as key when URL parsing fails', () => {
@@ -190,20 +195,55 @@ describe('account key generation', () => {
 });
 
 describe('generateKeychainAccount', () => {
-  it('returns hostname:org for valid SonarCloud URL with org', () => {
-    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe('sonarcloud.io:my-org');
+  useFileBackend();
+
+  it('returns URL and org for valid SonarCloud URL with org', () => {
+    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe(
+      'https://sonarcloud.io:my-org',
+    );
   });
 
-  it('returns hostname only for valid URL without org', () => {
-    expect(generateKeychainAccount('https://sonar.example.com')).toBe('sonar.example.com');
+  it('returns URL for valid server URL without org', () => {
+    expect(generateKeychainAccount('https://sonar.example.com')).toBe('https://sonar.example.com');
   });
 
   it('returns the raw string when URL parsing fails', () => {
     expect(generateKeychainAccount('not-a-valid-url')).toBe('not-a-valid-url');
   });
 
-  it('strips trailing slash via URL hostname extraction', () => {
-    expect(generateKeychainAccount('https://sonar.example.com/')).toBe('sonar.example.com');
+  it('normalizes the host, default port, and trailing slash', () => {
+    expect(generateKeychainAccount('HTTPS://SONAR.EXAMPLE.COM:443/base/')).toBe(
+      'https://sonar.example.com/base',
+    );
+    expect(generateKeychainAccount('https://sonar.example.com/')).toBe('https://sonar.example.com');
+    expect(generateKeychainAccount('https://sonar.example.com//')).toBe(
+      'https://sonar.example.com',
+    );
+    expect(generateKeychainAccount('https://sonar.example.com/base//')).toBe(
+      'https://sonar.example.com/base',
+    );
+  });
+
+  it.each([
+    ['http://sonar.example.com'],
+    ['https://sonar.example.com:8443'],
+    ['https://sonar.example.com/other'],
+  ])('keeps %s separate from the active server', async (otherUrl) => {
+    await saveToken('https://sonar.example.com', 'active-token');
+    expect(await getToken(otherUrl)).toBeNull();
+  });
+
+  it('does not read a legacy hostname account', async () => {
+    const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    if (!keychainFile) {
+      throw new Error('Test keychain file is missing.');
+    }
+    writeFileSync(
+      keychainFile,
+      JSON.stringify({ tokens: { 'sonar.example.com': 'legacy-token' } }),
+    );
+    clearSecretCache();
+    expect(await getToken('https://sonar.example.com')).toBeNull();
   });
 });
 
@@ -253,6 +293,148 @@ describe('deleteStaleTokens', () => {
     expect(await getToken('https://sonarcloud.io', 'org1')).toBe('cloud-tok');
     expect(await getToken('https://sonar.internal.com')).toBeNull();
   });
+
+  it('deletes legacy accounts for recorded connections, including the current connection', async () => {
+    const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    if (!keychainFile) throw new Error('Test keychain file is missing.');
+    writeFileSync(
+      keychainFile,
+      JSON.stringify({
+        tokens: {
+          'sonarcloud.io': 'legacy-host-token',
+          'sonarcloud.io:org1': 'legacy-org-token',
+          'sonarcloud.io:org2': 'other-org-token',
+          'https://sonarcloud.io:org1': 'current-token',
+        },
+      }),
+    );
+
+    const removed = await deleteStaleTokens(
+      [{ serverUrl: 'https://sonarcloud.io', orgKey: 'org1' }],
+      'https://sonarcloud.io',
+      'org1',
+    );
+
+    const store = JSON.parse(readFileSync(keychainFile, 'utf-8')) as {
+      tokens: Record<string, string>;
+    };
+    expect(removed).toEqual(['https://sonarcloud.io']);
+    expect(store.tokens['sonarcloud.io']).toBeUndefined();
+    expect(store.tokens['sonarcloud.io:org1']).toBeUndefined();
+    expect(store.tokens['sonarcloud.io:org2']).toBe('other-org-token');
+    expect(store.tokens['https://sonarcloud.io:org1']).toBe('current-token');
+  });
+
+  it('returns only server URLs whose legacy accounts were deleted', async () => {
+    const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    if (!keychainFile) throw new Error('Test keychain file is missing.');
+    writeFileSync(
+      keychainFile,
+      JSON.stringify({ tokens: { 'first.example.com': 'legacy-token' } }),
+    );
+
+    const removed = await deleteStaleTokens(
+      [
+        { serverUrl: 'https://first.example.com/base' },
+        { serverUrl: 'https://second.example.com' },
+      ],
+      'https://new.example.com',
+    );
+
+    expect(removed).toEqual(['https://first.example.com/base']);
+  });
+
+  it('continues deleting legacy accounts after one connection fails', async () => {
+    const keychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    if (!keychainFile) throw new Error('Test keychain file is missing.');
+    delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    clearSecretCache();
+    const deletedAccounts: string[] = [];
+    const failures: string[] = [];
+    const deleteSpy = spyOn(Bun.secrets, 'delete').mockImplementation(({ name }) => {
+      deletedAccounts.push(name);
+      if (name === 'first.example.com:org') throw new Error('Keychain is locked');
+      return Promise.resolve(name === 'first.example.com' || name === 'second.example.com');
+    });
+
+    try {
+      const removed = await deleteStaleTokens(
+        [
+          { serverUrl: 'https://first.example.com', orgKey: 'org' },
+          { serverUrl: 'https://second.example.com' },
+        ],
+        'https://new.example.com',
+        undefined,
+        (serverUrl) => failures.push(serverUrl),
+      );
+      expect(failures).toEqual(['https://first.example.com']);
+      expect(removed).toEqual(['https://first.example.com', 'https://second.example.com']);
+      expect(deletedAccounts).toContain('second.example.com');
+    } finally {
+      deleteSpy.mockRestore();
+      process.env.SONARQUBE_CLI_KEYCHAIN_FILE = keychainFile;
+      clearSecretCache();
+    }
+  });
+});
+
+describe('deleteLegacyTokens', () => {
+  it('uses deletion without reading either legacy account', async () => {
+    const savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    clearSecretCache();
+    const getSpy = spyOn(Bun.secrets, 'get').mockImplementation(() => {
+      throw new Error('Legacy account must not be read.');
+    });
+    const deleteSpy = spyOn(Bun.secrets, 'delete').mockResolvedValue(true);
+
+    try {
+      expect(await deleteLegacyTokens('https://sonar.example.com:8443/base', 'org')).toEqual({
+        removed: true,
+        errors: [],
+      });
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(deleteSpy).toHaveBeenCalledWith({
+        service: expect.any(String),
+        name: 'sonar.example.com',
+      });
+      expect(deleteSpy).toHaveBeenCalledWith({
+        service: expect.any(String),
+        name: 'sonar.example.com:org',
+      });
+    } finally {
+      getSpy.mockRestore();
+      deleteSpy.mockRestore();
+      if (savedKeychainFile === undefined) delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+      else process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
+      clearSecretCache();
+    }
+  });
+
+  it('reports a partial removal and attempts both accounts when one deletion fails', async () => {
+    const savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+    clearSecretCache();
+    const deletedAccounts: string[] = [];
+    const deleteSpy = spyOn(Bun.secrets, 'delete').mockImplementation(({ name }) => {
+      deletedAccounts.push(name);
+      if (name === 'sonar.example.com:org') throw new Error('Keychain is locked');
+      return Promise.resolve(true);
+    });
+
+    try {
+      const result = await deleteLegacyTokens('https://sonar.example.com', 'org');
+      expect(result.removed).toBe(true);
+      expect(result.errors).toHaveLength(1);
+      expect((result.errors[0] as Error).message).toContain('Keychain is locked');
+      expect(deletedAccounts).toEqual(['sonar.example.com', 'sonar.example.com:org']);
+    } finally {
+      deleteSpy.mockRestore();
+      if (savedKeychainFile === undefined) delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
+      else process.env.SONARQUBE_CLI_KEYCHAIN_FILE = savedKeychainFile;
+      clearSecretCache();
+    }
+  });
 });
 
 describe('file backend edge cases', () => {
@@ -282,7 +464,7 @@ describe('file backend edge cases', () => {
     const altDir = join(tmpdir(), `keychain-alt-${crypto.randomUUID()}`);
     mkdirSync(altDir, { recursive: true });
     const altFile = join(altDir, 'keychain.json');
-    writeFileSync(altFile, JSON.stringify({ tokens: { 'sonarcloud.io:org1': 'tok-alt' } }));
+    writeFileSync(altFile, JSON.stringify({ tokens: { 'https://sonarcloud.io:org1': 'tok-alt' } }));
 
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = altFile;
     clearSecretCache();
