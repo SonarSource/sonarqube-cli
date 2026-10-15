@@ -19,9 +19,11 @@
  */
 
 import { realpathSync } from 'node:fs';
-import { join, normalize, win32 } from 'node:path';
+import { join, normalize, sep, win32 } from 'node:path';
 
 import { isWindows } from '@/core/host/environment/platform-detector.ts';
+
+export const HOMEBREW_UPDATE_GUIDANCE = 'Run brew upgrade --cask sonarqube-cli to update it.';
 
 export const EXTERNAL_UPDATE_GUIDANCE =
   'Update it through your organization, package manager, or the method used to install it.';
@@ -34,6 +36,16 @@ function canonicalPath(path: string, windows: boolean): string {
     resolvedPath = path;
   }
   return windows ? win32.normalize(resolvedPath).toLowerCase() : normalize(resolvedPath);
+}
+
+export function isHomebrewInstallation(): boolean {
+  if (isWindows()) return false;
+  const executablePath = canonicalPath(process.execPath, false).split(sep).join('/');
+  return /\/Caskroom\/sonarqube-cli\/[^/]+\/[^/]+$/.test(executablePath);
+}
+
+export function externalUpdateGuidance(): string {
+  return isHomebrewInstallation() ? HOMEBREW_UPDATE_GUIDANCE : EXTERNAL_UPDATE_GUIDANCE;
 }
 
 export function isStandaloneInstallerLocation(): boolean {

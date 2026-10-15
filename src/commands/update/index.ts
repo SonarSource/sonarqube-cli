@@ -23,6 +23,9 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
+  externalUpdateGuidance,
+  HOMEBREW_UPDATE_GUIDANCE,
+  isHomebrewInstallation,
   isStandaloneInstallerLocation,
 } from '@/core/update/installation-location.ts';
 
@@ -79,7 +82,7 @@ export async function updateStatus(
   } else {
     console.warn(`Update available: v${latestVersion}`);
     console.text(
-      isStandaloneInstallerLocation() ? '  Run: sonar update' : `  ${EXTERNAL_UPDATE_GUIDANCE}`,
+      isStandaloneInstallerLocation() ? '  Run: sonar update' : `  ${externalUpdateGuidance()}`,
     );
   }
 }
@@ -95,6 +98,12 @@ export async function updateVersion(
     return;
   }
 
+  if (isHomebrewInstallation()) {
+    console.warn('This CLI was installed with Homebrew.');
+    throw new CommandFailedError(HOMEBREW_UPDATE_GUIDANCE, {
+      remediationHint: `${HOMEBREW_UPDATE_GUIDANCE} A package manager update can have side effects on your machine, such as upgrading other packages or dependencies. Run the update yourself to stay in control.`,
+    });
+  }
   assertStandaloneInstallerLocation();
   console.info('Checking for updates...');
 
