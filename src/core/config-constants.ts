@@ -179,7 +179,8 @@ export const SCA_SCANNER_CLI_DIST_PREFIX = 'CommercialDistribution/sca-scanner-c
  * path embeds the platform: `${SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX}-${platform}/...`.
  */
 export const SONAR_CONTEXT_AUGMENTATION_DIST_PREFIX = 'Distribution/sonar-context-augmentation';
-export const CLI_STABLE_VERSION_PATH = 'Distribution/sonarqube-cli/stable.version';
+export const CLI_DIST_PREFIX = 'Distribution/sonarqube-cli';
+export const CLI_STABLE_VERSION_PATH = `${CLI_DIST_PREFIX}/stable.version`;
 export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 
@@ -355,6 +356,12 @@ export const AUTH_PORT_COUNT = 11;
 
 /** Env var to shorten SQAA 503 retry backoff (ms). Used by the integration harness only. */
 export const ENV_SQAA_RETRY_BASE_DELAY_MS = 'SONARQUBE_CLI_SQAA_RETRY_BASE_DELAY_MS';
+
+/** Env var redirecting the `sonar mdm` system-wide binary path. Used by the integration harness only. */
+export const ENV_MDM_BINARY_PATH = 'SONARQUBE_CLI_MDM_BINARY_PATH';
+
+/** Env var replacing `sonar mdm` user enumeration with a PATH-delimited list of home directories. Used by the integration harness only. */
+export const ENV_MDM_USER_HOMES = 'SONARQUBE_CLI_MDM_USER_HOMES';
 
 const DEFAULT_SQAA_RETRY_503_BASE_DELAY_MS = 2000;
 
