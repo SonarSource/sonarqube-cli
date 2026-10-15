@@ -128,6 +128,11 @@ export interface SonarSecretsHooksFeatureConfig {
    * such placeholder. Ignored when `hookWriter` is set.
    */
   projectDirPlaceholder?: string;
+  /**
+   * Re-roots the context the hook scripts, hook commands and hook config are resolved against, for
+   * agents whose config directory is not `<targetRoot>/<configDir>` (e.g. Windows `%APPDATA%`).
+   */
+  resolveContext?: (context: IntegrationContext) => IntegrationContext;
 }
 
 export function resolveAgentHooksConfigPath(
@@ -143,8 +148,9 @@ export function createSonarSecretsHooksFeature<TOptions>(
 ): FeatureDeclaration<TOptions> {
   const featureId = config.featureId ?? SONAR_SECRETS_HOOKS_FEATURE_ID;
   const writer = config.hookWriter ?? createAgentHooksWriter(config.projectDirPlaceholder);
+  const rootContext = config.resolveContext ?? ((context: IntegrationContext) => context);
   const resolveHooksConfigPath = (context: IntegrationContext) =>
-    resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
+    resolveAgentHooksConfigPath(rootContext(context), config.configDir, config.hooksConfigFileName);
 
   return {
     id: featureId,
@@ -158,7 +164,7 @@ export function createSonarSecretsHooksFeature<TOptions>(
           id: script.id,
           displayName: script.displayName,
           targetPath: (context) =>
-            resolveAgentHookScriptPath(context, config.configDir, script.scriptPath),
+            resolveAgentHookScriptPath(rootContext(context), config.configDir, script.scriptPath),
           content: script.content,
           executable: true,
         }),
@@ -169,7 +175,7 @@ export function createSonarSecretsHooksFeature<TOptions>(
         targetPath: resolveHooksConfigPath,
         defaultValue: writer.defaultValue,
         patch: (document, context) =>
-          writer.patch(document, context, config.hookEntries, config.configDir),
+          writer.patch(document, rootContext(context), config.hookEntries, config.configDir),
         removePatch: (document) =>
           writer.removePatch(
             document,

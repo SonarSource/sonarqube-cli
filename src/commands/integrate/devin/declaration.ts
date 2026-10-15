@@ -22,14 +22,20 @@ import { join } from 'node:path';
 
 import type {
   FeatureContainer,
+  FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { jsonPatch, wholeFile } from '@/core/framework/features';
+import { jsonPatch, textSnippet, wholeFile } from '@/core/framework/features';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
+import {
+  SECRETS_COMBINED_FEATURE_PREVIEW,
+  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
+} from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
+import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -43,6 +49,11 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
+import {
+  SECRETS_ON_READ_BODY,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 
@@ -58,6 +69,11 @@ const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 const SQAA_HOOK_MARKER = 'sonar-sqaa';
 // Devin tool names are lowercase and the matcher is case-sensitive.
 const SQAA_HOOK_MATCHER = '^(edit|write)$';
+const PRETOOL_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
+const PROMPT_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+const SECRETS_HOOK_MARKER = 'sonar-secrets';
+const READ_HOOK_MATCHER = '^read$';
+const SECRETS_ON_READ_MARKER = 'devin-secrets-on-read';
 
 export function resolveDevinMcpConfigPath(
   context: IntegrationContext,
@@ -89,6 +105,69 @@ export function resolveDevinAgentsMdPath(
 // config dir keeps hook scripts and commands correct where it is not `<home>/<name>` (Windows %APPDATA%).
 function devinHookContext(context: IntegrationContext): IntegrationContext {
   return { ...context, targetRoot: resolveDevinConfigDir(context.targetRoot) };
+}
+
+function createDevinSecretsHooksFeature(): FeatureDeclaration<DevinIntegrationOptions> {
+  return createSonarSecretsHooksFeature<DevinIntegrationOptions>({
+    agentDisplayName: DEVIN_DISPLAY_NAME,
+    configDir: '',
+    hooksConfigFileName: DEVIN_CONFIG_FILE,
+    hooksPatchId: 'devin-hooks-secrets-hook',
+    previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
+    resolveContext: devinHookContext,
+    scripts: [
+      {
+        id: 'pretool-secrets-script',
+        displayName: 'Devin PreToolUse hook script',
+        scriptPath: PRETOOL_SECRETS_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('devin-pre-tool-use'),
+          windows: buildWindowsHookScript('devin-pre-tool-use'),
+        },
+      },
+      {
+        id: 'prompt-secrets-script',
+        displayName: 'Devin UserPromptSubmit hook script',
+        scriptPath: PROMPT_SECRETS_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('devin-prompt-submit'),
+          windows: buildWindowsHookScript('devin-prompt-submit'),
+        },
+      },
+    ],
+    hookEntries: [
+      {
+        eventType: 'PreToolUse',
+        matcher: READ_HOOK_MATCHER,
+        marker: SECRETS_HOOK_MARKER,
+        scriptPath: PRETOOL_SECRETS_SCRIPT_REL,
+      },
+      {
+        eventType: 'UserPromptSubmit',
+        matcher: '',
+        marker: SECRETS_HOOK_MARKER,
+        scriptPath: PROMPT_SECRETS_SCRIPT_REL,
+      },
+    ],
+  });
+}
+
+function createSecretsInstructionsFeature(): FeatureDeclaration<DevinIntegrationOptions> {
+  return {
+    id: 'secrets-instructions',
+    displayName: 'secrets-on-read instructions',
+    previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
+    resources: [
+      textSnippet({
+        id: 'devin-secrets-instructions',
+        displayName: 'Devin AGENTS.md secrets instructions',
+        targetPath: resolveDevinAgentsMdPath,
+        startMarker: sonarBeginMarker(SECRETS_ON_READ_MARKER),
+        endMarker: sonarEndMarker(SECRETS_ON_READ_MARKER),
+        content: SECRETS_ON_READ_BODY,
+      }),
+    ],
+  };
 }
 
 function createSqaaHookSubfeature(): SubfeatureDeclaration<DevinIntegrationOptions> {
@@ -141,7 +220,9 @@ export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> =
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
   features: [
+    createDevinSecretsHooksFeature(),
     createDevinVortexFeature(),
+    createSecretsInstructionsFeature(),
     createMcpServerFeature<DevinIntegrationOptions>({
       resolveConfigPath: resolveDevinMcpConfigPath,
       alwaysGlobal: true,
