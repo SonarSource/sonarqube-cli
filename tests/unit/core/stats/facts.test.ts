@@ -88,6 +88,7 @@ describe('commitStatsFacts: run_trigger classification', () => {
     [SECRETS_CALLER_COMMANDS.antigravityPreToolUse, 'hooks'],
     [SECRETS_CALLER_COMMANDS.cursorPreFileRead, 'hooks'],
     [SECRETS_CALLER_COMMANDS.cursorPreToolUse, 'hooks'],
+    [SECRETS_CALLER_COMMANDS.devinPreToolUse, 'hooks'],
     [SQAA_ANALYZE_CALLER_COMMAND, 'manual'],
     [SQAA_ANALYZE_AGENTIC_CALLER_COMMAND, 'manual'],
     [SQAA_VERIFY_CALLER_COMMAND, 'manual'],

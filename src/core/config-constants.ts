@@ -298,6 +298,7 @@ export const SECRETS_CALLER_COMMANDS = {
   antigravityPreToolUse: 'antigravity-pre-tool-use',
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
+  devinPreToolUse: 'devin-pre-tool-use',
   opencodePreToolUse: 'opencode-pre-tool-use',
   opencodeChatMessage: 'opencode-chat-message',
 } as const;
@@ -321,6 +322,7 @@ export const SECRETS_STOP_POINT_BY_CALLER_COMMAND: Readonly<Record<string, strin
   [SECRETS_CALLER_COMMANDS.antigravityPreToolUse]: 'file-read',
   [SECRETS_CALLER_COMMANDS.cursorPreFileRead]: 'file-read',
   [SECRETS_CALLER_COMMANDS.cursorPreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.devinPreToolUse]: 'file-read',
   [SECRETS_CALLER_COMMANDS.opencodePreToolUse]: 'file-read',
 };
 

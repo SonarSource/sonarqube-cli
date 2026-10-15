@@ -49,9 +49,11 @@ function fakeContext(targetRoot: string): IntegrationContext {
 }
 
 describe('devinIntegration features', () => {
-  it('declares the vortex container and the mcp-server feature', () => {
+  it('declares the secrets hooks, the vortex container, the secrets instructions and the mcp-server feature', () => {
     expect(devinIntegration.features.map((feature) => feature.id)).toEqual([
+      'sonar-secrets-hooks',
       'vortex',
+      'secrets-instructions',
       'mcp-server',
     ]);
   });
