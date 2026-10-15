@@ -21,6 +21,7 @@
 // Integration tests for the `sonar update` command and the deprecated `sonar self-update` alias
 
 import { chmodSync, copyFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -115,6 +116,29 @@ describe('update command', () => {
     );
     expect(result.stdout + result.stderr).toContain(
       'Update it through your organization, package manager, or the method used to install it.',
+    );
+  });
+
+  describe.skipIf(process.platform === 'win32')('Homebrew installation', () => {
+    it.each(['update', 'update --force', 'self-update'])(
+      '%s warns without updating the Homebrew binary',
+      async (command) => {
+        const binDir = join(harness.userHome.path, 'Cellar', 'sonarqube-cli', CLI_VERSION, 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryPath = join(binDir, 'sonar');
+        copyFileSync(getCliBinaryPath(), binaryPath);
+        chmodSync(binaryPath, 0o755);
+
+        const result = await harness.run(command, { binaryPath });
+        const output = result.stdout + result.stderr;
+
+        expect(result.exitCode).toBe(1);
+        expect(output).toContain('This CLI was installed with Homebrew.');
+        expect(output).toContain('brew upgrade sonar');
+        expect(output).toContain('side effects on your machine');
+        expect(output).not.toContain('Checking for updates');
+        expect(output).not.toContain('Updated to');
+      },
     );
   });
 
