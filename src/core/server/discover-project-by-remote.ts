@@ -68,11 +68,11 @@ export async function applyGitRemoteBinding(
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  if (options.auth === null) {
+  if (options.auth === null || !repoRoot) {
     return;
   }
 
-  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
+  const gitRemote = await getGitRemote(repoRoot);
   if (!gitRemote) {
     return;
   }
@@ -90,6 +90,8 @@ export async function applyGitRemoteBinding(
   config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
+  // The binding is repository-wide, so the project is anchored at the repository root, not at wherever we were invoked.
+  config.projectRoot = repoRoot;
 
   if (options.silent) {
     return;

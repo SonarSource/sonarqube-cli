@@ -82,7 +82,7 @@ export function singleFileFailureReport(
   return makeReport([], [{ path: filePath, message }], [], analysisDepth);
 }
 
-/** Ignored files are reported relative to `base` (the repository root), never as absolute paths. */
+/** Relative to `base` (the repository root); a file outside it (`outside-repository`) keeps its absolute path. */
 export function ignoredReportPath(path: string, base?: string): string {
   return toRelativePosixPathOrNull(path, base) ?? normalizePath(path);
 }
