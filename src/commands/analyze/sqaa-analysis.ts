@@ -29,6 +29,7 @@ import {
   readSqaaFileContent,
   type SqaaChunkGroupError,
   type SqaaChunkResponse,
+  withDisplayFilePath,
 } from './sqaa-api.ts';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -45,11 +46,14 @@ export type FileSuccess = {
 export type FileFailure = { file: string; filePath: string; failure: Error };
 export type FileResult = FileSuccess | FileFailure;
 
-type ChunkPath = { file: string; filePath: string };
+type ChunkPath = { file: string; filePath: string; serverPath: string };
 
 export interface RunContext {
   files: string[];
+  /** Display paths, parallel to `files`. */
   allPaths: string[];
+  /** Paths sent to SQAA, parallel to `files`. */
+  serverPaths: string[];
   connection: SonarConnection;
   projectKey: string;
   branch: string | undefined;
@@ -124,11 +128,11 @@ function prepareChunks(
     try {
       readableChunkFiles.push({
         absolutePath: file,
-        relativePath: ctx.allPaths[idx],
+        relativePath: ctx.serverPaths[idx],
         content: readSqaaFileContent(file),
       });
     } catch (err) {
-      recordFileFailure(progress, tally, idx, { file, filePath: ctx.allPaths[idx] }, err as Error);
+      recordFileFailure(progress, tally, idx, chunkPathAt(ctx, idx), err as Error);
     }
   }
 
@@ -161,17 +165,18 @@ function chunkPathsForFiles(
     if (idx === undefined) {
       continue;
     }
-    partPaths.push({ file: chunkFile.absolutePath, filePath: ctx.allPaths[idx] });
+    partPaths.push(chunkPathAt(ctx, idx));
     partIndices.push(idx);
   }
   return { partPaths, partIndices };
 }
 
+function chunkPathAt(ctx: RunContext, idx: number): ChunkPath {
+  return { file: ctx.files[idx], filePath: ctx.allPaths[idx], serverPath: ctx.serverPaths[idx] };
+}
+
 function chunkPathsForIndices(ctx: RunContext, fileIndices: number[]): ChunkPath[] {
-  return fileIndices.map((idx) => ({
-    file: ctx.files[idx],
-    filePath: ctx.allPaths[idx],
-  }));
+  return fileIndices.map((idx) => chunkPathAt(ctx, idx));
 }
 
 function recordSuccessfulParts(
@@ -203,13 +208,7 @@ function recordGroupFetchErrors(
       if (idx === undefined) {
         continue;
       }
-      recordFileFailure(
-        progress,
-        tally,
-        idx,
-        { file: failed.absolutePath, filePath: ctx.allPaths[idx] },
-        error,
-      );
+      recordFileFailure(progress, tally, idx, chunkPathAt(ctx, idx), error);
     }
   }
 }
@@ -357,22 +356,23 @@ export function distributeChunkResponse(
   errors: Array<{ code: string; message: string }> | null | undefined,
   chunkPaths: ChunkPath[],
 ): FileSuccess[] {
-  const issuesByPath = new Map<string, SqaaIssue[]>();
-  const knownPaths = new Set(chunkPaths.map((p) => p.filePath));
-  const fallbackPath = chunkPaths[0]?.filePath;
+  const issuesByServerPath = new Map<string, SqaaIssue[]>();
+  const knownServerPaths = new Set(chunkPaths.map((p) => p.serverPath));
+  const fallbackServerPath = chunkPaths[0]?.serverPath;
 
   for (const issue of issues) {
-    const path = issue.filePath && knownPaths.has(issue.filePath) ? issue.filePath : fallbackPath;
-    if (!path) continue;
-    const list = issuesByPath.get(path) ?? [];
+    const serverPath =
+      issue.filePath && knownServerPaths.has(issue.filePath) ? issue.filePath : fallbackServerPath;
+    if (!serverPath) continue;
+    const list = issuesByServerPath.get(serverPath) ?? [];
     list.push(issue);
-    issuesByPath.set(path, list);
+    issuesByServerPath.set(serverPath, list);
   }
 
-  return chunkPaths.map(({ file, filePath }, index) => ({
+  return chunkPaths.map(({ file, filePath, serverPath }, index) => ({
     file,
     filePath,
-    issues: issuesByPath.get(filePath) ?? [],
+    issues: withDisplayFilePath(issuesByServerPath.get(serverPath) ?? [], filePath),
     errors: index === 0 ? errors : null,
   }));
 }

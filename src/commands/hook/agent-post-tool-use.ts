@@ -38,6 +38,7 @@ import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
+import { isInsideProjectRoot, resolveSqaaPath } from '../analyze/sqaa-api.ts';
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import type {
@@ -73,7 +74,7 @@ export async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), {
+  const { projectKey, projectRoot } = await discoverProject(process.cwd(), {
     auth,
     silent: true,
     console: ctx.console,
@@ -90,6 +91,10 @@ export async function handleSqaaPostToolUse(
     logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
     return { decision: 'none' };
   }
+  if (!isInsideProjectRoot(canonicalPath, projectRoot)) {
+    logger.debug(`PostToolUse SQAA skipped: file outside project root ${projectRoot}: ${filePath}`);
+    return { decision: 'none' };
+  }
 
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
@@ -101,7 +106,7 @@ export async function handleSqaaPostToolUse(
       fetchSingleFileReport(
         connection,
         projectKey,
-        canonicalPath,
+        resolveSqaaPath(canonicalPath, projectRoot),
         fileContent,
         branch,
         undefined,
