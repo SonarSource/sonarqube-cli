@@ -43,6 +43,7 @@ const AGENT_LABELS: Record<CallerAgent, string> = {
   antigravity: 'Antigravity',
   opencode: 'OpenCode',
   devin: 'Devin',
+  pi: 'Pi',
 };
 
 export const SUPPORTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
@@ -76,6 +77,7 @@ const AGENT_MARKERS: Record<DetectedAgentId, MarkerResolver> = {
   antigravity: underHome(join('.gemini', 'config')),
   opencode: underHome(join('.config', 'opencode')),
   devin: ({ home, env, platform }) => [resolveDevinConfigDir(home, env, platform)],
+  pi: underHome(join('.pi', 'agent')),
 };
 
 export function detectInstalledAgents(
