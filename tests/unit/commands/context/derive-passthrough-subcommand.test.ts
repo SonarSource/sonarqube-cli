@@ -25,7 +25,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import * as keychain from '@/core/host/keychain.ts';
 import { clearSecretCache, MissingKeychainError } from '@/core/host/keychain.ts';
 import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 
 import {
   derivePassthroughSubcommand,
