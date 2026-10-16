@@ -29,16 +29,24 @@ interface DriverInput {
   cwd: string;
   sessionId: string;
   sessionIdThrows?: boolean;
+  entries?: unknown[];
   steps: Step[];
 }
 
 const input = JSON.parse(await Bun.stdin.text()) as DriverInput;
 const loaded = (await import(pathToFileURL(input.extensionPath).href)) as {
-  default: (pi: { on: (name: string, handler: Handler) => void }) => void;
+  default: (pi: {
+    on: (name: string, handler: Handler) => void;
+    sendMessage: (message: unknown) => void;
+  }) => void;
 };
 
 const handlers = new Map<string, Handler>();
-loaded.default({ on: (name, handler) => handlers.set(name, handler) });
+const sentMessages: unknown[] = [];
+loaded.default({
+  on: (name, handler) => handlers.set(name, handler),
+  sendMessage: (message) => sentMessages.push(message),
+});
 
 const ctx = {
   cwd: input.cwd,
@@ -47,6 +55,7 @@ const ctx = {
       if (input.sessionIdThrows) throw new Error('no session');
       return input.sessionId;
     },
+    getEntries: () => input.entries ?? [],
   },
 };
 const results: unknown[] = [];
@@ -63,5 +72,5 @@ for (const step of input.steps) {
   results.push((await handler(step.payload, ctx)) ?? null);
 }
 
-process.stdout.write(JSON.stringify({ registered: [...handlers.keys()], results }));
+process.stdout.write(JSON.stringify({ registered: [...handlers.keys()], results, sentMessages }));
 process.exit(0);
