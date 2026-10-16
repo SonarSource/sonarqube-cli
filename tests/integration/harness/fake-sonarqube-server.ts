@@ -84,6 +84,11 @@ export interface PullRequestConfig {
   branch: string;
 }
 
+export interface PatResponse {
+  status: number;
+  message?: string;
+}
+
 interface ComponentTreeErrorConfig {
   statusCode: number;
   body?: string;
@@ -621,7 +626,7 @@ export class FakeSonarQubeServerBuilder {
   >();
   private readonly githubOrganizations = new Map<string, FakeGithubOrganization[]>();
   private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
-  private readonly patResponses = new Map<string, { status: number; message?: string }>();
+  private readonly patResponses = new Map<string, PatResponse[]>();
   private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
@@ -1007,8 +1012,16 @@ export class FakeSonarQubeServerBuilder {
    * A `status` of 204 (200 for the GitHub probe) is a valid token; 400 carries `message` as the
    * server's error; any other status is returned as-is. Settings never configured here are valid.
    */
-  withPatResponse(settingKey: string, response: { status: number; message?: string }): this {
-    this.patResponses.set(settingKey, response);
+  withPatResponse(settingKey: string, response: PatResponse): this {
+    return this.withPatResponses(settingKey, [response]);
+  }
+
+  /**
+   * Like {@link withPatResponse}, but answers successive calls for the key in order; the last
+   * response repeats once the sequence is exhausted.
+   */
+  withPatResponses(settingKey: string, responses: PatResponse[]): this {
+    this.patResponses.set(settingKey, responses);
     return this;
   }
 
@@ -1093,6 +1106,7 @@ export class FakeSonarQubeServerBuilder {
       }));
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
+    const patCallCounts = new Map<string, number>();
     const provisionConcurrency = { current: 0, peak: 0 };
 
     const server = Bun.serve({
@@ -2248,7 +2262,11 @@ export class FakeSonarQubeServerBuilder {
           path === '/api/alm_integrations/list_github_organizations'
         ) {
           const isProbe = path === '/api/alm_integrations/list_github_organizations';
-          const configured = patResponses.get(query.almSetting ?? '');
+          const settingKey = query.almSetting ?? '';
+          const sequence = patResponses.get(settingKey);
+          const calls = patCallCounts.get(settingKey) ?? 0;
+          patCallCounts.set(settingKey, calls + 1);
+          const configured = sequence?.[Math.min(calls, sequence.length - 1)];
           const status = configured?.status ?? (isProbe ? 200 : 204);
           if (status === 204) return new Response(null, { status });
           if (status === 400) {

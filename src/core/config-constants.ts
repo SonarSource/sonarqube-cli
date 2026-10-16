@@ -372,3 +372,28 @@ export function getSqaaRetry503BaseDelayMs(): number {
   }
   return parsed;
 }
+
+/** Env var to shorten the `sonar import` PAT poll interval (ms). Used by the integration harness only. */
+export const ENV_IMPORT_PAT_POLL_INTERVAL_MS = 'SONARQUBE_CLI_IMPORT_PAT_POLL_INTERVAL_MS';
+
+/** Env var to shorten the `sonar import` PAT wait timeout (ms). Used by the integration harness only. */
+export const ENV_IMPORT_PAT_WAIT_TIMEOUT_MS = 'SONARQUBE_CLI_IMPORT_PAT_WAIT_TIMEOUT_MS';
+
+function readNonNegativeIntEnv(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') {
+    return undefined;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** Poll interval override via {@link ENV_IMPORT_PAT_POLL_INTERVAL_MS}; `undefined` keeps the default. */
+export function getImportPatPollIntervalMs(): number | undefined {
+  return readNonNegativeIntEnv(ENV_IMPORT_PAT_POLL_INTERVAL_MS);
+}
+
+/** Wait timeout override via {@link ENV_IMPORT_PAT_WAIT_TIMEOUT_MS}; `undefined` keeps the default. */
+export function getImportPatWaitTimeoutMs(): number | undefined {
+  return readNonNegativeIntEnv(ENV_IMPORT_PAT_WAIT_TIMEOUT_MS);
+}
