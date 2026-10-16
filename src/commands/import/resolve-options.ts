@@ -290,6 +290,10 @@ export interface RepoSource {
   scope: string;
   /** Names the platform a missing repository was looked up on, e.g. "the selected organization's DevOps platform". */
   platformScope: string;
+  /** Why a source with no repositories at all may be empty. */
+  noRepositoriesHint: string;
+  /** Where a `--repo` slug that was not listed should have been visible. */
+  notFoundHint: string;
   almKey: string | undefined;
   onlyPrivateProjects: OnlyPrivateProjects;
 }
@@ -341,6 +345,9 @@ export async function resolveRepos(
         client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
       scope: 'the selected organization',
       platformScope: "the selected organization's DevOps platform",
+      noRepositoriesHint:
+        'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
+      notFoundHint: 'Check that the repository slug(s) are correct and visible to the org.',
       almKey,
       onlyPrivateProjects,
     },
@@ -395,8 +402,7 @@ async function createRepositoryCollectionOrThrow(
 
   if (collection.total === 0) {
     throw new CommandFailedError(`No repositories found for ${source.scope}.`, {
-      remediationHint:
-        'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
+      remediationHint: source.noRepositoriesHint,
     });
   }
 
@@ -486,7 +492,7 @@ async function resolveReposBySlug(source: RepoSource, slugs: string[]): Promise<
   if (notFound.length > 0) {
     throw new CommandFailedError(
       `Repositor${notFound.length === 1 ? 'y' : 'ies'} not found in ${source.platformScope}: ${notFound.join(', ')}`,
-      { remediationHint: 'Check that the repository slug(s) are correct and visible to the org.' },
+      { remediationHint: source.notFoundHint },
     );
   }
 
