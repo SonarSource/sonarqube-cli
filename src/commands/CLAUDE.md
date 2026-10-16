@@ -51,3 +51,5 @@ The location check resolves symlinks on the running executable and the installer
 When `sonar update` runs from source through Bun, it explains that only an installed CLI can update itself. An unset or different home directory still fails the location check with the generic external-installation guidance.
 
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
+
+`sonar update` detects the Homebrew cask when the canonical executable path contains `/Caskroom/sonarqube-cli/` under any prefix, including through a `bin/sonar` symlink. It exits with code 1 before checking or installing updates, including with `--force`. It recommends `brew upgrade --cask sonarqube-cli`. The remediation hint explains why the CLI does not run Homebrew. Read-only update status, system status recommendations, and post-command update notices also recommend `brew upgrade --cask sonarqube-cli` for this cask. Standalone updates keep their existing behavior.
