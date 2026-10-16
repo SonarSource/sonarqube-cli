@@ -184,6 +184,27 @@ describe('analyzeSqaa: auth resolution', () => {
       "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
     );
   });
+
+  it('skips the git-remote lookup when --project is explicit, since only the root is needed', async () => {
+    await analyzeSqaa(
+      { file: ['src/index.ts'], project: TEST_PROJECT },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: false }),
+    );
+  });
+
+  it('keeps the git-remote lookup when no project is given', async () => {
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: true }),
+    );
+  });
 });
 
 // Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
