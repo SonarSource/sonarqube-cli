@@ -95,7 +95,11 @@ describe('sonar import on SonarQube Server', () => {
     });
 
     it('picks the setting named by --dop-setting', async () => {
-      await startServer((s) => s.withDopSettings([GITLAB, GITHUB]));
+      await startServer((s) =>
+        s
+          .withDopSettings([GITLAB, GITHUB])
+          .withGithubOrganizations('my-github', [{ key: 'acme', repos: [] }]),
+      );
 
       const result = await harness.run('import --non-interactive --all --dop-setting my-github');
 
