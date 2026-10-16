@@ -188,6 +188,24 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(putPayloads(server)).toHaveLength(0);
   });
 
+  it('fails with the connect URL when GitHub returns no organizations for the token', async () => {
+    const server = await startServer((s) => s.withGithubOrganizations('my-github', []));
+
+    const result = await harness.run('import --non-interactive --all');
+
+    expect(result.exitCode).toBe(1);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain("GitHub returned no organizations for setting 'my-github':");
+    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=github&dopSetting=gh-id`);
+    expect(output).not.toContain('resetPat');
+    expect(
+      server
+        .getRecordedRequests()
+        .some((r) => r.path === '/api/alm_integrations/list_github_repositories'),
+    ).toBe(false);
+    expect(putPayloads(server)).toHaveLength(0);
+  });
+
   it('prints the connect URL with dopSetting when no token is connected, and lists nothing', async () => {
     const server = await startServer((s) =>
       s
