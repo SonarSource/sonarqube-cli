@@ -413,6 +413,9 @@ async function createRepositoryCollectionOrThrow(
       RepositoryCollection.create(source.fetchPage, source.onlyPrivateProjects),
     );
   } catch (err) {
+    if (err instanceof CommandFailedError) {
+      throw err;
+    }
     throw new CommandFailedError(
       `Failed to load repositories: ${err instanceof Error ? err.message : String(err)}`,
       { remediationHint: 'Check your network connection and authentication, then retry.' },
