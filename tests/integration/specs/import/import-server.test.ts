@@ -112,7 +112,11 @@ describe('sonar import on SonarQube Server', () => {
     it(
       'asks which setting to use when several are configured and a terminal is available',
       async () => {
-        await startServer((s) => s.withDopSettings([GITLAB, AZURE]));
+        await startServer((s) =>
+          s
+            .withDopSettings([GITLAB, AZURE])
+            .withAzureRepos('my-azure', [{ name: 'repo-a', projectName: 'Project A' }]),
+        );
 
         const session = harness.runInteractive('import --all', {
           extraEnv: { CI: 'false', SONARQUBE_CLI_MOCK_TTY: '1' },
