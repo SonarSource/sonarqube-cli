@@ -39,10 +39,14 @@ import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
 import { readStdinJson } from '../stdin.ts';
-import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
+import {
+  claudeCodexAdapter,
+  userVisibleClaudeCodexAdapter,
+} from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { piAdapter } from './agent-adapters/pi-adapter.ts';
+import { claimSessionWarning } from './session-warning.ts';
 import type {
   SessionStartAgent,
   SessionStartAgentAdapter,
@@ -71,8 +75,13 @@ export async function agentSessionStart(
     }
     sessionId = input.sessionId;
 
-    const output = await resolveSessionStartContext(ctx, input);
-    if (output !== null) {
+    // Suppress failure warnings on SubagentStart by passing reportFailures=false.
+    const output = await resolveSessionStartContext(
+      ctx,
+      input,
+      input.eventName !== 'SubagentStart',
+    );
+    if (output !== null && (!output.userMessage || claimSessionWarning(agent, sessionId))) {
       process.stdout.write(JSON.stringify(adapter.emit(output, input)) + '\n');
     }
   } catch (err) {
@@ -84,6 +93,25 @@ export async function agentSessionStart(
 export async function resolveSessionStartContext(
   ctx: CommandInvocationContext,
   input: SessionStartInput,
+  reportFailures = false,
+): Promise<SessionStartOutput | null> {
+  try {
+    const output = await loadSessionStartContext(ctx, input);
+    return output?.userMessage && !reportFailures ? null : output;
+  } catch (error) {
+    logSkip((error as Error).message);
+    if (!reportFailures) {
+      return null;
+    }
+    return contextWarning(
+      "An unexpected error occurred. Run 'sonar auth status' and check the CLI debug logs.",
+    );
+  }
+}
+
+async function loadSessionStartContext(
+  ctx: CommandInvocationContext,
+  input: SessionStartInput,
 ): Promise<SessionStartOutput | null> {
   if (isContextAugmentationSkipped()) {
     logSkip(`${ENV_SKIP_CAG} is set`);
@@ -91,20 +119,33 @@ export async function resolveSessionStartContext(
   }
 
   const connection = await ctx.resolveConnection();
-  if (!connection) {
-    logSkip('no usable credentials');
-    return null;
-  }
-  const { auth } = connection;
-
   const discovered = await discoverProject(input.startDir ?? process.cwd(), {
-    auth,
+    auth: connection?.auth ?? null,
     silent: true,
     console: ctx.console,
   });
-  if (!discovered.projectKey) {
-    logSkip('no project key resolved');
+  if (discovered.ambiguousProject) {
+    logSkip('multiple projects matched the session directory');
     return null;
+  }
+  const hasSonarConfig = discovered.hasSonarConfig === true;
+  if (!connection) {
+    return hasSonarConfig
+      ? contextWarning(
+          "No usable credentials. Run 'sonar auth status', then 'sonar auth login' if needed.",
+        )
+      : null;
+  }
+  const { auth } = connection;
+
+  if (!discovered.projectKey) {
+    if (!hasSonarConfig && !discovered.gitRemoteBindingNotFound) {
+      logSkip('no project key or Sonar configuration resolved');
+      return null;
+    }
+    return contextWarning(
+      "No project was found. Run 'sonar link <projectKey>' from the project directory.",
+    );
   }
   noteProject(auth, discovered.projectKey);
 
@@ -114,13 +155,16 @@ export async function resolveSessionStartContext(
   ]);
   if (vortexEntitlement.status !== 'enabled') {
     logSkip(`Vortex entitlement is '${vortexEntitlement.status}'`);
-    return null;
+    return contextWarning(
+      "Vortex is unavailable for this connection. Run 'sonar auth status' and 'sonar system status'.",
+    );
   }
 
   const binaryPath = resolveContextAugmentationBinaryPath();
   if (!binaryPath) {
-    logSkip('sonar-context-augmentation is not installed');
-    return null;
+    return contextWarning(
+      "The context binary is not installed. Run 'sonar integrate' for your agent.",
+    );
   }
 
   const result = await printSessionStartContext({
@@ -136,14 +180,23 @@ export async function resolveSessionStartContext(
   });
   if (!result.ok) {
     logSkip(result.failureMessage ?? 'sonar-context-augmentation failed');
-    return null;
+    return contextWarning(
+      "The context command failed. Run 'sonar auth status' and 'sonar system status'.",
+    );
   }
   if (result.stdout.trim().length === 0) {
-    logSkip('sonar-context-augmentation produced no context');
-    return null;
+    return contextWarning(
+      "The context command returned no context. Run 'sonar system status' and check the CLI debug logs.",
+    );
   }
 
   return { additionalContext: result.stdout };
+}
+
+function contextWarning(reason: string): SessionStartOutput {
+  logSkip(reason);
+  const userMessage = `Vortex context was not loaded. ${reason}`;
+  return { userMessage, additionalContext: `Tell the user: ${userMessage}` };
 }
 
 function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
@@ -156,8 +209,8 @@ function logSkip(reason: string): void {
 }
 
 const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
-  claude: claudeCodexAdapter,
-  codex: claudeCodexAdapter,
+  claude: userVisibleClaudeCodexAdapter,
+  codex: userVisibleClaudeCodexAdapter,
   copilot: copilotAdapter,
   cursor: cursorAdapter,
   devin: claudeCodexAdapter,
