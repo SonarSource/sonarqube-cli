@@ -41,20 +41,13 @@ function toRepository(repo: AzureRepositoryResponse): ServerRepository {
 
 export const azureSupport: PlatformSupport = {
   listRepositories(api, setting): FetchServerRepositories {
-    let projectNames: string[] | undefined;
-    let nextProject = 0;
-    const loaded: ServerRepository[] = [];
+    let loaded: ServerRepository[] | undefined;
 
-    // Neither endpoint is paged, and every repository needs one request per project: they are
-    // all read on the first call so the total is exact. A project only counts as read once its
-    // repositories are in, so a call that failed is simply made again.
+    // Without a project filter the endpoint returns the repositories of every project the token
+    // can see, unpaged: they are all read on the first call so the total is exact, and a failed
+    // call is simply made again.
     return async (pageIndex, pageSize) => {
-      projectNames ??= (await api.listAzureProjects(setting.key)).map((project) => project.name);
-      while (nextProject < projectNames.length) {
-        const repos = await api.searchAzureRepos(setting.key, projectNames[nextProject]);
-        loaded.push(...repos.map(toRepository));
-        nextProject++;
-      }
+      loaded ??= (await api.searchAzureRepos(setting.key)).map(toRepository);
       const start = (pageIndex - 1) * pageSize;
       return { repositories: loaded.slice(start, start + pageSize), total: loaded.length };
     };
