@@ -89,6 +89,15 @@ export interface AzureRepositoryResponse {
   sqProjectName?: string;
 }
 
+/** A Bitbucket Cloud repository as `search_bitbucketcloud_repos` returns it; `sqProjectKey` is set once it is bound. */
+export interface BitbucketCloudRepositoryResponse {
+  slug: string;
+  uuid: string;
+  name: string;
+  workspace: string;
+  sqProjectKey?: string;
+}
+
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
@@ -185,6 +194,24 @@ export class ServerImportApiClient {
       )
       .orThrow();
     return response.repositories ?? [];
+  }
+
+  /**
+   * One page of the Bitbucket Cloud repositories of the setting's workspace, which the server
+   * resolves itself (`pageIndex` starts at 1). The response carries no total.
+   */
+  async searchBitbucketCloudRepos(
+    settingKey: string,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<{ repositories: BitbucketCloudRepositoryResponse[] }> {
+    const response = await this.client
+      .get<{ repositories?: BitbucketCloudRepositoryResponse[] }>(
+        '/api/alm_integration/search_bitbucketcloud_repos',
+        { almSetting: settingKey, p: pageIndex, ps: pageSize },
+      )
+      .orThrow();
+    return { repositories: response.repositories ?? [] };
   }
 
   /**
