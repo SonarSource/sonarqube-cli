@@ -156,10 +156,11 @@ describe('ServerImportApiClient', () => {
       expect(await statusOf('s')).toBe('invalid');
     });
 
-    it('rejects with the original error on a 400 that is not about the token', async () => {
+    it('rejects with the server message on a 400 that is not about the token', async () => {
       fetchSpy = mockFetchSeq(badRequest('Unable to contact Bitbucket server'));
       const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(BadRequestError);
+      expect((error as BadRequestError).message).toBe('Unable to contact Bitbucket server');
     });
 
     it('rejects with the original error when the status is not about the token', async () => {
@@ -173,6 +174,27 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
       const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('query encoding', () => {
+    it.each([
+      ['checkPat', (c: ServerImportApiClient) => c.checkPat('My stuff here')],
+      ['probeGithubPat', (c: ServerImportApiClient) => c.probeGithubPat('My stuff here')],
+    ] as const)('%s sends a key with spaces as %%20, not +', async (_name, call) => {
+      fetchSpy = mockFetchSeq(noContentResponse());
+      await call(api);
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toContain('almSetting=My%20stuff%20here');
+      expect(url).not.toContain('+');
+    });
+
+    it('also escapes reserved characters in a key', async () => {
+      fetchSpy = mockFetchSeq(noContentResponse());
+      await api.checkPat('a&b=c/d');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('almSetting')).toBe('a&b=c/d');
+      expect([...url.searchParams.keys()]).toEqual(['almSetting']);
     });
   });
 
