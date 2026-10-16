@@ -28,11 +28,13 @@ import type {
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
+import { createContextAugmentationExtensionSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
+import { PI_CAG_EXTENSION_CONTENT } from './cag-extension-content.ts';
 import {
   PI_EXTENSION_MANAGED_MARKER,
   PI_SECRETS_EXTENSION_CONTENT,
@@ -44,6 +46,7 @@ const PI_GLOBAL_CONFIG_DIR = join('.pi', 'agent');
 const EXTENSIONS_DIR = 'extensions';
 const SECRETS_EXTENSION_FILE = 'sonar-secrets.ts';
 const SQAA_EXTENSION_FILE = 'sonar-sqaa.ts';
+const CAG_EXTENSION_FILE = 'sonar-cag.ts';
 const MCP_CONFIG_FILE = 'mcp.json';
 
 export const PI_INTEGRATION_ID = 'pi';
@@ -63,6 +66,10 @@ export function resolvePiSecretsExtensionPath(context: IntegrationContext): stri
 
 export function resolvePiSqaaExtensionPath(context: IntegrationContext): string {
   return resolveExtensionFilePath(context, SQAA_EXTENSION_FILE);
+}
+
+export function resolvePiCagExtensionPath(context: IntegrationContext): string {
+  return resolveExtensionFilePath(context, CAG_EXTENSION_FILE);
 }
 
 export function resolvePiMcpConfigPath(context: IntegrationContext): string {
@@ -87,6 +94,18 @@ function createSqaaExtensionSubfeature(): SubfeatureDeclaration<IntegrateAgentOp
   };
 }
 
+function createCagExtensionSubfeature(): SubfeatureDeclaration<IntegrateAgentOptions> {
+  return createContextAugmentationExtensionSubfeature<IntegrateAgentOptions>(
+    wholeFile({
+      id: 'pi-cag-extension',
+      displayName: 'Pi Vortex Context extension',
+      targetPath: resolvePiCagExtensionPath,
+      content: PI_CAG_EXTENSION_CONTENT,
+      managedMarker: PI_EXTENSION_MANAGED_MARKER,
+    }),
+  );
+}
+
 export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
   id: PI_INTEGRATION_ID,
   displayName: PI_DISPLAY_NAME,
@@ -107,7 +126,10 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
         }),
       ],
     },
-    createVortexFeature<IntegrateAgentOptions>([createSqaaExtensionSubfeature()]),
+    createVortexFeature<IntegrateAgentOptions>([
+      createSqaaExtensionSubfeature(),
+      createCagExtensionSubfeature(),
+    ]),
     createMcpServerFeature<IntegrateAgentOptions>({ resolveConfigPath: resolvePiMcpConfigPath }),
   ],
 };
