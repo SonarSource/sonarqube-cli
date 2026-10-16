@@ -41,6 +41,7 @@ import { deriveProjectKey } from './server/project-key.ts';
 import {
   DOP_PLATFORM_LABELS,
   type DopSetting,
+  type PatProbe,
   type ServerImportApiClient,
 } from './server/server-import-api.ts';
 import type { ServerRepository } from './server/server-repository.ts';
@@ -151,8 +152,10 @@ export class ServerBackend implements ImportBackend {
     options: ImportOptions,
     console: Console,
   ): Promise<void> {
-    const status = await this.patStatusOf(setting);
+    const probe = await this.probeOf(setting);
+    const { status } = probe;
     if (status === 'valid') {
+      this.requireGithubOrganizations(setting, probe);
       return;
     }
     const label = DOP_PLATFORM_LABELS[setting.type];
@@ -185,6 +188,7 @@ export class ServerBackend implements ImportBackend {
     url: string,
     problem: string,
   ): Promise<void> {
+    let latest: PatProbe = { status: initial };
     const label = DOP_PLATFORM_LABELS[setting.type];
     const abort = new AbortController();
     const onSigint = () => {
@@ -194,7 +198,10 @@ export class ServerBackend implements ImportBackend {
     let result;
     try {
       result = await waitForPat({
-        check: () => this.patStatusOf(setting),
+        check: async () => {
+          latest = await this.probeOf(setting);
+          return latest.status;
+        },
         initial,
         intervalMs: getImportPatPollIntervalMs(),
         timeoutMs: getImportPatWaitTimeoutMs(),
@@ -207,6 +214,7 @@ export class ServerBackend implements ImportBackend {
     const rerun = `run 'sonar import' again.`;
     switch (result) {
       case 'valid':
+        this.requireGithubOrganizations(setting, latest);
         return;
       case 'invalid':
         throw new CommandFailedError(
@@ -227,11 +235,27 @@ export class ServerBackend implements ImportBackend {
     }
   }
 
-  private async patStatusOf(setting: DopSetting): Promise<PatStatus> {
+  /**
+   * GitHub answers a dead token, or an app installed nowhere the user can see, with a successful
+   * but empty organizations listing, so an empty one cannot lead to a working import.
+   */
+  private requireGithubOrganizations(setting: DopSetting, probe: PatProbe): void {
+    if (setting.type !== 'github' || probe.organizationCount !== 0) {
+      return;
+    }
+    throw new CommandFailedError(
+      `GitHub returned no organizations for setting '${setting.key}'. The personal access token may be expired or revoked, or the GitHub App may not be installed for your GitHub account.`,
+      {
+        remediationHint: `Reconnect it at ${buildConnectUrl(this.serverUrl, setting)}, then run 'sonar import' again.`,
+      },
+    );
+  }
+
+  private async probeOf(setting: DopSetting): Promise<PatProbe> {
     try {
       return setting.type === 'github'
         ? await this.api.probeGithubPat(setting.key)
-        : await this.api.checkPat(setting.key);
+        : { status: await this.api.checkPat(setting.key) };
     } catch (error) {
       if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
         throw new CommandFailedError(`DevOps platform setting '${setting.key}' was not found.`, {
