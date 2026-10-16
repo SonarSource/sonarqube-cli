@@ -82,15 +82,38 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
 
 export interface SqaaPath {
   absolutePath: string;
-  displayPath: string; // path relative to repo root
-  serverPath: string; // path relative to project root; used for SQAA
+  /** Relative to `displayBase`; what the user sees in reports. */
+  displayPath: string;
+  /** Relative to the project root, which is what SQAA matches against the project's analysis. */
+  serverPath: string;
 }
 
-/** Both relative paths are cwd-relative for now; throws when `absolutePath` is outside `base`. */
-export function resolveSqaaPath(absolutePath: string, base: string = process.cwd()): SqaaPath {
-  const relativePath = toRelativePosixPath(absolutePath, base);
-  // TODO: disambiguate display and relative paths
-  return { absolutePath, displayPath: relativePath, serverPath: relativePath };
+export function isInsideProjectRoot(absolutePath: string, projectRoot: string): boolean {
+  return toRelativePosixPathOrNull(absolutePath, projectRoot) !== null;
+}
+
+/** Throws when `absolutePath` is outside `projectRoot` or `displayBase`. */
+export function resolveSqaaPath(
+  absolutePath: string,
+  projectRoot: string,
+  displayBase: string = process.cwd(),
+): SqaaPath {
+  const serverPath = toRelativePosixPathOrNull(absolutePath, projectRoot);
+  if (serverPath == null) {
+    throw new InvalidOptionError(
+      `File must be inside the project root '${projectRoot}': ${absolutePath}`,
+    );
+  }
+  return {
+    absolutePath,
+    displayPath: toRelativePosixPath(absolutePath, displayBase),
+    serverPath,
+  };
+}
+
+/** SQAA echoes the `serverPath` it was sent; reports show the `displayPath` instead. */
+export function withDisplayFilePath(issues: SqaaIssue[], displayPath: string): SqaaIssue[] {
+  return issues.map((issue) => ({ ...issue, filePath: displayPath }));
 }
 
 function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): boolean {
