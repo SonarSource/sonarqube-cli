@@ -227,7 +227,7 @@ describe('sonar import on SonarQube Server', () => {
         `${server.baseUrl()}/projects/create?mode=github&dopSetting=gh-id,`,
       );
       const paths = server.getRecordedRequests().map((r) => r.path);
-      expect(paths).toContain('/api/alm_integration/list_github_organizations');
+      expect(paths).toContain('/api/alm_integrations/list_github_organizations');
       expect(paths).not.toContain('/api/alm_integration/check_pat');
     });
 

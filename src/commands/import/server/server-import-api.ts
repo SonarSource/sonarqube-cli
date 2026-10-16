@@ -301,7 +301,7 @@ export class ServerImportApiClient {
       .get<{
         organizations?: GithubOrganizationResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_organizations', {
+      }>('/api/alm_integrations/list_github_organizations', {
         almSetting: settingKey,
         p: pageIndex,
         ps: pageSize,
@@ -321,7 +321,7 @@ export class ServerImportApiClient {
       .get<{
         repositories?: GithubRepositoryResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_repositories', {
+      }>('/api/alm_integrations/list_github_repositories', {
         almSetting: settingKey,
         organization,
         p: pageIndex,

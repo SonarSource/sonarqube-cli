@@ -2274,9 +2274,9 @@ export class FakeSonarQubeServerBuilder {
 
         if (
           path === '/api/alm_integration/check_pat' ||
-          path === '/api/alm_integration/list_github_organizations'
+          path === '/api/alm_integrations/list_github_organizations'
         ) {
-          const isProbe = path === '/api/alm_integration/list_github_organizations';
+          const isProbe = path === '/api/alm_integrations/list_github_organizations';
           const configured = patResponses.get(query.almSetting ?? '');
           const status = configured?.status ?? (isProbe ? 200 : 204);
           if (status === 204) return new Response(null, { status });
@@ -2307,7 +2307,7 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/api/alm_integration/list_github_repositories') {
+        if (path === '/api/alm_integrations/list_github_repositories') {
           const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
             (o) => o.key === query.organization,
           );
