@@ -83,11 +83,13 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
       'Project_A_web',
       'Project_B_api',
     ]);
-    const searches = server
-      .getRecordedRequests()
-      .filter((r) => r.path === '/api/alm_integrations/search_azure_repos');
-    expect(searches.map((r) => r.query.projectName).sort()).toEqual(['Project A', 'Project B']);
-    expect(searches.every((r) => r.query.almSetting === 'my-azure')).toBe(true);
+    const requests = server.getRecordedRequests();
+    const searches = requests.filter((r) => r.path === '/api/alm_integrations/search_azure_repos');
+    expect(searches).toHaveLength(1);
+    expect(searches[0].query).toEqual({ almSetting: 'my-azure' });
+    expect(requests.some((r) => r.path === '/api/alm_integrations/list_azure_projects')).toBe(
+      false,
+    );
   });
 
   it('sends the repository name as repositoryIdentifier and the Azure project as projectIdentifier', async () => {
