@@ -59,13 +59,28 @@ export interface ContextAugmentationFeatureOptions {
 export function createContextAugmentationSubfeature<TOptions extends IntegrateAgentOptions>(
   options: ContextAugmentationFeatureOptions,
 ): SubfeatureDeclaration<TOptions> {
+  return buildContextAugmentationSubfeature([
+    createHookScriptResource(options),
+    options.hookConfigResource,
+  ]);
+}
+
+export function createContextAugmentationExtensionSubfeature<
+  TOptions extends IntegrateAgentOptions,
+>(extensionResource: ResourceDeclaration): SubfeatureDeclaration<TOptions> {
+  return buildContextAugmentationSubfeature([extensionResource]);
+}
+
+function buildContextAugmentationSubfeature<TOptions extends IntegrateAgentOptions>(
+  resources: ResourceDeclaration[],
+): SubfeatureDeclaration<TOptions> {
   return {
     id: CONTEXT_AUGMENTATION_FEATURE_ID,
     displayName: 'Vortex Context',
     required: true,
     isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
     dependencies: [contextAugmentationBinaryDependency],
-    resources: [createHookScriptResource(options), options.hookConfigResource],
+    resources,
     operations: [createToolIntegrationOperation()],
   };
 }
@@ -89,15 +104,10 @@ export interface ContextAugmentationSkillFeatureOptions {
 export function createContextAugmentationSkillSubfeature<TOptions extends IntegrateAgentOptions>(
   options: ContextAugmentationSkillFeatureOptions,
 ): SubfeatureDeclaration<TOptions> {
-  return {
-    id: CONTEXT_AUGMENTATION_FEATURE_ID,
-    displayName: 'Vortex Context',
-    required: true,
-    isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
-    dependencies: [contextAugmentationBinaryDependency],
-    resources: [createSkillResource(options), createInstructionsResource(options)],
-    operations: [createToolIntegrationOperation()],
-  };
+  return buildContextAugmentationSubfeature([
+    createSkillResource(options),
+    createInstructionsResource(options),
+  ]);
 }
 
 function createToolIntegrationOperation(): FeatureOperation {

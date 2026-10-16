@@ -80,7 +80,9 @@ interface VortexHookInstallShape {
   expectHookEntries: (config: any) => void;
 }
 
-const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallShape> = {
+export type ScriptHookAgent = Exclude<SessionStartAgent, 'pi'>;
+
+const VORTEX_HOOK_INSTALL_SHAPES: Record<ScriptHookAgent, VortexHookInstallShape> = {
   claude: {
     configDir: '.claude',
     hookConfigPath: ['.claude', 'settings.json'],
@@ -138,7 +140,7 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
 
 export function sessionStartScript(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): File {
   const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
@@ -148,7 +150,7 @@ export function sessionStartScript(
 
 function hookConfigText(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): string {
   const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
@@ -158,7 +160,7 @@ function hookConfigText(
   return config.exists() ? config.asText() : '';
 }
 
-export function isVortexHookInstalled(root: Dir, agent: SessionStartAgent): boolean {
+export function isVortexHookInstalled(root: Dir, agent: ScriptHookAgent): boolean {
   return (
     sessionStartScript(root, agent).exists() &&
     hookConfigText(root, agent).includes(VORTEX_HOOK_MARKER)
@@ -167,7 +169,7 @@ export function isVortexHookInstalled(root: Dir, agent: SessionStartAgent): bool
 
 export function expectVortexHookInstalled(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): void {
   const script = sessionStartScript(root, agent, scope);
@@ -182,7 +184,7 @@ export function expectVortexHookInstalled(
 
 export function expectVortexHookAbsent(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): void {
   expect(sessionStartScript(root, agent, scope).exists()).toBe(false);
