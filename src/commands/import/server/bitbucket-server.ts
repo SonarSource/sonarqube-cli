@@ -53,9 +53,9 @@ function toRepository(repo: BitbucketServerRepositoryResponse): ServerRepository
  */
 class BitbucketServerRepositoryLister {
   private projectStart: number | undefined = PROJECT_START;
-  private pendingProjects: BitbucketServerProjectResponse[] = [];
+  private readonly pendingProjects: BitbucketServerProjectResponse[] = [];
   private current: { project: BitbucketServerProjectResponse; start: number } | undefined;
-  private buffered: ServerRepository[] = [];
+  private readonly buffered: ServerRepository[] = [];
   private served = 0;
 
   constructor(
@@ -64,12 +64,16 @@ class BitbucketServerRepositoryLister {
   ) {}
 
   async fetchPage(pageSize: number): Promise<ServerRepositoryPage> {
-    while (this.buffered.length < pageSize && (await this.fetchMore())) {
-      // keep filling until a full page is buffered or the server has nothing left
-    }
+    await this.fillBuffer(pageSize);
     const repositories = this.buffered.splice(0, pageSize);
     this.served += repositories.length;
     return { repositories, total: this.served + this.buffered.length };
+  }
+
+  /** Keeps requesting until a full page is buffered or the server has nothing left. */
+  private async fillBuffer(wanted: number): Promise<void> {
+    if (this.buffered.length >= wanted || !(await this.fetchMore())) return;
+    await this.fillBuffer(wanted);
   }
 
   /** Runs the next request of the walk; false once there is none left. */
