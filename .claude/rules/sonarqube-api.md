@@ -20,7 +20,7 @@ result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
 whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its
 domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organization` /
-`OrganizationRecord` / `OrganizationAccess`). A type or function derived from a client's data but
+`OrganizationRecord` / `OrganizationMembership`). A type or function derived from a client's data but
 issuing no request of its own — no `SonarHttpClient` involved at all — does not belong in this
 layer even when it lives right next to the client conceptually: `OrganizationSummary` /
 `toOrganizationSummary()` sit one level up, in `src/core/domain/organization.ts`, since deriving a
