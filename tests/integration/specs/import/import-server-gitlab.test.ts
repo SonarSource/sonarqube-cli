@@ -265,6 +265,26 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     );
   });
 
+  it('falls back to POST when the server has no PUT on bound-projects', async () => {
+    const server = await startServer((s) =>
+      s
+        .withGitlabRepos('my-gitlab', [
+          gitlabRepo(11, 'group/repo-a'),
+          gitlabRepo(12, 'group/repo-b'),
+        ])
+        .withoutBoundProjectsPut(405),
+    );
+
+    const result = await harness.run('import --all');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Imported 2 repositories');
+    const requests = server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/api/v2/dop-translation/bound-projects');
+    expect(requests.filter((r) => r.method === 'POST')).toHaveLength(2);
+  });
+
   it('pages through every repository', async () => {
     const repos = Array.from({ length: 120 }, (_, i) => gitlabRepo(1000 + i, `group/repo-${i}`));
     const server = await startServer((s) => s.withGitlabRepos('my-gitlab', repos));
