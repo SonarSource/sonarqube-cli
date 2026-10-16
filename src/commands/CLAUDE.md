@@ -42,6 +42,14 @@ The bare `sonar analyze` command accepts `-p, --project <project>` for the agent
 
 `sonar self-update` is a deprecated, hidden alias for `sonar update` (only when `CURRENT_DISTRIBUTION.enableSelfUpdate` is true; see `src/core/host/distribution.ts`), staged with `Stage.Deprecated({ sinceVersion: '1.4', replacement: 'sonar update' })`. Calling it prints a deprecation warning, then runs the same `updateVersion()` logic. Both are registered in `src/commands/command-tree.ts`.
 
+`sonar update` runs the standalone installer only when `process.execPath` matches that installer's per-user destination: `$HOME/.local/share/sonarqube-cli/bin/sonar` on Unix or `%LOCALAPPDATA%\sonarqube-cli\bin\sonar.exe` on Windows. Other installation paths fail before the version check, including with `--force`. `update status` and the deprecated `--status` flag remain read-only and available from any path. The build distribution marker alone does not identify how a binary was installed.
+
+When an update is available, `update status` and `sonar system status` recommend `sonar update` only for a CLI at the standalone installer path. Other installations show guidance to use their organization, package manager, or original installation method.
+
+The location check resolves symlinks on the running executable and the installer directory, including symlinked parent directories. It does not follow a symlink at the expected executable leaf, so a link from the installer path to an externally managed binary stays ineligible.
+
+When `sonar update` runs from source through Bun, it explains that only an installed CLI can update itself. An unset or different home directory still fails the location check with the generic external-installation guidance.
+
 `sonar verify` is a deprecated, hidden alias for `sonar analyze` / `analyze agentic`, staged with `Stage.Deprecated({ sinceVersion: '0.14', replacement: 'sonar analyze' })`.
 
 After an empty Cloud issue search, `sonar list issues` verifies that the exact project key is in the active organization. It uses one exact `/api/components/show` lookup and compares the returned organization. A 403, a 404, or a successful response with a different or missing organization fails with exit code 1 and states that the project can also be inaccessible to the user. The error suggests checking `sonar list projects` and `sonar auth status`. Other lookup failures, including server and network errors, log the error at debug level and preserve the empty result. Existing projects retain their empty result. Server connections and auth without an organization skip this organization check.
