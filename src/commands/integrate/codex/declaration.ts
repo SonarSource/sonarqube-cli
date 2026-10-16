@@ -52,10 +52,13 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
+import {
+  SECRETS_ON_READ_BODY,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
-import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
