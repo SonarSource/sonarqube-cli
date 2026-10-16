@@ -22,8 +22,10 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
-import { readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
+import { readSqaaFileContent, resolveSqaaPath } from './sqaa-api.ts';
 import {
+  type ChangeSetResult,
+  excludeOutsideProject,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -61,14 +63,16 @@ async function buildSqaaJsonReportFromEntries(
   displayDepth: SqaaAnalysisDepth,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport> {
-  if (entries.length === 1) {
-    const { absolutePath } = entries[0];
-    const fileContent = readSqaaFileContent(absolutePath);
+  const cwd = process.cwd();
+  const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
+  if (paths.length === 1) {
+    const [path] = paths;
+    const fileContent = readSqaaFileContent(path.absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
         resolved.connection,
         resolved.projectKey,
-        absolutePath,
+        path,
         fileContent,
         branch,
         wireDepth,
@@ -79,13 +83,10 @@ async function buildSqaaJsonReportFromEntries(
     return fetchResult.report;
   }
 
-  const cwd = process.cwd();
-  const absolutePaths = entries.map((e) => e.absolutePath);
-  const allPaths = absolutePaths.map((f) => toRelativePosixPath(f, cwd));
+  const allPaths = paths.map((p) => p.displayPath);
   const { result: tally, durationMs } = await timed(() =>
     runSqaaAnalysesTallyForResolved(
-      absolutePaths,
-      allPaths,
+      paths,
       resolved,
       branch,
       wireDepth,
@@ -108,25 +109,21 @@ async function buildSqaaJsonReportFromChangeSet(
   const { staged, base, branch, project, force } = options;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
-  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
-  if (changeSet.files.length === 0) {
-    return makeReport(
-      [],
-      [],
-      changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
-    );
+  const fullChangeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, fullChangeSet.repoRoot);
+  if (fullChangeSet.files.length === 0) {
+    return allExcludedReport(fullChangeSet);
   }
 
   const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    changeSet.repoRoot,
-  );
+  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
+
+  const changeSet = excludeOutsideProject(fullChangeSet, resolved.projectRoot);
+  if (changeSet.files.length === 0) {
+    return allExcludedReport(changeSet);
+  }
 
   if (
     !(await confirmLargeRunIfNeeded(
@@ -140,11 +137,11 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { files, ignored, repoRoot } = changeSet;
-  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  const paths = files.map((f) => resolveSqaaPath(f, resolved.projectRoot, repoRoot));
+  const allPaths = paths.map((p) => p.displayPath);
   const { result: tally, durationMs } = await timed(() =>
     runSqaaAnalysesTallyForResolved(
-      files,
-      allPaths,
+      paths,
       resolved,
       resolvedBranch,
       wireDepth,
@@ -155,6 +152,14 @@ async function buildSqaaJsonReportFromChangeSet(
   const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
+}
+
+function allExcludedReport(changeSet: ChangeSetResult): SqaaJsonReport {
+  return makeReport(
+    [],
+    [],
+    changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
+  );
 }
 
 /**
