@@ -185,6 +185,39 @@ describe('discoverProject', () => {
     }
   });
 
+  it('resolveProjectKey() succeeds from a key-and-organization-only sonar-project.properties (no --project, no host URL), regardless of the active connection', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    // A server unrelated to SonarCloud, to prove the key resolves from the organization's
+    // well-known URL, not by borrowing the caller's (here, mismatched) active connection.
+    const unrelatedAuth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarqube.internal',
+      connectionType: 'on-premise',
+      source: 'state',
+    });
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      expect(await resolveProjectKey(undefined, unrelatedAuth, new FakeConsole())).toBe(
+        'my_project',
+      );
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
+  it('does not resolve a project key alone, with neither an organization nor a host URL to identify the connection', async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.serverUrl).toBeUndefined();
+  });
+
   it('defaults projectRoot to the invocation directory, not repoRoot, even inside a git repo', async () => {
     fakeFs.mkdir(join(testDir, '.git'));
     const subDir = join(testDir, 'packages', 'app');
@@ -249,13 +282,28 @@ describe('discoverProject', () => {
     expect(result.projectKey).toBeUndefined();
   });
 
-  it('does not resolve a project key alone without a serverUrl — discoverProject() only accepts fully resolved matches', async () => {
-    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+  it('derives the well-known SonarQube Cloud URL from organization alone (sonar.host.url conventionally omitted)', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    // A server unrelated to SonarCloud, to prove the URL is derived from the organization,
+    // not borrowed from whatever the caller happens to be connected to right now.
+    const unrelatedAuth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarqube.internal',
+      connectionType: 'on-premise',
+      source: 'state',
+    });
 
-    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: unrelatedAuth,
+    });
 
-    expect(result.projectKey).toBeUndefined();
-    expect(result.serverUrl).toBeUndefined();
+    expect(result.projectKey).toBe('my_project');
+    expect(result.organization).toBe('my-org');
+    expect(result.serverUrl).toBe(SONARCLOUD_URL);
   });
 
   it('maps sonar-project.properties to DiscoveredProject', async () => {
@@ -270,7 +318,7 @@ describe('discoverProject', () => {
   });
 
   it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
-    'does not discover a project key when sonar-project.properties has an invalid server URL, since the match is no longer fully resolved',
+    'does not resolve a project key when sonar-project.properties has an invalid server URL and no organization to derive one from',
     async (serverUrl) => {
       fakeFs.writeFile(
         join(testDir, 'sonar-project.properties'),
