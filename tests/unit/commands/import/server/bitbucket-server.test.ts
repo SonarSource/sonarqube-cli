@@ -30,52 +30,30 @@ import type {
 const SETTING: DopSetting = { id: 'bb-id', key: 'my-bbs', type: 'bitbucket' };
 const SERVER_PAGE_SIZE = 2;
 
-interface FakeProject {
-  key: string;
-  name: string;
-  repos: Array<Partial<BitbucketServerRepositoryResponse> & { slug: string }>;
-}
+type FakeRepo = Partial<BitbucketServerRepositoryResponse> & { slug: string };
 
-function project(key: string, repoSlugs: string[]): FakeProject {
-  return { key, name: `Project ${key}`, repos: repoSlugs.map((slug) => ({ slug })) };
-}
-
-function fakeRepo(
-  projectKey: string,
-  repo: FakeProject['repos'][number],
-): BitbucketServerRepositoryResponse {
+function repoOf(projectKey: string, repo: FakeRepo): BitbucketServerRepositoryResponse {
   return { id: `${projectKey}-${repo.slug}`, name: `${repo.slug} name`, projectKey, ...repo };
 }
 
-/** A Bitbucket Server that serves `SERVER_PAGE_SIZE` items per request, whatever is asked. */
-function serverOver(projects: FakeProject[]) {
-  const listProjects = (_setting: string, start: number, _pageSize: number) => {
-    const end = start + SERVER_PAGE_SIZE;
-    return Promise.resolve({
-      projects: projects.slice(start, end).map(({ key, name }) => ({ key, name })),
-      nextStart: end < projects.length ? end : undefined,
-    });
-  };
-  const searchRepos = (_setting: string, projectName: string, start: number, _pageSize: number) => {
-    const matching = projects.filter((p) => p.name.includes(projectName));
-    const all = matching.flatMap((p) => p.repos.map((repo) => fakeRepo(p.key, repo)));
+function reposOf(projectKey: string, slugs: string[]): BitbucketServerRepositoryResponse[] {
+  return slugs.map((slug) => repoOf(projectKey, { slug }));
+}
+
+/** A Bitbucket Server that serves `SERVER_PAGE_SIZE` repositories per request, whatever is asked. */
+function serverOver(all: BitbucketServerRepositoryResponse[]) {
+  const searchRepos = (_setting: string, start: number, _pageSize: number) => {
     const end = start + SERVER_PAGE_SIZE;
     return Promise.resolve({
       repositories: all.slice(start, end),
       nextStart: end < all.length ? end : undefined,
     });
   };
-  const listBitbucketServerProjects = mock(listProjects);
   const searchBitbucketServerRepos = mock(searchRepos);
-  const api = {
-    listBitbucketServerProjects,
-    searchBitbucketServerRepos,
-  } as unknown as ServerImportApiClient;
+  const api = { searchBitbucketServerRepos } as unknown as ServerImportApiClient;
   return {
     fetch: bitbucketServerSupport.listRepositories(api, SETTING),
-    listBitbucketServerProjects,
     searchBitbucketServerRepos,
-    listProjects,
     searchRepos,
   };
 }
@@ -87,9 +65,7 @@ describe('bitbucketServerSupport.listRepositories', () => {
   });
 
   it('maps a repository to PROJECTKEY/slug with the identifiers the server expects', async () => {
-    const { fetch } = serverOver([
-      { key: 'PRJ', name: 'Project PRJ', repos: [{ slug: 'my-repo', name: 'My Repo', id: 77 }] },
-    ]);
+    const { fetch } = serverOver([repoOf('PRJ', { slug: 'my-repo', name: 'My Repo', id: 77 })]);
     expect(await fetch(1, 50)).toEqual({
       repositories: [
         {
@@ -105,51 +81,50 @@ describe('bitbucketServerSupport.listRepositories', () => {
     });
   });
 
-  it('falls back to the full path as the id when the server sends none', async () => {
-    const { fetch } = serverOver([
-      { key: 'PRJ', name: 'Project PRJ', repos: [{ slug: 'repo', id: undefined }] },
+  it('uses the project key of each repository, personal projects included', async () => {
+    const { fetch } = serverOver([...reposOf('PRJ', ['a']), ...reposOf('~JDOE', ['b'])]);
+    const { repositories } = await fetch(1, 50);
+    expect(repositories.map((r) => [r.slug, r.projectIdentifier])).toEqual([
+      ['PRJ/a', 'PRJ'],
+      ['~JDOE/b', '~JDOE'],
     ]);
+  });
+
+  it('falls back to the full path as the id when the server sends none', async () => {
+    const { fetch } = serverOver([repoOf('PRJ', { slug: 'repo', id: undefined })]);
     const { repositories } = await fetch(1, 50);
     expect(repositories[0].id).toBe('PRJ/repo');
   });
 
   it('carries the key of the SonarQube project a repository is already bound to', async () => {
     const { fetch } = serverOver([
-      {
-        key: 'PRJ',
-        name: 'Project PRJ',
-        repos: [
-          { slug: 'bound', sqProjectKey: 'PRJ_bound' },
-          { slug: 'free', sqProjectKey: '' },
-        ],
-      },
+      repoOf('PRJ', { slug: 'bound', sqProjectKey: 'PRJ_bound' }),
+      repoOf('PRJ', { slug: 'free', sqProjectKey: '' }),
     ]);
     const { repositories } = await fetch(1, 50);
     expect(repositories.map((r) => r.boundProjectKey)).toEqual(['PRJ_bound', undefined]);
   });
 
-  it('pages the project list by offset and lists each project by name from offset 0', async () => {
-    const { fetch, listBitbucketServerProjects, searchBitbucketServerRepos } = serverOver([
-      project('A', ['a1']),
-      project('B', ['b1']),
-      project('C', ['c1']),
-    ]);
+  it('searches without a project filter, from offset 0, at the largest page size', async () => {
+    const { fetch, searchBitbucketServerRepos } = serverOver(reposOf('A', ['a1']));
     await fetch(1, 50);
-    expect(listBitbucketServerProjects.mock.calls.map(([, start]) => start)).toEqual([0, 2]);
-    expect(listBitbucketServerProjects.mock.calls[0][0]).toBe('my-bbs');
-    expect(searchBitbucketServerRepos.mock.calls.map(([, name, start]) => [name, start])).toEqual([
-      ['Project A', 0],
-      ['Project B', 0],
-      ['Project C', 0],
-    ]);
+    expect(searchBitbucketServerRepos.mock.calls).toEqual([['my-bbs', 0, 100]]);
   });
 
-  it('cuts the repositories of several projects into flat pages, the short one being last', async () => {
+  it('follows the offset the server hands out until the last page', async () => {
+    const { fetch, searchBitbucketServerRepos } = serverOver(
+      reposOf('A', ['a1', 'a2', 'a3', 'a4', 'a5']),
+    );
+    const { repositories } = await fetch(1, 50);
+    expect(repositories.map((r) => r.slug)).toEqual(['A/a1', 'A/a2', 'A/a3', 'A/a4', 'A/a5']);
+    expect(searchBitbucketServerRepos.mock.calls.map(([, start]) => start)).toEqual([0, 2, 4]);
+  });
+
+  it('cuts the repositories into flat pages independent of the server page size', async () => {
     const { fetch } = serverOver([
-      project('A', ['a1', 'a2', 'a3']),
-      project('B', []),
-      project('C', ['c1']),
-      project('D', ['d1', 'd2', 'd3']),
+      ...reposOf('A', ['a1', 'a2', 'a3']),
+      ...reposOf('C', ['c1']),
+      ...reposOf('D', ['d1', 'd2', 'd3']),
     ]);
 
     const pages = [await fetch(1, 3), await fetch(2, 3), await fetch(3, 3)];
@@ -163,45 +138,24 @@ describe('bitbucketServerSupport.listRepositories', () => {
   });
 
   it('returns an empty page after a last page that was exactly full', async () => {
-    const { fetch } = serverOver([project('A', ['a1', 'a2'])]);
+    const { fetch } = serverOver(reposOf('A', ['a1', 'a2']));
     expect((await fetch(1, 2)).repositories).toHaveLength(2);
     expect(await fetch(2, 2)).toEqual({ repositories: [], total: 2 });
   });
 
   it('stops fetching once a page is full', async () => {
-    const { fetch, listBitbucketServerProjects, searchBitbucketServerRepos } = serverOver([
-      project('A', ['a1', 'a2', 'a3', 'a4']),
-      project('B', ['b1']),
-      project('C', ['c1']),
-    ]);
+    const { fetch, searchBitbucketServerRepos } = serverOver(
+      reposOf('A', ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']),
+    );
     await fetch(1, 2);
     expect(searchBitbucketServerRepos).toHaveBeenCalledTimes(1);
-    expect(listBitbucketServerProjects).toHaveBeenCalledTimes(1);
-  });
-
-  it('follows the repository offset of a project that needs several requests', async () => {
-    const { fetch, searchBitbucketServerRepos } = serverOver([
-      project('A', ['a1', 'a2', 'a3', 'a4', 'a5']),
-    ]);
-    const { repositories } = await fetch(1, 50);
-    expect(repositories.map((r) => r.slug)).toEqual(['A/a1', 'A/a2', 'A/a3', 'A/a4', 'A/a5']);
-    expect(searchBitbucketServerRepos.mock.calls.map(([, , start]) => start)).toEqual([0, 2, 4]);
-  });
-
-  it('keeps only the repositories of the project being listed when the name filter overmatches', async () => {
-    const { fetch } = serverOver([
-      { key: 'APP', name: 'App', repos: [{ slug: 'one' }] },
-      { key: 'APP2', name: 'App 2', repos: [{ slug: 'two' }] },
-    ]);
-    const { repositories } = await fetch(1, 50);
-    expect(repositories.map((r) => r.slug)).toEqual(['APP/one', 'APP2/two']);
   });
 
   describe('when a request fails', () => {
     it('resumes at the same page without skipping or repeating a repository', async () => {
       const { fetch, searchBitbucketServerRepos, searchRepos } = serverOver([
-        project('A', ['a1', 'a2', 'a3']),
-        project('B', ['b1', 'b2']),
+        ...reposOf('A', ['a1', 'a2', 'a3']),
+        ...reposOf('B', ['b1', 'b2']),
       ]);
       searchBitbucketServerRepos.mockImplementationOnce(searchRepos);
       searchBitbucketServerRepos.mockImplementationOnce(() => Promise.reject(new Error('boom')));
@@ -214,26 +168,25 @@ describe('bitbucketServerSupport.listRepositories', () => {
       expect(second.repositories.map((r) => r.slug)).toEqual(['B/b1', 'B/b2']);
     });
 
-    it('retries the failed project list request from the same offset', async () => {
-      const { fetch, listBitbucketServerProjects, listProjects } = serverOver([
-        project('A', ['a1']),
-        project('B', ['b1']),
-        project('C', ['c1']),
+    it('retries the failed request from the same offset', async () => {
+      const { fetch, searchBitbucketServerRepos, searchRepos } = serverOver([
+        ...reposOf('A', ['a1', 'a2']),
+        ...reposOf('B', ['b1']),
       ]);
-      listBitbucketServerProjects.mockImplementationOnce(listProjects);
-      listBitbucketServerProjects.mockImplementationOnce(() => Promise.reject(new Error('boom')));
+      searchBitbucketServerRepos.mockImplementationOnce(searchRepos);
+      searchBitbucketServerRepos.mockImplementationOnce(() => Promise.reject(new Error('boom')));
 
       expect(await fetch(1, 50).catch((e: unknown) => e)).toEqual(new Error('boom'));
       const { repositories } = await fetch(1, 50);
 
-      expect(repositories.map((r) => r.slug)).toEqual(['A/a1', 'B/b1', 'C/c1']);
-      expect(listBitbucketServerProjects.mock.calls.map(([, start]) => start)).toEqual([0, 2, 2]);
+      expect(repositories.map((r) => r.slug)).toEqual(['A/a1', 'A/a2', 'B/b1']);
+      expect(searchBitbucketServerRepos.mock.calls.map(([, start]) => start)).toEqual([0, 2, 2]);
     });
 
     it('does not lose the repositories fetched before the failure', async () => {
       const { fetch, searchBitbucketServerRepos, searchRepos } = serverOver([
-        project('A', ['a1', 'a2']),
-        project('B', ['b1']),
+        ...reposOf('A', ['a1', 'a2']),
+        ...reposOf('B', ['b1']),
       ]);
       searchBitbucketServerRepos.mockImplementationOnce(searchRepos);
       searchBitbucketServerRepos.mockImplementationOnce(() => Promise.reject(new Error('boom')));
