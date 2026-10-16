@@ -21,6 +21,7 @@
 // Platform detection for sonar-secrets binary installation
 
 import { arch, platform } from 'node:os';
+import { join } from 'node:path';
 
 import type { PlatformInfo } from '../install/install-types.ts';
 
@@ -36,6 +37,16 @@ const ARCH_MAP: Record<string, string> = {
   arm: 'arm',
   ia32: '386',
 };
+
+export function windowsPowerShellPath(): string {
+  return join(
+    process.env.SystemRoot ?? String.raw`C:\Windows`,
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe',
+  );
+}
 
 export function isWindows(): boolean {
   return process.platform === 'win32';
