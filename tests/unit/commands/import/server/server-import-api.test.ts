@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
-import { AccessDeniedError, ServerError } from '@/core/server/errors.ts';
+import { AccessDeniedError, BadRequestError, ServerError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import {
@@ -149,6 +149,12 @@ describe('ServerImportApiClient', () => {
     it('is invalid when the platform rejects the token', async () => {
       fetchSpy = mockFetchSeq(badRequest('Invalid personal access token'));
       expect(await api[method]('s')).toBe('invalid');
+    });
+
+    it('rejects with the original error on a 400 that is not about the token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('Unable to contact Bitbucket server'));
+      const error = await api[method]('s').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
     });
 
     it('rejects with the original error when the status is not about the token', async () => {
