@@ -38,6 +38,7 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
           repositories: [{ id: 5, slug: 'my-repo', name: 'My Repo', projectKey: 'PRJ' }],
           nextStart: undefined,
         }),
+      lookupProject: () => Promise.resolve('missing' as const),
       putBoundProject,
     } as unknown as ServerImportApiClient;
     const backend = new ServerBackend(api, 'https://sonarqube.example.com');
