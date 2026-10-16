@@ -20,8 +20,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
+import { PI_CAG_EXTENSION_CONTENT } from '@/commands/integrate/pi/cag-extension-content.ts';
 import { piIntegration } from '@/commands/integrate/pi/declaration.ts';
 import { PI_EXTENSION_MANAGED_MARKER } from '@/commands/integrate/pi/secrets-extension-content.ts';
 import { PI_SQAA_EXTENSION_CONTENT } from '@/commands/integrate/pi/sqaa-extension-content.ts';
@@ -32,6 +34,7 @@ import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const SECRETS_EXTENSION_PATH = '.pi/agent/extensions/sonar-secrets.ts';
 const SQAA_EXTENSION_PATH = '.pi/agent/extensions/sonar-sqaa.ts';
+const CAG_EXTENSION_PATH = '.pi/agent/extensions/sonar-cag.ts';
 const TEST_ORG = 'my-org';
 const TEST_PROJECT = 'my-project';
 
@@ -104,12 +107,12 @@ describe('integrate pi — secrets scanning extension', () => {
   );
 });
 
-describe('integrate pi — Vortex SQAA feature', () => {
+describe('integrate pi — Vortex feature', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.state().withSecretsBinaryInstalled();
+    harness.state().withSecretsBinaryInstalled().withContextAugmentationBinaryInstalled();
   });
 
   afterEach(async () => {
@@ -117,7 +120,7 @@ describe('integrate pi — Vortex SQAA feature', () => {
   });
 
   it(
-    'writes the SQAA extension when Vortex is entitled',
+    'writes the SQAA and Context extensions when Vortex is entitled',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -142,6 +145,12 @@ describe('integrate pi — Vortex SQAA feature', () => {
       expect(extension.asText()).toBe(PI_SQAA_EXTENSION_CONTENT);
       expect(
         findInstalledSubfeature(harness, 'pi', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),
+      ).toBeDefined();
+      expect(harness.userHome.file(...CAG_EXTENSION_PATH.split('/')).asText()).toBe(
+        PI_CAG_EXTENSION_CONTENT,
+      );
+      expect(
+        findInstalledSubfeature(harness, 'pi', VORTEX_FEATURE_ID, CONTEXT_AUGMENTATION_FEATURE_ID),
       ).toBeDefined();
     },
     { timeout: 30000 },
@@ -168,6 +177,7 @@ describe('integrate pi — Vortex SQAA feature', () => {
 
       expect(result.exitCode).toBe(0);
       expect(harness.userHome.exists(SQAA_EXTENSION_PATH)).toBe(false);
+      expect(harness.userHome.exists(CAG_EXTENSION_PATH)).toBe(false);
       expect(findPiFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
     },
     { timeout: 30000 },
