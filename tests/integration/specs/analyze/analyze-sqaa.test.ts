@@ -3114,3 +3114,51 @@ describe('analyze agentic — project root below the repository root', () => {
     { timeout: 15000 },
   );
 });
+
+const REMOTE_URL = 'https://github.com/example/remote-bound.git';
+
+describe('analyze agentic — project bound only through the git remote', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    commitFile(harness.cwd.path, 'README.md', 'hello');
+    git(['remote', 'add', 'origin', REMOTE_URL], harness.cwd.path);
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'anchors the project at the repository root, so a subdirectory run keeps the whole change set',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withGitRemoteBinding(REMOTE_URL, TEST_PROJECT)
+        .start();
+      harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('analyze agentic --format json', {
+        cwd: join(harness.cwd.path, 'pkg/src'),
+      });
+
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const body = parseSqaaRequestBody(sqaaCalls[0].body);
+      expect(body.projectKey).toBe(TEST_PROJECT);
+      expect((body.files ?? []).map((f) => f.path).sort()).toEqual(['other/b.ts', 'pkg/src/a.ts']);
+      const report = JSON.parse(result.stdout) as { ignored: unknown[] };
+      expect(report.ignored).toEqual([]);
+    },
+    { timeout: 15000 },
+  );
+});
