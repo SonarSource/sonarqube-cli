@@ -61,6 +61,16 @@ describe('ServerBackend when binding a repository fails', () => {
     );
   });
 
+  it('points a missing token at the connect URL that keeps the stored token', async () => {
+    const error = await failingImport(
+      new BadRequestError("Personal access token for 'x' is missing"),
+    );
+
+    expect((error as Error).message).toBe(
+      "no personal access token is connected for GitLab setting 'my gitlab'; connect it at https://sonarqube.example.com/projects/create?mode=gitlab",
+    );
+  });
+
   it('keeps the server message of a platform failure', async () => {
     const message = "Failed to fetch GitLab project with ID '11' from 'https://gitlab.example.com'";
     const error = await failingImport(
@@ -71,6 +81,7 @@ describe('ServerBackend when binding a repository fails', () => {
     );
 
     expect((error as Error).message).toContain('GitLab could not return the repository');
+    expect((error as Error).message).not.toContain('resetPat');
     expect((error as Error).message).toContain(`(${message})`);
   });
 
