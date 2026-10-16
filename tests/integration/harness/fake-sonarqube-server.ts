@@ -2287,7 +2287,7 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (
-          path === '/api/alm_integration/check_pat' ||
+          path === '/api/alm_integrations/check_pat' ||
           path === '/api/alm_integrations/list_github_organizations'
         ) {
           const isProbe = path === '/api/alm_integrations/list_github_organizations';
