@@ -33,6 +33,7 @@ import {
 } from '@/core/project-discovery/project-discovery-format.ts';
 import type { PartialProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import type { DiscoverProjectOptions } from '@/core/project-discovery/project-info.ts';
+import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
 
 export interface SonarProperties {
   hostURL: string;
@@ -79,6 +80,11 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
 
   if (!props.hostURL && !props.projectKey) {
     return null;
+  }
+
+  // Cloud scanners conventionally omit sonar.host.url — the region's URL is well-known.
+  if (!props.hostURL && props.organization) {
+    props.hostURL = cloudRegionToUrl('eu');
   }
 
   return props as SonarProperties;
