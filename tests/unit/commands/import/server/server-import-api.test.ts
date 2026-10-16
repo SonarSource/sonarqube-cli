@@ -310,6 +310,103 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('listBitbucketServerProjects', () => {
+    it('sends the setting key, start offset and page size', async () => {
+      fetchSpy = mockFetch({ projects: [], isLastPage: true });
+      await api.listBitbucketServerProjects('my-bbs', 25, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integration/list_bitbucketserver_projects');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-bbs',
+        start: '25',
+        pageSize: '100',
+      });
+    });
+
+    it('returns the projects and where the next page starts', async () => {
+      fetchSpy = mockFetch({
+        projects: [{ key: 'PRJ', name: 'Project' }],
+        isLastPage: false,
+        nextPageStart: 25,
+        paging: { pageSize: 1 },
+      });
+      expect(await api.listBitbucketServerProjects('s', 0, 25)).toEqual({
+        projects: [{ key: 'PRJ', name: 'Project' }],
+        nextStart: 25,
+      });
+    });
+
+    it('has no next page on the last one, whatever nextPageStart says', async () => {
+      fetchSpy = mockFetch({ projects: [], isLastPage: true, nextPageStart: 25 });
+      expect((await api.listBitbucketServerProjects('s', 0, 25)).nextStart).toBeUndefined();
+    });
+
+    it('treats an empty result as no projects', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listBitbucketServerProjects('s', 0, 25)).toEqual({
+        projects: [],
+        nextStart: undefined,
+      });
+    });
+
+    it('has no next page when the offset would not advance', async () => {
+      fetchSpy = mockFetch({ projects: [], isLastPage: false, nextPageStart: 25 });
+      expect((await api.listBitbucketServerProjects('s', 25, 25)).nextStart).toBeUndefined();
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.listBitbucketServerProjects('s', 0, 25).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('searchBitbucketServerRepos', () => {
+    it('sends the setting key, project name, start offset and page size', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      await api.searchBitbucketServerRepos('my-bbs', 'My Project', 50, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketserver_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-bbs',
+        projectName: 'My Project',
+        start: '50',
+        pageSize: '100',
+      });
+    });
+
+    it('returns the repositories and where the next page starts', async () => {
+      const repositories = [
+        { id: 5, slug: 'repo', name: 'Repo', projectKey: 'PRJ', projectName: 'Project' },
+        { id: 6, slug: 'bound', name: 'Bound', projectKey: 'PRJ', sqProjectKey: 'PRJ_bound' },
+      ];
+      fetchSpy = mockFetch({ repositories, isLastPage: false, nextPageStart: 2 });
+      expect(await api.searchBitbucketServerRepos('s', 'Project', 0, 100)).toEqual({
+        repositories,
+        nextStart: 2,
+      });
+    });
+
+    it('has no next page on the last one', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      expect((await api.searchBitbucketServerRepos('s', 'P', 0, 100)).nextStart).toBeUndefined();
+    });
+
+    it('treats an empty result as no repositories', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchBitbucketServerRepos('s', 'P', 0, 100)).toEqual({
+        repositories: [],
+        nextStart: undefined,
+      });
+    });
+
+    it('rejects on a server error', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.searchBitbucketServerRepos('s', 'P', 0, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
   describe('putBoundProject', () => {
     const request = {
       projectKey: 'group_repo',
