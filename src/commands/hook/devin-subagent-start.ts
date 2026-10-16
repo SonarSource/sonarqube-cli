@@ -18,8 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// PreToolUse handler for Devin's `run_subagent` tool. Devin fires no SessionStart for subagents,
-// so the announcement is prepended to the subagent task through `updatedInput`.
+// Prepends the Vortex announcement to the task of Devin's `run_subagent` tool through `updatedInput`.
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
@@ -35,7 +34,6 @@ interface RunSubagentPayload {
   session_id?: string;
 }
 
-// Devin tool names are lowercase and hook matching is case-sensitive.
 const RUN_SUBAGENT_TOOL = 'run_subagent';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
