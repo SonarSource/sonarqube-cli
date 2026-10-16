@@ -21,6 +21,7 @@
 import { azureSupport } from './azure.ts';
 import { bitbucketCloudSupport } from './bitbucket-cloud.ts';
 import { bitbucketServerSupport } from './bitbucket-server.ts';
+import { githubSupport } from './github.ts';
 import { gitlabSupport } from './gitlab.ts';
 import type { SupportedPlatforms } from './server-repository.ts';
 
@@ -30,4 +31,5 @@ export const SUPPORTED_PLATFORMS: SupportedPlatforms = {
   azure: azureSupport,
   bitbucketcloud: bitbucketCloudSupport,
   bitbucket: bitbucketServerSupport,
+  github: githubSupport,
 };
