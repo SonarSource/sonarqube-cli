@@ -65,7 +65,7 @@ describe('runPostUpdateActions', () => {
   let stateFileExistsSpy: Mock<typeof stateRepository.stateFileExists>;
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
   let tryLoadStateSpy: Mock<typeof stateRepository.tryLoadState>;
-  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let updateStateSpy: Mock<typeof stateRepository.updateState>;
   let isNewerVersionSpy: Mock<typeof versionLib.isNewerVersion>;
   let installSecretsBinarySpy: Mock<typeof secretsInstall.installSecretsBinary>;
 
@@ -74,7 +74,9 @@ describe('runPostUpdateActions', () => {
     stateFileExistsSpy = spyOn(stateRepository, 'stateFileExists').mockReturnValue(true);
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
     tryLoadStateSpy = spyOn(stateRepository, 'tryLoadState').mockReturnValue(makeState());
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
     isNewerVersionSpy = spyOn(versionLib, 'isNewerVersion').mockReturnValue(true);
     installSecretsBinarySpy = spyOn(secretsInstall, 'installSecretsBinary').mockResolvedValue(
       '/fake/bin/sonar-secrets',
@@ -86,7 +88,7 @@ describe('runPostUpdateActions', () => {
     stateFileExistsSpy.mockRestore();
     loadStateSpy.mockRestore();
     tryLoadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     isNewerVersionSpy.mockRestore();
     installSecretsBinarySpy.mockRestore();
   });
@@ -97,7 +99,7 @@ describe('runPostUpdateActions', () => {
     await runPostUpdateActions(makeDeps());
 
     expect(loadStateSpy).not.toHaveBeenCalled();
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('swallows and warns on a throw when called through runPostUpdateActionsSafely', async () => {
@@ -114,7 +116,7 @@ describe('runPostUpdateActions', () => {
   });
 
   it('warns when post-update actions fail', async () => {
-    saveStateSpy.mockImplementation(() => {
+    updateStateSpy.mockImplementation(() => {
       throw new Error('state file is read-only');
     });
     const deps = makeDeps();
@@ -129,14 +131,15 @@ describe('runPostUpdateActions', () => {
 
     await runPostUpdateActions(makeDeps());
 
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('saves state with cliVersion bumped to the current version', async () => {
     await runPostUpdateActions(makeDeps());
 
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
-    const savedState = saveStateSpy.mock.calls[0][0];
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    const savedState = makeState();
+    updateStateSpy.mock.calls[0][0](savedState);
     expect(savedState.config.cliVersion).toBe(CURRENT_VERSION);
   });
 
@@ -150,34 +153,17 @@ describe('runPostUpdateActions', () => {
 
     await runPostUpdateActions(makeDeps());
 
-    expect(saveStateSpy.mock.calls[0][0].config.betaCommandWarnings).toBeUndefined();
+    expect(state.config.betaCommandWarnings).toBeUndefined();
   });
 
-  it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 8 times:
-    //   1. inside migrateLegacyStateConfig
-    //   2. inside migrateLegacyTelemetryEvents
-    //   3. inside migrateKnownServerProjectMappings
-    //   4. inside migrateAgentIntegrationsToGlobalScope
-    //   5. inside migrateDeclarativeIntegrations
-    //   6. inside updateSecretsBinaryIfNeeded
-    //   7. inside updateScaScannerBinaryIfNeeded
-    //   8. the reload after runActions (the fix being tested)
-    const reloadedState = makeState();
-    loadStateSpy
-      .mockReturnValueOnce(makeState()) // call 1: migrateLegacyStateConfig
-      .mockReturnValueOnce(makeState()) // call 2: migrateLegacyTelemetryEvents
-      .mockReturnValueOnce(makeState()) // call 3: migrateKnownServerProjectMappings
-      .mockReturnValueOnce(makeState()) // call 4: migrateAgentIntegrationsToGlobalScope
-      .mockReturnValueOnce(makeState()) // call 5: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 6: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 7: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 8: reload
-
+  it('applies the version update to the latest state', async () => {
     await runPostUpdateActions(makeDeps());
 
-    expect(loadStateSpy).toHaveBeenCalledTimes(8);
-    expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
+    const latest = makeState();
+    latest.config.updateCheck = { lastCheckedAt: '2026-01-01' };
+    updateStateSpy.mock.calls[0][0](latest);
+    expect(latest.config.cliVersion).toBe(CURRENT_VERSION);
+    expect(latest.config.updateCheck).toEqual({ lastCheckedAt: '2026-01-01' });
   });
 
   it('passes previousVersion and CURRENT_VERSION to isNewerVersion', async () => {
@@ -206,7 +192,7 @@ describe('runPostUpdateActions', () => {
 
     await runPostUpdateActions(makeDeps());
 
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('still saves state when only migrateKnownServerProjectMappings fails', async () => {
@@ -219,22 +205,24 @@ describe('runPostUpdateActions', () => {
 
     await runPostUpdateActions(makeDeps());
 
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('migrateDeclarativeIntegrations', () => {
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
-  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let updateStateSpy: Mock<typeof stateRepository.updateState>;
 
   beforeEach(() => {
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
   });
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
   });
 
   it('loads state, reconciles the registry against it, and saves when changed', async () => {
@@ -246,7 +234,7 @@ describe('migrateDeclarativeIntegrations', () => {
     await migrateDeclarativeIntegrations(registry, new FakeConsole());
 
     expect(loadStateSpy).toHaveBeenCalledTimes(1);
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('saves state when reconciliation reports a change', async () => {
@@ -287,7 +275,7 @@ describe('migrateDeclarativeIntegrations', () => {
 
     await migrateDeclarativeIntegrations(registry, new FakeConsole());
 
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
-    expect(saveStateSpy.mock.calls[0][0].integrations.installed[0].features).toHaveLength(0);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    expect(state.integrations.installed).toHaveLength(0);
   });
 });

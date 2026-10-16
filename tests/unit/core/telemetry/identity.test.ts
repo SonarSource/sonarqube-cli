@@ -34,8 +34,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
-import type { AuthConnection } from '@/core/state/state.ts';
-import { addOrUpdateConnection, loadState, saveState } from '@/core/state/state-manager.ts';
+import type { AuthConnection, CliState } from '@/core/state/state.ts';
+import { addOrUpdateConnection, loadState, updateState } from '@/core/state/state-manager.ts';
 import {
   identityFromConnection,
   isIdentityCompleteForConnection,
@@ -255,6 +255,12 @@ describe('resolveStoreEventTelemetryIdentity()', () => {
   });
 });
 
+function writeStateFixture(state: CliState): void {
+  updateState((latest) => {
+    Object.assign(latest, state);
+  });
+}
+
 // ─── resolveCommandTelemetryIdentity ───────────────────────────────────────────
 
 describe('resolveCommandTelemetryIdentity()', () => {
@@ -264,7 +270,7 @@ describe('resolveCommandTelemetryIdentity()', () => {
       orgKey: 'my-org',
     });
     conn.userUuid = 'post-login-user';
-    saveState(state);
+    writeStateFixture(state);
     const getSafeSpy = mockIdentityGetSafe();
 
     const { connectionType, identity } = await resolveCommandTelemetryIdentity(null);
@@ -331,7 +337,7 @@ describe('resolveCommandTelemetryIdentity()', () => {
     const conn = addOrUpdateConnection(state, auth.serverUrl, 'on-premise');
     conn.userUuid = null;
     conn.sqsInstallationId = 'sqs-abc';
-    saveState(state);
+    writeStateFixture(state);
     const getSafeSpy = mockIdentityGetSafe();
 
     const { identity } = await resolveCommandTelemetryIdentity(auth);
@@ -350,7 +356,7 @@ describe('resolveCommandTelemetryIdentity()', () => {
     });
     conn.userUuid = 'post-login-user';
     conn.organizationUuidV4 = 'post-login-org';
-    saveState(state);
+    writeStateFixture(state);
     const getSafeSpy = mockIdentityGetSafe({
       status: [{ ok: true, id: 'sqs-from-api' }],
       user: [{ ok: false }],

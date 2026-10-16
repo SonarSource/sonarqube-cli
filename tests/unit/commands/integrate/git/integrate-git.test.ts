@@ -380,7 +380,7 @@ describe('integrateGitGlobal', () => {
   let installBinarySpy: ReturnType<typeof spyOn>;
   let resolveBinaryPathSpy: ReturnType<typeof spyOn>;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
   let state: CliState;
 
   beforeEach(() => {
@@ -393,14 +393,16 @@ describe('integrateGitGlobal', () => {
     resolveBinaryPathSpy = spyOn(binaryInstall, 'resolveBinaryPath').mockReturnValue(null);
     state = getDefaultState('test');
     loadStateSpy = spyOn(stateRepository, 'loadState').mockImplementation(() => state);
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
   });
 
   afterEach(() => {
     installBinarySpy.mockRestore();
     resolveBinaryPathSpy.mockRestore();
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
   });
 
   it('throws CommandFailedError when the user cancels the global install confirmation', async () => {

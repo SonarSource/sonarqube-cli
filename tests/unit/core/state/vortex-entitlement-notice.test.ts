@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { loadState, saveState } from '@/core/state/state-manager.ts';
+import { loadState, updateState } from '@/core/state/state-manager.ts';
 import { ONE_DAY_MS } from '@/core/time/cooldown.ts';
 import {
   isVortexEntitlementLossNoticeDue,
@@ -43,9 +43,9 @@ function cleanup(): void {
 }
 
 function seedLastWarnedAt(iso: string): void {
-  const state = loadState();
-  state.config.vortexEntitlementLossNotice = { lastWarnedAt: iso };
-  saveState(state);
+  updateState((state) => {
+    state.config.vortexEntitlementLossNotice = { lastWarnedAt: iso };
+  });
 }
 
 describe('Vortex entitlement-loss notice throttle', () => {
