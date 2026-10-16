@@ -2070,7 +2070,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/alm_integration/list_azure_projects') {
+        if (path === '/api/alm_integrations/list_azure_projects') {
           const names = (azureRepos.get(query.almSetting ?? '') ?? []).map((r) => r.projectName);
           return new Response(
             JSON.stringify({ projects: [...new Set(names)].map((name) => ({ name })) }),
@@ -2078,7 +2078,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/alm_integration/search_azure_repos') {
+        if (path === '/api/alm_integrations/search_azure_repos') {
           const repositories = (azureRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.projectName || r.projectName === query.projectName,
           );

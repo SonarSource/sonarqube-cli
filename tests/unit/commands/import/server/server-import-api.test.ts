@@ -215,7 +215,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ projects: [] });
       await api.listAzureProjects('my-azure');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_azure_projects');
+      expect(url.pathname).toBe('/api/alm_integrations/list_azure_projects');
       expect(Object.fromEntries(url.searchParams)).toEqual({ almSetting: 'my-azure' });
     });
 
@@ -244,7 +244,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [] });
       await api.searchAzureRepos('my-azure', 'My Project');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_azure_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_azure_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-azure',
         projectName: 'My Project',
