@@ -53,6 +53,8 @@ export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/project-discovery/kn
 export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 export interface DiscoveredProject {
+  hasSonarConfig?: boolean;
+  gitRemoteBindingNotFound?: boolean;
   /** Where the discovered project is anchored — what nearly every caller should use. */
   projectRoot: string;
   projectKey?: string;
@@ -139,7 +141,12 @@ async function discoverProjectWithoutSharedConfig(
     await applyGitRemoteBinding(single, repoRoot, options);
   }
 
-  return single.projectKey || single.serverUrl ? [single] : [];
+  return single.projectKey ||
+    single.serverUrl ||
+    single.organization ||
+    single.gitRemoteBindingNotFound
+    ? [single]
+    : [];
 }
 
 /**
@@ -203,10 +210,18 @@ export async function discoverProject(
   options: DiscoverProjectOptions,
 ): Promise<DiscoveredProject> {
   const invocationDir = canonicalizePath(startDir);
-  const result = await discoverProjects(startDir, options);
+  const result = await discoverProjectMappings(startDir, options);
   const scoped = result.scope(invocationDir);
-  const mapping = scoped.length > 1 ? undefined : scoped.at(0);
+  const complete = scoped.filter(isCompleteProjectMapping);
+  const mapping = complete.length > 1 ? undefined : complete.at(0);
   return {
+    hasSonarConfig: scoped.some(
+      (project) => !!(project.projectKey || project.serverUrl || project.organization),
+    ),
+    gitRemoteBindingNotFound: scoped.some(
+      (project) =>
+        'gitRemoteBindingNotFound' in project && project.gitRemoteBindingNotFound === true,
+    ),
     projectRoot: mapping?.projectRoot ?? invocationDir,
     projectKey: mapping?.projectKey,
     serverUrl: mapping?.serverUrl,
@@ -293,9 +308,11 @@ async function resolveSharedProjectConfigMappings(
       continue;
     }
     if (mappings.length === 0) {
+      logger.debug(`Project discovery shared config: no usable .sonar-config.json at ${checkPath}`);
       continue;
     }
 
+    logger.debug(`Project discovery shared config: project resolved at ${checkPath}`);
     for (const mapping of mappings) {
       printSharedProjectConfigMapping(mapping, options);
     }
