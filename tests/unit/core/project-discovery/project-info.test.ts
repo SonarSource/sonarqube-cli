@@ -209,10 +209,27 @@ describe('discoverProject', () => {
     }
   });
 
-  it('does not resolve a project key alone, with neither an organization nor a host URL to identify the connection', async () => {
+  it("falls back to the caller's connection for a project key with neither an organization nor a host URL to identify its own", async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+    const auth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarcloud.io',
+      orgKey: 'active-org',
+      connectionType: 'cloud',
+      source: 'state',
+    });
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth });
+
+    expect(result.projectKey).toBe('my_project');
+    expect(result.serverUrl).toBe(auth.serverUrl);
+    expect(result.organization).toBe('active-org');
+  });
+
+  it('does not resolve a project key at all when there is no active connection to fall back on either', async () => {
     fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
 
-    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
 
     expect(result.projectKey).toBeUndefined();
     expect(result.serverUrl).toBeUndefined();
@@ -329,7 +346,7 @@ describe('discoverProject', () => {
   });
 
   it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
-    'does not resolve a project key when sonar-project.properties has an invalid server URL and no organization to derive one from',
+    "falls back to the caller's connection when sonar-project.properties has an invalid server URL and no organization to derive one from",
     async (serverUrl) => {
       fakeFs.writeFile(
         join(testDir, 'sonar-project.properties'),
@@ -341,8 +358,8 @@ describe('discoverProject', () => {
         auth: MOCK_AUTH,
       });
 
-      expect(result.serverUrl).toBeUndefined();
-      expect(result.projectKey).toBeUndefined();
+      expect(result.serverUrl).toBe(MOCK_AUTH.serverUrl);
+      expect(result.projectKey).toBe('my_project');
     },
   );
 
