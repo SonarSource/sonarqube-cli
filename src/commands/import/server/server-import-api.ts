@@ -89,6 +89,27 @@ export interface BitbucketCloudRepositoryResponse {
   sqProjectKey?: string;
 }
 
+/** A Bitbucket Server project as `list_bitbucketserver_projects` returns it. */
+export interface BitbucketServerProjectResponse {
+  key: string;
+  name: string;
+}
+
+/** A Bitbucket Server repository as `search_bitbucketserver_repos` returns it. */
+export interface BitbucketServerRepositoryResponse {
+  id?: number | string;
+  slug: string;
+  name: string;
+  projectKey: string;
+  projectName?: string;
+  sqProjectKey?: string;
+}
+
+interface BitbucketServerPagingResponse {
+  isLastPage?: boolean;
+  nextPageStart?: number;
+}
+
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
@@ -193,6 +214,47 @@ export class ServerImportApiClient {
   }
 
   /**
+   * One page of the Bitbucket Server projects the caller's token can see. `start` is the offset
+   * to resume from (0 for the first page); `nextStart` is where the next page begins, absent on
+   * the last one.
+   */
+  async listBitbucketServerProjects(
+    settingKey: string,
+    start: number,
+    pageSize: number,
+  ): Promise<{ projects: BitbucketServerProjectResponse[]; nextStart?: number }> {
+    const response = await this.client
+      .get<BitbucketServerPagingResponse & { projects?: BitbucketServerProjectResponse[] }>(
+        '/api/alm_integration/list_bitbucketserver_projects',
+        { almSetting: settingKey, start, pageSize },
+      )
+      .orThrow();
+    return { projects: response.projects ?? [], nextStart: nextBitbucketStart(response, start) };
+  }
+
+  /**
+   * One page of the repositories whose Bitbucket Server project name matches `projectName`. The
+   * server filters on the name, so a partial match can return another project's repositories.
+   */
+  async searchBitbucketServerRepos(
+    settingKey: string,
+    projectName: string,
+    start: number,
+    pageSize: number,
+  ): Promise<{ repositories: BitbucketServerRepositoryResponse[]; nextStart?: number }> {
+    const response = await this.client
+      .get<BitbucketServerPagingResponse & { repositories?: BitbucketServerRepositoryResponse[] }>(
+        '/api/alm_integration/search_bitbucketserver_repos',
+        { almSetting: settingKey, projectName, start, pageSize },
+      )
+      .orThrow();
+    return {
+      repositories: response.repositories ?? [],
+      nextStart: nextBitbucketStart(response, start),
+    };
+  }
+
+  /**
    * Creates the project and binds it to the repository, or updates the binding when a project
    * with that key already exists (the endpoint is idempotent). `newProjectCreated` tells which.
    */
@@ -217,6 +279,17 @@ export class ServerImportApiClient {
       },
     );
   }
+}
+
+/** Where the next Bitbucket page starts; absent on the last page or when the offset would not advance. */
+function nextBitbucketStart(
+  { isLastPage, nextPageStart }: BitbucketServerPagingResponse,
+  start: number,
+): number | undefined {
+  if (isLastPage === true || nextPageStart === undefined || nextPageStart <= start) {
+    return undefined;
+  }
+  return nextPageStart;
 }
 
 /** `check_pat` answers 204 with no body, which the JSON client reports as a parse failure. */
