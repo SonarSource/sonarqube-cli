@@ -31,10 +31,8 @@ import {
   formatConfigFields,
   selectValidServerUrl,
 } from '@/core/project-discovery/project-discovery-format.ts';
-import type {
-  DiscoveredProject,
-  DiscoverProjectOptions,
-} from '@/core/project-discovery/project-info.ts';
+import type { PartialProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
+import type { DiscoverProjectOptions } from '@/core/project-discovery/project-info.ts';
 
 export interface SonarProperties {
   hostURL: string;
@@ -101,7 +99,7 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
 }
 
 function applyLocalSonarProperties(
-  config: DiscoveredProject,
+  config: PartialProjectMapping,
   local: LocalProjectConfig,
   options: DiscoverProjectOptions,
 ): void {
@@ -124,7 +122,7 @@ function applyLocalSonarProperties(
 
 /** Returns true once `config.projectKey` is resolved, so the caller can stop checking further sources. */
 function applySonarLintConfig(
-  config: DiscoveredProject,
+  config: PartialProjectMapping,
   local: LocalProjectConfig,
   options: DiscoverProjectOptions,
 ): boolean {
@@ -152,7 +150,7 @@ function applySonarLintConfig(
 
 /** Walks `lookupPaths` nearest-first for a `sonar-project.properties`/`.sonarlint` hit; a partial match doesn't stop the climb. */
 export async function applyLocalConfigAcrossLookupPaths(
-  config: DiscoveredProject,
+  config: PartialProjectMapping,
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
 ): Promise<boolean> {

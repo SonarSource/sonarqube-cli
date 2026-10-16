@@ -249,6 +249,15 @@ describe('discoverProject', () => {
     expect(result.projectKey).toBeUndefined();
   });
 
+  it('does not resolve a project key alone without a serverUrl — discoverProject() only accepts fully resolved matches', async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.serverUrl).toBeUndefined();
+  });
+
   it('maps sonar-project.properties to DiscoveredProject', async () => {
     fakeFs.writeFile(
       join(testDir, 'sonar-project.properties'),
@@ -261,7 +270,7 @@ describe('discoverProject', () => {
   });
 
   it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
-    'does not discover an invalid server URL from sonar-project.properties',
+    'does not discover a project key when sonar-project.properties has an invalid server URL, since the match is no longer fully resolved',
     async (serverUrl) => {
       fakeFs.writeFile(
         join(testDir, 'sonar-project.properties'),
@@ -274,7 +283,7 @@ describe('discoverProject', () => {
       });
 
       expect(result.serverUrl).toBeUndefined();
-      expect(result.projectKey).toBe('my_project');
+      expect(result.projectKey).toBeUndefined();
     },
   );
 
@@ -1158,7 +1167,7 @@ describe('discoverProject', () => {
       const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
 
       expect(result.projectKey).toBeUndefined();
-      expect(result.serverUrl).toBe('https://sub.example.com');
+      expect(result.serverUrl).toBeUndefined();
     });
 
     it('a known-mapping match at a farther directory still wins over a nearer local properties file', async () => {
@@ -1380,6 +1389,18 @@ describe('discoverOrganization', () => {
     });
   });
 
+  it('reads organization even without a project key, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-no-key-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.organization=from-props-org\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-props-org');
+    });
+  });
+
   it('reads organization from .sonar-config.json before login, with no active connection', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-shared-config-' + Date.now());
     fakeFs.mkdir(testDir);
@@ -1517,6 +1538,18 @@ describe('discoverServer', () => {
       expect(await discoverServer(fake)).toBe('https://from-props.integration.test');
       const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
       expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(true);
+    });
+  });
+
+  it('reads server URL even without a project key, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-server-no-key-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://from-props.integration.test\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverServer(new FakeConsole())).toBe('https://from-props.integration.test');
     });
   });
 

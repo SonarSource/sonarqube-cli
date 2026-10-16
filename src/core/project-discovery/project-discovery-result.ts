@@ -20,31 +20,62 @@
 
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 
-/**
- * One resolved project binding — what `ProjectDiscoveryResult.projects` holds, possibly more
- * than one per call. `projectKey` is absent for an otherwise-incomplete single-valued match
- * (e.g. a `sonar-project.properties` with a host URL but no project key) — still worth keeping
- * so `discoverServer()`/`discoverOrganization()` can read its `serverUrl`/`organization`.
- */
-export interface ProjectMapping {
+/** Both `projectKey` and `serverUrl` present — what `discoverProject()` requires. */
+export interface CompleteProjectMapping {
+  projectRoot: string;
+  projectKey: string;
+  serverUrl: string;
+  organization?: string;
+}
+
+/** `projectKey`/`serverUrl` not guaranteed — `discoverServer()`/`discoverOrganization()` never need `projectKey`, so they accept this directly. */
+export interface PartialProjectMapping {
   projectRoot: string;
   projectKey?: string;
   serverUrl?: string;
   organization?: string;
 }
 
-/** Mutable accumulator `discoverProjects()` builds up source by source, then returns as-is. */
+export type ProjectMapping = CompleteProjectMapping | PartialProjectMapping;
+
+export function isCompleteProjectMapping(
+  mapping: ProjectMapping,
+): mapping is CompleteProjectMapping {
+  return mapping.projectKey !== undefined && mapping.serverUrl !== undefined;
+}
+
+/** Matches on the same ancestry line as `path`, either direction — no nearest-wins, so a nested path can match more than one. */
+function scopeByAncestry<T extends { projectRoot: string }>(mappings: T[], path: string): T[] {
+  const target = canonicalizePath(path);
+  return mappings.filter(
+    (mapping) =>
+      isAncestorOrSelf(mapping.projectRoot, target) ||
+      isAncestorOrSelf(target, mapping.projectRoot),
+  );
+}
+
+/**
+ * Internal accumulator `discoverProjectMappings()` builds up source by source — `PartialProjectMapping`
+ * exists only to support `discoverProject()`'s single-valued fallback. External callers use the
+ * `DiscoveredProjects`-returning `discoverProjects()` instead, which never exposes partial matches.
+ */
 export class ProjectDiscoveryResult {
   repoRoot?: string;
   projects: ProjectMapping[] = [];
 
-  /** Projects on the same ancestry line as `path` (directory or file), either direction — no nearest-wins, so a nested path can match more than one. */
   scope(path: string): ProjectMapping[] {
-    const target = canonicalizePath(path);
-    return this.projects.filter(
-      (project) =>
-        isAncestorOrSelf(project.projectRoot, target) ||
-        isAncestorOrSelf(target, project.projectRoot),
-    );
+    return scopeByAncestry(this.projects, path);
+  }
+}
+
+/** Public discovery result: only `CompleteProjectMapping` — see `ProjectDiscoveryResult`. */
+export class DiscoveredProjects {
+  constructor(
+    public readonly repoRoot: string | undefined,
+    public readonly projects: CompleteProjectMapping[],
+  ) {}
+
+  scope(path: string): CompleteProjectMapping[] {
+    return scopeByAncestry(this.projects, path);
   }
 }
