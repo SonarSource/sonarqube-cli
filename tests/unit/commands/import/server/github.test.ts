@@ -202,6 +202,30 @@ describe('githubSupport.listRepositories', () => {
     ]);
   });
 
+  it('stops at the 1000 repositories GitHub search can return instead of requesting an out-of-range page', async () => {
+    const big = repos('big', 1000);
+    const listGithubOrganizations = mock(() =>
+      Promise.resolve({ organizations: [{ key: 'big', name: 'big' }], total: 1 }),
+    );
+    const listGithubRepositories = mock(
+      (_setting: string, _organization: string, pageIndex: number, pageSize: number) =>
+        Promise.resolve({
+          repositories: big.slice((pageIndex - 1) * pageSize, pageIndex * pageSize),
+          total: 1500,
+        }),
+    );
+    const api = {
+      listGithubOrganizations,
+      listGithubRepositories,
+    } as unknown as ServerImportApiClient;
+    const fetch = githubSupport.listRepositories(api, SETTING);
+    const page = await fetch(1, 1500);
+    expect(page.repositories).toHaveLength(1000);
+    expect(listGithubRepositories.mock.calls.map((call) => call[2])).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ]);
+  });
+
   it('pages through the organizations too', async () => {
     const lastOrganization = `org${SERVER_PAGE_SIZE}`;
     const organizations = Array.from({ length: SERVER_PAGE_SIZE + 1 }, (_, i) => `org${i}`);

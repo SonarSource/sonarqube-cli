@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import logger from '@/core/observability/logger.ts';
+
 import { type GithubRepositoryResponse, ServerImportApiClient } from './server-import-api.ts';
 import type {
   FetchServerRepositories,
@@ -26,6 +28,8 @@ import type {
 } from './server-repository.ts';
 
 const SERVER_PAGE_SIZE = ServerImportApiClient.SEARCH_MAX_PAGE_SIZE;
+// The server lists repositories through GitHub's search API, which rejects any page past 1000 results.
+const GITHUB_SEARCH_RESULT_CAP = 1000;
 
 function toRepository(repo: GithubRepositoryResponse): ServerRepository {
   return {
@@ -82,7 +86,17 @@ export const githubSupport: PlatformSupport = {
 
       const organizationDone =
         page.repositories.length < SERVER_PAGE_SIZE ||
-        (page.total !== undefined && repositoriesFetchedInOrganization >= page.total);
+        (page.total !== undefined && repositoriesFetchedInOrganization >= page.total) ||
+        repositoriesFetchedInOrganization >= GITHUB_SEARCH_RESULT_CAP;
+      if (
+        repositoriesFetchedInOrganization >= GITHUB_SEARCH_RESULT_CAP &&
+        page.total !== undefined &&
+        page.total > repositoriesFetchedInOrganization
+      ) {
+        logger.warn(
+          `GitHub organization ${organization} has ${page.total} repositories; only the first ${GITHUB_SEARCH_RESULT_CAP} can be listed`,
+        );
+      }
       if (organizationDone) {
         organizationIndex++;
         nextRepositoriesPage = 1;
