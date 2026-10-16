@@ -33,7 +33,8 @@ import {
   UnexpectedApiError,
 } from '@/core/server/errors.ts';
 
-const CONNECT_URL = 'https://sonar.example.com/projects/create?mode=gitlab&resetPat=1';
+const CONNECT_URL = 'https://sonar.example.com/projects/create?mode=gitlab';
+const RECONNECT_URL = `${CONNECT_URL}&resetPat=1`;
 const CREATE_PROJECTS_REASON = "you need the 'Create Projects' permission to import repositories";
 const KEY_NOT_ADMINISTERED_MESSAGE =
   'You do not have access to this resource or it does not exist.';
@@ -43,6 +44,7 @@ function context(platformLabel = 'GitLab'): ImportFailureContext {
     settingKey: 'my-gitlab',
     platformLabel,
     connectUrl: CONNECT_URL,
+    reconnectUrl: RECONNECT_URL,
     projectKey: 'group_repo-a',
   };
 }
@@ -80,7 +82,7 @@ describe('explainImportFailure', () => {
       ['Unable to contact Bitbucket Cloud servers [HTTP 401]'],
     ])('explains a 400 %p', (message) => {
       expect(explainImportFailure(new BadRequestError(message), context())).toBe(
-        `GitLab rejected the personal access token for setting 'my-gitlab'; reconnect at ${CONNECT_URL}`,
+        `GitLab rejected the personal access token for setting 'my-gitlab'; reconnect at ${RECONNECT_URL}`,
       );
     });
 
@@ -94,7 +96,7 @@ describe('explainImportFailure', () => {
           context('Bitbucket Cloud'),
         ),
       ).toBe(
-        `Bitbucket Cloud rejected the personal access token for setting 'my-gitlab'; reconnect at ${CONNECT_URL}`,
+        `Bitbucket Cloud rejected the personal access token for setting 'my-gitlab'; reconnect at ${RECONNECT_URL}`,
       );
     });
   });

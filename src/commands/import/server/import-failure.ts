@@ -36,8 +36,10 @@ import { patStatusFromError } from './pat-status.ts';
 export interface ImportFailureContext {
   settingKey: string;
   platformLabel: string;
-  /** Where the user reconnects their token for this setting. */
+  /** Where the user connects a token that is missing or may be fine. */
   connectUrl: string;
+  /** Where the user replaces a token the platform rejected. */
+  reconnectUrl: string;
   /** The key the CLI derived for the repository, named in the project-key conflict reasons. */
   projectKey?: string;
 }
@@ -64,7 +66,7 @@ export function explainImportFailure(error: unknown, context: ImportFailureConte
   }
   const message = serverMessage(error);
   const status = statusOf(error);
-  const { settingKey, platformLabel, connectUrl, projectKey } = context;
+  const { settingKey, platformLabel, connectUrl, reconnectUrl, projectKey } = context;
 
   const tokenStatus = error instanceof BadRequestError ? patStatusFromError(error) : undefined;
   if (tokenStatus === 'missing') {
@@ -76,7 +78,7 @@ export function explainImportFailure(error: unknown, context: ImportFailureConte
       status !== undefined &&
       BITBUCKET_CLOUD_REJECTION.test(message))
   ) {
-    return `${platformLabel} rejected the personal access token for setting '${settingKey}'; reconnect at ${connectUrl}`;
+    return `${platformLabel} rejected the personal access token for setting '${settingKey}'; reconnect at ${reconnectUrl}`;
   }
   if (PLATFORM_FETCH_FAILURE.test(message)) {
     return `${platformLabel} could not return the repository: check the token and that the repository is visible to it; reconnect at ${connectUrl} (${message})`;
