@@ -96,7 +96,7 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
   let extensionPath: string;
 
   async function setUp(options: SetUpOptions = {}): Promise<void> {
-    harness.state().withSecretsBinaryInstalled();
+    harness.state().withSecretsBinaryInstalled().withContextAugmentationBinaryInstalled();
     harness.withCliInPath();
     initGitRepo(harness.cwd.path);
     commitFile(harness.cwd.path, 'README.md', 'baseline');

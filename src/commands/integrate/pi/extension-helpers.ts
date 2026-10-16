@@ -28,7 +28,7 @@ const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
 
 function runHook<T>(subcommand: string, payload: unknown, timeout: number = HOOK_TIMEOUT_MS, cwd?: string): Promise<T> {
   return new Promise((resolvePromise, reject) => {
-    const child = execFile('sonar', ['hook', subcommand], { timeout, cwd }, (error, stdout) => {
+    const child = execFile('sonar', ['hook', ...subcommand.split(' ')], { timeout, cwd }, (error, stdout) => {
       if (error) return reject(error);
       try {
         resolvePromise(JSON.parse(stdout) as T);
