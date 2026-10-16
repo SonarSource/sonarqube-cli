@@ -530,6 +530,19 @@ export interface FakeBitbucketServerProject {
   repos: FakeBitbucketServerRepo[];
 }
 
+export interface FakeGithubRepo {
+  id: number | string;
+  key: string;
+  name: string;
+  url?: string;
+  sqProjectKey?: string;
+}
+
+export interface FakeGithubOrganization {
+  key: string;
+  repos: FakeGithubRepo[];
+}
+
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
@@ -606,6 +619,7 @@ export class FakeSonarQubeServerBuilder {
     string,
     { projects: FakeBitbucketServerProject[]; pageLimit: number }
   >();
+  private readonly githubOrganizations = new Map<string, FakeGithubOrganization[]>();
   private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
   private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
@@ -967,6 +981,15 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Organizations (each with its repositories) that `list_github_organizations` and
+   * `list_github_repositories` return for a GitHub setting key, in the order given.
+   */
+  withGithubOrganizations(settingKey: string, organizations: FakeGithubOrganization[]): this {
+    this.githubOrganizations.set(settingKey, organizations);
+    return this;
+  }
+
   /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
   withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
     this.boundProjectFailures.set(repositoryIdentifier, { status, message });
@@ -1057,6 +1080,7 @@ export class FakeSonarQubeServerBuilder {
       azureRepos,
       bitbucketCloudRepos,
       bitbucketServerProjects,
+      githubOrganizations,
       boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
@@ -2233,10 +2257,42 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          return new Response(isProbe && status === 200 ? '{"organizations":[]}' : '{}', {
+          if (isProbe && status === 200) {
+            const organizations = githubOrganizations.get(query.almSetting ?? '') ?? [];
+            const pageIndex = Number.parseInt(query.p ?? '1', 10);
+            const pageSize = Number.parseInt(query.ps ?? '100', 10);
+            const start = (pageIndex - 1) * pageSize;
+            return new Response(
+              JSON.stringify({
+                organizations: organizations
+                  .slice(start, start + pageSize)
+                  .map(({ key }) => ({ key, name: key })),
+                paging: { pageIndex, pageSize, total: organizations.length },
+              }),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response('{}', {
             status,
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (path === '/api/alm_integration/list_github_repositories') {
+          const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
+            (o) => o.key === query.organization,
+          );
+          const repos = organization?.repos ?? [];
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '100', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize, total: repos.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {

@@ -413,6 +413,93 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('listGithubOrganizations', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ organizations: [], paging: { total: 0 } });
+      await api.listGithubOrganizations('my-github', 2, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integration/list_github_organizations');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-github',
+        p: '2',
+        ps: '100',
+      });
+      expect(lastFetchInit(fetchSpy).method).toBe('GET');
+    });
+
+    it('returns the organizations and the reported total', async () => {
+      fetchSpy = mockFetch({
+        organizations: [{ key: 'acme', name: 'acme' }],
+        paging: { pageIndex: 1, pageSize: 100, total: 4 },
+      });
+      expect(await api.listGithubOrganizations('s', 1, 100)).toEqual({
+        organizations: [{ key: 'acme', name: 'acme' }],
+        total: 4,
+      });
+    });
+
+    it('treats an empty result as no organizations and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listGithubOrganizations('s', 1, 100)).toEqual({
+        organizations: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.listGithubOrganizations('s', 1, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('listGithubRepositories', () => {
+    it('sends the setting key, the organization and paging', async () => {
+      fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
+      await api.listGithubRepositories('my-github', 'acme', 3, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integration/list_github_repositories');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-github',
+        organization: 'acme',
+        p: '3',
+        ps: '100',
+      });
+      expect(lastFetchInit(fetchSpy).method).toBe('GET');
+    });
+
+    it('returns the repositories and the reported total', async () => {
+      const repositories = [
+        {
+          id: 1,
+          key: 'acme/a',
+          name: 'a',
+          url: 'https://github.com/acme/a',
+          sqProjectKey: 'acme_a',
+        },
+      ];
+      fetchSpy = mockFetch({ repositories, paging: { pageIndex: 1, pageSize: 100, total: 9 } });
+      expect(await api.listGithubRepositories('s', 'acme', 1, 100)).toEqual({
+        repositories,
+        total: 9,
+      });
+    });
+
+    it('treats an empty result as no repositories and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listGithubRepositories('s', 'acme', 1, 100)).toEqual({
+        repositories: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a server error', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.listGithubRepositories('s', 'acme', 1, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
   describe('putBoundProject', () => {
     const request = {
       projectKey: 'group_repo',
