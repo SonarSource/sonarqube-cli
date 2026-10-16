@@ -261,8 +261,9 @@ describe('integrate devin', () => {
       session.keyCtrlC();
       const result = await session.waitFinish();
 
-      expect(result.stderr).toContain(
-        "Both Claude Code and Devin were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
+      expect(result.stdout).toContain('Claude Code and Devin may conflict at the hook level.');
+      expect(result.stdout).toContain(
+        "→ Run 'sonar integrate' again anytime to add, customize or remove an agent.",
       );
     },
     { timeout: 15000 },
