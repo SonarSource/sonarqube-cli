@@ -18,10 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { azureSupport } from './azure.ts';
 import { gitlabSupport } from './gitlab.ts';
 import type { SupportedPlatforms } from './server-repository.ts';
 
 /** The DevOps platforms `sonar import` can list repositories from on SonarQube Server. */
 export const SUPPORTED_PLATFORMS: SupportedPlatforms = {
   gitlab: gitlabSupport,
+  azure: azureSupport,
 };
