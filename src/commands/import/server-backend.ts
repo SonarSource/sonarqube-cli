@@ -34,6 +34,7 @@ import type { DopRepository } from './import-api.ts';
 import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-backend.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
 import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
+import { guardAzureSignIn } from './server/azure-sign-in.ts';
 import { buildConnectUrl } from './server/connect-url.ts';
 import { explainImportFailure } from './server/import-failure.ts';
 import { assertProjectKeyUsable } from './server/key-guard.ts';
@@ -81,7 +82,11 @@ export class ServerBackend implements ImportBackend {
 
     const repositories = new Map<string, ServerRepository>();
     const claimedKeys = new Map<string, string>();
-    const fetchServerPage = support.listRepositories(this.api, setting);
+    const listed = support.listRepositories(this.api, setting);
+    const fetchServerPage =
+      setting.type === 'azure'
+        ? guardAzureSignIn(listed, buildConnectUrl(this.serverUrl, setting, { resetPat: true }))
+        : listed;
     const selection = await selectRepos(
       {
         fetchPage: async (pageIndex, pageSize) => {
