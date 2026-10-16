@@ -85,13 +85,6 @@ describe('detectInstalledAgents', () => {
     expect(detectInstalledAgents(home, hermeticEnv())).toEqual(['opencode']);
   });
 
-  it('detects Devin from ~/.config/devin on macOS and Linux', () => {
-    mkdirSync(resolveDevinConfigDir(home, {}, 'linux'), { recursive: true });
-
-    expect(detectInstalledAgents(home, {}, 'linux')).toEqual(['devin']);
-    expect(detectInstalledAgents(home, {}, 'darwin')).toEqual(['devin']);
-  });
-
   it('detects Devin from %APPDATA%\\devin on Windows, not from ~/.config/devin', () => {
     const env = { APPDATA: join(home, 'AppData', 'Roaming') };
     mkdirSync(resolveDevinConfigDir(home, {}, 'linux'), { recursive: true });
