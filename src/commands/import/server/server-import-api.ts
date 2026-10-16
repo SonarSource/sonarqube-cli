@@ -1,0 +1,97 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// The SonarQube Server API calls `sonar import` makes against a DevOps platform setting.
+// None of them returns or accepts a personal access token: the CLI only asks the server
+// whether the caller has a usable one.
+
+import { type HttpClientError, UnexpectedApiError } from '@/core/server/errors.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NO_CONTENT } from '@/core/server/http-constants.ts';
+
+import { type PatStatus, patStatusFromError } from './pat-status.ts';
+
+/** DevOps platform kinds as `dop-settings` reports them (`bitbucket` is Bitbucket Server). */
+const DOP_PLATFORMS = ['github', 'gitlab', 'azure', 'bitbucket', 'bitbucketcloud'] as const;
+
+export type DopPlatform = (typeof DOP_PLATFORMS)[number];
+
+export interface DopSetting {
+  id: string;
+  key: string;
+  type: DopPlatform;
+  url?: string;
+}
+
+interface DopSettingsResponse {
+  dopSettings: Array<{ id: string; key: string; type: string; url?: string | null }>;
+}
+
+function isDopPlatform(type: string): type is DopPlatform {
+  return (DOP_PLATFORMS as readonly string[]).includes(type);
+}
+
+export class ServerImportApiClient {
+  private readonly client: SonarHttpClient;
+
+  constructor(client: SonarHttpClient) {
+    this.client = client;
+  }
+
+  /** The configured DevOps platform settings; kinds this CLI does not know are left out. */
+  async listDopSettings(): Promise<DopSetting[]> {
+    const response = await this.client
+      .get<DopSettingsResponse>('/api/v2/dop-translation/dop-settings')
+      .orThrow();
+    return response.dopSettings.flatMap(({ id, key, type, url }) =>
+      isDopPlatform(type) ? [{ id, key, type, ...(url ? { url } : {}) }] : [],
+    );
+  }
+
+  /** PAT status through `check_pat`, which every platform supports except GitHub. */
+  async checkPat(settingKey: string): Promise<PatStatus> {
+    return this.patStatusOf('/api/alm_integration/check_pat', settingKey);
+  }
+
+  /**
+   * PAT status for GitHub, which `check_pat` rejects: listing the user's organizations needs the
+   * stored token, so a successful listing means the token works.
+   */
+  async probeGithubPat(settingKey: string): Promise<PatStatus> {
+    return this.patStatusOf('/api/alm_integration/list_github_organizations', settingKey);
+  }
+
+  private patStatusOf(endpoint: string, settingKey: string): Promise<PatStatus> {
+    return this.client.get<unknown>(endpoint, { almSetting: settingKey }).match(
+      () => 'valid',
+      (error) => {
+        if (isEmptySuccess(error)) return 'valid';
+        const status = patStatusFromError(error);
+        if (status === undefined) throw error;
+        return status;
+      },
+    );
+  }
+}
+
+/** `check_pat` answers 204 with no body, which the JSON client reports as a parse failure. */
+function isEmptySuccess(error: HttpClientError): boolean {
+  return error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NO_CONTENT;
+}
