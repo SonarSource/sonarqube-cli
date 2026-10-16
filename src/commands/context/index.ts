@@ -26,7 +26,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
+import { getToken, MissingKeychainError, normalizeServerUrl } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -114,8 +114,17 @@ async function resolveContextToken(
   serverUrl: string,
   organization: string | undefined,
 ): Promise<string> {
-  if (auth.serverUrl === serverUrl && auth.orgKey === organization) {
+  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const sameServer = normalizeServerUrl(auth.serverUrl) === normalizeServerUrl(serverUrl);
+  if (sameServer && auth.orgKey === organization) {
     return auth.token;
+  }
+
+  if (!sameServer) {
+    throw new CommandFailedError(
+      `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
+      { remediationHint: `Run sonar auth login --server ${serverUrl} first.` },
+    );
   }
 
   let token: string | null = null;
@@ -135,7 +144,6 @@ async function resolveContextToken(
     return token;
   }
 
-  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,

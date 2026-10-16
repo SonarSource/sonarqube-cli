@@ -45,7 +45,7 @@ export interface RecordConnectionOptions {
   tokenName?: string;
   /** Bypasses the no-op check below to always refresh. */
   force?: boolean;
-  /** Marks the connection as having no keychain entry behind it. */
+  /** Marks the connection as environment-only unless its token matches a stored token. */
   envOnly?: boolean;
   /** Ignores identity inherited from the active connection and resolves it for this token. */
   refreshIdentity?: boolean;
@@ -63,19 +63,19 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
-  // Logout treats envOnly as already logged out, so never stamp it on a
-  // keychain-backed (login-created) connection — that would leave the stored
-  // token behind, unrevoked. A keychain we cannot read (headless CI, no
-  // libsecret) must not break env-var recording, so it degrades to "unknown".
-  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
+  const envOnly = options.envOnly === true && !(await hasMatchingStoredToken(auth));
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (envOnly && seedConnection.envOnly !== true) {
-      seedConnection.envOnly = true;
+    if (options.envOnly === true && seedConnection.envOnly !== (envOnly || undefined)) {
+      if (envOnly) {
+        seedConnection.envOnly = true;
+      } else {
+        delete seedConnection.envOnly;
+      }
       saveState(state);
     }
     return seedConnection;
@@ -108,12 +108,12 @@ function resolveRecordedTokenName(
   return undefined;
 }
 
-async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
+async function hasMatchingStoredToken(auth: ResolvedAuth): Promise<boolean> {
   try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
+    return (await getToken(auth.serverUrl, auth.orgKey)) === auth.token;
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
-    return true;
+    return false;
   }
 }
 

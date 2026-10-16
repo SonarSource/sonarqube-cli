@@ -119,7 +119,7 @@ describe('env-var auth — state sync', () => {
   );
 
   it(
-    'does not mark a keychain-backed connection envOnly when env vars match the same server',
+    'keeps a connection keychain-backed when the env token equals the stored token',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('login-token').start();
       harness
@@ -129,7 +129,7 @@ describe('env-var auth — state sync', () => {
         .withKeychainToken(server.baseUrl(), 'login-token');
 
       const envResult = await harness.run('system status', {
-        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
+        extraEnv: { [ENV_TOKEN]: 'login-token', [ENV_SERVER]: server.baseUrl() },
       });
       expect(envResult.exitCode).toBe(0);
       expect(
@@ -145,6 +145,56 @@ describe('env-var auth — state sync', () => {
       expect(state.auth.isAuthenticated).toBe(false);
       expect(state.auth.connections).toHaveLength(0);
       expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({});
+    },
+    { timeout: 20000 },
+  );
+
+  it(
+    'does not release a stored token after env auth records another port on the same host',
+    async () => {
+      const loginServer = await harness.newFakeServer().withAuthToken('stored-token').start();
+      const firstLogin = harness.runInteractive(`auth login --server ${loginServer.baseUrl()}`, {
+        browserToken: 'stored-token',
+      });
+      await firstLogin.accept('Connect to:');
+      expect((await firstLogin.waitFinish()).exitCode).toBe(0);
+      const envServer = await harness.newFakeServer().withAuthToken('new-login-token').start();
+
+      const envResult = await harness.run('system status', {
+        extraEnv: { [ENV_TOKEN]: 'env-token', [ENV_SERVER]: envServer.baseUrl() },
+      });
+      expect(envResult.exitCode).toBe(0);
+      expect((harness.stateJsonFile.asJson() as StoredState).auth.connections[0]).toMatchObject({
+        serverUrl: envServer.baseUrl(),
+        envOnly: true,
+      });
+
+      const noAuthEnv = { [ENV_TOKEN]: '', [ENV_SERVER]: '', [ENV_ORG]: '' };
+      const requestsAfterEnvRun = envServer.getRecordedRequests().length;
+      const statusResult = await harness.run('auth status --format json', {
+        extraEnv: noAuthEnv,
+      });
+      expect(JSON.parse(statusResult.stdout)).toMatchObject({ status: 'token_missing' });
+      expect(statusResult.exitCode).toBe(1);
+      expect(envServer.getRecordedRequests()).toHaveLength(requestsAfterEnvRun);
+
+      const loginSession = harness.runInteractive(`auth login --server ${envServer.baseUrl()}`, {
+        browserToken: 'new-login-token',
+        extraEnv: noAuthEnv,
+      });
+      await loginSession.accept('Connect to:');
+      const loginResult = await loginSession.waitFinish();
+      expect(loginResult.exitCode).toBe(0);
+      expect(loginResult.stdout).toContain(`Authenticating with: ${envServer.baseUrl()}`);
+      expect(loginResult.stdout).not.toContain('Token already exists');
+      expect(
+        envServer
+          .getRecordedRequests()
+          .some((request) => request.headers.authorization?.includes('stored-token')),
+      ).toBe(false);
+      expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({
+        [generateKeychainAccount(envServer.baseUrl())]: 'new-login-token',
+      });
     },
     { timeout: 20000 },
   );
