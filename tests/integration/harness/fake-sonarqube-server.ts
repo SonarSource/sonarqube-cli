@@ -501,6 +501,13 @@ export interface FakeGitlabRepo {
   sqProjectName?: string;
 }
 
+export interface FakeAzureRepo {
+  name: string;
+  projectName: string;
+  sqProjectKey?: string;
+  sqProjectName?: string;
+}
+
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
@@ -573,6 +580,7 @@ export class FakeSonarQubeServerBuilder {
   private projectBindingsStatusCode = 200;
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
+  private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
   private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
   private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
@@ -922,6 +930,12 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Repositories of an Azure DevOps setting key; `list_azure_projects` reports their distinct project names. */
+  withAzureRepos(settingKey: string, repos: FakeAzureRepo[]): this {
+    this.azureRepos.set(settingKey, repos);
+    return this;
+  }
+
   /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
   withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
     this.boundProjectFailures.set(repositoryIdentifier, { status, message });
@@ -1011,6 +1025,7 @@ export class FakeSonarQubeServerBuilder {
       dopSettingsStatusCode,
       patResponses,
       gitlabRepos,
+      azureRepos,
       boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
@@ -2120,6 +2135,23 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/alm_integration/list_azure_projects') {
+          const names = (azureRepos.get(query.almSetting ?? '') ?? []).map((r) => r.projectName);
+          return new Response(
+            JSON.stringify({ projects: [...new Set(names)].map((name) => ({ name })) }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/alm_integration/search_azure_repos') {
+          const repositories = (azureRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.projectName || r.projectName === query.projectName,
+          );
+          return new Response(JSON.stringify({ repositories }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (
