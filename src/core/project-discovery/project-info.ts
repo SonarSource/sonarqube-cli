@@ -29,13 +29,17 @@ import logger from '@/core/observability/logger.ts';
 import {
   applyKnownServerProjectMapping,
   collectKnownRoots,
+  type KnownMappingsResult,
   loadKnownMappings,
 } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
 import { applyLocalConfigAcrossLookupPaths } from '@/core/project-discovery/local-project-config.ts';
 import { formatConfigFields } from '@/core/project-discovery/project-discovery-format.ts';
 import {
+  type CompleteProjectMapping,
+  DiscoveredProjects,
+  isCompleteProjectMapping,
+  type PartialProjectMapping,
   ProjectDiscoveryResult,
-  type ProjectMapping,
 } from '@/core/project-discovery/project-discovery-result.ts';
 import {
   type SharedProjectConfigMapping,
@@ -74,18 +78,22 @@ export interface DiscoverProjectOptions {
   console: Console;
 }
 
+/** Unlike `discoverProject()`, accepts a partial match — these callers never read `projectKey`. */
 async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
   console: Console,
 ): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
-  const discovered = await discoverProject(startDir, {
+  const invocationDir = canonicalizePath(startDir);
+  const result = await discoverProjectMappings(startDir, {
     auth: null,
     silent,
     console,
     useKnownMappings: false,
   });
-  return { serverUrl: discovered.serverUrl, organization: discovered.organization };
+  const scoped = result.scope(invocationDir);
+  const mapping = scoped.length > 1 ? undefined : scoped.at(0);
+  return { serverUrl: mapping?.serverUrl, organization: mapping?.organization };
 }
 
 /** Try to find server URL from project configs. */
@@ -109,13 +117,38 @@ export async function discoverOrganization(console: Console): Promise<string | n
   }
 }
 
+/** Falls back to the three single-valued sources (known-server-project-mapping, local config, git-remote binding) when shared project config resolved nothing. */
+async function discoverProjectWithoutSharedConfig(
+  invocationDir: string,
+  lookupPaths: LookupPath[],
+  knownMappings: KnownMappingsResult | undefined,
+  repoRoot: string | undefined,
+  options: DiscoverProjectOptions,
+): Promise<PartialProjectMapping[]> {
+  const single: PartialProjectMapping = { projectRoot: invocationDir };
+
+  const resolved =
+    (options.useKnownMappings !== false &&
+      knownMappings !== undefined &&
+      applyKnownServerProjectMapping(single, lookupPaths, knownMappings, options)) ||
+    (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options));
+
+  if (!resolved) {
+    await applyGitRemoteBinding(single, repoRoot, options);
+  }
+
+  return single.projectKey || single.serverUrl ? [single] : [];
+}
+
 /**
  * Tries each source in turn — shared project config (the only one that can resolve more
  * than one project), then known-server-project-mapping, local config, then git-remote
  * binding — the first three walking the same nearest-first `resolveLookupPaths` list, so
  * "closer wins" uniformly. Never throws — degrades to whatever was already resolved.
+ * Internal only: callers outside this file use `discoverProjects()`, which hides the
+ * `PartialProjectMapping` case this can produce.
  */
-export async function discoverProjects(
+async function discoverProjectMappings(
   startDir: string,
   options: DiscoverProjectOptions,
 ): Promise<ProjectDiscoveryResult> {
@@ -134,33 +167,15 @@ export async function discoverProjects(
     );
 
     const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
-    if (sharedConfigProjects) {
-      result.projects = sharedConfigProjects;
-    } else {
-      // The other three sources stay single-valued: same DiscoveredProject-shaped accumulator as before.
-      const single: DiscoveredProject = { projectRoot: invocationDir };
-
-      const resolved =
-        (options.useKnownMappings !== false &&
-          knownMappings !== undefined &&
-          applyKnownServerProjectMapping(single, lookupPaths, knownMappings, options)) ||
-        (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options));
-
-      if (!resolved) {
-        await applyGitRemoteBinding(single, repoRoot, options);
-      }
-
-      if (single.projectKey || single.serverUrl) {
-        result.projects = [
-          {
-            projectRoot: single.projectRoot,
-            projectKey: single.projectKey,
-            serverUrl: single.serverUrl,
-            organization: single.organization,
-          },
-        ];
-      }
-    }
+    result.projects =
+      sharedConfigProjects ??
+      (await discoverProjectWithoutSharedConfig(
+        invocationDir,
+        lookupPaths,
+        knownMappings,
+        repoRoot,
+        options,
+      ));
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
     // rather than throwing out of a git hook, agent hook, or long-running MCP server.
@@ -171,13 +186,16 @@ export async function discoverProjects(
   return result;
 }
 
-/**
- * Resolves exactly one project for `startDir`: `discoverProjects()` + `scope(startDir)`.
- * Zero matches and more than one match both degrade to "nothing resolved" — ambiguous and
- * missing are the same unusable answer to every current caller, none of which can act on
- * the distinction (hooks/passthroughs run unattended; the few commands with a `--project`
- * flag already print one generic "could not determine project key" message for both).
- */
+/** Public counterpart to `discoverProjectMappings()` — never exposes a `PartialProjectMapping`. */
+export async function discoverProjects(
+  startDir: string,
+  options: DiscoverProjectOptions,
+): Promise<DiscoveredProjects> {
+  const result = await discoverProjectMappings(startDir, options);
+  return new DiscoveredProjects(result.repoRoot, result.projects.filter(isCompleteProjectMapping));
+}
+
+/** Zero or ambiguous matches both degrade to "nothing resolved". */
 export async function discoverProject(
   startDir: string,
   options: DiscoverProjectOptions,
@@ -245,7 +263,7 @@ export function assertSingleLineProjectKey(projectKey: string): void {
 }
 
 function printSharedProjectConfigMapping(
-  mapping: ProjectMapping,
+  mapping: CompleteProjectMapping,
   options: DiscoverProjectOptions,
 ): void {
   if (options.silent) {
@@ -261,7 +279,7 @@ function printSharedProjectConfigMapping(
 async function resolveSharedProjectConfigMappings(
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
-): Promise<ProjectMapping[] | null> {
+): Promise<CompleteProjectMapping[] | null> {
   for (const { checkPath } of lookupPaths) {
     let mappings: SharedProjectConfigMapping[];
     try {
