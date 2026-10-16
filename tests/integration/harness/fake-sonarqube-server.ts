@@ -559,6 +559,8 @@ export class FakeSonarQubeServerBuilder {
     [];
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
+  private dopSettingsStatusCode?: number;
+  private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
@@ -895,6 +897,22 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Makes `GET /api/v2/dop-translation/dop-settings` answer with this status (e.g. 404 on an older server). */
+  withDopSettingsError(statusCode: number): this {
+    this.dopSettingsStatusCode = statusCode;
+    return this;
+  }
+
+  /**
+   * How `check_pat` and `list_github_organizations` answer for one DevOps platform setting key.
+   * A `status` of 204 (200 for the GitHub probe) is a valid token; 400 carries `message` as the
+   * server's error; any other status is returned as-is. Settings never configured here are valid.
+   */
+  withPatResponse(settingKey: string, response: { status: number; message?: string }): this {
+    this.patResponses.set(settingKey, response);
+    return this;
+  }
+
   withBoundProjectsError(statusCode: number): this {
     this.boundProjectsStatusCode = statusCode;
     return this;
@@ -958,6 +976,8 @@ export class FakeSonarQubeServerBuilder {
       projectBindings,
       hasProvisionProjects,
       boundProjectsStatusCode,
+      dopSettingsStatusCode,
+      patResponses,
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
@@ -2038,7 +2058,33 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/v2/dop-translation/dop-settings') {
+          if (dopSettingsStatusCode !== undefined) {
+            return new Response('{}', {
+              status: dopSettingsStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
           return new Response(JSON.stringify({ dopSettings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (
+          path === '/api/alm_integration/check_pat' ||
+          path === '/api/alm_integration/list_github_organizations'
+        ) {
+          const isProbe = path === '/api/alm_integration/list_github_organizations';
+          const configured = patResponses.get(query.almSetting ?? '');
+          const status = configured?.status ?? (isProbe ? 200 : 204);
+          if (status === 204) return new Response(null, { status });
+          if (status === 400) {
+            return new Response(JSON.stringify({ errors: [{ msg: configured?.message ?? '' }] }), {
+              status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(isProbe && status === 200 ? '{"organizations":[]}' : '{}', {
+            status,
             headers: { 'Content-Type': 'application/json' },
           });
         }

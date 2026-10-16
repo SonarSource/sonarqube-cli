@@ -1,0 +1,192 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import {
+  CommandFailedError,
+  type CommandFailedErrorOptions,
+  InvalidOptionError,
+} from '@/core/commands/command-error.ts';
+import { AccessDeniedError } from '@/core/server/errors.ts';
+import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
+import { fetchServerVersion } from '@/core/server/server-info.ts';
+import type { Console } from '@/core/ui/console.ts';
+
+import type { ImportBackend, ImportPlan } from './import-backend.ts';
+import { buildConnectUrl } from './server/connect-url.ts';
+import type { PatStatus } from './server/pat-status.ts';
+import {
+  DOP_PLATFORM_LABELS,
+  type DopSetting,
+  type ServerImportApiClient,
+} from './server/server-import-api.ts';
+import type { ImportOptions } from './types';
+
+const NETWORK_HINT = 'Check your network connection and authentication, then retry.';
+
+/** SonarQube Server: repositories come from a DevOps platform setting the user has connected to. */
+export class ServerBackend implements ImportBackend {
+  constructor(
+    private readonly api: ServerImportApiClient,
+    private readonly serverUrl: string,
+  ) {}
+
+  async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+    const settings = await this.loadSettings();
+    const setting = await selectSetting(settings, options, console);
+    const label = DOP_PLATFORM_LABELS[setting.type];
+    console.info(`DevOps platform: ${setting.key} (${label})`);
+
+    await this.requireConnectedPat(setting);
+
+    throw new CommandFailedError(`Importing from ${label} is not supported yet.`, {
+      remediationHint: 'Support for more DevOps platforms is being added.',
+    });
+  }
+
+  private async loadSettings(): Promise<DopSetting[]> {
+    try {
+      return await this.api.listDopSettings();
+    } catch (error) {
+      throw await this.mapDopSettingsError(error);
+    }
+  }
+
+  private async mapDopSettingsError(error: unknown): Promise<unknown> {
+    if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+      const version = await fetchServerVersion(this.serverUrl).catch(() => undefined);
+      const detected = version ? ` Detected server version: ${version}.` : '';
+      return new CommandFailedError(
+        `This SonarQube Server does not support importing repositories (the DevOps platform settings API was not found).${detected}`,
+        { remediationHint: 'Upgrade SonarQube Server, then retry.' },
+      );
+    }
+    return mapRequestError(error, 'list the configured DevOps platforms');
+  }
+
+  /** Ends the run unless the caller already has a working personal access token for `setting`. */
+  private async requireConnectedPat(setting: DopSetting): Promise<void> {
+    const status = await this.patStatusOf(setting);
+    if (status === 'valid') {
+      return;
+    }
+    const label = DOP_PLATFORM_LABELS[setting.type];
+    const url = buildConnectUrl(this.serverUrl, setting, { resetPat: status === 'invalid' });
+    const problem =
+      status === 'missing'
+        ? `No personal access token is connected for ${label} setting '${setting.key}'.`
+        : `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`;
+    throw new CommandFailedError(problem, {
+      remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
+    });
+  }
+
+  private async patStatusOf(setting: DopSetting): Promise<PatStatus> {
+    try {
+      return setting.type === 'github'
+        ? await this.api.probeGithubPat(setting.key)
+        : await this.api.checkPat(setting.key);
+    } catch (error) {
+      if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+        throw new CommandFailedError(`DevOps platform setting '${setting.key}' was not found.`, {
+          remediationHint: 'It may have been removed. Run the command again to pick another one.',
+        });
+      }
+      throw mapRequestError(error, 'check the personal access token');
+    }
+  }
+}
+
+function mapRequestError(error: unknown, action: string): unknown {
+  if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_FORBIDDEN) {
+    return new CommandFailedError(
+      "You need the 'Create Projects' permission to import repositories.",
+      {
+        remediationHint:
+          "Ask a SonarQube administrator to grant you the global 'Create Projects' permission.",
+      },
+    );
+  }
+  if (error instanceof Error) {
+    const options: CommandFailedErrorOptions = { remediationHint: NETWORK_HINT };
+    return new CommandFailedError(`Failed to ${action}: ${error.message}`, options);
+  }
+  return error;
+}
+
+/** Whether the run may stop and ask the user something. */
+function canPrompt(options: ImportOptions): boolean {
+  return (
+    !options.nonInteractive &&
+    process.env.CI !== 'true' &&
+    Boolean(process.stdin.isTTY || process.env.SONARQUBE_CLI_MOCK_TTY)
+  );
+}
+
+async function selectSetting(
+  settings: DopSetting[],
+  options: ImportOptions,
+  console: Console,
+): Promise<DopSetting> {
+  if (settings.length === 0) {
+    throw new CommandFailedError(
+      'No DevOps platform integration is configured on this SonarQube Server.',
+      {
+        remediationHint:
+          'A SonarQube administrator must configure one under Administration > DevOps Platform Integration, then retry.',
+      },
+    );
+  }
+
+  const keys = settings.map((setting) => setting.key).join(', ');
+
+  if (options.dopSetting !== undefined) {
+    const chosen = settings.find((setting) => setting.key === options.dopSetting);
+    if (!chosen) {
+      throw new InvalidOptionError(
+        `No DevOps platform setting has the key '${options.dopSetting}'.`,
+        `Available keys: ${keys}.`,
+      );
+    }
+    return chosen;
+  }
+
+  if (settings.length === 1) {
+    return settings[0];
+  }
+
+  if (!canPrompt(options)) {
+    throw new InvalidOptionError(
+      'Several DevOps platform settings are configured: pass --dop-setting <key> to choose one.',
+      `Available keys: ${keys}.`,
+    );
+  }
+
+  const chosen = await console.selectPrompt(
+    'Which DevOps platform do you want to import from?',
+    settings.map((setting) => ({
+      value: setting,
+      label: `${setting.key} (${DOP_PLATFORM_LABELS[setting.type]})`,
+    })),
+  );
+  if (chosen === null) {
+    throw new CommandFailedError('DevOps platform selection cancelled');
+  }
+  return chosen;
+}
