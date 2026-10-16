@@ -25,8 +25,10 @@ import type {
 } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
+  excludeOutsideProject,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -215,29 +217,28 @@ async function analyzeSqaaChangeSet(params: {
   const { console } = telemetryCtx;
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
 
-  const changeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, changeSet.repoRoot);
+  const fullChangeSet = await resolveChangeSet(process.cwd(), { staged, base });
+  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, fullChangeSet.repoRoot);
 
-  if (changeSet.files.length === 0 && changeSet.ignored.length === 0) {
+  if (fullChangeSet.files.length === 0 && fullChangeSet.ignored.length === 0) {
     console.text('Vortex analysis: no files in the change set to analyze.');
     return;
   }
 
-  if (changeSet.files.length === 0) {
-    console.text(
-      'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository).',
-    );
+  if (fullChangeSet.files.length === 0) {
+    printAllChangeSetFilesExcluded(console);
     return;
   }
 
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    changeSet.repoRoot,
-  );
+  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
+
+  const changeSet = excludeOutsideProject(fullChangeSet, resolved.projectRoot);
+  if (changeSet.files.length === 0) {
+    printAllChangeSetFilesExcluded(console);
+    return;
+  }
 
   if (!(await confirmLargeRunIfNeeded(changeSet.files.length, console, force, format))) return;
 
@@ -251,4 +252,10 @@ async function analyzeSqaaChangeSet(params: {
     telemetryCtx,
     console,
   });
+}
+
+function printAllChangeSetFilesExcluded(console: Console): void {
+  console.text(
+    'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
+  );
 }

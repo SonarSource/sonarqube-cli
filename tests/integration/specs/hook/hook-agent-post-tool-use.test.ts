@@ -29,6 +29,7 @@ import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from '../analyze/sqaa-request-helpers';
+import { initGitRepo } from './git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -104,6 +105,38 @@ describe('sonar hook claude-post-tool-use', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(TEST_PROJECT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends the edited file relative to the discovered project root, not cwd',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      // Discovery only climbs above cwd up to a git root.
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('pkg/sonar-project.properties', 'sonar.projectKey=pkg-project\n');
+      harness.cwd.writeFile('pkg/src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'pkg/src/main.ts');
+
+      const result = await harness.runWithStdin(
+        'hook claude-post-tool-use',
+        postToolUseStdin(filePath),
+        { cwd: join(harness.cwd.path, 'pkg/src') },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe('pkg-project');
+      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/main.ts');
     },
     { timeout: 15000 },
   );

@@ -31,12 +31,10 @@ import {
   ServiceUnavailableError,
   SqaaForbiddenError,
 } from '@/core/server/errors.ts';
-import type { Console } from '@/core/ui/console.ts';
 
 import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
-import { displaySqaaResults, printSingleFileTextFailure } from './sqaa-display.ts';
 import {
   isGlobalSqaaError,
   payloadTooLargeCommandError,
@@ -80,6 +78,42 @@ export function toRelativePosixPath(file: string, base: string = process.cwd()):
     throw new InvalidOptionError(`File must be inside '${base}': ${file}`);
   }
   return rel;
+}
+
+export interface SqaaPath {
+  absolutePath: string;
+  /** Relative to `displayBase`; what the user sees in reports. */
+  displayPath: string;
+  /** Relative to the project root, which is what SQAA matches against the project's analysis. */
+  serverPath: string;
+}
+
+export function isInsideProjectRoot(absolutePath: string, projectRoot: string): boolean {
+  return toRelativePosixPathOrNull(absolutePath, projectRoot) !== null;
+}
+
+/** Throws when `absolutePath` is outside `projectRoot` or `displayBase`. */
+export function resolveSqaaPath(
+  absolutePath: string,
+  projectRoot: string,
+  displayBase: string = process.cwd(),
+): SqaaPath {
+  const serverPath = toRelativePosixPathOrNull(absolutePath, projectRoot);
+  if (serverPath == null) {
+    throw new InvalidOptionError(
+      `File must be inside the project root '${projectRoot}': ${absolutePath}`,
+    );
+  }
+  return {
+    absolutePath,
+    displayPath: toRelativePosixPath(absolutePath, displayBase),
+    serverPath,
+  };
+}
+
+/** SQAA echoes the `serverPath` it was sent; reports show the `displayPath` instead. */
+export function withDisplayFilePath(issues: SqaaIssue[], displayPath: string): SqaaIssue[] {
+  return issues.map((issue) => ({ ...issue, filePath: displayPath }));
 }
 
 function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): boolean {
@@ -169,28 +203,17 @@ export async function submitValidatedSqaaAnalysis(
 /**
  * Fetch the SQAA API response for a single file. Does not print anything.
  * Throws ServiceUnavailableError on 503 (caller handles retry), CommandFailedError on other failures.
- *
- * `pathBase` is the directory the SQAA-side file path is computed relative to.
- * Defaults to `process.cwd()` for the single-file path; change-set callers
- * pass the repository root so paths are stable regardless of where the user runs.
  */
 export async function fetchSqaaResponse(
   connection: SonarConnection,
   projectKey: string,
-  file: string,
-  fileContent: string,
+  file: SqaaAnalysisFile,
   branch: string | undefined,
-  pathBase?: string,
   analysisDepth?: SqaaDeepWireDepth,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
-  const filePath = toRelativePosixPath(file, pathBase);
-  const { response, rejected } = await postSqaaAnalysis(
-    connection,
-    projectKey,
-    branch,
-    [{ path: filePath, content: fileContent }],
-    { analysisDepth },
-  );
+  const { response, rejected } = await postSqaaAnalysis(connection, projectKey, branch, [file], {
+    analysisDepth,
+  });
   if (rejected.length > 0) {
     throw rejected[0].error;
   }
@@ -223,7 +246,6 @@ async function with503Retry<T>(
 
 export interface FetchSqaaRetryOptions {
   onRetry?: (attempt: number) => Promise<void>;
-  pathBase?: string;
   analysisDepth?: SqaaDeepWireDepth;
 }
 
@@ -233,15 +255,13 @@ export interface FetchSqaaRetryOptions {
 export async function fetchWithRetry(
   connection: SonarConnection,
   projectKey: string,
-  file: string,
-  fileContent: string,
+  file: SqaaAnalysisFile,
   branch: string | undefined,
   retryOptions?: FetchSqaaRetryOptions,
 ): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
-  const { onRetry, pathBase, analysisDepth } = retryOptions ?? {};
+  const { onRetry, analysisDepth } = retryOptions ?? {};
   return with503Retry(
-    () =>
-      fetchSqaaResponse(connection, projectKey, file, fileContent, branch, pathBase, analysisDepth),
+    () => fetchSqaaResponse(connection, projectKey, file, branch, analysisDepth),
     onRetry,
   );
 }
@@ -495,30 +515,4 @@ export async function defaultRetryCountdown(
     await sleep(COUNTDOWN_TICK_MS);
   }
   process.stdout.write('\r\x1b[K');
-}
-
-/**
- * Call the SQAA API and display the results for the single-file path.
- * Returns the number of issues found. Analysis failures render as a ✗ file row (exit 1).
- */
-export async function callSqaaApiAndDisplay(
-  connection: SonarConnection,
-  projectKey: string,
-  file: string,
-  fileContent: string,
-  branch: string | undefined,
-  console: Console,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<number> {
-  const filePath = toRelativePosixPath(file);
-  const displayDepth = analysisDepth === 'DEEP' ? 'DEEP' : 'STANDARD';
-  try {
-    const response = await fetchWithRetry(connection, projectKey, file, fileContent, branch, {
-      analysisDepth,
-    });
-    return displaySqaaResults(response.issues, response.errors, filePath, console, displayDepth);
-  } catch (err) {
-    printSingleFileTextFailure(filePath, err as Error, console, displayDepth);
-    return 0;
-  }
 }
