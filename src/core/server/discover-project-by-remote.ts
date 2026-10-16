@@ -37,20 +37,22 @@ export interface GitRemoteBindingDiscovery {
 export function discoverProjectKeyByGitRemote(
   auth: ResolvedAuth,
   gitRemote: string,
-): Promise<GitRemoteBindingDiscovery | null> {
+): Promise<GitRemoteBindingDiscovery | null | undefined> {
   const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
   return client.getProjectKeyByGitRemote(gitRemote, auth.orgKey).match(
-    (projectKey) =>
-      projectKey
-        ? {
-            projectKey,
-            serverUrl: auth.serverUrl,
-            organization: auth.orgKey,
-          }
-        : null,
+    (projectKey) => {
+      if (!projectKey) {
+        return projectKey === null ? null : undefined;
+      }
+      return {
+        projectKey,
+        serverUrl: auth.serverUrl,
+        organization: auth.orgKey,
+      };
+    },
     (error) => {
       logger.debug(`Git remote project binding lookup failed: ${error.message}`);
-      return null;
+      return undefined;
     },
   );
 }

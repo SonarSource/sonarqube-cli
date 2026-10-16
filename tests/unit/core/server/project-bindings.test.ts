@@ -60,14 +60,14 @@ describe('ProjectBindingsClient', () => {
       expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
     });
 
-    it('returns null when SQS has multiple bindings', async () => {
+    it('returns undefined when SQS has multiple bindings', async () => {
       fetchSpy = mockFetch({
         projectBindings: [
           { projectId: 'proj:1', projectKey: 'project-a' },
           { projectId: 'proj:2', projectKey: 'project-b' },
         ],
       });
-      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeUndefined();
     });
 
     it('strips embedded credentials from the remote before calling SQS', async () => {
@@ -83,16 +83,16 @@ describe('ProjectBindingsClient', () => {
       );
     });
 
-    it('returns null when SQS project-bindings request fails', async () => {
+    it('returns undefined when SQS project-bindings request fails', async () => {
       fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
-      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeUndefined();
     });
 
-    it('returns null when SQS binding has no projectKey', async () => {
+    it('returns undefined when SQS binding has no projectKey', async () => {
       fetchSpy = mockFetch({
         projectBindings: [{ projectId: 'proj:123', projectKey: '' }],
       });
-      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
+      expect(await client.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeUndefined();
     });
 
     it('resolves SonarCloud project key via bindings then search_projects', async () => {
@@ -124,19 +124,21 @@ describe('ProjectBindingsClient', () => {
       expect((fetchSpy.mock.calls[1][0] as URL).toString()).toContain('projectIds=proj%3Aabc');
     });
 
-    it('returns null on SonarCloud when organization is missing', async () => {
+    it('returns undefined on SonarCloud when organization is missing', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ bindings: [{ projectId: 'proj:abc' }] });
-      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeNull();
+      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl).orThrow()).toBeUndefined();
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('returns null when SonarCloud has multiple bindings', async () => {
+    it('returns undefined when SonarCloud has multiple bindings', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({
         bindings: [{ projectId: 'proj:a' }, { projectId: 'proj:b' }],
       });
-      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
+      expect(
+        await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow(),
+      ).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
@@ -168,14 +170,16 @@ describe('ProjectBindingsClient', () => {
       );
     });
 
-    it('returns null when SonarCloud project-bindings request fails', async () => {
+    it('returns undefined when SonarCloud project-bindings request fails', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = mockFetch({ message: 'not found' }, { ok: false, status: 404 });
-      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
+      expect(
+        await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow(),
+      ).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('returns null when SonarCloud search_projects request fails', async () => {
+    it('returns undefined when SonarCloud search_projects request fails', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
@@ -191,11 +195,13 @@ describe('ProjectBindingsClient', () => {
           json: () => Promise.resolve({ message: 'Insufficient privileges' }),
         } as Response);
 
-      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
+      expect(
+        await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow(),
+      ).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('returns null when SonarCloud search_projects omits components', async () => {
+    it('returns undefined when SonarCloud search_projects omits components', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
@@ -211,7 +217,9 @@ describe('ProjectBindingsClient', () => {
           json: () => Promise.resolve({}),
         } as Response);
 
-      expect(await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow()).toBeNull();
+      expect(
+        await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow(),
+      ).toBeUndefined();
       expect(fetchSpy).toHaveBeenCalledTimes(2);
     });
   });

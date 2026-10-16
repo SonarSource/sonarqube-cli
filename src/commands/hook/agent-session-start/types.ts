@@ -31,6 +31,7 @@ export interface SessionStartInput {
 /** Normalized output (what the pipeline resolved) */
 export interface SessionStartOutput {
   additionalContext: string;
+  userMessage?: string;
 }
 
 export interface SessionStartAgentAdapter {
