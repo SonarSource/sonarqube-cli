@@ -1103,7 +1103,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('SessionStart/SubagentStart handler: inject Vortex context at agent session start')
     .requiredOption(
       '--agent <agent>',
-      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor|devin)',
+      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor|devin|pi)',
     )
     .anonymousAction(
       handleHookInvocation((ctx, options: { agent: string }) =>
