@@ -46,6 +46,7 @@ function fakeApi(repositories: GitlabRepositoryResponse[]): {
     listDopSettings: () => Promise.resolve([{ id: 'id-1', key: 'gitlab-main', type: 'gitlab' }]),
     checkPat: () => Promise.resolve('valid'),
     searchGitlabRepos: () => Promise.resolve({ repositories, total: repositories.length }),
+    lookupProject: () => Promise.resolve('missing'),
     putBoundProject: (request: BoundProjectRequest) => {
       bound.push(request);
       return Promise.resolve({ newProjectCreated: true });
