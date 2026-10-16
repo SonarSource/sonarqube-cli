@@ -65,14 +65,14 @@ const refusal = {
 describe('assertProjectKeyUsable', () => {
   it('lets the import go ahead when no project has the key, without looking at bindings', async () => {
     const api = apiWith('missing');
-    await assertProjectKeyUsable(api, GITLAB, repository(), KEY);
+    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
     expect(api.lookupProject).toHaveBeenCalledWith(KEY);
     expect(api.searchProjectBindings).not.toHaveBeenCalled();
   });
 
   it('lets a project bound to this repository on this setting go ahead', async () => {
     const api = apiWith('found', [binding()]);
-    await assertProjectKeyUsable(api, GITLAB, repository(), KEY);
+    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
     expect(api.searchProjectBindings).toHaveBeenCalledWith('gl-id', '42');
   });
 
@@ -105,24 +105,28 @@ describe('assertProjectKeyUsable', () => {
   it('compares repository identifiers case-insensitively', async () => {
     const api = apiWith('found', [binding({ repository: 'Acme/Repo' })]);
     const github: DopSetting = { id: 'gl-id', key: 'gh', type: 'github' };
-    await assertProjectKeyUsable(
-      api,
-      github,
-      repository({ repositoryIdentifier: 'acme/repo' }),
-      KEY,
-    );
+    expect(
+      await assertProjectKeyUsable(
+        api,
+        github,
+        repository({ repositoryIdentifier: 'acme/repo' }),
+        KEY,
+      ),
+    ).toBeUndefined();
   });
 
   describe('platforms that bind two identifiers', () => {
     it('matches Azure DevOps on repository name and project name', async () => {
       const azure: DopSetting = { id: 'gl-id', key: 'az', type: 'azure' };
       const azureRepo = repository({ repositoryIdentifier: 'repo', projectIdentifier: 'Proj' });
-      await assertProjectKeyUsable(
-        apiWith('found', [binding({ repository: 'repo', slug: 'Proj' })]),
-        azure,
-        azureRepo,
-        KEY,
-      );
+      expect(
+        await assertProjectKeyUsable(
+          apiWith('found', [binding({ repository: 'repo', slug: 'Proj' })]),
+          azure,
+          azureRepo,
+          KEY,
+        ),
+      ).toBeUndefined();
       expect(
         await failureOf(
           apiWith('found', [binding({ repository: 'repo', slug: 'Other' })]),
@@ -136,12 +140,14 @@ describe('assertProjectKeyUsable', () => {
     it('matches Bitbucket Server on project key and repository slug', async () => {
       const bitbucket: DopSetting = { id: 'gl-id', key: 'bb', type: 'bitbucket' };
       const bbRepo = repository({ repositoryIdentifier: 'my-repo', projectIdentifier: 'PRJ' });
-      await assertProjectKeyUsable(
-        apiWith('found', [binding({ repository: 'PRJ', slug: 'my-repo' })]),
-        bitbucket,
-        bbRepo,
-        KEY,
-      );
+      expect(
+        await assertProjectKeyUsable(
+          apiWith('found', [binding({ repository: 'PRJ', slug: 'my-repo' })]),
+          bitbucket,
+          bbRepo,
+          KEY,
+        ),
+      ).toBeUndefined();
       expect(
         await failureOf(
           apiWith('found', [binding({ repository: 'my-repo', slug: 'PRJ' })]),
