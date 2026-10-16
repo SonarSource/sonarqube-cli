@@ -80,11 +80,10 @@ export interface AuthConnection {
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
   /**
-   * Set only when this connection was recorded from env-var auth and no
-   * keychain token was found. Not set for `sonar auth login`, when a keychain
-   * token exists, or when the keychain cannot be read. Logout treats envOnly
-   * as already logged out, so this must not be stamped onto a keychain-backed
-   * connection.
+   * Set when env-var auth records a new or already environment-only connection
+   * whose token does not match the stored token. An unreadable keychain counts
+   * as no match. Never set on an existing keychain-backed connection for the
+   * same server. Logout and stored-auth resolution skip these connections.
    */
   envOnly?: boolean;
 }
