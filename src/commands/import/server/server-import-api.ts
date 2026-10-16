@@ -164,7 +164,7 @@ export class ServerImportApiClient {
    * stored token, so a successful listing means the token works.
    */
   async probeGithubPat(settingKey: string): Promise<PatStatus> {
-    return this.patStatusOf('/api/alm_integration/list_github_organizations', settingKey);
+    return this.patStatusOf('/api/alm_integrations/list_github_organizations', settingKey);
   }
 
   /** One page of the GitLab projects the caller's token can see (`pageIndex` starts at 1). */
@@ -279,7 +279,7 @@ export class ServerImportApiClient {
       .get<{
         organizations?: GithubOrganizationResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_organizations', {
+      }>('/api/alm_integrations/list_github_organizations', {
         almSetting: settingKey,
         p: pageIndex,
         ps: pageSize,
@@ -299,7 +299,7 @@ export class ServerImportApiClient {
       .get<{
         repositories?: GithubRepositoryResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_repositories', {
+      }>('/api/alm_integrations/list_github_repositories', {
         almSetting: settingKey,
         organization,
         p: pageIndex,
