@@ -85,7 +85,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     ]);
     const searches = server
       .getRecordedRequests()
-      .filter((r) => r.path === '/api/alm_integration/search_azure_repos');
+      .filter((r) => r.path === '/api/alm_integrations/search_azure_repos');
     expect(searches.map((r) => r.query.projectName).sort()).toEqual(['Project A', 'Project B']);
     expect(searches.every((r) => r.query.almSetting === 'my-azure')).toBe(true);
   });
@@ -140,7 +140,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     expect(result.exitCode).toBe(1);
     const listed = server
       .getRecordedRequests()
-      .filter((r) => r.path.startsWith('/api/alm_integration/') && r.path.includes('azure'));
+      .filter((r) => r.path.startsWith('/api/alm_integrations/') && r.path.includes('azure'));
     expect(listed).toHaveLength(0);
     expect(putPayloads(server)).toHaveLength(0);
   });
