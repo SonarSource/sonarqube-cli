@@ -32,6 +32,13 @@ import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 
 const GITLAB = { id: 'gl-id', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.example.com' };
 const GITHUB = { id: 'gh-id', key: 'my-github', type: 'github', url: 'https://api.github.com' };
+const GITLAB_REPO = {
+  id: 11,
+  name: 'repo-a',
+  pathName: 'group',
+  slug: 'repo-a',
+  pathSlug: 'group',
+};
 const AZURE = { id: 'az-id', key: 'my-azure', type: 'azure', url: 'https://dev.azure.com/org' };
 
 describe('sonar import on SonarQube Server', () => {
@@ -303,6 +310,7 @@ describe('sonar import on SonarQube Server', () => {
         const server = await startServer((s) =>
           s
             .withDopSettings([GITLAB])
+            .withGitlabRepos('my-gitlab', [GITLAB_REPO])
             .withPatResponses('my-gitlab', [MISSING, MISSING, MISSING, { status: 204 }]),
         );
 
@@ -311,12 +319,12 @@ describe('sonar import on SonarQube Server', () => {
         });
         const result = await session.waitFinish();
 
-        expect(result.exitCode).toBe(1);
+        expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         expect(output).toContain(`\n${server.baseUrl()}/projects/create?mode=gitlab\n`);
         expect(output).toContain('Automatic browser opening is disabled');
         expect(output).toContain('Personal access token connected');
-        expect(output).toContain('Importing from GitLab is not supported yet.');
+        expect(output).toContain('Imported 1 repository');
         expect(checkPatCalls(server)).toHaveLength(4);
       },
       { timeout: 30000 },
@@ -370,13 +378,15 @@ describe('sonar import on SonarQube Server', () => {
         const server = await startServer((s) =>
           s
             .withDopSettings([GITLAB])
+            .withGitlabRepos('my-gitlab', [GITLAB_REPO])
             .withPatResponses('my-gitlab', [REJECTED, REJECTED, { status: 204 }]),
         );
 
         const result = await harness.run('import --all', { extraEnv: interactiveEnv('20000') });
 
+        expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Importing from GitLab is not supported yet.');
+        expect(output).toContain('Imported 1 repository');
         expect(checkPatCalls(server)).toHaveLength(3);
       },
       { timeout: 30000 },
