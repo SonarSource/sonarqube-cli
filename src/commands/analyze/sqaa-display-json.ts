@@ -82,6 +82,11 @@ export function singleFileFailureReport(
   return makeReport([], [{ path: filePath, message }], [], analysisDepth);
 }
 
+/** Ignored files are reported relative to `base` (the repository root), never as absolute paths. */
+export function ignoredReportPath(path: string, base?: string): string {
+  return toRelativePosixPathOrNull(path, base) ?? normalizePath(path);
+}
+
 export function buildJsonReport(
   tally: RunTally,
   ignored: IgnoredFile[],
@@ -103,7 +108,7 @@ export function buildJsonReport(
   const report: SqaaJsonReport = {
     files,
     ignored: ignored.map((f) => ({
-      path: toRelativePosixPathOrNull(f.path, pathBase) ?? normalizePath(f.path),
+      path: ignoredReportPath(f.path, pathBase),
       reason: f.reason,
     })),
     failures,

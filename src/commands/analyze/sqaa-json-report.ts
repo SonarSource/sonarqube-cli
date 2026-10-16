@@ -36,7 +36,12 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
-import { buildJsonReport, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
+import {
+  buildJsonReport,
+  ignoredReportPath,
+  makeReport,
+  type SqaaJsonReport,
+} from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
@@ -158,7 +163,10 @@ function allExcludedReport(changeSet: ChangeSetResult): SqaaJsonReport {
   return makeReport(
     [],
     [],
-    changeSet.ignored.map((f) => ({ path: f.path, reason: f.reason })),
+    changeSet.ignored.map((f) => ({
+      path: ignoredReportPath(f.path, changeSet.repoRoot),
+      reason: f.reason,
+    })),
   );
 }
 

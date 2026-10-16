@@ -18,10 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import {
-  normalizePath,
-  toRelativePosixPath as toRelativePosixPathOrNull,
-} from '@/core/io/fs-utils.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -47,6 +43,7 @@ import {
   buildJsonReport,
   displaySqaaResults,
   EXIT_CODE_ISSUES_FOUND,
+  ignoredReportPath,
   printSingleFileTextFailure,
   printSqaaTextReport,
   printVortexUnavailable,
@@ -379,9 +376,7 @@ export async function runSqaaAnalysisOnFiles(
     return;
   }
 
-  const ignoredPaths = ignored.map(
-    (f) => toRelativePosixPathOrNull(f.path, repoRoot) ?? normalizePath(f.path),
-  );
+  const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, repoRoot));
   const progress = new SqaaProgress({
     files: allPaths,
     ignoredFiles: ignoredPaths,

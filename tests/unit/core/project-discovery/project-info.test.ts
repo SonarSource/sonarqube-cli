@@ -512,6 +512,25 @@ describe('discoverProject', () => {
     expect(remoteSpy).not.toHaveBeenCalled();
   });
 
+  it('skips only the git-remote binding when useGitRemoteBinding is false, keeping auth for local sources', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      useGitRemoteBinding: false,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
   it('returns a partial result instead of throwing when lookup-path resolution fails', async () => {
     lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
 
