@@ -20,11 +20,31 @@
 
 import { join } from 'node:path';
 
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  FeatureContainer,
+  IntegrationContext,
+  IntegrationDeclaration,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
+import { jsonPatch, wholeFile } from '@/core/framework/features';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
+import {
+  createSqaaInstructionsSnippet,
+  createSqaaInstructionsSubfeature,
+  SQAA_HOOK_FEATURE_ID,
+} from '../_common/features/sqaa-instructions-feature.ts';
+import {
+  buildUnixHookScript,
+  buildWindowsHookScript,
+  createAgentHookEntry,
+  removeAgentHooks,
+  resolveAgentHookScriptPath,
+  upsertAgentHooks,
+} from '../_common/hooks.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
+import { createVortexFeature } from '../_common/vortex.ts';
 
 export const DEVIN_INTEGRATION_ID = 'devin';
 const DEVIN_DISPLAY_NAME = 'Devin';
@@ -32,15 +52,82 @@ const DEVIN_DISPLAY_NAME = 'Devin';
 export type DevinIntegrationOptions = IntegrateAgentOptions;
 
 const DEVIN_MCP_CONFIG_FILE = 'mcp_config.json';
+const DEVIN_CONFIG_FILE = 'config.json';
+const DEVIN_AGENTS_MD_FILE = 'AGENTS.md';
+const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
+const SQAA_HOOK_MARKER = 'sonar-sqaa';
+// Devin tool names are lowercase and the matcher is case-sensitive.
+const SQAA_HOOK_MATCHER = '^(edit|write)$';
 
 function resolveDevinMcpConfigPath(context: IntegrationContext): string {
   return join(resolveDevinConfigDir(context.targetRoot), DEVIN_MCP_CONFIG_FILE);
+}
+
+// Devin ignores a standalone global `hooks.v1.json`: global hooks live under `hooks` in `config.json`.
+function resolveDevinConfigPath(context: IntegrationContext): string {
+  return join(resolveDevinConfigDir(context.targetRoot), DEVIN_CONFIG_FILE);
+}
+
+function resolveDevinAgentsMdPath(context: IntegrationContext): string {
+  return join(resolveDevinConfigDir(context.targetRoot), DEVIN_AGENTS_MD_FILE);
+}
+
+// The hook helpers need a context rooted at the Devin config dir, which is `%APPDATA%\devin` on Windows.
+function devinHookContext(context: IntegrationContext): IntegrationContext {
+  return { ...context, targetRoot: resolveDevinConfigDir(context.targetRoot) };
+}
+
+function createSqaaHookSubfeature(): SubfeatureDeclaration<DevinIntegrationOptions> {
+  return {
+    id: SQAA_HOOK_FEATURE_ID,
+    displayName: 'Vortex analysis hook',
+    required: true,
+    resources: [
+      wholeFile({
+        id: 'posttool-sqaa-script',
+        displayName: 'Devin PostToolUse hook script',
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(devinHookContext(context), '', POSTTOOL_SQAA_SCRIPT_REL),
+        content: {
+          unix: buildUnixHookScript('devin-post-tool-use'),
+          windows: buildWindowsHookScript('devin-post-tool-use'),
+        },
+        executable: true,
+      }),
+      jsonPatch({
+        id: 'devin-hooks-sqaa-hook',
+        displayName: 'Devin Vortex analysis hook configuration',
+        targetPath: resolveDevinConfigPath,
+        defaultValue: { hooks: {} },
+        patch: (document, context) =>
+          upsertAgentHooks(document, [
+            createAgentHookEntry(
+              devinHookContext(context),
+              '',
+              'PostToolUse',
+              SQAA_HOOK_MATCHER,
+              SQAA_HOOK_MARKER,
+              POSTTOOL_SQAA_SCRIPT_REL,
+            ),
+          ]),
+        removePatch: (document) => removeAgentHooks(document, [SQAA_HOOK_MARKER]),
+      }),
+    ],
+  };
+}
+
+function createDevinVortexFeature(): FeatureContainer<DevinIntegrationOptions> {
+  return createVortexFeature<DevinIntegrationOptions>([
+    createSqaaHookSubfeature(),
+    createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveDevinAgentsMdPath)]),
+  ]);
 }
 
 export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> = {
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
   features: [
+    createDevinVortexFeature(),
     createMcpServerFeature<DevinIntegrationOptions>({
       resolveConfigPath: resolveDevinMcpConfigPath,
       alwaysGlobal: true,
