@@ -42,6 +42,7 @@ interface SetupOptions {
   isScaEnabled?: boolean;
   isAuthenticated?: boolean;
   isProjectDiscoverable?: boolean;
+  hasPartialProjectConfig?: boolean;
   isCagInstalled?: boolean;
   cagStdout?: string;
   cagExitCode?: number;
@@ -56,6 +57,7 @@ describe('sonar hook agent-session-start', () => {
     isScaEnabled = false,
     isAuthenticated = true,
     isProjectDiscoverable = true,
+    hasPartialProjectConfig = false,
     isCagInstalled = true,
     cagStdout = CAG_CONTEXT,
     cagExitCode = 0,
@@ -77,12 +79,12 @@ describe('sonar hook agent-session-start', () => {
     if (isAuthenticated) {
       harness.withAuth(serverUrl, VALID_TOKEN, TEST_ORG);
     }
-    if (isProjectDiscoverable) {
+    if (isProjectDiscoverable || hasPartialProjectConfig) {
       harness.cwd.writeFile(
         'sonar-project.properties',
         [
           `sonar.host.url=${serverUrl}`,
-          `sonar.projectKey=${TEST_PROJECT}`,
+          ...(isProjectDiscoverable ? [`sonar.projectKey=${TEST_PROJECT}`] : []),
           `sonar.organization=${TEST_ORG}`,
         ].join('\n'),
       );
@@ -306,35 +308,20 @@ describe('sonar hook agent-session-start', () => {
     TEST_TIMEOUT,
   );
 
-  it(
-    'exits 0 with no output when not authenticated',
-    async () => {
-      await setup({ isAuthenticated: false });
-
-      const result = await runHook('claude', {
-        session_id: 'sess-1',
-        cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-      expect(cagSessionStartInvocations()).toEqual([]);
-    },
-    TEST_TIMEOUT,
-  );
-
-  it(
-    'exits 0 with no output when no project key can be discovered',
-    async () => {
+  it.each(['claude', 'codex', 'copilot', 'cursor', 'devin'])(
+    'keeps an unrelated directory silent for %s',
+    async (agent) => {
       await setup({ isProjectDiscoverable: false });
-
-      const result = await runHook('claude', {
-        session_id: 'sess-1',
-        cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
-      });
-
+      const input =
+        agent === 'cursor'
+          ? { conversation_id: 'sess-1', workspace_roots: [harness.cwd.path] }
+          : {
+              session_id: 'sess-1',
+              sessionId: 'sess-1',
+              cwd: harness.cwd.path,
+              hook_event_name: 'SessionStart',
+            };
+      const result = await runHook(agent, input);
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
       expect(cagSessionStartInvocations()).toEqual([]);
@@ -342,73 +329,83 @@ describe('sonar hook agent-session-start', () => {
     TEST_TIMEOUT,
   );
 
-  it(
-    'exits 0 with no output when the organization is not entitled to Vortex',
-    async () => {
-      await setup({ isVortexEntitled: false });
-
-      const result = await runHook('claude', {
+  it.each(
+    ['claude', 'codex'].flatMap((agent) => [
+      { agent, name: 'no authentication', options: { isAuthenticated: false } },
+      { agent, name: 'empty context', options: { cagStdout: '' } },
+    ]),
+  )(
+    'keeps $agent subagents silent with $name',
+    async ({ agent, options }) => {
+      await setup(options);
+      const result = await runHook(agent, {
         session_id: 'sess-1',
         cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
+        hook_event_name: 'SubagentStart',
       });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-      expect(cagSessionStartInvocations()).toEqual([]);
-    },
-    TEST_TIMEOUT,
-  );
-
-  it(
-    'exits 0 with no output when the CAG binary is not installed',
-    async () => {
-      await setup({ isCagInstalled: false });
-
-      const result = await runHook('claude', {
-        session_id: 'sess-1',
-        cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
-      });
-
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('');
     },
     TEST_TIMEOUT,
   );
 
-  it(
-    'exits 0 with no output when CAG exits non-zero',
-    async () => {
-      await setup({ cagExitCode: 1 });
-
-      const result = await runHook('claude', {
-        session_id: 'sess-1',
-        cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-      expect(cagSessionStartInvocations()).toHaveLength(1);
+  const failures: { name: string; options: SetupOptions; hint: string }[] = [
+    { name: 'not authenticated', options: { isAuthenticated: false }, hint: 'sonar auth login' },
+    {
+      name: 'no project',
+      options: { isProjectDiscoverable: false, hasPartialProjectConfig: true },
+      hint: 'sonar link <projectKey>',
     },
-    TEST_TIMEOUT,
-  );
+    { name: 'not entitled', options: { isVortexEntitled: false }, hint: 'sonar auth status' },
+    { name: 'binary missing', options: { isCagInstalled: false }, hint: 'sonar integrate' },
+    { name: 'context command failed', options: { cagExitCode: 1 }, hint: 'sonar system status' },
+    { name: 'empty context', options: { cagStdout: '' }, hint: 'sonar system status' },
+  ];
 
-  it(
-    'exits 0 with no output when CAG produces no context',
-    async () => {
-      await setup({ cagStdout: '' });
+  it.each(
+    failures.flatMap((failure) =>
+      ['claude', 'codex', 'copilot', 'cursor', 'devin'].map((agent) => ({ ...failure, agent })),
+    ),
+  )(
+    'reports $name to $agent without blocking startup',
+    async ({ options, hint, agent }) => {
+      await setup(options);
+      const input =
+        agent === 'cursor'
+          ? { conversation_id: 'sess-1', workspace_roots: [harness.cwd.path] }
+          : {
+              session_id: 'sess-1',
+              sessionId: 'sess-1',
+              cwd: harness.cwd.path,
+              hook_event_name: 'SessionStart',
+            };
 
-      const result = await runHook('claude', {
-        session_id: 'sess-1',
-        cwd: harness.cwd.path,
-        hook_event_name: 'SessionStart',
-      });
+      const result = await runHook(agent, input);
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-      expect(cagSessionStartInvocations()).toHaveLength(1);
+      const output = JSON.parse(result.stdout.trim()) as {
+        systemMessage?: string;
+        additional_context?: string;
+        additionalContext?: string;
+        hookSpecificOutput?: { additionalContext: string };
+      };
+      if (agent === 'claude' || agent === 'codex') {
+        expect(Object.keys(output)).toEqual(['systemMessage']);
+        expect(output.systemMessage).toStartWith('Vortex context was not loaded.');
+        expect(output.systemMessage).toContain(hint);
+      } else {
+        const context =
+          agent === 'cursor'
+            ? output.additional_context
+            : agent === 'devin'
+              ? output.hookSpecificOutput?.additionalContext
+              : output.additionalContext;
+        expect(context).toStartWith('Tell the user: Vortex context was not loaded.');
+        expect(context).toContain(hint);
+      }
+      const expectedCalls =
+        options.cagExitCode !== undefined || options.cagStdout !== undefined ? 1 : 0;
+      expect(cagSessionStartInvocations()).toHaveLength(expectedCalls);
     },
     TEST_TIMEOUT,
   );
