@@ -210,8 +210,8 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(putPayloads(server)).toHaveLength(2);
   });
 
-  it('surfaces a rejected request body as that repository failing, with the server message', async () => {
-    await startServer((s) =>
+  it('reports a missing token during the import as that repository failing, with the way to connect it', async () => {
+    const server = await startServer((s) =>
       s
         .withGitlabRepos('my-gitlab', [gitlabRepo(11, 'group/repo-a')])
         .withBoundProjectFailure('11', 400, "personal access token for 'my-gitlab' is missing"),
@@ -220,7 +220,11 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     const result = await harness.run('import --all');
 
     expect(result.exitCode).toBe(1);
-    expect(result.stdout + result.stderr).toContain('is missing');
+    const output = result.stdout + result.stderr;
+    expect(output).toContain(
+      "no personal access token is connected for GitLab setting 'my-gitlab'",
+    );
+    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab&resetPat=1`);
   });
 
   it('explains a platform failure for one repository with the way to fix it', async () => {
