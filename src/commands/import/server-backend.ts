@@ -152,18 +152,16 @@ export class ServerBackend implements ImportBackend {
     options: ImportOptions,
     console: Console,
   ): Promise<void> {
-    const probe = await this.probeOf(setting);
-    const { status } = probe;
+    const status = await this.statusOf(setting);
     if (status === 'valid') {
-      this.requireGithubOrganizations(setting, probe);
       return;
     }
     const label = DOP_PLATFORM_LABELS[setting.type];
-    const url = buildConnectUrl(this.serverUrl, setting, { resetPat: status === 'invalid' });
+    const url = this.reconnectUrl(setting, status);
     const problem =
       status === 'missing'
         ? `No personal access token is connected for ${label} setting '${setting.key}'.`
-        : `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`;
+        : this.rejectedProblem(setting);
     if (!canPrompt(options)) {
       throw new CommandFailedError(problem, {
         remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
@@ -188,7 +186,6 @@ export class ServerBackend implements ImportBackend {
     url: string,
     problem: string,
   ): Promise<void> {
-    let latest: PatProbe = { status: initial };
     const label = DOP_PLATFORM_LABELS[setting.type];
     const abort = new AbortController();
     const onSigint = () => {
@@ -198,10 +195,7 @@ export class ServerBackend implements ImportBackend {
     let result;
     try {
       result = await waitForPat({
-        check: async () => {
-          latest = await this.probeOf(setting);
-          return latest.status;
-        },
+        check: () => this.statusOf(setting),
         initial,
         intervalMs: getImportPatPollIntervalMs(),
         timeoutMs: getImportPatWaitTimeoutMs(),
@@ -214,15 +208,11 @@ export class ServerBackend implements ImportBackend {
     const rerun = `run 'sonar import' again.`;
     switch (result) {
       case 'valid':
-        this.requireGithubOrganizations(setting, latest);
         return;
       case 'invalid':
-        throw new CommandFailedError(
-          `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`,
-          {
-            remediationHint: `Reconnect it at ${buildConnectUrl(this.serverUrl, setting, { resetPat: true })}, then ${rerun}`,
-          },
-        );
+        throw new CommandFailedError(this.rejectedProblem(setting), {
+          remediationHint: `Reconnect it at ${this.reconnectUrl(setting, 'invalid')}, then ${rerun}`,
+        });
       case 'timeout':
         throw new CommandFailedError(
           `Timed out waiting for the ${label} personal access token to be connected.`,
@@ -236,19 +226,31 @@ export class ServerBackend implements ImportBackend {
   }
 
   /**
-   * GitHub answers a dead token, or an app installed nowhere the user can see, with a successful
-   * but empty organizations listing, so an empty one cannot lead to a working import.
+   * GitHub answers a dead or expired token, or an app installed nowhere the user can see, with a
+   * successful but empty organizations listing, and its web flow authorizes again on every visit.
+   * So a valid probe with no organizations is treated like a rejected token: the user goes through
+   * the browser, and the wait ends once organizations show up.
    */
-  private requireGithubOrganizations(setting: DopSetting, probe: PatProbe): void {
-    if (setting.type !== 'github' || probe.organizationCount !== 0) {
-      return;
+  private async statusOf(setting: DopSetting): Promise<PatStatus> {
+    const probe = await this.probeOf(setting);
+    return setting.type === 'github' && probe.status === 'valid' && probe.organizationCount === 0
+      ? 'invalid'
+      : probe.status;
+  }
+
+  private rejectedProblem(setting: DopSetting): string {
+    if (setting.type === 'github') {
+      return `GitHub returned no organizations for setting '${setting.key}': its authorization is missing or has expired, or the GitHub App is not installed for your GitHub account.`;
     }
-    throw new CommandFailedError(
-      `GitHub returned no organizations for setting '${setting.key}'. The personal access token may be expired or revoked, or the GitHub App may not be installed for your GitHub account.`,
-      {
-        remediationHint: `Reconnect it at ${buildConnectUrl(this.serverUrl, setting)}, then run 'sonar import' again.`,
-      },
-    );
+    const label = DOP_PLATFORM_LABELS[setting.type];
+    return `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`;
+  }
+
+  /** The web UI ignores `resetPat` for GitHub: it authorizes again on every visit. */
+  private reconnectUrl(setting: DopSetting, status: PatStatus): string {
+    return buildConnectUrl(this.serverUrl, setting, {
+      resetPat: status === 'invalid' && setting.type !== 'github',
+    });
   }
 
   private async probeOf(setting: DopSetting): Promise<PatProbe> {

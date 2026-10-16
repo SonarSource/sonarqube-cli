@@ -70,7 +70,7 @@ describe('ServerBackend GitHub token gate', () => {
 
     const { message, remediationHint } = error as { message: string; remediationHint: string };
     expect(message).toContain('GitHub returned no organizations');
-    expect(message).toContain('expired or revoked');
+    expect(message).toContain('authorization is missing or has expired');
     expect(message).toContain('GitHub App');
     expect(remediationHint).toContain(CONNECT_URL);
     expect(remediationHint).not.toContain('resetPat');
@@ -148,7 +148,20 @@ describe('ServerBackend GitHub token gate', () => {
       expect(plan.selection.kind).toBe('streaming');
     });
 
-    it('fails with the connect URL when the connected token lists no organizations', async () => {
+    it('keeps waiting while a stale authorization lists no organizations, then continues', async () => {
+      const { backend, probeGithubPat } = backendWith([
+        { status: 'valid', organizationCount: 0 },
+        { status: 'valid', organizationCount: 0 },
+        { status: 'valid', organizationCount: 1 },
+      ]);
+
+      const plan = await backend.plan({ all: true }, new FakeConsole());
+
+      expect(plan.selection.kind).toBe('streaming');
+      expect(probeGithubPat).toHaveBeenCalledTimes(3);
+    });
+
+    it('fails with the connect URL when a newly connected token lists no organizations', async () => {
       const { backend } = backendWith([
         { status: 'missing' },
         { status: 'valid', organizationCount: 0 },

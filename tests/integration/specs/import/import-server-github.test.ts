@@ -195,7 +195,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
-    expect(output).toContain("GitHub returned no organizations for setting 'my-github'.");
+    expect(output).toContain("GitHub returned no organizations for setting 'my-github':");
     expect(output).toContain(`${server.baseUrl()}/projects/create?mode=github&dopSetting=gh-id`);
     expect(output).not.toContain('resetPat');
     expect(
