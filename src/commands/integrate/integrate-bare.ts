@@ -48,6 +48,7 @@ import {
 } from './git/tools';
 import { integrateOpenCode } from './opencode';
 import { openCodeIntegration } from './opencode/declaration.ts';
+import { integratePi } from './pi';
 import { piIntegration } from './pi/declaration.ts';
 
 export interface IntegrateBareOptions {
@@ -69,6 +70,7 @@ const TOOLS: { label: string; handler: Handler }[] = [
   { label: antigravityIntegration.displayName, handler: integrateAntigravity },
   { label: openCodeIntegration.displayName, handler: integrateOpenCode },
   { label: devinIntegration.displayName, handler: integrateDevin },
+  { label: piIntegration.displayName, handler: integratePi },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
   { label: 'Git', handler: integrateGit },
