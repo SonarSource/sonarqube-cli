@@ -66,6 +66,20 @@ export interface GitlabRepositoryResponse {
   sqProjectKey?: string;
 }
 
+/** An Azure DevOps project as `list_azure_projects` returns it. */
+export interface AzureProjectResponse {
+  name: string;
+  description?: string;
+}
+
+/** An Azure DevOps repository as `search_azure_repos` returns it; `sqProjectKey` is set once bound. */
+export interface AzureRepositoryResponse {
+  name: string;
+  projectName: string;
+  sqProjectKey?: string;
+  sqProjectName?: string;
+}
+
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
@@ -125,6 +139,30 @@ export class ServerImportApiClient {
       })
       .orThrow();
     return { repositories: response.repositories ?? [], total: response.paging?.total };
+  }
+
+  /** Every Azure DevOps project the caller's token can see; the endpoint is not paged. */
+  async listAzureProjects(settingKey: string): Promise<AzureProjectResponse[]> {
+    const response = await this.client
+      .get<{ projects?: AzureProjectResponse[] }>('/api/alm_integration/list_azure_projects', {
+        almSetting: settingKey,
+      })
+      .orThrow();
+    return response.projects ?? [];
+  }
+
+  /** Every repository of one Azure DevOps project; the endpoint is not paged. */
+  async searchAzureRepos(
+    settingKey: string,
+    projectName: string,
+  ): Promise<AzureRepositoryResponse[]> {
+    const response = await this.client
+      .get<{ repositories?: AzureRepositoryResponse[] }>(
+        '/api/alm_integration/search_azure_repos',
+        { almSetting: settingKey, projectName },
+      )
+      .orThrow();
+    return response.repositories ?? [];
   }
 
   /**
