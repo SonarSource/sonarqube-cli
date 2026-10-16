@@ -31,7 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 import { NetworkConfigError } from '@/core/errors.ts';
@@ -165,6 +165,57 @@ describe('runMcp', () => {
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+  });
+
+  it('reports the native runtime and its stderr when it is unreachable', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+      nativeFailure: { runtime: 'docker', exitCode: 1, stderr: 'Cannot reach daemon' },
+    });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toMatchObject({
+      message: 'docker is installed but not reachable (exit 1): Cannot reach daemon',
+      remediationHint: 'Start docker and rerun this command.',
+    });
+  });
+
+  it('omits an unavailable exit code from the native runtime error', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+      nativeFailure: { runtime: 'docker', exitCode: null, stderr: 'spawn docker EACCES' },
+    });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toMatchObject({
+      message: 'docker is installed but not reachable: spawn docker EACCES',
+    });
+  });
+
+  it('preserves the invalid-option exit code in an MCP startup error', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockRejectedValue(
+      new InvalidOptionError('SONAR_MCP_WSL must be auto, always, or never.'),
+    );
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('SONAR_MCP_WSL must be'));
+      expect(process.exitCode).toBe(2);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
   });
 
   it('returns the no-runtime error through MCP for non-terminal input', async () => {
@@ -324,7 +375,7 @@ describe('runMcp', () => {
     try {
       await runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK);
 
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBe(2);
       expect(spawnSpy).not.toHaveBeenCalled();
     } finally {
       process.exitCode = initialExitCode;
