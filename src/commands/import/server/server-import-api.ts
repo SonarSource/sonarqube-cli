@@ -22,8 +22,14 @@
 // None of them returns or accepts a personal access token: the CLI only asks the server
 // whether the caller has a usable one.
 
-import type { HttpClientError } from '@/core/server/errors.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { type HttpClientError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
+import {
+  HTTP_STATUS_METHOD_NOT_ALLOWED,
+  HTTP_STATUS_NOT_FOUND,
+} from '@/core/server/http-constants.ts';
+import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
 
@@ -142,6 +148,14 @@ export interface PatProbe {
   organizationCount?: number;
 }
 
+/** First release whose `bound-projects` endpoint accepts PUT (create-or-update). */
+const PUT_BOUND_PROJECT_MIN_VERSION = '2025.6';
+
+/** First release with the v2 `dop-translation` endpoints, hence the oldest one `sonar import` supports. */
+const IMPORT_MIN_VERSION = '10.5';
+
+const BOUND_PROJECTS_ENDPOINT = '/api/v2/dop-translation/bound-projects';
+
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
@@ -155,12 +169,18 @@ export class ServerImportApiClient {
   /** Server-enforced max `ps` for the `search_*_repos` endpoints. */
   static readonly SEARCH_MAX_PAGE_SIZE = 100;
 
-  private readonly client: Pick<SonarHttpClient, 'get' | 'put'>;
+  private readonly client: Pick<SonarHttpClient, 'get' | 'put' | 'post'>;
+  private serverVersion: Promise<string | undefined> | undefined;
+  private putUnsupported = false;
 
-  constructor(client: SonarHttpClient) {
+  constructor(
+    client: SonarHttpClient,
+    private readonly serverUrl: string,
+  ) {
     this.client = {
       get: (endpoint, params) => client.get(withPercentEncodedQuery(endpoint, params)),
       put: (endpoint, body) => client.put(endpoint, body),
+      post: (endpoint, body) => client.post(endpoint, body),
     };
   }
 
@@ -345,15 +365,59 @@ export class ServerImportApiClient {
   /**
    * Creates the project and binds it to the repository, or updates the binding when a project
    * with that key already exists (the endpoint is idempotent). `newProjectCreated` tells which.
+   * Servers older than 2025.6 have no PUT: there it POSTs instead, which refuses to touch a
+   * project that already exists. The server is probed once, not per repository.
    */
   async putBoundProject(request: BoundProjectRequest): Promise<{ newProjectCreated: boolean }> {
-    const response = await this.client
-      .put<{ newProjectCreated?: boolean }>('/api/v2/dop-translation/bound-projects', {
-        ...request,
-        monorepo: false,
-      })
-      .orThrow();
-    return { newProjectCreated: response.newProjectCreated ?? true };
+    const body = { ...request, monorepo: false };
+    if (!this.putUnsupported) {
+      try {
+        const response = await this.client
+          .put<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
+          .orThrow();
+        return { newProjectCreated: response.newProjectCreated ?? true };
+      } catch (error) {
+        if (!(await this.isPutUnsupported(error))) throw error;
+        this.putUnsupported = true;
+      }
+    }
+    return this.postBoundProject(body);
+  }
+
+  private async postBoundProject(body: unknown): Promise<{ newProjectCreated: boolean }> {
+    try {
+      const response = await this.client
+        .post<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
+        .orThrow();
+      return { newProjectCreated: response.newProjectCreated ?? true };
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      const version = await this.version();
+      if (version !== undefined && isAtLeast(version, IMPORT_MIN_VERSION)) throw error;
+      const subject = version ? `SonarQube Server ${version}` : 'This SonarQube Server';
+      throw new CommandFailedError(
+        `${subject} does not support importing repositories; ${IMPORT_MIN_VERSION} or later is required.`,
+        { remediationHint: 'Upgrade SonarQube Server, then retry.' },
+      );
+    }
+  }
+
+  /**
+   * A 405 always means the server predates PUT. A 404 is ambiguous on a recent server (it also
+   * hides a project the caller cannot administer), so it only counts once the version is known
+   * to be older than 2025.6.
+   */
+  private async isPutUnsupported(error: unknown): Promise<boolean> {
+    if (!(error instanceof UnexpectedApiError)) return false;
+    if (error.status === HTTP_STATUS_METHOD_NOT_ALLOWED) return true;
+    if (error.status !== HTTP_STATUS_NOT_FOUND) return false;
+    const version = await this.version();
+    return version !== undefined && !isAtLeast(version, PUT_BOUND_PROJECT_MIN_VERSION);
+  }
+
+  private version(): Promise<string | undefined> {
+    this.serverVersion ??= fetchServerVersion(this.serverUrl).catch(() => undefined);
+    return this.serverVersion;
   }
 
   private patStatusOf(endpoint: string, settingKey: string): Promise<PatStatus> {
@@ -405,4 +469,8 @@ function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefin
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
     .join('&');
   return `${endpoint}?${query}`;
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND;
 }
