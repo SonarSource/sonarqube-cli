@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// PreToolUse handler for Devin — scans the file Devin's `read` tool is about to open for secrets.
-
 import { existsSync } from 'node:fs';
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -41,6 +39,8 @@ interface PreToolUsePayload {
   session_id?: string;
 }
 
+const READ_TOOL = 'read';
+
 function denyToolUse(reason: string): void {
   process.stdout.write(
     JSON.stringify({
@@ -58,13 +58,12 @@ export async function devinPreToolUse(ctx: CommandInvocationContext): Promise<Ho
   try {
     payload = await readStdinJson<PreToolUsePayload>();
   } catch {
-    return { agentSessionId: null }; // unparseable stdin — allow
+    return { agentSessionId: null };
   }
 
   const agentSessionId = payload.session_id ?? null;
 
-  // Devin tool names are lowercase and hook matching is case-sensitive.
-  if (payload.tool_name !== 'read') return { agentSessionId };
+  if (payload.tool_name !== READ_TOOL) return { agentSessionId };
 
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) return { agentSessionId };
