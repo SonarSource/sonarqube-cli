@@ -48,13 +48,17 @@ export const azureSupport: PlatformSupport = {
     // Neither endpoint is paged, and every repository needs one request per project: they are
     // all read on the first call so the total is exact. A project only counts as read once its
     // repositories are in, so a call that failed is simply made again.
+    async function readRemainingProjects(names: string[]): Promise<void> {
+      if (nextProject >= names.length) return;
+      const repos = await api.searchAzureRepos(setting.key, names[nextProject]);
+      loaded.push(...repos.map(toRepository));
+      nextProject++;
+      await readRemainingProjects(names);
+    }
+
     return async (pageIndex, pageSize) => {
       projectNames ??= (await api.listAzureProjects(setting.key)).map((project) => project.name);
-      while (nextProject < projectNames.length) {
-        const repos = await api.searchAzureRepos(setting.key, projectNames[nextProject]);
-        loaded.push(...repos.map(toRepository));
-        nextProject++;
-      }
+      await readRemainingProjects(projectNames);
       const start = (pageIndex - 1) * pageSize;
       return { repositories: loaded.slice(start, start + pageSize), total: loaded.length };
     };
