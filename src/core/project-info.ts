@@ -77,6 +77,8 @@ export interface DiscoveredProject {
   repoRoot?: string;
   /** Where `sonar integrate` was run for the matched mapping/feature (its own `targetRoot`), possibly a different worktree; undefined when nothing in state matched. */
   integrationDir?: string;
+  /** True only after an authenticated git-remote lookup succeeds with no bindings. */
+  gitRemoteBindingNotFound?: boolean;
 }
 
 export interface DiscoverProjectOptions {
@@ -317,14 +319,19 @@ async function applyLocalConfigAcrossLookupPaths(
       continue;
     }
     if (!local.hasSonarProps && !local.hasSonarLintConfig) {
+      logger.debug(
+        `Project discovery local config: no usable sonar-project.properties or .sonarlint config at ${checkPath}`,
+      );
       continue;
     }
 
     applyLocalSonarProperties(config, local, options);
     if (applySonarLintConfig(config, local, options)) {
       config.projectRoot = projectRoot;
+      logger.debug(`Project discovery local config: project resolved at ${checkPath}`);
       return true;
     }
+    logger.debug(`Project discovery local config: no project key at ${checkPath}`);
   }
 
   return false;
@@ -366,9 +373,11 @@ async function applySharedProjectConfig(
       continue;
     }
     if (mapping === null) {
+      logger.debug(`Project discovery shared config: no usable .sonar-config.json at ${checkPath}`);
       continue;
     }
 
+    logger.debug(`Project discovery shared config: project resolved at ${checkPath}`);
     applySharedProjectConfigEntry(config, mapping, options);
     return true;
   }
@@ -447,14 +456,17 @@ function applyKnownServerProjectMapping(
 ): boolean {
   const match = matchKnownServerProjectMapping(lookupPaths, known.mappings);
   if (!match) {
+    logger.debug('Project discovery known mappings: no mapping matched the lookup paths');
     return false;
   }
 
   const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, options.auth);
   if (!serverUrl || !isValidServerUrl(serverUrl)) {
+    logger.debug('Project discovery known mappings: matched mapping has no valid server URL');
     return false;
   }
 
+  logger.debug('Project discovery known mappings: project resolved');
   config.projectKey = match.feature.projectKey;
   config.serverUrl = serverUrl;
   config.organization = orgKey;
@@ -481,24 +493,34 @@ async function applyGitRemoteBinding(
   options: DiscoverProjectOptions,
 ): Promise<void> {
   if (options.auth === null) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because authentication was disabled',
+    );
     return;
   }
 
   const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
   if (!gitRemote) {
+    logger.debug('Project discovery git remote binding: no git remote found');
     return;
   }
 
   const auth = resolveDiscoverProjectAuth(options);
   if (!auth) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because no credentials were supplied',
+    );
     return;
   }
 
   const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  config.gitRemoteBindingNotFound = remoteBinding === null;
   if (!remoteBinding) {
+    logger.debug('Project discovery git remote binding: no project binding resolved');
     return;
   }
 
+  logger.debug('Project discovery git remote binding: project resolved');
   config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
