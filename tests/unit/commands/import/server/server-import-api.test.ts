@@ -750,6 +750,52 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('lookupProject', () => {
+    it('asks components/show for the key, percent-encoded', async () => {
+      fetchSpy = mockFetch({ component: { key: 'group_repo:x' } });
+      expect(await api.lookupProject('group_repo:x')).toBe('found');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/components/show');
+      expect(lastFetchUrl(fetchSpy)).toContain('component=group_repo%3Ax');
+    });
+
+    it('is missing on a 404', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 404 }));
+      expect(await api.lookupProject('k')).toBe('missing');
+    });
+
+    it('is hidden on a 403', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 403 }));
+      expect(await api.lookupProject('k')).toBe('hidden');
+    });
+
+    it('rejects on a 500', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.lookupProject('k').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('searchProjectBindings', () => {
+    it('filters the v2 project-bindings by setting and repository', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'k', devOpsPlatformSettingId: 'gl-id', repository: '42' }],
+      });
+      expect(await api.searchProjectBindings('gl-id', 'my repo')).toEqual([
+        { projectKey: 'k', devOpsPlatformSettingId: 'gl-id', repository: '42' },
+      ]);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/v2/dop-translation/project-bindings');
+      expect(lastFetchUrl(fetchSpy)).toContain('repository=my%20repo');
+      expect(url.searchParams.get('dopSettingId')).toBe('gl-id');
+    });
+
+    it('returns no bindings when the response has none', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchProjectBindings('gl-id', '42')).toEqual([]);
+    });
+  });
+
   it('probeGithubPat is missing on "No personal access token found"', async () => {
     fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
     expect(await api.probeGithubPat('gh')).toEqual({ status: 'missing' });
