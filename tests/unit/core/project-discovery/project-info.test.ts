@@ -306,6 +306,17 @@ describe('discoverProject', () => {
     expect(result.serverUrl).toBe(SONARCLOUD_URL);
   });
 
+  it('derives the US SonarQube Cloud URL when sonar.region=US is declared alongside the organization', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\nsonar.region=US\n',
+    );
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.serverUrl).toBe(SONARCLOUD_US_URL);
+  });
+
   it('maps sonar-project.properties to DiscoveredProject', async () => {
     fakeFs.writeFile(
       join(testDir, 'sonar-project.properties'),
