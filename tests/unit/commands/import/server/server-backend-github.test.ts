@@ -77,6 +77,19 @@ describe('ServerBackend GitHub token gate', () => {
     expect(listGithubOrganizations).not.toHaveBeenCalled();
   });
 
+  it('reports a rejected GitHub token as rejected, not as an empty organizations listing', async () => {
+    const { backend } = backendWith([{ status: 'invalid' }]);
+
+    const error = await failureOf(
+      backend.plan({ all: true, nonInteractive: true }, new FakeConsole()),
+    );
+
+    const { message } = error as { message: string };
+    expect(message).toContain("The personal access token for GitHub setting 'my-github'");
+    expect(message).toContain('was rejected by GitHub');
+    expect(message).not.toContain('no organizations');
+  });
+
   it('proceeds to list repositories when the probe found organizations', async () => {
     const { backend, probeGithubPat } = backendWith([{ status: 'valid', organizationCount: 2 }]);
 
@@ -173,6 +186,16 @@ describe('ServerBackend GitHub token gate', () => {
         message: expect.stringContaining('GitHub returned no organizations'),
         remediationHint: expect.stringContaining(CONNECT_URL),
       });
+    });
+
+    it('reports a rejected token, not an empty listing, when the wait ends on a rejection', async () => {
+      const { backend } = backendWith([{ status: 'missing' }, { status: 'invalid' }]);
+
+      const error = await failureOf(backend.plan({ all: true }, new FakeConsole()));
+
+      const { message } = error as { message: string };
+      expect(message).toContain('was rejected by GitHub');
+      expect(message).not.toContain('no organizations');
     });
   });
 });
