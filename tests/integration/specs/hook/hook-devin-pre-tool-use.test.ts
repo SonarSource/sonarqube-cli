@@ -18,16 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar hook devin-pre-tool-use`:
-// JSON stdin parsing, graceful skips, and end-to-end secret detection in files
-// that Devin's `read` tool is about to open.
-//
-// Behaviour contract:
-//   - Always exits 0 (hook must never crash Devin)
-//   - Outputs a deny decision when a secret is found
-//   - Outputs nothing when the file is clean, the tool is not the lowercase `read`, or the file
-//     doesn't exist
-
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';

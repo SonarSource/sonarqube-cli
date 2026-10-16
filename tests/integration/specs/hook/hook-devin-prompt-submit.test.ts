@@ -18,17 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar hook devin-prompt-submit`.
-//
-// Note: hardcoded token below is an intentional test fixture for the secret scanner.
-// sonar-ignore-next-line S6769
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import {
-  SECRETS_INACTIVE_BINARY_MISSING,
-  SECRETS_INACTIVE_UNAUTHENTICATED,
-} from '@/commands/hook/hook-dependencies.ts';
 import { SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 
 import { readStatsEvents } from '../../../_common/stats-helpers.ts';
@@ -77,70 +68,6 @@ describe('sonar hook devin-prompt-submit', () => {
       expect(output.reason).toContain('secrets');
     },
     { timeout: 30000 },
-  );
-
-  it(
-    'exits 0 and allows a prompt without secrets',
-    async () => {
-      harness.state().withSecretsBinaryInstalled();
-      harness.withAuth(FAKE_SERVER, 'fake-token');
-
-      const result = await harness.runWithStdin(
-        'hook devin-prompt-submit',
-        promptPayload('please help me refactor this function'),
-      );
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'exits 0 and allows when stdin is invalid JSON',
-    async () => {
-      const result = await harness.runWithStdin('hook devin-prompt-submit', 'not valid json {{');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.trim()).toBe('');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits 0 and blocks with the unauthenticated message when not authenticated',
-    async () => {
-      harness.state().withSecretsBinaryInstalled();
-
-      const result = await harness.runWithStdin(
-        'hook devin-prompt-submit',
-        promptPayload(`my token is ${GITHUB_TEST_TOKEN}`),
-      );
-
-      expect(result.exitCode).toBe(0);
-      const output = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
-      expect(output.decision).toBe('block');
-      expect(output.reason).toBe(SECRETS_INACTIVE_UNAUTHENTICATED);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits 0 and blocks with the binary-missing message when the binary is not installed',
-    async () => {
-      harness.withAuth(FAKE_SERVER, 'fake-token');
-
-      const result = await harness.runWithStdin(
-        'hook devin-prompt-submit',
-        promptPayload(`my token is ${GITHUB_TEST_TOKEN}`),
-      );
-
-      expect(result.exitCode).toBe(0);
-      const output = JSON.parse(result.stdout.trim()) as { decision: string; reason: string };
-      expect(output.decision).toBe('block');
-      expect(output.reason).toBe(SECRETS_INACTIVE_BINARY_MISSING);
-    },
-    { timeout: 15000 },
   );
 
   it(

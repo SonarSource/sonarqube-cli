@@ -18,9 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// UserPromptSubmit handler for Devin. Devin sends `prompt` and `session_id` under the same names as
-// Claude and accepts `{ decision: "block", reason }`, so the agnostic handler is reused.
-
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { agentPromptSubmit } from './agent-prompt-submit.ts';
