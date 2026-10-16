@@ -170,6 +170,12 @@ describe('sonar hook agent-session-start', () => {
       }),
       expected: { additional_context: EXPECTED_CONTEXT },
     },
+    {
+      name: 'Pi session_start',
+      agent: 'pi',
+      stdin: (cwd: string) => ({ sessionID: 'sess-1', cwd }),
+      expected: { additionalContext: EXPECTED_CONTEXT },
+    },
   ]) {
     it(
       `reads the ${invocation.name} payload and emits that agent's envelope`,
