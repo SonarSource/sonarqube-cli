@@ -235,7 +235,8 @@ export class ServerBackend implements ImportBackend {
     } catch (error) {
       if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
         throw new CommandFailedError(`DevOps platform setting '${setting.key}' was not found.`, {
-          remediationHint: 'It may have been removed. Run the command again to pick another one.',
+          remediationHint:
+            'The server answered 404: the setting may have been removed, or this server may not offer the token check. Run the command again to pick another setting.',
         });
       }
       throw mapRequestError(error, 'check the personal access token');
