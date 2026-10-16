@@ -35,12 +35,6 @@ export interface SharedProjectConfigMapping {
   organization?: string;
 }
 
-/**
- * The wire shape of a `project` entry — identical whether it's about to be written by
- * `set()` or was just read back and validated by `load()`, since `set()` serializes it
- * verbatim as JSON. One type serves both directions instead of a write-side and a
- * read-side DTO declaring the same two shapes twice.
- */
 export type SonarCloudProjectConfigEntry = {
   projectKey: string;
   path: string;
@@ -65,13 +59,14 @@ export type SharedProjectConfigEntry =
   SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry | CustomCloudProjectConfigEntry;
 
 export interface SharedProjectConfigRepository {
-  load(dir: string): Promise<SharedProjectConfigMapping | null>;
+  load(dir: string): Promise<SharedProjectConfigMapping[]>;
   set(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
 
-/** File root — a container so other top-level fields can be added later without disturbing `project`. */
 interface SharedProjectConfigFileDto {
   project?: unknown;
+  /** Monorepo form: several mappings in one file. Takes precedence over `project` when present. */
+  projects?: unknown;
 }
 
 const VALID_CLOUD_REGIONS = new Set<CloudRegion>(['eu', 'us']);
@@ -132,7 +127,6 @@ export function resolveContainedPath(dir: string, rawPath: string): string | nul
   }
   const canonicalDir = canonicalizePath(dir);
   const lexical = join(canonicalDir, rawPath);
-  // Must be a directory: the result is later joined with file names and used as a write/mount target.
   if (!statSync(lexical, { throwIfNoEntry: false })?.isDirectory()) {
     return null;
   }
@@ -141,9 +135,29 @@ export function resolveContainedPath(dir: string, rawPath: string): string | nul
 }
 
 export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
-  async load(dir: string): Promise<SharedProjectConfigMapping | null> {
+  async load(dir: string): Promise<SharedProjectConfigMapping[]> {
     const root = await this.readRawRoot(dir);
-    return root === null ? null : this.resolveEntry(dir, root.project);
+    if (root === null) {
+      return [];
+    }
+
+    let rawEntries: unknown[];
+    if (Array.isArray(root.projects)) {
+      rawEntries = root.projects;
+    } else if (root.project !== undefined) {
+      rawEntries = [root.project];
+    } else {
+      rawEntries = [];
+    }
+
+    const mappings: SharedProjectConfigMapping[] = [];
+    for (const rawEntry of rawEntries) {
+      const mapping = this.resolveEntry(dir, rawEntry);
+      if (mapping !== null) {
+        mappings.push(mapping);
+      }
+    }
+    return mappings;
   }
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
@@ -157,11 +171,9 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
   }
 
   /**
-   * Read the existing file to merge into, so `set()` preserves any other top-level
-   * fields already there. Unlike `readRawRoot()` (used by `load()`, which treats an
-   * unreadable/invalid file as "no mapping" and moves on), a write must not silently
-   * clobber content it failed to read: only a genuinely absent file is safe to treat
-   * as empty — any other read or parse failure aborts the write instead.
+   * Unlike `readRawRoot()` (used by `load()`), a write must not silently clobber
+   * content it failed to read: only a genuinely absent file is treated as empty —
+   * any other read or parse failure aborts the write instead.
    */
   private async readExistingRootForWrite(dir: string): Promise<SharedProjectConfigFileDto> {
     let content: string;
