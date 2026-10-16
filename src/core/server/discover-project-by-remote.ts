@@ -25,10 +25,8 @@ import {
   formatConfigFields,
   selectValidServerUrl,
 } from '../project-discovery/project-discovery-format.ts';
-import type {
-  DiscoveredProject,
-  DiscoverProjectOptions,
-} from '../project-discovery/project-info.ts';
+import type { PartialProjectMapping } from '../project-discovery/project-discovery-result.ts';
+import type { DiscoverProjectOptions } from '../project-discovery/project-info.ts';
 import { SonarHttpClient } from './http-client.ts';
 import { ProjectBindingsClient } from './project-bindings.ts';
 
@@ -66,7 +64,7 @@ export function discoverProjectKeyByGitRemote(
 
 /** A single repo-level last resort for discoverProjects(): never climbs, only ever consults the repo root's own origin remote. */
 export async function applyGitRemoteBinding(
-  config: DiscoveredProject,
+  config: PartialProjectMapping,
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {

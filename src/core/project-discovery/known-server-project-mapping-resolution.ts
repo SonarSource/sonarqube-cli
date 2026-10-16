@@ -33,10 +33,8 @@ import {
   mergeKnownServerProjectMappings,
 } from '@/core/project-discovery/known-server-project-mappings.ts';
 import { formatConfigFields } from '@/core/project-discovery/project-discovery-format.ts';
-import type {
-  DiscoveredProject,
-  DiscoverProjectOptions,
-} from '@/core/project-discovery/project-info.ts';
+import type { PartialProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
+import type { DiscoverProjectOptions } from '@/core/project-discovery/project-info.ts';
 import type { CliState, KnownServerProjectMapping } from '@/core/state/state.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -107,7 +105,7 @@ function resolveMappingConnection(
 
 /** Matches against the combined persisted + live-derived mapping table, caller-loaded once above. */
 export function applyKnownServerProjectMapping(
-  config: DiscoveredProject,
+  config: PartialProjectMapping,
   lookupPaths: LookupPath[],
   known: KnownMappingsResult,
   options: DiscoverProjectOptions,
