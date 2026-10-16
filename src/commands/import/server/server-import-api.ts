@@ -393,10 +393,9 @@ export class ServerImportApiClient {
     } catch (error) {
       if (!isNotFound(error)) throw error;
       const version = await this.version();
-      if (version !== undefined && isAtLeast(version, IMPORT_MIN_VERSION)) throw error;
-      const subject = version ? `SonarQube Server ${version}` : 'This SonarQube Server';
+      if (version === undefined || isAtLeast(version, IMPORT_MIN_VERSION)) throw error;
       throw new CommandFailedError(
-        `${subject} does not support importing repositories; ${IMPORT_MIN_VERSION} or later is required.`,
+        `SonarQube Server ${version} does not support importing repositories; ${IMPORT_MIN_VERSION} or later is required.`,
         { remediationHint: 'Upgrade SonarQube Server, then retry.' },
       );
     }
