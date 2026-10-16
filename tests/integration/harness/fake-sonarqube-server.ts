@@ -2141,7 +2141,7 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/api/alm_integration/search_gitlab_repos') {
+        if (path === '/api/alm_integrations/search_gitlab_repos') {
           const repos = (gitlabRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.projectName || r.name.includes(query.projectName),
           );
@@ -2165,7 +2165,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/alm_integration/search_bitbucketcloud_repos') {
+        if (path === '/api/alm_integrations/search_bitbucketcloud_repos') {
           const repos = (bitbucketCloudRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.repositoryName || r.name.includes(query.repositoryName),
           );
@@ -2192,13 +2192,13 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (
-          path === '/api/alm_integration/list_bitbucketserver_projects' ||
-          path === '/api/alm_integration/search_bitbucketserver_repos'
+          path === '/api/alm_integrations/list_bitbucketserver_projects' ||
+          path === '/api/alm_integrations/search_bitbucketserver_repos'
         ) {
           const configured = bitbucketServerProjects.get(query.almSetting ?? '');
           const projects = configured?.projects ?? [];
           const items =
-            path === '/api/alm_integration/list_bitbucketserver_projects'
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
               ? projects.map(({ key, name }) => ({ key, name }))
               : projects
                   .filter((p) =>
@@ -2215,7 +2215,7 @@ export class FakeSonarQubeServerBuilder {
           const end = start + limit;
           const isLastPage = end >= items.length;
           const listKey =
-            path === '/api/alm_integration/list_bitbucketserver_projects'
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
               ? 'projects'
               : 'repositories';
           return new Response(
@@ -2230,7 +2230,7 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (
-          path === '/api/alm_integration/check_pat' ||
+          path === '/api/alm_integrations/check_pat' ||
           path === '/api/alm_integrations/list_github_organizations'
         ) {
           const isProbe = path === '/api/alm_integrations/list_github_organizations';
