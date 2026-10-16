@@ -901,6 +901,7 @@ describe('integrate <agent> — Context Augmentation (global install, no project
     ['copilot', 'integrate copilot --non-interactive'],
     ['codex', 'integrate codex --non-interactive'],
     ['cursor', 'integrate cursor --non-interactive'],
+    ['devin', 'integrate devin --non-interactive'],
   ] as const;
 
   it.each(AGENTS)(
