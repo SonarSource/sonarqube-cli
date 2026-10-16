@@ -35,3 +35,11 @@ export const claudeCodexAdapter: SessionStartAgentAdapter = {
     hookSpecificOutput: { hookEventName: input.eventName, additionalContext },
   }),
 };
+
+export const userVisibleClaudeCodexAdapter: SessionStartAgentAdapter = {
+  ...claudeCodexAdapter,
+  emit: (output, input) =>
+    output.userMessage
+      ? { systemMessage: output.userMessage }
+      : claudeCodexAdapter.emit(output, input),
+};
