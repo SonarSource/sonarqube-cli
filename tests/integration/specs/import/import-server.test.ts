@@ -55,7 +55,7 @@ describe('sonar import on SonarQube Server', () => {
     it('fails when no DevOps platform is configured', async () => {
       await startServer();
 
-      const result = await harness.run('import');
+      const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
@@ -69,9 +69,6 @@ describe('sonar import on SonarQube Server', () => {
       const result = await harness.run('import --non-interactive --all');
 
       expect(result.stdout).toContain('DevOps platform: my-gitlab (GitLab)');
-      expect(result.stdout + result.stderr).toContain(
-        'Importing from GitLab is not supported yet.',
-      );
     });
 
     it('exits 2 with the available keys when several are configured and --dop-setting is missing', async () => {
@@ -255,14 +252,26 @@ describe('sonar import on SonarQube Server', () => {
     });
 
     it('continues past the gate when the token works', async () => {
-      await startServer((s) => s.withDopSettings([AZURE]));
+      await startServer((s) => s.withDopSettings([GITLAB]).withGitlabRepos('my-gitlab', []));
 
       const result = await harness.run('import --non-interactive --all');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        'Importing from Azure DevOps is not supported yet.',
+        'No repositories found for this DevOps platform.',
       );
+    });
+
+    it('requires a selection flag when prompts are off, before contacting the server', async () => {
+      const server = await startServer((s) => s.withDopSettings([GITLAB]));
+
+      const result = await harness.run('import --non-interactive');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        '--repo, --all, or --regex is required in non-interactive mode',
+      );
+      expect(server.getRecordedRequests().some((r) => r.path.includes('dop-settings'))).toBe(false);
     });
   });
 
@@ -270,7 +279,7 @@ describe('sonar import on SonarQube Server', () => {
     it('reports the detected version when the dop-settings API is missing', async () => {
       await startServer((s) => s.withDopSettingsError(404).withVersion('9.9.0.65466'));
 
-      const result = await harness.run('import');
+      const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
@@ -281,7 +290,7 @@ describe('sonar import on SonarQube Server', () => {
     it('explains the missing permission when listing settings is forbidden', async () => {
       await startServer((s) => s.withDopSettingsError(403));
 
-      const result = await harness.run('import');
+      const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain("'Create Projects' permission");
