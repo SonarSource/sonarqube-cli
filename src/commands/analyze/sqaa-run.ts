@@ -32,7 +32,12 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
-import { fetchWithRetry, readSqaaFileContent, toRelativePosixPath } from './sqaa-api.ts';
+import {
+  fetchWithRetry,
+  readSqaaFileContent,
+  resolveSqaaPath,
+  toRelativePosixPath,
+} from './sqaa-api.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -190,17 +195,28 @@ export async function fetchSingleFileReport(
   wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
-  const filePath = toRelativePosixPath(file);
+  const path = resolveSqaaPath(file);
   try {
-    const response = await fetchWithRetry(connection, projectKey, file, fileContent, branch, {
-      analysisDepth: wireDepth,
-    });
+    const response = await fetchWithRetry(
+      connection,
+      projectKey,
+      { path: path.serverPath, content: fileContent },
+      branch,
+      {
+        analysisDepth: wireDepth,
+      },
+    );
     return {
-      report: singleFileSuccessReport(filePath, response.issues, response.errors, displayDepth),
+      report: singleFileSuccessReport(
+        path.displayPath,
+        response.issues,
+        response.errors,
+        displayDepth,
+      ),
     };
   } catch (err) {
     const error = err as Error;
-    const report = singleFileFailureReport(filePath, error.message, displayDepth);
+    const report = singleFileFailureReport(path.displayPath, error.message, displayDepth);
     if (isGlobalSqaaError(error)) {
       report.globalError = {
         kind: globalSqaaErrorKind(error),
