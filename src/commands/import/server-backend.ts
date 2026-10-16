@@ -18,11 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import {
   CommandFailedError,
   type CommandFailedErrorOptions,
   InvalidOptionError,
 } from '@/core/commands/command-error.ts';
+import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/config-constants.ts';
 import { AccessDeniedError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { fetchServerVersion } from '@/core/server/server-info.ts';
@@ -42,6 +44,7 @@ import {
   type ServerImportApiClient,
 } from './server/server-import-api.ts';
 import type { ServerRepository } from './server/server-repository.ts';
+import { waitForPat } from './server/wait-for-pat.ts';
 import type { ImportOptions } from './types';
 
 /** Every repository is selectable: SonarQube Server has no per-organization visibility rule. */
@@ -64,7 +67,7 @@ export class ServerBackend implements ImportBackend {
     const label = DOP_PLATFORM_LABELS[setting.type];
     console.info(`DevOps platform: ${setting.key} (${label})`);
 
-    await this.requireConnectedPat(setting);
+    await this.requireConnectedPat(setting, options, console);
 
     const support = SUPPORTED_PLATFORMS[setting.type];
     if (!support) {
@@ -139,8 +142,15 @@ export class ServerBackend implements ImportBackend {
     return mapRequestError(error, 'list the configured DevOps platforms');
   }
 
-  /** Ends the run unless the caller already has a working personal access token for `setting`. */
-  private async requireConnectedPat(setting: DopSetting): Promise<void> {
+  /**
+   * Returns once the caller has a working personal access token for `setting`. When the run can
+   * prompt it waits for the user to connect one in the browser; otherwise it ends the run.
+   */
+  private async requireConnectedPat(
+    setting: DopSetting,
+    options: ImportOptions,
+    console: Console,
+  ): Promise<void> {
     const status = await this.patStatusOf(setting);
     if (status === 'valid') {
       return;
@@ -151,9 +161,70 @@ export class ServerBackend implements ImportBackend {
       status === 'missing'
         ? `No personal access token is connected for ${label} setting '${setting.key}'.`
         : `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`;
-    throw new CommandFailedError(problem, {
-      remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
-    });
+    if (!canPrompt(options)) {
+      throw new CommandFailedError(problem, {
+        remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
+      });
+    }
+
+    console.info(`${problem} Connect it in your browser:`);
+    console.print(url);
+    await openBrowserWithFallback(url, console);
+    await console.withSpinner(
+      `Waiting for the ${label} personal access token to be connected`,
+      () => this.waitForConnectedPat(setting, status, url, problem),
+    );
+    console.discreetSuccess(
+      `Personal access token connected for ${label} setting '${setting.key}'.`,
+    );
+  }
+
+  private async waitForConnectedPat(
+    setting: DopSetting,
+    initial: Exclude<PatStatus, 'valid'>,
+    url: string,
+    problem: string,
+  ): Promise<void> {
+    const label = DOP_PLATFORM_LABELS[setting.type];
+    const abort = new AbortController();
+    const onSigint = () => {
+      abort.abort();
+    };
+    process.on('SIGINT', onSigint);
+    let result;
+    try {
+      result = await waitForPat({
+        check: () => this.patStatusOf(setting),
+        initial,
+        intervalMs: getImportPatPollIntervalMs(),
+        timeoutMs: getImportPatWaitTimeoutMs(),
+        signal: abort.signal,
+      });
+    } finally {
+      process.off('SIGINT', onSigint);
+    }
+
+    const rerun = `run 'sonar import' again.`;
+    switch (result) {
+      case 'valid':
+        return;
+      case 'invalid':
+        throw new CommandFailedError(
+          `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`,
+          {
+            remediationHint: `Reconnect it at ${buildConnectUrl(this.serverUrl, setting, { resetPat: true })}, then ${rerun}`,
+          },
+        );
+      case 'timeout':
+        throw new CommandFailedError(
+          `Timed out waiting for the ${label} personal access token to be connected.`,
+          { remediationHint: `Connect it at ${url}, then ${rerun}` },
+        );
+      case 'aborted':
+        throw new CommandFailedError(`Stopped waiting. ${problem}`, {
+          remediationHint: `Connect it at ${url}, then ${rerun}`,
+        });
+    }
   }
 
   private async patStatusOf(setting: DopSetting): Promise<PatStatus> {

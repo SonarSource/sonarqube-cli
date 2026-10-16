@@ -24,6 +24,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import {
+  ENV_IMPORT_PAT_POLL_INTERVAL_MS,
+  ENV_IMPORT_PAT_WAIT_TIMEOUT_MS,
+} from '../../../../src/core/config-constants.ts';
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 
 const GITLAB = { id: 'gl-id', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.example.com' };
@@ -276,6 +280,138 @@ describe('sonar import on SonarQube Server', () => {
         '--repo, --all, or --regex is required in non-interactive mode',
       );
       expect(server.getRecordedRequests().some((r) => r.path.includes('dop-settings'))).toBe(false);
+    });
+  });
+
+  describe('waiting for the token in the browser', () => {
+    const MISSING = {
+      status: 400,
+      message: "personal access token for 'my-gitlab' is missing",
+    };
+    const interactiveEnv = (timeoutMs: string) => ({
+      CI: 'false',
+      SONARQUBE_CLI_MOCK_TTY: '1',
+      [ENV_IMPORT_PAT_POLL_INTERVAL_MS]: '50',
+      [ENV_IMPORT_PAT_WAIT_TIMEOUT_MS]: timeoutMs,
+    });
+    const checkPatCalls = (server: FakeSonarQubeServer) =>
+      server.getRecordedRequests().filter((r) => r.path.endsWith('/check_pat'));
+
+    it(
+      'continues the same run once the token is connected',
+      async () => {
+        const server = await startServer((s) =>
+          s
+            .withDopSettings([GITLAB])
+            .withPatResponses('my-gitlab', [MISSING, MISSING, MISSING, { status: 204 }]),
+        );
+
+        const session = harness.runInteractive('import --all', {
+          extraEnv: interactiveEnv('20000'),
+        });
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain(`\n${server.baseUrl()}/projects/create?mode=gitlab\n`);
+        expect(output).toContain('Automatic browser opening is disabled');
+        expect(output).toContain('Personal access token connected');
+        expect(output).toContain('Importing from GitLab is not supported yet.');
+        expect(checkPatCalls(server)).toHaveLength(4);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 1 with the connect URL when the wait times out',
+      async () => {
+        const server = await startServer((s) =>
+          s.withDopSettings([GITLAB]).withPatResponse('my-gitlab', MISSING),
+        );
+
+        const result = await harness.run('import --all', { extraEnv: interactiveEnv('300') });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Timed out waiting for the GitLab personal access token');
+        expect(output).toContain(`Connect it at ${server.baseUrl()}/projects/create?mode=gitlab,`);
+        expect(checkPatCalls(server).length).toBeGreaterThan(1);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits 1 with resetPat when the connected token is rejected',
+      async () => {
+        const server = await startServer((s) =>
+          s
+            .withDopSettings([GITLAB])
+            .withPatResponses('my-gitlab', [
+              MISSING,
+              { status: 400, message: 'Invalid personal access token' },
+            ]),
+        );
+
+        const result = await harness.run('import --all', { extraEnv: interactiveEnv('20000') });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('was rejected by GitLab');
+        expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab&resetPat=1,`);
+        expect(checkPatCalls(server)).toHaveLength(2);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'keeps waiting past the stale rejected token when the run started from a rejection',
+      async () => {
+        const REJECTED = { status: 400, message: 'Invalid personal access token' };
+        const server = await startServer((s) =>
+          s
+            .withDopSettings([GITLAB])
+            .withPatResponses('my-gitlab', [REJECTED, REJECTED, { status: 204 }]),
+        );
+
+        const result = await harness.run('import --all', { extraEnv: interactiveEnv('20000') });
+
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Importing from GitLab is not supported yet.');
+        expect(checkPatCalls(server)).toHaveLength(3);
+      },
+      { timeout: 30000 },
+    );
+
+    it('does not wait, poll or open a browser with --non-interactive', async () => {
+      const server = await startServer((s) =>
+        s.withDopSettings([GITLAB]).withPatResponse('my-gitlab', MISSING),
+      );
+
+      const result = await harness.run('import --all --non-interactive', {
+        extraEnv: interactiveEnv('20000'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain(
+        "No personal access token is connected for GitLab setting 'my-gitlab'.",
+      );
+      expect(output).not.toContain('browser');
+      expect(checkPatCalls(server)).toHaveLength(1);
+    });
+
+    it('does not wait or poll when CI=true', async () => {
+      const server = await startServer((s) =>
+        s.withDopSettings([GITLAB]).withPatResponse('my-gitlab', MISSING),
+      );
+
+      const result = await harness.run('import --all', {
+        extraEnv: { ...interactiveEnv('20000'), CI: 'true' },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).not.toContain('browser');
+      expect(checkPatCalls(server)).toHaveLength(1);
     });
   });
 
