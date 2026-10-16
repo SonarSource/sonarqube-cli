@@ -234,7 +234,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(putPayloads(server)).toHaveLength(120);
     const searches = server
       .getRecordedRequests()
-      .filter((r) => r.path === '/api/alm_integration/search_gitlab_repos');
+      .filter((r) => r.path === '/api/alm_integrations/search_gitlab_repos');
     expect(searches.map((r) => r.query.p)).toEqual(['1', '2', '3']);
     expect(searches.every((r) => r.query.almSetting === 'my-gitlab' && r.query.ps === '50')).toBe(
       true,
@@ -257,7 +257,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(
       server
         .getRecordedRequests()
-        .some((r) => r.path === '/api/alm_integration/search_gitlab_repos'),
+        .some((r) => r.path === '/api/alm_integrations/search_gitlab_repos'),
     ).toBe(false);
   });
 });
