@@ -147,7 +147,8 @@ export class ServerBackend implements ImportBackend {
     const reason = explainImportFailure(error, {
       settingKey: setting.key,
       platformLabel: DOP_PLATFORM_LABELS[setting.type],
-      connectUrl: buildConnectUrl(this.serverUrl, setting, { resetPat: true }),
+      connectUrl: this.reconnectUrl(setting, 'missing'),
+      reconnectUrl: this.reconnectUrl(setting, 'invalid'),
       projectKey,
     });
     return error instanceof Error && reason === error.message
