@@ -184,6 +184,11 @@ export async function applyLocalConfigAcrossLookupPaths(
 
     applyLocalSonarProperties(config, local, options);
     if (applySonarLintConfig(config, local, options)) {
+      // A key with no connection info of its own borrows the caller's whole active connection.
+      if (!config.serverUrl && options.auth?.serverUrl) {
+        config.serverUrl = options.auth.serverUrl;
+        config.organization = options.auth.orgKey;
+      }
       config.projectRoot = projectRoot;
       return true;
     }
