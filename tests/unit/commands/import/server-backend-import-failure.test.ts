@@ -37,6 +37,7 @@ async function failingImport(putError: Error): Promise<unknown> {
         repositories: [{ id: 11, name: 'repo-a', slug: 'repo-a', pathSlug: 'group' }],
         total: 1,
       }),
+    lookupProject: () => Promise.resolve('missing'),
     putBoundProject: () => Promise.reject(putError),
   } as unknown as ServerImportApiClient;
   const backend = new ServerBackend(api, 'https://sonarqube.example.com/');
