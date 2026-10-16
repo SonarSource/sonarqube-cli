@@ -167,7 +167,7 @@ export class ServerBackend implements ImportBackend {
     options: ImportOptions,
     console: Console,
   ): Promise<void> {
-    const status = await this.statusOf(setting);
+    const { status, emptyListing } = await this.statusOf(setting);
     if (status === 'valid') {
       return;
     }
@@ -176,7 +176,7 @@ export class ServerBackend implements ImportBackend {
     const problem =
       status === 'missing'
         ? `No personal access token is connected for ${label} setting '${setting.key}'.`
-        : this.rejectedProblem(setting);
+        : this.rejectedProblem(setting, emptyListing);
     if (!canPrompt(options)) {
       throw new CommandFailedError(problem, {
         remediationHint: `Connect it at ${url}, then run 'sonar import' again.`,
@@ -188,7 +188,7 @@ export class ServerBackend implements ImportBackend {
     await openBrowserWithFallback(url, console);
     await console.withSpinner(
       `Waiting for the ${label} personal access token to be connected`,
-      () => this.waitForConnectedPat(setting, status, url, problem),
+      () => this.waitForConnectedPat(setting, status, emptyListing, url, problem),
     );
     console.discreetSuccess(
       `Personal access token connected for ${label} setting '${setting.key}'.`,
@@ -198,6 +198,7 @@ export class ServerBackend implements ImportBackend {
   private async waitForConnectedPat(
     setting: DopSetting,
     initial: Exclude<PatStatus, 'valid'>,
+    initialEmptyListing: boolean,
     url: string,
     problem: string,
   ): Promise<void> {
@@ -207,10 +208,15 @@ export class ServerBackend implements ImportBackend {
       abort.abort();
     };
     process.on('SIGINT', onSigint);
+    let emptyListing = initialEmptyListing;
     let result;
     try {
       result = await waitForPat({
-        check: () => this.statusOf(setting),
+        check: async () => {
+          const checked = await this.statusOf(setting);
+          emptyListing = checked.emptyListing;
+          return checked.status;
+        },
         initial,
         intervalMs: getImportPatPollIntervalMs(),
         timeoutMs: getImportPatWaitTimeoutMs(),
@@ -225,7 +231,7 @@ export class ServerBackend implements ImportBackend {
       case 'valid':
         return;
       case 'invalid':
-        throw new CommandFailedError(this.rejectedProblem(setting), {
+        throw new CommandFailedError(this.rejectedProblem(setting, emptyListing), {
           remediationHint: `Reconnect it at ${this.reconnectUrl(setting, 'invalid')}, then ${rerun}`,
         });
       case 'timeout':
@@ -246,15 +252,17 @@ export class ServerBackend implements ImportBackend {
    * So a valid probe with no organizations is treated like a rejected token: the user goes through
    * the browser, and the wait ends once organizations show up.
    */
-  private async statusOf(setting: DopSetting): Promise<PatStatus> {
+  private async statusOf(
+    setting: DopSetting,
+  ): Promise<{ status: PatStatus; emptyListing: boolean }> {
     const probe = await this.probeOf(setting);
-    return setting.type === 'github' && probe.status === 'valid' && probe.organizationCount === 0
-      ? 'invalid'
-      : probe.status;
+    const emptyListing =
+      setting.type === 'github' && probe.status === 'valid' && probe.organizationCount === 0;
+    return { status: emptyListing ? 'invalid' : probe.status, emptyListing };
   }
 
-  private rejectedProblem(setting: DopSetting): string {
-    if (setting.type === 'github') {
+  private rejectedProblem(setting: DopSetting, emptyListing: boolean): string {
+    if (setting.type === 'github' && emptyListing) {
       return `GitHub returned no organizations for setting '${setting.key}': its authorization is missing or has expired, or the GitHub App is not installed for your GitHub account.`;
     }
     const label = DOP_PLATFORM_LABELS[setting.type];
