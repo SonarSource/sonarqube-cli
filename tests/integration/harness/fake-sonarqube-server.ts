@@ -2307,7 +2307,7 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/api/alm_integration/list_github_repositories') {
+        if (path === '/api/alm_integrations/list_github_repositories') {
           const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
             (o) => o.key === query.organization,
           );
