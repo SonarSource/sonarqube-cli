@@ -24,7 +24,11 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { LookupPath } from '@/core/host/git/lookup-path-resolver.ts';
-import { loadSonarLintConfig, type SonarLintConfig } from '@/core/host/sonarlint-connected-mode.ts';
+import {
+  loadSonarLintConfig,
+  sonarCloudBaseUrlFromRegion,
+  type SonarLintConfig,
+} from '@/core/host/sonarlint-connected-mode.ts';
 import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -33,7 +37,6 @@ import {
 } from '@/core/project-discovery/project-discovery-format.ts';
 import type { PartialProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import type { DiscoverProjectOptions } from '@/core/project-discovery/project-info.ts';
-import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
 
 export interface SonarProperties {
   hostURL: string;
@@ -70,8 +73,13 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
   const content = await fs.readFile(propPath, 'utf-8');
 
   const props: Partial<SonarProperties> = {};
+  let region: string | undefined;
 
   for (const [key, value] of parseProperties(content)) {
+    if (key === 'sonar.region') {
+      region = value;
+      continue;
+    }
     const field = SONAR_PROPERTY_FIELDS.get(key);
     if (field) {
       props[field] = value;
@@ -84,7 +92,7 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
 
   // Cloud scanners conventionally omit sonar.host.url — the region's URL is well-known.
   if (!props.hostURL && props.organization) {
-    props.hostURL = cloudRegionToUrl('eu');
+    props.hostURL = sonarCloudBaseUrlFromRegion(region);
   }
 
   return props as SonarProperties;
