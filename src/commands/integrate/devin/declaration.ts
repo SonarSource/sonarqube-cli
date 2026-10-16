@@ -75,7 +75,6 @@ const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 const SQAA_HOOK_MARKER = 'sonar-sqaa';
 // Devin tool names are lowercase and the matcher is case-sensitive.
 const SQAA_HOOK_MATCHER = '^(edit|write)$';
-// SessionStart has no tool name to match; Devin documents an empty matcher for non-tool events.
 const SESSION_START_HOOK_MATCHER = '';
 const PRETOOL_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
