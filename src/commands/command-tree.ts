@@ -634,7 +634,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateDevin(options, ctx));
 
   integrateCommand
-    .command('pi', { hidden: true })
+    .command('pi')
     .description(
       'Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.',
     )
