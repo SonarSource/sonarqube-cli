@@ -441,9 +441,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   COMMAND_TREE.command('import')
-    .description(
-      'Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only)',
-    )
+    .description('Import repositories from a connected DevOps platform into SonarQube')
     .rootHelp({
       category: 'integrate',
     })
@@ -466,6 +464,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         '                   Examples:\n' +
         '                       --regex "^test-"\n' +
         '                       --regex "/^archived-/i"\n',
+    )
+    .option(
+      '--dop-setting <key>',
+      'SonarQube Server only: key of the DevOps platform setting to import from. Required when several are configured and prompts are off.',
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
