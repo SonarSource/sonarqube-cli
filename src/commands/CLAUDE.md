@@ -2,6 +2,8 @@
 
 The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agent integrations that install them: `src/commands/integrate/CLAUDE.md` covers both halves and is the file to read before changing either.
 
+`sonar auth remind-login` (hidden, PoC) shows a native OS notification that opens a terminal running `sonar auth login` when clicked, and does nothing when the user is already signed in (no credentials, or a token the server reports invalid; an unreachable server counts as signed in). It is meant to be called from MDM scripts, which run as root / SYSTEM, so a process with no graphical session first re-runs itself in the active console user's session and the sign-in check happens there, against that user's state. Per-OS code lives in `src/commands/auth/remind/`: macOS hands off with `launchctl asuser` and shows an `osascript` dialog, or with `--alerter` (macOS only) a real notification through the `alerter` binary; Linux picks the active graphical `loginctl` session, hands off with `runuser` and talks to the notification server over `gdbus` / `dbus-monitor`; Windows hands off through a one-shot interactive scheduled task and shows a WinRT toast activated by a one-shot URI scheme in HKCU.
+
 To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
 Please declare commands using the type defined in `src/core/commands/sonar-command.ts`.
 Lifecycle stages (`Stage`) live in `src/core/commands/stage.ts` and are re-exported from `sonar-command.ts`. Qualified invocation paths used in lifecycle warnings live in `src/core/commands/path.ts`.

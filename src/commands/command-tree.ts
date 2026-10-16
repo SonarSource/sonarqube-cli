@@ -89,6 +89,7 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
+import { authRemindLogin, type AuthRemindLoginOptions } from './auth/remind/index.ts';
 import {
   authStatus,
   type AuthStatusOptions,
@@ -315,6 +316,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Show active authentication connection with token verification')
     .addOption(formatOption(AUTH_STATUS_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, options: AuthStatusOptions) => authStatus(options, ctx));
+
+  auth
+    .command('remind-login', { hidden: true })
+    .description(
+      'Show a native OS notification that runs `sonar auth login` in a terminal when clicked. Does nothing when already authenticated.',
+    )
+    .option(
+      '--alerter',
+      'macOS only: show a notification through the alerter binary instead of a dialog',
+    )
+    .anonymousAction((ctx, options: AuthRemindLoginOptions) => authRemindLogin(options, ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
