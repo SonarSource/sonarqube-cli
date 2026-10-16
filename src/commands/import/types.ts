@@ -23,4 +23,5 @@ export interface ImportOptions {
   all?: boolean;
   regex?: string;
   nonInteractive?: boolean;
+  dopSetting?: string;
 }
