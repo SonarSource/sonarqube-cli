@@ -724,16 +724,15 @@ describe('ServerImportApiClient', () => {
         expect((error as CommandFailedError).remediationHint).toContain('Upgrade');
       });
 
-      it('reports an unsupported server without a version when it cannot be read', async () => {
+      it('keeps a POST 404 as the original error when the version cannot be read', async () => {
         fetchSpy = mockServer({
           put: fakeResponse({}, { status: 405 }),
           post: fakeResponse({}, { status: 404 }),
           version: null,
         });
         const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect((error as CommandFailedError).message).toBe(
-          'This SonarQube Server does not support importing repositories; 10.5 or later is required.',
-        );
+        expect(error).toBeInstanceOf(UnexpectedApiError);
+        expect((error as UnexpectedApiError).status).toBe(404);
       });
 
       it('keeps a POST 404 on a 10.5+ server as the original error', async () => {
