@@ -32,13 +32,23 @@ export type PatStatus = 'valid' | 'missing' | 'invalid';
 const MISSING_PAT_MESSAGE = /personal access token .*is missing|no personal access token found/i;
 
 /**
- * Classifies a failed PAT check. Only a 400 answers the question; any other failure (network,
- * 403, 404, 5xx, ...) says nothing about the token, so it returns `undefined` and the caller
- * must surface the error instead of guessing.
+ * What the platform clients say when they reject the stored token: "Invalid personal access
+ * token" (GitLab, Azure, Bitbucket Server), "Your GitLab token was revoked / is expired",
+ * "insufficient scope", "Forbidden access to GitLab" and Bitbucket Cloud's "[HTTP 401]" / "[HTTP 403]".
+ */
+const REJECTED_PAT_MESSAGE =
+  /invalid personal access token|token (?:was revoked|is expired)|insufficient scope|forbidden access to gitlab|\[http 40[13]\]/i;
+
+/**
+ * Classifies a failed PAT check. Only a 400 whose message names the token answers the question.
+ * Every other failure (network, 403, 404, 5xx, or a 400 such as "Unable to contact Bitbucket
+ * server") says nothing about the token, so it returns `undefined` and the caller must surface
+ * the error instead of guessing.
  */
 export function patStatusFromError(error: HttpClientError): PatStatus | undefined {
   if (!(error instanceof BadRequestError)) {
     return undefined;
   }
-  return MISSING_PAT_MESSAGE.test(error.message) ? 'missing' : 'invalid';
+  if (MISSING_PAT_MESSAGE.test(error.message)) return 'missing';
+  return REJECTED_PAT_MESSAGE.test(error.message) ? 'invalid' : undefined;
 }

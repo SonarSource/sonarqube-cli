@@ -238,8 +238,25 @@ describe('sonar import on SonarQube Server', () => {
         `${server.baseUrl()}/projects/create?mode=github&dopSetting=gh-id,`,
       );
       const paths = server.getRecordedRequests().map((r) => r.path);
-      expect(paths).toContain('/api/alm_integration/list_github_organizations');
-      expect(paths).not.toContain('/api/alm_integration/check_pat');
+      expect(paths).toContain('/api/alm_integrations/list_github_organizations');
+      expect(paths).not.toContain('/api/alm_integrations/check_pat');
+    });
+
+    it('reports a platform that cannot be reached as an error, not as a rejected token', async () => {
+      const server = await startServer((s) =>
+        s.withDopSettings([GITLAB]).withPatResponse('my-gitlab', {
+          status: 400,
+          message: 'Unable to contact Bitbucket server',
+        }),
+      );
+
+      const result = await harness.run('import --non-interactive --all');
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Unable to contact Bitbucket server');
+      expect(output).not.toContain('was rejected');
+      expect(output).not.toContain(`${server.baseUrl()}/projects/create`);
     });
 
     it('explains the missing permission on a 403', async () => {
