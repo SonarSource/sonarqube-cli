@@ -151,6 +151,13 @@ describe('ServerImportApiClient', () => {
       expect(await api[method]('s')).toBe('invalid');
     });
 
+    it('rejects with the server message on a 400 that is not about the token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('Unable to contact Bitbucket server'));
+      const error = await api[method]('s').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+      expect((error as BadRequestError).message).toBe('Unable to contact Bitbucket server');
+    });
+
     it('rejects with the original error when the status is not about the token', async () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 403 }));
       const error = await api[method]('s').catch((e: unknown) => e);
