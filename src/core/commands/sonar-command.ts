@@ -40,7 +40,7 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { isResult, type ResultAsync } from '@/core/result.ts';
-import { loadState, saveState } from '@/core/state/state-manager.ts';
+import { loadState, updateState } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
@@ -745,13 +745,13 @@ export class SonarCommand extends Command {
     }
 
     this._console.info(message, 'stderr');
-    state.config.betaCommandWarnings = {
-      ...state.config.betaCommandWarnings,
-      [warningKey]: VERSION,
-    };
-
     try {
-      saveState(state);
+      updateState((latest) => {
+        latest.config.betaCommandWarnings = {
+          ...latest.config.betaCommandWarnings,
+          [warningKey]: VERSION,
+        };
+      });
     } catch (err) {
       logger.debug(`Failed to persist Beta command warning: ${(err as Error).message}`);
     }

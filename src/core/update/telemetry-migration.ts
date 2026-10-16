@@ -28,7 +28,7 @@ import { appendTelemetryEvent } from '@/core/telemetry/telemetry-events.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 
 /** Migrates legacy telemetry events to the new pipeline (telemetry-events.ndjson). */
 export function migrateLegacyTelemetryEvents(): void {
@@ -38,17 +38,20 @@ export function migrateLegacyTelemetryEvents(): void {
 
 /** Moves any events left in `state.telemetry.events` to `telemetry-events.ndjson`. */
 function migrateStateQueue(): void {
-  const state = loadState();
-  const legacyEvents = state.telemetry.events ?? [];
+  if ((loadState().telemetry.events?.length ?? 0) === 0) {
+    return;
+  }
+  const legacyEvents = updateState((state) => {
+    const events = state.telemetry.events ?? [];
+    delete state.telemetry.events;
+    return events;
+  });
   if (legacyEvents.length === 0) {
     return;
   }
 
   // Clear the queue first, then drain: a crash mid-way loses a rare
   // best-effort event instead of re-appending duplicates on the next launch.
-  delete state.telemetry.events;
-  saveState(state);
-
   for (const event of legacyEvents) {
     appendTelemetryEvent(event);
   }

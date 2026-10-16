@@ -28,7 +28,7 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
-import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -40,6 +40,7 @@ import {
   renderInstallPreview,
 } from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
+import { persistIntegrationChanges } from './integration-state-updates.ts';
 import type { IntegrationRegistry } from './registry.ts';
 import {
   customizeFeatureSelection,
@@ -95,6 +96,7 @@ export async function installIntegration<TOptions>({
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const state = loadState();
+  const stateBeforeInstall = structuredClone(state);
   const invocation: IntegrationInvocation<TOptions> = {
     options,
     targetRoot,
@@ -169,7 +171,7 @@ export async function installIntegration<TOptions>({
       noteProject(auth, projectKeyFromAttrs(attrs));
     }
 
-    const stateSaved = saveInstalledFeatures(state, console);
+    const stateSaved = saveInstalledFeatures(stateBeforeInstall, state, console);
     if (stateSaved) {
       await onSuccess?.({
         installedFeatures,
@@ -181,7 +183,7 @@ export async function installIntegration<TOptions>({
 
     return stateSaved ? installedFeatures : [];
   } catch (error) {
-    saveInstalledFeatures(state, console);
+    saveInstalledFeatures(stateBeforeInstall, state, console);
     throw error;
   }
 }
@@ -265,9 +267,9 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
   return isGit ? gitRoot : null;
 }
 
-function saveInstalledFeatures(state: CliState, console: Console): boolean {
+function saveInstalledFeatures(before: CliState, state: CliState, console: Console): boolean {
   try {
-    saveStateKeepingInstalledDependencies(state);
+    persistIntegrationChanges(before, state);
     return true;
   } catch (err) {
     const msg = (err as Error).message;
