@@ -30,7 +30,18 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 
 type Lookup = 'found' | 'missing' | 'hidden';
 
-async function importAll(lookups: Record<string, Lookup>, bindings: ProjectBindingResponse[] = []) {
+type GitlabRepo = { id: number; name: string; slug: string; pathSlug: string };
+
+const DEFAULT_REPOS: GitlabRepo[] = [
+  { id: 1, name: 'repo-a', slug: 'repo-a', pathSlug: 'group' },
+  { id: 2, name: 'repo-b', slug: 'repo-b', pathSlug: 'group' },
+];
+
+async function importAll(
+  lookups: Record<string, Lookup>,
+  bindings: ProjectBindingResponse[] = [],
+  repos: GitlabRepo[] = DEFAULT_REPOS,
+) {
   const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
   const api = {
     listDopSettings: () =>
@@ -38,11 +49,8 @@ async function importAll(lookups: Record<string, Lookup>, bindings: ProjectBindi
     checkPat: () => Promise.resolve('valid' as const),
     searchGitlabRepos: () =>
       Promise.resolve({
-        repositories: [
-          { id: 1, name: 'repo-a', slug: 'repo-a', pathSlug: 'group' },
-          { id: 2, name: 'repo-b', slug: 'repo-b', pathSlug: 'group' },
-        ],
-        total: 2,
+        repositories: repos,
+        total: repos.length,
       }),
     lookupProject: (key: string) => Promise.resolve(lookups[key] ?? 'missing'),
     searchProjectBindings: () => Promise.resolve(bindings),
@@ -51,7 +59,7 @@ async function importAll(lookups: Record<string, Lookup>, bindings: ProjectBindi
   const backend = new ServerBackend(api, 'https://sonarqube.example.com');
 
   const plan = await backend.plan(
-    { repo: ['group/repo-a', 'group/repo-b'], nonInteractive: true },
+    { repo: repos.map((r) => `${r.pathSlug}/${r.slug}`), nonInteractive: true },
     new FakeConsole(),
   );
   if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
@@ -98,5 +106,29 @@ describe('ServerBackend project key guard', () => {
 
     expect(outcomes.map((o) => o.status)).toEqual(['fulfilled', 'fulfilled']);
     expect(putBoundProject).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a second repository whose derived key collides with one imported in the same run', async () => {
+    const { outcomes, putBoundProject } = await importAll(
+      {},
+      [],
+      [
+        { id: 1, name: 'my_repo', slug: 'my_repo', pathSlug: 'acme' },
+        { id: 2, name: 'repo', slug: 'repo', pathSlug: 'acme_my' },
+      ],
+    );
+
+    expect(outcomes[0].status).toBe('fulfilled');
+    expect(outcomes[1]).toMatchObject({
+      status: 'rejected',
+      reason: {
+        message:
+          "Repository 'acme_my/repo' would get the project key 'acme_my_repo', already used by another repository in this run.",
+      },
+    });
+    expect(putBoundProject).toHaveBeenCalledTimes(1);
+    expect(putBoundProject).toHaveBeenCalledWith(
+      expect.objectContaining({ projectKey: 'acme_my_repo', repositoryIdentifier: '1' }),
+    );
   });
 });
