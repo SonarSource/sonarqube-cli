@@ -28,6 +28,7 @@ import { cursorIntegration } from './cursor/declaration.ts';
 import { devinIntegration } from './devin/declaration.ts';
 import { GIT_INTEGRATIONS } from './git/tools';
 import { openCodeIntegration } from './opencode/declaration.ts';
+import { piIntegration } from './pi/declaration.ts';
 
 export const ALL_INTEGRATIONS = [
   antigravityIntegration,
@@ -37,6 +38,7 @@ export const ALL_INTEGRATIONS = [
   cursorIntegration,
   openCodeIntegration,
   devinIntegration,
+  piIntegration,
   ...GIT_INTEGRATIONS,
 ] as const;
 
