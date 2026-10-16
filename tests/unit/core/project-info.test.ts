@@ -148,6 +148,24 @@ describe('discoverProject', () => {
     remoteSpy.mockRestore();
   });
 
+  it('logs each unsuccessful discovery source while keeping silent output empty', async () => {
+    const debug = spyOn(logger, 'debug');
+    const console = new FakeConsole();
+    try {
+      await discoverProject(testDir, { console, auth: MOCK_AUTH, silent: true });
+      const messages = debug.mock.calls.map(([message]) => message).join('\n');
+      expect(messages).toContain('Project discovery shared config: no usable .sonar-config.json');
+      expect(messages).toContain('Project discovery known mappings: no mapping matched');
+      expect(messages).toContain(
+        'Project discovery local config: no usable sonar-project.properties or .sonarlint config',
+      );
+      expect(messages).toContain('Project discovery git remote binding: no git remote found');
+      expect(console.calls).toEqual([]);
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
   it('resolves repoRoot from filesystem, undefined outside a git repository', async () => {
     expect(
       (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).repoRoot,
