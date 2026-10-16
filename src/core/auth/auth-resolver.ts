@@ -202,7 +202,7 @@ export class AuthResolver {
     // instead of a misleading "not authenticated".
     const state = loadState();
     const active = getActiveConnection(state);
-    if (!active) {
+    if (!active || active.envOnly) {
       return null;
     }
     const connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };
