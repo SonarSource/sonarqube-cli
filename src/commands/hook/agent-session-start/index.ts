@@ -42,6 +42,7 @@ import { readStdinJson } from '../stdin.ts';
 import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
+import { piAdapter } from './agent-adapters/pi-adapter.ts';
 import type {
   SessionStartAgent,
   SessionStartAgentAdapter,
@@ -159,6 +160,7 @@ const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
   codex: claudeCodexAdapter,
   copilot: copilotAdapter,
   cursor: cursorAdapter,
+  pi: piAdapter,
 };
 
 function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {
