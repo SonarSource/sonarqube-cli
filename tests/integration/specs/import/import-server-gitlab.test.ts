@@ -224,7 +224,8 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(output).toContain(
       "no personal access token is connected for GitLab setting 'my-gitlab'",
     );
-    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab&resetPat=1`);
+    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab`);
+    expect(output).not.toContain('resetPat');
   });
 
   it('explains a platform failure for one repository with the way to fix it', async () => {
@@ -243,7 +244,8 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(result.exitCode).toBe(1);
     const output = result.stdout + result.stderr;
     expect(output).toContain('GitLab could not return the repository');
-    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab&resetPat=1`);
+    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=gitlab`);
+    expect(output).not.toContain('resetPat');
   });
 
   it('explains a project key that already exists with a different name', async () => {
