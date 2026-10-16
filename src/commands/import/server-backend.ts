@@ -74,6 +74,7 @@ export class ServerBackend implements ImportBackend {
     }
 
     const repositories = new Map<string, ServerRepository>();
+    const claimedKeys = new Map<string, string>();
     const fetchServerPage = support.listRepositories(this.api, setting);
     const selection = await selectRepos(
       {
@@ -86,6 +87,10 @@ export class ServerBackend implements ImportBackend {
         },
         scope: 'this DevOps platform',
         platformScope: 'this DevOps platform',
+        noRepositoriesHint:
+          'The personal access token may not see any repository, or the DevOps platform connection may need to be reconfigured.',
+        notFoundHint:
+          'Check that the repository path(s) are correct and visible to your personal access token.',
         almKey: undefined,
         onlyPrivateProjects: NO_VISIBILITY_RESTRICTION,
       },
@@ -96,21 +101,31 @@ export class ServerBackend implements ImportBackend {
       selection,
       projectListUrl: `${this.serverUrl.replace(/\/$/, '')}/projects`,
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
-      importRepo: (resolved) => this.importRepository(setting, repositories, resolved),
+      importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
     };
   }
 
   private async importRepository(
     setting: DopSetting,
     repositories: Map<string, ServerRepository>,
+    claimedKeys: Map<string, string>,
     resolved: ResolvedRepo,
   ): Promise<ImportRepoOutcome> {
     const repository = repositories.get(resolved.installationKey);
     if (!repository) {
       throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
     }
+    const projectKey = deriveProjectKey(repository.slug);
+    const claimedBy = claimedKeys.get(projectKey);
+    if (claimedBy !== undefined && claimedBy !== repository.id) {
+      throw new CommandFailedError(
+        `Repository '${repository.slug}' would get the project key '${projectKey}', already used by another repository in this run.`,
+        { remediationHint: 'Import it from SonarQube Server in your browser instead.' },
+      );
+    }
+    claimedKeys.set(projectKey, repository.id);
     const { newProjectCreated } = await this.api.putBoundProject({
-      projectKey: deriveProjectKey(repository.slug),
+      projectKey,
       projectName: repository.name,
       devOpsPlatformSettingId: setting.id,
       repositoryIdentifier: repository.repositoryIdentifier,
