@@ -39,10 +39,20 @@ describe('patStatusFromError', () => {
 
   it.each([
     ['Invalid personal access token'],
-    ['Unable to contact Bitbucket server'],
-    ['SonarQube API error: 400 Bad Request'],
-  ])('reports an invalid token for any other 400: %p', (message) => {
+    ['Your GitLab token was revoked'],
+    ['Your GitLab token is expired'],
+    ['Your GitLab token has insufficient scope'],
+    ['Error returned by Bitbucket Cloud: Token is invalid [HTTP 401]'],
+  ])('reports an invalid token when the platform rejects it: %p', (message) => {
     expect(patStatusFromError(new BadRequestError(message))).toBe('invalid');
+  });
+
+  it.each([
+    ['Unable to contact Bitbucket server'],
+    ['Unable to contact Azure DevOps server : boom'],
+    ['SonarQube API error: 400 Bad Request'],
+  ])('says nothing about the token on a 400 that is not a rejection: %p', (message) => {
+    expect(patStatusFromError(new BadRequestError(message))).toBeUndefined();
   });
 
   it.each([
