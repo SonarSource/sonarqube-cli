@@ -1592,7 +1592,15 @@ export class FakeSonarQubeServerBuilder {
             );
 
           if (!projectData) {
-            return notFound();
+            const boundOnly = projectBindings.find((b) => b.projectKey === componentKey);
+            return boundOnly
+              ? new Response(
+                  JSON.stringify({
+                    component: { key: boundOnly.projectKey, name: boundOnly.projectKey },
+                  }),
+                  { headers: { 'Content-Type': 'application/json' } },
+                )
+              : notFound();
           }
 
           if (projectData.componentShowStatusCode !== undefined) {
@@ -2322,19 +2330,25 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {
-          const { dopSettingId, pageSize: pageSizeStr, pageIndex: pageIndexStr } = query;
+          const {
+            dopSettingId,
+            repository,
+            pageSize: pageSizeStr,
+            pageIndex: pageIndexStr,
+          } = query;
           const pageSize = Number.parseInt(pageSizeStr ?? '500', 10);
           const pageIndex = Number.parseInt(pageIndexStr ?? '1', 10);
-          const filtered = dopSettingId
-            ? projectBindings.filter((b) => b.dopSettingId === dopSettingId)
-            : projectBindings;
+          const filtered = projectBindings
+            .filter((b) => !dopSettingId || b.dopSettingId === dopSettingId)
+            .filter((b) => !repository || b.repository.toLowerCase() === repository.toLowerCase());
           const start = (pageIndex - 1) * pageSize;
           const page = filtered.slice(start, start + pageSize);
           return new Response(
             JSON.stringify({
-              projectBindings: page.map(({ projectKey, repository }) => ({
+              projectBindings: page.map(({ projectKey, repository, dopSettingId }) => ({
                 projectKey,
                 repository,
+                devOpsPlatformSettingId: dopSettingId,
               })),
               page: { total: filtered.length, pageSize, pageIndex },
             }),
