@@ -36,7 +36,8 @@ import {
   fetchWithRetry,
   readSqaaFileContent,
   resolveSqaaPath,
-  toRelativePosixPath,
+  type SqaaPath,
+  withDisplayFilePath,
 } from './sqaa-api.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
@@ -164,18 +165,20 @@ function displaySingleFileReport(
 }
 
 export async function runSqaaAnalysesTallyForResolved(
-  files: string[],
-  allPaths: string[],
+  paths: SqaaPath[],
   resolved: SqaaResolvedContext,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
   console: Console,
 ): Promise<RunTally> {
-  const silentProgress = new SqaaProgress({ files: allPaths, silent: true, console });
+  const silentProgress = new SqaaProgress({
+    files: paths.map((p) => p.displayPath),
+    silent: true,
+    console,
+  });
   const ctx: RunContext = {
-    files,
-    allPaths,
+    ...runContextPaths(paths),
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -186,16 +189,25 @@ export async function runSqaaAnalysesTallyForResolved(
   return runAnalyses(ctx);
 }
 
+function runContextPaths(
+  paths: SqaaPath[],
+): Pick<RunContext, 'files' | 'allPaths' | 'serverPaths'> {
+  return {
+    files: paths.map((p) => p.absolutePath),
+    allPaths: paths.map((p) => p.displayPath),
+    serverPaths: paths.map((p) => p.serverPath),
+  };
+}
+
 export async function fetchSingleFileReport(
   connection: SonarConnection,
   projectKey: string,
-  file: string,
+  path: SqaaPath,
   fileContent: string,
   branch?: string,
   wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
-  const path = resolveSqaaPath(file);
   try {
     const response = await fetchWithRetry(
       connection,
@@ -209,7 +221,7 @@ export async function fetchSingleFileReport(
     return {
       report: singleFileSuccessReport(
         path.displayPath,
-        response.issues,
+        withDisplayFilePath(response.issues, path.displayPath),
         response.errors,
         displayDepth,
       ),
@@ -249,15 +261,16 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  const { connection, projectKey } = resolved;
+  const { connection, projectKey, projectRoot } = resolved;
   const { auth } = connection;
+  const path = resolveSqaaPath(file, projectRoot);
   const fileContent = readSqaaFileContent(file);
 
   const { result: fetchResult, durationMs } = await timed(() =>
     fetchSingleFileReport(
       connection,
       projectKey,
-      file,
+      path,
       fileContent,
       branch,
       wireDepth,
@@ -265,14 +278,13 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
     ),
   );
   const { report, error } = fetchResult;
-  const filePath = toRelativePosixPath(file);
 
   if (format === 'json') {
     await printSqaaJsonReport(report, connection, console);
   } else if (error instanceof SqaaForbiddenError) {
     await printVortexUnavailableForForbidden(connection, console);
   } else if (error) {
-    printSingleFileTextFailure(filePath, error, console, displayDepth);
+    printSingleFileTextFailure(path.displayPath, error, console, displayDepth);
   } else {
     displaySingleFileReport(report, displayDepth, console);
   }
@@ -294,14 +306,13 @@ export async function runSqaaAnalysisOnExplicitFiles(
     console,
   } = options;
   const cwd = process.cwd();
-  const files = entries.map((e) => e.absolutePath);
-  const allPaths = files.map((f) => toRelativePosixPath(f, cwd));
+  const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
+  const allPaths = paths.map((p) => p.displayPath);
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
       runSqaaAnalysesTallyForResolved(
-        files,
-        allPaths,
+        paths,
         resolved,
         branch,
         wireDepth,
@@ -317,8 +328,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
 
   const progress = new SqaaProgress({ files: allPaths, console: options.console });
   const ctx: RunContext = {
-    files,
-    allPaths,
+    ...runContextPaths(paths),
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -349,13 +359,13 @@ export async function runSqaaAnalysisOnFiles(
   } = options;
   const { files, ignored, repoRoot } = changeSet;
   const { connection, projectKey } = resolved;
-  const allPaths = files.map((f) => toRelativePosixPath(f, repoRoot));
+  const paths = files.map((f) => resolveSqaaPath(f, resolved.projectRoot, repoRoot));
+  const allPaths = paths.map((p) => p.displayPath);
 
   if (format === 'json') {
     const { result: tally, durationMs } = await timed(() =>
       runSqaaAnalysesTallyForResolved(
-        files,
-        allPaths,
+        paths,
         resolved,
         branch,
         wireDepth,
@@ -378,8 +388,7 @@ export async function runSqaaAnalysisOnFiles(
     console: options.console,
   });
   const ctx: RunContext = {
-    files,
-    allPaths,
+    ...runContextPaths(paths),
     connection,
     projectKey,
     branch,

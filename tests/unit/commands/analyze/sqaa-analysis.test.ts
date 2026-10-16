@@ -20,6 +20,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import {
+  distributeChunkResponse,
+  runAnalyses,
+  shouldContinueAfterChunk,
+} from '@/commands/analyze/sqaa-analysis.ts';
+import type { SqaaChunkFile } from '@/commands/analyze/sqaa-chunking.ts';
+import { payloadTooLargeCommandError } from '@/commands/analyze/sqaa-errors.ts';
 import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -27,22 +34,15 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { RequestPayloadTooLargeError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
-import {
-  distributeChunkResponse,
-  runAnalyses,
-  shouldContinueAfterChunk,
-} from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import * as sqaaApi from '../../../../src/commands/analyze/sqaa-api.ts';
-import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
-import { payloadTooLargeCommandError } from '../../../../src/commands/analyze/sqaa-errors.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('distributeChunkResponse', () => {
   it('attaches chunk-level errors only to the first file', () => {
     const chunkErrors = [{ code: 'WARN', message: 'chunk warning' }];
     const results = distributeChunkResponse([], chunkErrors, [
-      { file: '/repo/a.ts', filePath: 'a.ts' },
-      { file: '/repo/b.ts', filePath: 'b.ts' },
+      { file: '/repo/a.ts', filePath: 'a.ts', serverPath: 'a.ts' },
+      { file: '/repo/b.ts', filePath: 'b.ts', serverPath: 'b.ts' },
     ]);
 
     expect(results).toHaveLength(2);
@@ -55,13 +55,29 @@ describe('distributeChunkResponse', () => {
       [{ rule: 'ts:S1', message: 'issue', filePath: './a.ts', id: '1' }],
       null,
       [
-        { file: '/repo/a.ts', filePath: 'a.ts' },
-        { file: '/repo/b.ts', filePath: 'b.ts' },
+        { file: '/repo/a.ts', filePath: 'a.ts', serverPath: 'a.ts' },
+        { file: '/repo/b.ts', filePath: 'b.ts', serverPath: 'b.ts' },
       ],
     );
 
     expect(results[0].issues).toHaveLength(1);
     expect(results[1].issues).toHaveLength(0);
+  });
+
+  it('matches issues on the server path and reports them under the display path', () => {
+    const results = distributeChunkResponse(
+      [{ rule: 'ts:S1', message: 'issue', filePath: 'src/b.ts', id: '1' }],
+      null,
+      [
+        { file: '/repo/pkg/src/a.ts', filePath: 'pkg/src/a.ts', serverPath: 'src/a.ts' },
+        { file: '/repo/pkg/src/b.ts', filePath: 'pkg/src/b.ts', serverPath: 'src/b.ts' },
+      ],
+    );
+
+    expect(results[0].issues).toHaveLength(0);
+    expect(results[1].issues).toEqual([
+      { rule: 'ts:S1', message: 'issue', filePath: 'pkg/src/b.ts', id: '1' },
+    ]);
   });
 });
 
@@ -189,6 +205,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files,
       allPaths: ['a.ts', 'b.ts', 'c.ts'],
+      serverPaths: ['a.ts', 'b.ts', 'c.ts'],
       connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,
@@ -225,6 +242,7 @@ describe('runAnalyses partial 413', () => {
     const tally = await runAnalyses({
       files: ['/repo/ok.ts', '/repo/bad.ts'],
       allPaths: ['ok.ts', 'bad.ts'],
+      serverPaths: ['ok.ts', 'bad.ts'],
       connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,

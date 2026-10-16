@@ -77,7 +77,7 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
+/** discoverProject result carrying just enough for discoverSqaaProject to resolve `projectKey`. */
 function makeDiscoveredProject(projectKey: string | undefined) {
   return {
     repoRoot: process.cwd(),
