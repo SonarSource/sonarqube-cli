@@ -173,7 +173,10 @@ function createBackend(
 ): ImportBackend {
   const { httpClient } = ctx.connection;
   if (!httpClient.isCloud) {
-    return new ServerBackend(new ServerImportApiClient(httpClient), ctx.auth.serverUrl);
+    return new ServerBackend(
+      new ServerImportApiClient(httpClient, ctx.auth.serverUrl),
+      ctx.auth.serverUrl,
+    );
   }
   if (options.dopSetting !== undefined) {
     throw new InvalidOptionError(
