@@ -91,15 +91,15 @@ export const githubSupport: PlatformSupport = {
     }
 
     async function fill(wanted: number): Promise<void> {
-      while (buffer.length < wanted) {
-        if (organizationIndex < organizations.length) {
-          await loadRepositories(organizations[organizationIndex]);
-        } else if (organizationsDone) {
-          return;
-        } else {
-          await loadOrganizations();
-        }
+      if (buffer.length >= wanted) return;
+      if (organizationIndex < organizations.length) {
+        await loadRepositories(organizations[organizationIndex]);
+      } else if (organizationsDone) {
+        return;
+      } else {
+        await loadOrganizations();
       }
+      await fill(wanted);
     }
 
     return async (_pageIndex, pageSize) => {
