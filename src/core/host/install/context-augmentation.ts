@@ -18,8 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
@@ -49,6 +49,23 @@ import {
   makeExecutable,
   verifyInstallation,
 } from './install-utils.ts';
+
+const CONTEXT_AUGMENTATION_BINARY_PATH_ENV = 'SONAR_CONTEXT_AUGMENTATION_BINARY_PATH';
+
+function resolveBinaryOverride(): string | null {
+  const binaryPath = process.env[CONTEXT_AUGMENTATION_BINARY_PATH_ENV]?.trim();
+  if (!binaryPath) return null;
+  if (!isAbsolute(binaryPath) || !existsSync(binaryPath) || !statSync(binaryPath).isFile()) {
+    throw new CommandFailedError(
+      `${CONTEXT_AUGMENTATION_BINARY_PATH_ENV} must point to an existing absolute binary file.`,
+      {
+        remediationHint:
+          'Build Vortex Context locally and set this variable to the executable path, or unset it to use the released binary.',
+      },
+    );
+  }
+  return binaryPath;
+}
 
 export interface ContextAugmentationInstallOptions {
   console: Console;
@@ -85,6 +102,12 @@ export async function installContextAugmentationBinary(console: Console): Promis
  * if it is not present on disk. Never downloads.
  */
 export function resolveContextAugmentationBinaryPath(): string | null {
+  const override = resolveBinaryOverride();
+  if (override) return override;
+  return resolveReleasedContextAugmentationBinaryPath();
+}
+
+export function resolveReleasedContextAugmentationBinaryPath(): string | null {
   const binaryPath = join(BIN_DIR, buildLocalCagBinaryName(detectPlatform()));
   return existsSync(binaryPath) ? binaryPath : null;
 }
@@ -97,6 +120,8 @@ export function resolveContextAugmentationBinaryPath(): string | null {
 export async function resolveContextAugmentationBinary(
   options: ContextAugmentationInstallOptions,
 ): Promise<ContextAugmentationInstallResult> {
+  const override = resolveBinaryOverride();
+  if (override) return { binaryPath: override, freshlyInstalled: false };
   const platform = detectPlatform();
   const resolvedBinDir = ensureBinDirectory(options.binDir);
   const localName = buildLocalCagBinaryName(platform);
