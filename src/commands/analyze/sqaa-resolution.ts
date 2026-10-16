@@ -23,7 +23,11 @@
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { type DiscoveredProject, discoverProject } from '@/core/project-info.ts';
+import {
+  type DiscoveredProject,
+  discoverProject,
+  type DiscoverProjectOptions,
+} from '@/core/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
@@ -72,7 +76,9 @@ export async function resolveSqaaConnectionAndProject(
   }
 
   const lookupDir = startDir ?? process.cwd();
-  const discovered = await discoverSqaaProject(auth, console, lookupDir);
+  const discovered = await discoverSqaaProject(auth, console, lookupDir, {
+    useGitRemoteBinding: !explicitProject,
+  });
   const projectKey = explicitProject ?? discovered.projectKey;
   if (!projectKey) return { kind: 'no-project' };
 
@@ -108,11 +114,13 @@ export async function discoverSqaaProject(
   auth: ResolvedAuth,
   console: Console,
   startDir?: string,
+  options: Pick<DiscoverProjectOptions, 'useGitRemoteBinding'> = {},
 ): Promise<DiscoveredProject> {
   const discovered = await discoverProject(startDir ?? process.cwd(), {
     auth,
     silent: true,
     console,
+    ...options,
   });
   if (!discovered.projectKey) {
     logger.debug('Vortex analysis: no project key discovered');
