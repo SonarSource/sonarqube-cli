@@ -423,7 +423,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ organizations: [], paging: { total: 0 } });
       await api.listGithubOrganizations('my-github', 2, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_github_organizations');
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_organizations');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-github',
         p: '2',
@@ -463,7 +463,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
       await api.listGithubRepositories('my-github', 'acme', 3, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_github_repositories');
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_repositories');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-github',
         organization: 'acme',
