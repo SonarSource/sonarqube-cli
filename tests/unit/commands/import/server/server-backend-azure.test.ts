@@ -32,7 +32,6 @@ describe('ServerBackend importing from Azure DevOps', () => {
       listDopSettings: () =>
         Promise.resolve([{ id: 'az-id', key: 'my-azure', type: 'azure' as const }]),
       checkPat: () => Promise.resolve('valid' as const),
-      listAzureProjects: () => Promise.resolve([{ name: 'My Project' }]),
       searchAzureRepos: () => Promise.resolve([{ name: 'web-app', projectName: 'My Project' }]),
       lookupProject: () => Promise.resolve('missing' as const),
       putBoundProject,
