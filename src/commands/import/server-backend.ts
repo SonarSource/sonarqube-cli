@@ -35,6 +35,7 @@ import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-back
 import type { OnlyPrivateProjects } from './repository-collection';
 import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
 import { buildConnectUrl } from './server/connect-url.ts';
+import { explainImportFailure } from './server/import-failure.ts';
 import type { PatStatus } from './server/pat-status.ts';
 import { SUPPORTED_PLATFORMS } from './server/platforms.ts';
 import { deriveProjectKey } from './server/project-key.ts';
@@ -128,14 +129,31 @@ export class ServerBackend implements ImportBackend {
       );
     }
     claimedKeys.set(projectKey, repository.id);
-    const { newProjectCreated } = await this.api.putBoundProject({
-      projectKey,
-      projectName: repository.name,
-      devOpsPlatformSettingId: setting.id,
-      repositoryIdentifier: repository.repositoryIdentifier,
-      projectIdentifier: repository.projectIdentifier,
-    });
+    const { newProjectCreated } = await this.api
+      .putBoundProject({
+        projectKey,
+        projectName: repository.name,
+        devOpsPlatformSettingId: setting.id,
+        repositoryIdentifier: repository.repositoryIdentifier,
+        projectIdentifier: repository.projectIdentifier,
+      })
+      .catch((error: unknown) => {
+        throw this.explainedImportFailure(error, setting, projectKey);
+      });
     return newProjectCreated ? {} : { detail: 'project already existed, binding updated' };
+  }
+
+  private explainedImportFailure(error: unknown, setting: DopSetting, projectKey: string): unknown {
+    const reason = explainImportFailure(error, {
+      settingKey: setting.key,
+      platformLabel: DOP_PLATFORM_LABELS[setting.type],
+      connectUrl: this.reconnectUrl(setting, 'missing'),
+      reconnectUrl: this.reconnectUrl(setting, 'invalid'),
+      projectKey,
+    });
+    return error instanceof Error && reason === error.message
+      ? error
+      : new CommandFailedError(reason);
   }
 
   private async loadSettings(): Promise<DopSetting[]> {
