@@ -19,8 +19,11 @@
  */
 
 import { chmodSync, existsSync, readlinkSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
+
+import { managedInstallationMarkerPath } from '@/core/host/managed-installation.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
 import { isRealCli, isRoot, isStub, isSymlink, MdmSandbox, modeOf } from './mdm-sandbox';
@@ -53,6 +56,27 @@ describe('mdm install', () => {
     expect(result.stdout + result.stderr).toContain(sandbox.binaryPath);
     expect(isRealCli(sandbox.binaryPath)).toBe(true);
     expect(await installedVersion()).toBe(reference.stdout);
+  });
+
+  describe.skipIf(IS_WINDOWS)('under a restrictive umask', () => {
+    let previousUmask: number;
+
+    beforeEach(() => {
+      previousUmask = process.umask(0o077);
+    });
+
+    afterEach(() => {
+      process.umask(previousUmask);
+    });
+
+    it('creates an install directory and files other users can read and run', async () => {
+      const result = await sandbox.run(`install --managed-message "Ask IT."`);
+
+      expect(result.exitCode).toBe(0);
+      expect(modeOf(dirname(sandbox.binaryPath))).toBe(0o755);
+      expect(modeOf(sandbox.binaryPath)).toBe(0o755);
+      expect(modeOf(managedInstallationMarkerPath(sandbox.binaryPath))).toBe(0o644);
+    });
   });
 
   it.skipIf(IS_WINDOWS)('installs with mode 755', async () => {

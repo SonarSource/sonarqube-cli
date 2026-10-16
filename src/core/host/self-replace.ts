@@ -41,6 +41,7 @@ const MOVEFILE_DELAY_UNTIL_REBOOT = 4;
 const HELPER_RETRY_COUNT = 120;
 const HELPER_RETRY_DELAY_MS = 500;
 export const EXECUTABLE_MODE = 0o755;
+const DIRECTORY_MODE = 0o755;
 
 const DELETE_HELPER_SCRIPT = `
 Wait-Process -Id $env:${PARENT_PID_ENV} -ErrorAction SilentlyContinue
@@ -62,6 +63,19 @@ Add-Type -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true, CharSe
 [NativeMethods.Win32MoveFile]::MoveFileEx($env:${DELETE_TARGET_ENV}, [NullString]::Value, ${MOVEFILE_DELAY_UNTIL_REBOOT}) | Out-Null
 Start-Process -FilePath '${windowsPowerShellPath()}' -ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','${helper}' -WindowStyle Hidden
 `;
+}
+
+function createTraversableDirectory(directory: string): void {
+  const firstCreated = mkdirSync(directory, { recursive: true });
+  if (firstCreated === undefined || isWindows()) {
+    return;
+  }
+  for (let current = directory; ; current = dirname(current)) {
+    chmodSync(current, DIRECTORY_MODE);
+    if (current === firstCreated) {
+      return;
+    }
+  }
 }
 
 function asideSuffix(): string {
@@ -120,7 +134,7 @@ async function discardAside(path: string, emptyDirectories: string[] = []): Prom
 }
 
 export async function replaceBinary(sourcePath: string, targetPath: string): Promise<void> {
-  mkdirSync(dirname(targetPath), { recursive: true });
+  createTraversableDirectory(dirname(targetPath));
   const incomingPath = `${targetPath}.new`;
   rmSync(incomingPath, { force: true });
   copyFileSync(sourcePath, incomingPath);

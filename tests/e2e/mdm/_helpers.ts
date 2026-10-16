@@ -22,7 +22,7 @@
 // (/usr/local/bin/sonar, C:\Program Files\sonarqube-cli\bin, the machine PATH), so they run only
 // on CI (or with SONARQUBE_CLI_E2E_MDM=1), only when elevated, and never over an existing install.
 
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -105,10 +105,14 @@ async function collect(proc: ReturnType<typeof Bun.spawn>): Promise<RunResult> {
 export function runElevatedCommand(
   command: string[],
   env: Record<string, string>,
+  options: { umask?: string } = {},
 ): Promise<RunResult> {
   const useSudo = !IS_WINDOWS && process.getuid?.() !== 0;
   const assignments = Object.entries(env).map(([key, value]) => `${key}=${value}`);
-  const spawnArgs = useSudo ? ['sudo', '-n', 'env', ...assignments, ...command] : command;
+  const withUmask = options.umask
+    ? ['sh', '-c', `umask ${options.umask}; exec "$@"`, 'sh', ...command]
+    : command;
+  const spawnArgs = useSudo ? ['sudo', '-n', 'env', ...assignments, ...withUmask] : withUmask;
   return collect(
     Bun.spawn(spawnArgs, {
       env: useSudo ? { PATH: SYSTEM_PATH } : env,
@@ -133,6 +137,28 @@ export async function runUnelevated(
 ): Promise<RunResult> {
   return collect(
     Bun.spawn([binary, ...args], { env: isolatedEnv(home), stdout: 'pipe', stderr: 'pipe' }),
+  );
+}
+
+const OTHER_USER = 'nobody';
+
+export function otherUserAvailable(): boolean {
+  return !IS_WINDOWS && Bun.spawnSync(['id', OTHER_USER]).exitCode === 0;
+}
+
+export function shareWithOtherUsers(home: string): void {
+  chmodSync(home, 0o777);
+  chmodSync(join(home, '.sonar'), 0o777);
+}
+
+export function runAsOtherUser(command: string[], home: string): Promise<RunResult> {
+  const assignments = Object.entries(isolatedEnv(home)).map(([key, value]) => `${key}=${value}`);
+  return collect(
+    Bun.spawn(['sudo', '-n', '-u', OTHER_USER, 'env', ...assignments, ...command], {
+      env: { PATH: SYSTEM_PATH },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }),
   );
 }
 

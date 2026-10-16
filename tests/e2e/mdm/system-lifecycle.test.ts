@@ -21,7 +21,7 @@
 // Real-system e2e for `sonar mdm`: real install location, real user enumeration, real file locks.
 // Skipped unless elevated on CI (see _helpers.ts).
 
-import { existsSync, lstatSync, mkdirSync, readlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readlinkSync, statSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 
 import {
@@ -36,6 +36,7 @@ import {
 } from 'bun:test';
 
 import { standaloneBinaryPath } from '@/commands/mdm/mdm-environment.ts';
+import { managedInstallationMarkerPath } from '@/core/host/managed-installation.ts';
 
 import { IS_WINDOWS } from '../../integration/harness';
 import { getCliBinaryPath } from '../../integration/harness/cli-runner.js';
@@ -55,12 +56,16 @@ import {
   isolatedEnv,
   machinePath,
   makeIsolatedHome,
+  otherUserAvailable,
   REAL_CDN_BASE_URL,
   realUserHomeIfEnumerable,
   removeSystemInstall,
   restoreMachinePath,
+  runAsOtherUser,
+  runElevatedCommand,
   runMdm,
   runUnelevated,
+  shareWithOtherUsers,
   SYSTEM_BINARY,
 } from './_helpers';
 
@@ -174,6 +179,47 @@ describe.skipIf(!CAN_RUN_SYSTEM_E2E)('sonar mdm on the real system', () => {
       const attribute = Bun.spawnSync(['xattr', '-p', 'com.apple.quarantine', SYSTEM_BINARY]);
 
       expect(attribute.exitCode).not.toBe(0);
+    });
+  });
+
+  describe.skipIf(IS_WINDOWS || !otherUserAvailable())('as seen by another user', () => {
+    beforeEach(() => {
+      shareWithOtherUsers(home);
+    });
+
+    it('installs under a restrictive umask so that another user can run it and gets the managed message', async () => {
+      const result = await runElevatedCommand(
+        [getCliBinaryPath(), 'mdm', 'install', '--managed-message', 'Ask IT.'],
+        env,
+        { umask: '077' },
+      );
+
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      const reference = await runUnelevated(getCliBinaryPath(), ['--version'], home);
+      const version = await runAsOtherUser([SYSTEM_BINARY, '--version'], home);
+      expect(version.exitCode, version.stdout + version.stderr).toBe(0);
+      expect(version.stdout).toBe(reference.stdout);
+      const update = await runAsOtherUser([SYSTEM_BINARY, 'update'], home);
+      expect(update.exitCode).toBe(1);
+      expect(update.stdout + update.stderr).toContain('Ask IT.');
+    });
+
+    it('is owned by root and cannot be changed by another user', async () => {
+      await runMdm(['install'], env);
+      const marker = managedInstallationMarkerPath(SYSTEM_BINARY);
+
+      expect(statSync(SYSTEM_BINARY).uid).toBe(0);
+      expect(statSync(SYSTEM_BINARY).mode & 0o022).toBe(0);
+      expect(statSync(dirname(SYSTEM_BINARY)).mode & 0o022).toBe(0);
+      expect(statSync(marker).mode & 0o022).toBe(0);
+      for (const path of [SYSTEM_BINARY, marker]) {
+        const append = await runAsOtherUser(['sh', '-c', 'echo x >> "$0"', path], home);
+        const remove = await runAsOtherUser(['rm', '-f', path], home);
+        expect(append.exitCode).not.toBe(0);
+        expect(remove.exitCode).not.toBe(0);
+        expect(existsSync(path)).toBe(true);
+      }
+      expect(isRealCli(SYSTEM_BINARY)).toBe(true);
     });
   });
 
