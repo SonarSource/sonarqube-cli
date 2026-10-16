@@ -113,8 +113,8 @@ describe('ServerImportApiClient', () => {
   });
 
   describe.each([
-    ['checkPat', '/api/alm_integration/check_pat'],
-    ['probeGithubPat', '/api/alm_integration/list_github_organizations'],
+    ['checkPat', '/api/alm_integrations/check_pat'],
+    ['probeGithubPat', '/api/alm_integrations/list_github_organizations'],
   ] as const)('%s', (method, path) => {
     it('sends the setting key as almSetting, and nothing token-like', async () => {
       fetchSpy = mockFetchSeq(noContentResponse());
@@ -191,7 +191,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
       await api.searchGitlabRepos('my-gitlab', 2, 50);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_gitlab_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_gitlab_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-gitlab',
         p: '2',
@@ -230,7 +230,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ projects: [] });
       await api.listAzureProjects('my-azure');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_azure_projects');
+      expect(url.pathname).toBe('/api/alm_integrations/list_azure_projects');
       expect(Object.fromEntries(url.searchParams)).toEqual({ almSetting: 'my-azure' });
     });
 
@@ -259,7 +259,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [] });
       await api.searchAzureRepos('my-azure', 'My Project');
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_azure_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_azure_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-azure',
         projectName: 'My Project',
@@ -292,7 +292,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], isLastPage: true });
       await api.searchBitbucketCloudRepos('my-bbc', 2, 50);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketcloud_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketcloud_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbc',
         p: '2',
@@ -336,7 +336,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ projects: [], isLastPage: true });
       await api.listBitbucketServerProjects('my-bbs', 25, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_bitbucketserver_projects');
+      expect(url.pathname).toBe('/api/alm_integrations/list_bitbucketserver_projects');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbs',
         start: '25',
@@ -387,7 +387,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], isLastPage: true });
       await api.searchBitbucketServerRepos('my-bbs', 'My Project', 50, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketserver_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketserver_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbs',
         projectName: 'My Project',
@@ -433,7 +433,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ organizations: [], paging: { total: 0 } });
       await api.listGithubOrganizations('my-github', 2, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_github_organizations');
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_organizations');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-github',
         p: '2',
@@ -473,7 +473,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
       await api.listGithubRepositories('my-github', 'acme', 3, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_github_repositories');
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_repositories');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-github',
         organization: 'acme',

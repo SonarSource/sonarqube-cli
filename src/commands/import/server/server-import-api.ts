@@ -159,7 +159,7 @@ export class ServerImportApiClient {
 
   /** PAT status through `check_pat`, which every platform supports except GitHub. */
   async checkPat(settingKey: string): Promise<PatStatus> {
-    return this.patStatusOf('/api/alm_integration/check_pat', settingKey);
+    return this.patStatusOf('/api/alm_integrations/check_pat', settingKey);
   }
 
   /**
@@ -167,7 +167,7 @@ export class ServerImportApiClient {
    * stored token, so a successful listing means the token works.
    */
   async probeGithubPat(settingKey: string): Promise<PatStatus> {
-    return this.patStatusOf('/api/alm_integration/list_github_organizations', settingKey);
+    return this.patStatusOf('/api/alm_integrations/list_github_organizations', settingKey);
   }
 
   /** One page of the GitLab projects the caller's token can see (`pageIndex` starts at 1). */
@@ -180,7 +180,7 @@ export class ServerImportApiClient {
       .get<{
         repositories?: GitlabRepositoryResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/search_gitlab_repos', {
+      }>('/api/alm_integrations/search_gitlab_repos', {
         almSetting: settingKey,
         p: pageIndex,
         ps: pageSize,
@@ -192,7 +192,7 @@ export class ServerImportApiClient {
   /** Every Azure DevOps project the caller's token can see; the endpoint is not paged. */
   async listAzureProjects(settingKey: string): Promise<AzureProjectResponse[]> {
     const response = await this.client
-      .get<{ projects?: AzureProjectResponse[] }>('/api/alm_integration/list_azure_projects', {
+      .get<{ projects?: AzureProjectResponse[] }>('/api/alm_integrations/list_azure_projects', {
         almSetting: settingKey,
       })
       .orThrow();
@@ -206,7 +206,7 @@ export class ServerImportApiClient {
   ): Promise<AzureRepositoryResponse[]> {
     const response = await this.client
       .get<{ repositories?: AzureRepositoryResponse[] }>(
-        '/api/alm_integration/search_azure_repos',
+        '/api/alm_integrations/search_azure_repos',
         { almSetting: settingKey, projectName },
       )
       .orThrow();
@@ -224,7 +224,7 @@ export class ServerImportApiClient {
   ): Promise<{ repositories: BitbucketCloudRepositoryResponse[] }> {
     const response = await this.client
       .get<{ repositories?: BitbucketCloudRepositoryResponse[] }>(
-        '/api/alm_integration/search_bitbucketcloud_repos',
+        '/api/alm_integrations/search_bitbucketcloud_repos',
         { almSetting: settingKey, p: pageIndex, ps: pageSize },
       )
       .orThrow();
@@ -243,7 +243,7 @@ export class ServerImportApiClient {
   ): Promise<{ projects: BitbucketServerProjectResponse[]; nextStart?: number }> {
     const response = await this.client
       .get<BitbucketServerPagingResponse & { projects?: BitbucketServerProjectResponse[] }>(
-        '/api/alm_integration/list_bitbucketserver_projects',
+        '/api/alm_integrations/list_bitbucketserver_projects',
         { almSetting: settingKey, start, pageSize },
       )
       .orThrow();
@@ -262,7 +262,7 @@ export class ServerImportApiClient {
   ): Promise<{ repositories: BitbucketServerRepositoryResponse[]; nextStart?: number }> {
     const response = await this.client
       .get<BitbucketServerPagingResponse & { repositories?: BitbucketServerRepositoryResponse[] }>(
-        '/api/alm_integration/search_bitbucketserver_repos',
+        '/api/alm_integrations/search_bitbucketserver_repos',
         { almSetting: settingKey, projectName, start, pageSize },
       )
       .orThrow();
@@ -282,7 +282,7 @@ export class ServerImportApiClient {
       .get<{
         organizations?: GithubOrganizationResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_organizations', {
+      }>('/api/alm_integrations/list_github_organizations', {
         almSetting: settingKey,
         p: pageIndex,
         ps: pageSize,
@@ -302,7 +302,7 @@ export class ServerImportApiClient {
       .get<{
         repositories?: GithubRepositoryResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/list_github_repositories', {
+      }>('/api/alm_integrations/list_github_repositories', {
         almSetting: settingKey,
         organization,
         p: pageIndex,
