@@ -523,6 +523,15 @@ export interface FakeAzureRepo {
   sqProjectName?: string;
 }
 
+export interface FakeBitbucketCloudRepo {
+  slug: string;
+  uuid: string;
+  name: string;
+  workspace: string;
+  projectKey?: string;
+  sqProjectKey?: string;
+}
+
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
@@ -596,6 +605,7 @@ export class FakeSonarQubeServerBuilder {
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
+  private readonly bitbucketCloudRepos = new Map<string, FakeBitbucketCloudRepo[]>();
   private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
   private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
@@ -951,6 +961,12 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Repositories `search_bitbucketcloud_repos` returns for a Bitbucket Cloud setting key. */
+  withBitbucketCloudRepos(settingKey: string, repos: FakeBitbucketCloudRepo[]): this {
+    this.bitbucketCloudRepos.set(settingKey, repos);
+    return this;
+  }
+
   /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
   withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
     this.boundProjectFailures.set(repositoryIdentifier, { status, message });
@@ -1044,6 +1060,7 @@ export class FakeSonarQubeServerBuilder {
       patResponses,
       gitlabRepos,
       azureRepos,
+      bitbucketCloudRepos,
       boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
@@ -2175,6 +2192,23 @@ export class FakeSonarQubeServerBuilder {
           const names = (azureRepos.get(query.almSetting ?? '') ?? []).map((r) => r.projectName);
           return new Response(
             JSON.stringify({ projects: [...new Set(names)].map((name) => ({ name })) }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/alm_integration/search_bitbucketcloud_repos') {
+          const repos = (bitbucketCloudRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.repositoryName || r.name.includes(query.repositoryName),
+          );
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '20', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize },
+              isLastPage: start + pageSize >= repos.length,
+            }),
             { headers: { 'Content-Type': 'application/json' } },
           );
         }
