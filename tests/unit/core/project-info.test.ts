@@ -385,6 +385,40 @@ describe('discoverProject', () => {
     );
   });
 
+  it('anchors projectRoot at the repository root when the key comes from the git-remote binding', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    const subDir = join(testDir, 'packages', 'app');
+    fakeFs.mkdir(subDir);
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({ projectKey: 'from-remote', serverUrl: 'https://sonarcloud.io' });
+
+    const result = await discoverProject(subDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBe('from-remote');
+    expect(result.projectRoot).toBe(canonicalizePath(testDir));
+  });
+
+  it('keeps projectRoot at the invocation directory when the git-remote lookup finds no binding', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    const subDir = join(testDir, 'packages', 'app');
+    fakeFs.mkdir(subDir);
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/unbound.git');
+    remoteSpy.mockResolvedValue(null);
+
+    const result = await discoverProject(subDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.projectRoot).toBe(canonicalizePath(subDir));
+  });
+
   it('does not call git remote lookup when projectKey is already in local config', async () => {
     fakeFs.mkdir(join(testDir, '.git'));
     fakeFs.writeFile(
@@ -423,6 +457,25 @@ describe('discoverProject', () => {
     });
 
     expect(getGitRemoteSpy).not.toHaveBeenCalled();
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips only the git-remote binding when useGitRemoteBinding is false, keeping auth for local sources', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      useGitRemoteBinding: false,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBeUndefined();
     expect(remoteSpy).not.toHaveBeenCalled();
   });
 

@@ -91,6 +91,11 @@ export interface DiscoverProjectOptions {
    * connection state cannot masquerade as project config during `sonar auth login`).
    */
   useKnownMappings?: boolean;
+  /**
+   * When false, skips only the git-remote binding step (a server round trip), leaving `auth`
+   * available to the local sources. For callers that already hold the project key.
+   */
+  useGitRemoteBinding?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;
@@ -192,7 +197,7 @@ export async function discoverProject(
         applyKnownServerProjectMapping(config, lookupPaths, knownMappings, options)) ||
       (await applyLocalConfigAcrossLookupPaths(config, lookupPaths, options));
 
-    if (!resolved) {
+    if (!resolved && options.useGitRemoteBinding !== false) {
       await applyGitRemoteBinding(config, repoRoot, options);
     }
   } catch (error) {
@@ -480,11 +485,11 @@ async function applyGitRemoteBinding(
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  if (options.auth === null) {
+  if (options.auth === null || !repoRoot) {
     return;
   }
 
-  const gitRemote = repoRoot ? await getGitRemote(repoRoot) : '';
+  const gitRemote = await getGitRemote(repoRoot);
   if (!gitRemote) {
     return;
   }
@@ -502,6 +507,8 @@ async function applyGitRemoteBinding(
   config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;
+  // The binding is repository-wide, so the project is anchored at the repository root, not at wherever we were invoked.
+  config.projectRoot = repoRoot;
 
   if (options.silent) {
     return;
