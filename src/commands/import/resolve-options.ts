@@ -273,20 +273,34 @@ async function promptForRegex(console: Console): Promise<RegExp | typeof BACK> {
   }
 }
 
-export async function resolveRepos(
-  client: ImportApiClient,
-  orgKey: string,
-  almKey: string | undefined,
-  onlyPrivateProjects: OnlyPrivateProjects,
-  opts: {
-    repo?: string[];
-    all?: boolean;
-    regex?: string;
-    nonInteractive?: boolean;
-    console: Console;
-  },
-): Promise<RepoResolution> {
-  const console = opts.console;
+export interface RepoSelectionOptions {
+  repo?: string[];
+  all?: boolean;
+  regex?: string;
+  nonInteractive?: boolean;
+  console: Console;
+}
+
+/**
+ * Where repositories are listed from, as the user would call it in a message ("the selected
+ * organization" on Cloud) and how to fetch them.
+ */
+export interface RepoSource {
+  fetchPage: FetchPage;
+  scope: string;
+  /** Names the platform a missing repository was looked up on, e.g. "the selected organization's DevOps platform". */
+  platformScope: string;
+  almKey: string | undefined;
+  onlyPrivateProjects: OnlyPrivateProjects;
+}
+
+/**
+ * Rejects an unusable combination of selection flags before anything is fetched, and returns
+ * the compiled `--regex` if one was given.
+ */
+export function validateSelectionOptions(
+  opts: Pick<RepoSelectionOptions, 'repo' | 'all' | 'regex' | 'nonInteractive'>,
+): RegExp | undefined {
   const regexFromFlag = validateSelectionFlags(opts);
 
   if (opts.nonInteractive && !opts.repo?.length && !opts.all && !opts.regex) {
@@ -295,6 +309,17 @@ export async function resolveRepos(
       'Pass --repo <slug> to specify one or more repositories directly, --all to import every eligible one, or --regex <pattern> to import only eligible repositories matching a pattern.',
     );
   }
+  return regexFromFlag;
+}
+
+export async function resolveRepos(
+  client: ImportApiClient,
+  orgKey: string,
+  almKey: string | undefined,
+  onlyPrivateProjects: OnlyPrivateProjects,
+  opts: RepoSelectionOptions,
+): Promise<RepoResolution> {
+  validateSelectionOptions(opts);
 
   const organizationId = await client.organizations.getOrganizationLegacyId(orgKey).match(
     (id) => id,
@@ -310,32 +335,41 @@ export async function resolveRepos(
     });
   }
 
+  return selectRepos(
+    {
+      fetchPage: (pageIndex, pageSize) =>
+        client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
+      scope: 'the selected organization',
+      platformScope: "the selected organization's DevOps platform",
+      almKey,
+      onlyPrivateProjects,
+    },
+    opts,
+  );
+}
+
+/** Applies the selection flags (or asks, when none is given) over repositories from `source`. */
+export async function selectRepos(
+  source: RepoSource,
+  opts: RepoSelectionOptions,
+): Promise<RepoResolution> {
+  const console = opts.console;
+  const regexFromFlag = validateSelectionOptions(opts);
+
   if (opts.all) {
-    return resolveStreamingImport(client, organizationId, onlyPrivateProjects, undefined, console);
+    return resolveStreamingImport(source, undefined, console);
   }
 
   if (opts.regex) {
-    return resolveStreamingImport(
-      client,
-      organizationId,
-      onlyPrivateProjects,
-      regexFromFlag,
-      console,
-    );
+    return resolveStreamingImport(source, regexFromFlag, console);
   }
 
   if (opts.repo?.length) {
-    const repos = await resolveReposBySlug(
-      client,
-      organizationId,
-      almKey,
-      onlyPrivateProjects,
-      opts.repo,
-    );
+    const repos = await resolveReposBySlug(source, opts.repo);
     return { kind: 'batch', repos, skipped: [] };
   }
 
-  return resolveOnboardingMode(client, organizationId, almKey, onlyPrivateProjects, console);
+  return resolveOnboardingMode(source, console);
 }
 
 /**
@@ -344,19 +378,13 @@ export async function resolveRepos(
  * a fetch failure or an org with no repositories at all.
  */
 async function createRepositoryCollectionOrThrow(
-  client: ImportApiClient,
-  organizationId: string,
-  onlyPrivateProjects: OnlyPrivateProjects,
+  source: RepoSource,
   console: Console,
 ): Promise<RepositoryCollection> {
   let collection: RepositoryCollection;
   try {
     collection = await console.withSpinner('Loading repositories...', () =>
-      RepositoryCollection.create(
-        (pageIndex, pageSize) =>
-          client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
-        onlyPrivateProjects,
-      ),
+      RepositoryCollection.create(source.fetchPage, source.onlyPrivateProjects),
     );
   } catch (err) {
     throw new CommandFailedError(
@@ -366,7 +394,7 @@ async function createRepositoryCollectionOrThrow(
   }
 
   if (collection.total === 0) {
-    throw new CommandFailedError('No repositories found for the selected organization.', {
+    throw new CommandFailedError(`No repositories found for ${source.scope}.`, {
       remediationHint:
         'The organization may have no repositories visible to its connected DevOps platform, or the platform connection may need to be reconfigured.',
     });
@@ -380,9 +408,9 @@ async function createRepositoryCollectionOrThrow(
  * only stops early once it finds an eligible repo, so this is only called once every fetched page
  * has been fully scanned.
  */
-function handleNoEligibleRepos(collection: RepositoryCollection): never {
+function handleNoEligibleRepos(collection: RepositoryCollection, scope: string): never {
   const reason = collection.skippedRepos.every((repo) => repo.reason === 'already imported')
-    ? 'All repositories for the selected organization have already been imported into SonarQube.'
+    ? `All repositories for ${scope} have already been imported into SonarQube.`
     : "No repositories match this organization's project visibility settings.";
   throw new CommandFailedError(reason);
 }
@@ -399,21 +427,14 @@ function handleNoEligibleRepos(collection: RepositoryCollection): never {
  * from this same collection rather than starting over from page one.
  */
 async function resolveOnboardingMode(
-  client: ImportApiClient,
-  organizationId: string,
-  almKey: string | undefined,
-  onlyPrivateProjects: OnlyPrivateProjects,
+  source: RepoSource,
   console: Console,
 ): Promise<RepoResolution> {
-  const collection = await createRepositoryCollectionOrThrow(
-    client,
-    organizationId,
-    onlyPrivateProjects,
-    console,
-  );
+  const { almKey } = source;
+  const collection = await createRepositoryCollectionOrThrow(source, console);
 
   if (collection.eligibleRepos.length === 0) {
-    handleNoEligibleRepos(collection);
+    handleNoEligibleRepos(collection, source.scope);
   }
 
   const RECOMMENDED = Symbol('recommended');
@@ -457,22 +478,14 @@ async function resolveOnboardingMode(
   }
 }
 
-async function resolveReposBySlug(
-  client: ImportApiClient,
-  organizationId: string,
-  almKey: string | undefined,
-  onlyPrivateProjects: OnlyPrivateProjects,
-  slugs: string[],
-): Promise<ResolvedRepo[]> {
-  const matches = await findReposBySlugs(
-    (pageIndex, pageSize) => client.fetchDopRepositoriesPage(organizationId, pageIndex, pageSize),
-    slugs,
-  );
+async function resolveReposBySlug(source: RepoSource, slugs: string[]): Promise<ResolvedRepo[]> {
+  const { almKey, onlyPrivateProjects } = source;
+  const matches = await findReposBySlugs(source.fetchPage, slugs);
 
   const notFound = slugs.filter((slug) => !matches.has(slug));
   if (notFound.length > 0) {
     throw new CommandFailedError(
-      `Repositor${notFound.length === 1 ? 'y' : 'ies'} not found in the selected organization's DevOps platform: ${notFound.join(', ')}`,
+      `Repositor${notFound.length === 1 ? 'y' : 'ies'} not found in ${source.platformScope}: ${notFound.join(', ')}`,
       { remediationHint: 'Check that the repository slug(s) are correct and visible to the org.' },
     );
   }
@@ -544,18 +557,11 @@ function isRepoSelectable(
  * instead of waiting for the whole org to be scanned first.
  */
 async function resolveStreamingImport(
-  client: ImportApiClient,
-  organizationId: string,
-  onlyPrivateProjects: OnlyPrivateProjects,
+  source: RepoSource,
   regex: RegExp | undefined,
   console: Console,
 ): Promise<RepoResolution> {
-  const collection = await createRepositoryCollectionOrThrow(
-    client,
-    organizationId,
-    onlyPrivateProjects,
-    console,
-  );
+  const collection = await createRepositoryCollectionOrThrow(source, console);
 
   if (collection.eligibleRepos.length === 0) {
     throw new CommandFailedError(
