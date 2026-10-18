@@ -53,9 +53,8 @@ The rest of this documentation loads on demand, never at session start. Content 
 
 ## Gitar dependency reviews
 
-`.gitar/rules/renovate-safety.md` selects major/minor Renovate PRs for advisory
-review. `.gitar/skills/dependency-safety/SKILL.md` defines the bounded evidence
-checks and the single dependency safety summary; humans can also invoke it for patches.
+`.gitar/rules/renovate-safety.md` contains the trigger, bounded evidence checks,
+and advisory summary instructions for major/minor Renovate updates.
 
 ## Network access
 
