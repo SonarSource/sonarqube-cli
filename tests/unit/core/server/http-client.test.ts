@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { isCriticalFailure } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   SONARCLOUD_STAGING_API_URL,
@@ -439,7 +440,7 @@ describe('SonarHttpClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('returns a BadRequestError result on non-ok POST response', async () => {
+    it('returns the raw response body on non-ok POST response', async () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       const result = await client.genericRequest(
         'POST',
@@ -450,8 +451,8 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
-        message: 'Bad request',
+        name: 'UnexpectedApiError',
+        message: expect.stringContaining('{"message":"Bad request"}'),
       });
     });
 
@@ -466,16 +467,18 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
+        name: 'UnexpectedApiError',
         message: expect.stringContaining('Transition failed'),
       });
     });
 
-    it('returns an access-denied error result on GET 403', async () => {
+    it('returns the status and raw body on GET 403', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       const result = await client.genericRequest('GET', '/api/system/status', fake);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain('Access denied');
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'SonarQube API error: 403 Internal Server Error - {}',
+      );
     });
 
     it('returns an error result instead of throwing on a transport failure', async () => {
@@ -484,6 +487,41 @@ describe('SonarHttpClient', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
+
+    it.each([
+      [429, 'RateLimitError'],
+      [503, 'ServiceUnavailableError'],
+      [500, 'ServerError'],
+      [502, 'ServerError'],
+    ])('preserves critical error classification for HTTP %i', async (status, name) => {
+      fetchSpy = mockFetch({ message: 'Request failed' }, { ok: false, status });
+
+      const result = await client.genericRequest('GET', '/api/projects/search', fake);
+
+      expect(result.isErr()).toBe(true);
+      const error = result._unsafeUnwrapErr();
+      expect(error.name).toBe(name);
+      expect(error.message).toContain('{"message":"Request failed"}');
+      expect(isCriticalFailure(error)).toBe(true);
+    });
+
+    it.each([new Error('Body stream failed'), 'Body stream failed'])(
+      'reports a body-read failure as an API error: %s',
+      async (reason) => {
+        const response = new Response(null, { status: 200 });
+        spyOn(response, 'text').mockRejectedValue(reason);
+        fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+        const result = await client.genericRequest('GET', '/api/projects/search', fake);
+
+        expect(result.isErr()).toBe(true);
+        expect(result._unsafeUnwrapErr()).toMatchObject({
+          name: 'UnexpectedApiError',
+          status: 200,
+          message: 'Body stream failed',
+        });
+      },
+    );
 
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {
       const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);
