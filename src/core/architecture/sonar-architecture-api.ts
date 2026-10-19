@@ -43,7 +43,7 @@ const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 interface ArchitectureIds {
   organizationId: string;
   branchId: string;
-  /** What the model, intended and directive endpoints call `projectId`. */
+  /** The project UUID used by the intended architecture endpoint. */
   projectId: string;
 }
 

@@ -391,18 +391,6 @@ describe('sonar architecture get on the public API', () => {
     });
   }
 
-  it('rejects directives without credentials before any auth resolution', async () => {
-    for (const command of [
-      'architecture get directives',
-      'architecture set directives --file missing.json --dry-run',
-    ]) {
-      const result = await harness.run(command);
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('not available yet: waiting for public API');
-      expect(result.stderr).not.toContain('auth login');
-    }
-  });
-
   it(
     'explains the 403 the public API answers to a caller who may not read the project',
     async () => {
@@ -744,7 +732,7 @@ describe('sonar architecture set on the public API', () => {
     expect(writes(server)).toEqual([]);
   });
 
-  it('rejects directives before authentication, file reads or network requests', async () => {
+  it('does not register unsupported architecture commands', async () => {
     const server = await startWith(() => undefined);
     for (const command of [
       'architecture get directives',
@@ -752,8 +740,19 @@ describe('sonar architecture set on the public API', () => {
       'architecture set directives --file missing.json',
     ]) {
       const result = await harness.run(command);
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('not available yet: waiting for public API');
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain("unknown command 'directives'");
+      expect(result.stderr).not.toContain('auth login');
+      expect(result.stderr).not.toContain('Cannot read');
+    }
+    for (const command of [
+      'architecture --help',
+      'architecture get --help',
+      'architecture set --help',
+    ]) {
+      const help = await harness.run(command);
+      expect(help.exitCode).toBe(0);
+      expect(help.stdout).not.toContain('directives');
     }
     expect(server.getRecordedRequests()).toEqual([]);
   });

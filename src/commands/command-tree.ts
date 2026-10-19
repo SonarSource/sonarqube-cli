@@ -91,7 +91,6 @@ import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.
 import {
   type ArchitectureReadOptions,
   getCurrent as getCurrentArchitecture,
-  getDirectives as getArchitectureDirectives,
   getIntended as getIntendedArchitecture,
   TEXT_FORMATS,
 } from './architecture/index.ts';
@@ -99,11 +98,7 @@ import {
   installSkill as installArchitectureSkill,
   type InstallSkillOptions,
 } from './architecture/install-skill.ts';
-import {
-  setDirectives as setArchitectureDirectives,
-  type SetFileOptions,
-  setIntended as setIntendedArchitecture,
-} from './architecture/set.ts';
+import { type SetFileOptions, setIntended as setIntendedArchitecture } from './architecture/set.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import {
@@ -872,9 +867,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   const architectureGet = architecture
     .command('get')
-    .description(
-      'Read the current or intended architecture of a project; directives are unavailable',
-    );
+    .description('Read the current or intended architecture of a project');
   const languageOption = (): SonarOption =>
     new SonarOption('--language <language>', 'Only this language (default: all)').choices(
       ECOSYSTEMS,
@@ -910,16 +903,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
       getIntendedArchitecture(options, ctx),
     );
-  architectureGet
-    .command('directives')
-    .description('Unavailable: waiting for the public directives API')
-    .option('-p, --project <project>', 'Project key')
-    .addOption(textFormatOption())
-    .anonymousAction(() => getArchitectureDirectives());
 
   const architectureSet = architecture
     .command('set')
-    .description('Set the intended architecture from a JSON file; directives are unavailable');
+    .description('Set the intended architecture from a JSON file');
   architectureSet
     .command('intended')
     .description(
@@ -929,13 +916,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
-  architectureSet
-    .command('directives')
-    .description('Unavailable: waiting for the public directives API')
-    .requiredOption('--file <file>', 'Reserved directives JSON file; directives are unavailable')
-    .option('--dry-run', 'Reserved dry run; directives are unavailable')
-    .option('-p, --project <project>', 'Project key')
-    .anonymousAction(() => setArchitectureDirectives());
 
   architecture
     .command('install-skill')

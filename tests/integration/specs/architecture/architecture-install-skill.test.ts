@@ -68,9 +68,6 @@ describe('sonar architecture install-skill', () => {
         );
         expect(content).toContain('Use the installed CLI help or the exposed MCP tool definitions');
         expect(content).toContain('Do not bypass those limits');
-        expect(content).toContain(
-          'Directive reads\nand writes are unavailable pending public API support',
-        );
         expect(first.stdout).toContain(`Installed ${join(harness.cwd.path, path)}`);
       }
 

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// `sonar architecture set intended|directives`
+// `sonar architecture set intended`
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -42,7 +42,7 @@ export const CLI_ARCHITECTURE_SET = 'CliArchitectureSet';
 
 /** Domain payload for CliArchitectureSet (identity is filled at drain time). */
 export interface ArchitectureSetPayload {
-  target: 'intended' | 'directives';
+  target: 'intended';
   mode: string;
   dry_run: boolean;
   removed: number;
@@ -116,10 +116,6 @@ export async function setIntended(
     ctx.console.info(`The previous one is backed up in ${result.backupPath}`);
   }
   ctx.console.info('SonarQube applies it from the next analysis.');
-}
-
-export function setDirectives(): never {
-  throw new CommandFailedError('Directives are not available yet: waiting for public API.');
 }
 
 async function readJsonFile(path: string): Promise<unknown> {

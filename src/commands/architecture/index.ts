@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// `sonar architecture get current|intended|directives`
+// `sonar architecture get current|intended`
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
@@ -150,10 +150,6 @@ export async function getIntended(
     ...(language ? { language } : {}),
     models,
   });
-}
-
-export function getDirectives(): never {
-  throw new CommandFailedError('Directives are not available yet: waiting for public API.');
 }
 
 function resolveDepth(options: ArchitectureReadOptions, defaultDepth: number): number {
