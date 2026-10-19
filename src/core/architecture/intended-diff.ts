@@ -157,14 +157,19 @@ function diffConstraints(
   after: IntendedConstraint[],
   diff: IntendedDiff,
 ): void {
+  const keyOf = ({ from, to }: IntendedConstraint): string => JSON.stringify([from, to]);
   const describe = ({ from, to }: IntendedConstraint): string =>
-    `constraint ${language} ${from} -> ${to}`;
-  const beforeLines = new Set(before.map(describe));
-  const afterLines = new Set(after.map(describe));
-  for (const line of beforeLines) {
-    if (!afterLines.has(line)) diff.removed.push(line);
+    `constraint ${language} ${constraintEndpoint(from)} -> ${constraintEndpoint(to)}`;
+  const beforePairs = new Set(before.map(keyOf));
+  const afterPairs = new Set(after.map(keyOf));
+  for (const constraint of before) {
+    if (!afterPairs.has(keyOf(constraint))) diff.removed.push(describe(constraint));
   }
-  for (const line of afterLines) {
-    if (!beforeLines.has(line)) diff.added.push(line);
+  for (const constraint of after) {
+    if (!beforePairs.has(keyOf(constraint))) diff.added.push(describe(constraint));
   }
+}
+
+function constraintEndpoint(key: string): string {
+  return key.includes(' -> ') ? JSON.stringify(key) : key;
 }

@@ -95,6 +95,54 @@ describe('sonar architecture get on the public API', () => {
     return server;
   }
 
+  for (const explicitChildren of [false, true]) {
+    it(`keeps intended leaf views and touching constraints with ${explicitChildren ? 'empty' : 'omitted'} children`, async () => {
+      const constraints = [
+        { from: 'Web', to: 'Domain/Billing' },
+        { from: 'Domain/Billing', to: 'Web' },
+      ];
+      await cloudServerWith((project) =>
+        project.withArchitecture((architecture) =>
+          architecture.withIntended([
+            {
+              type: 'namespace',
+              language: 'java',
+              groups: [
+                {
+                  label: 'Domain',
+                  groups: [
+                    {
+                      label: 'Billing',
+                      patterns: ['billing:**'],
+                      ...(explicitChildren ? { groups: [] } : {}),
+                    },
+                  ],
+                },
+                { label: 'Web', patterns: ['web:**'] },
+              ],
+              constraints,
+            },
+          ]),
+        ),
+      );
+      const result = await harness.run(
+        `arch get intended -p ${PROJECT} --component Domain/Billing --format json`,
+      );
+      expect(result.exitCode).toBe(0);
+      const payload = JSON.parse(result.stdout) as { partial: boolean; models: unknown[] };
+      expect(payload.partial).toBe(true);
+      expect(payload.models).toEqual([
+        {
+          type: 'namespace',
+          language: 'java',
+          root: 'Domain/Billing',
+          groups: [],
+          constraints,
+        },
+      ]);
+    });
+  }
+
   it('drops unexpected nested intended fields and unsupported current graph ids', async () => {
     const hidden = 'synthetic-private-canary';
     const model = {
@@ -503,6 +551,47 @@ describe('sonar architecture set on the public API', () => {
     },
     { timeout: 15000 },
   );
+
+  it('previews and saves distinct constraint pairs whose display text used to collide', async () => {
+    const groups = ['A', 'A -> B', 'B -> C', 'C'].map((label) => ({ label, patterns: [] }));
+    const before: IntendedArchitecture[] = [
+      {
+        type: 'namespace',
+        language: 'java',
+        groups,
+        constraints: [
+          { from: 'A -> B', to: 'C' },
+          { from: 'C', to: 'A' },
+        ],
+      },
+    ];
+    const server = await startWith((architecture) => architecture.withIntended(before));
+    const saved = await readSavedFile();
+    const next = [
+      {
+        ...before[0],
+        constraints: [
+          { from: 'A', to: 'B -> C' },
+          { from: 'C', to: 'A' },
+        ],
+      },
+    ];
+    const file = { ...saved, models: next };
+    harness.cwd.writeFile('model.json', JSON.stringify(file));
+    const preview = await harness.run(
+      `arch set intended -p ${PROJECT} --file model.json --dry-run`,
+    );
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain('1 removed, 1 added, 0 changed.');
+    expect(preview.stdout).toContain('"A -> B" -> C');
+    expect(preview.stdout).toContain('A -> "B -> C"');
+    expect(writes(server)).toEqual([]);
+    const result = await setIntended(file);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`Replaced the intended architecture of '${PROJECT}'.`);
+    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
+    expect((await readSavedFile()).models).toEqual(next);
+  });
 
   it('replaces through only allowlisted public architecture endpoints and warns about flattened imports', async () => {
     const server = await startWith((fake) =>

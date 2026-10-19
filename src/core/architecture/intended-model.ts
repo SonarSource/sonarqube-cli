@@ -92,8 +92,9 @@ export function viewIntended(
   component: string | undefined,
   depth: number,
 ): IntendedView | undefined {
-  const start = component === undefined ? model.groups : findGroup(model.groups, component)?.groups;
-  if (start === undefined) return undefined;
+  const selected = component === undefined ? undefined : findGroup(model.groups, component);
+  if (component !== undefined && selected === undefined) return undefined;
+  const start = component === undefined ? model.groups : (selected?.groups ?? []);
   const prefix = component === undefined ? '' : `${component}${GROUP_KEY_SEPARATOR}`;
   return {
     type: model.type,
