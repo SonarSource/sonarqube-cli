@@ -41,8 +41,8 @@ describe('distributeChunkResponse', () => {
   it('attaches chunk-level errors only to the first file', () => {
     const chunkErrors = [{ code: 'WARN', message: 'chunk warning' }];
     const results = distributeChunkResponse([], chunkErrors, [
-      { file: '/repo/a.ts', filePath: 'a.ts', serverPath: 'a.ts' },
-      { file: '/repo/b.ts', filePath: 'b.ts', serverPath: 'b.ts' },
+      { absolutePath: '/repo/a.ts', displayPath: 'a.ts', serverPath: 'a.ts' },
+      { absolutePath: '/repo/b.ts', displayPath: 'b.ts', serverPath: 'b.ts' },
     ]);
 
     expect(results).toHaveLength(2);
@@ -55,8 +55,8 @@ describe('distributeChunkResponse', () => {
       [{ rule: 'ts:S1', message: 'issue', filePath: './a.ts', id: '1' }],
       null,
       [
-        { file: '/repo/a.ts', filePath: 'a.ts', serverPath: 'a.ts' },
-        { file: '/repo/b.ts', filePath: 'b.ts', serverPath: 'b.ts' },
+        { absolutePath: '/repo/a.ts', displayPath: 'a.ts', serverPath: 'a.ts' },
+        { absolutePath: '/repo/b.ts', displayPath: 'b.ts', serverPath: 'b.ts' },
       ],
     );
 
@@ -69,8 +69,8 @@ describe('distributeChunkResponse', () => {
       [{ rule: 'ts:S1', message: 'issue', filePath: 'src/b.ts', id: '1' }],
       null,
       [
-        { file: '/repo/pkg/src/a.ts', filePath: 'pkg/src/a.ts', serverPath: 'src/a.ts' },
-        { file: '/repo/pkg/src/b.ts', filePath: 'pkg/src/b.ts', serverPath: 'src/b.ts' },
+        { absolutePath: '/repo/pkg/src/a.ts', displayPath: 'pkg/src/a.ts', serverPath: 'src/a.ts' },
+        { absolutePath: '/repo/pkg/src/b.ts', displayPath: 'pkg/src/b.ts', serverPath: 'src/b.ts' },
       ],
     );
 
@@ -203,9 +203,10 @@ describe('runAnalyses partial 413', () => {
       console: new FakeConsole(),
     });
     const tally = await runAnalyses({
-      files,
-      allPaths: ['a.ts', 'b.ts', 'c.ts'],
-      serverPaths: ['a.ts', 'b.ts', 'c.ts'],
+      paths: files.map((absolutePath) => {
+        const name = absolutePath.replace('/repo/', '');
+        return { absolutePath, displayPath: name, serverPath: name };
+      }),
       connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,
@@ -240,9 +241,10 @@ describe('runAnalyses partial 413', () => {
       console: new FakeConsole(),
     });
     const tally = await runAnalyses({
-      files: ['/repo/ok.ts', '/repo/bad.ts'],
-      allPaths: ['ok.ts', 'bad.ts'],
-      serverPaths: ['ok.ts', 'bad.ts'],
+      paths: [
+        { absolutePath: '/repo/ok.ts', displayPath: 'ok.ts', serverPath: 'ok.ts' },
+        { absolutePath: '/repo/bad.ts', displayPath: 'bad.ts', serverPath: 'bad.ts' },
+      ],
       connection: CONNECTION,
       projectKey: 'proj',
       branch: undefined,
