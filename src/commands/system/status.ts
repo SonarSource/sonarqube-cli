@@ -164,6 +164,7 @@ const INTEGRATION_TO_COMMAND: Record<string, string> = {
   antigravity: 'sonar integrate antigravity',
   opencode: 'sonar integrate opencode',
   devin: 'sonar integrate devin',
+  pi: 'sonar integrate pi',
 };
 
 interface McpFeatureRecord {
