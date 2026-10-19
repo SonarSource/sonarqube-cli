@@ -35,6 +35,7 @@ import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
+import { isInsideProjectRoot, resolveSqaaPath } from '../analyze/sqaa-paths.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
@@ -71,7 +72,7 @@ async function analyzeEditedFile(
     return undefined;
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), {
+  const { projectKey, projectRoot } = await discoverProject(process.cwd(), {
     auth,
     silent: true,
     console: ctx.console,
@@ -88,6 +89,12 @@ async function analyzeEditedFile(
     logger.debug(`opencode-post-tool-use SQAA skipped: file outside cwd: ${filePath}`);
     return undefined;
   }
+  if (!isInsideProjectRoot(canonicalPath, projectRoot)) {
+    logger.debug(
+      `opencode-post-tool-use SQAA skipped: file outside project root ${projectRoot}: ${filePath}`,
+    );
+    return undefined;
+  }
 
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
@@ -99,7 +106,7 @@ async function analyzeEditedFile(
       fetchSingleFileReport(
         connection,
         projectKey,
-        canonicalPath,
+        resolveSqaaPath(canonicalPath, projectRoot),
         fileContent,
         branch,
         undefined,

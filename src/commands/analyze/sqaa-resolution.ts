@@ -21,8 +21,13 @@
 // Connection and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import {
+  type DiscoveredProject,
+  discoverProject,
+  type DiscoverProjectOptions,
+} from '@/core/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
@@ -45,7 +50,7 @@ const LARGE_CHANGESET_HINT =
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaResolution =
-  | { kind: 'resolved'; connection: SonarConnection; projectKey: string }
+  | { kind: 'resolved'; connection: SonarConnection; projectKey: string; projectRoot: string }
   | { kind: 'no-org'; explicitProject: boolean }
   | { kind: 'no-project' };
 
@@ -63,41 +68,67 @@ export async function resolveSqaaConnectionAndProject(
   connection: SonarConnection,
   explicitProject: string | undefined,
   console: Console,
-  projectRoot?: string,
+  startDir?: string,
 ): Promise<SqaaResolution> {
   const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
     return { kind: 'no-org', explicitProject: Boolean(explicitProject) };
   }
 
-  const projectKey = explicitProject ?? (await resolveSqaaProjectKey(auth, console, projectRoot));
+  const lookupDir = startDir ?? process.cwd();
+  // An explicit --project already supplies the key, so skip the git-remote binding lookup
+  // (a server round trip). Discovery still runs because the project root is needed to build
+  // server paths, and known mappings and local config are enough to find it.
+  const discovered = await discoverSqaaProject(auth, console, lookupDir, {
+    useGitRemoteBinding: !explicitProject,
+  });
+  const projectKey = explicitProject ?? discovered.projectKey;
   if (!projectKey) return { kind: 'no-project' };
 
   noteProject(auth, projectKey);
-  return { kind: 'resolved', connection, projectKey };
+  return {
+    kind: 'resolved',
+    connection,
+    projectKey,
+    projectRoot: resolveSqaaProjectRoot(discovered, projectKey, lookupDir),
+  };
 }
 
 /**
- * Look up the project key for the current project via the shared project-discovery
- * pipeline (`discoverProject`): the known-server-project-mapping cache, local config
- * files, then a git-remote-binding lookup against the server. Falls back to
- * `process.cwd()` when no `projectRoot` is given so the single-file path still
- * works, including from a subdirectory or outside git.
+ * A discovered root only describes the discovered key, so an explicit `--project` naming a
+ * different one falls back to the repository root.
  */
-export async function resolveSqaaProjectKey(
+function resolveSqaaProjectRoot(
+  discovered: DiscoveredProject,
+  projectKey: string,
+  lookupDir: string,
+): string {
+  if (discovered.projectKey === projectKey) return discovered.projectRoot;
+  return discovered.repoRoot ?? canonicalizePath(lookupDir);
+}
+
+/**
+ * Look up the current project via the shared project-discovery pipeline
+ * (`discoverProject`): the known-server-project-mapping cache, local config files, then a
+ * git-remote-binding lookup against the server. Falls back to `process.cwd()` when no
+ * `startDir` is given, so it works from a subdirectory or outside git.
+ */
+export async function discoverSqaaProject(
   auth: ResolvedAuth,
   console: Console,
-  projectRoot?: string,
-): Promise<string | null> {
-  const discovered = await discoverProject(projectRoot ?? process.cwd(), {
+  startDir?: string,
+  options: Pick<DiscoverProjectOptions, 'useGitRemoteBinding'> = {},
+): Promise<DiscoveredProject> {
+  const discovered = await discoverProject(startDir ?? process.cwd(), {
     auth,
     silent: true,
     console,
+    ...options,
   });
   if (!discovered.projectKey) {
-    logger.debug('Vortex analysis skipped: no project key found');
+    logger.debug('Vortex analysis: no project key discovered');
   }
-  return discovered.projectKey ?? null;
+  return discovered;
 }
 
 /**

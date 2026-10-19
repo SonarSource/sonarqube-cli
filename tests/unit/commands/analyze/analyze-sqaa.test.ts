@@ -77,7 +77,7 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
+/** discoverProject result carrying just enough for discoverSqaaProject to resolve `projectKey`. */
 function makeDiscoveredProject(projectKey: string | undefined) {
   return {
     repoRoot: process.cwd(),
@@ -182,6 +182,27 @@ describe('analyzeSqaa: auth resolution', () => {
       .join('\n');
     expect(output).toContain(
       "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
+    );
+  });
+
+  it('skips the git-remote lookup when --project is explicit, since only the root is needed', async () => {
+    await analyzeSqaa(
+      { file: ['src/index.ts'], project: TEST_PROJECT },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: false }),
+    );
+  });
+
+  it('keeps the git-remote lookup when no project is given', async () => {
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: true }),
     );
   });
 });
