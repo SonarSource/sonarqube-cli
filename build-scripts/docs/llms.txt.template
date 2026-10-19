@@ -11,7 +11,7 @@
 
 ## Quick Start
 sonar auth login
-sonar integrate claude -g
+sonar integrate claude
 
 ## For AI Agents
 Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
