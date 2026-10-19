@@ -85,7 +85,8 @@ export const EXAMPLES: Record<string, Example[]> = {
     },
     {
       command: 'sonar integrate claude',
-      description: 'Integrate Claude Code with interactive setup (installed globally for all projects)',
+      description:
+        'Integrate Claude Code with interactive setup (installed globally for all projects)',
     },
     {
       command: 'sonar integrate claude --non-interactive',
