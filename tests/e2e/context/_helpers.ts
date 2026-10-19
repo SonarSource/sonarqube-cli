@@ -24,7 +24,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
   CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
@@ -55,6 +54,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 import type { TestHarness } from '../../integration/harness';
 import {
   expectVortexHookInstalled,
+  type ScriptHookAgent,
   sessionStartScript,
 } from '../../integration/harness/cag-helpers';
 import { Dir } from '../../integration/harness/dir';
@@ -319,14 +319,11 @@ export function seedLegacySkillFile(
 }
 
 // Antigravity is absent from SessionStartAgent: it has no session start event.
-export function expectSessionStartHookRefreshed(
-  projectRoot: string,
-  agent: SessionStartAgent,
-): void {
+export function expectSessionStartHookRefreshed(projectRoot: string, agent: ScriptHookAgent): void {
   expectVortexHookInstalled(new Dir(projectRoot), agent);
 }
 
-export function sessionStartScriptPath(projectRoot: string, agent: SessionStartAgent): string {
+export function sessionStartScriptPath(projectRoot: string, agent: ScriptHookAgent): string {
   return sessionStartScript(new Dir(projectRoot), agent).path;
 }
 

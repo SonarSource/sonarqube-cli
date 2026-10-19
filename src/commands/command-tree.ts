@@ -636,7 +636,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateDevin(options, ctx));
 
   integrateCommand
-    .command('pi', { hidden: true })
+    .command('pi')
     .description(
       'Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.',
     )
@@ -1103,7 +1103,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('SessionStart/SubagentStart handler: inject Vortex context at agent session start')
     .requiredOption(
       '--agent <agent>',
-      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor|devin)',
+      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor|devin|pi)',
     )
     .anonymousAction(
       handleHookInvocation((ctx, options: { agent: string }) =>
