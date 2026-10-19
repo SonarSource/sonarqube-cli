@@ -49,6 +49,25 @@ export function isInsideProjectRoot(absolutePath: string, projectRoot: string): 
   return toRelativePosixPathOrNull(absolutePath, projectRoot) !== null;
 }
 
+/** Throws one error naming every path outside `projectRoot`, so the user can fix them all at once. */
+export function assertInsideProjectRoot(
+  absolutePaths: string[],
+  projectRoot: string,
+  displayBase: string = process.cwd(),
+): void {
+  const outside = absolutePaths
+    .filter((p) => !isInsideProjectRoot(p, projectRoot))
+    .map((p) => toRelativePosixPathOrNull(p, displayBase) ?? p);
+  if (outside.length === 0) return;
+  if (outside.length === 1) {
+    throw new InvalidOptionError(
+      `File must be inside the project root '${projectRoot}': ${outside[0]}`,
+    );
+  }
+  const list = outside.map((p) => '  ' + p).join('\n');
+  throw new InvalidOptionError(`Files must be inside the project root '${projectRoot}':\n${list}`);
+}
+
 /** Throws when `absolutePath` is outside `projectRoot` or `displayBase`. */
 export function resolveSqaaPath(
   absolutePath: string,

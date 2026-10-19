@@ -29,7 +29,7 @@ import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
-import type { ChangeSetResult, IgnoredFile } from './sqaa-changeset.ts';
+import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
@@ -277,7 +277,6 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
 
 export async function runSqaaAnalysisOnExplicitFiles(
   entries: ResolvedSqaaFileEntry[],
-  ignored: IgnoredFile[],
   options: SqaaBatchRunOptions,
 ): Promise<void> {
   const {
@@ -289,6 +288,9 @@ export async function runSqaaAnalysisOnExplicitFiles(
     console,
   } = options;
   const cwd = process.cwd();
+  // Unlike change-set files, which are skipped as `outside-project`, a file the user named
+  // explicitly that lies outside the project root is an input error: this throws rather than
+  // silently dropping it from the run.
   const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
   const allPaths = paths.map((p) => p.displayPath);
 
@@ -303,18 +305,13 @@ export async function runSqaaAnalysisOnExplicitFiles(
         options.console,
       ),
     );
-    const report = buildJsonReport(tally, ignored, allPaths, cwd, displayDepth);
+    const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
     await printSqaaJsonReport(report, resolved.connection, console);
     finishSqaaRun(tally, durationMs, options);
     return;
   }
 
-  const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, cwd));
-  const progress = new SqaaProgress({
-    files: allPaths,
-    ignoredFiles: ignoredPaths,
-    console: options.console,
-  });
+  const progress = new SqaaProgress({ files: allPaths, console: options.console });
   const ctx: RunContext = {
     paths,
     connection: resolved.connection,
@@ -329,7 +326,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
   if (tally.globalError instanceof SqaaForbiddenError) {
     await printVortexUnavailableForForbidden(resolved.connection, console);
   }
-  printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth }, console);
+  printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth }, console);
   finishSqaaRun(tally, durationMs, options);
 }
 

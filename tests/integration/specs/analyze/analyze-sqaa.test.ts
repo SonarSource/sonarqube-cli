@@ -3036,6 +3036,36 @@ describe('analyze agentic — project root below the repository root', () => {
   );
 
   it(
+    'rejects explicit --file paths outside the project root, naming all of them',
+    async () => {
+      const server = await startServer();
+      // A repo-root config whose `path` points at the project, so running from the repo root
+      // resolves `pkg` as the project root while sibling files are still inside cwd.
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: { serverUrl: server.baseUrl(), projectKey: TEST_PROJECT, path: 'pkg' },
+        }),
+      );
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+      harness.cwd.writeFile('c.ts', 'export const c = 3;');
+
+      const result = await harness.run(
+        'analyze agentic --file other/b.ts --file pkg/src/a.ts --file c.ts',
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`Files must be inside the project root`);
+      expect(result.stderr).toContain('other/b.ts');
+      expect(result.stderr).toContain('c.ts');
+      expect(result.stderr).not.toContain('pkg/src/a.ts');
+      expect(sqaaCallsOf(server)).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'sends change-set paths relative to the project root and ignores files outside it',
     async () => {
       const server = await startServer([{ rule: 'ts:S1135', message: 'Fix this TODO' }]);

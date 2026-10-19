@@ -43,7 +43,7 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { resolveSqaaPath } from './sqaa-paths.ts';
+import { assertInsideProjectRoot, resolveSqaaPath } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   fetchSingleFileReport,
@@ -192,6 +192,10 @@ export async function buildSqaaJsonReport(
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
+    assertInsideProjectRoot(
+      entries.map((e) => e.absolutePath),
+      resolved.projectRoot,
+    );
     if (entries.length === 1) {
       const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
       return buildSqaaJsonReportFromEntries(
