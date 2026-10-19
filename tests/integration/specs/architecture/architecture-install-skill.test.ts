@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { load } from 'js-yaml';
 
 import { ARCHITECTURE_SKILL } from '@/commands/architecture/skill-content.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
@@ -59,10 +60,17 @@ describe('sonar architecture install-skill', () => {
         expect(content).toContain('name: sonar-architecture');
         expect(content).toContain('<!-- sonar:architecture-skill -->');
         expect(content).toContain('# Architecture data operations');
-        expect(content).toContain('sonar arch set intended --file intended.json --dry-run');
-        expect(content).toContain('Directives are not available yet: waiting for public API');
-        expect(content).toContain('architecture_get target=current');
-        expect(content).toContain('architecture_set target=intended');
+        const frontmatter = content.match(/^---\n([\s\S]*?)\n---\n/);
+        expect(frontmatter).not.toBeNull();
+        const metadata = load(frontmatter?.[1] ?? '') as { description: string };
+        expect(metadata.description).toContain(
+          'The write replaces the complete intended model; omitted content is removed.',
+        );
+        expect(content).toContain('Use the installed CLI help or the exposed MCP tool definitions');
+        expect(content).toContain('Do not bypass those limits');
+        expect(content).toContain(
+          'Directive reads\nand writes are unavailable pending public API support',
+        );
         expect(first.stdout).toContain(`Installed ${join(harness.cwd.path, path)}`);
       }
 

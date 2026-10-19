@@ -23,73 +23,79 @@ export const ARCHITECTURE_SKILL_MARKER = '<!-- sonar:architecture-skill -->';
 
 export const ARCHITECTURE_SKILL = `---
 name: sonar-architecture
-description: Read current or intended architecture and apply user-specified intended-model edits through the sonar CLI or SonarQube MCP architecture tools. Use for these data operations, not architecture recommendations, diagnosis or code navigation.
+description: Read current or intended architecture and apply user-specified intended-model edits through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
 ---
 ${ARCHITECTURE_SKILL_MARKER}
 
 # Architecture data operations
 
-Use this skill to read requested architecture data or apply explicitly specified intended-model
-edits. Return the requested data, operation result and any reported limits or errors. Architectural
-diagnosis, model design, refactoring recommendations and code navigation belong outside this core
-skill, in Vortex. Do not infer groups or constraints, choose a dependency to remove, or orchestrate
-other analysis tools.
+Read requested architecture data or apply explicitly specified intended-model edits. Return the
+requested data, operation result and any reported limits or errors. Architectural diagnosis,
+model design, refactoring recommendations and code navigation belong outside this core skill.
+Do not infer groups or constraints, choose a dependency to remove, or orchestrate other analysis
+tools.
 
-## Connection and operations
+## Discover the installed interface
 
-Use the available CLI or MCP integration. The CLI needs \`SONARQUBE_CLI_ALPHA=true\` and
-\`sonar auth login\`. Pass \`--project <key>\` unless the repository is linked; MCP uses \`projectKey\`
-or its configured default. If the project is unknown, ask for it. Use the configured Cloud
-organization, or the MCP integration's standard organization selection when needed.
+Use the installed CLI help or the exposed MCP tool definitions to discover supported operations,
+parameters, defaults and availability. In CLI Alpha, enable \`SONARQUBE_CLI_ALPHA=true\` and start
+with \`sonar architecture --help\`. The skill is installed as a local copy; use the installed
+interface as the authority for syntax.
 
-| Operation | CLI | MCP |
-| --- | --- | --- |
-| Read current architecture | \`sonar arch get current\` | \`architecture_get target=current\` |
-| Read intended architecture | \`sonar arch get intended --format json\` | \`architecture_get target=intended\` |
-| Preview specified model edits | \`sonar arch set intended --file intended.json --dry-run\` | \`architecture_set target=intended\`, \`model\`, \`dryRun: true\` |
-| Apply specified model edits | \`sonar arch set intended --file intended.json\` | \`architecture_set target=intended\`, \`model\`, \`dryRun: false\` |
+Use the configured connection and organization. Resolve the project from the user's request or
+integration configuration; ask if it is unknown. Use component references returned by reads.
+Only the public Architecture API is supported. Report request failures; do not try private
+endpoints or an API mode switch.
 
-\`sonar arch\` is an alias for \`sonar architecture\`. Current and intended reads accept \`--component\`,
-\`--depth\` and \`--language\`; MCP uses \`component\`, \`depth\` and \`language\`. Languages are \`java\`,
-\`cs\`, \`js\`, \`ts\` and \`py\`. Use the component keys returned by a read. CLI \`--format json\` preserves
-exact keys; text output shortens labels. MCP returns JSON.
+## Read within context limits
 
-Read only the scope the user requests. If a component key is needed, obtain it from the returned
-data. Preserve \`capped\`, \`omittedNodes\`, \`truncated\`, \`partial\` and \`outsideViewWeight\` information
-when returning a limited view. Reported dependencies are static references, not runtime calls.
+Read only the scope the user requests. For current architecture, use only the bounded CLI or MCP
+read operations. The clients cap the nodes returned before exposing the response to the agent;
+this is a node limit, not an absolute token budget. Preserve returned limits, omissions,
+truncation and partial-view warnings.
 
-Only the public Architecture API is supported. Return request failures; do not try private
-endpoints or an API mode switch. Intended operations on SonarQube Server await public project
-UUID resolution. Directives are not available yet: waiting for public API. Do not call directive
-targets or claim to create, read or validate directives.
+Do not bypass those limits by fetching raw current-graph endpoints, requesting an unbounded
+graph, or assembling all slices into the agent context. Use a specific bounded slice when more
+detail is needed. Reported dependencies are static references, not runtime calls.
+
+This current-graph cap does not apply to complete intended exports. Keep large intended exports
+in local files rather than pasting them into the conversation. Never substitute a partial view
+when a complete export is required for a write.
 
 ## Intended-model edits
 
-1. Read the complete intended export, without component, depth or language filters. With the CLI,
-   save it using \`sonar arch get intended --format json > intended.json\`.
-2. Apply only the model edits the user specified. Keep the export's \`revision\`. If the requested
-   groups, patterns or constraints are unspecified, ask for them rather than designing a model.
-3. Preview with \`sonar arch set intended --file intended.json --dry-run\`; with MCP, pass the whole
-   export as \`model\` and set \`dryRun: true\`. An explicit MCP \`revision\` must match the embedded one.
-4. Show the returned diff and warnings. Apply only after the user confirms that preview, using
-   the same file or model and revision with dry run disabled.
-5. Read the saved intended architecture to verify the result. It takes effect in analysis from
-   the project's next analysis.
+The write replaces the complete intended model; omitted content is removed.
 
-The write replaces the complete intended model; omitted content is removed. Never use a partial
-or truncated view as write input, discard perspectives to fit the API, or remove a revision to
-bypass a conflict. On a stale revision, read again and reapply only the specified edits before a
-new preview and confirmation. A bare MCP models array lacks the original revision; retain the
-whole export instead.
+1. Obtain the complete intended export without component, depth or language filters. Retain all
+   perspectives and the exported revision as the base for the edit.
+2. Apply only the edits the user specified. If groups, patterns or constraints are unspecified,
+   ask for them rather than designing a model.
+3. Use the installed interface to validate and preview without writing. Retain the whole export
+   and its revision; a revision supplied separately must match the exported one.
+4. Show the returned diff and warnings. Apply only after the user confirms that preview, using
+   exactly the approved model and revision.
+5. Read the saved intended architecture to verify the result. It takes effect from the project's
+   next analysis.
+
+Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
+to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
+a new preview and confirmation.
 
 The public API creates one language/type perspective. Changed multi-perspective models are
-rejected before writing. Replacement is DELETE followed by POST, not an atomic operation; a
-concurrent change after preflight can still race the write. Public exports flatten imported
-organization patterns and omit metadata, so replacement and restoration cannot preserve those
-links or omitted metadata. Include these returned warnings when presenting the preview.
+rejected before writing. Replacement is DELETE followed by POST, not atomic; a concurrent change
+after preflight can still race the write. Public exports flatten imported organization patterns
+and omit metadata, so replacement and restoration cannot preserve those links or omitted
+metadata. Include these returned warnings when presenting the preview.
 
 If an operation fails, report the error and inspect the saved state before retrying. CLI writes
-save a local backup; MCP errors can include the previous export. Recovery is best effort and is
-attempted only after a read verifies the project is empty. Preserve the reported backup or
-previous export and recovery instructions; do not claim restoration succeeded without checking.
+save a local backup; MCP errors can include the previous export. Recovery is best effort and
+attempted only after a read verifies emptiness. Preserve the backup or previous export and
+recovery instructions; do not claim restoration succeeded without checking.
+
+## Availability
+
+Intended operations on SonarQube Server await public project UUID resolution. Directive reads
+and writes are unavailable pending public API support. Deviations, structural flaws and
+architecture coverage are not exposed by these adapters in this iteration. Do not call
+unavailable operations, claim their results or substitute other analysis tools.
 `;
