@@ -48,6 +48,7 @@ import {
 } from './git/tools';
 import { integrateOpenCode } from './opencode';
 import { openCodeIntegration } from './opencode/declaration.ts';
+import { piIntegration } from './pi/declaration.ts';
 
 export interface IntegrateBareOptions {
   nonInteractive?: boolean;
@@ -82,6 +83,7 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [antigravityIntegration.id]: antigravityIntegration.displayName,
   [openCodeIntegration.id]: openCodeIntegration.displayName,
   [devinIntegration.id]: devinIntegration.displayName,
+  [piIntegration.id]: piIntegration.displayName,
   [NATIVE_GIT_INTEGRATION_ID]: 'Git',
   [HUSKY_INTEGRATION_ID]: 'Git',
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
