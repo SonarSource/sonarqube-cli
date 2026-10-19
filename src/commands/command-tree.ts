@@ -560,7 +560,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('codex')
     .description(
-      'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
+      'Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
