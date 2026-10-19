@@ -29,6 +29,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import {
   excludeOutsideProject,
+  type IgnoredFile,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -39,6 +40,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { isInsideProjectRoot } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
@@ -172,9 +174,20 @@ async function analyzeSqaaExplicitFiles(
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
+  const insideProject = entries.filter((e) =>
+    isInsideProjectRoot(e.absolutePath, resolved.projectRoot),
+  );
+  const ignored: IgnoredFile[] = entries
+    .filter((e) => !insideProject.includes(e))
+    .map((e) => ({ path: e.absolutePath, reason: 'outside-project' }));
+  if (insideProject.length === 0) {
+    console.text('Vortex analysis: no files to analyze. All files are outside the project root.');
+    return;
+  }
 
-  await runSqaaAnalysisOnExplicitFiles(entries, {
+  if (!(await confirmLargeRunIfNeeded(insideProject.length, console, force, format))) return;
+
+  await runSqaaAnalysisOnExplicitFiles(insideProject, ignored, {
     resolved,
     branch: resolvedBranch,
     format,
