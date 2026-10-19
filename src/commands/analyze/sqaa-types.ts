@@ -57,6 +57,8 @@ export interface AnalyzeSqaaOptions {
 export interface SqaaResolvedContext {
   connection: SonarConnection;
   projectKey: string;
+  /** Base for the paths sent to SQAA, which matches them against the project's analysis root. */
+  projectRoot: string;
 }
 
 export interface SqaaBatchRunOptions {
