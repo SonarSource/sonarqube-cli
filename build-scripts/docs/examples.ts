@@ -79,9 +79,17 @@ export const EXAMPLES: Record<string, Example[]> = {
   ],
   'sonar integrate': [
     {
-      command: 'sonar integrate claude -g',
+      command: 'sonar integrate',
       description:
-        'Integrate globally and install hooks to ~/.claude which will be available for all projects',
+        'Interactively choose a tool (Claude Code, Codex, Copilot, Cursor, …) to integrate with',
+    },
+    {
+      command: 'sonar integrate claude',
+      description: 'Integrate Claude Code (interactive setup, including install location)',
+    },
+    {
+      command: 'sonar integrate claude --non-interactive',
+      description: 'Integrate Claude Code without prompts, for scripts and CI',
     },
   ],
   'sonar integrate git': [
