@@ -40,7 +40,7 @@ import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { UsersClient } from '@/core/server/users.ts';
