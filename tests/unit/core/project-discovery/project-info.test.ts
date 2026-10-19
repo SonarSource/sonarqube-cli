@@ -149,6 +149,56 @@ describe('discoverProject', () => {
     remoteSpy.mockRestore();
   });
 
+  it('logs each unsuccessful discovery source while keeping silent output empty', async () => {
+    const debug = spyOn(logger, 'debug');
+    const console = new FakeConsole();
+    try {
+      await discoverProject(testDir, { console, auth: MOCK_AUTH, silent: true });
+      const messages = debug.mock.calls.map(([message]) => message).join('\n');
+      expect(messages).toContain('Project discovery shared config: no usable .sonar-config.json');
+      expect(messages).toContain('Project discovery known mappings: no mapping matched');
+      expect(messages).toContain(
+        'Project discovery local config: no usable sonar-project.properties or .sonarlint config',
+      );
+      expect(messages).toContain('Project discovery git remote binding: no git remote found');
+      expect(console.calls).toEqual([]);
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('retains a partial-configuration signal without exposing an incomplete project', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonar.example.com\n',
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
+    expect(result.hasSonarConfig).toBe(true);
+    expect(result.projectKey).toBeUndefined();
+    expect(
+      (await discoverProjects(testDir, { console: new FakeConsole(), auth: null })).projects,
+    ).toEqual([]);
+  });
+
+  it.each([
+    { binding: null, expected: true },
+    { binding: undefined, expected: false },
+  ])(
+    'distinguishes empty remote bindings from failed lookups: $expected',
+    async ({ binding, expected }) => {
+      fakeFs.mkdir(join(testDir, '.git'));
+      getGitRemoteSpy.mockResolvedValue('https://github.com/example/repository.git');
+      remoteSpy.mockResolvedValue(binding);
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+      expect(result.gitRemoteBindingNotFound).toBe(expected);
+      expect(result.hasSonarConfig).toBe(false);
+      expect(result.projectKey).toBeUndefined();
+    },
+  );
+
   it('resolves repoRoot from filesystem, undefined outside a git repository', async () => {
     expect(
       (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).repoRoot,
@@ -1418,6 +1468,7 @@ describe('discoverProjects', () => {
       });
 
       expect(result.projectKey).toBeUndefined();
+      expect(result.ambiguousProject).toBe(true);
     });
 
     it('resolves normally when there is no ambiguity', async () => {
@@ -1431,6 +1482,7 @@ describe('discoverProjects', () => {
       });
 
       expect(result.projectKey).toBe('known-project');
+      expect(result.ambiguousProject).toBe(false);
     });
   });
 });
