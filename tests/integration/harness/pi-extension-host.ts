@@ -31,12 +31,14 @@ export type PiExtensionStep = { event: string; payload?: unknown } | { remove: s
 export interface PiExtensionOptions {
   processCwd?: string;
   sessionIdThrows?: boolean;
+  entries?: unknown[];
   env?: Record<string, string>;
 }
 
 export interface PiExtensionRun {
   registered: string[];
   results: unknown[];
+  sentMessages: unknown[];
 }
 
 export async function runPiExtension(
@@ -50,6 +52,7 @@ export async function runPiExtension(
     cwd: harness.cwd.path,
     sessionId: DEFAULT_SESSION_ID,
     sessionIdThrows: options.sessionIdThrows,
+    entries: options.entries,
     steps,
   };
   const proc = Bun.spawn([process.execPath, DRIVER_PATH], {
