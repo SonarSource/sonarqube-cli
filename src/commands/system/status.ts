@@ -72,6 +72,7 @@ import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
+import { renderCodexInstallation } from './status-codex.ts';
 import {
   buildVortexJson,
   buildVortexRecommendation,
@@ -758,8 +759,12 @@ function renderIntegrationsSection(integrations: IntegrationInfo[], console: Con
   console.blank();
   console.text('INTEGRATIONS');
   for (const i of integrations) {
-    const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
-    console.text(`  • ${line}`);
+    if (i.id === 'codex') {
+      renderCodexInstallation(i.path, console);
+    } else {
+      const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
+      console.text(`  • ${line}`);
+    }
     if (i.mcp) {
       console.text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
     }
