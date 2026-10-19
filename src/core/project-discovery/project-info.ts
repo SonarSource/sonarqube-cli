@@ -38,6 +38,7 @@ import {
   type CompleteProjectMapping,
   DiscoveredProjects,
   isCompleteProjectMapping,
+  isSameConnection,
   type PartialProjectMapping,
   ProjectDiscoveryResult,
 } from '@/core/project-discovery/project-discovery-result.ts';
@@ -92,7 +93,8 @@ async function discoverLocalConfig(
     useKnownMappings: false,
   });
   const scoped = result.scope(invocationDir);
-  const mapping = scoped.length > 1 ? undefined : scoped.at(0);
+  // Several scoped mappings aren't ambiguous here the way they are for discoverProject(): projectKey is never read.
+  const mapping = scoped.length <= 1 || isSameConnection(scoped) ? scoped.at(0) : undefined;
   return { serverUrl: mapping?.serverUrl, organization: mapping?.organization };
 }
 

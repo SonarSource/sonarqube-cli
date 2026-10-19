@@ -44,6 +44,14 @@ export function isCompleteProjectMapping(
   return mapping.projectKey !== undefined && mapping.serverUrl !== undefined;
 }
 
+export function isSameConnection(mappings: ProjectMapping[]): boolean {
+  const [first, ...rest] = mappings;
+  return rest.every(
+    (mapping) =>
+      mapping.serverUrl === first.serverUrl && mapping.organization === first.organization,
+  );
+}
+
 /** Matches on the same ancestry line as `path`, either direction — no nearest-wins, so a nested path can match more than one. */
 function scopeByAncestry<T extends { projectRoot: string }>(mappings: T[], path: string): T[] {
   const target = canonicalizePath(path);

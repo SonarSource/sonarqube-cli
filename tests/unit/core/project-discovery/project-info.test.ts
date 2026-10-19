@@ -1504,6 +1504,76 @@ describe('discoverOrganization', () => {
     }
   });
 
+  it('resolves organization from several sibling projects that share the same organization, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-siblings-same-' + Date.now());
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBe('shared-org');
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('degrades to null when several sibling projects disagree on organization', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-siblings-diff-' + Date.now());
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: 'org-1',
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: 'org-2',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBeNull();
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
   it('ignores known-server-project-mapping during pre-login discovery', async () => {
     const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-known-mapping-' + Date.now());
     fakeFs.mkdir(testDir);
