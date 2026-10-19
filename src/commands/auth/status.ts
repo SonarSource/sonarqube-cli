@@ -274,10 +274,10 @@ function displayNotAuthenticated(console: Console, format: AuthStatusFormat): vo
  * The connection this project records, when it differs from the credentials in use.
  *
  * `sonar auth status` answers a global question, but `sonar context` resolves credentials
- * per project and only accepts them when the server and organization both match what the
- * project recorded. Those two answers can disagree, and when they do the user is told
- * "Connected" by the very command meant to check, then told "not authenticated" by the next
- * one. That contradiction reads as a broken tool and sends people looking in the wrong place.
+ * per project and only accepts them when the server matches what the project recorded. Those
+ * two answers can disagree, and when they do the user is told "Connected" by the very command
+ * meant to check, then told "not authenticated" by the next one. That contradiction reads as a
+ * broken tool and sends people looking in the wrong place.
  *
  * Returns null whenever there is nothing useful to say: outside a project, when nothing was
  * recorded, when it matches, or when discovery fails. Discovery must never make this command
@@ -294,7 +294,7 @@ async function mismatchedProjectConnection(
     }
     const serverUrl = discovered.serverUrl ?? auth.serverUrl;
     const orgKey = discovered.organization ?? auth.orgKey;
-    const credentialSource = recordedConnectionCredentialSource(auth, serverUrl, orgKey);
+    const credentialSource = recordedConnectionCredentialSource(auth, serverUrl);
     if (credentialSource === 'active') {
       return null;
     }

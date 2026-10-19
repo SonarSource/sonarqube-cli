@@ -117,7 +117,7 @@ async function resolveContextToken(
 ): Promise<string> {
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
   const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
-  const credentialSource = recordedConnectionCredentialSource(auth, serverUrl, organization);
+  const credentialSource = recordedConnectionCredentialSource(auth, serverUrl);
   if (credentialSource === 'active') {
     return auth.token;
   }
@@ -158,13 +158,16 @@ async function resolveContextToken(
       // With a working keychain, logging in is the fix. If libsecret cannot be loaded,
       // `sonar auth login` cannot store its token in that keychain.
       //
-      // Environment credentials for another organization on this server are ignored here.
+      // Naming the variables is not enough either. This branch is mostly reached when they are
+      // already set and simply point elsewhere, since environment credentials only apply when
+      // the server matches the recorded connection. So the values are named too.
       remediationHint: keychainUnavailable
         ? 'The system keychain is unavailable because libsecret could not be loaded. Install or repair libsecret, or ' +
           `authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
           organizationHint +
           '. ' +
-          'Credentials for another organization on this server are ignored. ' +
+          'Credentials pointing at a different server are ignored, which is the ' +
+          'usual reason this appears when they look configured. ' +
           'If the connection above is itself wrong, re-run sonar integrate claude or ' +
           'sonar integrate copilot from this project to record the right one.'
         : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
