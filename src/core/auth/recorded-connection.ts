@@ -26,10 +26,9 @@ export type RecordedConnectionCredentialSource = 'active' | 'stored-token' | 'di
 export function recordedConnectionCredentialSource(
   auth: ResolvedAuth,
   serverUrl: string,
-  orgKey: string | undefined,
 ): RecordedConnectionCredentialSource {
   if (normalizeServerUrl(auth.serverUrl) !== normalizeServerUrl(serverUrl)) {
     return 'different-server';
   }
-  return auth.orgKey === orgKey ? 'active' : 'stored-token';
+  return 'active';
 }
