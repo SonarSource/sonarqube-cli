@@ -119,7 +119,7 @@ describe('env-var auth — state sync', () => {
   );
 
   it(
-    'does not mark a keychain-backed connection envOnly when env vars match the same server',
+    'does not mark a keychain-backed connection envOnly when the env token is the stored token',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('login-token').start();
       harness
@@ -129,7 +129,7 @@ describe('env-var auth — state sync', () => {
         .withKeychainToken(server.baseUrl(), 'login-token');
 
       const envResult = await harness.run('system status', {
-        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
+        extraEnv: { [ENV_TOKEN]: 'login-token', [ENV_SERVER]: server.baseUrl() },
       });
       expect(envResult.exitCode).toBe(0);
       expect(
@@ -145,6 +145,30 @@ describe('env-var auth — state sync', () => {
       expect(state.auth.isAuthenticated).toBe(false);
       expect(state.auth.connections).toHaveLength(0);
       expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({});
+    },
+    { timeout: 20000 },
+  );
+
+  it(
+    'marks the connection envOnly when the env token differs from the token stored for the same server',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('login-token').start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withTokenName('cli-login-token')
+        .withKeychainToken(server.baseUrl(), 'login-token');
+      const account = generateKeychainAccount(server.baseUrl());
+
+      const result = await harness.run('system status', {
+        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect((harness.stateJsonFile.asJson() as StoredState).auth.connections[0].envOnly).toBe(
+        true,
+      );
+      expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({ [account]: 'login-token' });
     },
     { timeout: 20000 },
   );
