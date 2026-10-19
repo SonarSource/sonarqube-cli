@@ -40,6 +40,21 @@ function resolveCommand(path: string[]): Command {
 }
 
 describe('createCommandTree', () => {
+  it('describes every installed Codex component', () => {
+    const description = resolveCommand(['integrate', 'codex']).description();
+    for (const part of [
+      'UserPromptSubmit',
+      'secrets-on-read instructions',
+      'MCP server',
+      'When Vortex is available',
+      'startup context hooks',
+      'analysis hooks',
+      'end-of-turn analysis instructions',
+    ]) {
+      expect(description).toContain(part);
+    }
+  });
+
   it('still accepts the deprecated --project on post-tool-use hooks', () => {
     for (const cmd of ['claude-post-tool-use', 'codex-post-tool-use']) {
       const hook = resolveCommand(['hook', cmd]);
