@@ -18,10 +18,39 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'bun:test';
 
 import { supportedIntegrations } from '@/commands/integrate';
-import { PI_INTEGRATION_ID, piIntegration } from '@/commands/integrate/pi/declaration.ts';
+import {
+  PI_INTEGRATION_ID,
+  piIntegration,
+  resolvePiMcpConfigPath,
+} from '@/commands/integrate/pi/declaration.ts';
+import type { IntegrationContext } from '@/core/framework/features';
+
+import { FakeConsole } from '../../../../_common/fake-console.ts';
+
+function fakeContext(scope: IntegrationContext['scope'], targetRoot: string): IntegrationContext {
+  return {
+    targetRoot,
+    scope,
+    attrs: {},
+    state: {} as never,
+    executionMode: 'install',
+    console: new FakeConsole(),
+    resolvedDependencies: new Map(),
+  };
+}
+
+describe('resolvePiMcpConfigPath', () => {
+  it('writes to <project>/.pi/mcp.json for the project scope', () => {
+    expect(resolvePiMcpConfigPath(fakeContext('project', '/project/root'))).toBe(
+      join('/project/root', '.pi', 'mcp.json'),
+    );
+  });
+});
 
 describe('piIntegration', () => {
   it('is declared as the pi integration, displayed as Pi', () => {
