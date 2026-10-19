@@ -50,6 +50,24 @@ describe('SonarHttpClient', () => {
     fetchSpy?.mockRestore();
   });
 
+  it.each(['POST', 'DELETE'] as const)(
+    'identifies the CLI on architecture %s requests',
+    async (method) => {
+      fetchSpy = mockFetch({});
+      const endpoint = '/api/v2/architecture/intended-architectures';
+      const result =
+        method === 'POST'
+          ? await client.post(endpoint, { models: [] })
+          : await client.delete(`${endpoint}/model-id`);
+
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchInit(fetchSpy).method).toBe(method);
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    },
+  );
+
   describe('get', () => {
     it('uses serverURL as base by default', async () => {
       fetchSpy = mockFetch({ valid: true });
@@ -301,6 +319,27 @@ describe('SonarHttpClient', () => {
       const result = await client.post('/api/some/endpoint', {});
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+  });
+
+  describe('delete', () => {
+    it('sends DELETE without a body to the endpoint host', async () => {
+      fetchSpy = mockFetch(null, { status: 204 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/m-1`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('DELETE');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('returns an error result with the status when response is not ok', async () => {
+      fetchSpy = mockFetch({ message: 'Forbidden' }, { ok: false, status: 403 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toContain('403');
     });
   });
 
