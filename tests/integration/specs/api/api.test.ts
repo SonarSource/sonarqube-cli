@@ -20,6 +20,8 @@
 
 // Integration tests for `api` — generic authenticated API requests
 
+import { STATUS_CODES } from 'node:http';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
@@ -212,4 +214,48 @@ describe('api', () => {
     },
     { timeout: 15000 },
   );
+  it.each([
+    ['get', 400, '{"errors":[{"msg":"A component key is required"}]}'],
+    ['get', 403, '{"errors":[{"msg":"Insufficient privileges"}]}'],
+    ['get', 404, 'Project not found'],
+    ['get', 429, '{"message":"Too many requests"}'],
+    ['post', 400, '{"message":"Invalid parameters","code":"BAD_REQUEST"}'],
+    ['post', 403, 'Forbidden request'],
+    ['post', 413, '{"message":"Payload too large"}'],
+    ['put', 500, 'Internal server error'],
+    ['patch', 503, '<html>Service unavailable</html>'],
+    ['delete', 502, 'Upstream failed\nTry again later'],
+    ['get', 400, ''],
+  ])(
+    'reports the raw body for %s with HTTP %i',
+    async (method, status, body) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('valid-token')
+        .withProjectsSearchError(status, body)
+        .start();
+      harness.withAuth(server.baseUrl(), 'valid-token');
+
+      const result = await harness.run(`api ${method} /api/projects/search`);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      const statusText = STATUS_CODES[status];
+      const expected = `SonarQube API error: ${status} ${statusText}${body ? ` - ${body}` : ''}`;
+      expect(result.stderr).toContain(expected);
+      if (!body) expect(result.stderr).not.toContain(' - ');
+    },
+    { timeout: 15000 },
+  );
+
+  it('documents response output and the HTTP error format in help', async () => {
+    const result = await harness.run('api --help');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Successful requests print the response body to stdout.');
+    expect(result.stdout).toContain(
+      'SonarQube API error: <status> <status text> - <response body>',
+    );
+    expect(result.stdout).toContain('without JSON parsing');
+  });
 });

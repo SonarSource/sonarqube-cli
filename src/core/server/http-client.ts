@@ -210,7 +210,20 @@ export class SonarHttpClient {
         console.print(`response status: ${response.status}`, 'stderr');
         console.print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
       }
-      return this.toStatusCheckedResult(response, method, () => response.text());
+      return ResultAsync.fromPromise(
+        response.text(),
+        (error) =>
+          new UnexpectedApiError(
+            response.status,
+            error instanceof Error ? error.message : String(error),
+          ),
+      ).andThen((body) =>
+        response.ok
+          ? okAsync(body)
+          : errAsync(
+              new UnexpectedApiError(response.status, apiErrorFallbackMessage(response, body)),
+            ),
+      );
     });
   }
 

@@ -439,7 +439,7 @@ describe('SonarHttpClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('returns a BadRequestError result on non-ok POST response', async () => {
+    it('returns the raw response body on non-ok POST response', async () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       const result = await client.genericRequest(
         'POST',
@@ -450,8 +450,8 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
-        message: 'Bad request',
+        name: 'UnexpectedApiError',
+        message: expect.stringContaining('{"message":"Bad request"}'),
       });
     });
 
@@ -466,16 +466,18 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
+        name: 'UnexpectedApiError',
         message: expect.stringContaining('Transition failed'),
       });
     });
 
-    it('returns an access-denied error result on GET 403', async () => {
+    it('returns the status and raw body on GET 403', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       const result = await client.genericRequest('GET', '/api/system/status', fake);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain('Access denied');
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'SonarQube API error: 403 Internal Server Error - {}',
+      );
     });
 
     it('returns an error result instead of throwing on a transport failure', async () => {
