@@ -34,8 +34,8 @@ import { discoverProject } from '@/core/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
-import { isInsideProjectRoot, resolveSqaaPath } from '../analyze/sqaa-api.ts';
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
+import { isInsideProjectRoot, resolveSqaaPath } from '../analyze/sqaa-paths.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';

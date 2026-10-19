@@ -29,7 +29,7 @@ import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { isInsideProjectRoot } from './sqaa-api.ts';
+import { isInsideProjectRoot } from './sqaa-paths.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB

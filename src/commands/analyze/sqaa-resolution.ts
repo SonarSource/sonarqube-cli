@@ -76,6 +76,9 @@ export async function resolveSqaaConnectionAndProject(
   }
 
   const lookupDir = startDir ?? process.cwd();
+  // An explicit --project already supplies the key, so skip the git-remote binding lookup
+  // (a server round trip). Discovery still runs because the project root is needed to build
+  // server paths, and known mappings and local config are enough to find it.
   const discovered = await discoverSqaaProject(auth, console, lookupDir, {
     useGitRemoteBinding: !explicitProject,
   });

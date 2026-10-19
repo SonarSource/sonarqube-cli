@@ -28,13 +28,7 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import type { RunContext, RunTally } from './sqaa-analysis.ts';
 import { runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
-import {
-  fetchWithRetry,
-  readSqaaFileContent,
-  resolveSqaaPath,
-  type SqaaPath,
-  withDisplayFilePath,
-} from './sqaa-api.ts';
+import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -53,6 +47,7 @@ import {
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
 import type { ResolvedSqaaFileEntry } from './sqaa-file-arg.ts';
+import { resolveSqaaPath, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import type {
@@ -175,7 +170,7 @@ export async function runSqaaAnalysesTallyForResolved(
     console,
   });
   const ctx: RunContext = {
-    ...runContextPaths(paths),
+    paths,
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -184,16 +179,6 @@ export async function runSqaaAnalysesTallyForResolved(
     displayAnalysisDepth: displayDepth,
   };
   return runAnalyses(ctx);
-}
-
-function runContextPaths(
-  paths: SqaaPath[],
-): Pick<RunContext, 'files' | 'allPaths' | 'serverPaths'> {
-  return {
-    files: paths.map((p) => p.absolutePath),
-    allPaths: paths.map((p) => p.displayPath),
-    serverPaths: paths.map((p) => p.serverPath),
-  };
 }
 
 export async function fetchSingleFileReport(
@@ -303,6 +288,9 @@ export async function runSqaaAnalysisOnExplicitFiles(
     console,
   } = options;
   const cwd = process.cwd();
+  // Unlike change-set files, which are skipped as `outside-project`, a file the user named
+  // explicitly that lies outside the project root is an input error: this throws rather than
+  // silently dropping it from the run.
   const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
   const allPaths = paths.map((p) => p.displayPath);
 
@@ -325,7 +313,7 @@ export async function runSqaaAnalysisOnExplicitFiles(
 
   const progress = new SqaaProgress({ files: allPaths, console: options.console });
   const ctx: RunContext = {
-    ...runContextPaths(paths),
+    paths,
     connection: resolved.connection,
     projectKey: resolved.projectKey,
     branch,
@@ -383,7 +371,7 @@ export async function runSqaaAnalysisOnFiles(
     console: options.console,
   });
   const ctx: RunContext = {
-    ...runContextPaths(paths),
+    paths,
     connection,
     projectKey,
     branch,

@@ -22,7 +22,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
-import { readSqaaFileContent, resolveSqaaPath } from './sqaa-api.ts';
+import { readSqaaFileContent } from './sqaa-api.ts';
 import {
   type ChangeSetResult,
   excludeOutsideProject,
@@ -43,6 +43,7 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { resolveSqaaPath } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   fetchSingleFileReport,
