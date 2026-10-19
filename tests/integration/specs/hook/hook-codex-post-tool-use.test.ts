@@ -20,6 +20,8 @@
 
 // Integration tests for `sonar hook codex-post-tool-use`.
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
@@ -31,7 +33,7 @@ import {
   parseSqaaRequestBody,
   sqaaRequestFileCount,
 } from '../analyze/sqaa-request-helpers';
-import { commitFile, initGitRepo } from './git-test-helpers';
+import { commitFile, git, initGitRepo } from './git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -130,6 +132,37 @@ describe('sonar hook codex-post-tool-use', () => {
       expect(sqaaRequestFileCount(sqaaCalls[0].body)).toBe(2);
       expect(allSqaaRequestsUseDeep(sqaaCalls)).toBe(false);
       expect(parseSqaaRequestBody(sqaaCalls[0].body).analysisDepth).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'lists repository-relative paths when every changed file is outside the project root',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/sonar-project.properties', 'sonar.projectKey=pkg-project\n');
+      harness.cwd.writeFile('pkg/src/.keep', '');
+      git(['add', 'pkg'], harness.cwd.path);
+      git(['commit', '-m', 'add pkg'], harness.cwd.path);
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('hook codex-post-tool-use', {
+        cwd: join(harness.cwd.path, 'pkg/src'),
+      });
+
+      expect(result.exitCode).toBe(0);
+      const { additionalContext } = JSON.parse(result.stdout.trim()).hookSpecificOutput;
+      expect(additionalContext).toContain('other/b.ts (outside-project)');
+      expect(additionalContext).not.toContain(harness.cwd.path);
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(0);
     },
     { timeout: 15000 },
   );
