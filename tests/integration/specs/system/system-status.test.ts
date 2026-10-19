@@ -649,8 +649,13 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Codex: CONFIGURED');
-      expect(normalizePath(result.stdout)).toContain('.codex/hooks.json');
+      expect(result.stdout).toContain('Codex: RECORDED AS INSTALLED');
+      expect(result.stdout).toContain(
+        'Status does not verify hook delivery to the current session.',
+      );
+      expect(normalizePath(result.stdout)).toMatch(
+        /\.codex\/hooks\.json|\/etc\/codex\/requirements\.toml/,
+      );
     },
     { timeout: 15000 },
   );

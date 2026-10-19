@@ -95,6 +95,23 @@ describe('integrate codex', () => {
     await harness.dispose();
   });
 
+  it('lists installed components in help', async () => {
+    const result = await harness.run('integrate codex --help');
+    expect(result.exitCode).toBe(0);
+    const help = result.stdout.replace(/\s+/g, ' ');
+    for (const part of [
+      'UserPromptSubmit',
+      'secrets-on-read instructions',
+      'MCP server',
+      'When Vortex is available',
+      'startup context hooks',
+      'analysis hooks',
+      'end-of-turn analysis instructions',
+    ]) {
+      expect(help).toContain(part);
+    }
+  });
+
   describe('install (default: global)', () => {
     it(
       'writes script + hooks.json under $HOME/.codex/ with an absolute command path',
