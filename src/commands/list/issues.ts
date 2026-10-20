@@ -27,7 +27,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
 import logger from '@/core/observability/logger.ts';
-import { resolveProjectKey } from '@/core/project-info.ts';
+import { resolveProjectKey } from '@/core/project-discovery/project-info.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { AccessDeniedError } from '@/core/server/errors.ts';

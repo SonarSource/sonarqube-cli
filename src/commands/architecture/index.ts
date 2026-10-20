@@ -39,7 +39,10 @@ import { assertGroupExists, revisionOf, viewIntended } from '@/core/architecture
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 
 import { formatCurrentText } from './current-text.ts';
 import { formatIntendedText } from './intended-text.ts';
