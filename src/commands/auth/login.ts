@@ -87,11 +87,11 @@ export async function authLogin(
   }
 
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
-  // keeps the keychain account, the recorded connection and the resolved organization consistent.
+  // keeps the recorded connection and the resolved organization consistent.
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption, console);
+    const auth = await getOrGenerateToken(server, console);
     const { token, tokenName, reusedExistingToken } = auth;
 
     const org = await resolveOrganization(
@@ -191,14 +191,13 @@ async function persistLoginCredentials(
   const state = loadState();
   const existingConnection = getActiveConnection(state);
 
-  const previousToken = await getKeystoreToken(server, org);
+  const previousToken = await getKeystoreToken(server);
   if (
     !options.reusedExistingToken &&
     existingConnection?.tokenName &&
     previousToken &&
     previousToken !== token &&
-    existingConnection.serverUrl === server &&
-    existingConnection.orgKey === org
+    existingConnection.serverUrl === server
   ) {
     const outcome = await revokeServerTokenIfPossible(
       { serverUrl: server, tokenName: existingConnection.tokenName },
@@ -212,16 +211,14 @@ async function persistLoginCredentials(
     }
   }
 
-  await deleteStaleTokens(state.auth.connections, server, org);
-  await saveToken(server, token, org);
+  await deleteStaleTokens(state.auth.connections, server);
+  await saveToken(server, token);
 
   const connectionTokenName =
-    options.reusedExistingToken &&
-    existingConnection?.serverUrl === server &&
-    existingConnection.orgKey === org
+    options.reusedExistingToken && existingConnection?.serverUrl === server
       ? existingConnection.tokenName
       : options.tokenName;
-  const actualToken = token || (await getKeystoreToken(server, org));
+  const actualToken = token || (await getKeystoreToken(server));
 
   if (actualToken) {
     await recordConnectionFromAuth(
@@ -348,13 +345,11 @@ async function discardGeneratedToken(
  */
 async function getOrGenerateToken(
   server: string,
-  org: string | undefined,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const existingToken = await getKeystoreToken(server, org);
+  const existingToken = await getKeystoreToken(server);
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
-    console.print(`Token already exists for: ${displayServer}`);
+    console.print(`Token already exists for: ${server}`);
     console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
   }

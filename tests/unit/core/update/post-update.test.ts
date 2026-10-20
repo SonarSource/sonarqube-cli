@@ -154,29 +154,31 @@ describe('runPostUpdateActions', () => {
   });
 
   it('saves the reloaded state, not the pre-runActions snapshot', async () => {
-    // The version check reads via tryLoadState, so loadState is called 8 times:
+    // The version check reads via tryLoadState, so loadState is called 9 times:
     //   1. inside migrateLegacyStateConfig
     //   2. inside migrateLegacyTelemetryEvents
     //   3. inside migrateKnownServerProjectMappings
-    //   4. inside migrateAgentIntegrationsToGlobalScope
-    //   5. inside migrateDeclarativeIntegrations
-    //   6. inside updateSecretsBinaryIfNeeded
-    //   7. inside updateScaScannerBinaryIfNeeded
-    //   8. the reload after runActions (the fix being tested)
+    //   4. inside migrateLegacyKeychainTokens
+    //   5. inside migrateAgentIntegrationsToGlobalScope
+    //   6. inside migrateDeclarativeIntegrations
+    //   7. inside updateSecretsBinaryIfNeeded
+    //   8. inside updateScaScannerBinaryIfNeeded
+    //   9. the reload after runActions (the fix being tested)
     const reloadedState = makeState();
     loadStateSpy
       .mockReturnValueOnce(makeState()) // call 1: migrateLegacyStateConfig
       .mockReturnValueOnce(makeState()) // call 2: migrateLegacyTelemetryEvents
       .mockReturnValueOnce(makeState()) // call 3: migrateKnownServerProjectMappings
-      .mockReturnValueOnce(makeState()) // call 4: migrateAgentIntegrationsToGlobalScope
-      .mockReturnValueOnce(makeState()) // call 5: migrateDeclarativeIntegrations
-      .mockReturnValueOnce(makeState()) // call 6: updateSecretsBinaryIfNeeded
-      .mockReturnValueOnce(makeState()) // call 7: updateScaScannerBinaryIfNeeded
-      .mockReturnValueOnce(reloadedState); // call 8: reload
+      .mockReturnValueOnce(makeState()) // call 4: migrateLegacyKeychainTokens
+      .mockReturnValueOnce(makeState()) // call 5: migrateAgentIntegrationsToGlobalScope
+      .mockReturnValueOnce(makeState()) // call 6: migrateDeclarativeIntegrations
+      .mockReturnValueOnce(makeState()) // call 7: updateSecretsBinaryIfNeeded
+      .mockReturnValueOnce(makeState()) // call 8: updateScaScannerBinaryIfNeeded
+      .mockReturnValueOnce(reloadedState); // call 9: reload
 
     await runPostUpdateActions(makeDeps());
 
-    expect(loadStateSpy).toHaveBeenCalledTimes(8);
+    expect(loadStateSpy).toHaveBeenCalledTimes(9);
     expect(saveStateSpy.mock.calls[0][0]).toBe(reloadedState);
   });
 

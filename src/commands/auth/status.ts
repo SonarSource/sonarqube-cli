@@ -297,7 +297,7 @@ async function mismatchedProjectConnection(
       return null;
     }
     try {
-      if (await getToken(serverUrl, orgKey)) {
+      if (await getToken(serverUrl)) {
         return null;
       }
     } catch (err) {

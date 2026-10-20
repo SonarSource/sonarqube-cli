@@ -111,7 +111,7 @@ function resolveRecordedTokenName(
 
 async function matchesStoredToken(auth: ResolvedAuth): Promise<boolean> {
   try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) === auth.token;
+    return (await getToken(auth.serverUrl)) === auth.token;
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
     return true;

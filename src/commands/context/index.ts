@@ -121,7 +121,7 @@ async function resolveContextToken(
   let token: string | null = null;
   let keychainUnavailable = false;
   try {
-    token = await getToken(serverUrl, organization);
+    token = await getToken(serverUrl);
   } catch (err) {
     if (!(err instanceof MissingKeychainError)) {
       throw err;

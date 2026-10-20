@@ -172,7 +172,7 @@ describe('authStatus with FakeConsole', () => {
     await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
-    expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io', 'another-org');
+    expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io');
   });
 
   // Reporting must not become a reason to fail. Discovery reads the filesystem and can throw

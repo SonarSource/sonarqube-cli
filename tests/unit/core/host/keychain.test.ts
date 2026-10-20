@@ -82,63 +82,57 @@ describe('token caching', () => {
   const { getKeychainFile } = useFileBackend();
 
   it('returns cached value without hitting the backend again', async () => {
-    await saveToken('https://sonarcloud.io', 'token123', 'myorg');
+    await saveToken('https://sonarcloud.io', 'token123');
 
     writeFileSync(getKeychainFile(), '{ invalid json }');
 
-    const cached = await getToken('https://sonarcloud.io', 'myorg');
+    const cached = await getToken('https://sonarcloud.io');
     expect(cached).toBe('token123');
   });
 
   it('caches null when token is not found', async () => {
-    const result = await getToken('https://sonarcloud.io', 'missing-org');
+    const result = await getToken('https://sonarcloud.io');
     expect(result).toBeNull();
 
-    writeFileSync(
-      getKeychainFile(),
-      JSON.stringify({ tokens: { 'sonarcloud.io:missing-org': 'late-token' } }),
-    );
-    expect(await getToken('https://sonarcloud.io', 'missing-org')).toBeNull();
+    writeFileSync(getKeychainFile(), JSON.stringify({ tokens: { 'sonarcloud.io': 'late-token' } }));
+    expect(await getToken('https://sonarcloud.io')).toBeNull();
   });
 
   it('updates cache on saveToken', async () => {
-    await saveToken('https://sonarcloud.io', 'token-v1', 'myorg');
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('token-v1');
+    await saveToken('https://sonarcloud.io', 'token-v1');
+    expect(await getToken('https://sonarcloud.io')).toBe('token-v1');
 
-    await saveToken('https://sonarcloud.io', 'token-v2', 'myorg');
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('token-v2');
+    await saveToken('https://sonarcloud.io', 'token-v2');
+    expect(await getToken('https://sonarcloud.io')).toBe('token-v2');
   });
 
   it('removes from cache on deleteToken', async () => {
-    await saveToken('https://sonarcloud.io', 'token123', 'myorg');
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('token123');
+    await saveToken('https://sonarcloud.io', 'token123');
+    expect(await getToken('https://sonarcloud.io')).toBe('token123');
 
-    await deleteToken('https://sonarcloud.io', 'myorg');
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBeNull();
+    await deleteToken('https://sonarcloud.io');
+    expect(await getToken('https://sonarcloud.io')).toBeNull();
   });
 
   it('clearSecretCache forces re-read from backend', async () => {
-    await saveToken('https://sonarcloud.io', 'original', 'myorg');
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('original');
+    await saveToken('https://sonarcloud.io', 'original');
+    expect(await getToken('https://sonarcloud.io')).toBe('original');
 
-    writeFileSync(
-      getKeychainFile(),
-      JSON.stringify({ tokens: { 'sonarcloud.io:myorg': 'updated' } }),
-    );
+    writeFileSync(getKeychainFile(), JSON.stringify({ tokens: { 'sonarcloud.io': 'updated' } }));
     clearSecretCache();
 
-    expect(await getToken('https://sonarcloud.io', 'myorg')).toBe('updated');
+    expect(await getToken('https://sonarcloud.io')).toBe('updated');
   });
 
   it('caches different accounts independently', async () => {
-    await saveToken('https://sonarcloud.io', 'token1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token2', 'org2');
+    await saveToken('https://sonarcloud.io', 'token1');
+    await saveToken('https://sonarqube.us', 'token2');
     await saveToken('https://sonarqube.example.com', 'token3');
 
     writeFileSync(getKeychainFile(), '{ invalid json }');
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('token1');
-    expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token2');
+    expect(await getToken('https://sonarcloud.io')).toBe('token1');
+    expect(await getToken('https://sonarqube.us')).toBe('token2');
     expect(await getToken('https://sonarqube.example.com')).toBe('token3');
   });
 });
@@ -146,55 +140,29 @@ describe('token caching', () => {
 describe('deleteToken', () => {
   useFileBackend();
 
-  it('does not affect other tokens when deleting one', async () => {
-    await saveToken('https://sonarcloud.io', 'token1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token2', 'org2');
+  it('does not affect other servers when deleting one', async () => {
+    await saveToken('https://sonarcloud.io', 'token1');
+    await saveToken('https://sonarqube.us', 'token2');
 
-    await deleteToken('https://sonarcloud.io', 'org1');
+    await deleteToken('https://sonarcloud.io');
     clearSecretCache();
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
-    expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token2');
+    expect(await getToken('https://sonarcloud.io')).toBeNull();
+    expect(await getToken('https://sonarqube.us')).toBe('token2');
   });
 
   it('silently succeeds when deleting non-existent token', async () => {
-    const result = await deleteToken('https://sonarcloud.io', 'ghost-org');
+    const result = await deleteToken('https://sonarcloud.io');
     expect(result).toBeUndefined();
   });
 });
 
-describe('account key generation', () => {
-  useFileBackend();
-
-  it('uses hostname:org format for SonarCloud with org', () => {
-    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe('sonarcloud.io:my-org');
-  });
-
-  it('uses hostname only for SonarQube without org', () => {
-    expect(generateKeychainAccount('https://sonarqube.example.com')).toBe('sonarqube.example.com');
-  });
-
-  it('uses raw string as key when URL parsing fails', () => {
-    const invalidUrl = 'not-a-valid-url';
-    expect(generateKeychainAccount(invalidUrl)).toBe(invalidUrl);
-  });
-
-  it('isolates tokens by org on the same server', async () => {
-    await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
-    await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
-    clearSecretCache();
-
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('token-org1');
-    expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
-  });
-});
-
 describe('generateKeychainAccount', () => {
-  it('returns hostname:org for valid SonarCloud URL with org', () => {
-    expect(generateKeychainAccount('https://sonarcloud.io', 'my-org')).toBe('sonarcloud.io:my-org');
+  it('returns hostname for a valid SonarCloud URL', () => {
+    expect(generateKeychainAccount('https://sonarcloud.io')).toBe('sonarcloud.io');
   });
 
-  it('returns hostname only for valid URL without org', () => {
+  it('returns hostname for a valid server URL', () => {
     expect(generateKeychainAccount('https://sonar.example.com')).toBe('sonar.example.com');
   });
 
@@ -211,46 +179,46 @@ describe('deleteStaleTokens', () => {
   useFileBackend();
 
   it('deletes token for a replaced connection', async () => {
-    await saveToken('https://sonarcloud.io', 'old-token', 'org-old');
+    await saveToken('https://sonarcloud.io', 'old-token');
     clearSecretCache();
 
-    const oldConnections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'org-old' }];
+    const oldConnections = [{ serverUrl: 'https://sonarcloud.io' }];
     await deleteStaleTokens(oldConnections, 'https://sonar.company.com');
 
-    expect(await getToken('https://sonarcloud.io', 'org-old')).toBeNull();
+    expect(await getToken('https://sonarcloud.io')).toBeNull();
   });
 
-  it('preserves token when re-logging into the same server/org', async () => {
-    await saveToken('https://sonarcloud.io', 'my-token', 'my-org');
+  it('preserves token when re-logging into the same server', async () => {
+    await saveToken('https://sonarcloud.io', 'my-token');
     clearSecretCache();
 
-    const connections = [{ serverUrl: 'https://sonarcloud.io', orgKey: 'my-org' }];
-    await deleteStaleTokens(connections, 'https://sonarcloud.io', 'my-org');
+    const connections = [{ serverUrl: 'https://sonarcloud.io' }];
+    await deleteStaleTokens(connections, 'https://sonarcloud.io');
 
-    expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('my-token');
+    expect(await getToken('https://sonarcloud.io')).toBe('my-token');
   });
 
   it('is a no-op when connections array is empty', async () => {
-    await saveToken('https://sonarcloud.io', 'tok', 'org1');
+    await saveToken('https://sonarcloud.io', 'tok');
     clearSecretCache();
 
     await deleteStaleTokens([], 'https://other.example.com');
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('tok');
+    expect(await getToken('https://sonarcloud.io')).toBe('tok');
   });
 
   it('only deletes the stale connection, not the matching one', async () => {
-    await saveToken('https://sonarcloud.io', 'cloud-tok', 'org1');
+    await saveToken('https://sonarcloud.io', 'cloud-tok');
     await saveToken('https://sonar.internal.com', 'onprem-tok');
     clearSecretCache();
 
     const connections = [
-      { serverUrl: 'https://sonarcloud.io', orgKey: 'org1' },
+      { serverUrl: 'https://sonarcloud.io' },
       { serverUrl: 'https://sonar.internal.com' },
     ];
-    await deleteStaleTokens(connections, 'https://sonarcloud.io', 'org1');
+    await deleteStaleTokens(connections, 'https://sonarcloud.io');
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('cloud-tok');
+    expect(await getToken('https://sonarcloud.io')).toBe('cloud-tok');
     expect(await getToken('https://sonar.internal.com')).toBeNull();
   });
 });
@@ -270,24 +238,24 @@ describe('file backend edge cases', () => {
   });
 
   it('deleteToken is idempotent for already-deleted tokens', async () => {
-    await saveToken('https://sonarcloud.io', 'tok', 'org1');
-    await deleteToken('https://sonarcloud.io', 'org1');
-    await deleteToken('https://sonarcloud.io', 'org1');
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
+    await saveToken('https://sonarcloud.io', 'tok');
+    await deleteToken('https://sonarcloud.io');
+    await deleteToken('https://sonarcloud.io');
+    expect(await getToken('https://sonarcloud.io')).toBeNull();
   });
 
   it('backend cache is invalidated when SONARQUBE_CLI_KEYCHAIN_FILE changes', async () => {
-    await saveToken('https://sonarcloud.io', 'tok-original', 'org1');
+    await saveToken('https://sonarcloud.io', 'tok-original');
 
     const altDir = join(tmpdir(), `keychain-alt-${crypto.randomUUID()}`);
     mkdirSync(altDir, { recursive: true });
     const altFile = join(altDir, 'keychain.json');
-    writeFileSync(altFile, JSON.stringify({ tokens: { 'sonarcloud.io:org1': 'tok-alt' } }));
+    writeFileSync(altFile, JSON.stringify({ tokens: { 'sonarcloud.io': 'tok-alt' } }));
 
     process.env.SONARQUBE_CLI_KEYCHAIN_FILE = altFile;
     clearSecretCache();
 
-    expect(await getToken('https://sonarcloud.io', 'org1')).toBe('tok-alt');
+    expect(await getToken('https://sonarcloud.io')).toBe('tok-alt');
 
     rmSync(altDir, { recursive: true, force: true });
   });
@@ -370,7 +338,7 @@ describe('OS keychain unavailable (Bun.secrets backend)', () => {
     try {
       let caught: unknown;
       try {
-        await getToken('https://sonarcloud.io', 'my-org');
+        await getToken('https://sonarcloud.io');
       } catch (err) {
         caught = err;
       }
@@ -396,7 +364,7 @@ describe('OS keychain unavailable (Bun.secrets backend)', () => {
       try {
         let caught: unknown;
         try {
-          await getToken('https://sonarcloud.io', 'my-org');
+          await getToken('https://sonarcloud.io');
         } catch (err) {
           caught = err;
         }
