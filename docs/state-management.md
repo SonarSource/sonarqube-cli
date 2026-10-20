@@ -418,7 +418,9 @@ cat ~/.sonar/sonarqube-cli/state.json | jq '.dependencies.installed'
 - **Linux**: libsecret (GNOME Keyring, KWallet, etc.)
 - **Windows**: Windows Credential Manager
 
-The keychain account key is derived from the connection's `serverUrl` and `orgKey` fields.
+The keychain account is the hostname of the connection's `serverUrl`. The organization is not part of it.
+After an update, the CLI moves a token that an older CLI stored under `hostname:org` to the hostname account.
+The move runs once. If it fails, the CLI warns and does not retry, and the old `hostname:org` entry stays in the keychain until you remove it by hand.
 Sensitive `sonar config` values use `config/<key>` accounts in the same keychain service.
 Non-sensitive ones are stored in `~/.sonar/sonarqube-cli/cli-config.properties`, where values are literal (backslashes are not escapes).
 
