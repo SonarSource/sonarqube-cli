@@ -55,7 +55,9 @@ export function diffIntended(
       diffPerspective(language, before[0], after[0], diff);
       continue;
     }
-    const types = [...new Set([...before, ...after].map(({ type }) => type))].sort();
+    const types = [...new Set([...before, ...after].map(({ type }) => type))].sort((a, b) =>
+      a.localeCompare(b),
+    );
     for (const type of types) {
       diffPerspective(
         `${language} (${type})`,

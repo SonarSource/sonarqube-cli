@@ -130,8 +130,8 @@ function writeFailure(
   if (readError !== undefined)
     lines.push(`The server state is unknown. Read failed: ${messageOf(readError)}`);
   if (backupPath !== undefined) {
-    lines.push(`The previous export is saved in ${backupPath}`);
     lines.push(
+      `The previous export is saved in ${backupPath}`,
       `Restore it with: sonar architecture set intended --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
