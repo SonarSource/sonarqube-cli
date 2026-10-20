@@ -123,13 +123,16 @@ export class SonarHttpClient {
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       return new ServiceUnavailableError();
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
+    if ((method === 'POST' || method === 'PATCH') && response.status === HTTP_STATUS_BAD_REQUEST) {
       return await parseBadRequestError(response, this.isCloud);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+    if (
+      (method === 'POST' || method === 'PATCH' || method === 'DELETE') &&
+      response.status === HTTP_STATUS_FORBIDDEN
+    ) {
       return new ForbiddenApiError(await response.text());
     }
 
@@ -318,6 +321,39 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       this.toStatusCheckedResult(response, 'POST', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Replace a JSON resource through the authenticated proxy/TLS-aware transport. */
+  patch<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+    const headers = {
+      ...this.commonHeaders('json'),
+      'Content-Type': 'application/merge-patch+json',
+    };
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('PATCH', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'PATCH', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Make DELETE request to SonarQube API; the response body is discarded. */
+  delete(endpoint: string): ResultAsync<void, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('DELETE', this.commonHeaders(), POST_REQUEST_TIMEOUT_MS, undefined),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'DELETE', () => Promise.resolve(undefined)),
     );
   }
 
