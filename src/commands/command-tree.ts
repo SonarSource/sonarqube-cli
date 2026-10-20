@@ -798,6 +798,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'core',
+      label: 'link',
     })
     .argument('<projectKey>', 'SonarQube project key')
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
