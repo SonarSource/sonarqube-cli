@@ -69,13 +69,16 @@ export interface DiscoverProjectOptions {
    * skips git-remote binding. Pass `null` to skip git-remote binding entirely.
    */
   auth?: ResolvedAuth | null;
-  /** Disable remote binding lookup while retaining auth for local connection completion. */
-  useGitRemoteBinding?: boolean;
   /**
    * When false, skips known-server-project-mapping (pre-login discovery uses false so active
    * connection state cannot masquerade as project config during `sonar auth login`).
    */
   useKnownMappings?: boolean;
+  /**
+   * When false, skips only the git-remote binding step (a server round trip), leaving `auth`
+   * available to the local sources. For callers that already hold the project key.
+   */
+  useGitRemoteBinding?: boolean;
   /** Suppresses the "Found ..." stderr hints. Defaults to false. */
   silent?: boolean;
   console: Console;

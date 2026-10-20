@@ -24,7 +24,7 @@ import { discoverOrganization } from '@/core/project-discovery/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import {
   type Organization,
-  type OrganizationAccess,
+  type OrganizationMembership,
   type OrganizationsClient,
 } from '@/core/server/organizations.ts';
 import type { Paging } from '@/core/server/paging.ts';
@@ -35,32 +35,32 @@ import { formatOrganizationRows, type OrganizationRow } from './rows.ts';
 /**
  * Turn a rejected lookup into an error.
  *
- * A failed lookup gets its own message, so a network or server problem is never reported as a
- * missing organization.
+ * A failed lookup gets its own message, so a network or server problem is never reported as
+ * absent membership.
  */
-function organizationAccessError(
+function organizationMembershipError(
   org: string,
-  access: Extract<OrganizationAccess, { status: 'not_found' | 'check_failed' }>,
+  membership: Extract<OrganizationMembership, { status: 'not_member' | 'check_failed' }>,
 ): CommandFailedError {
-  if (access.status === 'not_found') {
-    return new CommandFailedError(`Organization '${org}' not found or not accessible.`, {
-      remediationHint: 'Check the organization key and your access, then try again.',
+  if (membership.status === 'not_member') {
+    return new CommandFailedError(`You are not a member of organization '${org}'.`, {
+      remediationHint: 'Choose an organization you belong to, then try again.',
     });
   }
 
-  return new CommandFailedError(`Could not verify organization '${org}': ${access.reason}`, {
+  return new CommandFailedError(`Could not verify organization '${org}': ${membership.reason}`, {
     remediationHint: 'Check your network connection and the server status, then try again.',
   });
 }
 
-/** Fail unless the server can resolve the key. */
-export async function assertOrganizationAccessible(
+/** Fail unless the token belongs to the organization. */
+export async function assertOrganizationMember(
   client: OrganizationsClient,
   org: string,
 ): Promise<void> {
-  const access = await client.resolveOrganizationAccess(org);
-  if (access.status !== 'accessible') {
-    throw organizationAccessError(org, access);
+  const membership = await client.checkMembership(org);
+  if (membership.status !== 'member') {
+    throw organizationMembershipError(org, membership);
   }
 }
 
@@ -74,7 +74,7 @@ export async function validateOrSelectOrganization(
   activeOrgKey: string | undefined,
 ): Promise<string> {
   if (org) {
-    await assertOrganizationAccessible(client, org);
+    await assertOrganizationMember(client, org);
     console.print(`Using organization: ${org}`);
     return org;
   }
@@ -82,18 +82,18 @@ export async function validateOrSelectOrganization(
   // Try to find organization in project configs first (skip the org listing)
   const configOrg = await discoverOrganization(console);
   if (configOrg) {
-    const access = await client.resolveOrganizationAccess(configOrg);
-    if (access.status === 'accessible') {
+    const membership = await client.checkMembership(configOrg);
+    if (membership.status === 'member') {
       console.print(`Using organization from config: ${configOrg}`);
       return configOrg;
     }
     // A stale key in a checked-in file cannot be corrected from here, so fall through to the
     // user's memberships rather than failing a command they can still complete. That lookup resolves
     // a single membership without asking anything, so it is worth trying on piped input too.
-    if (access.status === 'check_failed') {
-      throw organizationAccessError(configOrg, access);
+    if (membership.status === 'check_failed') {
+      throw organizationMembershipError(configOrg, membership);
     }
-    console.warn(`Organization '${configOrg}' from project config is not accessible.`);
+    console.warn(`You are not a member of organization '${configOrg}' from project config.`);
   }
 
   return await getUserSelectedOrganization(client, console, activeOrgKey);
@@ -115,7 +115,7 @@ function organizationRequiredError(): CommandFailedError {
 const MAX_ORGANIZATION_ATTEMPTS = 5;
 
 /**
- * Prompt for an organization key until the server resolves one.
+ * Prompt for an organization key until the token has membership.
  *
  * A typo — or an accidental Enter — is reported and asked again rather than failing the command.
  * Asking again cannot fix an outage, and piped input has nobody to ask, so those still abort on
@@ -142,12 +142,12 @@ async function promptForOrganizationKey(
       continue;
     }
 
-    const access = await client.resolveOrganizationAccess(org);
-    if (access.status === 'accessible') {
+    const membership = await client.checkMembership(org);
+    if (membership.status === 'member') {
       return org;
     }
-    lastError = organizationAccessError(org, access);
-    if (access.status !== 'not_found' || !process.stdin.isTTY) {
+    lastError = organizationMembershipError(org, membership);
+    if (membership.status !== 'not_member' || !process.stdin.isTTY) {
       throw lastError;
     }
     console.warn(lastError.message);
@@ -189,9 +189,10 @@ async function getUserSelectedOrganization(
     return singleOrg;
   }
 
-  // No org memberships — prompt for manual entry
   if (memberOrgs.length === 0) {
-    return promptForOrganizationKey(client, console);
+    throw new CommandFailedError('You are not a member of any organization.', {
+      remediationHint: 'Join a SonarQube Cloud organization, then try again.',
+    });
   }
 
   // Multiple orgs available — let user pick from a list or enter manually

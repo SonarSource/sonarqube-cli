@@ -540,6 +540,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
+  private readonly projectKeysByGitRemote: Map<string, string> = new Map();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -653,6 +654,15 @@ export class FakeSonarQubeServerBuilder {
    */
   withOrganizationBinding(organizationId: string, devOpsPlatform: string): this {
     this.organizationBindingsByOrgId.set(organizationId, devOpsPlatform);
+    return this;
+  }
+
+  /**
+   * Bind a git remote URL to a project for the Cloud lookup: `GET /dop-translation/project-bindings`
+   * resolves the URL to a project id, then `GET /api/components/search_projects` resolves the id to a key.
+   */
+  withGitRemoteBinding(remoteUrl: string, projectKey: string): this {
+    this.projectKeysByGitRemote.set(remoteUrl, projectKey);
     return this;
   }
 
@@ -926,6 +936,7 @@ export class FakeSonarQubeServerBuilder {
       currentUserId,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
+      projectKeysByGitRemote,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -1718,6 +1729,24 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/dop-translation/project-bindings' && req.method === 'GET') {
+          const projectKey = projectKeysByGitRemote.get(query.url ?? '');
+          return new Response(
+            JSON.stringify({ bindings: projectKey ? [{ projectId: `id-${projectKey}` }] : [] }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/components/search_projects' && req.method === 'GET') {
+          const projectIds = (query.projectIds ?? '').split(',');
+          const components = [...projectKeysByGitRemote.values()]
+            .filter((key) => projectIds.includes(`id-${key}`))
+            .map((key) => ({ key }));
+          return new Response(JSON.stringify({ components }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/dop-translation/organization-bindings') {
