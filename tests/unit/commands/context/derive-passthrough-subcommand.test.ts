@@ -34,7 +34,7 @@ import {
 
 afterEach(() => {
   spyOn(keychain, 'getToken').mockRestore();
-  spyOn(projectInfo, 'discoverProject').mockRestore();
+  spyOn(projectInfo, 'discoverWorkspace').mockRestore();
   setMockLogger(null);
   configureLogger({ level: 'INFO' });
 });
@@ -92,11 +92,14 @@ describe('runContextPassthrough', () => {
     const savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     clearSecretCache();
-    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      organization: 'recorded-org',
-      projectKey: 'project-key',
-      projectRoot: process.cwd(),
-      serverUrl: 'https://regional.sonarcloud.io',
+    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
+      kind: 'project',
+      project: {
+        organization: 'recorded-org',
+        projectKey: 'project-key',
+        projectRoot: process.cwd(),
+        serverUrl: 'https://regional.sonarcloud.io',
+      },
     });
     const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(new Error(message));
     const ctx = {
@@ -165,11 +168,14 @@ describe('runContextPassthrough', () => {
       success: () => {},
       warn: () => {},
     });
-    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      organization: 'recorded-org',
-      projectKey: 'project-key',
-      projectRoot: process.cwd(),
-      serverUrl: 'https://regional.sonarcloud.io',
+    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
+      kind: 'project',
+      project: {
+        organization: 'recorded-org',
+        projectKey: 'project-key',
+        projectRoot: process.cwd(),
+        serverUrl: 'https://regional.sonarcloud.io',
+      },
     });
     spyOn(keychain, 'getToken').mockRejectedValue(
       new MissingKeychainError('libsecret not available'),
@@ -212,11 +218,14 @@ describe('runContextPassthrough', () => {
   });
 
   it('still recommends logging in when the keychain works and holds no token', async () => {
-    spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      organization: 'recorded-org',
-      projectKey: 'project-key',
-      projectRoot: process.cwd(),
-      serverUrl: 'https://regional.sonarcloud.io',
+    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
+      kind: 'project',
+      project: {
+        organization: 'recorded-org',
+        projectKey: 'project-key',
+        projectRoot: process.cwd(),
+        serverUrl: 'https://regional.sonarcloud.io',
+      },
     });
     spyOn(keychain, 'getToken').mockResolvedValue(null);
     const ctx = {

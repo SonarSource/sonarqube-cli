@@ -444,6 +444,73 @@ describe('sonar context passthrough', () => {
     { timeout: 30000 },
   );
 
+  describe('in a multi-project workspace', () => {
+    let serverUrl: string;
+
+    beforeEach(async () => {
+      serverUrl = (await harness.newFakeServer().start()).baseUrl();
+      harness.withAuth(serverUrl, 'expected-token', ORG_KEY);
+      initGitRepo(harness.cwd.path);
+      harness.state().withContextAugmentationBinaryInstalled();
+      for (const path of ['services/api', 'services/api/v2', 'apps/web']) {
+        harness.cwd.writeFile(`${path}/.keep`, '');
+      }
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api', path: 'services/api', serverUrl },
+            { projectKey: 'api-v2', path: 'services/api/v2', serverUrl },
+            { projectKey: 'web', path: 'apps/web', serverUrl },
+          ],
+        }),
+      );
+    });
+
+    it('fails without invoking CAG and points at sonar link resolve', async () => {
+      const result = await harness.run('context compass get');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Could not determine a single SonarQube project for ${harness.cwd.path}: 3 projects are linked at or under it.`,
+      );
+      expect(result.stderr).toContain('sonar link resolve --path <dir>');
+      expect(readInvocations(harness)).toEqual([]);
+    });
+
+    it('explains that nested project directories are not supported', async () => {
+      const result = await harness.run('context compass get', {
+        cwd: join(harness.cwd.path, 'services', 'api', 'v2'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('it is inside 2 nested projects');
+      expect(result.stderr).toContain('Nested project directories are not supported yet.');
+    });
+
+    it('forwards a command run from inside one project with that project', async () => {
+      const webRoot = join(harness.cwd.path, 'apps', 'web');
+
+      const result = await harness.run('context compass get', { cwd: webRoot });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['compass', 'get']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('web');
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(webRoot);
+    });
+
+    it.each([['tool status'], ['__hook Claude']])(
+      'still forwards "%s", which needs no project',
+      async (command) => {
+        const result = await harness.run(`context ${command}`);
+
+        expect(result.exitCode).toBe(0);
+        const invocation = findInvocation(readInvocations(harness), command.split(' '));
+        expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+      },
+    );
+  });
+
   it(
     'fails with a helpful message when CAG is not installed and --help is requested',
     async () => {

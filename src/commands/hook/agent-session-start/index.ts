@@ -28,10 +28,11 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
+import { discoverWorkspace } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -97,16 +98,10 @@ export async function resolveSessionStartContext(
   }
   const { auth } = connection;
 
-  const discovered = await discoverProject(input.startDir ?? process.cwd(), {
-    auth,
-    silent: true,
-    console: ctx.console,
-  });
-  if (!discovered.projectKey) {
-    logSkip('no project key resolved');
+  const target = await resolveSessionStartTarget(input.startDir ?? process.cwd(), auth, ctx);
+  if (!target) {
     return null;
   }
-  noteProject(auth, discovered.projectKey);
 
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(connection),
@@ -127,8 +122,8 @@ export async function resolveSessionStartContext(
     binaryPath,
     scaEnabled,
     context: {
-      workspaceDir: discovered.projectRoot,
-      projectKey: discovered.projectKey,
+      workspaceDir: target.workspaceDir,
+      projectKey: target.projectKey,
       serverUrl: auth.serverUrl,
       token: auth.token,
       organization: auth.orgKey,
@@ -143,7 +138,50 @@ export async function resolveSessionStartContext(
     return null;
   }
 
-  return { additionalContext: result.stdout };
+  return {
+    additionalContext: target.projectKey
+      ? result.stdout
+      : `${result.stdout.trimEnd()}\n\n${MULTI_PROJECT_WORKSPACE_CONTEXT}`,
+  };
+}
+
+export const MULTI_PROJECT_WORKSPACE_CONTEXT = `## Multi-project workspace
+
+This directory contains several SonarQube projects, and \`sonar context\` commands work on one project at a time. Run them from inside a project's directory. If a command reports that it cannot determine a single project, run \`sonar link resolve --path <dir>\` to find the project covering a directory, or \`sonar link list --near <dir>\` to list nearby projects, then retry from that project's directory.
+`;
+
+interface SessionStartTarget {
+  workspaceDir: string;
+  /** Undefined for a multi-project workspace: CAG renders the session-start context from the organization alone. */
+  projectKey?: string;
+}
+
+async function resolveSessionStartTarget(
+  startDir: string,
+  auth: ResolvedAuth,
+  ctx: CommandInvocationContext,
+): Promise<SessionStartTarget | null> {
+  const discovered = await discoverWorkspace(startDir, {
+    auth,
+    silent: true,
+    console: ctx.console,
+  });
+  switch (discovered.kind) {
+    case 'project': {
+      const { projectRoot, projectKey } = discovered.project;
+      noteProject(auth, projectKey);
+      return { workspaceDir: projectRoot, projectKey };
+    }
+    case 'multi-project':
+      if (!discovered.workspace.connection) {
+        logSkip('projects in this workspace use different connections');
+        return null;
+      }
+      return { workspaceDir: discovered.workspace.workspaceRoot };
+    case 'none':
+      logSkip('no project key resolved');
+      return null;
+  }
 }
 
 function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {

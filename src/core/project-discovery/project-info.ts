@@ -202,6 +202,20 @@ export async function discoverProjects(
   return new DiscoveredProjects(result.repoRoot, result.projects.filter(isCompleteProjectMapping));
 }
 
+function toDiscoveredProject(
+  mapping: CompleteProjectMapping | undefined,
+  invocationDir: string,
+  repoRoot: string | undefined,
+): DiscoveredProject {
+  return {
+    projectRoot: mapping?.projectRoot ?? invocationDir,
+    projectKey: mapping?.projectKey,
+    serverUrl: mapping?.serverUrl,
+    organization: mapping?.organization,
+    repoRoot,
+  };
+}
+
 /** Zero or ambiguous matches both degrade to "nothing resolved". */
 export async function discoverProject(
   startDir: string,
@@ -211,13 +225,52 @@ export async function discoverProject(
   const result = await discoverProjects(startDir, options);
   const scoped = result.scope(invocationDir);
   const mapping = scoped.length > 1 ? undefined : scoped.at(0);
-  return {
-    projectRoot: mapping?.projectRoot ?? invocationDir,
-    projectKey: mapping?.projectKey,
-    serverUrl: mapping?.serverUrl,
-    organization: mapping?.organization,
-    repoRoot: result.repoRoot,
-  };
+  return toDiscoveredProject(mapping, invocationDir, result.repoRoot);
+}
+
+export interface MultiProjectWorkspace {
+  workspaceRoot: string;
+  repoRoot?: string;
+  projects: CompleteProjectMapping[];
+  /** Set only when every project shares one server and organization. */
+  connection?: { serverUrl: string; organization?: string };
+}
+
+export type DiscoveredWorkspace =
+  | { kind: 'project'; project: DiscoveredProject & { projectKey: string } }
+  | { kind: 'multi-project'; workspace: MultiProjectWorkspace }
+  | { kind: 'none'; project: DiscoveredProject };
+
+/**
+ * Sibling of `discoverProject()` for callers that can still act when several projects cover the
+ * invocation directory — `discoverProject()` collapses that case to "nothing resolved".
+ */
+export async function discoverWorkspace(
+  startDir: string,
+  options: DiscoverProjectOptions,
+): Promise<DiscoveredWorkspace> {
+  const invocationDir = canonicalizePath(startDir);
+  const result = await discoverProjects(startDir, options);
+  const scoped = result.scope(invocationDir);
+  if (scoped.length > 1) {
+    const [first] = scoped;
+    return {
+      kind: 'multi-project',
+      workspace: {
+        workspaceRoot: invocationDir,
+        repoRoot: result.repoRoot,
+        projects: scoped,
+        connection: isSameConnection(scoped)
+          ? { serverUrl: first.serverUrl, organization: first.organization }
+          : undefined,
+      },
+    };
+  }
+  const mapping = scoped.at(0);
+  const project = toDiscoveredProject(mapping, invocationDir, result.repoRoot);
+  return mapping
+    ? { kind: 'project', project: { ...project, projectKey: mapping.projectKey } }
+    : { kind: 'none', project };
 }
 
 /**
