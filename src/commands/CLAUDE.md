@@ -1,5 +1,7 @@
 # Commands
 
+`sonar run mcp` reads `mcp.container.network`, `mcp.container.addHost`, `mcp.container.serverUrl`, and `mcp.container.autoNetwork` from persistent config on each launch for on-premise connections. The URL override affects only the MCP container, so host-side CLI commands keep the saved connection URL. Explicit settings (`network`/`addHost`/`serverUrl`) always take precedence. Automatic loopback handling is opt-in via `mcp.container.autoNetwork=true` (default `false`, so existing users see no behavior change until they set it): once enabled, a loopback URL with no explicit settings gets native Linux host networking, or a Docker/Podman host alias elsewhere. Generated agent MCP entries invoke `sonar run mcp`, so the same behavior applies to them. Agent integration and system status show loopback networking advice, including a nudge to set `mcp.container.autoNetwork` when it's off. A non-signal container failure also writes a hint to stderr. Cloud connections ignore these MCP networking settings.
+
 The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agent integrations that install them: `src/commands/integrate/CLAUDE.md` covers both halves and is the file to read before changing either.
 
 `sonar auth login` selects the browser sign-in page in `src/core/auth/token.ts`. SonarQube Cloud uses `/auth`. SonarQube Server uses `/auth` from full-year version 2026.2, while Community Build uses it from short-year version 26.4. Earlier or unknown versions use `/sonarlint/auth`.
