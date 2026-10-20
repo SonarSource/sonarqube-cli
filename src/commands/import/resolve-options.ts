@@ -32,10 +32,6 @@ import {
 } from './repository-collection';
 
 const GITHUB_ALM_KEY = 'github';
-/** Azure DevOps as `Organization.alm.key` spells it. */
-const AZURE_DEVOPS_ALM_KEY = 'microsoft';
-/** Azure DevOps elsewhere, where the key carries a suffix (e.g. `azure_devops`). */
-const AZURE_DEVOPS_ALM_KEY_PREFIX = 'azure';
 
 export interface ResolvedOrg {
   key: string;
@@ -151,28 +147,6 @@ async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise
 /** The API doesn't guarantee the casing it reports; a blank key means no platform. */
 export function normalizeAlmKey(almKey: string | undefined): string | undefined {
   return almKey?.trim().toLowerCase() || undefined;
-}
-
-/**
- * Rejects any organization not bound to GitHub or Azure DevOps, an unresolved platform included:
- * unknown is not a licence to import, since `dop-repositories` is keyed on the organization alone
- * and returns its repositories whatever the platform turns out to be.
- */
-export function assertSupportedAlm(orgKey: string, almKey: string | undefined): void {
-  if (
-    almKey === GITHUB_ALM_KEY ||
-    almKey === AZURE_DEVOPS_ALM_KEY ||
-    almKey?.startsWith(AZURE_DEVOPS_ALM_KEY_PREFIX)
-  ) {
-    return;
-  }
-
-  const platform = almKey ? `'${almKey}'` : 'no DevOps platform';
-  throw new CommandFailedError(
-    `sonar import supports GitHub and Azure DevOps organizations only, but '${orgKey}' is bound ` +
-      `to ${platform}.`,
-    { remediationHint: 'Import these repositories from SonarQube Cloud in your browser instead.' },
-  );
 }
 
 /** The key from the org record when it carries one, otherwise the organization-bindings lookup. */
