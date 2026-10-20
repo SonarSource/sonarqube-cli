@@ -56,10 +56,15 @@ describe('MCP container networking', () => {
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
-    'uses host networking on native Linux with %s',
+    'uses host networking on native Linux with %s when autoNetwork is enabled',
     (runtime) => {
       expect(
-        resolveMcpContainerNetworking(ON_PREMISE_AUTH, { runtime, viaWsl: false }, {}, 'linux'),
+        resolveMcpContainerNetworking(
+          ON_PREMISE_AUTH,
+          { runtime, viaWsl: false },
+          { autoNetwork: true },
+          'linux',
+        ),
       ).toEqual({ serverUrl: 'http://localhost:9000', network: 'host' });
     },
   );
@@ -67,22 +72,58 @@ describe('MCP container networking', () => {
   it.each([
     ['docker', 'host.docker.internal'],
     ['podman', 'host.containers.internal'],
-  ] as const)('uses the %s host alias outside native Linux', (runtime, alias) => {
-    expect(
-      resolveMcpContainerNetworking(ON_PREMISE_AUTH, { runtime, viaWsl: true }, {}, 'win32'),
-    ).toEqual({ serverUrl: `http://${alias}:9000/` });
-  });
+  ] as const)(
+    'uses the %s host alias outside native Linux when autoNetwork is enabled',
+    (runtime, alias) => {
+      expect(
+        resolveMcpContainerNetworking(
+          ON_PREMISE_AUTH,
+          { runtime, viaWsl: true },
+          { autoNetwork: true },
+          'win32',
+        ),
+      ).toEqual({ serverUrl: `http://${alias}:9000/` });
+    },
+  );
 
   it('keeps the saved URL for Nerdctl outside native Linux and gives setup advice', () => {
     expect(
       resolveMcpContainerNetworking(
         ON_PREMISE_AUTH,
         { runtime: 'nerdctl', viaWsl: true },
-        {},
+        { autoNetwork: true },
         'win32',
       ),
     ).toEqual({ serverUrl: 'http://localhost:9000' });
-    expect(mcpLoopbackAdvice(ON_PREMISE_AUTH, {})).toContain('For Nerdctl outside native Linux');
+    expect(mcpLoopbackAdvice(ON_PREMISE_AUTH, { autoNetwork: true })).toContain(
+      'For Nerdctl outside native Linux',
+    );
+  });
+
+  it.each(['docker', 'podman', 'nerdctl'] as const)(
+    'keeps the saved loopback URL unchanged by default (autoNetwork off) on native Linux with %s',
+    (runtime) => {
+      expect(
+        resolveMcpContainerNetworking(ON_PREMISE_AUTH, { runtime, viaWsl: false }, {}, 'linux'),
+      ).toEqual({ serverUrl: 'http://localhost:9000' });
+    },
+  );
+
+  it.each(['docker', 'podman'] as const)(
+    'keeps the saved loopback URL unchanged by default (autoNetwork off) outside native Linux with %s',
+    (runtime) => {
+      expect(
+        resolveMcpContainerNetworking(ON_PREMISE_AUTH, { runtime, viaWsl: true }, {}, 'win32'),
+      ).toEqual({ serverUrl: 'http://localhost:9000' });
+    },
+  );
+
+  it('advises enabling autoNetwork when nothing is configured for a loopback URL', () => {
+    const advice = mcpLoopbackAdvice(ON_PREMISE_AUTH, {});
+    expect(advice).toContain('mcp.container.autoNetwork');
+    expect(advice).not.toContain(
+      'Set mcp.container.serverUrl and mcp.container.network to reachable values',
+    );
   });
 
   it('keeps explicit settings and the container-only URL for a user-defined network', () => {
