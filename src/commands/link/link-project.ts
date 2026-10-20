@@ -65,10 +65,35 @@ function deriveEntry(
   return { projectKey, path, region, organization: auth.orgKey };
 }
 
-export async function linkProject(
+type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<void>;
+
+/** Single-project link: replaces the legacy singular `project` binding. */
+export function linkProject(
   projectKey: string,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return writeLink(projectKey, options, ctx, (dir, entry) =>
+    sharedProjectConfigRepository.set(dir, entry),
+  );
+}
+
+/** Monorepo link: adds or updates a mapping in the `projects` array. */
+export function linkMonorepoProject(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return writeLink(projectKey, options, ctx, (dir, entry) =>
+    sharedProjectConfigRepository.addProject(dir, entry),
+  );
+}
+
+async function writeLink(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+  write: WriteEntry,
 ): Promise<void> {
   const { auth, console } = ctx;
   const { path } = options;
@@ -102,7 +127,7 @@ export async function linkProject(
     console.warn('No git repository found. Writing to the current directory instead.');
   }
 
-  await sharedProjectConfigRepository.set(targetDir, entry);
+  await write(targetDir, entry);
 
   const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
   const summaryLines = [

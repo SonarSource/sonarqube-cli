@@ -35,7 +35,7 @@ import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 
-import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
+import { link, linkMonorepo, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const onPremAuth = new ResolvedAuth({
@@ -153,6 +153,22 @@ describe('link', () => {
     } finally {
       rmSync(symlinkDir, { recursive: true, force: true });
       rmSync(realDir, { recursive: true, force: true });
+    }
+  });
+
+  it('linkMonorepo writes through addProject and never calls set', async () => {
+    const addSpy = spyOn(sharedProjectConfigRepository, 'addProject').mockResolvedValue(undefined);
+    try {
+      await linkMonorepo('my_project', { path: '.' }, ctxFor(onPremAuth));
+
+      expect(addSpy).toHaveBeenCalledWith(process.cwd(), {
+        projectKey: 'my_project',
+        path: '.',
+        serverUrl: onPremAuth.serverUrl,
+      });
+      expect(setSpy).not.toHaveBeenCalled();
+    } finally {
+      addSpy.mockRestore();
     }
   });
 });

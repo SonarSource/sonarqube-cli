@@ -204,4 +204,45 @@ describe('sonar link', () => {
       expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
     });
   });
+
+  describe('monorepo', () => {
+    it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      harness.cwd.writeFile('services/api/.keep', '');
+      harness.cwd.writeFile('services/web/.keep', '');
+      expect((await harness.run('link legacy --path .')).exitCode).toBe(0);
+      expect((await harness.run('link monorepo api --path services/api')).exitCode).toBe(0);
+      expect((await harness.run('link monorepo web --path services/web')).exitCode).toBe(0);
+
+      const result = await harness.run('link monorepo api2 --path ./services/api/');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
+        projects: [
+          { serverUrl: SERVER_URL, projectKey: 'api2', path: 'services/api' },
+          { serverUrl: SERVER_URL, projectKey: 'web', path: 'services/web' },
+        ],
+      });
+    });
+
+    it('does not overwrite a malformed configuration', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ projects: {} }));
+
+      const result = await harness.run('link monorepo api');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asText()).toBe(
+        JSON.stringify({ projects: {} }),
+      );
+    });
+
+    it('is documented in link --help', async () => {
+      const result = await harness.run('link --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('monorepo');
+    });
+  });
 });
