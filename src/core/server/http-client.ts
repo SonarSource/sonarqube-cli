@@ -129,7 +129,7 @@ export class SonarHttpClient {
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+    if ((method === 'POST' || method === 'DELETE') && response.status === HTTP_STATUS_FORBIDDEN) {
       return new ForbiddenApiError(await response.text());
     }
 

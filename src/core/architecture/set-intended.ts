@@ -25,9 +25,10 @@ import { randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 
 import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
+import { toArchitectureError } from './errors.ts';
 import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts';
 import { revisionOf } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
@@ -72,7 +73,8 @@ export async function setIntended(
   if (current.length === 0) {
     try {
       await api.createIntended(next);
-    } catch (createError) {
+    } catch (error) {
+      const createError = toArchitectureError(error, options.projectKey);
       try {
         if (revisionOf(await api.getIntended()) === revisionOf(next)) {
           return { mode: 'created', diff, unchecked };
@@ -93,10 +95,11 @@ export async function setIntended(
   }
   try {
     await api.deleteIntended();
-  } catch (deleteError) {
+  } catch (error) {
+    const deleteError = toArchitectureError(error, options.projectKey);
     await recoverPrevious(api, current, backupPath, options.projectKey, deleteError);
     throw new CommandFailedError(
-      `Deleting the intended architecture failed; the previous export was preserved or restored. ${messageOf(deleteError)}`,
+      `Deleting the intended architecture failed; the previous export was preserved or restored. ${messageOf(deleteError)}\nBackup kept at ${backupPath}`,
       { cause: deleteError, remediationHint: `Backup kept at ${backupPath}` },
     );
   }
@@ -124,7 +127,8 @@ export async function setIntended(
   }
   try {
     await api.createIntended(next);
-  } catch (createError) {
+  } catch (error) {
+    const createError = toArchitectureError(error, options.projectKey);
     let saved: IntendedArchitecture[];
     try {
       saved = await api.getIntended();
@@ -136,7 +140,7 @@ export async function setIntended(
     }
     await recoverPrevious(api, current, backupPath, options.projectKey, createError, saved);
     throw new CommandFailedError(
-      `Saving the new intended architecture failed; the previous export was preserved or restored. ${messageOf(createError)}`,
+      `Saving the new intended architecture failed; the previous export was preserved or restored. ${messageOf(createError)}\nBackup kept at ${backupPath}`,
       { cause: createError, remediationHint: `Backup kept at ${backupPath}` },
     );
   }
@@ -181,10 +185,13 @@ function recoveryError(
   operationError: unknown,
   restoreError: unknown,
 ): CommandFailedError {
+  operationError = toArchitectureError(operationError, projectKey);
+  restoreError = toArchitectureError(restoreError, projectKey);
   return new CommandFailedError(
     [
       'The architecture write failed, and automatic recovery could not be completed. The current server state may have changed; inspect it before restoring.',
       `The previous export is saved in ${backupPath}`,
+      `Restore it with: sonar architecture set intended --project ${projectKey} --file ${backupPath}`,
       `Write failed: ${messageOf(operationError)}`,
       `Recovery failed: ${messageOf(restoreError)}`,
     ].join('\n'),
@@ -229,5 +236,7 @@ function staleError(projectKey: string): CommandFailedError {
 }
 
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  const hint = remediationHintFor(error);
+  return hint ? `${message}\n${hint}` : message;
 }

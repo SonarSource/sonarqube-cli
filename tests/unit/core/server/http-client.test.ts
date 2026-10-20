@@ -335,11 +335,20 @@ describe('SonarHttpClient', () => {
       expect(init.body).toBeUndefined();
     });
 
-    it('returns an error result with the status when response is not ok', async () => {
+    it('retains status information for other DELETE failures', async () => {
+      fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+      expect(result._unsafeUnwrapErr().message).toContain('404');
+    });
+
+    it('returns a typed permission error with the backend body on DELETE 403', async () => {
       fetchSpy = mockFetch({ message: 'Forbidden' }, { ok: false, status: 403 });
       const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain('403');
+      expect(result._unsafeUnwrapErr().name).toBe('ForbiddenApiError');
+      expect(result._unsafeUnwrapErr().message).toBe(JSON.stringify({ message: 'Forbidden' }));
     });
   });
 

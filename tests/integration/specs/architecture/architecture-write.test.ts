@@ -113,7 +113,7 @@ describe('sonar architecture set', () => {
   }
 
   function backupPathFrom(output: string): string {
-    const match = /(\/\S+architecture\/backups\/\S+\.json)/.exec(output);
+    const match = /(?:backed up in|saved in|Backup kept at) ([^\r\n]+\.json)/.exec(output);
     expect(match).not.toBeNull();
     return match?.[1] ?? '';
   }
@@ -385,7 +385,7 @@ describe('sonar architecture set', () => {
 
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(
-          'Saving the new intended architecture failed; the previous export was preserved or restored. Model rejected (400)',
+          'Saving the new intended architecture failed; the previous export was preserved or restored. SonarQube rejected the request: Model rejected (400)',
         );
         const posts = writes(server).filter(({ method }) => method === 'POST');
         expect(posts).toHaveLength(2);

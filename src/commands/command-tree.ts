@@ -893,7 +893,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   architectureGet
     .command('intended')
     .description(
-      'Intended architecture; the full JSON can be edited and saved with set intended, --component and --depth give a partial view',
+      'Intended architecture; full JSON can be saved with set intended, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set',
     )
     .option('-p, --project <project>', 'Project key')
     .option('--component <key>', 'Group key to start below, e.g. Domain/Billing')

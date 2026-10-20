@@ -20,6 +20,8 @@
 
 // Integration tests for `sonar architecture get` on the public architecture API
 
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
@@ -606,6 +608,88 @@ describe('sonar architecture set on the public API', () => {
     { timeout: 15000 },
   );
 
+  const partialModel = { ...NEXT[0], partial: true };
+  const hiddenGroupsModel = {
+    ...NEXT[0],
+    groups: [{ label: 'Domain', groups: [{ label: 'Billing', hiddenSubgroups: 1 }] }],
+  };
+  const partialFiles = [
+    { name: 'MCP component envelope', file: { component: 'Domain', models: [NEXT[0]] } },
+    { name: 'MCP depth envelope', file: { depth: 1, models: [NEXT[0]] } },
+    { name: 'MCP partial model', file: { models: [partialModel] } },
+    { name: 'bare partial model array', file: [partialModel] },
+    { name: 'nested hidden subgroups', file: { models: [hiddenGroupsModel] } },
+    { name: 'bare nested hidden subgroup array', file: [hiddenGroupsModel] },
+  ];
+
+  for (const { name, file } of partialFiles) {
+    it(`rejects ${name} before architecture requests and preserves the saved model`, async () => {
+      const server = await startWith((fake) => fake.withIntended(INTENDED));
+      const saved = await readSavedFile();
+      const input = Array.isArray(file) ? file : { ...file, revision: saved.revision };
+      const requestCount = server.getRecordedRequests().length;
+      const result = await setIntended(input);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('partial view');
+      expect(result.stderr).toContain('nothing was changed');
+      expect(
+        server
+          .getRecordedRequests()
+          .slice(requestCount)
+          .filter(({ path }) => path.startsWith('/architecture/')),
+      ).toEqual([]);
+      expect(writes(server)).toEqual([]);
+      expect((await readSavedFile()).models).toEqual(INTENDED);
+    });
+  }
+
+  it('preserves the stored model and backup when DELETE is forbidden, with the permission hint', async () => {
+    const server = await startWith((fake) =>
+      fake
+        .withIntended(INTENDED)
+        .withStatus(
+          'intended-architectures',
+          403,
+          JSON.stringify({ message: 'Missing architectureadmin' }),
+          'DELETE',
+        ),
+    );
+    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('SonarQube refused the change: Missing architectureadmin');
+    expect(result.stderr).toContain('Administer Architecture permission');
+    expect(result.stderr).toContain('Architecture needs SonarQube Cloud Team or Enterprise');
+    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+    const backup = /Backup kept at ([^\r\n]+\.json)/.exec(result.stderr)?.[1];
+    expect(backup).toBeDefined();
+    expect(JSON.parse(readFileSync(backup!, 'utf8'))).toEqual({
+      project: PROJECT,
+      models: INTENDED,
+    });
+    expect((await readSavedFile()).models).toEqual(INTENDED);
+  });
+
+  it('keeps permission guidance and the recovery command when saving and restoring are forbidden', async () => {
+    const server = await startWith((fake) =>
+      fake.withIntended(INTENDED).failModelCreates(403, 403),
+    );
+    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('automatic recovery could not be completed');
+    expect(result.stderr).toContain('Administer Architecture permission');
+    const backup = /The previous export is saved in ([^\r\n]+\.json)/.exec(result.stderr)?.[1];
+    expect(backup).toBeDefined();
+    expect(JSON.parse(readFileSync(backup!, 'utf8'))).toEqual({
+      project: PROJECT,
+      models: INTENDED,
+    });
+    expect(result.stderr).toContain(
+      `Restore it with: sonar architecture set intended --project ${PROJECT} --file ${backup}`,
+    );
+    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST', 'POST']);
+    expect((await readSavedFile()).models).toEqual([]);
+  });
+
   it('previews and saves distinct constraint pairs whose display text used to collide', async () => {
     const groups = ['A', 'A -> B', 'B -> C', 'C'].map((label) => ({ label, patterns: [] }));
     const before: IntendedArchitecture[] = [
@@ -748,7 +832,7 @@ describe('sonar architecture set on the public API', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
-        'Saving the new intended architecture failed; the previous export was preserved or restored. Model rejected (400)',
+        'Saving the new intended architecture failed; the previous export was preserved or restored. SonarQube rejected the request: Model rejected (400)',
       );
       expect(described(writes(server))).toEqual([
         `DELETE ${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`,

@@ -64,7 +64,7 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   if (!isObject(file) || !Array.isArray(file.models)) {
     throw invalidModel(['The file must hold "models": an array of intended architectures.']);
   }
-  if (file.partial === true) {
+  if (isPartialView(file)) {
     throw invalidModel([
       'The file is a partial view (--component/--depth). Read it again without --component and --depth: get intended --format json.',
     ]);
@@ -111,6 +111,9 @@ function parseModel(
   if (!isObject(value)) {
     problems.push(`${where} must be an object.`);
     return undefined;
+  }
+  if (isPartialView(value)) {
+    problems.push(`${where} is a partial view; export the complete intended architecture.`);
   }
   const { language } = value;
   if (typeof language !== 'string' || !isEcosystem(language)) {
@@ -160,6 +163,9 @@ function parseGroups(
     if (!isObject(raw) || typeof raw.label !== 'string' || raw.label.trim() === '') {
       problems.push(`Every group of ${owner} needs a label.`);
       return [];
+    }
+    if (raw.hiddenSubgroups !== undefined && raw.hiddenSubgroups !== null) {
+      problems.push(`Group "${raw.label}" is a partial view with hidden subgroups.`);
     }
     const key = `${prefix}${raw.label}`;
     const name = `Group "${key}" (${language})`;
@@ -233,4 +239,12 @@ function isEcosystem(value: string): value is Ecosystem {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPartialView(value: Record<string, unknown>): boolean {
+  return (
+    value.partial === true ||
+    (value.component !== undefined && value.component !== null) ||
+    (value.depth !== undefined && value.depth !== null)
+  );
 }
