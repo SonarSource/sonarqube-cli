@@ -112,14 +112,17 @@ export function applyKnownServerProjectMapping(
 ): boolean {
   const match = matchKnownServerProjectMapping(lookupPaths, known.mappings);
   if (!match) {
+    logger.debug('Project discovery known mappings: no mapping matched the lookup paths');
     return false;
   }
 
   const { serverUrl, orgKey } = resolveMappingConnection(match.feature, known.state, options.auth);
   if (!serverUrl || !isValidServerUrl(serverUrl)) {
+    logger.debug('Project discovery known mappings: matched mapping has no valid server URL');
     return false;
   }
 
+  logger.debug('Project discovery known mappings: project resolved');
   config.projectKey = match.feature.projectKey;
   config.serverUrl = serverUrl;
   config.organization = orgKey;
