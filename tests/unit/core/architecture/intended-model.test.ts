@@ -90,7 +90,7 @@ describe('parseIntendedFile', () => {
     expect(message).toContain('patterns": an array of strings');
     expect(message).toContain('Group "c" (ts) is defined twice');
     expect(message).toContain('constraint a -> b is defined twice');
-    expect(message).toContain('More than one model for language ts');
+    expect(message).toContain('More than one model for perspective ts:file');
     expect(message).toContain('models[2].language must be one of');
   });
 
@@ -159,6 +159,26 @@ describe('diffIntended', () => {
 });
 
 describe('revisionOf', () => {
+  it('matches the MCP same-language qualifier revision fixture', () => {
+    const file: IntendedArchitecture = {
+      language: 'java',
+      type: 'file',
+      groups: [],
+      constraints: [],
+    };
+    const namespace: IntendedArchitecture = { ...file, type: 'namespace' };
+    expect(revisionOf([namespace, file])).toBe(
+      'c4674bae74ea8f6687b40418c8b3ffc770e3ad1bed780b71084eb44f274d1543',
+    );
+  });
+
+  it('sorts same-language perspectives by type and accepts both qualifiers', () => {
+    const namespace: IntendedArchitecture = { ...MODEL, type: 'namespace' };
+    const file = parseIntendedFile({ models: [namespace, MODEL] });
+    expect(file.models).toHaveLength(2);
+    expect(revisionOf([namespace, MODEL])).toBe(revisionOf([MODEL, namespace]));
+  });
+
   it('ignores pattern and constraint order, not group order', () => {
     const reordered: IntendedArchitecture = {
       ...MODEL,

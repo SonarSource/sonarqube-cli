@@ -110,7 +110,8 @@ export async function setIntended(
     );
     return;
   }
-  const verb = result.mode === 'created' ? 'Created' : 'Replaced';
+  const verbs = { created: 'Created', updated: 'Updated', cleared: 'Cleared' } as const;
+  const verb = verbs[result.mode];
   ctx.console.success(`${verb} the intended architecture of '${projectKey}'.`);
   if (result.backupPath !== undefined) {
     ctx.console.info(`The previous one is backed up in ${result.backupPath}`);

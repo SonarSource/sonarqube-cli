@@ -49,23 +49,44 @@ export function diffIntended(
     (a, b) => a.localeCompare(b),
   );
   for (const language of languages) {
-    const before = current.find((model) => model.language === language);
-    const after = next.find((model) => model.language === language);
-    if (!after) diff.removed.push(`model ${language}`);
-    if (!before) diff.added.push(`model ${language}`);
-    if (before && after && before.type !== after.type) {
-      diff.changed.push(`model ${language}: type ${before.type} -> ${after.type}`);
+    const before = current.filter((model) => model.language === language);
+    const after = next.filter((model) => model.language === language);
+    if (before.length <= 1 && after.length <= 1) {
+      diffPerspective(language, before[0], after[0], diff);
+      continue;
     }
-    diffGroups(
-      language,
-      flattenGroups(before?.groups ?? []),
-      flattenGroups(after?.groups ?? []),
-      diff,
-    );
-    diffGroupOrder(language, before?.groups ?? [], after?.groups ?? [], '', diff);
-    diffConstraints(language, before?.constraints ?? [], after?.constraints ?? [], diff);
+    const types = [...new Set([...before, ...after].map(({ type }) => type))].sort();
+    for (const type of types) {
+      diffPerspective(
+        `${language} (${type})`,
+        before.find((model) => model.type === type),
+        after.find((model) => model.type === type),
+        diff,
+      );
+    }
   }
+
   return diff;
+}
+
+function diffPerspective(
+  language: string,
+  before: IntendedArchitecture | undefined,
+  after: IntendedArchitecture | undefined,
+  diff: IntendedDiff,
+): void {
+  if (!after) diff.removed.push(`model ${language}`);
+  if (!before) diff.added.push(`model ${language}`);
+  if (before && after && before.type !== after.type)
+    diff.changed.push(`model ${language}: type ${before.type} -> ${after.type}`);
+  diffGroups(
+    language,
+    flattenGroups(before?.groups ?? []),
+    flattenGroups(after?.groups ?? []),
+    diff,
+  );
+  diffGroupOrder(language, before?.groups ?? [], after?.groups ?? [], '', diff);
+  diffConstraints(language, before?.constraints ?? [], after?.constraints ?? [], diff);
 }
 
 function diffGroupOrder(

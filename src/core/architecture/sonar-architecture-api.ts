@@ -250,52 +250,76 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Invalid public intended architecture response: expected one stored model with a server id.',
       );
     }
-    // Pin the first identity so a concurrent recreation cannot become our DELETE target.
-    this.intendedModelId ??= response.intendedArchitectures[0]?.id;
+    const id = response.intendedArchitectures.at(0)?.id;
+    if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
+      throw new CommandFailedError(
+        'The intended architecture model identity changed; read the current state before retrying.',
+      );
+    }
+    this.intendedModelId ??= id;
     return response.intendedArchitectures.map(toIntended);
   }
 
-  /** The public API creates one perspective and rejects a second stored model. */
   async createIntended(models: IntendedArchitecture[]): Promise<void> {
-    if (models.length !== 1) {
-      throw new CommandFailedError(
-        'The public API can create exactly one intended architecture perspective.',
-      );
-    }
     const response = await this.http
-      .post<IntendedModelExportDto | null>(await this.intendedArchitecturesPath(), models[0])
+      .post<IntendedArchitecturesDto | null>(this.path('intended-architectures'), {
+        projectId: await this.projectId(),
+        intendedArchitectures: models,
+      })
       .orThrow();
-    if (!response || typeof response.id !== 'string' || !MODEL_ID.test(response.id)) {
-      throw new CommandFailedError(
-        'Invalid public intended architecture creation response: missing server id.',
-      );
-    }
-    if (
-      !Array.isArray(response.groups) ||
-      !Array.isArray(response.constraints) ||
-      revisionOf([toIntended(response)]) !== revisionOf(models)
-    ) {
-      throw new CommandFailedError(
-        'Invalid public intended architecture creation response: returned content does not match the requested model.',
-      );
-    }
-    this.intendedModelId = response.id;
+    this.verifySaved(response, models);
+  }
+
+  async updateIntended(models: IntendedArchitecture[]): Promise<void> {
+    const response = await this.http
+      .patch<IntendedArchitecturesDto | null>(this.modelPath(), { intendedArchitectures: models })
+      .orThrow();
+    this.verifySaved(response, models);
   }
 
   async deleteIntended(): Promise<void> {
-    if (!this.intendedModelId) {
-      throw new CommandFailedError(
-        'Cannot delete an intended architecture without its server id from a public read.',
-      );
-    }
-    await this.http
-      .delete(`${this.path('intended-architectures')}/${encodeURIComponent(this.intendedModelId)}`)
-      .orThrow();
+    await this.http.delete(this.modelPath()).orThrow();
   }
 
-  private async intendedArchitecturesPath(): Promise<string> {
-    const projectId = await this.projectId();
-    return `${this.path('intended-architectures')}?${new URLSearchParams({ projectId }).toString()}`;
+  private modelPath(): string {
+    if (!this.intendedModelId) {
+      throw new CommandFailedError(
+        'Cannot change an intended architecture without its server id from a public read.',
+      );
+    }
+    return `${this.path('intended-architectures')}/${encodeURIComponent(this.intendedModelId)}`;
+  }
+
+  private verifySaved(
+    response: IntendedArchitecturesDto | null,
+    models: IntendedArchitecture[],
+  ): void {
+    if (
+      !Array.isArray(response?.intendedArchitectures) ||
+      response.intendedArchitectures.length === 0
+    ) {
+      throw new CommandFailedError(
+        'Invalid public intended architecture write response: missing model envelope or server id.',
+      );
+    }
+    const ids = new Set(response.intendedArchitectures.map(({ id }) => id));
+    const id = response.intendedArchitectures.at(0)?.id;
+    if (
+      ids.size !== 1 ||
+      typeof id !== 'string' ||
+      !MODEL_ID.test(id) ||
+      (this.intendedModelId !== undefined && this.intendedModelId !== id)
+    ) {
+      throw new CommandFailedError(
+        'Invalid public intended architecture write response: unexpected server model id.',
+      );
+    }
+    if (revisionOf(response.intendedArchitectures.map(toIntended)) !== revisionOf(models)) {
+      throw new CommandFailedError(
+        'Invalid public intended architecture write response: returned content does not match the requested model.',
+      );
+    }
+    this.intendedModelId = id;
   }
 
   private path(resource: string): string {

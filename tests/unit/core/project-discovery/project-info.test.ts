@@ -549,15 +549,22 @@ describe('discoverProject', () => {
   it('completes a key-only local mapping from auth with git-remote binding disabled', async () => {
     fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=local_key\n');
 
+    const authWithOrg = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
+      orgKey: 'my-org',
+      source: 'state',
+    });
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
-      auth: MOCK_AUTH,
+      auth: authWithOrg,
       useGitRemoteBinding: false,
     });
 
     expect(result.projectKey).toBe('local_key');
     expect(result.serverUrl).toBe(MOCK_AUTH.serverUrl);
-    expect(result.organization).toBe(MOCK_AUTH.orgKey);
+    expect(result.organization).toBe('my-org');
     expect(getGitRemoteSpy).not.toHaveBeenCalled();
     expect(remoteSpy).not.toHaveBeenCalled();
   });

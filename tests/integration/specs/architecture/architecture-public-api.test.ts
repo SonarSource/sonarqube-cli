@@ -28,6 +28,7 @@ import {
   type IntendedArchitecture,
   type StructureGraph,
 } from '@/core/architecture/architecture-api.ts';
+import { shellQuote } from '@/core/architecture/shell-quote.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
@@ -140,6 +141,8 @@ describe('sonar architecture get on the public API', () => {
     const missing = await harness.run('arch get current --language java --format json');
     expect(missing.exitCode).toBe(1);
     expect(missing.stderr).toContain('Could not determine project key.');
+    expect(missing.stderr).toContain('Use --project <key>');
+    expect(missing.stderr).toContain('run from inside a linked project directory');
     const explicit = await harness.run(
       `arch get current -p ${PROJECT} --language java --format json`,
     );
@@ -545,24 +548,15 @@ function writes(server: FakeSonarQubeServer): RecordedRequest[] {
     .filter(({ path, method }) => path.startsWith('/architecture/') && method !== 'GET');
 }
 
-function described(requests: RecordedRequest[]): string[] {
-  return requests.map(({ method, path, query }) =>
-    [method, path, new URLSearchParams(query).toString()].filter(Boolean).join(' '),
-  );
-}
-
 describe('sonar architecture set on the public API', () => {
   let harness: TestHarness;
-
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
-
   afterEach(async () => {
     await harness.dispose();
   });
-
   async function startWith(configure: (fake: FakeArchitecture) => void) {
     const server = await harness
       .newFakeServer()
@@ -573,414 +567,289 @@ describe('sonar architecture set on the public API', () => {
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     return server;
   }
-
-  async function setIntended(file: unknown) {
+  async function setFile(file: unknown, suffix = '') {
     harness.cwd.writeFile('model.json', JSON.stringify(file));
-    return harness.run(`architecture set intended --project ${PROJECT} --file model.json`, {
-      extraEnv: {},
-    });
+    return harness.run(`architecture set intended --project ${PROJECT} --file model.json${suffix}`);
   }
-
-  async function readSavedFile(): Promise<{ revision: string; models: IntendedArchitecture[] }> {
+  async function readSaved() {
     const result = await harness.run(
       `architecture get intended --project ${PROJECT} --format json`,
     );
     expect(result.exitCode).toBe(0);
     return JSON.parse(result.stdout) as { revision: string; models: IntendedArchitecture[] };
   }
-
-  it(
-    'creates through POST /intended-architectures with one perspective and no client id',
-    async () => {
+  function backupFrom(stderr: string) {
+    const path = /The previous export is saved in ([^\r\n]+\.json)/.exec(stderr)?.[1];
+    expect(path).toBeDefined();
+    expect(JSON.parse(readFileSync(path!, 'utf8'))).toEqual({ project: PROJECT, models: INTENDED });
+    return path!;
+  }
+  const TS_MODEL: IntendedArchitecture = { ...NEXT[0], type: 'file', language: 'ts' };
+  const JAVA_FILE: IntendedArchitecture = { ...NEXT[0], type: 'file' };
+  for (const models of [NEXT, [...NEXT, TS_MODEL, JAVA_FILE]]) {
+    it(`POSTs a full ${models.length}-perspective envelope with projectId in JSON`, async () => {
       const server = await startWith(() => undefined);
-
-      const result = await setIntended({ models: NEXT });
-
+      const result = await setFile({ models });
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(`Created the intended architecture of '${PROJECT}'.`);
-      const calls = writes(server);
-      expect(described(calls)).toEqual([
-        `POST ${PUBLIC_PATH} projectId=${fakeMainBranchId(PROJECT)}`,
-      ]);
-      expect(JSON.parse(calls[0].body ?? '{}')).toEqual(NEXT[0]);
-      expect((await readSavedFile()).models).toEqual(NEXT);
-    },
-    { timeout: 15000 },
-  );
-
-  const partialModel = { ...NEXT[0], partial: true };
-  const hiddenGroupsModel = {
-    ...NEXT[0],
-    groups: [{ label: 'Domain', groups: [{ label: 'Billing', hiddenSubgroups: 1 }] }],
-  };
-  const partialFiles = [
-    { name: 'MCP component envelope', file: { component: 'Domain', models: [NEXT[0]] } },
-    { name: 'MCP depth envelope', file: { depth: 1, models: [NEXT[0]] } },
-    { name: 'MCP partial model', file: { models: [partialModel] } },
-    { name: 'bare partial model array', file: [partialModel] },
-    { name: 'nested hidden subgroups', file: { models: [hiddenGroupsModel] } },
-    { name: 'bare nested hidden subgroup array', file: [hiddenGroupsModel] },
-  ];
-
-  for (const { name, file } of partialFiles) {
-    it(`rejects ${name} before architecture requests and preserves the saved model`, async () => {
-      const server = await startWith((fake) => fake.withIntended(INTENDED));
-      const saved = await readSavedFile();
-      const input = Array.isArray(file) ? file : { ...file, revision: saved.revision };
-      const requestCount = server.getRecordedRequests().length;
-      const result = await setIntended(input);
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('partial view');
-      expect(result.stderr).toContain('nothing was changed');
-      expect(
-        server
-          .getRecordedRequests()
-          .slice(requestCount)
-          .filter(({ path }) => path.startsWith('/architecture/')),
-      ).toEqual([]);
-      expect(writes(server)).toEqual([]);
-      expect((await readSavedFile()).models).toEqual(INTENDED);
+      expect(writes(server)).toHaveLength(1);
+      const [call] = writes(server);
+      expect(call.method).toBe('POST');
+      expect(call.path).toBe(PUBLIC_PATH);
+      expect(call.query).toEqual({});
+      expect(call.headers['content-type']).toBe('application/json');
+      expect(JSON.parse(call.body!)).toEqual({
+        projectId: fakeMainBranchId(PROJECT),
+        intendedArchitectures: models,
+      });
+      expect((await readSaved()).models).toEqual(models);
     });
   }
-
-  it('preserves the stored model and backup when DELETE is forbidden, with the permission hint', async () => {
-    const server = await startWith((fake) =>
-      fake
-        .withIntended(INTENDED)
-        .withStatus(
-          'intended-architectures',
-          403,
-          JSON.stringify({ message: 'Missing architectureadmin' }),
-          'DELETE',
-        ),
-    );
-    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('SonarQube refused the change: Missing architectureadmin');
-    expect(result.stderr).toContain('Administer Architecture permission');
-    expect(result.stderr).toContain('Architecture needs SonarQube Cloud Team or Enterprise');
-    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
-    const backup = /Backup kept at ([^\r\n]+\.json)/.exec(result.stderr)?.[1];
-    expect(backup).toBeDefined();
-    expect(JSON.parse(readFileSync(backup!, 'utf8'))).toEqual({
-      project: PROJECT,
-      models: INTENDED,
-    });
-    expect((await readSavedFile()).models).toEqual(INTENDED);
+  it('PATCHes the complete perspectives with merge-patch content type and preserves the UUID', async () => {
+    const original = [...INTENDED, TS_MODEL, JAVA_FILE];
+    const desired = [...NEXT, TS_MODEL, JAVA_FILE];
+    const server = await startWith((fake) => fake.withIntended(original));
+    const saved = await readSaved();
+    expect((await setFile({ ...saved, models: desired })).exitCode).toBe(0);
+    const [call] = writes(server);
+    expect(writes(server)).toHaveLength(1);
+    expect(call.method).toBe('PATCH');
+    expect(call.path).toBe(`${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`);
+    expect(call.query).toEqual({});
+    expect(call.headers['content-type']).toBe('application/merge-patch+json');
+    expect(JSON.parse(call.body!)).toEqual({ intendedArchitectures: desired });
+    expect((await readSaved()).models).toEqual(desired);
   });
-
-  it('keeps permission guidance and the recovery command when saving and restoring are forbidden', async () => {
-    const server = await startWith((fake) =>
-      fake.withIntended(INTENDED).failModelCreates(403, 403),
-    );
-    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('automatic recovery could not be completed');
-    expect(result.stderr).toContain('Administer Architecture permission');
-    const backup = /The previous export is saved in ([^\r\n]+\.json)/.exec(result.stderr)?.[1];
-    expect(backup).toBeDefined();
-    expect(JSON.parse(readFileSync(backup!, 'utf8'))).toEqual({
-      project: PROJECT,
-      models: INTENDED,
-    });
-    expect(result.stderr).toContain(
-      `Restore it with: sonar architecture set intended --project ${PROJECT} --file ${backup}`,
-    );
-    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST', 'POST']);
-    expect((await readSavedFile()).models).toEqual([]);
-  });
-
-  it('previews and saves distinct constraint pairs whose display text used to collide', async () => {
-    const groups = ['A', 'A -> B', 'B -> C', 'C'].map((label) => ({ label, patterns: [] }));
-    const before: IntendedArchitecture[] = [
-      {
-        type: 'namespace',
-        language: 'java',
-        groups,
-        constraints: [
-          { from: 'A -> B', to: 'C' },
-          { from: 'C', to: 'A' },
-        ],
-      },
-    ];
-    const server = await startWith((architecture) => architecture.withIntended(before));
-    const saved = await readSavedFile();
-    const next = [
-      {
-        ...before[0],
-        constraints: [
-          { from: 'A', to: 'B -> C' },
-          { from: 'C', to: 'A' },
-        ],
-      },
-    ];
-    const file = { ...saved, models: next };
-    harness.cwd.writeFile('model.json', JSON.stringify(file));
-    const preview = await harness.run(
-      `arch set intended -p ${PROJECT} --file model.json --dry-run`,
-    );
+  it('preserves other perspectives when changing the second qualifier of one language', async () => {
+    const server = await startWith((fake) => fake.withIntended([...INTENDED, JAVA_FILE]));
+    const desiredFile = { ...JAVA_FILE, groups: [{ label: 'Changed', patterns: [] }] };
+    const saved = await readSaved();
+    const preview = await setFile({ ...saved, models: [...INTENDED, desiredFile] }, ' --dry-run');
     expect(preview.exitCode).toBe(0);
-    expect(preview.stdout).toContain('1 removed, 1 added, 0 changed.');
-    expect(preview.stdout).toContain('"A -> B" -> C');
-    expect(preview.stdout).toContain('A -> "B -> C"');
+    expect(preview.stdout).toContain('Changed');
     expect(writes(server)).toEqual([]);
-    const result = await setIntended(file);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(`Replaced the intended architecture of '${PROJECT}'.`);
-    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
-    expect((await readSavedFile()).models).toEqual(next);
+    expect((await setFile({ ...saved, models: [...INTENDED, desiredFile] })).exitCode).toBe(0);
+    expect((await readSaved()).models).toEqual([...INTENDED, desiredFile]);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
   });
-
-  it('replaces through only allowlisted public architecture endpoints and warns about flattened imports', async () => {
-    const server = await startWith((fake) =>
-      fake.withSavedPerspectives([
-        {
-          qualifiers: 'namespace',
-          language: 'java',
-          groups: [{ label: 'Shared', patterns: ['lib:**'], patternId: 'shared' }],
-          constraints: [],
-        },
-      ]),
-    );
-    const saved = await readSavedFile();
-    harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
-    const dry = await harness.run(
-      `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
-    );
-    expect(dry.exitCode).toBe(0);
-    expect(dry.stderr).toContain('may flatten those imports');
-    expect(writes(server)).toEqual([]);
-    const result = await setIntended({ ...saved, models: NEXT });
-    expect(result.exitCode).toBe(0);
-    expect(result.stderr).toContain('may flatten those imports');
-    for (const { method, path } of server
-      .getRecordedRequests()
-      .filter(({ path }) => path.startsWith('/architecture/'))) {
-      expect([
-        'GET /architecture/current-architectures',
-        'GET /architecture/intended-architectures',
-        'POST /architecture/intended-architectures',
-        'DELETE /architecture/intended-architectures/00000000-0000-4000-8000-000000000001',
-      ]).toContain(`${method} ${path}`);
-    }
-    expect((await readSavedFile()).models).toEqual(NEXT);
-  });
-
   for (const committed of [false, true]) {
-    it(`reconciles a failed DELETE response without data loss (committed=${committed})`, async () => {
+    it(`reconciles failed PATCH without rollback (committed=${committed})`, async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(INTENDED).failModelUpdate(1, committed),
+      );
+      const result = await setFile({ ...(await readSaved()), models: NEXT });
+      expect(result.exitCode).toBe(committed ? 0 : 1);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      expect((await readSaved()).models).toEqual(committed ? NEXT : INTENDED);
+      if (!committed) {
+        backupFrom(result.stderr);
+        expect(result.stderr).toContain('No automatic rollback was attempted');
+      }
+    });
+  }
+  it('retains one permission hint and one backup instruction on PATCH 403', async () => {
+    const server = await startWith((fake) =>
+      fake.withIntended(INTENDED).failModelUpdate(1, false, 403),
+    );
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    const backup = backupFrom(result.stderr);
+    expect(result.stderr.match(/Administer Architecture permission/g)).toHaveLength(1);
+    expect(result.stderr.match(/The previous export is saved in/g)).toHaveLength(1);
+    expect(result.stderr.match(/Restore it with:/g)).toHaveLength(1);
+    expect(result.stderr).toContain(`--file ${shellQuote(backup)}`);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(INTENDED);
+  });
+  it('preserves concurrent state after a rejected PATCH and never restores automatically', async () => {
+    const concurrent = [{ ...NEXT[0], groups: [{ label: 'Concurrent', patterns: [] }] }];
+    const server = await startWith((fake) =>
+      fake.withIntended(INTENDED).failModelUpdate(1).changeIntendedBeforeRead(4, concurrent),
+    );
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    backupFrom(result.stderr);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(concurrent);
+  });
+  it('reports unknown server state and retains backup when PATCH verification cannot be read', async () => {
+    const server = await startWith((fake) =>
+      fake.withIntended(INTENDED).failModelUpdate(1).failIntendedRead(4),
+    );
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('server state is unknown');
+    backupFrom(result.stderr);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(INTENDED);
+  });
+  for (const models of [NEXT, INTENDED]) {
+    it(`refuses preflight recreation even if content is ${models === INTENDED ? 'identical' : 'changed'}`, async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(INTENDED).changeIntendedBeforeRead(3, models),
+      );
+      const result = await setFile({ ...(await readSaved()), models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('identity changed');
+      expect(writes(server)).toEqual([]);
+      expect((await readSaved()).models).toEqual(models);
+    });
+  }
+  for (const committed of [false, true]) {
+    it(`clears via DELETE only and reconciles response failure (committed=${committed})`, async () => {
       const server = await startWith((fake) =>
         fake.withIntended(INTENDED).failModelDelete(1, committed),
       );
-      const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('previous export was preserved or restored');
-      expect((await readSavedFile()).models).toEqual(INTENDED);
-      expect(writes(server).filter(({ method }) => method === 'POST')).toHaveLength(
-        committed ? 1 : 0,
-      );
+      const result = await setFile({ ...(await readSaved()), models: [] });
+      expect(result.exitCode).toBe(committed ? 0 : 1);
+      expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+      expect((await readSaved()).models).toEqual(committed ? [] : INTENDED);
+      if (!committed) backupFrom(result.stderr);
     });
   }
-
-  it('does not overwrite concurrent changes while reconciling a failed DELETE', async () => {
-    const server = await startWith((fake) =>
-      fake.withIntended(INTENDED).failModelDelete(1, true).changeIntendedBeforeRead(4, NEXT),
-    );
-    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('automatic recovery could not be completed');
-    expect(writes(server).filter(({ method }) => method === 'POST')).toEqual([]);
-    expect((await readSavedFile()).models).toEqual(NEXT);
-  });
-
-  it('clears with DELETE only and allows a new model to be created afterward', async () => {
+  it('clears the resource with DELETE, then creates a new model through POST', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED));
-    const cleared = await setIntended({ ...(await readSavedFile()), models: [] });
-    expect(cleared.exitCode).toBe(0);
+    expect((await setFile({ ...(await readSaved()), models: [] })).exitCode).toBe(0);
+    expect((await readSaved()).models).toEqual([]);
     expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
-    expect((await readSavedFile()).models).toEqual([]);
-    const recreated = await setIntended({ models: NEXT });
-    expect(recreated.exitCode).toBe(0);
+    expect((await setFile({ models: NEXT })).exitCode).toBe(0);
     expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
-    expect((await readSavedFile()).models).toEqual(NEXT);
+    expect((await readSaved()).models).toEqual(NEXT);
   });
-
-  it('confirms an initial POST that committed before its response failed', async () => {
-    const server = await startWith((fake) => fake.failCommittedIntendedCreate(1));
-    const result = await setIntended({ models: NEXT });
-    expect(result.exitCode).toBe(0);
-    expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
-    expect((await readSavedFile()).models).toEqual(NEXT);
-  });
-
-  it('confirms an ambiguous POST through public GET without a duplicate or rollback', async () => {
-    const server = await startWith((fake) =>
-      fake.withIntended(INTENDED).failCommittedIntendedCreate(1),
-    );
-    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
-    expect(result.exitCode).toBe(0);
-    expect(writes(server).filter(({ method }) => method === 'POST')).toHaveLength(1);
-    expect((await readSavedFile()).models).toEqual(NEXT);
-  });
-
-  it(
-    'restores the previous model through the public POST when the new one is refused',
-    async () => {
-      const server = await startWith((fake) => fake.withIntended(INTENDED).failModelCreates(400));
-      const saved = await readSavedFile();
-
-      const result = await setIntended({ ...saved, models: NEXT });
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(
-        'Saving the new intended architecture failed; the previous export was preserved or restored. SonarQube rejected the request: Model rejected (400)',
-      );
-      expect(described(writes(server))).toEqual([
-        `DELETE ${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`,
-        `POST ${PUBLIC_PATH} projectId=${fakeMainBranchId(PROJECT)}`,
-        `POST ${PUBLIC_PATH} projectId=${fakeMainBranchId(PROJECT)}`,
-      ]);
-      expect((await readSavedFile()).models).toEqual(INTENDED);
-    },
-    { timeout: 15000 },
-  );
-
-  it('stops after one DELETE when an unbacked legacy model becomes visible', async () => {
+  it('does not delete additional legacy resources exposed by clear', async () => {
     const server = await startWith((fake) =>
       fake.withIntended(INTENDED).withAdditionalIntended(NEXT),
     );
-    const result = await setIntended({ ...(await readSavedFile()), models: NEXT });
+    const result = await setFile({ ...(await readSaved()), models: [] });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('automatic recovery could not be completed');
     expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+    backupFrom(result.stderr);
+    expect((await readSaved()).models).toEqual(NEXT);
+  });
+  it('confirms POST committed before its response failed without another write', async () => {
+    const server = await startWith((fake) => fake.failCommittedIntendedCreate(1));
+    expect((await setFile({ models: [...NEXT, TS_MODEL] })).exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
+    expect((await readSaved()).models).toEqual([...NEXT, TS_MODEL]);
+  });
+  for (const hasOtherLanguage of [false, true]) {
+    it(`removes a scoped language using ${hasOtherLanguage ? 'PATCH of survivors' : 'DELETE of the last perspective'}`, async () => {
+      const original = hasOtherLanguage ? [...INTENDED, TS_MODEL] : INTENDED;
+      const server = await startWith((fake) => fake.withIntended(original));
+      const result = await setFile({ ...(await readSaved()), language: 'java', models: [] });
+      expect(result.exitCode).toBe(0);
+      expect(writes(server).map(({ method }) => method)).toEqual([
+        hasOtherLanguage ? 'PATCH' : 'DELETE',
+      ]);
+      expect((await readSaved()).models).toEqual(hasOtherLanguage ? [TS_MODEL] : []);
+    });
+  }
+  it('does not trust a successful PATCH response when the public read returns different persisted content', async () => {
+    const response = {
+      intendedArchitectures: NEXT.map((model) => ({
+        ...model,
+        id: '00000000-0000-4000-8000-000000000001',
+      })),
+    };
+    const server = await startWith((fake) =>
+      fake
+        .withIntended(INTENDED)
+        .withStatus('intended-architectures', 200, JSON.stringify(response), 'PATCH'),
+    );
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('public read after writing does not match');
+    backupFrom(result.stderr);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(INTENDED);
+  });
+  it('does not roll back a same-resource concurrent edit observed after successful PATCH', async () => {
+    const concurrent = [{ ...NEXT[0], groups: [{ label: 'Concurrent', patterns: [] }] }];
+    const server = await startWith((fake) =>
+      fake.withIntended(INTENDED).changeIntendedBeforeRead(4, concurrent, true),
+    );
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
+    expect(result.exitCode).toBe(1);
+    backupFrom(result.stderr);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(concurrent);
   });
 
-  for (const body of ['{}', '{"intendedArchitectures":null}']) {
-    it(`rejects a malformed public export before any writes: ${body}`, async () => {
+  const partialModel = { ...NEXT[0], partial: true };
+  const hiddenModel = {
+    ...NEXT[0],
+    groups: [{ label: 'Domain', groups: [{ label: 'Child', hiddenSubgroups: 1 }] }],
+  };
+  for (const [name, file] of [
+    ['component', { component: 'Domain', models: NEXT }],
+    ['depth', { depth: 1, models: NEXT }],
+    ['partial model', { models: [partialModel] }],
+    ['bare partial model', [partialModel]],
+    ['hidden subgroups', { models: [hiddenModel] }],
+    ['bare hidden subgroups', [hiddenModel]],
+  ] as const) {
+    it(`rejects MCP ${name} before architecture requests`, async () => {
+      const server = await startWith((fake) => fake.withIntended(INTENDED));
+      const saved = await readSaved();
+      const count = server.getRecordedRequests().length;
+      const input = Array.isArray(file) ? file : { ...file, revision: saved.revision };
+      const result = await setFile(input);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('partial view');
+      expect(
+        server
+          .getRecordedRequests()
+          .slice(count)
+          .filter(({ path }) => path.startsWith('/architecture/')),
+      ).toEqual([]);
+      expect(writes(server)).toEqual([]);
+      expect((await readSaved()).models).toEqual(INTENDED);
+    });
+  }
+  for (const body of [
+    JSON.stringify({ intendedArchitectures: INTENDED }),
+    JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'bad-id' }] }),
+  ]) {
+    it(`rejects malformed public model identity before writing: ${body}`, async () => {
       const server = await startWith((fake) =>
         fake.withStatus('intended-architectures', 200, body, 'GET'),
       );
-      const result = await setIntended({ models: NEXT });
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('intendedArchitectures must be an array');
+      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
       expect(writes(server)).toEqual([]);
     });
   }
-
-  it('refuses a proposed multi-perspective model before dry run or any mutation', async () => {
-    const server = await startWith(() => undefined);
-    harness.cwd.writeFile(
-      'model.json',
-      JSON.stringify({ models: [NEXT[0], { ...NEXT[0], language: 'ts' }] }),
-    );
-    for (const suffix of [' --dry-run', '']) {
-      const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json${suffix}`,
+  for (const body of [
+    JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
+    JSON.stringify({ intendedArchitectures: [] }),
+    JSON.stringify({ intendedArchitectures: [{ ...NEXT[0], id: 'invalid-id' }] }),
+  ]) {
+    it(`rejects malformed POST response envelope: ${body}`, async () => {
+      const server = await startWith((fake) =>
+        fake.withStatus('intended-architectures', 201, body, 'POST'),
       );
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('cannot be safely applied or restored');
-    }
-    expect(writes(server)).toEqual([]);
-  });
-
-  it('rejects a public export without a server id before any mutation', async () => {
+      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
+      expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
+      expect((await readSaved()).models).toEqual([]);
+    });
+  }
+  it('rejects a mismatched PATCH response without rollback', async () => {
     const server = await startWith((fake) =>
-      fake.withStatus(
+      fake.withIntended(INTENDED).withStatus(
         'intended-architectures',
         200,
-        JSON.stringify({ intendedArchitectures: INTENDED }),
-        'GET',
+        JSON.stringify({
+          intendedArchitectures: INTENDED.map((model) => ({
+            ...model,
+            id: '00000000-0000-4000-8000-000000000001',
+          })),
+        }),
+        'PATCH',
       ),
     );
-    const result = await setIntended({ models: NEXT });
+    const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('expected one stored model with a server id');
-    expect(writes(server)).toEqual([]);
-  });
-
-  it('keeps server ids out of exports and preserves content revisions after replacement', async () => {
-    const server = await startWith((fake) => fake.withIntended(INTENDED));
-    const before = await readSavedFile();
-    expect(before.models[0]).not.toHaveProperty('id');
-    expect((await setIntended({ ...before, models: NEXT })).exitCode).toBe(0);
-    const next = await readSavedFile();
-    expect((await setIntended({ ...next, models: INTENDED })).exitCode).toBe(0);
-    expect((await readSavedFile()).revision).toBe(before.revision);
-    expect(
-      writes(server)
-        .filter(({ method }) => method === 'DELETE')
-        .map(({ path, query }) => ({ path, query })),
-    ).toEqual([
-      { path: `${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`, query: {} },
-      { path: `${PUBLIC_PATH}/00000000-0000-4000-8000-000000000002`, query: {} },
-    ]);
-  });
-
-  it('never deletes a concurrent same-content replacement with a different server id', async () => {
-    const server = await startWith((fake) =>
-      fake.withIntended(INTENDED).changeIntendedBeforeRead(3, INTENDED),
-    );
-    const before = await readSavedFile();
-    const result = await setIntended({ ...before, models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(writes(server).map(({ method, path }) => `${method} ${path}`)).toEqual([
-      `DELETE ${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`,
-    ]);
-    expect((await readSavedFile()).models).toEqual(INTENDED);
-  });
-
-  it('does not claim creation succeeded when the public response contains only an id', async () => {
-    const server = await startWith((fake) =>
-      fake.withStatus(
-        'intended-architectures',
-        201,
-        JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
-        'POST',
-      ),
-    );
-    const result = await setIntended({ models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('returned content does not match the requested model');
-    expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
-    expect((await readSavedFile()).models).toEqual([]);
-  });
-
-  it('rejects a malformed server model UUID before any mutation', async () => {
-    const server = await startWith((fake) =>
-      fake.withStatus(
-        'intended-architectures',
-        200,
-        JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'invalid-id' }] }),
-        'GET',
-      ),
-    );
-    const result = await setIntended({ models: NEXT });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('expected one stored model with a server id');
-    expect(writes(server)).toEqual([]);
-  });
-
-  it('does not register unsupported architecture commands', async () => {
-    const server = await startWith(() => undefined);
-    for (const command of [
-      'architecture get directives',
-      'architecture set directives --file missing.json --dry-run',
-      'architecture set directives --file missing.json',
-    ]) {
-      const result = await harness.run(command);
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain("unknown command 'directives'");
-      expect(result.stderr).not.toContain('auth login');
-      expect(result.stderr).not.toContain('Cannot read');
-    }
-    for (const command of [
-      'architecture --help',
-      'architecture get --help',
-      'architecture set --help',
-    ]) {
-      const help = await harness.run(command);
-      expect(help.exitCode).toBe(0);
-      expect(help.stdout).not.toContain('directives');
-    }
-    expect(server.getRecordedRequests()).toEqual([]);
+    expect(result.stderr).toContain('returned content does not match');
+    backupFrom(result.stderr);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(INTENDED);
   });
 });

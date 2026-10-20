@@ -61,6 +61,24 @@ describe('formatIntendedText', () => {
     );
   });
 
+  it('counts both qualifiers of the same language against their own full model', () => {
+    const file: IntendedArchitecture = {
+      ...MODEL,
+      type: 'file',
+      groups: [{ label: 'Files', patterns: ['src/**'] }],
+      constraints: [],
+    };
+    const models = [file, MODEL];
+    const views = models.flatMap(
+      (model) => viewIntended(model, undefined, Number.POSITIVE_INFINITY) ?? [],
+    );
+    const text = stripAnsi(formatIntendedText('p', 'abc', models, views));
+    expect(text).toContain('java (file): 1 group(s), 0 constraint(s)');
+    expect(text).toContain('java (namespace): 3 group(s), 1 constraint(s)');
+    expect(text).toContain('Files [src/**]');
+    expect(text).toContain('Billing [core:com.example.domain.billing.**]');
+  });
+
   it('shows a partial view relative to its root and counts the hidden subgroups', () => {
     expect(format(undefined, 1).split('\n')[2]).toBe(
       '  Domain [core:com.example.domain.**] (interface) (+1 subgroup(s), raise --depth)',

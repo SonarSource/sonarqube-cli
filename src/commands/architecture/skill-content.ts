@@ -81,16 +81,15 @@ Never use partial or truncated input, discard perspectives to fit the API, or re
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
 a new preview and confirmation.
 
-The public API creates one language/type perspective. Changed multi-perspective models are
-rejected before writing. Replacement is DELETE followed by POST, not atomic; a concurrent change
-after preflight can still race the write. Public exports flatten imported organization patterns
+The public API creates and updates the complete set of language/type perspectives. Existing
+models use PATCH by their public model UUID; failed writes are verified by a public read and
+never automatically rolled back. A concurrent change after preflight can still race the write. Public exports flatten imported organization patterns
 and omit metadata, so replacement and restoration cannot preserve those links or omitted
 metadata. Include these returned warnings when presenting the preview.
 
 If an operation fails, report the error and inspect the saved state before retrying. CLI writes
-save a local backup; MCP errors can include the previous export. Recovery is best effort and
-attempted only after a read verifies emptiness. Preserve the backup or previous export and
-recovery instructions; do not claim restoration succeeded without checking.
+save a local backup; MCP errors can include the previous export. Preserve that export and the
+recovery instructions, inspect the current state, and obtain approval before restoring it.
 
 ## Availability
 

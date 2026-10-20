@@ -80,14 +80,15 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   if (scope !== undefined && (typeof scope !== 'string' || !isEcosystem(scope))) {
     problems.push(`"language" must be one of ${ECOSYSTEMS.join(', ')}.`);
   }
-  const languages = new Set<string>();
+  const perspectives = new Set<string>();
   const models = (file.models as unknown[]).flatMap((value, index) => {
     const model = parseModel(value, `models[${index}]`, problems);
     if (!model) return [];
-    if (languages.has(model.language)) {
-      problems.push(`More than one model for language ${model.language}.`);
+    const perspective = `${model.language}:${model.type}`;
+    if (perspectives.has(perspective)) {
+      problems.push(`More than one model for perspective ${perspective}.`);
     }
-    languages.add(model.language);
+    perspectives.add(perspective);
     if (typeof scope === 'string' && model.language !== scope) {
       problems.push(
         `The file holds only the ${scope} model (get intended --language ${scope}), but models[${index}] is ${model.language}.`,

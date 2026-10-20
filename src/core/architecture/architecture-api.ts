@@ -85,6 +85,8 @@ export interface ArchitectureApi {
   getIntended(): Promise<IntendedArchitecture[]>;
   /** Saves `models` as the project's intended architecture; the project must have none. */
   createIntended(models: IntendedArchitecture[]): Promise<void>;
+  /** Replaces all perspectives of the model read from the public API. */
+  updateIntended(models: IntendedArchitecture[]): Promise<void>;
   /** Removes the project's intended architecture. */
   deleteIntended(): Promise<void>;
 }

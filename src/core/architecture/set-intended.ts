@@ -18,29 +18,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Saving an intended architecture safely without a transactional replace: refuse a stale
-// base, back up, delete and create, then attempt recovery only after checking the saved state.
+// Back up and replace complete public models; reconcile uncertain responses without rollback.
 
 import { randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
 import { toArchitectureError } from './errors.ts';
 import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts';
 import { revisionOf } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
+import { shellQuote } from './shell-quote.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;
 
-export type SetIntendedMode = 'dry-run' | 'unchanged' | 'created' | 'replaced-by-fallback';
+export type SetIntendedMode = 'dry-run' | 'unchanged' | 'created' | 'updated' | 'cleared';
 
 export interface SetIntendedResult {
   mode: SetIntendedMode;
   diff: IntendedDiff;
-  /** Set when the saved model was backed up before being deleted. */
+  /** Set when the saved model was backed up before being changed. */
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
@@ -64,162 +64,84 @@ export async function setIntended(
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
-  if (!isEmptyDiff(diff) && (current.length > 1 || next.length > 1)) {
-    throw new CommandFailedError(
-      'The public API can create only one intended architecture perspective. Changing a multi-perspective model cannot be safely applied or restored; nothing was changed.',
-    );
-  }
   if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
-
   if (current.length === 0) {
-    await createInitial(api, next, options.projectKey);
+    await writeModel(api, next, 'create', options.projectKey);
     return { mode: 'created', diff, unchecked };
   }
   const backupPath = await writeBackup(options.backupDir, options.projectKey, current);
-  if (revisionOf(await api.getIntended()) !== revisionOf(current)) {
+  if (revisionOf(await api.getIntended()) !== revisionOf(current))
     throw staleError(options.projectKey);
-  }
-  try {
-    await api.deleteIntended();
-  } catch (error) {
-    const deleteError = toArchitectureError(error, options.projectKey);
-    await recoverPrevious(api, current, backupPath, options.projectKey, deleteError);
-    throw new CommandFailedError(
-      `Deleting the intended architecture failed; the previous export was preserved or restored. ${messageOf(deleteError)}\nBackup kept at ${backupPath}`,
-      { cause: deleteError, remediationHint: `Backup kept at ${backupPath}` },
-    );
-  }
-  let remaining: IntendedArchitecture[];
-  try {
-    remaining = await api.getIntended();
-  } catch (readError) {
-    throw recoveryError(
-      backupPath,
-      options.projectKey,
-      'DELETE completed, but its result could not be verified.',
-      readError,
-    );
-  }
-  if (remaining.length > 0) {
-    throw recoveryError(
-      backupPath,
-      options.projectKey,
-      'The intended architecture is still present after DELETE.',
-      'Automatic recovery stopped to avoid overwriting concurrent changes or unbacked legacy models.',
-    );
-  }
-  if (next.length === 0) {
-    return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
-  }
-  await createReplacement(api, current, next, backupPath, options.projectKey);
-  return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
+  const operation = next.length === 0 ? 'clear' : 'update';
+  await writeModel(api, next, operation, options.projectKey, backupPath);
+  return { mode: operation === 'clear' ? 'cleared' : 'updated', diff, backupPath, unchecked };
 }
 
-async function createReplacement(
-  api: ArchitectureApi,
-  current: IntendedArchitecture[],
-  next: IntendedArchitecture[],
-  backupPath: string,
-  projectKey: string,
-): Promise<void> {
-  try {
-    await api.createIntended(next);
-  } catch (error) {
-    const createError = toArchitectureError(error, projectKey);
-    let saved: IntendedArchitecture[];
-    try {
-      saved = await api.getIntended();
-    } catch (readError) {
-      throw recoveryError(backupPath, projectKey, createError, readError);
-    }
-    if (revisionOf(saved) === revisionOf(next)) {
-      return;
-    }
-    await recoverPrevious(api, current, backupPath, projectKey, createError, saved);
-    throw new CommandFailedError(
-      `Saving the new intended architecture failed; the previous export was preserved or restored. ${messageOf(createError)}\nBackup kept at ${backupPath}`,
-      { cause: createError, remediationHint: `Backup kept at ${backupPath}` },
-    );
-  }
-}
-
-async function createInitial(
+async function writeModel(
   api: ArchitectureApi,
   next: IntendedArchitecture[],
+  operation: 'create' | 'update' | 'clear',
   projectKey: string,
+  backupPath?: string,
 ): Promise<void> {
   try {
-    await api.createIntended(next);
-  } catch (error) {
-    const createError = toArchitectureError(error, projectKey);
-    try {
-      if (revisionOf(await api.getIntended()) === revisionOf(next)) {
-        return;
-      }
-    } catch (readError) {
+    if (operation === 'create') await api.createIntended(next);
+    else if (operation === 'update') await api.updateIntended(next);
+    else await api.deleteIntended();
+    if (revisionOf(await api.getIntended()) !== revisionOf(next)) {
       throw new CommandFailedError(
-        `Creating the intended architecture failed and its result could not be verified. The server state is unknown. Create failed: ${messageOf(createError)}\nRead failed: ${messageOf(readError)}`,
-        { cause: createError },
+        'The public read after writing does not match the requested model.',
       );
     }
-    throw createError;
+  } catch (error) {
+    await reconcileWrite(api, next, projectKey, error, backupPath);
   }
+}
+
+async function reconcileWrite(
+  api: ArchitectureApi,
+  next: IntendedArchitecture[],
+  projectKey: string,
+  error: unknown,
+  backupPath?: string,
+): Promise<void> {
+  const writeError = toArchitectureError(error, projectKey);
+  let saved: IntendedArchitecture[];
+  try {
+    saved = await api.getIntended();
+  } catch (readError) {
+    throw writeFailure(projectKey, writeError, backupPath, readError);
+  }
+  if (revisionOf(saved) === revisionOf(next)) return;
+  throw writeFailure(projectKey, writeError, backupPath);
+}
+
+function writeFailure(
+  projectKey: string,
+  error: unknown,
+  backupPath?: string,
+  readError?: unknown,
+): CommandFailedError {
+  const lines = [
+    'The architecture write failed; inspect the current server state before restoring. No automatic rollback was attempted.',
+    `Write failed: ${messageOf(error)}`,
+  ];
+  if (readError !== undefined)
+    lines.push(`The server state is unknown. Read failed: ${messageOf(readError)}`);
+  if (backupPath !== undefined) {
+    lines.push(`The previous export is saved in ${backupPath}`);
+    lines.push(
+      `Restore it with: sonar architecture set intended --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
+    );
+  }
+  return new CommandFailedError(lines.join('\n'), { cause: error });
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
 function withLanguage(current: IntendedArchitecture[], file: IntendedFile): IntendedArchitecture[] {
   const others = current.filter(({ language }) => language !== file.language);
   return [...others, ...file.models];
-}
-
-async function recoverPrevious(
-  api: ArchitectureApi,
-  previous: IntendedArchitecture[],
-  backupPath: string,
-  projectKey: string,
-  operationError: unknown,
-  observed?: IntendedArchitecture[],
-): Promise<void> {
-  try {
-    const saved = observed ?? (await api.getIntended());
-    if (revisionOf(saved) === revisionOf(previous)) return;
-    if (saved.length > 0) {
-      throw new CommandFailedError(
-        'The saved architecture differs from the backup; automatic recovery stopped to avoid overwriting concurrent changes.',
-      );
-    }
-    try {
-      await api.createIntended(previous);
-    } catch (restoreError) {
-      if (revisionOf(await api.getIntended()) !== revisionOf(previous)) throw restoreError;
-    }
-  } catch (restoreError) {
-    throw recoveryError(backupPath, projectKey, operationError, restoreError);
-  }
-}
-
-function recoveryError(
-  backupPath: string,
-  projectKey: string,
-  operationError: unknown,
-  restoreError: unknown,
-): CommandFailedError {
-  operationError = toArchitectureError(operationError, projectKey);
-  restoreError = toArchitectureError(restoreError, projectKey);
-  return new CommandFailedError(
-    [
-      'The architecture write failed, and automatic recovery could not be completed. The current server state may have changed; inspect it before restoring.',
-      `The previous export is saved in ${backupPath}`,
-      `Restore it with: sonar architecture set intended --project ${projectKey} --file ${backupPath}`,
-      `Write failed: ${messageOf(operationError)}`,
-      `Recovery failed: ${messageOf(restoreError)}`,
-    ].join('\n'),
-    {
-      cause: restoreError,
-      remediationHint: `Restore it with: sonar architecture set intended --project ${projectKey} --file ${backupPath}`,
-    },
-  );
 }
 
 async function writeBackup(
@@ -256,7 +178,5 @@ function staleError(projectKey: string): CommandFailedError {
 }
 
 function messageOf(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  const hint = remediationHintFor(error);
-  return hint ? `${message}\n${hint}` : message;
+  return error instanceof Error ? error.message : String(error);
 }

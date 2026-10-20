@@ -39,7 +39,9 @@ export function formatIntendedText(
 ): string {
   const lines = [`${projectKey}: intended architecture`];
   for (const view of views) {
-    const model = models.find(({ language }) => language === view.language);
+    const model = models.find(
+      ({ language, type }) => language === view.language && type === view.type,
+    );
     const groups = countGroups(model?.groups ?? []);
     const constraints = model?.constraints.length ?? 0;
     const below = view.root ? `, showing below ${view.root}` : '';

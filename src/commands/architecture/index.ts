@@ -36,6 +36,7 @@ import {
   topLevelKeys,
 } from '@/core/architecture/graph.ts';
 import { assertGroupExists, revisionOf, viewIntended } from '@/core/architecture/intended-model.ts';
+import { shellQuote } from '@/core/architecture/shell-quote.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
@@ -182,7 +183,7 @@ export async function resolveProject(
   if (!projectKey) {
     throw new CommandFailedError('Could not determine project key.', {
       remediationHint:
-        "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
+        "Use --project <key>, run from inside a linked project directory, or run 'sonar link <projectKey>' to link this repository.",
     });
   }
   assertSingleLineProjectKey(projectKey);
@@ -218,11 +219,6 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
     summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}`,
     ...slice,
   };
-}
-
-export function shellQuote(value: string): string {
-  const escaped = value.replaceAll("'", String.raw`'\''`);
-  return /^[\w.:/@-]+$/.test(value) ? value : `'${escaped}'`;
 }
 
 function printPayload(

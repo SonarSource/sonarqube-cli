@@ -322,6 +322,38 @@ describe('SonarHttpClient', () => {
     });
   });
 
+  describe('patch', () => {
+    it('sends merge-patch JSON to the endpoint host through authenticated transport', async () => {
+      fetchSpy = mockFetch({ intendedArchitectures: [] });
+      const body = { intendedArchitectures: [] };
+      const result = await client.patch(
+        '/api/v2/architecture/intended-architectures/model-id',
+        body,
+      );
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/model-id`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('PATCH');
+      expect(init.body).toBe(JSON.stringify(body));
+      expect(init.headers).toMatchObject({
+        'Content-Type': 'application/merge-patch+json',
+        Authorization: `Bearer ${TOKEN}`,
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    });
+    it.each([
+      [403, 'ForbiddenApiError'],
+      [400, 'BadRequestError'],
+    ] as const)('maps PATCH %s to %s', async (status, name) => {
+      fetchSpy = mockFetch({ message: 'Rejected' }, { ok: false, status });
+      const result = await client.patch('/api/v2/architecture/intended-architectures/model-id', {});
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe(name);
+    });
+  });
+
   describe('delete', () => {
     it('sends DELETE without a body to the endpoint host', async () => {
       fetchSpy = mockFetch(null, { status: 204 });

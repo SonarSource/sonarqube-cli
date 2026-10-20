@@ -71,7 +71,9 @@ function canonical(models: IntendedArchitecture[]): unknown {
       model.groups.map(canonicalGroup),
       model.constraints.map(({ from, to }) => JSON.stringify([from, to])).sort(byCodeUnit),
     ])
-    .sort((a, b) => byCodeUnit(String(a[0]), String(b[0])));
+    .sort(
+      (a, b) => byCodeUnit(String(a[0]), String(b[0])) || byCodeUnit(String(a[1]), String(b[1])),
+    );
 }
 
 /** Locale-independent, so other clients (the SonarQube MCP server) compute the same revision. */

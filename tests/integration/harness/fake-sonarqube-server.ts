@@ -1385,7 +1385,13 @@ export class FakeSonarQubeServerBuilder {
         // a one-branch payload for registered projects; otherwise CAG aborts
         // with "Project '<key>' not found in organization '<org>'".
         const architectureResponse = routeArchitectureRequest(
-          { method: req.method, path, query, body },
+          {
+            method: req.method,
+            path,
+            query,
+            body,
+            contentType: req.headers.get('content-type') ?? undefined,
+          },
           [...projects.values()],
           treatAsCloud,
         );

@@ -30,6 +30,8 @@ import type {
   IntendedArchitecture,
 } from '@/core/architecture/architecture-api.ts';
 import { setIntended } from '@/core/architecture/set-intended.ts';
+import { shellQuote } from '@/core/architecture/shell-quote.ts';
+import { ForbiddenApiError } from '@/core/server/errors.ts';
 
 const MODEL: IntendedArchitecture = {
   type: 'namespace',
@@ -47,6 +49,10 @@ describe('intended backup safety', () => {
       getCurrent: () => Promise.resolve([]),
       getIntended: () => Promise.resolve(saved),
       createIntended: (models) => {
+        saved = models;
+        return Promise.resolve();
+      },
+      updateIntended: (models) => {
         saved = models;
         return Promise.resolve();
       },
@@ -68,6 +74,41 @@ describe('intended backup safety', () => {
   function clear(backupDir: string) {
     return setIntended(api(), { models: [] }, { projectKey: 'test', dryRun: false, backupDir });
   }
+  it('quotes project and backup arguments with spaces and emits permission guidance once', async () => {
+    const backend = api();
+    backend.updateIntended = () => Promise.reject(new ForbiddenApiError('Missing permission'));
+    const result = await setIntended(
+      backend,
+      { models: [{ ...MODEL, groups: [{ label: 'Changed' }] }] },
+      {
+        projectKey: 'project with spaces',
+        dryRun: false,
+        backupDir: join(root, 'backups with spaces'),
+      },
+    ).catch((error: unknown) => error);
+    expect(result).toBeInstanceOf(Error);
+    const error = result as Error & { remediationHint?: string };
+    const backup = /The previous export is saved in ([^\r\n]+\.json)/.exec(error.message)?.[1];
+    expect(backup).toBeDefined();
+    expect(error.message).toContain(
+      `--project 'project with spaces' --file ${shellQuote(backup!)}`,
+    );
+    expect(error.message).not.toContain('Administer Architecture permission');
+    expect(error.remediationHint).toContain('Administer Architecture permission');
+    expect(JSON.parse(await readFile(backup!, 'utf8')).models).toEqual([MODEL]);
+    expect(deleted).toBe(false);
+  });
+  it('quotes Windows and POSIX paths with spaces and apostrophes for their shells', () => {
+    expect(shellQuote('C:\\Users\\John Smith\\backup.json', 'win32')).toBe(
+      "'C:\\Users\\John Smith\\backup.json'",
+    );
+    expect(shellQuote("C:\\Users\\O'Brien\\backup.json", 'win32')).toBe(
+      "'C:\\Users\\O''Brien\\backup.json'",
+    );
+    expect(shellQuote('/home/John Smith/backup.json', 'linux')).toBe(
+      "'/home/John Smith/backup.json'",
+    );
+  });
   it.skipIf(process.platform === 'win32')(
     'restricts model backups and their directory to the owner',
     async () => {

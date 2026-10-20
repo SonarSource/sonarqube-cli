@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { IntendedArchitecture } from '@/core/architecture/architecture-api.ts';
+import { shellQuote } from '@/core/architecture/shell-quote.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
@@ -161,8 +162,8 @@ describe('sonar architecture set', () => {
             `architecture set intended --project ${PROJECT} --file model.json`,
           );
           expect(result.exitCode).toBe(0);
-          expect(result.stdout).toContain(`Replaced the intended architecture of '${PROJECT}'.`);
-          expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
+          expect(result.stdout).toContain(`Updated the intended architecture of '${PROJECT}'.`);
+          expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
           const saved = await readSavedFile();
           expect(saved.models).toEqual(next);
 
@@ -172,14 +173,14 @@ describe('sonar architecture set', () => {
           );
           expect(unchanged.exitCode).toBe(0);
           expect(unchanged.stdout).toContain('already matches the file; nothing was written.');
-          expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
+          expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
         },
         { timeout: 15000 },
       );
     }
 
-    it('keeps survivors without duplicate writes when the first DELETE is refused', async () => {
-      const server = await startWith((fake) => fake.withIntended(SAVED).failModelDelete(1));
+    it('preserves the saved model without rollback when PATCH is refused', async () => {
+      const server = await startWith((fake) => fake.withIntended(SAVED).failModelUpdate(1));
       harness.cwd.writeFile(
         'model.json',
         JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
@@ -188,13 +189,13 @@ describe('sonar architecture set', () => {
         `architecture set intended --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(1);
-      expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
       expect((await readSavedFile()).models).toEqual(SAVED);
     });
 
-    it('reports the backup and recovery command when deletion rollback fails', async () => {
-      await startWith((fake) =>
-        fake.withIntended(SAVED).failModelDelete(1, true).failModelCreates(500),
+    it('reports backup instructions when PATCH verification is unavailable', async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(SAVED).failModelUpdate(1).failIntendedRead(4),
       );
       harness.cwd.writeFile(
         'model.json',
@@ -205,10 +206,10 @@ describe('sonar architecture set', () => {
       );
       expect(result.exitCode).toBe(1);
       const backup = backupPathFrom(result.stderr);
-      expect(result.stderr).toContain(
-        `sonar architecture set intended --project ${PROJECT} --file ${backup}`,
-      );
-      expect((await readSavedFile()).models).toEqual([]);
+      expect(result.stderr).toContain(`--file ${shellQuote(backup)}`);
+      expect(result.stderr).toContain('server state is unknown');
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      expect((await readSavedFile()).models).toEqual(SAVED);
     });
 
     it('includes top-level and nested sibling order in the dry run and applies it', async () => {
@@ -304,7 +305,10 @@ describe('sonar architecture set', () => {
         expect(calls.map(({ method, path }) => `${method} ${path}`)).toEqual([
           `POST ${MODELS_PATH}`,
         ]);
-        expect(JSON.parse(calls[0].body ?? '{}')).toEqual(NEXT[0]);
+        expect(JSON.parse(calls[0].body ?? '{}')).toEqual({
+          projectId: 'shop-branch-id',
+          intendedArchitectures: NEXT,
+        });
       },
       { timeout: 15000 },
     );
@@ -346,7 +350,7 @@ describe('sonar architecture set', () => {
     );
 
     it(
-      'replaces a saved model by backup, delete and create',
+      'updates a saved model by backup and PATCH',
       async () => {
         const server = await startWith((fake) => fake.withIntended(SAVED));
         const saved = await readSavedFile();
@@ -357,10 +361,9 @@ describe('sonar architecture set', () => {
         );
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(`Replaced the intended architecture of '${PROJECT}'.`);
+        expect(result.stdout).toContain(`Updated the intended architecture of '${PROJECT}'.`);
         expect(writes(server).map(({ method, path }) => `${method} ${path}`)).toEqual([
-          `DELETE ${MODELS_PATH}/00000000-0000-4000-8000-000000000001`,
-          `POST ${MODELS_PATH}`,
+          `PATCH ${MODELS_PATH}/00000000-0000-4000-8000-000000000001`,
         ]);
         const backup = backupPathFrom(result.stdout);
         expect(JSON.parse(readFileSync(backup, 'utf8'))).toEqual({
@@ -372,57 +375,47 @@ describe('sonar architecture set', () => {
       { timeout: 15000 },
     );
 
-    it(
-      'restores the previous model when the server rejects the new one',
-      async () => {
-        const server = await startWith((fake) => fake.withIntended(SAVED).failModelCreates(400));
-        const saved = await readSavedFile();
-        harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
+    it('keeps the original model and backup when PATCH is rejected', async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(SAVED).failModelUpdate(1, false, 400),
+      );
+      harness.cwd.writeFile(
+        'model.json',
+        JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
+      );
+      const result = await harness.run(
+        `architecture set intended --project ${PROJECT} --file model.json`,
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Patch response failed (400)');
+      expect(result.stderr).toContain('No automatic rollback was attempted');
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      expect(existsSync(backupPathFrom(result.stderr))).toBe(true);
+      expect((await readSavedFile()).models).toEqual(SAVED);
+    });
 
-        const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
-        );
-
-        expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain(
-          'Saving the new intended architecture failed; the previous export was preserved or restored. SonarQube rejected the request: Model rejected (400)',
-        );
-        const posts = writes(server).filter(({ method }) => method === 'POST');
-        expect(posts).toHaveLength(2);
-        expect(JSON.parse(posts[1].body ?? '{}')).toEqual(SAVED[0]);
-        expect(existsSync(backupPathFrom(result.stderr))).toBe(true);
-        expect((await readSavedFile()).models).toEqual(SAVED);
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'prints the backup path and the recovery command when the restore fails too',
-      async () => {
-        await startWith((fake) => fake.withIntended(SAVED).failModelCreates(400, 500));
-        const saved = await readSavedFile();
-        harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
-
-        const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
-        );
-
-        expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('automatic recovery could not be completed');
-        const backup = backupPathFrom(result.stderr);
-        expect(result.stderr).toContain(
-          `sonar architecture set intended --project ${PROJECT} --file ${backup}`,
-        );
-        expect((await readSavedFile()).models).toEqual([]);
-
-        const recovery = await harness.run(
-          `architecture set intended --project ${PROJECT} --file ${backup}`,
-        );
-        expect(recovery.exitCode).toBe(0);
-        expect((await readSavedFile()).models).toEqual(SAVED);
-      },
-      { timeout: 20000 },
-    );
+    it('prints a usable quoted restore command without automatically overwriting concurrent state', async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(SAVED).failModelUpdate(1).changeIntendedBeforeRead(4, NEXT),
+      );
+      harness.cwd.writeFile(
+        'model.json',
+        JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
+      );
+      const result = await harness.run(
+        `architecture set intended --project ${PROJECT} --file model.json`,
+      );
+      expect(result.exitCode).toBe(1);
+      const backup = backupPathFrom(result.stderr);
+      const command = `sonar architecture set intended --project ${PROJECT} --file ${shellQuote(backup)}`;
+      expect(result.stderr).toContain(command);
+      expect((await readSavedFile()).models).toEqual(NEXT);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      const recovery = await harness.run(command.slice('sonar '.length));
+      expect(recovery.exitCode).toBe(0);
+      expect((await readSavedFile()).models).toEqual(SAVED);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH', 'PATCH']);
+    });
 
     it(
       'refuses a file read from an older revision, with no write',
@@ -445,11 +438,11 @@ describe('sonar architecture set', () => {
     );
 
     it(
-      'refuses when the model changes between the first read and the delete',
+      'refuses when the model changes between the first read and the PATCH',
       async () => {
         const server = await startWith((fake) =>
           // Read 1 is the test's own get intended, read 2 the set's first read.
-          fake.withIntended(SAVED).changeIntendedBeforeRead(3, NEXT),
+          fake.withIntended(SAVED).changeIntendedBeforeRead(3, NEXT, true),
         );
         const saved = await readSavedFile();
         harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
@@ -466,7 +459,7 @@ describe('sonar architecture set', () => {
     );
 
     it(
-      'refuses to change one language of a legacy multi-perspective model before dry run or writes',
+      'changes a scoped language with PATCH while preserving the other language',
       async () => {
         const TS_MODEL: IntendedArchitecture = {
           type: 'file',
@@ -485,15 +478,14 @@ describe('sonar architecture set', () => {
         const dryRun = await harness.run(
           `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
         );
-        expect(dryRun.exitCode).toBe(1);
-        expect(dryRun.stderr).toContain('cannot be safely applied or restored');
+        expect(dryRun.exitCode).toBe(0);
+        expect(writes(server)).toEqual([]);
         const result = await harness.run(
           `architecture set intended --project ${PROJECT} --file model.json`,
         );
-        expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('cannot be safely applied or restored');
-        expect(writes(server)).toEqual([]);
-        expect((await readSavedFile()).models).toEqual([...SAVED, TS_MODEL]);
+        expect(result.exitCode).toBe(0);
+        expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+        expect((await readSavedFile()).models).toEqual([TS_MODEL, ...NEXT]);
       },
       { timeout: 20000 },
     );
