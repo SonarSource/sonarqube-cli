@@ -28,8 +28,12 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
+import { isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
+import {
+  discoverWorkspace,
+  type MultiProjectWorkspace,
+} from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -83,31 +87,72 @@ interface RecordedContextAugmentationConfig {
 }
 
 /**
- * Resolve org/project/server via the shared project-discovery pipeline (`discoverProject`),
- * the same one SQAA's project lookup uses (see discoverSqaaProject). `workspaceDir` is
- * `discovered.projectRoot` directly — `discoverProject()` itself always anchors it to the
- * current worktree (never a different one a matched mapping happens to point at), so no
- * extra resolution is needed here.
+ * Resolve org/project/server via the shared project-discovery pipeline (`discoverWorkspace`,
+ * the multi-project-aware sibling of the `discoverProject` SQAA's lookup uses). `workspaceDir`
+ * is the project's `projectRoot` directly — discovery always anchors it to the current worktree
+ * (never a different one a matched mapping happens to point at), so no extra resolution is
+ * needed here. Several projects covering `cwd` throw when `requiresSingleProject` is set.
  */
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
   console: Console,
+  requiresSingleProject: boolean,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverProject(cwd, {
+  const discovered = await discoverWorkspace(cwd, {
     auth,
     silent: true,
     console,
   });
-  if (!discovered.projectKey) {
+  if (discovered.kind === 'multi-project') {
+    if (requiresSingleProject) {
+      throw multiProjectWorkspaceError(discovered.workspace);
+    }
     return {};
   }
+  if (discovered.kind === 'none') {
+    return {};
+  }
+  const { project } = discovered;
   return {
-    organization: discovered.organization,
-    projectKey: discovered.projectKey,
-    serverUrl: discovered.serverUrl,
-    workspaceDir: discovered.projectRoot,
+    organization: project.organization,
+    projectKey: project.projectKey,
+    serverUrl: project.serverUrl,
+    workspaceDir: project.projectRoot,
   };
+}
+
+function multiProjectWorkspaceError({
+  workspaceRoot,
+  projects,
+}: MultiProjectWorkspace): CommandFailedError {
+  const enclosingCount = projects.filter((project) =>
+    isAncestorOrSelf(project.projectRoot, workspaceRoot),
+  ).length;
+  if (enclosingCount > 1) {
+    return new CommandFailedError(
+      `Could not determine a single SonarQube project for ${workspaceRoot}: it is inside ${enclosingCount} nested projects.`,
+      {
+        remediationHint:
+          "Nested project directories are not supported yet. Run 'sonar link list --near .' to list nearby projects, " +
+          'then re-run this command from a directory that belongs to only one of them.',
+      },
+    );
+  }
+  return new CommandFailedError(
+    `Could not determine a single SonarQube project for ${workspaceRoot}: ${projects.length} projects are linked at or under it.`,
+    {
+      remediationHint:
+        "Run 'sonar link resolve --path <dir>' to find the project covering a directory, or 'sonar link list --near .' to list nearby projects, " +
+        "then re-run this command from that project's directory.",
+    },
+  );
+}
+
+/** Management (`tool`) and hook (`__hook`) actions run without a project, so they never fail on an ambiguous one. */
+function requiresSingleProject(forwarded: string[]): boolean {
+  const [action] = forwarded;
+  return action !== 'tool' && !action.startsWith('__');
 }
 
 async function resolveContextToken(
@@ -203,6 +248,7 @@ export async function runContextPassthrough(
       process.cwd(),
       auth,
       options.ctx.console,
+      requiresSingleProject(forwarded),
     );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
