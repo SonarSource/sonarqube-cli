@@ -138,18 +138,15 @@ describe('sonar context passthrough', () => {
   );
 
   it.each([
-    ['the active token', ORG_KEY, 'active-token'],
-    ['a stored token for another org', 'active-org', 'project-token'],
+    ['the recorded org', ORG_KEY],
+    ['another org', 'active-org'],
   ])(
-    'accepts an equivalent recorded server URL with %s',
-    async (_source, activeOrg, expectedToken) => {
+    'passes the active token for an equivalent recorded server URL when the active org is %s',
+    async (_source, activeOrg) => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
       const recordedUrl = `${serverUrl}/`;
       harness.withAuth(serverUrl, 'active-token', activeOrg);
-      if (activeOrg !== ORG_KEY) {
-        harness.state().withKeychainToken(serverUrl, 'project-token', ORG_KEY);
-      }
       harness
         .state()
         .withContextAugmentationBinaryInstalled()
@@ -159,7 +156,7 @@ describe('sonar context passthrough', () => {
 
       expect(result.exitCode).toBe(0);
       const invocation = findInvocation(readInvocations(harness), ['status']);
-      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe(expectedToken);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('active-token');
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(recordedUrl);
     },
     { timeout: 30000 },
@@ -340,8 +337,7 @@ describe('sonar context passthrough', () => {
     'does not fall back to the active token when the recorded CAG URL has no token',
     async () => {
       const activeServer = await harness.newFakeServer().start();
-      const recordedServer = await harness.newFakeServer().start();
-      const recordedServerUrl = recordedServer.baseUrl();
+      const recordedServerUrl = 'http://recorded-sonar.example.test:9000';
       harness.withAuth(activeServer.baseUrl(), 'active-token', 'active-org');
       harness
         .state()
@@ -395,12 +391,11 @@ describe('sonar context passthrough', () => {
     'does not read a stored token for a recorded URL that differs from the active connection',
     async () => {
       const activeServer = await harness.newFakeServer().start();
-      const recordedServer = await harness.newFakeServer().start();
-      const recordedServerUrl = recordedServer.baseUrl();
+      const recordedServerUrl = 'http://recorded-sonar.example.test:9000';
       harness.withAuth(activeServer.baseUrl(), 'active-token', ORG_KEY);
       harness
         .state()
-        .withKeychainToken(recordedServerUrl, 'stored-token', ORG_KEY)
+        .withKeychainToken(recordedServerUrl, 'stored-token')
         .withContextAugmentationBinaryInstalled()
         .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
 
@@ -413,6 +408,11 @@ describe('sonar context passthrough', () => {
       expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
         false,
       );
+      expect(
+        readInvocations(harness).some(
+          (invocation) => invocation.env.SONAR_CONTEXT_TOKEN === 'stored-token',
+        ),
+      ).toBe(false);
     },
     { timeout: 30000 },
   );

@@ -25,13 +25,12 @@ import {
   isSonarQubeCloud,
   type ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
-import { recordedConnectionCredentialSource } from '@/core/auth/recorded-connection.ts';
+import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
-import { getToken } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -294,14 +293,7 @@ async function mismatchedProjectConnection(
     }
     const serverUrl = discovered.serverUrl ?? auth.serverUrl;
     const orgKey = discovered.organization ?? auth.orgKey;
-    const credentialSource = recordedConnectionCredentialSource(auth, serverUrl);
-    if (credentialSource === 'active') {
-      return null;
-    }
-    if (
-      credentialSource === 'stored-token' &&
-      (await hasRecordedConnectionStoredToken(serverUrl, orgKey))
-    ) {
+    if (authMatchesRecordedServer(auth, serverUrl)) {
       return null;
     }
     return { orgKey, serverUrl };
@@ -310,18 +302,6 @@ async function mismatchedProjectConnection(
       `Project discovery failed while checking the connection: ${(err as Error).message}`,
     );
     return null;
-  }
-}
-
-async function hasRecordedConnectionStoredToken(
-  serverUrl: string,
-  orgKey: string | undefined,
-): Promise<boolean> {
-  try {
-    return Boolean(await getToken(serverUrl, orgKey));
-  } catch (err) {
-    logger.debug(`Keychain lookup failed for ${serverUrl}: ${(err as Error).message}`);
-    return false;
   }
 }
 
