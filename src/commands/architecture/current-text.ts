@@ -57,27 +57,7 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
   ];
   if (base !== undefined) lines.push(dim(`Names are relative to ${base}`));
 
-  const totalEdges = slice.edges.length + slice.omittedEdges;
-  const shownEdges = slice.edges.slice(0, MAX_TEXT_EDGES);
-  lines.push(
-    `${totalEdges} dependenc${totalEdges === 1 ? 'y' : 'ies'}` +
-      (totalEdges > shownEdges.length ? `, heaviest ${shownEdges.length}:` : totalEdges ? ':' : ''),
-  );
-  for (const { from, to, weight } of shownEdges) {
-    lines.push(`  ${label(from)} -> ${label(to)}  (${weight})`);
-  }
-  if (totalEdges > shownEdges.length) lines.push(`  … ${totalEdges - shownEdges.length} more`);
-
-  const { total, heaviest } = slice.feedbackPairs;
-  if (total > 0) {
-    lines.push(
-      `${total} feedback pair(s)${total > heaviest.length ? `, heaviest ${heaviest.length}` : ''}:`,
-    );
-    for (const { from, to, weight } of heaviest) {
-      lines.push(`  ${label(from)} <-> ${label(to)}  (${weight})`);
-    }
-    if (total > heaviest.length) lines.push(`  … ${total - heaviest.length} more pair(s)`);
-  }
+  lines.push(...formatDependencies(slice, label), ...formatFeedbackPairs(slice, label));
 
   if (slice.outsideViewWeight > 0) {
     lines.push(dim(`plus ${slice.outsideViewWeight} units to nodes outside this view`));
@@ -87,6 +67,31 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
     lines.push('Drill down:', ...drillDown.map((command) => `  ${cyan(command)}`));
   }
   return lines.join('\n');
+}
+
+function formatDependencies(slice: GraphSlice, label: (key: string) => string): string[] {
+  const totalEdges = slice.edges.length + slice.omittedEdges;
+  const shownEdges = slice.edges.slice(0, MAX_TEXT_EDGES);
+  let suffix = totalEdges ? ':' : '';
+  if (totalEdges > shownEdges.length) suffix = `, heaviest ${shownEdges.length}:`;
+  const lines = [`${totalEdges} dependenc${totalEdges === 1 ? 'y' : 'ies'}${suffix}`];
+  for (const { from, to, weight } of shownEdges) {
+    lines.push(`  ${label(from)} -> ${label(to)}  (${weight})`);
+  }
+  if (totalEdges > shownEdges.length) lines.push(`  … ${totalEdges - shownEdges.length} more`);
+  return lines;
+}
+
+function formatFeedbackPairs(slice: GraphSlice, label: (key: string) => string): string[] {
+  const { total, heaviest } = slice.feedbackPairs;
+  if (total <= 0) return [];
+  const suffix = total > heaviest.length ? `, heaviest ${heaviest.length}` : '';
+  const lines = [`${total} feedback pair(s)${suffix}:`];
+  for (const { from, to, weight } of heaviest) {
+    lines.push(`  ${label(from)} <-> ${label(to)}  (${weight})`);
+  }
+  if (total > heaviest.length) lines.push(`  … ${total - heaviest.length} more pair(s)`);
+  return lines;
 }
 
 const NAME_SEPARATORS = new Set(['.', '/']);

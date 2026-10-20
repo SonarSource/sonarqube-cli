@@ -38,6 +38,8 @@ import { revisionOf } from './intended-model.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
+const MAX_PUBLIC_GROUPS = 50_000;
+const MAX_PUBLIC_GROUP_DEPTH = 64;
 const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ArchitectureIds {
@@ -110,7 +112,8 @@ function toIntended(value: unknown): IntendedArchitecture {
 }
 
 function publicGroup(value: unknown, depth: number, budget: { count: number }): IntendedGroup {
-  if (depth > 64 || ++budget.count > 50_000) return invalidPublicModel();
+  if (depth > MAX_PUBLIC_GROUP_DEPTH || ++budget.count > MAX_PUBLIC_GROUPS)
+    return invalidPublicModel();
   const group = objectField(value);
   if (
     typeof group.label !== 'string' ||

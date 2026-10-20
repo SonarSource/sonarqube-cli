@@ -221,7 +221,8 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
 }
 
 export function shellQuote(value: string): string {
-  return /^[\w.:/@-]+$/.test(value) ? value : `'${value.replaceAll("'", String.raw`'\''`)}'`;
+  const escaped = value.replaceAll("'", String.raw`'\''`);
+  return /^[\w.:/@-]+$/.test(value) ? value : `'${escaped}'`;
 }
 
 function printPayload(

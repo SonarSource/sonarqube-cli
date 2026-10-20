@@ -130,23 +130,33 @@ function diffGroups(
       diff.added.push(`group ${language} ${key} [${group.patterns.join(', ')}]`);
       continue;
     }
-    if (JSON.stringify(old.path) !== JSON.stringify(group.path)) {
-      diff.changed.push(
-        `group ${language} ${key}: hierarchy ${JSON.stringify(old.path)} -> ${JSON.stringify(group.path)}`,
-      );
-    }
-    const oldPatterns = new Set(old.patterns);
-    const newPatterns = new Set(group.patterns);
-    for (const pattern of oldPatterns) {
-      if (!newPatterns.has(pattern)) diff.removed.push(`pattern ${language} ${key} ${pattern}`);
-    }
-    for (const pattern of newPatterns) {
-      if (!oldPatterns.has(pattern)) diff.added.push(`pattern ${language} ${key} ${pattern}`);
-    }
-    for (const flag of ['interface', 'interfaceAccess'] as const) {
-      if (old[flag] !== group[flag]) {
-        diff.changed.push(`group ${language} ${key}: ${flag} ${old[flag]} -> ${group[flag]}`);
-      }
+    diffExistingGroup(language, key, old, group, diff);
+  }
+}
+
+function diffExistingGroup(
+  language: string,
+  key: string,
+  old: FlatGroup,
+  group: FlatGroup,
+  diff: IntendedDiff,
+): void {
+  if (JSON.stringify(old.path) !== JSON.stringify(group.path)) {
+    diff.changed.push(
+      `group ${language} ${key}: hierarchy ${JSON.stringify(old.path)} -> ${JSON.stringify(group.path)}`,
+    );
+  }
+  const oldPatterns = new Set(old.patterns);
+  const newPatterns = new Set(group.patterns);
+  for (const pattern of oldPatterns) {
+    if (!newPatterns.has(pattern)) diff.removed.push(`pattern ${language} ${key} ${pattern}`);
+  }
+  for (const pattern of newPatterns) {
+    if (!oldPatterns.has(pattern)) diff.added.push(`pattern ${language} ${key} ${pattern}`);
+  }
+  for (const flag of ['interface', 'interfaceAccess'] as const) {
+    if (old[flag] !== group[flag]) {
+      diff.changed.push(`group ${language} ${key}: ${flag} ${old[flag]} -> ${group[flag]}`);
     }
   }
 }

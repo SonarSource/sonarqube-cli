@@ -59,24 +59,31 @@ export async function installSkill(
     resolvedDependencies: new Map(),
   };
 
-  for (const dir of SKILL_DIRS) {
-    const path = join(targetRoot, ...dir, 'sonar-architecture', 'SKILL.md');
-    const skill = wholeFile({
-      id: 'sonar-architecture-skill',
-      displayName: 'architecture skill',
-      targetPath: path,
-      content: ARCHITECTURE_SKILL,
-      requiresForce: true,
-      managedMarker: ARCHITECTURE_SKILL_MARKER,
-      overwriteRemediationHint: 'Run again with --force to replace it.',
-    });
-    if (await skill.isApplied(context)) {
-      ctx.console.print(`Already up to date: ${path}`);
-      continue;
-    }
-    await skill.apply(context);
-    ctx.console.print(`Installed ${path}`);
+  await SKILL_DIRS.reduce(
+    (previous, dir) =>
+      previous.then(() =>
+        installAt(join(targetRoot, ...dir, 'sonar-architecture', 'SKILL.md'), context),
+      ),
+    Promise.resolve(),
+  );
+}
+
+async function installAt(path: string, context: IntegrationContext): Promise<void> {
+  const skill = wholeFile({
+    id: 'sonar-architecture-skill',
+    displayName: 'architecture skill',
+    targetPath: path,
+    content: ARCHITECTURE_SKILL,
+    requiresForce: true,
+    managedMarker: ARCHITECTURE_SKILL_MARKER,
+    overwriteRemediationHint: 'Run again with --force to replace it.',
+  });
+  if (await skill.isApplied(context)) {
+    context.console.print(`Already up to date: ${path}`);
+    return;
   }
+  await skill.apply(context);
+  context.console.print(`Installed ${path}`);
 }
 
 function projectRoot(): string {

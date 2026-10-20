@@ -33,6 +33,8 @@ import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts
 import { revisionOf } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
 
+const BACKUP_DIRECTORY_MODE = 0o700;
+
 export type SetIntendedMode = 'dry-run' | 'unchanged' | 'created' | 'replaced-by-fallback';
 
 export interface SetIntendedResult {
@@ -71,22 +73,7 @@ export async function setIntended(
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
 
   if (current.length === 0) {
-    try {
-      await api.createIntended(next);
-    } catch (error) {
-      const createError = toArchitectureError(error, options.projectKey);
-      try {
-        if (revisionOf(await api.getIntended()) === revisionOf(next)) {
-          return { mode: 'created', diff, unchecked };
-        }
-      } catch (readError) {
-        throw new CommandFailedError(
-          `Creating the intended architecture failed and its result could not be verified. The server state is unknown. Create failed: ${messageOf(createError)}\nRead failed: ${messageOf(readError)}`,
-          { cause: createError },
-        );
-      }
-      throw createError;
-    }
+    await createInitial(api, next, options.projectKey);
     return { mode: 'created', diff, unchecked };
   }
   const backupPath = await writeBackup(options.backupDir, options.projectKey, current);
@@ -125,26 +112,59 @@ export async function setIntended(
   if (next.length === 0) {
     return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
   }
+  await createReplacement(api, current, next, backupPath, options.projectKey);
+  return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
+}
+
+async function createReplacement(
+  api: ArchitectureApi,
+  current: IntendedArchitecture[],
+  next: IntendedArchitecture[],
+  backupPath: string,
+  projectKey: string,
+): Promise<void> {
   try {
     await api.createIntended(next);
   } catch (error) {
-    const createError = toArchitectureError(error, options.projectKey);
+    const createError = toArchitectureError(error, projectKey);
     let saved: IntendedArchitecture[];
     try {
       saved = await api.getIntended();
     } catch (readError) {
-      throw recoveryError(backupPath, options.projectKey, createError, readError);
+      throw recoveryError(backupPath, projectKey, createError, readError);
     }
     if (revisionOf(saved) === revisionOf(next)) {
-      return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
+      return;
     }
-    await recoverPrevious(api, current, backupPath, options.projectKey, createError, saved);
+    await recoverPrevious(api, current, backupPath, projectKey, createError, saved);
     throw new CommandFailedError(
       `Saving the new intended architecture failed; the previous export was preserved or restored. ${messageOf(createError)}\nBackup kept at ${backupPath}`,
       { cause: createError, remediationHint: `Backup kept at ${backupPath}` },
     );
   }
-  return { mode: 'replaced-by-fallback', diff, backupPath, unchecked };
+}
+
+async function createInitial(
+  api: ArchitectureApi,
+  next: IntendedArchitecture[],
+  projectKey: string,
+): Promise<void> {
+  try {
+    await api.createIntended(next);
+  } catch (error) {
+    const createError = toArchitectureError(error, projectKey);
+    try {
+      if (revisionOf(await api.getIntended()) === revisionOf(next)) {
+        return;
+      }
+    } catch (readError) {
+      throw new CommandFailedError(
+        `Creating the intended architecture failed and its result could not be verified. The server state is unknown. Create failed: ${messageOf(createError)}\nRead failed: ${messageOf(readError)}`,
+        { cause: createError },
+      );
+    }
+    throw createError;
+  }
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
@@ -207,11 +227,11 @@ async function writeBackup(
   projectKey: string,
   models: IntendedArchitecture[],
 ): Promise<string> {
-  await mkdir(backupDir, { recursive: true, mode: 0o700 });
+  await mkdir(backupDir, { recursive: true, mode: BACKUP_DIRECTORY_MODE });
   if (!(await lstat(backupDir)).isDirectory()) {
     throw new CommandFailedError('The architecture backup path must be a real directory.');
   }
-  await chmod(backupDir, 0o700);
+  await chmod(backupDir, BACKUP_DIRECTORY_MODE);
   const stamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
   const path = join(
     backupDir,
