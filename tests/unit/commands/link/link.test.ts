@@ -165,6 +165,7 @@ describe('link', () => {
     const warnings = fake.calls.filter((c) => c.method === 'warn');
     expect(warnings).toHaveLength(1);
     expect(String(warnings[0].args[0])).toContain("'sonar link monorepo'");
+    expect(fake.calls.filter((c) => c.method === 'success')).toHaveLength(0);
   });
 
   it('linkMonorepo writes through addProject and never calls set', async () => {

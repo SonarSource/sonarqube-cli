@@ -216,6 +216,8 @@ describe('sonar link', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout + result.stderr).toContain("'sonar link monorepo'");
+    expect(result.stdout).not.toContain('Linked ');
+    expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
   });
 
   describe('monorepo', () => {
