@@ -31,7 +31,11 @@ import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
-import { parseSqaaRequestBody, sqaaRequestFileCount } from '../analyze/sqaa-request-helpers';
+import {
+  parseSqaaRequestBody,
+  sqaaRequestFileCount,
+  sqaaRequestFirstFilePath,
+} from '../analyze/sqaa-request-helpers';
 import { commitFile, initGitRepo } from './git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -97,6 +101,33 @@ describe('sonar hook pi-post-tool-use', () => {
       expect(sqaaRequestFileCount(calls[0].body)).toBe(1);
       expect(parseSqaaRequestBody(calls[0].body).analysisDepth).toBeUndefined();
       expect(parseSqaaRequestBody(calls[0].body).branchName).toBeTruthy();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends the edited file relative to the discovered project root, not cwd',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/sonar-project.properties', 'sonar.projectKey=pkg-project\n');
+      harness.cwd.writeFile('pkg/src/main.ts', 'const x = 1;');
+
+      const result = await harness.runWithStdin(
+        'hook pi-post-tool-use',
+        toolPayload(join(harness.cwd.path, 'pkg/src/main.ts')),
+        { cwd: join(harness.cwd.path, 'pkg/src') },
+      );
+
+      expect(result.exitCode).toBe(0);
+      const calls = sqaaCalls(server);
+      expect(calls).toHaveLength(1);
+      expect(parseSqaaRequestBody(calls[0].body).projectKey).toBe('pkg-project');
+      expect(sqaaRequestFirstFilePath(calls[0].body)).toBe('src/main.ts');
     },
     { timeout: 15000 },
   );
