@@ -140,26 +140,19 @@ describe('authStatus with FakeConsole', () => {
     expect(rendered(fake)).not.toContain('This project expects a different connection');
   });
 
-  it('uses the current server when the project only records a different organization', async () => {
+  it('does not warn when the project only records a different organization on the current server', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       organization: 'another-org',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
       serverUrl: undefined,
     });
-    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue(null);
-    restorers.push(
-      () => discoverProjectSpy.mockRestore(),
-      () => getTokenSpy.mockRestore(),
-    );
+    restorers.push(() => discoverProjectSpy.mockRestore());
 
     const { ctx, fake } = contextFor(envAuth());
     await authStatus({}, ctx);
 
-    const output = rendered(fake);
-    expect(output).toContain('This project expects a different connection');
-    expect(output).toContain('https://sonarcloud.io');
-    expect(output).toContain('another-org');
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
   });
 
   it('does not warn when the recorded connection has a stored token', async () => {
@@ -179,7 +172,7 @@ describe('authStatus with FakeConsole', () => {
     await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
-    expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io', 'another-org');
+    expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io');
   });
 
   // Reporting must not become a reason to fail. Discovery reads the filesystem and can throw

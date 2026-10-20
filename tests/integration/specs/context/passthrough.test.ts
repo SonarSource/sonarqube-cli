@@ -115,14 +115,13 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'prefers the recorded project CAG connection over the active org',
+    'passes the active token with the recorded organization when it differs from the active org',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'active-token', 'active-org');
       harness
         .state()
-        .withKeychainToken(serverUrl, 'project-token', ORG_KEY)
         .withContextAugmentationBinaryInstalled()
         .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
 
@@ -130,7 +129,7 @@ describe('sonar context passthrough', () => {
 
       expect(result.exitCode).toBe(0);
       const invocation = findInvocation(readInvocations(harness), ['status']);
-      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('active-token');
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
@@ -310,31 +309,10 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'fails when the recorded project CAG connection has no token',
-    async () => {
-      const server = await harness.newFakeServer().start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'active-token', 'active-org');
-      harness
-        .state()
-        .withContextAugmentationBinaryInstalled()
-        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
-
-      const result = await harness.run('context status');
-
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain('recorded Vortex Context connection');
-      expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
     'does not fall back to the active token when the recorded CAG URL has no token',
     async () => {
       const activeServer = await harness.newFakeServer().start();
-      const recordedServer = await harness.newFakeServer().start();
-      const recordedServerUrl = recordedServer.baseUrl();
+      const recordedServerUrl = 'http://recorded-sonar.example.test:9000';
       harness.withAuth(activeServer.baseUrl(), 'active-token', 'active-org');
       harness
         .state()

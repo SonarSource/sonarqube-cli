@@ -55,7 +55,7 @@ async function purgeConnectionAuth(
 
   let token: string | undefined;
   try {
-    token = (await getToken(conn.serverUrl, conn.orgKey)) ?? undefined;
+    token = (await getToken(conn.serverUrl)) ?? undefined;
   } catch (err) {
     keychainWarnings.push(formatKeychainWarning(target, 'read', err));
   }
@@ -68,7 +68,7 @@ async function purgeConnectionAuth(
   });
 
   try {
-    await deleteToken(conn.serverUrl, conn.orgKey);
+    await deleteToken(conn.serverUrl);
   } catch (err) {
     keychainWarnings.push(formatKeychainWarning(target, 'delete', err));
   }

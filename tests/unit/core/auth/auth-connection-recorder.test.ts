@@ -239,7 +239,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
     saveState(state);
-    await keychain.seedToken('https://sq.example.com', 'login-token');
+    await keychain.seedToken('https://sq.example.com', 't7-keychain');
     const getSafeSpy = mockIdentityGetSafe();
 
     const connection = await recordConnectionFromAuth(serverAuth('t7-keychain'), { envOnly: true });
@@ -250,11 +250,28 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('stamps envOnly when the env token differs from the token stored for the same server', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    saveState(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const connection = await recordConnectionFromAuth(serverAuth('other-env-token'), {
+      envOnly: true,
+    });
+
+    expect(connection.envOnly).toBe(true);
+    getSafeSpy.mockRestore();
+  });
+
   it('does not stamp envOnly on a keychain-backed connection that still needs identity', async () => {
     const state = loadState();
     addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     saveState(state);
-    await keychain.seedToken('https://sq.example.com', 'login-token');
+    await keychain.seedToken('https://sq.example.com', 't-env-keychain');
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
 
     const connection = await recordConnectionFromAuth(serverAuth('t-env-keychain'), {

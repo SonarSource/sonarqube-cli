@@ -66,8 +66,9 @@ export async function recordConnectionFromAuth(
   // Logout treats envOnly as already logged out, so never stamp it on a
   // keychain-backed (login-created) connection — that would leave the stored
   // token behind, unrevoked. A keychain we cannot read (headless CI, no
-  // libsecret) must not break env-var recording, so it degrades to "unknown".
-  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
+  // libsecret) must not break env-var recording, so it counts as a match:
+  // a missed envOnly stamp only makes logout run its normal cleanup.
+  const envOnly = options.envOnly === true && !(await matchesStoredToken(auth));
 
   if (
     !options.force &&
@@ -108,9 +109,9 @@ function resolveRecordedTokenName(
   return undefined;
 }
 
-async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
+async function matchesStoredToken(auth: ResolvedAuth): Promise<boolean> {
   try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
+    return (await getToken(auth.serverUrl)) === auth.token;
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
     return true;
