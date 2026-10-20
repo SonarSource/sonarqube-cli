@@ -62,6 +62,8 @@ export type SharedProjectConfigEntry =
 export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping[]>;
   set(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
+  /** Adds (or updates, by canonical directory) an entry in the `projects` array, leaving `project` untouched. */
+  addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
 
 interface SharedProjectConfigFileDto {
@@ -163,27 +165,30 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
     const existing = await this.readExistingRootForWrite(dir);
+    const file: SharedProjectConfigFileDto = { ...existing, project: entry };
+    await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
+  }
+
+  async addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
+    const existing = await this.readExistingRootForWrite(dir);
     if (existing.projects !== undefined && !Array.isArray(existing.projects)) {
       throw new CommandFailedError(`${this.configPath(dir)} must contain a projects array`);
     }
-    const legacyEntries = existing.project === undefined ? [] : [existing.project];
-    const entries = Array.isArray(existing.projects) ? existing.projects : legacyEntries;
+    const canonicalDir = canonicalizePath(dir);
     const projectRoot = canonicalizePath(join(dir, entry.path));
-    const matches = (value: unknown): boolean =>
-      isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot;
-    const index = entries.findIndex(matches);
-    const projects = entries.filter((value, position) => position === index || !matches(value));
     const normalizedEntry = {
       ...entry,
-      path: relative(canonicalizePath(dir), projectRoot).split(sep).join('/') || '.',
+      path: relative(canonicalDir, projectRoot).split(sep).join('/') || '.',
     };
-    if (index === -1) {
-      projects.push(normalizedEntry);
-    } else {
-      projects[index] = normalizedEntry;
-    }
+    const entries: unknown[] = existing.projects ?? [];
+    const index = entries.findIndex(
+      (value) => isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot,
+    );
+    const projects =
+      index === -1
+        ? [...entries, normalizedEntry]
+        : entries.map((value, position) => (position === index ? normalizedEntry : value));
     const file: SharedProjectConfigFileDto = { ...existing, projects };
-    delete file.project;
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
 

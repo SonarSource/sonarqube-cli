@@ -42,7 +42,7 @@ function writeConfig(dir: string, content: string): void {
   writeFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), content);
 }
 
-/** Wraps a raw entry under the `project` container, using the legacy singular format. */
+/** Wraps a raw entry under the `project` container, mirroring what `set()` writes. */
 function writeProjectConfig(dir: string, project: unknown): void {
   writeConfig(dir, JSON.stringify({ project }));
 }
@@ -508,7 +508,7 @@ describe('SharedProjectConfigFileRepository.set', () => {
     }
   });
 
-  it('writes a projects array', async () => {
+  it('nests the written entry under a "project" field, leaving room for future top-level fields', async () => {
     const dir = tempDir('write-shape');
     try {
       const repo = new SharedProjectConfigRepositoryImpl();
@@ -516,14 +516,14 @@ describe('SharedProjectConfigFileRepository.set', () => {
 
       const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
       expect(raw).toEqual({
-        projects: [{ projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }],
+        project: { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('preserves other top-level fields when writing projects', async () => {
+  it('preserves other top-level fields already in the file when overwriting "project"', async () => {
     const dir = tempDir('preserve-siblings');
     writeConfig(dir, JSON.stringify({ someFutureField: 'keep-me' }));
     try {
@@ -533,7 +533,7 @@ describe('SharedProjectConfigFileRepository.set', () => {
       const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
       expect(raw).toEqual({
         someFutureField: 'keep-me',
-        projects: [{ projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }],
+        project: { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });
