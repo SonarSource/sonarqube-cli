@@ -924,6 +924,9 @@ export class FakeSonarQubeServerBuilder {
 
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
+    [...projects.values()].forEach(({ architecture }, index) =>
+      architecture?.assignProjectIndex(index),
+    );
     const {
       validToken,
       systemStatus,

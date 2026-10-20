@@ -586,6 +586,89 @@ describe('sonar architecture set on the public API', () => {
   }
   const TS_MODEL: IntendedArchitecture = { ...NEXT[0], type: 'file', language: 'ts' };
   const JAVA_FILE: IntendedArchitecture = { ...NEXT[0], type: 'file' };
+  it('isolates a scoped three-perspective PATCH from another project with its own model', async () => {
+    const cs: IntendedArchitecture = {
+      ...NEXT[0],
+      language: 'cs',
+      groups: [{ label: 'CsDomain', patterns: ['cs:**'] }],
+    };
+    const javaFile: IntendedArchitecture = {
+      ...JAVA_FILE,
+      groups: [{ label: 'FileDomain', patterns: ['src/**'] }],
+    };
+    const original = [INTENDED[0], cs, javaFile];
+    const server = await harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken(TOKEN)
+      .withProject(PROJECT, (project) =>
+        project.withArchitecture((fake) => fake.withIntended(INTENDED)),
+      )
+      .withProject('multi-shop', (project) =>
+        project.withArchitecture((fake) => fake.withIntended(original)),
+      )
+      .start();
+    harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
+    const exported = await harness.run(
+      'arch get intended -p multi-shop --language java --format json',
+    );
+    expect(exported.exitCode).toBe(0);
+    const file = JSON.parse(exported.stdout) as {
+      revision: string;
+      language: string;
+      models: IntendedArchitecture[];
+    };
+    file.models
+      .find(({ type }) => type === 'namespace')!
+      .groups.push({ label: 'ScopedLayer', patterns: ['scoped:**'] });
+    harness.cwd.writeFile('multi-scoped.json', JSON.stringify(file));
+    const preview = await harness.run(
+      'arch set intended -p multi-shop --file multi-scoped.json --dry-run',
+    );
+    expect(preview.exitCode).toBe(0);
+    expect(writes(server)).toEqual([]);
+    const applied = await harness.run('arch set intended -p multi-shop --file multi-scoped.json');
+    const actual = await harness.run('arch get intended -p multi-shop --format json');
+    const saved = JSON.parse(actual.stdout) as { models: IntendedArchitecture[] };
+    expect(saved.models).toEqual([cs, ...file.models]);
+    expect(applied.exitCode).toBe(0);
+    expect((await readSaved()).models).toEqual(INTENDED);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect(JSON.parse(writes(server)[0].body!)).toEqual({
+      intendedArchitectures: [cs, ...file.models],
+    });
+  });
+
+  it('keeps lazily-created model UUIDs distinct from another project', async () => {
+    const server = await harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken(TOKEN)
+      .withProject(PROJECT, (project) =>
+        project.withArchitecture((fake) => fake.withIntended(INTENDED)),
+      )
+      .withProject('lazy-shop')
+      .start();
+    harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
+    harness.cwd.writeFile('create-lazy.json', JSON.stringify({ models: INTENDED }));
+    expect(
+      (await harness.run('arch set intended -p lazy-shop --file create-lazy.json')).exitCode,
+    ).toBe(0);
+    const exported = await harness.run('arch get intended -p lazy-shop --format json');
+    const file = JSON.parse(exported.stdout) as {
+      revision: string;
+      models: IntendedArchitecture[];
+    };
+    harness.cwd.writeFile('update-lazy.json', JSON.stringify({ ...file, models: NEXT }));
+    expect(
+      (await harness.run('arch set intended -p lazy-shop --file update-lazy.json')).exitCode,
+    ).toBe(0);
+    const saved = await harness.run('arch get intended -p lazy-shop --format json');
+    expect((JSON.parse(saved.stdout) as { models: IntendedArchitecture[] }).models).toEqual(NEXT);
+    expect((await readSaved()).models).toEqual(INTENDED);
+    expect(writes(server).map(({ method }) => method)).toEqual(['POST', 'PATCH']);
+  });
+
   for (const models of [NEXT, [...NEXT, TS_MODEL, JAVA_FILE]]) {
     it(`POSTs a full ${models.length}-perspective envelope with projectId in JSON`, async () => {
       const server = await startWith(() => undefined);

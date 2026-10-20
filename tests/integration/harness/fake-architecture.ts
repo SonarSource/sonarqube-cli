@@ -29,6 +29,9 @@ import type {
 
 export const FAKE_SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 
+const MODEL_NAMESPACE_RADIX = 16;
+const MODEL_SEQUENCE_LENGTH = 12;
+
 const RESOURCES = ['current-architectures', 'intended-architectures'] as const;
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
@@ -69,6 +72,7 @@ export class FakeArchitecture {
   private readonly structure = new Map<Ecosystem, StructureGraph[]>();
   private models: SavedModel[] = [];
   private nextModelId = 1;
+  private modelNamespace = '00000000';
   private intendedReads = 0;
   private readonly readFailures = new Map<number, number>();
   private intendedCreates = 0;
@@ -83,6 +87,20 @@ export class FakeArchitecture {
   private deleteCount = 0;
   private readonly deleteFailures = new Map<number, { committed: boolean }>();
   private readonly statusOverrides = new Map<string, { status: number; body: string }>();
+
+  assignProjectIndex(index: number): this {
+    const namespace = index
+      .toString(MODEL_NAMESPACE_RADIX)
+      .padStart(this.modelNamespace.length, '0');
+    for (const model of this.models)
+      model.id = `${namespace}${model.id.slice(this.modelNamespace.length)}`;
+    this.modelNamespace = namespace;
+    return this;
+  }
+
+  private allocateModelId(): string {
+    return `${this.modelNamespace}-0000-4000-8000-${String(this.nextModelId++).padStart(MODEL_SEQUENCE_LENGTH, '0')}`;
+  }
 
   withStructure(ecosystem: Ecosystem, graphs: StructureGraph[]): this {
     this.structure.set(ecosystem, graphs);
@@ -99,7 +117,7 @@ export class FakeArchitecture {
   withSavedPerspectives(perspectives: SavedPerspective[]): this {
     this.models = [
       {
-        id: `00000000-0000-4000-8000-${String(this.nextModelId++).padStart(12, '0')}`,
+        id: this.allocateModelId(),
         perspectives,
       },
     ];
@@ -265,7 +283,7 @@ export class FakeArchitecture {
 
   private toSavedModel(models: IntendedArchitecture[]): SavedModel {
     return {
-      id: `00000000-0000-4000-8000-${String(this.nextModelId++).padStart(12, '0')}`,
+      id: this.allocateModelId(),
       perspectives: models.map(({ type, language, groups, constraints }) => ({
         qualifiers: type,
         language,
@@ -336,7 +354,7 @@ export function routeArchitectureRequest(
     project = projects.find(({ key }) => projectId(key) === (query.projectId ?? bodyProjectId));
   }
   if (!project) return json({ message: 'Unknown project, branch or model id' }, 400);
-  project.architecture ??= new FakeArchitecture();
+  project.architecture ??= new FakeArchitecture().assignProjectIndex(projects.indexOf(project));
   return project.architecture.handle(resource, {
     method: request.method,
     query,

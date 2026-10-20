@@ -81,11 +81,11 @@ Never use partial or truncated input, discard perspectives to fit the API, or re
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
 a new preview and confirmation.
 
-The public API creates and updates the complete set of language/type perspectives. Existing
-models use PATCH by their public model UUID; failed writes are verified by a public read and
-never automatically rolled back. A concurrent change after preflight can still race the write. Public exports flatten imported organization patterns
-and omit metadata, so replacement and restoration cannot preserve those links or omitted
-metadata. Include these returned warnings when presenting the preview.
+The clients write the complete set of language/type perspectives. Failed writes are checked
+by a read and are never automatically rolled back. A concurrent change after preflight can
+still race the write. Public exports flatten imported organization patterns and omit metadata,
+so replacement and restoration cannot preserve those links or omitted metadata. Include these
+returned warnings when presenting the preview.
 
 If an operation fails, report the error and inspect the saved state before retrying. CLI writes
 save a local backup; MCP errors can include the previous export. Preserve that export and the
