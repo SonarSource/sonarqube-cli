@@ -20,6 +20,8 @@
 
 import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
+import { ECOSYSTEMS } from '@/core/architecture/architecture-api.ts';
+import { DEFAULT_MAX_NODES } from '@/core/architecture/graph.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -86,6 +88,17 @@ import {
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
+import {
+  type ArchitectureReadOptions,
+  getCurrent as getCurrentArchitecture,
+  getIntended as getIntendedArchitecture,
+  TEXT_FORMATS,
+} from './architecture/index.ts';
+import {
+  installSkill as installArchitectureSkill,
+  type InstallSkillOptions,
+} from './architecture/install-skill.ts';
+import { type SetFileOptions, setIntended as setIntendedArchitecture } from './architecture/set.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import {
@@ -844,6 +857,72 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
+
+  // Agent-facing architecture commands. Alpha — not in public docs (see admin above).
+  const architecture = COMMAND_TREE.command('architecture')
+    .alias('arch')
+    .stage(Stage.Alpha)
+    .description('Read and set the architecture of a project')
+    .rootHelp({ category: 'data' });
+
+  const architectureGet = architecture
+    .command('get')
+    .description('Read the current or intended architecture of a project');
+  const languageOption = (): SonarOption =>
+    new SonarOption('--language <language>', 'Only this language (default: all)').choices(
+      ECOSYSTEMS,
+    );
+  const textFormatOption = (): SonarOption =>
+    new SonarOption(
+      '--format <format>',
+      'Output format (default: text on a terminal, toon otherwise)',
+    ).choices(TEXT_FORMATS);
+  architectureGet
+    .command('current')
+    .description(
+      `Current architecture, at most ${DEFAULT_MAX_NODES} nodes with a summary; drill down with --component and --depth`,
+    )
+    .option('-p, --project <project>', 'Project key')
+    .option('--component <key>', 'Node key to start below, from a previous get current')
+    .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
+    .addOption(languageOption())
+    .addOption(textFormatOption())
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
+      getCurrentArchitecture(options, ctx),
+    );
+  architectureGet
+    .command('intended')
+    .description(
+      'Intended architecture; full JSON can be saved with set intended, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set',
+    )
+    .option('-p, --project <project>', 'Project key')
+    .option('--component <key>', 'Group key to start below, e.g. Domain/Billing')
+    .option('--depth <n>', 'Levels of groups below the start group (default: all)', parseInteger)
+    .addOption(languageOption())
+    .addOption(textFormatOption())
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
+      getIntendedArchitecture(options, ctx),
+    );
+
+  const architectureSet = architecture
+    .command('set')
+    .description('Set the intended architecture from a JSON file');
+  architectureSet
+    .command('intended')
+    .description(
+      'Replace the intended architecture with a file shaped like the output of get intended --format json',
+    )
+    .requiredOption('--file <file>', 'Intended architecture JSON file')
+    .option('--dry-run', 'Validate and show the changes, removals first, without writing')
+    .option('-p, --project <project>', 'Project key')
+    .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
+
+  architecture
+    .command('install-skill')
+    .description('Install the architecture skill for Claude Code and Cursor in this repository')
+    .option('--global', 'Install in the home directory instead of the repository')
+    .option('--force', 'Replace a SKILL.md that was not written by this command')
+    .anonymousAction((ctx, options: InstallSkillOptions) => installArchitectureSkill(options, ctx));
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
