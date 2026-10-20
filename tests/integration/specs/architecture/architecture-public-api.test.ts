@@ -32,6 +32,7 @@ import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 import { type FakeArchitecture, fakeMainBranchId } from '../../harness/fake-architecture';
 import type { ProjectBuilder } from '../../harness/fake-sonarqube-server';
 import type { RecordedRequest } from '../../harness/types';
+import { git, initGitRepo } from '../hook/git-test-helpers';
 
 const TOKEN = 'arch-token';
 const PROJECT = 'shop';
@@ -94,6 +95,59 @@ describe('sonar architecture get on the public API', () => {
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     return server;
   }
+
+  for (const command of [
+    'arch get current --language java --format json',
+    'arch get intended --format json',
+    'arch set intended --file model.json --dry-run',
+    'arch set intended --file model.json',
+  ]) {
+    it(`uses a key-only local configuration with the authenticated connection: ${command}`, async () => {
+      const server = await cloudServerWith((project) =>
+        project.withArchitecture((architecture) =>
+          architecture.withStructure('java', GRAPH).withIntended(INTENDED),
+        ),
+      );
+      initGitRepo(harness.cwd.path);
+      git(
+        ['remote', 'add', 'origin', 'https://github.com/example/repository.git'],
+        harness.cwd.path,
+      );
+      harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${PROJECT}\n`);
+      harness.cwd.writeFile('model.json', JSON.stringify({ models: INTENDED }));
+
+      const result = await harness.run(command);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(`Using auto-detected project key: ${PROJECT}`);
+      const paths = server.getRecordedRequests().map(({ path }) => path);
+      expect(paths.some((path) => path.startsWith('/architecture/'))).toBe(true);
+      expect(paths.some((path) => path.includes('dop-translation'))).toBe(false);
+      expect(paths).not.toContain('/api/components/search_projects');
+      expect(paths).not.toContain('/api/navigation/component');
+    });
+  }
+
+  it('never discovers an unconfigured project through a git remote, but accepts an explicit key', async () => {
+    const server = await cloudServerWith((project) =>
+      project.withArchitecture((architecture) => architecture.withStructure('java', GRAPH)),
+    );
+    initGitRepo(harness.cwd.path);
+    git(['remote', 'add', 'origin', 'https://github.com/example/repository.git'], harness.cwd.path);
+
+    const missing = await harness.run('arch get current --language java --format json');
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stderr).toContain('Could not determine project key.');
+    const explicit = await harness.run(
+      `arch get current -p ${PROJECT} --language java --format json`,
+    );
+    expect(explicit.exitCode).toBe(0);
+    expect(JSON.parse(explicit.stdout).project).toBe(PROJECT);
+    const paths = server.getRecordedRequests().map(({ path }) => path);
+    expect(paths.some((path) => path.includes('dop-translation'))).toBe(false);
+    expect(paths).not.toContain('/api/components/search_projects');
+    expect(paths).not.toContain('/api/navigation/component');
+  });
 
   for (const explicitChildren of [false, true]) {
     it(`keeps intended leaf views and touching constraints with ${explicitChildren ? 'empty' : 'omitted'} children`, async () => {

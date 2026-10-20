@@ -173,7 +173,8 @@ export async function resolveProject(
     options.project ??
     (
       await discoverProject(process.cwd(), {
-        auth: null,
+        auth: ctx.auth,
+        useGitRemoteBinding: false,
         silent: true,
         console: ctx.console,
       })
