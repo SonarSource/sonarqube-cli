@@ -44,20 +44,22 @@ export interface GitRemoteBindingDiscovery {
 export function discoverProjectKeyByGitRemote(
   auth: ResolvedAuth,
   gitRemote: string,
-): Promise<GitRemoteBindingDiscovery | null> {
+): Promise<GitRemoteBindingDiscovery | null | undefined> {
   const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
   return client.getProjectKeyByGitRemote(gitRemote, auth.orgKey).match(
-    (projectKey) =>
-      projectKey
-        ? {
-            projectKey,
-            serverUrl: auth.serverUrl,
-            organization: auth.orgKey,
-          }
-        : null,
+    (projectKey) => {
+      if (!projectKey) {
+        return projectKey === null ? null : undefined;
+      }
+      return {
+        projectKey,
+        serverUrl: auth.serverUrl,
+        organization: auth.orgKey,
+      };
+    },
     (error) => {
       logger.debug(`Git remote project binding lookup failed: ${error.message}`);
-      return null;
+      return undefined;
     },
   );
 }
@@ -68,25 +70,40 @@ export async function applyGitRemoteBinding(
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
 ): Promise<void> {
-  if (options.auth === null || !repoRoot) {
+  if (options.auth === null) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because authentication was disabled',
+    );
+    return;
+  }
+
+  if (!repoRoot) {
+    logger.debug('Project discovery git remote binding: no git remote found');
     return;
   }
 
   const gitRemote = await getGitRemote(repoRoot);
   if (!gitRemote) {
+    logger.debug('Project discovery git remote binding: no git remote found');
     return;
   }
 
   const auth = options.auth ?? null;
   if (!auth) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because no credentials were supplied',
+    );
     return;
   }
 
   const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  config.gitRemoteBindingNotFound = remoteBinding === null;
   if (!remoteBinding) {
+    logger.debug('Project discovery git remote binding: no project binding resolved');
     return;
   }
 
+  logger.debug('Project discovery git remote binding: project resolved');
   config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
   config.projectKey = remoteBinding.projectKey;
   config.organization = config.organization || remoteBinding.organization;

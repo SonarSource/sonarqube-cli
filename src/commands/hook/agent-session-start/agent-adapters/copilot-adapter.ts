@@ -23,12 +23,17 @@ import type { SessionStartAgentAdapter } from '../types.ts';
 interface CopilotSessionStartPayload {
   sessionId: string;
   cwd: string;
+  agentName?: string;
 }
 
 export const copilotAdapter: SessionStartAgentAdapter = {
   parse: (payload) => {
     const p = payload as CopilotSessionStartPayload;
-    return { sessionId: p.sessionId, startDir: p.cwd, eventName: undefined };
+    return {
+      sessionId: p.sessionId,
+      startDir: p.cwd,
+      eventName: p.agentName ? 'SubagentStart' : undefined,
+    };
   },
   emit: ({ additionalContext }) => ({ additionalContext }),
 };
