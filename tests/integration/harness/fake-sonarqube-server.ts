@@ -31,6 +31,11 @@ import type {
 } from '@/core/server/types.ts';
 
 import { recordedCloudAuthServerUrl } from './cloud-auth-url.js';
+import {
+  FakeArchitecture,
+  fakeMainBranchId,
+  routeArchitectureRequest,
+} from './fake-architecture.js';
 import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;
@@ -184,6 +189,7 @@ interface ProjectData {
   dependencyRisks: DependencyRiskConfig[];
   componentsTreeItems: ComponentsTreeItemConfig[];
   componentMeasuresByPath: Map<string, ComponentMeasureConfig[]>;
+  architecture?: FakeArchitecture;
 }
 
 export interface DopRepositoryConfig {
@@ -220,6 +226,7 @@ export class ProjectBuilder {
   private dependencyRisks: DependencyRiskConfig[] = [];
   private readonly componentsTreeItems: ComponentsTreeItemConfig[] = [];
   private readonly componentMeasuresByPath: Map<string, ComponentMeasureConfig[]> = new Map();
+  private architecture?: FakeArchitecture;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
@@ -402,6 +409,13 @@ export class ProjectBuilder {
     return this;
   }
 
+  /** Serve the architecture endpoints (`/architecture/*`, `/api/v2/architecture/*`) for this project. */
+  withArchitecture(fn: (architecture: FakeArchitecture) => void): this {
+    this.architecture ??= new FakeArchitecture();
+    fn(this.architecture);
+    return this;
+  }
+
   getData(): ProjectData {
     return {
       organization: this.organization,
@@ -428,6 +442,7 @@ export class ProjectBuilder {
       dependencyRisks: this.dependencyRisks,
       componentsTreeItems: this.componentsTreeItems,
       componentMeasuresByPath: this.componentMeasuresByPath,
+      architecture: this.architecture,
     };
   }
 }
@@ -988,7 +1003,7 @@ export class FakeSonarQubeServerBuilder {
         req.headers.forEach((v, k) => {
           headers[k] = v;
         });
-        const body = req.method === 'POST' ? await req.text() : undefined;
+        const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
 
         requests.push({
           method: req.method,
@@ -1369,6 +1384,15 @@ export class FakeSonarQubeServerBuilder {
         // confirm the project exists in the org during daemon startup. Return
         // a one-branch payload for registered projects; otherwise CAG aborts
         // with "Project '<key>' not found in organization '<org>'".
+        const architectureResponse = routeArchitectureRequest(
+          { method: req.method, path, query, body },
+          [...projects.values()],
+          treatAsCloud,
+        );
+        if (architectureResponse) {
+          return architectureResponse;
+        }
+
         if (path === '/api/project_branches/list') {
           const projectKey = query.project;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
@@ -1385,6 +1409,7 @@ export class FakeSonarQubeServerBuilder {
                   ? [
                       {
                         name: projectData.defaultBranchName,
+                        branchId: fakeMainBranchId(projectData.key),
                         isMain: true,
                         type: 'LONG',
                         status: { qualityGateStatus: 'OK' },

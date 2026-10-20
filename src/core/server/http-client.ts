@@ -129,7 +129,7 @@ export class SonarHttpClient {
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+    if ((method === 'POST' || method === 'DELETE') && response.status === HTTP_STATUS_FORBIDDEN) {
       return new ForbiddenApiError(await response.text());
     }
 
@@ -318,6 +318,21 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       this.toStatusCheckedResult(response, 'POST', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Make DELETE request to SonarQube API; the response body is discarded. */
+  delete(endpoint: string): ResultAsync<void, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('DELETE', this.commonHeaders(), POST_REQUEST_TIMEOUT_MS, undefined),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'DELETE', () => Promise.resolve(undefined)),
     );
   }
 

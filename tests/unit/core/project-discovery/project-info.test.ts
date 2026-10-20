@@ -546,13 +546,26 @@ describe('discoverProject', () => {
     expect(remoteSpy).not.toHaveBeenCalled();
   });
 
-  it('skips only the git-remote binding when useGitRemoteBinding is false, keeping auth for local sources', async () => {
-    fakeFs.mkdir(join(testDir, '.git'));
-    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
-    remoteSpy.mockResolvedValue({
-      projectKey: 'from-remote',
-      serverUrl: 'https://sonarcloud.io',
+  it('completes a key-only local mapping from auth with git-remote binding disabled', async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=local_key\n');
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      useGitRemoteBinding: false,
     });
+
+    expect(result.projectKey).toBe('local_key');
+    expect(result.serverUrl).toBe(MOCK_AUTH.serverUrl);
+    expect(result.organization).toBe(MOCK_AUTH.orgKey);
+    expect(getGitRemoteSpy).not.toHaveBeenCalled();
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt git-remote binding when disabled even when authenticated and unconfigured', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/repository.git');
+    remoteSpy.mockResolvedValue({ projectKey: 'from-remote', serverUrl: MOCK_AUTH.serverUrl });
 
     const result = await discoverProject(testDir, {
       console: new FakeConsole(),
@@ -562,6 +575,7 @@ describe('discoverProject', () => {
     });
 
     expect(result.projectKey).toBeUndefined();
+    expect(getGitRemoteSpy).not.toHaveBeenCalled();
     expect(remoteSpy).not.toHaveBeenCalled();
   });
 
