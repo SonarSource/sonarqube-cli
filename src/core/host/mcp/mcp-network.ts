@@ -20,7 +20,7 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { getConfigValue } from '@/core/config/config-repository.ts';
+import { getBooleanConfigValue, getConfigValue } from '@/core/config/config-repository.ts';
 
 import type { ContainerRuntimeDetection } from '../environment/tool-detector.ts';
 
@@ -28,6 +28,8 @@ export interface McpContainerSettings {
   network?: string;
   addHost?: string;
   serverUrl?: string;
+  /** Opt-in: let a loopback SonarQube URL be routed to the MCP container automatically. */
+  autoNetwork?: boolean;
 }
 
 export interface ResolvedMcpContainerNetworking {
@@ -42,7 +44,8 @@ export async function readMcpContainerSettings(): Promise<McpContainerSettings> 
     getConfigValue('mcp.container.addHost'),
     getConfigValue('mcp.container.serverUrl'),
   ]);
-  return { network, addHost, serverUrl };
+  const autoNetwork = getBooleanConfigValue('mcp.container.autoNetwork', false);
+  return { network, addHost, serverUrl, autoNetwork };
 }
 
 export function isLoopbackServerUrl(serverUrl: string): boolean {
@@ -100,7 +103,7 @@ export function resolveMcpContainerNetworking(
     };
   }
 
-  if (!isLoopbackServerUrl(auth.serverUrl) || !detection.runtime) {
+  if (!settings.autoNetwork || !isLoopbackServerUrl(auth.serverUrl) || !detection.runtime) {
     return { serverUrl: auth.serverUrl };
   }
 
@@ -138,5 +141,8 @@ export function mcpLoopbackAdvice(
   if (settings.network || settings.addHost || settings.serverUrl) {
     return 'The MCP container still uses a loopback SonarQube URL. Set mcp.container.serverUrl to an address reachable from the container, and verify its network or host mapping.';
   }
-  return 'The MCP container needs a route to the loopback SonarQube URL. Native Linux uses host networking; Docker and Podman elsewhere use host aliases. For Nerdctl outside native Linux, or if tools are unavailable, set mcp.container.serverUrl and mcp.container.network to reachable values.';
+  if (settings.autoNetwork) {
+    return 'The MCP container needs a route to the loopback SonarQube URL. Native Linux uses host networking; Docker and Podman elsewhere use host aliases. For Nerdctl outside native Linux, or if tools are unavailable, set mcp.container.serverUrl and mcp.container.network to reachable values.';
+  }
+  return 'The MCP container cannot reach the loopback SonarQube URL by default. Set mcp.container.autoNetwork to true to route it automatically (native Linux uses host networking; Docker and Podman elsewhere use host aliases), or set mcp.container.serverUrl and mcp.container.network yourself.';
 }

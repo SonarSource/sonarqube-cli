@@ -93,6 +93,13 @@ export const CONFIG_KEY_DEFINITIONS = [
     description: 'SonarQube URL used only inside the MCP container.',
   },
   {
+    key: 'mcp.container.autoNetwork',
+    sensitive: false,
+    description:
+      'Whether to route the MCP container to a loopback SonarQube URL automatically (native Linux uses host networking; Docker and Podman elsewhere use host aliases). Disabled by default; mcp.container.network/addHost/serverUrl always take precedence when set.',
+    allowedValues: BOOLEAN_ALLOWED_VALUES,
+  },
+  {
     key: 'telemetry.enabled',
     sensitive: false,
     description: 'Whether anonymous usage telemetry is collected.',
