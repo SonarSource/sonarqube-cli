@@ -326,7 +326,7 @@ describe('system reset --force', () => {
         .state()
         .withRawState(JSON.stringify(raw))
         .withKeychainToken('https://sonar-a.example', 'tok-a')
-        .withKeychainToken('https://sonar-b.example', 'tok-b', 'org-b')
+        .withKeychainToken('https://sonar-b.example', 'tok-b')
         .withKeychainToken('https://sonar-c.example', 'tok-c');
 
       const result = await harness.run('system reset --force');

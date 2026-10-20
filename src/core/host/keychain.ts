@@ -146,22 +146,9 @@ function getBackend(): KeychainBackend {
   return bunSecretsBackend;
 }
 
-/**
- * Generate keychain account key
- * SonarQube Cloud: "sonarcloud.io:org-key"
- * SonarQube Server: "hostname"
- */
-export function generateKeychainAccount(serverURL: string, org?: string): string {
+export function generateKeychainAccount(serverURL: string): string {
   try {
-    const url = new URL(serverURL);
-    const hostname = url.hostname;
-
-    // SonarQube Cloud with organization
-    if (org) {
-      return `${hostname}:${org}`;
-    }
-    // SonarQube Server or hostname without organization
-    return hostname;
+    return new URL(serverURL).hostname;
   } catch {
     return serverURL;
   }
@@ -206,51 +193,48 @@ async function removeSecret(account: string): Promise<boolean> {
 
 /**
  * Get token from system keychain
- * For SonarQube Cloud: pass org parameter
- * For SonarQube Server: org parameter is ignored
  * Uses in-memory cache to avoid repeated keychain prompts
  */
-export function getToken(serverURL: string, org?: string): Promise<string | null> {
-  return readSecret(generateKeychainAccount(serverURL, org));
+export function getToken(serverURL: string): Promise<string | null> {
+  return readSecret(generateKeychainAccount(serverURL));
 }
 
 /**
  * Save token to system keychain
- * For SonarQube Cloud: pass org parameter
- * For SonarQube Server: org parameter is ignored
  * Updates in-memory cache
  */
-export function saveToken(serverURL: string, token: string, org?: string): Promise<void> {
-  return writeSecret(generateKeychainAccount(serverURL, org), token);
+export function saveToken(serverURL: string, token: string): Promise<void> {
+  return writeSecret(generateKeychainAccount(serverURL), token);
 }
 
 /**
  * Delete tokens for connections that are about to be replaced.
- * Skips the new connection's account (identified by newServerURL + newOrg) so
- * it doesn't get deleted right before being written.
+ * Skips the new server's account so it doesn't get deleted right before being written.
  */
 export async function deleteStaleTokens(
-  connections: ReadonlyArray<{ serverUrl: string; orgKey?: string }>,
+  connections: ReadonlyArray<{ serverUrl: string }>,
   newServerURL: string,
-  newOrg?: string,
 ): Promise<void> {
-  const newAccount = generateKeychainAccount(newServerURL, newOrg);
-  for (const conn of connections) {
-    const account = generateKeychainAccount(conn.serverUrl, conn.orgKey);
-    if (account !== newAccount) {
-      await removeSecret(account);
-    }
-  }
+  const staleAccounts = new Set(connections.map((conn) => generateKeychainAccount(conn.serverUrl)));
+  staleAccounts.delete(generateKeychainAccount(newServerURL));
+  await Promise.all([...staleAccounts].map(removeSecret));
 }
 
 /**
  * Delete token from system keychain
- * For SonarQube Cloud: pass org parameter
- * For SonarQube Server: org parameter is ignored
  * Removes from cache
  */
-export async function deleteToken(serverURL: string, org?: string): Promise<void> {
-  await removeSecret(generateKeychainAccount(serverURL, org));
+export async function deleteToken(serverURL: string): Promise<void> {
+  await removeSecret(generateKeychainAccount(serverURL));
+}
+
+export async function moveToken(fromAccount: string, toAccount: string): Promise<void> {
+  const token = await readSecret(fromAccount);
+  if (token === null) {
+    return;
+  }
+  await writeSecret(toAccount, token);
+  await removeSecret(fromAccount);
 }
 
 function generateConfigKeychainAccount(key: string): string {

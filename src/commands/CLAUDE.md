@@ -4,7 +4,7 @@ The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agen
 
 `sonar auth login` selects the browser sign-in page in `src/core/auth/token.ts`. SonarQube Cloud uses `/auth`. SonarQube Server uses `/auth` from full-year version 2026.2, while Community Build uses it from short-year version 26.4. Earlier or unknown versions use `/sonarlint/auth`.
 
-`sonar auth status` reports the active credentials and warns in text mode when a discovered project records a different connection that `sonar context` cannot use. Both commands classify recorded connections with `recordedConnectionCredentialSource()`: normalized server URLs must match for active-token use, and the organization is not compared. A different port is a different server even when the keychain account uses the same hostname.
+`sonar auth status` reports the active credentials and warns in text mode when a discovered project records a different connection that `sonar context` cannot use. Both commands compare the recorded server with `authMatchesRecordedServer()`: normalized server URLs must match for active-token use, and the organization is not compared. A different port is a different server even when the keychain account uses the same hostname.
 
 To add a new command: add it to `createCommandTree()` in `src/commands/command-tree.ts` and implement the logic in a new folder under `src/commands/`.
 Please declare commands using the type defined in `src/core/commands/sonar-command.ts`.
