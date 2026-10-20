@@ -61,7 +61,8 @@ export type SharedProjectConfigEntry =
 
 export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping[]>;
-  set(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
+  /** Resolves to whether a `projects` array already exists, which shadows the written `project`. */
+  set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean>;
   /** Adds (or updates, by canonical directory) an entry in the `projects` array, leaving `project` untouched. */
   addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
@@ -163,10 +164,11 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     return mappings;
   }
 
-  async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
+  async set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean> {
     const existing = await this.readExistingRootForWrite(dir);
     const file: SharedProjectConfigFileDto = { ...existing, project: entry };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
+    return Array.isArray(existing.projects);
   }
 
   async addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void> {

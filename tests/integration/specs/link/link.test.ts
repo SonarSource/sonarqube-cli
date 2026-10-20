@@ -205,6 +205,19 @@ describe('sonar link', () => {
     });
   });
 
+  it('warns when an existing projects array makes the link ineffective', async () => {
+    harness.withAuth(SERVER_URL, 'test-token');
+    harness.cwd.writeFile(
+      '.sonar-config.json',
+      JSON.stringify({ projects: [{ serverUrl: SERVER_URL, projectKey: 'a', path: '.' }] }),
+    );
+
+    const result = await harness.run('link my_project --path .');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout + result.stderr).toContain("'sonar link monorepo'");
+  });
+
   describe('monorepo', () => {
     it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
@@ -217,6 +230,7 @@ describe('sonar link', () => {
       const result = await harness.run('link monorepo api2 --path ./services/api/');
 
       expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('(monorepo mapping)');
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
         project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
         projects: [

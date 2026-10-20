@@ -67,7 +67,7 @@ describe('link', () => {
     // process.cwd() always exists, so it doubles as a real target directory
     // without needing to create one on disk for these tests.
     gitRootSpy = spyOn(gitWorktree, 'resolveGitRepoRoot').mockResolvedValue(process.cwd());
-    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(undefined);
+    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -154,6 +154,17 @@ describe('link', () => {
       rmSync(symlinkDir, { recursive: true, force: true });
       rmSync(realDir, { recursive: true, force: true });
     }
+  });
+
+  it('warns that the link is ignored when a projects array already exists', async () => {
+    setSpy.mockResolvedValue(true);
+
+    await link('my_project', { path: '.' }, ctxFor(onPremAuth));
+
+    expect(setSpy).toHaveBeenCalled();
+    const warnings = fake.calls.filter((c) => c.method === 'warn');
+    expect(warnings).toHaveLength(1);
+    expect(String(warnings[0].args[0])).toContain("'sonar link monorepo'");
   });
 
   it('linkMonorepo writes through addProject and never calls set', async () => {
