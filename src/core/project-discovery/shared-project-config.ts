@@ -20,8 +20,9 @@
 
 import { statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -162,7 +163,27 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
     const existing = await this.readExistingRootForWrite(dir);
-    const file: SharedProjectConfigFileDto = { ...existing, project: entry };
+    if (existing.projects !== undefined && !Array.isArray(existing.projects)) {
+      throw new CommandFailedError(`${this.configPath(dir)} must contain a projects array`);
+    }
+    const legacyEntries = existing.project === undefined ? [] : [existing.project];
+    const entries = Array.isArray(existing.projects) ? existing.projects : legacyEntries;
+    const projectRoot = canonicalizePath(join(dir, entry.path));
+    const matches = (value: unknown): boolean =>
+      isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot;
+    const index = entries.findIndex(matches);
+    const projects = entries.filter((value, position) => position === index || !matches(value));
+    const normalizedEntry = {
+      ...entry,
+      path: relative(canonicalizePath(dir), projectRoot).split(sep).join('/') || '.',
+    };
+    if (index === -1) {
+      projects.push(normalizedEntry);
+    } else {
+      projects[index] = normalizedEntry;
+    }
+    const file: SharedProjectConfigFileDto = { ...existing, projects };
+    delete file.project;
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
 
