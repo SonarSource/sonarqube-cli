@@ -154,10 +154,8 @@ import {
   type LinkListOptions,
   linkMonorepo,
   type LinkOptions,
-  type LinkResolveOptions,
   listLinks,
   MAX_LINK_LIST_PAGE_SIZE,
-  resolveLink,
 } from './link';
 import {
   DEFAULT_STATUSES,
@@ -231,7 +229,7 @@ ${projectKeyExtraHelp}`;
 const linkExtraHelp = `
 Supports one project per repository. Linking again replaces the existing link.
 For a monorepo, use 'sonar link monorepo' to link several directories.
-'sonar link resolve' prints the project covering a directory and 'sonar link list' lists linked projects.
+'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory; exactly one result is the project used there.
 `;
 
 const linkMonorepoExtraHelp = `
@@ -830,18 +828,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   linkCommand
-    .command('resolve')
-    .description('Print the linked project covering a directory or file, as JSON')
-    .option('--path <path>', 'Directory or file to resolve (default: current directory)')
-    .authenticatedAction((ctx, options: LinkResolveOptions) => resolveLink(options, ctx));
-
-  linkCommand
     .command('list')
-    .description('List linked projects as JSON, nearest to a directory first')
-    .option(
-      '--near <path>',
-      'Order projects by distance from this path (default: current directory)',
+    .description(
+      'List linked projects at, under or enclosing a path as JSON, nearest first (exactly one result is the project used there)',
     )
+    .option('--path <path>', 'File or directory to list projects for (default: current directory)')
     .option('--pattern <regex>', 'Only list projects whose key or directory matches this regex')
     .addOption(pageOption)
     .addOption(

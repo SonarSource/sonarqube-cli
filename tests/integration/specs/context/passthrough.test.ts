@@ -467,14 +467,14 @@ describe('sonar context passthrough', () => {
       );
     });
 
-    it('fails without invoking CAG and points at sonar link resolve', async () => {
+    it('fails without invoking CAG and points at sonar link list', async () => {
       const result = await harness.run('context compass get');
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
         `Could not determine a single SonarQube project for ${harness.cwd.path}: 3 projects are linked at or under it.`,
       );
-      expect(result.stderr).toContain('sonar link resolve --path <dir>');
+      expect(result.stderr).toContain('sonar link list --path <path>');
       expect(readInvocations(harness)).toEqual([]);
     });
 

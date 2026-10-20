@@ -380,7 +380,7 @@ describe('sonar hook agent-session-start', () => {
         const context: string = JSON.parse(result.stdout.trim()).hookSpecificOutput
           .additionalContext;
         expect(context.startsWith(`${CAG_CONTEXT}\n\n## Multi-project workspace`)).toBe(true);
-        expect(context).toContain('sonar link resolve --path <dir>');
+        expect(context).toContain('sonar link list --path <path>');
         const invocations = cagSessionStartInvocations();
         expect(invocations).toHaveLength(1);
         expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBeUndefined();
