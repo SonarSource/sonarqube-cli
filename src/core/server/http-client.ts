@@ -321,6 +321,21 @@ export class SonarHttpClient {
     );
   }
 
+  /** Make DELETE request to SonarQube API; the response body is discarded. */
+  delete(endpoint: string): ResultAsync<void, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('DELETE', this.commonHeaders(), POST_REQUEST_TIMEOUT_MS, undefined),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'DELETE', () => Promise.resolve(undefined)),
+    );
+  }
+
   /**
    * Generic helper to POST a form-encoded body to a SonarQube endpoint using the
    * configured Bearer token. Resolves to `Err` (never throws) on a non-2xx response or a
