@@ -219,7 +219,13 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
-Supports one project per repository; monorepo support is coming soon.
+Link each local directory to an existing SonarQube Cloud or Server project:
+  sonar link api_project --path services/api
+  sonar link web_project --path services/web
+
+Paths are relative to the repository root (the current directory outside Git).
+Mappings are saved in the projects array in .sonar-config.json.
+Linking the same directory again updates its mapping and preserves other mappings.
 `;
 
 export interface CreateCommandTreeOptions {
@@ -782,9 +788,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
-  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
   COMMAND_TREE.command('link')
-    .description('Link a project to the active connection in .sonar-config.json')
+    .description('Link a local directory to a project in .sonar-config.json')
     .rootHelp({
       category: 'core',
     })
