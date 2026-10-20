@@ -147,7 +147,7 @@ export async function resolveSessionStartContext(
 
 export const MULTI_PROJECT_WORKSPACE_CONTEXT = `## Multi-project workspace
 
-This directory contains several SonarQube projects, and \`sonar context\` commands work on one project at a time. Run them from inside a project's directory. If a command reports that it cannot determine a single project, run \`sonar link resolve --path <dir>\` to find the project covering a directory, or \`sonar link list --near <dir>\` to list nearby projects, then retry from that project's directory.
+This directory contains several SonarQube projects, and \`sonar context\` commands work on one project at a time. Run them from inside a project's directory. If a command reports that it cannot determine a single project, run \`sonar link list --path <path>\` with the file or directory to work on: it lists the projects at, under or enclosing that path, nearest first, and a single result is the project to use. Then retry from that project's directory.
 `;
 
 interface SessionStartTarget {

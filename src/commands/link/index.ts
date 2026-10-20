@@ -25,4 +25,3 @@ export {
   listLinks,
   MAX_LINK_LIST_PAGE_SIZE,
 } from './list-links.ts';
-export { type LinkResolveOptions, resolveLink } from './resolve-link.ts';

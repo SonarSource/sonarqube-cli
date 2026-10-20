@@ -18,28 +18,32 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { isAbsolute, relative, sep } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { dirname, relative, sep } from 'node:path';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolvePageOptions } from '@/core/commands/params.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import { hasNextPage } from '@/core/server/paging.ts';
-
-import { resolveExistingPath } from './resolve-link.ts';
 
 export const DEFAULT_LINK_LIST_PAGE_SIZE = 20;
 export const MAX_LINK_LIST_PAGE_SIZE = 100;
 
 export interface LinkListOptions {
-  near?: string;
+  path?: string;
   pattern?: string;
   page: number;
   pageSize: number;
 }
 
-/** Lists linked projects nearest to `--near` first, one page at a time so a large monorepo never prints everything. */
+/**
+ * Lists the projects at, under or enclosing `--path` (a file or directory), nearest first, one
+ * page at a time so a large monorepo never prints everything. Exactly one result is the project
+ * `sonar context` uses there; `contains` tells nested enclosing projects apart from ones below.
+ */
 export async function listLinks(
   options: LinkListOptions,
   ctx: CommandAuthenticatedInvocationContext,
@@ -54,22 +58,23 @@ export async function listLinks(
       throw error;
     },
   );
-  const near = resolveExistingPath(options.near ?? process.cwd());
+  const { path, startDir } = resolvePathOption(options.path);
   const pattern = compilePattern(options.pattern);
 
-  const discovered = await discoverProjects(process.cwd(), {
+  const discovered = await discoverProjects(startDir, {
     auth: ctx.auth,
     silent: true,
     console: ctx.console,
   });
-  const matching = discovered.projects
+  const matching = discovered
+    .scope(path)
     .filter((project) => matchesPattern(project, pattern))
-    .map((project) => ({ project, distance: treeDistance(near, project.projectRoot) }))
+    .map((project) => ({ project, distance: treeDistance(path, project.projectRoot) }))
     .sort(
       (a, b) =>
         a.distance - b.distance || a.project.projectRoot.localeCompare(b.project.projectRoot),
     )
-    .map(({ project }) => project);
+    .map(({ project }) => ({ ...project, contains: isAncestorOrSelf(project.projectRoot, path) }));
 
   const start = (page - 1) * pageSize;
   const paging = { pageIndex: page, pageSize, total: matching.length };
@@ -79,6 +84,16 @@ export async function listLinks(
       paging: { ...paging, hasNextPage: hasNextPage(paging) },
     }),
   );
+}
+
+/** Discovery starts from the directory of a file `--path`, so a file resolves like its directory. */
+function resolvePathOption(rawPath: string | undefined): { path: string; startDir: string } {
+  const requested = rawPath ?? process.cwd();
+  if (!existsSync(requested)) {
+    throw new InvalidOptionError(`Path "${requested}" does not exist.`);
+  }
+  const path = canonicalizePath(requested);
+  return { path, startDir: statSync(path).isDirectory() ? path : dirname(path) };
 }
 
 function compilePattern(pattern: string | undefined): RegExp | undefined {
@@ -101,11 +116,8 @@ function matchesPattern(project: CompleteProjectMapping, pattern: RegExp | undef
   );
 }
 
-/** Directory hops between `from` and `to`; another drive sorts last. */
+/** Directory hops between two paths on the same ancestry line. */
 function treeDistance(from: string, to: string): number {
   const rel = relative(from, to);
-  if (rel === '') {
-    return 0;
-  }
-  return isAbsolute(rel) ? Number.POSITIVE_INFINITY : rel.split(sep).length;
+  return rel === '' ? 0 : rel.split(sep).length;
 }

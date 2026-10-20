@@ -134,7 +134,7 @@ function multiProjectWorkspaceError({
       `Could not determine a single SonarQube project for ${workspaceRoot}: it is inside ${enclosingCount} nested projects.`,
       {
         remediationHint:
-          "Nested project directories are not supported yet. Run 'sonar link list --near .' to list nearby projects, " +
+          "Nested project directories are not supported yet. Run 'sonar link list' to list the projects here, " +
           'then re-run this command from a directory that belongs to only one of them.',
       },
     );
@@ -143,8 +143,8 @@ function multiProjectWorkspaceError({
     `Could not determine a single SonarQube project for ${workspaceRoot}: ${projects.length} projects are linked at or under it.`,
     {
       remediationHint:
-        "Run 'sonar link resolve --path <dir>' to find the project covering a directory, or 'sonar link list --near .' to list nearby projects, " +
-        "then re-run this command from that project's directory.",
+        "Run 'sonar link list --path <path>' with the file or directory to work on; a single result is its project. " +
+        "Then re-run this command from that project's directory.",
     },
   );
 }
