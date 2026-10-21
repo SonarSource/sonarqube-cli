@@ -113,9 +113,14 @@ describe('ServerImportApiClient', () => {
   });
 
   describe.each([
-    ['checkPat', '/api/alm_integration/check_pat'],
-    ['probeGithubPat', '/api/alm_integration/list_github_organizations'],
+    ['checkPat', '/api/alm_integrations/check_pat'],
+    ['probeGithubPat', '/api/alm_integrations/list_github_organizations'],
   ] as const)('%s', (method, path) => {
+    const statusOf = async (key: string) => {
+      const result = await api[method](key);
+      return typeof result === 'string' ? result : result.status;
+    };
+
     it('sends the setting key as almSetting, and nothing token-like', async () => {
       fetchSpy = mockFetchSeq(noContentResponse());
       await api[method]('my-setting');
@@ -128,51 +133,84 @@ describe('ServerImportApiClient', () => {
 
     it('is valid on an empty 2xx', async () => {
       fetchSpy = mockFetchSeq(noContentResponse());
-      expect(await api[method]('s')).toBe('valid');
+      expect(await statusOf('s')).toBe('valid');
     });
 
     it('is valid on a JSON 200', async () => {
       fetchSpy = mockFetch({ organizations: [] });
-      expect(await api[method]('s')).toBe('valid');
+      expect(await statusOf('s')).toBe('valid');
     });
 
     it('is missing when the server says the token is missing', async () => {
       fetchSpy = mockFetchSeq(badRequest("personal access token for 's' is missing"));
-      expect(await api[method]('s')).toBe('missing');
+      expect(await statusOf('s')).toBe('missing');
     });
 
     it('is missing for the GitLab capitalisation', async () => {
       fetchSpy = mockFetchSeq(badRequest("Personal access token for 's' Is Missing"));
-      expect(await api[method]('s')).toBe('missing');
+      expect(await statusOf('s')).toBe('missing');
     });
 
     it('is invalid when the platform rejects the token', async () => {
       fetchSpy = mockFetchSeq(badRequest('Invalid personal access token'));
-      expect(await api[method]('s')).toBe('invalid');
+      expect(await statusOf('s')).toBe('invalid');
     });
 
     it('rejects with the original error on a 400 that is not about the token', async () => {
       fetchSpy = mockFetchSeq(badRequest('Unable to contact Bitbucket server'));
-      const error = await api[method]('s').catch((e: unknown) => e);
+      const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(BadRequestError);
     });
 
     it('rejects with the original error when the status is not about the token', async () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 403 }));
-      const error = await api[method]('s').catch((e: unknown) => e);
+      const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(AccessDeniedError);
       expect((error as AccessDeniedError).status).toBe(403);
     });
 
     it('rejects on a server error rather than calling the token invalid', async () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
-      const error = await api[method]('s').catch((e: unknown) => e);
+      const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ServerError);
     });
   });
 
   it('probeGithubPat is missing on "No personal access token found"', async () => {
     fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
-    expect(await api.probeGithubPat('gh')).toBe('missing');
+    expect(await api.probeGithubPat('gh')).toEqual({ status: 'missing' });
+  });
+
+  describe('probeGithubPat organizationCount', () => {
+    it('counts the organizations of a valid token', async () => {
+      fetchSpy = mockFetch({
+        organizations: [{ key: 'a' }, { key: 'b' }],
+        paging: { total: 2 },
+      });
+      expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 2 });
+    });
+
+    it('is 0 for the empty listing GitHub answers to a dead token', async () => {
+      fetchSpy = mockFetch({
+        organizations: [],
+        paging: { pageIndex: 1, pageSize: 100, total: 0 },
+      });
+      expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 0 });
+    });
+
+    it('trusts a positive total over an empty page', async () => {
+      fetchSpy = mockFetch({ organizations: [], paging: { total: 3 } });
+      expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 3 });
+    });
+
+    it('is unknown when the response has no listing', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.probeGithubPat('gh')).toEqual({
+        status: 'valid',
+        organizationCount: undefined,
+      });
+      fetchSpy = mockFetchSeq(noContentResponse());
+      expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid' });
+    });
   });
 });

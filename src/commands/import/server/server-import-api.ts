@@ -40,6 +40,15 @@ export interface DopSetting {
   url?: string;
 }
 
+/**
+ * Outcome of a token probe. `organizationCount` is only set by the GitHub probe, from the
+ * listing a `valid` token returned; it is absent when the response carried no listing to count.
+ */
+export interface PatProbe {
+  status: PatStatus;
+  organizationCount?: number;
+}
+
 interface DopSettingsResponse {
   dopSettings: Array<{ id: string; key: string; type: string; url?: string | null }>;
 }
@@ -67,28 +76,52 @@ export class ServerImportApiClient {
 
   /** PAT status through `check_pat`, which every platform supports except GitHub. */
   async checkPat(settingKey: string): Promise<PatStatus> {
-    return this.patStatusOf('/api/alm_integration/check_pat', settingKey);
+    return this.patStatusOf('/api/alm_integrations/check_pat', settingKey);
   }
 
   /**
    * PAT status for GitHub, which `check_pat` rejects: listing the user's organizations needs the
-   * stored token, so a successful listing means the token works.
+   * stored token. GitHub's rejection of a dead token is not an HTTP error there, so a successful
+   * listing does not prove the token works: it comes back empty, which `organizationCount` exposes.
+   * An empty listing is inconclusive (a dead token, or a valid one with no installation).
    */
-  async probeGithubPat(settingKey: string): Promise<PatStatus> {
-    return this.patStatusOf('/api/alm_integration/list_github_organizations', settingKey);
+  async probeGithubPat(settingKey: string): Promise<PatProbe> {
+    return this.client
+      .get<{
+        organizations?: unknown[];
+        paging?: { total?: number };
+      }>('/api/alm_integrations/list_github_organizations', { almSetting: settingKey })
+      .match(
+        (response): PatProbe => ({
+          status: 'valid',
+          organizationCount: countOrganizations(response),
+        }),
+        (error): PatProbe => ({ status: patStatusOfFailure(error) }),
+      );
   }
 
   private patStatusOf(endpoint: string, settingKey: string): Promise<PatStatus> {
-    return this.client.get<unknown>(endpoint, { almSetting: settingKey }).match(
-      () => 'valid',
-      (error) => {
-        if (isEmptySuccess(error)) return 'valid';
-        const status = patStatusFromError(error);
-        if (status === undefined) throw error;
-        return status;
-      },
-    );
+    return this.client
+      .get<unknown>(endpoint, { almSetting: settingKey })
+      .match(() => 'valid', patStatusOfFailure);
   }
+}
+
+function patStatusOfFailure(error: HttpClientError): PatStatus {
+  if (isEmptySuccess(error)) return 'valid';
+  const status = patStatusFromError(error);
+  if (status === undefined) throw error;
+  return status;
+}
+
+function countOrganizations(response: {
+  organizations?: unknown[];
+  paging?: { total?: number };
+}): number | undefined {
+  if (!Array.isArray(response.organizations)) return undefined;
+  return response.organizations.length > 0
+    ? response.organizations.length
+    : (response.paging?.total ?? 0);
 }
 
 /** `check_pat` answers 204 with no body, which the JSON client reports as a parse failure. */
