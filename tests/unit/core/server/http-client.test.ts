@@ -52,6 +52,24 @@ describe('SonarHttpClient', () => {
     fetchSpy?.mockRestore();
   });
 
+  it.each(['POST', 'DELETE'] as const)(
+    'identifies the CLI on architecture %s requests',
+    async (method) => {
+      fetchSpy = mockFetch({});
+      const endpoint = '/api/v2/architecture/intended-architectures';
+      const result =
+        method === 'POST'
+          ? await client.post(endpoint, { models: [] })
+          : await client.delete(`${endpoint}/model-id`);
+
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchInit(fetchSpy).method).toBe(method);
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    },
+  );
+
   describe('get', () => {
     it('uses serverURL as base by default', async () => {
       fetchSpy = mockFetch({ valid: true });
@@ -303,6 +321,68 @@ describe('SonarHttpClient', () => {
       const result = await client.post('/api/some/endpoint', {});
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+  });
+
+  describe('patch', () => {
+    it('sends merge-patch JSON to the endpoint host through authenticated transport', async () => {
+      fetchSpy = mockFetch({ intendedArchitectures: [] });
+      const body = { intendedArchitectures: [] };
+      const result = await client.patch(
+        '/api/v2/architecture/intended-architectures/model-id',
+        body,
+      );
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/model-id`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('PATCH');
+      expect(init.body).toBe(JSON.stringify(body));
+      expect(init.headers).toMatchObject({
+        'Content-Type': 'application/merge-patch+json',
+        Authorization: `Bearer ${TOKEN}`,
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    });
+    it.each([
+      [403, 'ForbiddenApiError'],
+      [400, 'BadRequestError'],
+    ] as const)('maps PATCH %s to %s', async (status, name) => {
+      fetchSpy = mockFetch({ message: 'Rejected' }, { ok: false, status });
+      const result = await client.patch('/api/v2/architecture/intended-architectures/model-id', {});
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe(name);
+    });
+  });
+
+  describe('delete', () => {
+    it('sends DELETE without a body to the endpoint host', async () => {
+      fetchSpy = mockFetch(null, { status: 204 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/m-1`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('DELETE');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('retains status information for other DELETE failures', async () => {
+      fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+      expect(result._unsafeUnwrapErr().message).toContain('404');
+    });
+
+    it('returns a typed permission error with the backend body on DELETE 403', async () => {
+      fetchSpy = mockFetch({ message: 'Forbidden' }, { ok: false, status: 403 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('ForbiddenApiError');
+      expect(result._unsafeUnwrapErr().message).toBe(JSON.stringify({ message: 'Forbidden' }));
     });
   });
 

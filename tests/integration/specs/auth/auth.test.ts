@@ -29,6 +29,9 @@ import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
 import { type RunInteractiveOptions, TestHarness } from '../../harness';
 
+const CALLBACK_VALIDATION_TIMEOUT_MS = 5000;
+const CALLBACK_POLL_INTERVAL_MS = 10;
+
 async function confirmTrust(
   harness: TestHarness,
   command: string,
@@ -90,13 +93,20 @@ function runLoginPicker(harness: TestHarness, serverUrl: string) {
   });
 }
 
-async function selectManualOrganization(session: ReturnType<TestHarness['runInteractive']>) {
+async function selectManualOrganization(
+  session: ReturnType<TestHarness['runInteractive']>,
+  rows: PickerRow[] = ROWS_API_ORDER,
+) {
   await session.waitText('Select an organization');
-  for (let i = 0; i < PICKER_ORGS.length; i++) {
+  await session.waitText(new RegExp(`› ${toRowSource(rows[0])}`));
+  for (const row of rows.slice(1)) {
     session.keyDown();
+    await session.waitText(new RegExp(`› ${toRowSource(row)}`));
   }
+  session.keyDown();
+  await session.waitText('› Enter organization key manually');
   session.keyEnter();
-  await session.waitText('Enter organization key');
+  await session.waitText('?  Enter organization key');
 }
 
 function toRowSource([name, key, status]: PickerRow): string {
@@ -178,6 +188,21 @@ describe('auth login', () => {
 
       await session.accept('Connect to:');
       await session.waitText('Waiting for authorization');
+      const callbackDeadline = Date.now() + CALLBACK_VALIDATION_TIMEOUT_MS;
+      while (
+        !server
+          .getRecordedRequests()
+          .some(
+            (request) =>
+              request.path === '/api/authentication/validate' &&
+              request.headers.authorization === 'Bearer invalid-browser-token',
+          )
+      ) {
+        if (Date.now() >= callbackDeadline) {
+          throw new Error('The invalid browser callback token was not validated');
+        }
+        await new Promise((resolve) => setTimeout(resolve, CALLBACK_POLL_INTERVAL_MS));
+      }
       session.write('my-login-token');
       session.keyEnter();
       const result = await session.waitFinish();
@@ -829,7 +854,7 @@ describe('auth login — organization selection', () => {
 
     const session = runLoginPicker(harness, server.baseUrl());
     await selectManualOrganization(session);
-    await session.accept('Enter organization key');
+    session.keyEnter();
     const result = await session.waitFinish();
 
     expect(result.exitCode).not.toBe(0);
@@ -899,12 +924,7 @@ describe('auth login — organization selection', () => {
     harness.withAuth(server.baseUrl(), 'my-token', 'my-org-3');
 
     const session = runLoginPicker(harness, server.baseUrl());
-    await session.waitText('Select an organization');
-    for (let i = 0; i < PICKER_ORGS.length; i++) {
-      session.keyDown();
-    }
-    session.keyEnter();
-    await session.waitText('Enter organization key');
+    await selectManualOrganization(session, ROWS_ACTIVE_FIRST);
     session.write('my-org-2');
     session.keyEnter();
     const result = await session.waitFinish();
