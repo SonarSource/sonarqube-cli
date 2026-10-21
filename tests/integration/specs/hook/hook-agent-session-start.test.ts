@@ -380,12 +380,36 @@ describe('sonar hook agent-session-start', () => {
         const context: string = JSON.parse(result.stdout.trim()).hookSpecificOutput
           .additionalContext;
         expect(context.startsWith(`${CAG_CONTEXT}\n\n## Multi-project workspace`)).toBe(true);
-        expect(context).toContain('sonar link list --path <path>');
+        expect(context).toContain('- `apps/web` (web)\n- `services/api` (api)');
+        expect(context).not.toContain('sonar link list');
+        expect(context).not.toContain('cannot be resolved to a single project');
         const invocations = cagSessionStartInvocations();
         expect(invocations).toHaveLength(1);
         expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBeUndefined();
         expect(invocations[0].env.SONAR_CONTEXT_ORGANIZATION).toBe(TEST_ORG);
         expect(invocations[0].env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(harness.cwd.path);
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      'points at sonar link list instead of listing projects past context.projectListLimit',
+      async () => {
+        await setup({ isProjectDiscoverable: false });
+        writeSharedProjectConfig([TEST_ORG, TEST_ORG]);
+        expect((await harness.run('config set context.projectListLimit 1')).exitCode).toBe(0);
+
+        const result = await runHook('claude', {
+          session_id: 'sess-1',
+          cwd: harness.cwd.path,
+          hook_event_name: 'SessionStart',
+        });
+
+        const context: string = JSON.parse(result.stdout.trim()).hookSpecificOutput
+          .additionalContext;
+        expect(context).toContain('## Multi-project workspace');
+        expect(context).toContain('sonar link list --path <path>');
+        expect(context).not.toContain('`services/api`');
       },
       TEST_TIMEOUT,
     );

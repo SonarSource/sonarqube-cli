@@ -32,6 +32,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import logger from '@/core/observability/logger.ts';
+import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverWorkspace } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
@@ -44,6 +45,7 @@ import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { piAdapter } from './agent-adapters/pi-adapter.ts';
+import { buildMultiProjectContext } from './multi-project-context.ts';
 import type {
   SessionStartAgent,
   SessionStartAgentAdapter,
@@ -139,22 +141,16 @@ export async function resolveSessionStartContext(
   }
 
   return {
-    additionalContext: target.projectKey
-      ? result.stdout
-      : `${result.stdout.trimEnd()}\n\n${MULTI_PROJECT_WORKSPACE_CONTEXT}`,
+    additionalContext: target.projects
+      ? `${result.stdout.trimEnd()}\n\n${buildMultiProjectContext(target.workspaceDir, target.projects)}`
+      : result.stdout,
   };
 }
 
-export const MULTI_PROJECT_WORKSPACE_CONTEXT = `## Multi-project workspace
-
-This directory contains several SonarQube projects, and \`sonar context\` commands work on one project at a time. Run them from inside a project's directory. If a command reports that it cannot determine a single project, run \`sonar link list --path <path>\` with the file or directory to work on: it lists the projects at, under or enclosing that path, nearest first, and a single result is the project to use. Then retry from that project's directory.
-`;
-
-interface SessionStartTarget {
-  workspaceDir: string;
-  /** Undefined for a multi-project workspace: CAG renders the session-start context from the organization alone. */
-  projectKey?: string;
-}
+/** A multi-project workspace has no `projectKey`: CAG renders the session-start context from the organization alone. */
+type SessionStartTarget =
+  | { workspaceDir: string; projectKey: string; projects?: undefined }
+  | { workspaceDir: string; projectKey?: undefined; projects: CompleteProjectMapping[] };
 
 async function resolveSessionStartTarget(
   startDir: string,
@@ -177,7 +173,10 @@ async function resolveSessionStartTarget(
         logSkip('projects in this workspace use different connections');
         return null;
       }
-      return { workspaceDir: discovered.workspace.workspaceRoot };
+      return {
+        workspaceDir: discovered.workspace.workspaceRoot,
+        projects: discovered.workspace.projects,
+      };
     case 'none':
       logSkip('no project key resolved');
       return null;
