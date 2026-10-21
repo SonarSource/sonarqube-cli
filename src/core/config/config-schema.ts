@@ -31,9 +31,12 @@ export interface ConfigKeyDefinition {
   readonly description: string;
   /** Omitted when any string is accepted; otherwise the value must be one of these. */
   readonly allowedValues?: readonly string[];
+  /** Alternative to `allowedValues` for open-ended values, e.g. numbers. */
+  readonly allowedPattern?: { readonly regex: RegExp; readonly description: string };
 }
 
 const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
+const NON_NEGATIVE_INTEGER_PATTERN = { regex: /^\d+$/, description: 'a non-negative integer' };
 
 export const CONFIG_KEY_DEFINITIONS = [
   {
@@ -89,6 +92,13 @@ export const CONFIG_KEY_DEFINITIONS = [
     description: 'Whether local usage stats are collected.',
     allowedValues: BOOLEAN_ALLOWED_VALUES,
   },
+  {
+    key: 'context.projectListLimit',
+    sensitive: false,
+    description:
+      "Most projects the agent session-start context lists in a multi-project workspace (default 50); larger workspaces point at 'sonar link list' instead.",
+    allowedPattern: NON_NEGATIVE_INTEGER_PATTERN,
+  },
 ] as const satisfies readonly ConfigKeyDefinition[];
 
 export type ConfigKey = (typeof CONFIG_KEY_DEFINITIONS)[number]['key'];
@@ -99,9 +109,20 @@ export const CONFIG_KEY_BY_NAME: ReadonlyMap<ConfigKey, ConfigKeyDefinition> = n
   CONFIG_KEY_DEFINITIONS.map((definition) => [definition.key, definition]),
 );
 
-/** Whether `raw` is an accepted value for `definition` (any string when `allowedValues` is absent). */
+/** Whether `raw` is an accepted value for `definition` (any string when it declares no constraint). */
 export function isValidConfigValue(definition: ConfigKeyDefinition, raw: string): boolean {
+  if (definition.allowedPattern !== undefined) {
+    return definition.allowedPattern.regex.test(raw);
+  }
   return definition.allowedValues === undefined || definition.allowedValues.includes(raw);
+}
+
+/** The "Allowed values: …" / "Expected …" part of an invalid-value error. */
+export function describeAllowedConfigValues(definition: ConfigKeyDefinition): string {
+  if (definition.allowedPattern !== undefined) {
+    return `Expected ${definition.allowedPattern.description}.`;
+  }
+  return `Allowed values: ${definition.allowedValues?.join(', ')}.`;
 }
 
 /** `--format json` shape for one config entry, shared by `config get` and `config list`. */

@@ -20,12 +20,14 @@
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { deleteConfigSecret, getConfigSecret, saveConfigSecret } from '@/core/host/keychain.ts';
+import logger from '@/core/observability/logger.ts';
 
 import { getConfigFileValue, removeConfigFileValue, setConfigFileValue } from './config-file.ts';
 import {
   CONFIG_KEY_BY_NAME,
   type ConfigKey,
   type ConfigKeyDefinition,
+  describeAllowedConfigValues,
   isValidConfigValue,
 } from './config-schema.ts';
 
@@ -50,6 +52,19 @@ export function getBooleanConfigValue(key: ConfigKey, defaultValue: boolean): bo
   return value === undefined ? defaultValue : value === 'true';
 }
 
+/** A hand-edited value that is not a non-negative integer falls back to `defaultValue`. */
+export function getIntegerConfigValue(key: ConfigKey, defaultValue: number): number {
+  const value = getConfigFileValue(key);
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (!/^\d+$/.test(value)) {
+    logger.debug(`Ignoring stored config '${key}': '${value}' is not a non-negative integer`);
+    return defaultValue;
+  }
+  return Number(value);
+}
+
 export async function setConfigValue(key: ConfigKey, value: string): Promise<void> {
   const definition = getKeyDefinition(key);
   const trimmedValue = value.trim();
@@ -61,7 +76,7 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
   }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
-      `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
+      `Invalid value '${trimmedValue}' for config key '${key}'. ${describeAllowedConfigValues(definition)}`,
     );
   }
   if (definition.sensitive) {

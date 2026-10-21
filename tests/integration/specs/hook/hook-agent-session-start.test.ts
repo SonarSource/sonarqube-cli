@@ -348,6 +348,117 @@ describe('sonar hook agent-session-start', () => {
     TEST_TIMEOUT,
   );
 
+  describe('in a multi-project workspace', () => {
+    function writeSharedProjectConfig(organizations: [string, string]): void {
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('services/api/.keep', '');
+      harness.cwd.writeFile('apps/web/.keep', '');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api', path: 'services/api', serverUrl, organization: organizations[0] },
+            { projectKey: 'web', path: 'apps/web', serverUrl, organization: organizations[1] },
+          ],
+        }),
+      );
+    }
+
+    it(
+      'announces Vortex Context with multi-project guidance when every project shares the connection',
+      async () => {
+        await setup({ isProjectDiscoverable: false });
+        writeSharedProjectConfig([TEST_ORG, TEST_ORG]);
+
+        const result = await runHook('claude', {
+          session_id: 'sess-1',
+          cwd: harness.cwd.path,
+          hook_event_name: 'SessionStart',
+        });
+
+        expect(result.exitCode).toBe(0);
+        const context: string = JSON.parse(result.stdout.trim()).hookSpecificOutput
+          .additionalContext;
+        expect(context.startsWith(`${CAG_CONTEXT}\n\n## Multi-project workspace`)).toBe(true);
+        expect(context).toContain('- `apps/web` (web)\n- `services/api` (api)');
+        expect(context).not.toContain('sonar link list');
+        expect(context).not.toContain('cannot be resolved to a single project');
+        const invocations = cagSessionStartInvocations();
+        expect(invocations).toHaveLength(1);
+        expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+        expect(invocations[0].env.SONAR_CONTEXT_ORGANIZATION).toBe(TEST_ORG);
+        expect(invocations[0].env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(harness.cwd.path);
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      'points at sonar link list instead of listing projects past context.projectListLimit',
+      async () => {
+        await setup({ isProjectDiscoverable: false });
+        writeSharedProjectConfig([TEST_ORG, TEST_ORG]);
+        expect((await harness.run('config set context.projectListLimit 1')).exitCode).toBe(0);
+
+        const result = await runHook('claude', {
+          session_id: 'sess-1',
+          cwd: harness.cwd.path,
+          hook_event_name: 'SessionStart',
+        });
+
+        const context: string = JSON.parse(result.stdout.trim()).hookSpecificOutput
+          .additionalContext;
+        expect(context).toContain('## Multi-project workspace');
+        expect(context).toContain('sonar link list --path <path>');
+        expect(context).not.toContain('`services/api`');
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      'announces the single project without multi-project guidance from inside one project',
+      async () => {
+        await setup({ isProjectDiscoverable: false });
+        writeSharedProjectConfig([TEST_ORG, TEST_ORG]);
+        const apiRoot = join(harness.cwd.path, 'services', 'api');
+
+        const result = await runHook('claude', {
+          session_id: 'sess-1',
+          cwd: apiRoot,
+          hook_event_name: 'SessionStart',
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout.trim()).hookSpecificOutput.additionalContext).toBe(
+          EXPECTED_CONTEXT,
+        );
+        expect(cagSessionStartInvocations()[0].env).toMatchObject({
+          SONAR_CONTEXT_PROJECT: 'api',
+          SONAR_CONTEXT_WORKSPACE_ROOT: apiRoot,
+        });
+      },
+      TEST_TIMEOUT,
+    );
+
+    it(
+      'exits 0 with no output when the projects use different connections',
+      async () => {
+        await setup({ isProjectDiscoverable: false });
+        writeSharedProjectConfig([TEST_ORG, 'other-org']);
+
+        const result = await runHook('claude', {
+          session_id: 'sess-1',
+          cwd: harness.cwd.path,
+          hook_event_name: 'SessionStart',
+        });
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.trim()).toBe('');
+        expect(cagSessionStartInvocations()).toEqual([]);
+      },
+      TEST_TIMEOUT,
+    );
+  });
+
   it(
     'exits 0 with no output when the organization is not entitled to Vortex',
     async () => {

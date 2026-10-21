@@ -24,7 +24,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   applyKnownServerProjectMapping,
@@ -174,6 +174,7 @@ async function discoverProjectMappings(
     );
 
     const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    result.fromSharedConfig = sharedConfigProjects !== null;
     result.projects =
       sharedConfigProjects ??
       (await discoverProjectWithoutSharedConfig(
@@ -199,7 +200,11 @@ export async function discoverProjects(
   options: DiscoverProjectOptions,
 ): Promise<DiscoveredProjects> {
   const result = await discoverProjectMappings(startDir, options);
-  return new DiscoveredProjects(result.repoRoot, result.projects.filter(isCompleteProjectMapping));
+  return new DiscoveredProjects(
+    result.repoRoot,
+    result.projects.filter(isCompleteProjectMapping),
+    result.fromSharedConfig,
+  );
 }
 
 /** Zero or ambiguous matches both degrade to "nothing resolved". */
@@ -222,9 +227,9 @@ export async function discoverProject(
 
 /**
  * Resolve a project key for a command: an explicit `--project` wins outright, otherwise falls
- * back to `discoverProject()`. Throws `CommandFailedError` when neither resolves anything.
- * `silent` (same convention as `discoverProject`) suppresses the "Using ... project key" stderr
- * hints, for commands whose entire output must be a single clean payload.
+ * back to `discoverProjects()` scoped to the current directory. Throws `CommandFailedError` when
+ * neither resolves exactly one project. `silent` (same convention as `discoverProject`) suppresses
+ * the "Using ... project key" stderr hints, for commands whose entire output must be a single clean payload.
  */
 export async function resolveProjectKey(
   explicitProject: string | undefined,
@@ -240,23 +245,64 @@ export async function resolveProjectKey(
     return explicitProject;
   }
 
-  const discovered = await discoverProject(process.cwd(), {
+  const cwd = process.cwd();
+  const discovered = await discoverProjects(cwd, {
     auth,
     silent: true,
     console,
   });
-  if (discovered.projectKey) {
-    assertSingleLineProjectKey(discovered.projectKey);
+  const scoped = discovered.scope(cwd);
+  if (scoped.length === 1) {
+    const { projectKey } = scoped[0];
+    assertSingleLineProjectKey(projectKey);
     if (!silent) {
-      console.print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
+      console.print(`     Using auto-detected project key: ${projectKey}`, 'stderr');
     }
-    return discovered.projectKey;
+    return projectKey;
   }
 
   throw new CommandFailedError('Could not determine project key.', {
-    remediationHint:
-      "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
+    remediationHint: unresolvedProjectHint(discovered, cwd, { acceptsProjectOption: true }),
   });
+}
+
+/**
+ * Remedy for a `path` that `discovered` does not resolve to exactly one project. `sonar link
+ * <projectKey>` is only suggested without a `.sonar-config.json`, whose `projects` list would shadow the entry it writes.
+ */
+export function unresolvedProjectHint(
+  discovered: DiscoveredProjects,
+  path: string,
+  { acceptsProjectOption }: { acceptsProjectOption: boolean },
+): string {
+  const dir = canonicalizePath(path);
+  const scoped = discovered.scope(dir);
+  const orProjectOption = acceptsProjectOption ? ', or use --project <key>' : '';
+  if (scoped.length > 1) {
+    const enclosingCount = scoped.filter((project) =>
+      isAncestorOrSelf(project.projectRoot, dir),
+    ).length;
+    if (enclosingCount > 1) {
+      return (
+        `${dir} is inside ${enclosingCount} nested projects, which are not supported yet. ` +
+        `Run 'sonar link list' to list them, then work from a directory that belongs to only one${orProjectOption}.`
+      );
+    }
+    return (
+      `${scoped.length} projects are linked at or under ${dir}. ` +
+      "Run 'sonar link list --path <path>' with the file or directory to work on; a single result is its project. " +
+      `Then re-run from that project's directory${orProjectOption}.`
+    );
+  }
+  if (discovered.fromSharedConfig) {
+    return (
+      `${dir} is not inside any project linked in .sonar-config.json. ` +
+      `Run 'sonar link list --path "${discovered.repoRoot ?? dir}"' to see where they are${orProjectOption}.`
+    );
+  }
+  return acceptsProjectOption
+    ? "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository."
+    : "Run 'sonar link <projectKey>' to link one to this repository.";
 }
 
 export function assertSingleLineProjectKey(projectKey: string): void {

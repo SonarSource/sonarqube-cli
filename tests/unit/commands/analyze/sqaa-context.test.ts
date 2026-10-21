@@ -25,6 +25,8 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
+const NO_PROJECT_HINT = "Run 'sonar link <projectKey>' to link one to this repository.";
+
 describe('resolveSqaaContext', () => {
   let fake: FakeConsole;
 
@@ -51,12 +53,24 @@ describe('resolveSqaaContext', () => {
 
   it('fails on a missing project when the command requires one', () => {
     expect(() =>
-      resolveSqaaContext({ kind: 'no-project' }, { requireProject: true }, fake),
+      resolveSqaaContext(
+        { kind: 'no-project', remediationHint: NO_PROJECT_HINT },
+        { requireProject: true },
+        fake,
+      ),
     ).toThrow(/requires a project/);
   });
 
   it('skips with a warning on a missing project when the command does not require one', () => {
-    expect(resolveSqaaContext({ kind: 'no-project' }, { requireProject: false }, fake)).toBeNull();
-    expect(fake.findCall('warn', 'no project configured')).toBeDefined();
+    expect(
+      resolveSqaaContext(
+        { kind: 'no-project', remediationHint: NO_PROJECT_HINT },
+        { requireProject: false },
+        fake,
+      ),
+    ).toBeNull();
+    expect(
+      fake.findCall('warn', `Vortex analysis skipped: no project configured. ${NO_PROJECT_HINT}`),
+    ).toBeDefined();
   });
 });
