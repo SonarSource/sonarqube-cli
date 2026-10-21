@@ -81,22 +81,24 @@ function makeMapping(
 
 describe('migrateKnownServerProjectMappings', () => {
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
-  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let updateStateSpy: Mock<typeof stateRepository.updateState>;
 
   beforeEach(() => {
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
   });
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
   });
 
   it('does nothing when there is nothing to discover', () => {
     migrateKnownServerKeyMappingsForProjectLevelFeatures();
 
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('merges discovered mappings into the existing table and saves', () => {
@@ -119,9 +121,8 @@ describe('migrateKnownServerProjectMappings', () => {
 
     migrateKnownServerKeyMappingsForProjectLevelFeatures();
 
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
-    const savedState = saveStateSpy.mock.calls[0][0];
-    const saved = (savedState.knownServerProjectMappings ?? [])
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    const saved = (state.knownServerProjectMappings ?? [])
       .slice()
       .sort((a, b) => a.targetRoot.localeCompare(b.targetRoot));
     expect(saved).toEqual([
@@ -146,7 +147,7 @@ describe('migrateKnownServerProjectMappings', () => {
     });
 
     expect(() => migrateKnownServerKeyMappingsForProjectLevelFeatures()).not.toThrow();
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('keeps two worktrees of the same repo, sharing a repoRoot attr, as distinct mappings', () => {
@@ -183,10 +184,7 @@ describe('migrateKnownServerProjectMappings', () => {
 
     migrateKnownServerKeyMappingsForProjectLevelFeatures();
 
-    const savedState = saveStateSpy.mock.calls[0][0];
-    const projectKeys = (savedState.knownServerProjectMappings ?? [])
-      .map((m) => m.projectKey)
-      .sort();
+    const projectKeys = (state.knownServerProjectMappings ?? []).map((m) => m.projectKey).sort();
     expect(projectKeys).toEqual(['main-project', 'worktree-project']);
   });
 });
