@@ -24,6 +24,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
+import { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -42,6 +43,13 @@ let fake: FakeConsole;
 
 function makeCtx() {
   return new CommandInvocationContext(fake);
+}
+
+/** One project covering the current directory, which is where the stage resolves from. */
+function discoveredProject(projectKey: string): DiscoveredProjects {
+  return new DiscoveredProjects(undefined, [
+    { projectRoot: process.cwd(), projectKey, serverUrl: 'https://sonarcloud.io' },
+  ]);
 }
 
 const FAKE_AUTH = new ResolvedAuth({
@@ -196,11 +204,9 @@ describe('runDepRisksStage', () => {
   beforeEach(() => {
     resetProjectUuidContextForTests();
     fake = new FakeConsole();
-    discoverProjectSpy = spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
-      kind: 'none',
-      project: { projectRoot: '/repo' },
-      fromSharedConfig: false,
-    });
+    discoverProjectSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
+      new DiscoveredProjects(undefined, []),
+    );
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
       'resolveScaScannerBinaryPath',
@@ -326,10 +332,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('scans under the discovered project key when no -p was baked', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      kind: 'project',
-      project: { projectRoot: '/repo', projectKey: 'discovered-key' },
-    });
+    discoverProjectSpy.mockResolvedValue(discoveredProject('discovered-key'));
 
     let thrown: unknown;
     try {
@@ -350,10 +353,7 @@ describe('runDepRisksStage', () => {
   });
 
   it('rejects a multiline discovered project key before scanning', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      kind: 'project',
-      project: { projectRoot: '/repo', projectKey: 'first\nsecond' },
-    });
+    discoverProjectSpy.mockResolvedValue(discoveredProject('first\nsecond'));
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(

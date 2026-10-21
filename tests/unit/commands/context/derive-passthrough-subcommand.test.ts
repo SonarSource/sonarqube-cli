@@ -25,6 +25,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import * as keychain from '@/core/host/keychain.ts';
 import { clearSecretCache, MissingKeychainError } from '@/core/host/keychain.ts';
 import { configureLogger, setMockLogger } from '@/core/observability/logger.ts';
+import { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
 
 import {
@@ -32,9 +33,21 @@ import {
   runContextPassthrough,
 } from '../../../../src/commands/context';
 
+/** The project recorded for the current directory, on a different connection than the active auth. */
+function recordedProject(): DiscoveredProjects {
+  return new DiscoveredProjects(undefined, [
+    {
+      organization: 'recorded-org',
+      projectKey: 'project-key',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    },
+  ]);
+}
+
 afterEach(() => {
   spyOn(keychain, 'getToken').mockRestore();
-  spyOn(projectInfo, 'discoverWorkspace').mockRestore();
+  spyOn(projectInfo, 'discoverProjects').mockRestore();
   setMockLogger(null);
   configureLogger({ level: 'INFO' });
 });
@@ -92,15 +105,7 @@ describe('runContextPassthrough', () => {
     const savedKeychainFile = process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     delete process.env.SONARQUBE_CLI_KEYCHAIN_FILE;
     clearSecretCache();
-    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
-      kind: 'project',
-      project: {
-        organization: 'recorded-org',
-        projectKey: 'project-key',
-        projectRoot: process.cwd(),
-        serverUrl: 'https://regional.sonarcloud.io',
-      },
-    });
+    spyOn(projectInfo, 'discoverProjects').mockResolvedValue(recordedProject());
     const getSpy = spyOn(Bun.secrets, 'get').mockRejectedValue(new Error(message));
     const ctx = {
       console: {},
@@ -168,15 +173,7 @@ describe('runContextPassthrough', () => {
       success: () => {},
       warn: () => {},
     });
-    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
-      kind: 'project',
-      project: {
-        organization: 'recorded-org',
-        projectKey: 'project-key',
-        projectRoot: process.cwd(),
-        serverUrl: 'https://regional.sonarcloud.io',
-      },
-    });
+    spyOn(projectInfo, 'discoverProjects').mockResolvedValue(recordedProject());
     spyOn(keychain, 'getToken').mockRejectedValue(
       new MissingKeychainError('libsecret not available'),
     );
@@ -218,15 +215,7 @@ describe('runContextPassthrough', () => {
   });
 
   it('still recommends logging in when the keychain works and holds no token', async () => {
-    spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
-      kind: 'project',
-      project: {
-        organization: 'recorded-org',
-        projectKey: 'project-key',
-        projectRoot: process.cwd(),
-        serverUrl: 'https://regional.sonarcloud.io',
-      },
-    });
+    spyOn(projectInfo, 'discoverProjects').mockResolvedValue(recordedProject());
     spyOn(keychain, 'getToken').mockResolvedValue(null);
     const ctx = {
       console: {},

@@ -30,7 +30,7 @@ import { resolveContextAugmentationBinaryPath } from '@/core/host/install/contex
 import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverWorkspace, unresolvedProjectHint } from '@/core/project-discovery/project-info.ts';
+import { discoverProjects, unresolvedProjectHint } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -84,11 +84,11 @@ interface RecordedContextAugmentationConfig {
 }
 
 /**
- * Resolve org/project/server via the shared project-discovery pipeline (`discoverWorkspace`,
- * the multi-project-aware sibling of the `discoverProject` SQAA's lookup uses). `workspaceDir`
- * is the project's `projectRoot` directly — discovery always anchors it to the current worktree
- * (never a different one a matched mapping happens to point at), so no extra resolution is
- * needed here. Several projects covering `cwd` throw when `requiresSingleProject` is set.
+ * Resolve org/project/server via the shared project-discovery pipeline (`discoverProjects`, the
+ * same one SQAA's lookup uses), scoped to `cwd`. `workspaceDir` is the project's `projectRoot`
+ * directly — discovery always anchors it to the current worktree (never a different one a matched
+ * mapping happens to point at), so no extra resolution is needed here. When `requiresSingleProject`
+ * is set, several projects covering `cwd`, or linked projects none of which covers it, throw.
  */
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
@@ -96,13 +96,14 @@ async function resolveRecordedContextAugmentationConfig(
   console: Console,
   requiresSingleProject: boolean,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverWorkspace(cwd, {
+  const discovered = await discoverProjects(cwd, {
     auth,
     silent: true,
     console,
   });
-  if (discovered.kind === 'project') {
-    const { project } = discovered;
+  const scoped = discovered.scope(cwd);
+  if (scoped.length === 1) {
+    const [project] = scoped;
     return {
       organization: project.organization,
       projectKey: project.projectKey,
@@ -111,12 +112,12 @@ async function resolveRecordedContextAugmentationConfig(
     };
   }
   // With no shared config at all, CAG's own "integration context missing" error already says what to do.
-  const isLinkedElsewhere = discovered.kind === 'multi-project' || discovered.fromSharedConfig;
+  const isLinkedElsewhere = scoped.length > 1 || discovered.fromSharedConfig;
   if (requiresSingleProject && isLinkedElsewhere) {
     throw new CommandFailedError(
       `Could not determine a single SonarQube project for ${canonicalizePath(cwd)}.`,
       {
-        remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: false }),
+        remediationHint: unresolvedProjectHint(discovered, cwd, { acceptsProjectOption: false }),
       },
     );
   }

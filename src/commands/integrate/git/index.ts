@@ -37,7 +37,7 @@ import {
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import {
   assertSingleLineProjectKey,
-  discoverWorkspace,
+  discoverProjects,
   unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
@@ -251,9 +251,10 @@ export async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverWorkspace(root, { auth, silent: true, console });
-  if (discovered.kind === 'project') {
-    const { projectKey } = discovered.project;
+  const discovered = await discoverProjects(root, { auth, silent: true, console });
+  const scoped = discovered.scope(root);
+  if (scoped.length === 1) {
+    const [{ projectKey }] = scoped;
     assertSingleLineProjectKey(projectKey);
     console.phase('Project', [phaseItem('Key', 'done', projectKey)]);
     return { ...options, project: projectKey };
@@ -261,7 +262,7 @@ export async function resolveProjectKey(
 
   console.warn(
     'No project key detected for dependency-risks scanning (if installed). ' +
-      unresolvedProjectHint(discovered, { acceptsProjectOption: true }),
+      unresolvedProjectHint(discovered, root, { acceptsProjectOption: true }),
   );
   return options;
 }
