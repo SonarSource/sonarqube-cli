@@ -60,6 +60,9 @@ export interface McpRunOptions {
 
 const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
 const INTERNAL_ERROR_CODE = -32000;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
+const CONTAINER_SHUTDOWN_EXIT_CODES = new Set([INTERRUPTED_EXIT_CODE, TERMINATED_EXIT_CODE]);
 
 function debugLog(message: string): void {
   logger.debug(message);
@@ -151,10 +154,16 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
-        if (code !== null && code !== 0 && isLoopbackServerUrl(auth.serverUrl)) {
-          const networkHint = mcpLoopbackAdvice(auth, settings);
+        const networkHint = mcpLoopbackAdvice(auth, settings);
+        if (
+          code !== null &&
+          code !== 0 &&
+          !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
+          isLoopbackServerUrl(container.serverUrl) &&
+          networkHint
+        ) {
           process.stderr.write(
-            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint ?? ''}\n`,
+            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
           );
         }
         resolve();
