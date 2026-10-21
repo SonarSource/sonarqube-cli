@@ -149,7 +149,8 @@
     "typescript-eslint": "8.71.2"
   },
   "overrides": {
-    "flatted": "3.4.4"
+    "flatted": "3.4.4",
+    "follow-redirects": "1.16.1"
   },
   "lint-staged": {
     "*.ts": [
