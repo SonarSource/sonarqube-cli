@@ -738,13 +738,7 @@ describe('sonar architecture intended set on the public API', () => {
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect(JSON.parse(writes(server)[0].body!)).toEqual({
-      intendedArchitectures: wireModels([
-        ...publicModels([cs]),
-        ...file.models.map((model) => ({
-          ...model,
-          groups: model.groups.map(({ groups: _groups, ...group }) => group),
-        })),
-      ]),
+      intendedArchitectures: wireModels([...publicModels([cs]), ...file.models]),
     });
   });
 
@@ -840,6 +834,93 @@ describe('sonar architecture intended set on the public API', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Cannot edit expanded children');
     expect(writes(server)).toEqual([]);
+  });
+
+  it('reports a stale revision before checking the stale imported expansion', async () => {
+    let architecture!: FakeArchitecture;
+    const patternId = '11111111-1111-4111-8111-111111111111';
+    const server = await startWith((fake) => {
+      architecture = fake;
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          groups: [{ label: 'Shared', patternId, groups: [{ label: 'Old' }] }],
+          constraints: [],
+        },
+      ]);
+    });
+    const file = await readSaved();
+    architecture.changeImportedPattern(patternId, [{ label: 'New' }]);
+    const result = await setFile(file);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('changed since the file was read');
+    expect(result.stderr).not.toContain('Cannot edit expanded children');
+    expect(writes(server)).toEqual([]);
+  });
+
+  it('restores a generated backup after an imported pattern changes without replacing its new contents', async () => {
+    let architecture!: FakeArchitecture;
+    const patternId = '11111111-1111-4111-8111-111111111111';
+    const server = await startWith((fake) => {
+      architecture = fake;
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          description: 'Original',
+          groups: [{ label: 'Shared', patternId, groups: [{ label: 'Old' }] }],
+          constraints: [],
+        },
+      ]);
+    });
+    const changed = await readSaved();
+    changed.models[0].description = 'Updated';
+    const applied = await setFile(changed);
+    expect(applied.exitCode).toBe(0);
+    const backup = /backed up in ([^\r\n]+\.json)/.exec(applied.stdout)?.[1];
+    expect(backup).toBeDefined();
+    const recovery = JSON.parse(readFileSync(backup!, 'utf8'));
+    expect(recovery).not.toHaveProperty('revision');
+    expect(recovery.models[0].groups[0]).not.toHaveProperty('groups');
+    expect(recovery.models[0].groups[0].patternId).toBe(patternId);
+    architecture.changeImportedPattern(patternId, [{ label: 'New' }]);
+    const preview = await setFile(recovery, ' --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).not.toContain('group java Shared/New');
+    expect(preview.stdout).not.toContain('group java Shared/Old');
+    expect((await setFile(recovery)).exitCode).toBe(0);
+    const saved = await readSaved();
+    expect(saved.models[0].description).toBe('Original');
+    expect(saved.models[0].groups[0].groups?.map(({ label }) => label)).toEqual(['New']);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH', 'PATCH']);
+  });
+
+  it('rejects an explicit empty expansion while accepting omitted linked children', async () => {
+    const server = await startWith((fake) =>
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          groups: [
+            {
+              label: 'Shared',
+              patternId: '11111111-1111-4111-8111-111111111111',
+              groups: [{ label: 'Child' }],
+            },
+          ],
+          constraints: [],
+        },
+      ]),
+    );
+    const file = await readSaved();
+    file.models[0].groups[0].groups = [];
+    expect((await setFile(file)).exitCode).toBe(1);
+    expect(writes(server)).toEqual([]);
+    delete file.models[0].groups[0].groups;
+    file.models[0].description = 'Metadata edit';
+    expect((await setFile(file)).exitCode).toBe(0);
+    expect((await readSaved()).models[0].groups[0].groups?.[0].label).toBe('Child');
   });
 
   it('verifies a changed pattern link using writable fields instead of echoed expansion', async () => {

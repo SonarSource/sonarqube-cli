@@ -89,7 +89,8 @@ by the public export cannot be preserved. Include these
 returned warnings when presenting the preview.
 
 If an operation fails, report the error and inspect the saved state before retrying. CLI writes
-save a local backup; MCP errors can include the previous export. Preserve that export and the
+save a local backup; MCP errors can include the previous export. Recovery exports keep patternId
+and omit its resolved children, which remain managed by the server. Preserve that export and the
 recovery instructions, inspect the current state, and obtain approval before restoring it.
 
 ## Availability

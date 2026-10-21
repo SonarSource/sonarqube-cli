@@ -36,7 +36,12 @@ import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
 import { toArchitectureError } from './errors.ts';
 import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts';
-import { assertImportedGroupsUnchanged, revisionOf, writableRevisionOf } from './intended-model.ts';
+import {
+  assertImportedGroupsUnchanged,
+  recoveryModels,
+  revisionOf,
+  writableRevisionOf,
+} from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
 import { shellQuote } from './shell-quote.ts';
 import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
@@ -76,12 +81,12 @@ export async function setIntended(
 ): Promise<SetIntendedResult> {
   const current = await api.getIntended();
   const next = file.language === undefined ? file.models : withLanguage(current, file);
-  assertImportedGroupsUnchanged(current, next);
-  const diff = diffIntended(current, next);
   const unchecked = file.revision === undefined;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
+  assertImportedGroupsUnchanged(current, next);
+  const diff = diffIntended(current, next);
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
   if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
@@ -192,11 +197,15 @@ async function writeBackup(
     `${projectKey.replaceAll(/[^\w.-]/g, '_')}-${stamp}-${randomUUID()}.json`,
   );
   // No revision: the backup is applied over a project whose model has already changed.
-  await writeFile(path, `${JSON.stringify({ project: projectKey, models }, null, 2)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
-    flag: 'wx',
-  });
+  await writeFile(
+    path,
+    `${JSON.stringify({ project: projectKey, models: recoveryModels(models) }, null, 2)}\n`,
+    {
+      encoding: 'utf8',
+      mode: 0o600,
+      flag: 'wx',
+    },
+  );
   return path;
 }
 

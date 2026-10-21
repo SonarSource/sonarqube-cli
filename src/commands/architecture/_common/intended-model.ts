@@ -100,6 +100,19 @@ export function writableRevisionOf(models: IntendedArchitecture[]): string {
     .digest('hex');
 }
 
+export function recoveryModels(models: IntendedArchitecture[]): IntendedArchitecture[] {
+  return models.map((model) => ({ ...model, groups: recoveryGroups(model.groups) }));
+}
+
+function recoveryGroups(groups: IntendedGroup[]): IntendedGroup[] {
+  return groups.map(({ groups: children, ...group }) => ({
+    ...group,
+    ...(group.patternId !== undefined || children === undefined
+      ? {}
+      : { groups: recoveryGroups(children) }),
+  }));
+}
+
 export function assertImportedGroupsUnchanged(
   current: IntendedArchitecture[],
   next: IntendedArchitecture[],
@@ -123,6 +136,7 @@ function checkImportedGroups(
     if (!old) continue;
     const path = [...parent, group.label];
     if (
+      group.groups !== undefined &&
       old.patternId !== undefined &&
       old.patternId.toLowerCase() === group.patternId?.toLowerCase() &&
       JSON.stringify((old.groups ?? []).map((child) => canonicalGroup(child))) !==

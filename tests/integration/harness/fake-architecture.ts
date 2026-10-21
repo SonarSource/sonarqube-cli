@@ -143,6 +143,19 @@ export class FakeArchitecture {
     return this;
   }
 
+  changeImportedPattern(patternId: string, groups: SavedGroup[]): this {
+    this.patternGroups.set(patternId, groups);
+    const update = (children: SavedGroup[]): void => {
+      for (const group of children) {
+        if (group.patternId === patternId) group.groups = groups;
+        else update(group.groups ?? []);
+      }
+    };
+    for (const model of this.models)
+      for (const perspective of model.perspectives) update(perspective.groups ?? []);
+    return this;
+  }
+
   withAdditionalIntended(models: IntendedArchitecture[]): this {
     this.models.push(this.toSavedModel(models));
     return this;

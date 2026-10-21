@@ -205,7 +205,7 @@ function parseGroups(
       }
     }
     const subgroups = parseGroups(raw.groups, path, depth + 1, context);
-    if (subgroups.length > 0) group.groups = subgroups;
+    if (raw.groups != null) group.groups = subgroups;
     return [group];
   });
 }
