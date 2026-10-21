@@ -27,12 +27,9 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
-import { isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import {
-  discoverWorkspace,
-  type MultiProjectWorkspace,
-} from '@/core/project-discovery/project-info.ts';
+import { discoverWorkspace, unresolvedProjectHint } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -103,49 +100,26 @@ async function resolveRecordedContextAugmentationConfig(
     silent: true,
     console,
   });
-  if (discovered.kind === 'multi-project') {
-    if (requiresSingleProject) {
-      throw multiProjectWorkspaceError(discovered.workspace);
-    }
-    return {};
+  if (discovered.kind === 'project') {
+    const { project } = discovered;
+    return {
+      organization: project.organization,
+      projectKey: project.projectKey,
+      serverUrl: project.serverUrl,
+      workspaceDir: project.projectRoot,
+    };
   }
-  if (discovered.kind === 'none') {
-    return {};
-  }
-  const { project } = discovered;
-  return {
-    organization: project.organization,
-    projectKey: project.projectKey,
-    serverUrl: project.serverUrl,
-    workspaceDir: project.projectRoot,
-  };
-}
-
-function multiProjectWorkspaceError({
-  workspaceRoot,
-  projects,
-}: MultiProjectWorkspace): CommandFailedError {
-  const enclosingCount = projects.filter((project) =>
-    isAncestorOrSelf(project.projectRoot, workspaceRoot),
-  ).length;
-  if (enclosingCount > 1) {
-    return new CommandFailedError(
-      `Could not determine a single SonarQube project for ${workspaceRoot}: it is inside ${enclosingCount} nested projects.`,
+  // With no shared config at all, CAG's own "integration context missing" error already says what to do.
+  const isLinkedElsewhere = discovered.kind === 'multi-project' || discovered.fromSharedConfig;
+  if (requiresSingleProject && isLinkedElsewhere) {
+    throw new CommandFailedError(
+      `Could not determine a single SonarQube project for ${canonicalizePath(cwd)}.`,
       {
-        remediationHint:
-          "Nested project directories are not supported yet. Run 'sonar link list' to list the projects here, " +
-          'then re-run this command from a directory that belongs to only one of them.',
+        remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: false }),
       },
     );
   }
-  return new CommandFailedError(
-    `Could not determine a single SonarQube project for ${workspaceRoot}: ${projects.length} projects are linked at or under it.`,
-    {
-      remediationHint:
-        "Run 'sonar link list --path <path>' with the file or directory to work on; a single result is its project. " +
-        "Then re-run this command from that project's directory.",
-    },
-  );
+  return {};
 }
 
 /** Management (`tool`) and hook (`__hook`) actions run without a project, so they never fail on an ambiguous one. */

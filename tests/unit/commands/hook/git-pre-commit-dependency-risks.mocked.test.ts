@@ -196,8 +196,10 @@ describe('runDepRisksStage', () => {
   beforeEach(() => {
     resetProjectUuidContextForTests();
     fake = new FakeConsole();
-    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      projectRoot: '/repo',
+    discoverProjectSpy = spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue({
+      kind: 'none',
+      project: { projectRoot: '/repo' },
+      fromSharedConfig: false,
     });
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
@@ -325,8 +327,8 @@ describe('runDepRisksStage', () => {
 
   it('scans under the discovered project key when no -p was baked', async () => {
     discoverProjectSpy.mockResolvedValue({
-      projectRoot: '/repo',
-      projectKey: 'discovered-key',
+      kind: 'project',
+      project: { projectRoot: '/repo', projectKey: 'discovered-key' },
     });
 
     let thrown: unknown;
@@ -349,8 +351,8 @@ describe('runDepRisksStage', () => {
 
   it('rejects a multiline discovered project key before scanning', async () => {
     discoverProjectSpy.mockResolvedValue({
-      projectRoot: '/repo',
-      projectKey: 'first\nsecond',
+      kind: 'project',
+      project: { projectRoot: '/repo', projectKey: 'first\nsecond' },
     });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable

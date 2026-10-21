@@ -552,6 +552,44 @@ describe('list issues', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    ['.', 'projects are linked at or under', "'sonar link list --path <path>'"],
+    [
+      'scripts',
+      'is not inside any project linked in .sonar-config.json',
+      "'sonar link list --path",
+    ],
+  ])(
+    'points at sonar link list instead of sonar link when run from %s in a monorepo',
+    async (dir, reason, remedy) => {
+      const serverUrl = 'http://127.0.0.1:19999';
+      harness.withAuth(serverUrl, 'test-token');
+      initGitRepo(harness.cwd.path);
+      for (const path of ['services/api', 'apps/web', 'scripts']) {
+        harness.cwd.writeFile(`${path}/.keep`, '');
+      }
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api', path: 'services/api', serverUrl },
+            { projectKey: 'web', path: 'apps/web', serverUrl },
+          ],
+        }),
+      );
+
+      const result = await harness.run('list issues', { cwd: `${harness.cwd.path}/${dir}` });
+
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain('Could not determine project key.');
+      expect(output).toContain(reason);
+      expect(output).toContain(remedy);
+      expect(output).not.toContain('sonar link <projectKey>');
+    },
+    { timeout: 15000 },
+  );
+
   it(
     'prefers an explicit --project over auto-detection',
     async () => {

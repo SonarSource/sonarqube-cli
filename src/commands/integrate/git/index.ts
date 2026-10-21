@@ -37,7 +37,8 @@ import {
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import {
   assertSingleLineProjectKey,
-  discoverProject,
+  discoverWorkspace,
+  unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
@@ -250,16 +251,17 @@ export async function resolveProjectKey(
     return options;
   }
 
-  const discovered = await discoverProject(root, { auth, silent: true, console });
-  if (discovered.projectKey) {
-    assertSingleLineProjectKey(discovered.projectKey);
-    console.phase('Project', [phaseItem('Key', 'done', discovered.projectKey)]);
-    return { ...options, project: discovered.projectKey };
+  const discovered = await discoverWorkspace(root, { auth, silent: true, console });
+  if (discovered.kind === 'project') {
+    const { projectKey } = discovered.project;
+    assertSingleLineProjectKey(projectKey);
+    console.phase('Project', [phaseItem('Key', 'done', projectKey)]);
+    return { ...options, project: projectKey };
   }
 
   console.warn(
-    "No project key detected — run 'sonar link <projectKey>' to link one to this repository " +
-      'for dependency-risks scanning (if installed).',
+    'No project key detected for dependency-risks scanning (if installed). ' +
+      unresolvedProjectHint(discovered, { acceptsProjectOption: true }),
   );
   return options;
 }

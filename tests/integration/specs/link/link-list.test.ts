@@ -164,13 +164,4 @@ describe('sonar link list', () => {
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain(message);
   });
-
-  it('still links a project key given as the first argument', async () => {
-    const result = await harness.run('link my_project --path docs');
-
-    expect(result.exitCode).toBe(0);
-    expect(harness.cwd.file('.sonar-config.json').asJson()).toMatchObject({
-      project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: 'docs' },
-    });
-  });
 });

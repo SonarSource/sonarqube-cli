@@ -472,8 +472,9 @@ describe('sonar context passthrough', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
-        `Could not determine a single SonarQube project for ${harness.cwd.path}: 3 projects are linked at or under it.`,
+        `Could not determine a single SonarQube project for ${harness.cwd.path}.`,
       );
+      expect(result.stderr).toContain(`3 projects are linked at or under ${harness.cwd.path}.`);
       expect(result.stderr).toContain('sonar link list --path <path>');
       expect(readInvocations(harness)).toEqual([]);
     });
@@ -484,8 +485,20 @@ describe('sonar context passthrough', () => {
       });
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('it is inside 2 nested projects');
-      expect(result.stderr).toContain('Nested project directories are not supported yet.');
+      expect(result.stderr).toContain('is inside 2 nested projects, which are not supported yet.');
+    });
+
+    it('fails without invoking CAG outside every linked project', async () => {
+      harness.cwd.writeFile('scripts/.keep', '');
+
+      const result = await harness.run('context compass get', {
+        cwd: join(harness.cwd.path, 'scripts'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('is not inside any project linked in .sonar-config.json.');
+      expect(result.stderr).toContain(`sonar link list --path "${harness.cwd.path}"`);
+      expect(readInvocations(harness)).toEqual([]);
     });
 
     it('forwards a command run from inside one project with that project', async () => {

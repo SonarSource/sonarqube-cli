@@ -77,15 +77,10 @@ export function resolveSqaaContext(
       if (policy.requireProject) {
         throw new CommandFailedError(
           'Vortex analysis requires a project, but none is configured for this directory.',
-          {
-            remediationHint:
-              "Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
-          },
+          { remediationHint: resolution.remediationHint },
         );
       }
-      console.warn(
-        "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
-      );
+      console.warn(`Vortex analysis skipped: no project configured. ${resolution.remediationHint}`);
       return null;
   }
 }
