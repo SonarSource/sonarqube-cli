@@ -42,7 +42,14 @@ import { shellQuote } from './shell-quote.ts';
 import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;
-const VERIFICATION_DELAYS_MS = [0, 100, 250, 500];
+const SECOND_VERIFICATION_RETRY_DELAY_MS = 250;
+const FINAL_VERIFICATION_RETRY_DELAY_MS = 500;
+const VERIFICATION_DELAYS_MS = [
+  0,
+  100,
+  SECOND_VERIFICATION_RETRY_DELAY_MS,
+  FINAL_VERIFICATION_RETRY_DELAY_MS,
+];
 
 export type SetIntendedMode = 'dry-run' | 'unchanged' | 'created' | 'updated' | 'cleared';
 
