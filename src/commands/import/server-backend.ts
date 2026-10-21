@@ -100,7 +100,7 @@ export class ServerBackend implements ImportBackend {
   private async patStatusOf(setting: DopSetting): Promise<PatStatus> {
     try {
       return setting.type === 'github'
-        ? await this.api.probeGithubPat(setting.key)
+        ? (await this.api.probeGithubPat(setting.key)).status
         : await this.api.checkPat(setting.key);
     } catch (error) {
       if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
