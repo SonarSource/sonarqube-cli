@@ -20,7 +20,7 @@
 
 import { getConfigFileValue, setConfigFileValue } from '../config/config-file.ts';
 import type { ConfigKey } from '../config/config-schema.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 
 /** Moves the legacy telemetry and stats opt-outs from `state.json` to the config store. */
 export function migrateLegacyStateConfig(): void {
@@ -34,9 +34,10 @@ export function migrateLegacyStateConfig(): void {
   carryOptOut('telemetry.enabled', telemetryEnabled);
   carryOptOut('stats.enabled', statsEnabled);
 
-  delete state.telemetry.enabled;
-  delete state.stats;
-  saveState(state);
+  updateState((latest) => {
+    delete latest.telemetry.enabled;
+    delete latest.stats;
+  });
 }
 
 function carryOptOut(key: ConfigKey, enabled: boolean | undefined): void {

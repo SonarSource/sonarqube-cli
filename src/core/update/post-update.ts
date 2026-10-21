@@ -27,13 +27,13 @@ import {
 import type { Console } from '@/core/ui/console.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
+import { persistIntegrationChanges } from '../framework/features/integration-state-updates.ts';
 import logger from '../observability/logger.ts';
 import {
   loadState,
-  saveState,
-  saveStateKeepingInstalledDependencies,
   stateFileExists,
   tryLoadState,
+  updateState,
 } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
@@ -96,13 +96,12 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
 
   try {
     await runActions(deps);
-    // Reload state to pick up changes made by subroutines
-    // (migrateDeclarativeIntegrations,
-    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
-    const state = loadState();
-    state.config.cliVersion = CURRENT_VERSION;
-    delete state.config.betaCommandWarnings;
-    saveState(state);
+    updateState((state) => {
+      if (isNewerVersion(state.config.cliVersion, CURRENT_VERSION)) {
+        state.config.cliVersion = CURRENT_VERSION;
+        delete state.config.betaCommandWarnings;
+      }
+    });
   } catch (error) {
     deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
   }
@@ -139,7 +138,8 @@ export async function migrateDeclarativeIntegrations(
   console: Console,
 ): Promise<void> {
   const state = loadState();
+  const before = structuredClone(state);
   if (await reconcileInstalledIntegrations(state, registry, console)) {
-    saveStateKeepingInstalledDependencies(state);
+    persistIntegrationChanges(before, state);
   }
 }
