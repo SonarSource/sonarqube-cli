@@ -148,7 +148,14 @@ import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { integrateOpenCode } from './integrate/opencode';
 import { integratePi } from './integrate/pi';
-import { link, type LinkOptions } from './link';
+import {
+  DEFAULT_LINK_LIST_PAGE_SIZE,
+  link,
+  type LinkListOptions,
+  type LinkOptions,
+  listLinks,
+  MAX_LINK_LIST_PAGE_SIZE,
+} from './link';
 import {
   DEFAULT_STATUSES,
   listIssues,
@@ -219,7 +226,7 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
-Supports one project per repository; monorepo support is coming soon.
+Writes one project per repository. In a monorepo, 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory; exactly one result is the project used there.
 `;
 
 export interface CreateCommandTreeOptions {
@@ -783,10 +790,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
   // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
-  COMMAND_TREE.command('link')
+  const linkCommand = COMMAND_TREE.command('link')
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'core',
+      label: 'link <projectKey|list>',
     })
     .argument('<projectKey>', 'SonarQube project key')
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
@@ -794,6 +802,21 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
       link(projectKey, options, ctx),
     );
+
+  linkCommand
+    .command('list')
+    .description(
+      'List linked projects at, under or enclosing a path as JSON, nearest first (exactly one result is the project used there)',
+    )
+    .option('--path <path>', 'File or directory to list projects for (default: current directory)')
+    .option('--pattern <regex>', 'Only list projects whose key or directory matches this regex')
+    .addOption(pageOption)
+    .addOption(
+      new SonarOption('--page-size <page-size>', `Page size (1-${MAX_LINK_LIST_PAGE_SIZE})`)
+        .default(DEFAULT_LINK_LIST_PAGE_SIZE)
+        .argParser(parseInteger),
+    )
+    .authenticatedAction((ctx, options: LinkListOptions) => listLinks(options, ctx));
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');

@@ -97,6 +97,24 @@ describe('config set', () => {
   );
 
   it(
+    'accepts a non-negative integer for a numeric key and rejects anything else',
+    async () => {
+      const rejected = await harness.run('config set context.projectListLimit many');
+      const accepted = await harness.run('config set context.projectListLimit 10');
+
+      expect(rejected.exitCode).toBe(2);
+      expect(rejected.stdout + rejected.stderr).toContain(
+        "Invalid value 'many' for config key 'context.projectListLimit'. Expected a non-negative integer.",
+      );
+      expect(accepted.exitCode).toBe(0);
+      expect(harness.cliHome.file(CLI_CONFIG_FILE_NAME).asText()).toBe(
+        'context.projectListLimit=10\n',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'prompts for the value interactively, without echoing it, when omitted',
     async () => {
       const session = harness.runInteractive('config set network.tls.clientPassphrase', {

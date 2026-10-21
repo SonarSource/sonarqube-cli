@@ -24,7 +24,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   applyKnownServerProjectMapping,
@@ -174,6 +174,7 @@ async function discoverProjectMappings(
     );
 
     const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    result.fromSharedConfig = sharedConfigProjects !== null;
     result.projects =
       sharedConfigProjects ??
       (await discoverProjectWithoutSharedConfig(
@@ -199,7 +200,25 @@ export async function discoverProjects(
   options: DiscoverProjectOptions,
 ): Promise<DiscoveredProjects> {
   const result = await discoverProjectMappings(startDir, options);
-  return new DiscoveredProjects(result.repoRoot, result.projects.filter(isCompleteProjectMapping));
+  return new DiscoveredProjects(
+    result.repoRoot,
+    result.projects.filter(isCompleteProjectMapping),
+    result.fromSharedConfig,
+  );
+}
+
+function toDiscoveredProject(
+  mapping: CompleteProjectMapping | undefined,
+  invocationDir: string,
+  repoRoot: string | undefined,
+): DiscoveredProject {
+  return {
+    projectRoot: mapping?.projectRoot ?? invocationDir,
+    projectKey: mapping?.projectKey,
+    serverUrl: mapping?.serverUrl,
+    organization: mapping?.organization,
+    repoRoot,
+  };
 }
 
 /** Zero or ambiguous matches both degrade to "nothing resolved". */
@@ -211,13 +230,52 @@ export async function discoverProject(
   const result = await discoverProjects(startDir, options);
   const scoped = result.scope(invocationDir);
   const mapping = scoped.length > 1 ? undefined : scoped.at(0);
-  return {
-    projectRoot: mapping?.projectRoot ?? invocationDir,
-    projectKey: mapping?.projectKey,
-    serverUrl: mapping?.serverUrl,
-    organization: mapping?.organization,
-    repoRoot: result.repoRoot,
-  };
+  return toDiscoveredProject(mapping, invocationDir, result.repoRoot);
+}
+
+export interface MultiProjectWorkspace {
+  workspaceRoot: string;
+  repoRoot?: string;
+  projects: CompleteProjectMapping[];
+  /** Set only when every project shares one server and organization. */
+  connection?: { serverUrl: string; organization?: string };
+}
+
+export type DiscoveredWorkspace =
+  | { kind: 'project'; project: DiscoveredProject & { projectKey: string } }
+  | { kind: 'multi-project'; workspace: MultiProjectWorkspace }
+  | { kind: 'none'; project: DiscoveredProject; fromSharedConfig: boolean };
+
+/**
+ * Sibling of `discoverProject()` for callers that can still act when several projects cover the
+ * invocation directory — `discoverProject()` collapses that case to "nothing resolved".
+ */
+export async function discoverWorkspace(
+  startDir: string,
+  options: DiscoverProjectOptions,
+): Promise<DiscoveredWorkspace> {
+  const invocationDir = canonicalizePath(startDir);
+  const result = await discoverProjects(startDir, options);
+  const scoped = result.scope(invocationDir);
+  if (scoped.length > 1) {
+    const [first] = scoped;
+    return {
+      kind: 'multi-project',
+      workspace: {
+        workspaceRoot: invocationDir,
+        repoRoot: result.repoRoot,
+        projects: scoped,
+        connection: isSameConnection(scoped)
+          ? { serverUrl: first.serverUrl, organization: first.organization }
+          : undefined,
+      },
+    };
+  }
+  const mapping = scoped.at(0);
+  const project = toDiscoveredProject(mapping, invocationDir, result.repoRoot);
+  return mapping
+    ? { kind: 'project', project: { ...project, projectKey: mapping.projectKey } }
+    : { kind: 'none', project, fromSharedConfig: result.fromSharedConfig };
 }
 
 /**
@@ -240,23 +298,63 @@ export async function resolveProjectKey(
     return explicitProject;
   }
 
-  const discovered = await discoverProject(process.cwd(), {
+  const discovered = await discoverWorkspace(process.cwd(), {
     auth,
     silent: true,
     console,
   });
-  if (discovered.projectKey) {
-    assertSingleLineProjectKey(discovered.projectKey);
+  if (discovered.kind === 'project') {
+    const { projectKey } = discovered.project;
+    assertSingleLineProjectKey(projectKey);
     if (!silent) {
-      console.print(`     Using auto-detected project key: ${discovered.projectKey}`, 'stderr');
+      console.print(`     Using auto-detected project key: ${projectKey}`, 'stderr');
     }
-    return discovered.projectKey;
+    return projectKey;
   }
 
   throw new CommandFailedError('Could not determine project key.', {
-    remediationHint:
-      "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
+    remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: true }),
   });
+}
+
+export type UnresolvedWorkspace = Exclude<DiscoveredWorkspace, { kind: 'project' }>;
+
+/**
+ * Remedy for a directory that resolved to no single project. `sonar link <projectKey>` is only
+ * suggested without a `.sonar-config.json` `projects` list, since the entry it writes would be shadowed by it.
+ */
+export function unresolvedProjectHint(
+  discovered: UnresolvedWorkspace,
+  { acceptsProjectOption }: { acceptsProjectOption: boolean },
+): string {
+  const orProjectOption = acceptsProjectOption ? ', or use --project <key>' : '';
+  if (discovered.kind === 'multi-project') {
+    const { workspaceRoot, projects } = discovered.workspace;
+    const enclosingCount = projects.filter((project) =>
+      isAncestorOrSelf(project.projectRoot, workspaceRoot),
+    ).length;
+    if (enclosingCount > 1) {
+      return (
+        `${workspaceRoot} is inside ${enclosingCount} nested projects, which are not supported yet. ` +
+        `Run 'sonar link list' to list them, then work from a directory that belongs to only one${orProjectOption}.`
+      );
+    }
+    return (
+      `${projects.length} projects are linked at or under ${workspaceRoot}. ` +
+      "Run 'sonar link list --path <path>' with the file or directory to work on; a single result is its project. " +
+      `Then re-run from that project's directory${orProjectOption}.`
+    );
+  }
+  if (discovered.fromSharedConfig) {
+    const { projectRoot, repoRoot } = discovered.project;
+    return (
+      `${projectRoot} is not inside any project linked in .sonar-config.json. ` +
+      `Run 'sonar link list --path "${repoRoot ?? projectRoot}"' to see where they are${orProjectOption}.`
+    );
+  }
+  return acceptsProjectOption
+    ? "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository."
+    : "Run 'sonar link <projectKey>' to link one to this repository.";
 }
 
 export function assertSingleLineProjectKey(projectKey: string): void {

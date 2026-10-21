@@ -28,8 +28,9 @@ import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
 import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
+import { discoverWorkspace, unresolvedProjectHint } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -83,31 +84,49 @@ interface RecordedContextAugmentationConfig {
 }
 
 /**
- * Resolve org/project/server via the shared project-discovery pipeline (`discoverProject`),
- * the same one SQAA's project lookup uses (see discoverSqaaProject). `workspaceDir` is
- * `discovered.projectRoot` directly — `discoverProject()` itself always anchors it to the
- * current worktree (never a different one a matched mapping happens to point at), so no
- * extra resolution is needed here.
+ * Resolve org/project/server via the shared project-discovery pipeline (`discoverWorkspace`,
+ * the multi-project-aware sibling of the `discoverProject` SQAA's lookup uses). `workspaceDir`
+ * is the project's `projectRoot` directly — discovery always anchors it to the current worktree
+ * (never a different one a matched mapping happens to point at), so no extra resolution is
+ * needed here. Several projects covering `cwd` throw when `requiresSingleProject` is set.
  */
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
   console: Console,
+  requiresSingleProject: boolean,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverProject(cwd, {
+  const discovered = await discoverWorkspace(cwd, {
     auth,
     silent: true,
     console,
   });
-  if (!discovered.projectKey) {
-    return {};
+  if (discovered.kind === 'project') {
+    const { project } = discovered;
+    return {
+      organization: project.organization,
+      projectKey: project.projectKey,
+      serverUrl: project.serverUrl,
+      workspaceDir: project.projectRoot,
+    };
   }
-  return {
-    organization: discovered.organization,
-    projectKey: discovered.projectKey,
-    serverUrl: discovered.serverUrl,
-    workspaceDir: discovered.projectRoot,
-  };
+  // With no shared config at all, CAG's own "integration context missing" error already says what to do.
+  const isLinkedElsewhere = discovered.kind === 'multi-project' || discovered.fromSharedConfig;
+  if (requiresSingleProject && isLinkedElsewhere) {
+    throw new CommandFailedError(
+      `Could not determine a single SonarQube project for ${canonicalizePath(cwd)}.`,
+      {
+        remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: false }),
+      },
+    );
+  }
+  return {};
+}
+
+/** Management (`tool`) and hook (`__hook`) actions run without a project, so they never fail on an ambiguous one. */
+function requiresSingleProject(forwarded: string[]): boolean {
+  const [action] = forwarded;
+  return action !== 'tool' && !action.startsWith('__');
 }
 
 async function resolveContextToken(
@@ -203,6 +222,7 @@ export async function runContextPassthrough(
       process.cwd(),
       auth,
       options.ctx.console,
+      requiresSingleProject(forwarded),
     );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
