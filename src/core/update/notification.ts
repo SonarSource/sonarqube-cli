@@ -21,7 +21,7 @@
 import type { Command } from 'commander';
 
 import type { CliUpdateCheckState } from '@/core/state/state.ts';
-import { loadState, saveState } from '@/core/state/state-manager.ts';
+import { loadState, updateState } from '@/core/state/state-manager.ts';
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { isWithinCooldown, ONE_DAY_MS } from '@/core/time/cooldown.ts';
 import { cyan } from '@/core/ui/colors.ts';
@@ -103,8 +103,13 @@ export class UpdateNotifier {
 
       // Persist the fetch timestamp on every attempt (success or failure) so the
       // remote version check stays throttled to once per day.
-      state.config.updateCheck = resolved.updateCheck;
-      saveState(state);
+      updateState((latest) => {
+        const previousCheck = latest.config.updateCheck?.lastCheckedAt;
+        const newCheck = resolved.updateCheck.lastCheckedAt;
+        if (!previousCheck || (newCheck && previousCheck <= newCheck)) {
+          latest.config.updateCheck = resolved.updateCheck;
+        }
+      });
 
       if (!resolved.latestVersion) {
         return;
