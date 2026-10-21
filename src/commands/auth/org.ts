@@ -19,14 +19,47 @@
  */
 
 import { assertOrganizationsSupported } from '@/commands/components/organization/cloud-guard.ts';
-import { ENV_ORG, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { assertOrganizationMember } from '@/commands/components/organization/select.ts';
+import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
+import { ENV_ORG, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { getActiveConnection } from '@/core/state/state-manager.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 
-export function authOrg(ctx: CommandAuthenticatedInvocationContext): Promise<void> {
+export async function authOrg(
+  org: string | undefined,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
   assertNoEnvironmentAuthentication(ctx.auth);
   assertOrganizationsSupported(ctx.auth);
-  return Promise.resolve();
+  if (org === undefined) {
+    return;
+  }
+
+  await assertOrganizationMember(new OrganizationsClient(ctx.connection.httpClient), org);
+  if (org === ctx.auth.orgKey) {
+    ctx.console.print(`Already using organization: ${org}`);
+    return;
+  }
+
+  await switchOrganization(ctx.auth, org);
+  ctx.console.print(`Switched to organization: ${org}`);
+}
+
+async function switchOrganization(auth: ResolvedAuth, org: string): Promise<void> {
+  const activeConnection = getActiveConnection(loadState());
+  await recordConnectionFromAuth(
+    new ResolvedAuth({
+      token: auth.token,
+      serverUrl: auth.serverUrl,
+      orgKey: org,
+      connectionType: auth.connectionType,
+      source: auth.source,
+    }),
+    { force: true, tokenName: activeConnection?.tokenName },
+  );
 }
 
 function assertNoEnvironmentAuthentication(auth: ResolvedAuth): void {
