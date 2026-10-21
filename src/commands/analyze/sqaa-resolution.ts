@@ -24,9 +24,10 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
-  type DiscoveredProject,
-  discoverProject,
+  type DiscoveredWorkspace,
   type DiscoverProjectOptions,
+  discoverWorkspace,
+  unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -46,13 +47,13 @@ const LARGE_CHANGESET_HINT =
  * - `resolved`: usable connection and project key.
  * - `no-org`: Cloud is authenticated but has no organization. `explicitProject` tells the
  *   caller whether the user named a project, which is what makes this fatal rather than a skip.
- * - `no-project`: auth is fine but no project is configured. The caller
- *   decides whether this is an error or a graceful skip.
+ * - `no-project`: auth is fine but no single project resolved; `remediationHint` says how to fix
+ *   it. The caller decides whether this is an error or a graceful skip.
  */
 export type SqaaResolution =
   | { kind: 'resolved'; connection: SonarConnection; projectKey: string; projectRoot: string }
   | { kind: 'no-org'; explicitProject: boolean }
-  | { kind: 'no-project' };
+  | { kind: 'no-project'; remediationHint: string };
 
 /**
  * Checks the connection is usable for SQAA and resolves the project key. Never throws or warns — every
@@ -82,8 +83,17 @@ export async function resolveSqaaConnectionAndProject(
   const discovered = await discoverSqaaProject(auth, console, lookupDir, {
     useGitRemoteBinding: !explicitProject,
   });
-  const projectKey = explicitProject ?? discovered.projectKey;
-  if (!projectKey) return { kind: 'no-project' };
+  let projectKey: string;
+  if (explicitProject) {
+    projectKey = explicitProject;
+  } else if (discovered.kind === 'project') {
+    projectKey = discovered.project.projectKey;
+  } else {
+    return {
+      kind: 'no-project',
+      remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: true }),
+    };
+  }
 
   noteProject(auth, projectKey);
   return {
@@ -99,17 +109,23 @@ export async function resolveSqaaConnectionAndProject(
  * different one falls back to the repository root.
  */
 function resolveSqaaProjectRoot(
-  discovered: DiscoveredProject,
+  discovered: DiscoveredWorkspace,
   projectKey: string,
   lookupDir: string,
 ): string {
-  if (discovered.projectKey === projectKey) return discovered.projectRoot;
-  return discovered.repoRoot ?? canonicalizePath(lookupDir);
+  if (discovered.kind === 'project' && discovered.project.projectKey === projectKey) {
+    return discovered.project.projectRoot;
+  }
+  const repoRoot =
+    discovered.kind === 'multi-project'
+      ? discovered.workspace.repoRoot
+      : discovered.project.repoRoot;
+  return repoRoot ?? canonicalizePath(lookupDir);
 }
 
 /**
  * Look up the current project via the shared project-discovery pipeline
- * (`discoverProject`): the known-server-project-mapping cache, local config files, then a
+ * (`discoverWorkspace`): the known-server-project-mapping cache, local config files, then a
  * git-remote-binding lookup against the server. Falls back to `process.cwd()` when no
  * `startDir` is given, so it works from a subdirectory or outside git.
  */
@@ -118,14 +134,14 @@ export async function discoverSqaaProject(
   console: Console,
   startDir?: string,
   options: Pick<DiscoverProjectOptions, 'useGitRemoteBinding'> = {},
-): Promise<DiscoveredProject> {
-  const discovered = await discoverProject(startDir ?? process.cwd(), {
+): Promise<DiscoveredWorkspace> {
+  const discovered = await discoverWorkspace(startDir ?? process.cwd(), {
     auth,
     silent: true,
     console,
     ...options,
   });
-  if (!discovered.projectKey) {
+  if (discovered.kind !== 'project') {
     logger.debug('Vortex analysis: no project key discovered');
   }
   return discovered;

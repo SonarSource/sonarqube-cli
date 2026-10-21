@@ -194,6 +194,21 @@ describe('sonar link', () => {
       expect(result.stdout + result.stderr).toContain('SonarQube Cloud server URL host');
     });
 
+    it('refuses to write a project entry that an existing projects array would shadow', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      const existing = {
+        projects: [{ projectKey: 'api', path: '.', serverUrl: SERVER_URL }],
+      };
+      harness.cwd.writeFile('.sonar-config.json', JSON.stringify(existing));
+
+      const result = await harness.run('link my_project --path .');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('already lists projects in its "projects" array');
+      expect(result.stderr).toContain("Run 'sonar link list' to see the linked projects.");
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual(existing);
+    });
+
     it('fails with a helpful message when --path escapes the repository root', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
 

@@ -41,7 +41,8 @@ import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   assertSingleLineProjectKey,
-  discoverProject,
+  discoverWorkspace,
+  unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -74,20 +75,23 @@ export interface DepRisksStageOptions {
   ctx: CommandInvocationContext;
 }
 
-async function resolveProjectKey(options: DepRisksStageOptions): Promise<string | undefined> {
+async function resolveProjectKey(
+  options: DepRisksStageOptions,
+): Promise<{ projectKey: string } | { remediationHint: string }> {
   if (options.project) {
     assertSingleLineProjectKey(options.project);
-    return options.project;
+    return { projectKey: options.project };
   }
-  const discovered = await discoverProject(process.cwd(), {
+  const discovered = await discoverWorkspace(process.cwd(), {
     auth: options.connection.auth,
     silent: true,
     console: options.ctx.console,
   });
-  if (discovered.projectKey) {
-    assertSingleLineProjectKey(discovered.projectKey);
+  if (discovered.kind !== 'project') {
+    return { remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: false }) };
   }
-  return discovered.projectKey;
+  assertSingleLineProjectKey(discovered.project.projectKey);
+  return { projectKey: discovered.project.projectKey };
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
@@ -105,15 +109,16 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
     return;
   }
 
-  const project = await resolveProjectKey(options);
-  if (!project) {
+  const resolved = await resolveProjectKey(options);
+  if ('remediationHint' in resolved) {
     logger.warn('Dependency-risks hook: no project key resolved, skipping.');
     console.warn(
       'Dependency-risks scan skipped: no SonarQube project resolved for this repo; ' +
-        "commit not blocked. Run 'sonar link <projectKey>' to link one to this repository.",
+        `commit not blocked. ${resolved.remediationHint}`,
     );
     return;
   }
+  const project = resolved.projectKey;
   noteProject(options.connection.auth, project);
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);

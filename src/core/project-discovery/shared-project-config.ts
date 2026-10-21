@@ -22,6 +22,7 @@ import { statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -162,6 +163,15 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
     const existing = await this.readExistingRootForWrite(dir);
+    if (Array.isArray(existing.projects)) {
+      // `projects` takes precedence on load, so the written `project` would never be read.
+      throw new CommandFailedError(
+        `${this.configPath(dir)} already lists projects in its "projects" array; a single "project" entry would be ignored.`,
+        {
+          remediationHint: `Add the project to the "projects" array by hand. Run 'sonar link list' to see the linked projects.`,
+        },
+      );
+    }
     const file: SharedProjectConfigFileDto = { ...existing, project: entry };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
