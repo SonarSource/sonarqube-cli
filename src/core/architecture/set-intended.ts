@@ -25,6 +25,13 @@ import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import {
+  AccessDeniedError,
+  BadRequestError,
+  ForbiddenApiError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
+import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
 import { toArchitectureError } from './errors.ts';
@@ -35,6 +42,7 @@ import { shellQuote } from './shell-quote.ts';
 import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;
+const VERIFICATION_DELAYS_MS = [0, 100, 250, 500];
 
 export type SetIntendedMode = 'dry-run' | 'unchanged' | 'created' | 'updated' | 'cleared';
 
@@ -96,11 +104,23 @@ async function writeModel(
   } catch (error) {
     writeError = toArchitectureError(error, projectKey);
     if (error instanceof IntendedModelIdentityError)
-      throw writeFailure(projectKey, writeError, backupPath);
+      throw writeFailure(projectKey, writeError, backupPath, undefined, 'identity-changed');
+    if (isRejectedWrite(error))
+      throw writeFailure(projectKey, writeError, backupPath, undefined, 'rejected');
   }
+  await verifyWrite(api, next, projectKey, backupPath, writeError);
+}
+
+async function verifyWrite(
+  api: ArchitectureApi,
+  next: IntendedArchitecture[],
+  projectKey: string,
+  backupPath: string | undefined,
+  writeError: unknown,
+): Promise<void> {
   const expectedRevision = revisionOf(next);
   let readError: unknown;
-  for (const delay of [0, 100, 250, 500]) {
+  for (const delay of VERIFICATION_DELAYS_MS) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     try {
       if (revisionOf(await api.getIntended()) === expectedRevision) return;
@@ -118,11 +138,18 @@ function writeFailure(
   error: unknown,
   backupPath?: string,
   readError?: unknown,
+  outcome: 'unconfirmed' | 'rejected' | 'identity-changed' = 'unconfirmed',
 ): CommandFailedError {
-  const lines = [
-    'The architecture write could not be confirmed; inspect the current server state before restoring. No automatic rollback was attempted.',
-    'The public read after writing did not confirm the requested model within the verification window.',
-  ];
+  const messages = {
+    unconfirmed:
+      'The architecture write could not be confirmed; inspect the current server state before restoring. No automatic rollback was attempted.',
+    rejected: 'The server rejected the architecture write. No automatic rollback was attempted.',
+    'identity-changed':
+      'The architecture write stopped because the model identity changed. No automatic rollback was attempted.',
+  };
+  const lines = [messages[outcome]];
+  if (outcome === 'unconfirmed')
+    lines.push('The public verification reads did not confirm the requested model.');
   if (error !== undefined) lines.push(`Write failed: ${messageOf(error)}`);
   if (readError !== undefined)
     lines.push(`The server state is unknown. Read failed: ${messageOf(readError)}`);
@@ -176,4 +203,13 @@ function staleError(projectKey: string): CommandFailedError {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRejectedWrite(error: unknown): boolean {
+  return (
+    error instanceof BadRequestError ||
+    error instanceof ForbiddenApiError ||
+    error instanceof AccessDeniedError ||
+    (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_BAD_REQUEST)
+  );
 }

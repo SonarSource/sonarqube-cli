@@ -752,6 +752,8 @@ describe('sonar architecture set on the public API', () => {
     );
     const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('server rejected the architecture write');
+    expect(result.stderr).not.toContain('verification');
     const backup = backupFrom(result.stderr);
     expect(result.stderr.match(/Administer Architecture permission/g)).toHaveLength(1);
     expect(result.stderr.match(/The previous export is saved in/g)).toHaveLength(1);
@@ -760,6 +762,30 @@ describe('sonar architecture set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
   });
+  for (const method of ['POST', 'DELETE'] as const) {
+    it(`reports a rejected ${method} without verification reads`, async () => {
+      const server = await startWith((fake) => {
+        if (method === 'DELETE') fake.withIntended(INTENDED);
+        fake.withStatus(
+          'intended-architectures',
+          400,
+          JSON.stringify({ message: 'Invalid model' }),
+          method,
+        );
+      });
+      const result = await setFile({ models: method === 'POST' ? NEXT : [] });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('server rejected the architecture write');
+      expect(result.stderr).toContain('Invalid model');
+      expect(result.stderr).not.toContain('verification');
+      expect(writes(server).map(({ method }) => method)).toEqual([method]);
+      expect(
+        server
+          .getRecordedRequests()
+          .filter(({ method, path }) => method === 'GET' && path === PUBLIC_PATH),
+      ).toHaveLength(method === 'POST' ? 1 : 2);
+    });
+  }
   it('preserves concurrent state after a rejected PATCH and never restores automatically', async () => {
     const concurrent = [{ ...NEXT[0], groups: [{ label: 'Concurrent', patterns: [] }] }];
     const server = await startWith((fake) =>
@@ -863,7 +889,7 @@ describe('sonar architecture set on the public API', () => {
     );
     const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('public read after writing did not confirm');
+    expect(result.stderr).toContain('public verification reads did not confirm');
     backupFrom(result.stderr);
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
@@ -975,7 +1001,7 @@ describe('sonar architecture set on the public API', () => {
         JSON.stringify({
           intendedArchitectures: INTENDED.map((model) => ({
             ...model,
-            id: '00000000-0000-4000-8000-000000000001',
+            id: '00000000-0000-4000-8000-000000000002',
           })),
         }),
         'PATCH',
@@ -983,7 +1009,14 @@ describe('sonar architecture set on the public API', () => {
     );
     const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('public read after writing did not confirm');
+    expect(result.stderr).toContain('write stopped because the model identity changed');
+    expect(result.stderr).not.toContain('verification');
+    expect(result.stderr).not.toContain('public read after writing did not confirm');
+    expect(
+      server
+        .getRecordedRequests()
+        .filter(({ method, path }) => method === 'GET' && path === PUBLIC_PATH),
+    ).toHaveLength(3);
     backupFrom(result.stderr);
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));

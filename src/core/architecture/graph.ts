@@ -177,14 +177,11 @@ export function sliceGraph(
       capped = true;
       omittedLevel = { depth: level, nodes: frontier.length };
       if (visible.length === 0) {
-        const kept = largest(graph, frontier, maxNodes);
-        visible.push(...kept);
-        if (kept.length > 0) levels.push({ depth: level, nodes: kept.length });
+        appendVisibleLevel(visible, levels, largest(graph, frontier, maxNodes), level);
       }
       break;
     }
-    visible.push(...frontier);
-    levels.push({ depth: level, nodes: frontier.length });
+    appendVisibleLevel(visible, levels, frontier, level);
     frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
   }
 
@@ -299,4 +296,14 @@ function rollUpEdges(
     else weights.set(pair, { from: fromKey, to: toKey, weight: edge.weight });
   }
   return { edges: [...weights.values()].sort((a, b) => b.weight - a.weight), outsideViewWeight };
+}
+
+function appendVisibleLevel(
+  visible: number[],
+  levels: GraphSlice['levels'],
+  nodes: number[],
+  depth: number,
+): void {
+  visible.push(...nodes);
+  if (nodes.length > 0) levels.push({ depth, nodes: nodes.length });
 }
