@@ -139,7 +139,7 @@ export class ServerImportApiClient {
       .get<{
         repositories?: GitlabRepositoryResponse[];
         paging?: { total?: number };
-      }>('/api/alm_integration/search_gitlab_repos', {
+      }>('/api/alm_integrations/search_gitlab_repos', {
         almSetting: settingKey,
         p: pageIndex,
         ps: pageSize,
