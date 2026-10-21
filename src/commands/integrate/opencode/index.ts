@@ -27,6 +27,11 @@ import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { OPENCODE_INTEGRATION_ID, type OpenCodeIntegrationOptions } from './declaration.ts';
+import { detectLegacyOpenCodeVersion } from './version.ts';
+
+function legacySetupCompleteMessage(version: string): string {
+  return `OpenCode ${version} detected. SonarQube setup is complete, but plugins are inactive until you upgrade to OpenCode 2.0.`;
+}
 
 export async function integrateOpenCode(
   options: IntegrateAgentOptions,
@@ -38,6 +43,7 @@ export async function integrateOpenCode(
   }
 
   await displayAgentIntegratePrelude('OpenCode', auth, console);
+  const legacyVersion = await detectLegacyOpenCodeVersion();
 
   await finalizeAgentInstall<OpenCodeIntegrationOptions>({
     integrationId: OPENCODE_INTEGRATION_ID,
@@ -45,4 +51,8 @@ export async function integrateOpenCode(
     auth,
     ctx,
   });
+  if (legacyVersion) {
+    console.blank();
+    console.warn(legacySetupCompleteMessage(legacyVersion));
+  }
 }
