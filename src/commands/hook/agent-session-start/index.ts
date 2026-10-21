@@ -31,9 +31,13 @@ import {
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
-import { discoverWorkspace } from '@/core/project-discovery/project-info.ts';
+import {
+  type CompleteProjectMapping,
+  isSameConnection,
+} from '@/core/project-discovery/project-discovery-result.ts';
+import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -157,30 +161,27 @@ async function resolveSessionStartTarget(
   auth: ResolvedAuth,
   ctx: CommandInvocationContext,
 ): Promise<SessionStartTarget | null> {
-  const discovered = await discoverWorkspace(startDir, {
+  const invocationDir = canonicalizePath(startDir);
+  const discovered = await discoverProjects(invocationDir, {
     auth,
     silent: true,
     console: ctx.console,
   });
-  switch (discovered.kind) {
-    case 'project': {
-      const { projectRoot, projectKey } = discovered.project;
-      noteProject(auth, projectKey);
-      return { workspaceDir: projectRoot, projectKey };
-    }
-    case 'multi-project':
-      if (!discovered.workspace.connection) {
-        logSkip('projects in this workspace use different connections');
-        return null;
-      }
-      return {
-        workspaceDir: discovered.workspace.workspaceRoot,
-        projects: discovered.workspace.projects,
-      };
-    case 'none':
-      logSkip('no project key resolved');
-      return null;
+  const scoped = discovered.scope(invocationDir);
+  if (scoped.length === 0) {
+    logSkip('no project key resolved');
+    return null;
   }
+  if (scoped.length === 1) {
+    const [{ projectRoot, projectKey }] = scoped;
+    noteProject(auth, projectKey);
+    return { workspaceDir: projectRoot, projectKey };
+  }
+  if (!isSameConnection(scoped)) {
+    logSkip('projects in this workspace use different connections');
+    return null;
+  }
+  return { workspaceDir: invocationDir, projects: scoped };
 }
 
 function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {

@@ -33,7 +33,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
-import type { DiscoveredWorkspace } from '@/core/project-discovery/project-info.ts';
+import { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -69,7 +69,7 @@ let createAnalysisSpy: ReturnType<typeof spyOn>;
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 let discoverProjectSpy: ReturnType<typeof spyOn>;
 
-/** Cloud state (project-key resolution is mocked separately via discoverProjectSpy on discoverWorkspace) */
+/** Cloud state (project-key resolution is mocked separately via discoverProjectSpy on discoverProjects) */
 function makeCloudState() {
   const state = getDefaultState('test');
   stateManager.addOrUpdateConnection(state, SONARCLOUD_URL, 'cloud', {
@@ -78,12 +78,12 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverWorkspace result carrying just enough for discoverSqaaProject to resolve `projectKey`. */
-function makeDiscoveredProject(projectKey: string | undefined): DiscoveredWorkspace {
-  const project = { repoRoot: process.cwd(), projectRoot: process.cwd() };
-  return projectKey
-    ? { kind: 'project', project: { ...project, projectKey } }
-    : { kind: 'none', project, fromSharedConfig: false };
+/** discoverProjects result carrying just enough for discoverSqaaProject to resolve `projectKey`. */
+function makeDiscoveredProject(projectKey: string | undefined): DiscoveredProjects {
+  const projects = projectKey
+    ? [{ projectRoot: process.cwd(), projectKey, serverUrl: 'https://sonarcloud.io' }]
+    : [];
+  return new DiscoveredProjects(process.cwd(), projects);
 }
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ beforeEach(() => {
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
-  discoverProjectSpy = spyOn(projectInfo, 'discoverWorkspace').mockResolvedValue(
+  discoverProjectSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
     makeDiscoveredProject(TEST_PROJECT),
   );
 
@@ -208,7 +208,7 @@ describe('analyzeSqaa: auth resolution', () => {
 });
 
 // Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
-// lives entirely inside discoverWorkspace/selectFeatureForLookupPaths, which this
+// lives entirely inside discoverProjects/selectFeatureForLookupPaths, which this
 // suite mocks away via discoverProjectSpy — see tests/unit/core/project-discovery/project-info.test.ts
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 

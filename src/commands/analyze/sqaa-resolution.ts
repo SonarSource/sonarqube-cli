@@ -23,10 +23,13 @@
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
+import type {
+  CompleteProjectMapping,
+  DiscoveredProjects,
+} from '@/core/project-discovery/project-discovery-result.ts';
 import {
-  type DiscoveredWorkspace,
   type DiscoverProjectOptions,
-  discoverWorkspace,
+  discoverProjects,
   unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
@@ -83,15 +86,16 @@ export async function resolveSqaaConnectionAndProject(
   const discovered = await discoverSqaaProject(auth, console, lookupDir, {
     useGitRemoteBinding: !explicitProject,
   });
-  let projectKey: string;
-  if (explicitProject) {
-    projectKey = explicitProject;
-  } else if (discovered.kind === 'project') {
-    projectKey = discovered.project.projectKey;
-  } else {
+  const scoped = discovered.scope(lookupDir);
+  const mapping = scoped.length === 1 ? scoped[0] : undefined;
+  if (!mapping) {
+    logger.debug('Vortex analysis: no project key discovered');
+  }
+  const projectKey = explicitProject ?? mapping?.projectKey;
+  if (!projectKey) {
     return {
       kind: 'no-project',
-      remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: true }),
+      remediationHint: unresolvedProjectHint(discovered, lookupDir, { acceptsProjectOption: true }),
     };
   }
 
@@ -100,7 +104,7 @@ export async function resolveSqaaConnectionAndProject(
     kind: 'resolved',
     connection,
     projectKey,
-    projectRoot: resolveSqaaProjectRoot(discovered, projectKey, lookupDir),
+    projectRoot: resolveSqaaProjectRoot(mapping, discovered, projectKey, lookupDir),
   };
 }
 
@@ -109,42 +113,33 @@ export async function resolveSqaaConnectionAndProject(
  * different one falls back to the repository root.
  */
 function resolveSqaaProjectRoot(
-  discovered: DiscoveredWorkspace,
+  mapping: CompleteProjectMapping | undefined,
+  discovered: DiscoveredProjects,
   projectKey: string,
   lookupDir: string,
 ): string {
-  if (discovered.kind === 'project' && discovered.project.projectKey === projectKey) {
-    return discovered.project.projectRoot;
-  }
-  const repoRoot =
-    discovered.kind === 'multi-project'
-      ? discovered.workspace.repoRoot
-      : discovered.project.repoRoot;
-  return repoRoot ?? canonicalizePath(lookupDir);
+  if (mapping?.projectKey === projectKey) return mapping.projectRoot;
+  return discovered.repoRoot ?? canonicalizePath(lookupDir);
 }
 
 /**
  * Look up the current project via the shared project-discovery pipeline
- * (`discoverWorkspace`): the known-server-project-mapping cache, local config files, then a
+ * (`discoverProjects`): the known-server-project-mapping cache, local config files, then a
  * git-remote-binding lookup against the server. Falls back to `process.cwd()` when no
  * `startDir` is given, so it works from a subdirectory or outside git.
  */
-export async function discoverSqaaProject(
+export function discoverSqaaProject(
   auth: ResolvedAuth,
   console: Console,
   startDir?: string,
   options: Pick<DiscoverProjectOptions, 'useGitRemoteBinding'> = {},
-): Promise<DiscoveredWorkspace> {
-  const discovered = await discoverWorkspace(startDir ?? process.cwd(), {
+): Promise<DiscoveredProjects> {
+  return discoverProjects(startDir ?? process.cwd(), {
     auth,
     silent: true,
     console,
     ...options,
   });
-  if (discovered.kind !== 'project') {
-    logger.debug('Vortex analysis: no project key discovered');
-  }
-  return discovered;
 }
 
 /**

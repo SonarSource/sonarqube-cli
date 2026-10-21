@@ -41,7 +41,7 @@ import { ResolveOnlySecretsInstaller } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   assertSingleLineProjectKey,
-  discoverWorkspace,
+  discoverProjects,
   unresolvedProjectHint,
 } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
@@ -82,16 +82,21 @@ async function resolveProjectKey(
     assertSingleLineProjectKey(options.project);
     return { projectKey: options.project };
   }
-  const discovered = await discoverWorkspace(process.cwd(), {
+  const cwd = process.cwd();
+  const discovered = await discoverProjects(cwd, {
     auth: options.connection.auth,
     silent: true,
     console: options.ctx.console,
   });
-  if (discovered.kind !== 'project') {
-    return { remediationHint: unresolvedProjectHint(discovered, { acceptsProjectOption: false }) };
+  const scoped = discovered.scope(cwd);
+  if (scoped.length !== 1) {
+    return {
+      remediationHint: unresolvedProjectHint(discovered, cwd, { acceptsProjectOption: false }),
+    };
   }
-  assertSingleLineProjectKey(discovered.project.projectKey);
-  return { projectKey: discovered.project.projectKey };
+  const [{ projectKey }] = scoped;
+  assertSingleLineProjectKey(projectKey);
+  return { projectKey };
 }
 
 export async function runDepRisksStage(options: DepRisksStageOptions): Promise<void> {
