@@ -31,7 +31,6 @@ import type {
   SkippedRepo,
 } from './repository-collection';
 import {
-  assertSupportedAlm,
   computeInstallationKey,
   type RepoResolution,
   resolveAlmKey,
@@ -73,10 +72,6 @@ async function resolveOrgAndRepos(
       },
     ),
   ]);
-
-  // Before any repository is listed, so an unsupported org stops here rather than after a full
-  // paginated fetch.
-  assertSupportedAlm(resolvedOrgKey, almKey);
 
   const onlyPrivateProjects: OnlyPrivateProjects = {
     enabled: onlyPrivateProjectsEnabled ?? false,
