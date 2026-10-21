@@ -33,6 +33,7 @@ import {
   assertSingleLineProjectKey,
   discoverProject,
 } from '@/core/project-discovery/project-info.ts';
+import { assertProjectInOrganization } from '@/core/project-organization.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
@@ -81,6 +82,10 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
+  const projectKey = await resolveProjectKey(options, auth, console);
+  noteProject(auth, projectKey);
+  await assertProjectInOrganization(ctx.connection, projectKey);
+
   const client = new RemediateApiClient(ctx.connection.httpClient);
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
@@ -89,8 +94,6 @@ export async function remediate(
 
   if (!(await confirmEntitlement(client, orgKey, console))) return;
 
-  const projectKey = await resolveProjectKey(options, auth, console);
-  noteProject(auth, projectKey);
   const selectedKeys =
     suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey, console));
   if (selectedKeys === null) return;
