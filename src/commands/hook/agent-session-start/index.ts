@@ -28,10 +28,20 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
+import {
+  type CompleteProjectMapping,
+  isSameConnection,
+} from '@/core/project-discovery/project-discovery-result.ts';
+import {
+  type DiscoveredProject,
+  discoverProject,
+  discoverProjects,
+} from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -46,6 +56,7 @@ import {
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { piAdapter } from './agent-adapters/pi-adapter.ts';
+import { buildMultiProjectContext } from './multi-project-context.ts';
 import { claimSessionWarning } from './session-warning.ts';
 import type {
   SessionStartAgent,
@@ -119,15 +130,12 @@ async function loadSessionStartContext(
   }
 
   const connection = await ctx.resolveConnection();
-  const discovered = await discoverProject(input.startDir ?? process.cwd(), {
+  const startDir = input.startDir ?? process.cwd();
+  const discovered = await discoverProject(startDir, {
     auth: connection?.auth ?? null,
     silent: true,
     console: ctx.console,
   });
-  if (discovered.ambiguousProject) {
-    logSkip('multiple projects matched the session directory');
-    return null;
-  }
   const hasSonarConfig = discovered.hasSonarConfig === true;
   if (!connection) {
     return hasSonarConfig
@@ -138,7 +146,7 @@ async function loadSessionStartContext(
   }
   const { auth } = connection;
 
-  if (!discovered.projectKey) {
+  if (!discovered.projectKey && !discovered.ambiguousProject) {
     if (!hasSonarConfig && !discovered.gitRemoteBindingNotFound) {
       logSkip('no project key or Sonar configuration resolved');
       return null;
@@ -147,7 +155,10 @@ async function loadSessionStartContext(
       "No project was found. Run 'sonar link <projectKey>' from the project directory.",
     );
   }
-  noteProject(auth, discovered.projectKey);
+  const target = await resolveSessionStartTarget(discovered, startDir, auth, ctx);
+  if (!target) {
+    return null;
+  }
 
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(connection),
@@ -171,8 +182,8 @@ async function loadSessionStartContext(
     binaryPath,
     scaEnabled,
     context: {
-      workspaceDir: discovered.projectRoot,
-      projectKey: discovered.projectKey,
+      workspaceDir: target.workspaceDir,
+      projectKey: target.projectKey,
       serverUrl: auth.serverUrl,
       token: auth.token,
       organization: auth.orgKey,
@@ -190,7 +201,38 @@ async function loadSessionStartContext(
     );
   }
 
-  return { additionalContext: result.stdout };
+  return {
+    additionalContext: target.projects
+      ? `${result.stdout.trimEnd()}\n\n${buildMultiProjectContext(target.workspaceDir, target.projects)}`
+      : result.stdout,
+  };
+}
+
+/** A multi-project workspace has no `projectKey`: CAG renders the session-start context from the organization alone. */
+type SessionStartTarget =
+  | { workspaceDir: string; projectKey: string; projects?: undefined }
+  | { workspaceDir: string; projectKey?: undefined; projects: CompleteProjectMapping[] };
+
+async function resolveSessionStartTarget(
+  discovered: DiscoveredProject,
+  startDir: string,
+  auth: ResolvedAuth,
+  ctx: CommandInvocationContext,
+): Promise<SessionStartTarget | null> {
+  if (discovered.projectKey) {
+    noteProject(auth, discovered.projectKey);
+    return { workspaceDir: discovered.projectRoot, projectKey: discovered.projectKey };
+  }
+  // Only `.sonar-config.json` yields several projects, so listing them needs no server lookup.
+  const invocationDir = canonicalizePath(startDir);
+  const scoped = (
+    await discoverProjects(invocationDir, { auth, silent: true, console: ctx.console })
+  ).scope(invocationDir);
+  if (!isSameConnection(scoped)) {
+    logSkip('projects in this workspace use different connections');
+    return null;
+  }
+  return { workspaceDir: invocationDir, projects: scoped };
 }
 
 function contextWarning(reason: string): SessionStartOutput {
