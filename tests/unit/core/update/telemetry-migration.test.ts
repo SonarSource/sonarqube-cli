@@ -108,6 +108,9 @@ describe('migrateLegacyTelemetryEvents', () => {
     const events = [makeLegacyCommandEvent('auth'), makeLegacyCommandEvent('analyze')];
     state.telemetry.events = events;
     loadStateSpy.mockReturnValue(state);
+    appendTelemetryEventSpy.mockImplementation(() => {
+      expect(state.telemetry.events).toEqual([]);
+    });
 
     migrateLegacyTelemetryEvents();
 
@@ -116,7 +119,7 @@ describe('migrateLegacyTelemetryEvents', () => {
     expect(appendTelemetryEventSpy).toHaveBeenNthCalledWith(2, events[1]);
 
     expect(updateStateSpy).toHaveBeenCalledTimes(1);
-    expect(state.telemetry.events).toBeUndefined();
+    expect(state.telemetry.events).toEqual([]);
   });
 
   it('renames the on-disk findings.ndjson sink to telemetry-events.ndjson', () => {
