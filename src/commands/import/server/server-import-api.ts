@@ -246,7 +246,7 @@ export class ServerImportApiClient {
   ): Promise<{ projects: BitbucketServerProjectResponse[]; nextStart?: number }> {
     const response = await this.client
       .get<BitbucketServerPagingResponse & { projects?: BitbucketServerProjectResponse[] }>(
-        '/api/alm_integration/list_bitbucketserver_projects',
+        '/api/alm_integrations/list_bitbucketserver_projects',
         { almSetting: settingKey, start, pageSize },
       )
       .orThrow();
@@ -265,7 +265,7 @@ export class ServerImportApiClient {
   ): Promise<{ repositories: BitbucketServerRepositoryResponse[]; nextStart?: number }> {
     const response = await this.client
       .get<BitbucketServerPagingResponse & { repositories?: BitbucketServerRepositoryResponse[] }>(
-        '/api/alm_integration/search_bitbucketserver_repos',
+        '/api/alm_integrations/search_bitbucketserver_repos',
         { almSetting: settingKey, projectName, start, pageSize },
       )
       .orThrow();
