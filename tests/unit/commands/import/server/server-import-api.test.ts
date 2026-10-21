@@ -326,7 +326,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ projects: [], isLastPage: true });
       await api.listBitbucketServerProjects('my-bbs', 25, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/list_bitbucketserver_projects');
+      expect(url.pathname).toBe('/api/alm_integrations/list_bitbucketserver_projects');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbs',
         start: '25',
@@ -377,7 +377,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], isLastPage: true });
       await api.searchBitbucketServerRepos('my-bbs', 'My Project', 50, 100);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketserver_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketserver_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbs',
         projectName: 'My Project',

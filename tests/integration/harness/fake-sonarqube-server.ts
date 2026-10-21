@@ -2255,13 +2255,13 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (
-          path === '/api/alm_integration/list_bitbucketserver_projects' ||
-          path === '/api/alm_integration/search_bitbucketserver_repos'
+          path === '/api/alm_integrations/list_bitbucketserver_projects' ||
+          path === '/api/alm_integrations/search_bitbucketserver_repos'
         ) {
           const configured = bitbucketServerProjects.get(query.almSetting ?? '');
           const projects = configured?.projects ?? [];
           const items =
-            path === '/api/alm_integration/list_bitbucketserver_projects'
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
               ? projects.map(({ key, name }) => ({ key, name }))
               : projects
                   .filter((p) =>
@@ -2278,7 +2278,7 @@ export class FakeSonarQubeServerBuilder {
           const end = start + limit;
           const isLastPage = end >= items.length;
           const listKey =
-            path === '/api/alm_integration/list_bitbucketserver_projects'
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
               ? 'projects'
               : 'repositories';
           return new Response(
