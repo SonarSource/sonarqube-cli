@@ -167,6 +167,19 @@ export function generateKeychainAccount(serverURL: string, org?: string): string
   }
 }
 
+export function normalizeServerUrl(serverURL: string): string {
+  try {
+    const url = new URL(serverURL);
+    let pathEnd = url.pathname.length;
+    while (pathEnd > 0 && url.pathname[pathEnd - 1] === '/') {
+      pathEnd--;
+    }
+    return url.origin + url.pathname.slice(0, pathEnd);
+  } catch {
+    return serverURL;
+  }
+}
+
 async function readSecret(account: string): Promise<string | null> {
   // Check cache first (avoids multiple keychain prompts)
   if (secretCache.has(account)) {

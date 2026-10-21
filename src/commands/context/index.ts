@@ -21,6 +21,7 @@
 import { spawn } from 'node:child_process';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { recordedConnectionCredentialSource } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
@@ -114,8 +115,24 @@ async function resolveContextToken(
   serverUrl: string,
   organization: string | undefined,
 ): Promise<string> {
-  if (auth.serverUrl === serverUrl && auth.orgKey === organization) {
+  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
+  const credentialSource = recordedConnectionCredentialSource(auth, serverUrl, organization);
+  if (credentialSource === 'active') {
     return auth.token;
+  }
+
+  if (credentialSource === 'different-server') {
+    const remediationHint = auth.comesFromEnv()
+      ? `Environment credentials point at ${auth.serverUrl}. Set SONARQUBE_CLI_SERVER=${serverUrl}` +
+        organizationHint +
+        ' with a matching SONARQUBE_CLI_TOKEN, or unset SONARQUBE_CLI_TOKEN, SONARQUBE_CLI_SERVER, and SONARQUBE_CLI_ORG, then ' +
+        `run sonar auth login --server ${serverUrl}.`
+      : `Run sonar auth login --server ${serverUrl} first.`;
+    throw new CommandFailedError(
+      `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
+      { remediationHint },
+    );
   }
 
   let token: string | null = null;
@@ -135,24 +152,19 @@ async function resolveContextToken(
     return token;
   }
 
-  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
-  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
     {
       // With a working keychain, logging in is the fix. If libsecret cannot be loaded,
       // `sonar auth login` cannot store its token in that keychain.
       //
-      // Naming the variables is not enough either. This branch is mostly reached when they are
-      // already set and simply point elsewhere, since environment credentials only apply when
-      // the server and organization match the recorded connection. So the values are named too.
+      // Environment credentials for another organization on this server are ignored here.
       remediationHint: keychainUnavailable
         ? 'The system keychain is unavailable because libsecret could not be loaded. Install or repair libsecret, or ' +
           `authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
           organizationHint +
           '. ' +
-          'Credentials pointing at a different server or organization are ignored, which is the ' +
-          'usual reason this appears when they look configured. ' +
+          'Credentials for another organization on this server are ignored. ' +
           'If the connection above is itself wrong, re-run sonar integrate claude or ' +
           'sonar integrate copilot from this project to record the right one.'
         : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',

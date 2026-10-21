@@ -133,12 +133,11 @@ describe('AuthResolver', () => {
       });
     });
 
-    it('records the connection as envOnly', async () => {
+    it('passes its environment source to the connection recorder', async () => {
       await new AuthResolver().resolveAuth();
 
       expect(recordConnectionSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ token: FAKE_TOKEN_ENV }),
-        { envOnly: true },
+        expect.objectContaining({ token: FAKE_TOKEN_ENV, source: 'env' }),
       );
     });
 

@@ -138,6 +138,34 @@ describe('sonar context passthrough', () => {
     { timeout: 30000 },
   );
 
+  it.each([
+    ['the active token', ORG_KEY, 'active-token'],
+    ['a stored token for another org', 'active-org', 'project-token'],
+  ])(
+    'accepts an equivalent recorded server URL with %s',
+    async (_source, activeOrg, expectedToken) => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const recordedUrl = `${serverUrl}/`;
+      harness.withAuth(serverUrl, 'active-token', activeOrg);
+      if (activeOrg !== ORG_KEY) {
+        harness.state().withKeychainToken(serverUrl, 'project-token', ORG_KEY);
+      }
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedUrl);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe(expectedToken);
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(recordedUrl);
+    },
+    { timeout: 30000 },
+  );
+
   it(
     'resolves the recorded project CAG connection from inside a linked git worktree',
     async () => {
@@ -347,8 +375,65 @@ describe('sonar context passthrough', () => {
       expect(result.stderr).toContain(
         `Not authenticated for the recorded Vortex Context connection: ${recordedServerUrl} (${ORG_KEY}).`,
       );
-      expect(result.stderr).toContain('sonar auth login');
+      expect(result.stderr).toContain(`sonar auth login --server ${recordedServerUrl}`);
       expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'directs environment-authenticated users to match the recorded server before logging in',
+    async () => {
+      const activeServer = await harness.newFakeServer().start();
+      const recordedServer = await harness.newFakeServer().start();
+      const recordedServerUrl = recordedServer.baseUrl();
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
+
+      const result = await harness.run('context status', {
+        extraEnv: {
+          SONARQUBE_CLI_TOKEN: 'environment-token',
+          SONARQUBE_CLI_SERVER: activeServer.baseUrl(),
+          SONARQUBE_CLI_ORG: 'active-org',
+        },
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`SONARQUBE_CLI_SERVER=${recordedServerUrl}`);
+      expect(result.stderr).toContain(`SONARQUBE_CLI_ORG=${ORG_KEY}`);
+      expect(result.stderr).toContain('with a matching SONARQUBE_CLI_TOKEN');
+      expect(result.stderr).toContain('unset SONARQUBE_CLI_TOKEN');
+      expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
+        false,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not read a stored token for a recorded URL that differs from the active connection',
+    async () => {
+      const activeServer = await harness.newFakeServer().start();
+      const recordedServer = await harness.newFakeServer().start();
+      const recordedServerUrl = recordedServer.baseUrl();
+      harness.withAuth(activeServer.baseUrl(), 'active-token', ORG_KEY);
+      harness
+        .state()
+        .withKeychainToken(recordedServerUrl, 'stored-token', ORG_KEY)
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'Not authenticated for the recorded Vortex Context connection',
+      );
+      expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
+        false,
+      );
     },
     { timeout: 30000 },
   );
