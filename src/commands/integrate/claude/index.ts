@@ -21,18 +21,11 @@
 // Integrate command - setup SonarQube integration for Claude Code
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { installIntegration } from '@/core/framework/features';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
-import {
-  displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
-} from '../_common/agent-integrate-prelude.ts';
-import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
-import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { resolveVortexSetup } from '../_common/vortex.ts';
-import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
 
 /**
@@ -49,36 +42,10 @@ export async function integrateClaude(
 
   await displayAgentIntegratePrelude('Claude Code', auth, console);
 
-  const vortex = await resolveVortexSetup(auth, console);
-  const featureAttrs = buildRecordedIntegrationAttrs({
-    serverUrl: auth.serverUrl,
-    orgKey: auth.orgKey,
-    contextAugmentation: vortex,
-  });
-  const { installRoot, installScope } = resolveIntegrateInstallTarget();
-  const integrationOptions = {
-    ...options,
-    vortexDisposition: vortex.disposition,
-  } satisfies ClaudeIntegrationOptions;
-  await installIntegration({
-    registry: supportedIntegrations,
+  await finalizeAgentInstall<ClaudeIntegrationOptions>({
     integrationId: CLAUDE_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot: installRoot,
-    scope: installScope,
-    console: ctx.console,
+    options,
     auth,
-    attrs: featureAttrs,
-    nonInteractive: options.nonInteractive,
-    onSuccess: (facts) => {
-      recordIntegrationConfigured(ctx, {
-        auth,
-        integrationId: CLAUDE_INTEGRATION_ID,
-        scope: installScope,
-        nonInteractive: options.nonInteractive ?? false,
-        isFromRouter: options.isFromRouter ?? false,
-        ...facts,
-      });
-    },
+    ctx,
   });
 }

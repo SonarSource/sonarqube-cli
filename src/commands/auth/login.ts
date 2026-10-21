@@ -52,8 +52,9 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -191,64 +192,98 @@ async function persistLoginCredentials(
 ): Promise<void> {
   const state = loadState();
   const existingConnection = getActiveConnection(state);
+  const matchesExistingConnection = matchesLoginConnection(existingConnection, server, org);
 
-  if (
-    !options.reusedExistingToken &&
-    existingConnection?.tokenName &&
-    normalizeServerUrl(existingConnection.serverUrl) === normalizeServerUrl(server) &&
-    existingConnection.orgKey === org
-  ) {
-    const previousToken = await getKeystoreToken(server, org);
-    if (previousToken && previousToken !== token) {
-      const outcome = await revokeServerTokenIfPossible(
-        { serverUrl: server, tokenName: existingConnection.tokenName },
-        previousToken,
-      );
-      if (options.console) {
-        reportRevokeServerTokenOutcome(outcome, {
-          continuingMessage: 'Continuing with login.',
-          console: options.console,
-        });
-      }
-    }
-  }
+  await revokePreviousLoginToken(existingConnection, server, org, token, options);
 
   await deleteStaleTokens(state.auth.connections, server, org);
   await saveToken(server, token, org);
 
   const connectionTokenName =
-    options.reusedExistingToken &&
-    existingConnection &&
-    normalizeServerUrl(existingConnection.serverUrl) === normalizeServerUrl(server) &&
-    existingConnection.orgKey === org
+    options.reusedExistingToken && existingConnection && matchesExistingConnection
       ? existingConnection.tokenName
       : options.tokenName;
   const actualToken = token || (await getKeystoreToken(server, org));
 
   if (actualToken) {
-    await recordConnectionFromAuth(
-      new ResolvedAuth({
-        token: actualToken,
-        serverUrl: server,
-        orgKey: org,
-        connectionType: isCloud ? 'cloud' : 'on-premise',
-        source: 'state',
-      }),
-      {
-        tokenName: connectionTokenName,
-        force: true,
-        refreshIdentity: options.refreshIdentity,
-      },
-    );
+    try {
+      await recordConnectionFromAuth(
+        new ResolvedAuth({
+          token: actualToken,
+          serverUrl: server,
+          orgKey: org,
+          connectionType: isCloud ? 'cloud' : 'on-premise',
+          source: 'state',
+        }),
+        {
+          tokenName: connectionTokenName,
+          force: true,
+          refreshIdentity: options.refreshIdentity,
+        },
+      );
+    } catch (error) {
+      throw new CommandFailedError(
+        `Token saved, but login state could not be updated: ${String(error)}`,
+      );
+    }
     return;
   }
 
-  addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-    orgKey: org,
-    region: cloudRegionFromUrl(server),
-    tokenName: connectionTokenName,
-  });
-  saveState(state);
+  try {
+    updateState((latest) => {
+      addOrUpdateConnection(latest, server, isCloud ? 'cloud' : 'on-premise', {
+        orgKey: org,
+        region: cloudRegionFromUrl(server),
+        tokenName: connectionTokenName,
+      });
+    });
+  } catch (error) {
+    throw new CommandFailedError(
+      `Token saved, but login state could not be updated: ${String(error)}`,
+    );
+  }
+}
+
+async function revokePreviousLoginToken(
+  connection: AuthConnection | undefined,
+  server: string,
+  org: string | undefined,
+  token: string,
+  options: PersistLoginOptions,
+): Promise<void> {
+  if (
+    options.reusedExistingToken ||
+    !connection?.tokenName ||
+    !matchesLoginConnection(connection, server, org)
+  ) {
+    return;
+  }
+  const previousToken = await getKeystoreToken(server, org);
+  if (!previousToken || previousToken === token) {
+    return;
+  }
+  const outcome = await revokeServerTokenIfPossible(
+    { serverUrl: server, tokenName: connection.tokenName },
+    previousToken,
+  );
+  if (options.console) {
+    reportRevokeServerTokenOutcome(outcome, {
+      continuingMessage: 'Continuing with login.',
+      console: options.console,
+    });
+  }
+}
+
+function matchesLoginConnection(
+  connection: AuthConnection | undefined,
+  server: string,
+  org: string | undefined,
+): boolean {
+  return (
+    connection !== undefined &&
+    normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server) &&
+    connection.orgKey === org
+  );
 }
 
 function assertNoEnvironmentAuthentication(): void {

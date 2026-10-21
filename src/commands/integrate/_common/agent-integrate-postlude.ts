@@ -31,6 +31,7 @@ import { supportedIntegrations } from '../index.ts';
 import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import { recordIntegrationConfigured } from './integrate-telemetry.ts';
+import { warnIfMcpRuntimeUnavailable } from './mcp-runtime-warning.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -45,6 +46,7 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
    * here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
+  installTarget?: ReturnType<typeof resolveIntegrateInstallTarget>;
 }
 
 /**
@@ -58,7 +60,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
 ): Promise<void> {
   const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
-  const { installRoot, installScope } = resolveIntegrateInstallTarget();
+  const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
     serverUrl: auth.serverUrl,
     orgKey: auth.orgKey,
@@ -89,4 +91,5 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       });
     },
   });
+  await warnIfMcpRuntimeUnavailable(params.ctx.console, params.integrationId, installRoot);
 }

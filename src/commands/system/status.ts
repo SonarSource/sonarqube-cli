@@ -27,6 +27,7 @@ import { parse as parseToml } from 'smol-toml';
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { getBanner } from '@/core/commands/root-help.ts';
@@ -42,6 +43,14 @@ import type {
 } from '@/core/host/connectivity/types.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import {
+  runtimeHealthMessage,
+  runtimeStatusLine,
+} from '@/core/host/environment/runtime-health-messages.ts';
+import {
+  checkContainerRuntimeHealth,
+  type ContainerRuntimeHealth,
+} from '@/core/host/environment/tool-detector.ts';
+import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
 } from '@/core/host/install/install-types.ts';
@@ -50,6 +59,7 @@ import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
 } from '@/core/host/install/signatures.ts';
+import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { CliState } from '@/core/state/state.ts';
 import { loadState } from '@/core/state/state-repository.ts';
@@ -72,6 +82,7 @@ import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
 import { checkForUpdate, type UpdateCheckResult } from '../update/update-check.ts';
+import { renderCodexInstallation } from './status-codex.ts';
 import {
   buildVortexJson,
   buildVortexRecommendation,
@@ -444,13 +455,28 @@ export async function systemStatus(
     integration.features.some(isVortexFeature),
   );
 
-  const [connection, updateResult] = await Promise.all([
-    ctx.resolveConnection(),
+  const connectionPromise = ctx.resolveConnection();
+  const [authenticated, updateResult, runtimeResult] = await Promise.all([
+    connectionPromise.then(async (connection) => ({
+      connection,
+      checks: await resolveAuthenticatedChecks(connection),
+    })),
     getCliUpdateInfo(),
+    integrations.some((integration) => integration.mcp?.config === 'configured')
+      ? checkContainerRuntimeHealth()
+          .then((runtime) => ({ runtime, runtimeError: null }))
+          .catch((error: unknown) => {
+            if (error instanceof InvalidOptionError) {
+              return { runtime: null, runtimeError: error.message };
+            }
+            throw error;
+          })
+      : { runtime: null, runtimeError: null },
   ]);
+  const { runtime, runtimeError } = runtimeResult;
+  const { connection, checks } = authenticated;
   const auth = connection?.auth ?? null;
-
-  const { tokenStatus, vortex } = await resolveAuthenticatedChecks(connection);
+  const { tokenStatus, vortex } = checks;
 
   const binaries = state.dependencies.installed
     .filter((d): d is typeof d & { path: string; version: string } => !!(d.path && d.version))
@@ -481,7 +507,10 @@ export async function systemStatus(
     present: existsSync(path) && statSync(path).isDirectory(),
   }));
 
-  const hasMcpIssues = integrations.some((i) => i.mcp?.config === 'invalid');
+  const hasMcpIssues =
+    runtimeError !== null ||
+    (runtime !== null && runtime.status !== 'ready') ||
+    integrations.some((integration) => integration.mcp?.config === 'invalid');
   const hasHooksIssues = integrations.some((i) => i.hooks?.config === 'invalid');
 
   const network = await getNetworkConfig();
@@ -496,12 +525,18 @@ export async function systemStatus(
   const recommendations = buildRecommendations(
     tokenStatus,
     updateResult,
-    integrations,
+    { integrations, runtime, runtimeError },
     network,
     vortex,
     vortexInstalled,
     auth,
   );
+  if (auth && integrations.some((integration) => integration.mcp?.config === 'configured')) {
+    const mcpAdvice = mcpLoopbackAdvice(auth, await readMcpContainerSettings());
+    if (mcpAdvice) {
+      recommendations.push(`MCP container networking: ${mcpAdvice}`);
+    }
+  }
 
   const data: StatusData = {
     auth,
@@ -509,6 +544,7 @@ export async function systemStatus(
     binaries,
     cache,
     integrations,
+    runtime,
     network,
     vortex,
     hasIssues,
@@ -538,22 +574,37 @@ interface StatusData {
   binaries: BinaryInfo[];
   cache: CacheInfo[];
   integrations: IntegrationInfo[];
+  runtime: ContainerRuntimeHealth | null;
   network: ResolvedNetworkConfig;
   vortex: VortexEntitlementResult;
   hasIssues: boolean;
   recommendations: string[];
 }
 
+function runtimeRecommendations(
+  runtime: ContainerRuntimeHealth | null,
+  runtimeError: string | null,
+): string[] {
+  if (runtimeError) return [runtimeError];
+  const message = runtimeHealthMessage(runtime);
+  return message ? [message] : [];
+}
+
 function buildRecommendations(
   tokenStatus: TokenCheckResult | null,
   updateResult: UpdateCheckResult | null,
-  integrations: IntegrationInfo[],
+  mcp: {
+    integrations: IntegrationInfo[];
+    runtime: ContainerRuntimeHealth | null;
+    runtimeError: string | null;
+  },
   network: ResolvedNetworkConfig,
   vortexEntitlement: VortexEntitlementResult,
   vortexInstalled: boolean,
   auth: ResolvedAuth | null,
 ): string[] {
   const recommendations: string[] = [];
+  const { integrations, runtime, runtimeError } = mcp;
   if (tokenStatus === null) recommendations.push("Run 'sonar auth login' to authenticate");
   if (tokenStatus?.status === 'invalid')
     recommendations.push("Run 'sonar auth login' to reauthenticate");
@@ -583,6 +634,8 @@ function buildRecommendations(
     const integrateCmd = INTEGRATION_TO_COMMAND[integration.id] ?? 'sonar integrate claude';
     recommendations.push(`Run '${integrateCmd}' to reinstall MCP configuration`);
   }
+
+  recommendations.push(...runtimeRecommendations(runtime, runtimeError));
 
   const seenHooksIntegrations = new Set<string>();
   for (const integration of integrations) {
@@ -626,6 +679,7 @@ function printJsonStatus(version: string, data: StatusData, console: Console): v
     binaries,
     cache,
     integrations,
+    runtime,
     network,
     vortex,
     hasIssues,
@@ -674,6 +728,7 @@ function printJsonStatus(version: string, data: StatusData, console: Console): v
               }
             : {}),
         })),
+        mcpRuntime: runtime,
         vortex: buildVortexJson(vortex),
         network: {
           proxy: network.proxy
@@ -754,13 +809,21 @@ function renderCacheSection(cache: CacheInfo[], console: Console): void {
   }
 }
 
-function renderIntegrationsSection(integrations: IntegrationInfo[], console: Console): void {
+function renderIntegrationsSection(
+  integrations: IntegrationInfo[],
+  runtime: ContainerRuntimeHealth | null,
+  console: Console,
+): void {
   if (integrations.length === 0) return;
   console.blank();
   console.text('INTEGRATIONS');
   for (const i of integrations) {
-    const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
-    console.text(`  • ${line}`);
+    if (i.id === 'codex') {
+      renderCodexInstallation(i.path, console);
+    } else {
+      const line = i.path ? `${i.name}: CONFIGURED (${i.path})` : `${i.name}: CONFIGURED`;
+      console.text(`  • ${line}`);
+    }
     if (i.mcp) {
       console.text(`    • MCP Server: ${mcpStatusLine(i.mcp)}`);
     }
@@ -768,6 +831,7 @@ function renderIntegrationsSection(integrations: IntegrationInfo[], console: Con
       console.text(`    • Secrets Hook: ${integrationConfigStatusLine(i.hooks.config)}`);
     }
   }
+  if (runtime) console.text(`  • MCP Runtime: ${runtimeStatusLine(runtime)}`);
 }
 
 function renderRecommendationsSection(recommendations: string[], console: Console): void {
@@ -847,6 +911,7 @@ function renderTextStatus(version: string, data: StatusData, console: Console): 
     binaries,
     cache,
     integrations,
+    runtime,
     network,
     vortex,
     hasIssues,
@@ -866,7 +931,7 @@ function renderTextStatus(version: string, data: StatusData, console: Console): 
   renderNetworkSection(network, console);
   renderBinariesSection(binaries, console);
   renderCacheSection(cache, console);
-  renderIntegrationsSection(integrations, console);
+  renderIntegrationsSection(integrations, runtime, console);
   renderVortexSection(vortex, console);
   renderRecommendationsSection(recommendations, console);
 }

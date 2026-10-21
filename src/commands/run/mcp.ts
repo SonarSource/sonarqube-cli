@@ -25,16 +25,25 @@ import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
-import { detectContainerRuntime } from '@/core/host/environment/tool-detector.ts';
+import {
+  type ContainerRuntimeDetection,
+  detectContainerRuntime,
+} from '@/core/host/environment/tool-detector.ts';
 import {
   clientCertCachePath,
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import {
+  isLoopbackServerUrl,
+  mcpLoopbackAdvice,
+  readMcpContainerSettings,
+  resolveMcpContainerNetworking,
+} from '@/core/host/mcp/mcp-network.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -51,6 +60,9 @@ export interface McpRunOptions {
 
 const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
 const INTERNAL_ERROR_CODE = -32000;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
+const CONTAINER_SHUTDOWN_EXIT_CODES = new Set([INTERRUPTED_EXIT_CODE, TERMINATED_EXIT_CODE]);
 
 function debugLog(message: string): void {
   logger.debug(message);
@@ -80,11 +92,7 @@ export async function runMcp(
     const { console } = ctx;
     const detection = await detectContainerRuntime();
     if (!detection.runtime) {
-      await failStartup(
-        new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
-          remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
-        }),
-      );
+      await failStartup(runtimeDetectionError(detection));
       return;
     }
 
@@ -114,7 +122,20 @@ export async function runMcp(
       ? { withFsMount: true, projectRoot, projectKey }
       : { withFsMount: false, projectKey };
 
-    const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
+    const settings = await readMcpContainerSettings();
+    const container = resolveMcpContainerNetworking(auth, detection, settings);
+    const config = resolveMcpContainerCommand(
+      auth,
+      detection,
+      context,
+      {
+        ...options,
+        containerNetwork: container.network,
+        containerAddHost: container.addHost,
+        containerServerUrl: container.serverUrl,
+      },
+      resolvedNetwork,
+    );
     cachedCaCertPath = config.cachedCaCertPath;
 
     if (options.debug) {
@@ -133,6 +154,18 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
+        const networkHint = mcpLoopbackAdvice(auth, settings);
+        if (
+          code !== null &&
+          code !== 0 &&
+          !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
+          isLoopbackServerUrl(container.serverUrl) &&
+          networkHint
+        ) {
+          process.stderr.write(
+            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
+          );
+        }
         resolve();
       });
     });
@@ -152,7 +185,7 @@ export async function runMcp(
     const message = startupError.remediationHint
       ? `${startupError.message} ${startupError.remediationHint}`
       : startupError.message;
-    await respondToInitializeWithError(message);
+    await respondToInitializeWithError(message, startupError.exitCode);
   }
 
   function cleanup(network: ResolvedNetworkConfig) {
@@ -174,8 +207,33 @@ export async function runMcp(
   }
 }
 
-function asStartupError(error: unknown): CommandFailedError {
-  if (error instanceof CommandFailedError) {
+function runtimeDetectionError(detection: ContainerRuntimeDetection): CommandFailedError {
+  const failure = detection.nativeFailure;
+  if (failure) {
+    const exit = failure.exitCode === null ? '' : ` (exit ${failure.exitCode})`;
+    return new CommandFailedError(
+      `${failure.runtime[0].toUpperCase()}${failure.runtime.slice(1)} is installed but not reachable${exit}: ${failure.stderr || 'No error output.'}`,
+      {
+        remediationHint: `Start ${failure.runtime} and rerun this command, or set SONARQUBE_CLI_MCP_WSL=always if your container runtime runs in WSL.`,
+      },
+    );
+  }
+  if (detection.wslOnly) {
+    return new CommandFailedError(
+      'No container runtime (Docker/Podman/Nerdctl) is available in WSL.',
+      {
+        remediationHint:
+          'SONARQUBE_CLI_MCP_WSL=always checks WSL only. Start your runtime in WSL, or set SONARQUBE_CLI_MCP_WSL=auto to check native runtimes.',
+      },
+    );
+  }
+  return new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
+    remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+  });
+}
+
+function asStartupError(error: unknown): CliError {
+  if (error instanceof CliError) {
     return error;
   }
   return new CommandFailedError(
@@ -184,7 +242,7 @@ function asStartupError(error: unknown): CommandFailedError {
   );
 }
 
-async function respondToInitializeWithError(message: string): Promise<void> {
+async function respondToInitializeWithError(message: string, exitCode: number): Promise<void> {
   const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
   for await (const line of input) {
     const request = parseInitializeRequest(line);
@@ -200,10 +258,10 @@ async function respondToInitializeWithError(message: string): Promise<void> {
       })}\n`,
     );
     input.close();
-    process.exitCode = 1;
+    process.exitCode = exitCode;
     return;
   }
-  process.exitCode = 1;
+  process.exitCode = exitCode;
 }
 
 function parseInitializeRequest(line: string): { id: unknown } | undefined {

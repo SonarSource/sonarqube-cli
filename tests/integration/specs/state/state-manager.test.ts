@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { readFileSync, writeFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { version as CLI_VERSION } from '../../../../package.json';
@@ -64,4 +66,42 @@ describe('loadState', () => {
     },
     { timeout: 15000 },
   );
+});
+
+describe('updateState', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it('reports how to repair a corrupt lock without changing state or deleting the lock', async () => {
+    harness.state().withActiveConnection('https://sq.example.com');
+    await harness.run('system status');
+    const originalAuth = harness.stateJsonFile.asJson().auth as {
+      isAuthenticated: boolean;
+      activeConnectionId: string;
+      connections: unknown[];
+    };
+    const lockFile = `${harness.stateJsonFile.path}.lock.sqlite`;
+    writeFileSync(lockFile, 'not a database');
+
+    const result = await harness.run('auth logout');
+
+    expect(result.exitCode).toBe(1);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain(`State lock database is corrupt at ${lockFile}`);
+    expect(output).toContain(
+      'Stop all sonar CLI processes. Remove the corrupt lock file, then retry.',
+    );
+    const savedAuth = harness.stateJsonFile.asJson().auth as typeof originalAuth;
+    expect(savedAuth.isAuthenticated).toBe(originalAuth.isAuthenticated);
+    expect(savedAuth.activeConnectionId).toBe(originalAuth.activeConnectionId);
+    expect(savedAuth.connections).toHaveLength(originalAuth.connections.length);
+    expect(readFileSync(lockFile, 'utf-8')).toBe('not a database');
+  });
 });

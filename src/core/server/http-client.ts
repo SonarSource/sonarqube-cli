@@ -213,7 +213,14 @@ export class SonarHttpClient {
         console.print(`response status: ${response.status}`, 'stderr');
         console.print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
       }
-      return this.toStatusCheckedResult(response, method, () => response.text());
+      return ResultAsync.fromPromise(response.text(), (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return response.ok
+          ? new UnexpectedApiError(response.status, message)
+          : genericStatusError(response, message);
+      }).andThen((body) =>
+        response.ok ? okAsync(body) : errAsync(genericStatusError(response, body)),
+      );
     });
   }
 
@@ -270,7 +277,7 @@ export class SonarHttpClient {
    * A transport failure (DNS/TLS, connection refused,
    * timeout) becomes `TransportError`; a body-parse failure on an otherwise-2xx response becomes
    * `UnexpectedApiError` instead, since the server did answer. Same split as
-   * `toStatusCheckedResult` below, so a malformed body classifies the same way regardless
+   * `genericRequest` and `toStatusCheckedResult`, so a malformed body classifies the same way regardless
    * of which method reads it.
    */
   getSafe<TValue>(
@@ -447,8 +454,9 @@ export class SonarHttpClient {
  * Wraps whatever escaped the request itself as a `TransportError`: a throw from
  * `fetchAuthenticated` (DNS/TLS/proxy failure, connection refused, timeout, abort), before
  * any response was received. A body-parse failure on a response that did arrive is a
- * separate case, classified as `UnexpectedApiError` instead; see `getSafe` and
- * `toStatusCheckedResult`, the only two places that read a body.
+ * separate case: `genericRequest` preserves non-2xx status classes, while successful
+ * responses with unreadable bodies become `UnexpectedApiError`; see also `getSafe`
+ * and `toStatusCheckedResult`.
  *
  * `NetworkConfigError` is passed through unwrapped: it already describes the failure
  * precisely and is matched by name elsewhere (e.g. `remediationHintFor`), so re-wrapping
@@ -488,6 +496,19 @@ async function readStructuredErrorBody(response: Response): Promise<{
   } catch {
     return { text };
   }
+}
+
+function genericStatusError(response: Response, body: string): HttpClientError {
+  const message = apiErrorFallbackMessage(response, body);
+  if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
+    return new RateLimitError(message);
+  }
+  if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
+    return new ServiceUnavailableError(message);
+  }
+  return response.status >= HTTP_STATUS_INTERNAL_SERVER_ERROR
+    ? new ServerError(response.status, message)
+    : new UnexpectedApiError(response.status, message);
 }
 
 function apiErrorFallbackMessage(response: Response, text: string, emptyBodyHint?: string): string {
