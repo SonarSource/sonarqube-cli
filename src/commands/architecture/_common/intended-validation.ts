@@ -35,13 +35,13 @@ const MAX_GROUP_DEPTH = 64;
 const MAX_GROUPS = 50_000;
 const MAX_REPORTED_PROBLEMS = 10;
 const FULL_EXPORT_HINT =
-  'Export again without --component or --depth: sonar architecture get intended --format json.';
+  'Export again without --component or --depth: sonar architecture intended get --format json.';
 export const VALID_MODEL_RULES =
   'Each model requires type (file or namespace), a supported language, groups and constraints arrays. ' +
   'Groups require a label; optional patterns contain strings. Constraints require from and to strings. ' +
   'Group keys must be unambiguous and duplicate constraints are rejected by this client.';
 
-/** A model file, as `get intended --format json` writes it, or a bare array of models. */
+/** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
   models: IntendedArchitecture[];
   /** The revision the file was read at; absent from a hand-written file. */
@@ -91,7 +91,7 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
     perspectives.add(perspective);
     if (typeof scope === 'string' && model.language !== scope) {
       problems.push(
-        `The file holds only the ${scope} model (get intended --language ${scope}), but models[${index}] is ${model.language}.`,
+        `The file holds only the ${scope} model (intended get --language ${scope}), but models[${index}] is ${model.language}.`,
       );
     }
     return [model];

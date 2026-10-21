@@ -18,11 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar architecture get current|intended`
+// Integration tests for current and intended architecture reads.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { IntendedArchitecture, StructureGraph } from '@/core/architecture/architecture-api.ts';
+import type {
+  IntendedArchitecture,
+  StructureGraph,
+} from '@/commands/architecture/_common/architecture-api.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import {
@@ -91,6 +94,7 @@ interface CurrentPayload {
     feedbackPairs: { total: number; heaviest: Array<{ from: string; to: string; weight: number }> };
     outsideViewWeight: number;
     capped: boolean;
+    omittedEdges: number;
     depth: number;
     requestedDepth: number;
     nodeLimit: number;
@@ -100,7 +104,7 @@ interface CurrentPayload {
   }>;
 }
 
-describe('sonar architecture get', () => {
+describe('sonar architecture reads', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -132,7 +136,7 @@ describe('sonar architecture get', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain("unknown command 'architecture'");
 
-      const alias = await harness.run('arch get current', {
+      const alias = await harness.run('arch current get', {
         extraEnv: { [ALPHA_ENV_VAR]: 'false' },
       });
       expect(alias.exitCode).toBe(1);
@@ -147,10 +151,51 @@ describe('sonar architecture get', () => {
     'lists architecture with its arch alias in the Alpha root help',
     async () => {
       const help = await harness.run('--help');
-      expect(help.stdout).toContain('architecture|arch <get|set');
+      expect(help.stdout).toContain('architecture|arch <current|intended');
     },
     { timeout: 15000 },
   );
+
+  it('caps edges and feedback pairs across languages while preserving totals', async () => {
+    const dense = (weight: number): StructureGraph => ({
+      nodeCount: 8,
+      edgeCount: 56,
+      nodes: Array.from({ length: 8 }, (_, id) => ({
+        id,
+        name: `node-${id}`,
+        kind: 'module',
+        edges: Array.from({ length: 8 }, (_, toId) => ({
+          toId,
+          weight: weight + id + toId,
+        })).filter((edge) => edge.toId !== id),
+      })),
+    });
+    await serverWith((project) =>
+      project.withArchitecture((architecture) =>
+        architecture.withStructure('java', [dense(1)]).withStructure('ts', [dense(100)]),
+      ),
+    );
+    const command = `architecture current get -p ${PROJECT} --format json`;
+    const result = await harness.run(command);
+    expect(result.exitCode).toBe(0);
+    const { languages } = JSON.parse(result.stdout) as CurrentPayload;
+    expect(languages).toHaveLength(2);
+    expect(languages.reduce((count, view) => count + view.edges.length, 0)).toBe(20);
+    expect(languages.reduce((count, view) => count + view.feedbackPairs.heaviest.length, 0)).toBe(
+      5,
+    );
+    for (const view of languages) {
+      expect(view.feedbackPairs.total).toBe(28);
+      expect(view.edges.length + view.omittedEdges).toBe(56);
+    }
+    expect(languages[0].edges).toHaveLength(0);
+    expect(languages[1].edges.every((edge) => edge.weight >= 100)).toBe(true);
+    expect(languages[0].nodes.map(({ key }) => key)).toEqual(
+      Array.from({ length: 8 }, (_, id) => `node-${id}`),
+    );
+    const repeated = await harness.run(command);
+    expect(JSON.parse(repeated.stdout)).toEqual(JSON.parse(result.stdout));
+  });
 
   it(
     'caps a large project and points to drill-down commands',
@@ -158,7 +203,7 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
 
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --depth 3 --format json`,
+        `architecture current get --project ${PROJECT} --depth 3 --format json`,
       );
 
       expect(result.exitCode).toBe(0);
@@ -170,7 +215,7 @@ describe('sonar architecture get', () => {
       expect(java.nodes.length).toBeLessThanOrEqual(150);
       expect(java.drillDown.length).toBeGreaterThan(0);
       expect(java.drillDown[0]).toStartWith(
-        `sonar architecture get current --project ${PROJECT} --component `,
+        `sonar architecture current get --project ${PROJECT} --component `,
       );
       expect(java.summary).toContain('would exceed the 150-node cap');
       expect(java.requestedDepth).toBe(3);
@@ -193,7 +238,7 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
 
       const full = await harness.run(
-        `architecture get current --project ${PROJECT} --language java --format json`,
+        `architecture current get --project ${PROJECT} --language java --format json`,
       );
       const payload = JSON.parse(full.stdout) as CurrentPayload;
       expect(payload.languages[0].capped).toBe(false);
@@ -201,9 +246,9 @@ describe('sonar architecture get', () => {
       expect(payload.languages[0].nodes.every((node) => node.kind === 'module')).toBe(true);
       expect(payload.languages[0].edges.length).toBeGreaterThan(0);
 
-      const viaAlias = await harness.run(`arch get current --project ${PROJECT} --language java`);
+      const viaAlias = await harness.run(`arch current get --project ${PROJECT} --language java`);
       const viaName = await harness.run(
-        `architecture get current --project ${PROJECT} --language java`,
+        `architecture current get --project ${PROJECT} --language java`,
       );
       expect(viaAlias.exitCode).toBe(0);
       expect(viaAlias.stdout).toBe(viaName.stdout);
@@ -218,7 +263,7 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
 
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --component module-00 --depth 2 --format json`,
+        `architecture current get --project ${PROJECT} --component module-00 --depth 2 --format json`,
       );
 
       expect(result.exitCode).toBe(0);
@@ -239,7 +284,7 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
 
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --component module-00 --depth 2 --format json`,
+        `architecture current get --project ${PROJECT} --component module-00 --depth 2 --format json`,
       );
 
       expect(result.exitCode).toBe(0);
@@ -261,14 +306,14 @@ describe('sonar architecture get', () => {
     async () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
 
-      const result = await harness.run(`architecture get current --project ${PROJECT}`);
+      const result = await harness.run(`architecture current get --project ${PROJECT}`);
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(
         [
           '    drillDown[5]{command}:',
           ...['module-00', 'module-01', 'module-02', 'module-03', 'module-04'].map(
-            (key) => `      sonar architecture get current --project ${PROJECT} --component ${key}`,
+            (key) => `      sonar architecture current get --project ${PROJECT} --component ${key}`,
           ),
         ].join('\n'),
       );
@@ -280,7 +325,7 @@ describe('sonar architecture get', () => {
     'prints a text summary with --format text, and by default on a terminal',
     async () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SYNTHETIC_GRAPH)));
-      const command = `architecture get current --project ${PROJECT} --component module-00 --depth 2`;
+      const command = `architecture current get --project ${PROJECT} --component module-00 --depth 2`;
 
       const text = await harness.run(`${command} --format text`);
 
@@ -299,7 +344,7 @@ describe('sonar architecture get', () => {
       expect(drillDown).toHaveLength(5);
       expect(
         drillDown.every((line) =>
-          line.startsWith(`  sonar architecture get current --project ${PROJECT} --component `),
+          line.startsWith(`  sonar architecture current get --project ${PROJECT} --component `),
         ),
       ).toBe(true);
 
@@ -315,12 +360,12 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SMALL_GRAPH)));
 
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --component nope`,
+        `architecture current get --project ${PROJECT} --component nope`,
       );
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain("No node 'nope' in the current architecture.");
-      expect(result.stderr).toContain("'sonar architecture get current' without --component");
+      expect(result.stderr).toContain("'sonar architecture current get' without --component");
     },
     { timeout: 15000 },
   );
@@ -332,7 +377,7 @@ describe('sonar architecture get', () => {
         p.withArchitecture((a) => a.withStructure('java', SMALL_GRAPH)),
       );
 
-      const all = await harness.run(`architecture get current --project ${PROJECT} --format json`);
+      const all = await harness.run(`architecture current get --project ${PROJECT} --format json`);
       expect(all.exitCode).toBe(0);
       const structureCalls = () =>
         server
@@ -352,25 +397,26 @@ describe('sonar architecture get', () => {
       expect(payload.languages[0].edges).toEqual([{ from: 'app', to: 'core', weight: 4 }]);
 
       const before = structureCalls().length;
-      await harness.run(`architecture get current --project ${PROJECT} --language ts`);
+      await harness.run(`architecture current get --project ${PROJECT} --language ts`);
       expect(structureCalls().length - before).toBe(1);
     },
     { timeout: 15000 },
   );
 
   it(
-    'says there is no architecture yet, with exit code 0, when nothing was analyzed',
+    'reports an empty current response without claiming why data is missing',
     async () => {
       await serverWith();
 
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --format json`,
+        `architecture current get --project ${PROJECT} --format json`,
       );
 
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({ project: PROJECT, languages: [] });
-      expect(result.stderr).toContain(`No current architecture yet for '${PROJECT}'`);
-      expect(result.stderr).toContain('Run an analysis');
+      expect(result.stderr).toContain(`No current architecture was returned for '${PROJECT}'`);
+      expect(result.stderr).toContain('does not indicate whether analysis is missing');
+      expect(result.stderr).not.toContain('Run an analysis');
     },
     { timeout: 15000 },
   );
@@ -382,7 +428,7 @@ describe('sonar architecture get', () => {
         p.withArchitecture((a) => a.withStatus('current-architectures', 403)),
       );
 
-      const result = await harness.run(`architecture get current --project ${PROJECT}`);
+      const result = await harness.run(`architecture current get --project ${PROJECT}`);
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
@@ -408,10 +454,10 @@ describe('sonar architecture get', () => {
       harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
 
       const current = await harness.run(
-        `architecture get current --project ${PROJECT} --language java --format json`,
+        `architecture current get --project ${PROJECT} --language java --format json`,
       );
       const intended = await harness.run(
-        `architecture get intended --project ${PROJECT} --format json`,
+        `architecture intended get --project ${PROJECT} --format json`,
       );
 
       expect(current.exitCode).toBe(0);
@@ -439,10 +485,10 @@ describe('sonar architecture get', () => {
       const server = await serverWith((p) => p.withArchitecture((a) => a.withIntended(INTENDED)));
 
       const result = await harness.run(
-        `architecture get intended --project ${PROJECT} --format json`,
+        `architecture intended get --project ${PROJECT} --format json`,
       );
       const python = await harness.run(
-        `architecture get intended --project ${PROJECT} --language py --format json`,
+        `architecture intended get --project ${PROJECT} --language py --format json`,
       );
 
       expect(result.exitCode).toBe(0);
@@ -475,7 +521,7 @@ describe('sonar architecture get', () => {
         JSON.parse(
           (
             await harness.run(
-              `architecture get intended --project ${PROJECT} ${flags} --format json`,
+              `architecture intended get --project ${PROJECT} ${flags} --format json`,
             )
           ).stdout,
         ) as { revision: string; language?: string; models: IntendedArchitecture[] };
@@ -497,7 +543,7 @@ describe('sonar architecture get', () => {
     'prints the intended groups tree with --format text, and by default on a terminal',
     async () => {
       await serverWith((p) => p.withArchitecture((a) => a.withIntended(INTENDED)));
-      const command = `architecture get intended --project ${PROJECT}`;
+      const command = `architecture intended get --project ${PROJECT}`;
 
       const text = await harness.run(`${command} --format text`);
       const json = JSON.parse((await harness.run(`${command} --format json`)).stdout) as {
@@ -527,13 +573,13 @@ describe('sonar architecture get', () => {
       await serverWith((p) => p.withArchitecture((a) => a.withIntended(INTENDED)));
 
       const top = await harness.run(
-        `architecture get intended --project ${PROJECT} --depth 1 --format json`,
+        `architecture intended get --project ${PROJECT} --depth 1 --format json`,
       );
       const domain = await harness.run(
-        `architecture get intended --project ${PROJECT} --component Domain --format json`,
+        `architecture intended get --project ${PROJECT} --component Domain --format json`,
       );
       const unknown = await harness.run(
-        `architecture get intended --project ${PROJECT} --component Nope`,
+        `architecture intended get --project ${PROJECT} --component Nope`,
       );
 
       const topView = JSON.parse(top.stdout) as Record<string, unknown>;

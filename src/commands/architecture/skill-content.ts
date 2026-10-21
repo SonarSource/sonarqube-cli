@@ -42,7 +42,7 @@ parameters, defaults and availability. In CLI Alpha, enable \`SONARQUBE_CLI_ALPH
 with \`sonar architecture --help\`. The skill is installed as a local copy; use the installed
 interface as the authority for syntax.
 
-Use the configured connection and organization. Resolve the project from the user's request or
+Authenticate with the CLI before installing or using the skill. Use the configured connection and organization. Resolve the project from the user's request or
 integration configuration; ask if it is unknown. Use component references returned by reads.
 Only the public Architecture API is supported. Report request failures; do not try private
 endpoints or an API mode switch.
@@ -50,7 +50,7 @@ endpoints or an API mode switch.
 ## Read within context limits
 
 Read only the scope the user requests. For current architecture, use only the bounded CLI or MCP
-read operations. The clients cap the nodes returned before exposing the response to the agent;
+read operations. The clients cap nodes, dependencies and feedback pairs before exposing the response to the agent;
 this is a node limit, not an absolute token budget. Preserve returned limits, omissions,
 truncation and partial-view warnings.
 

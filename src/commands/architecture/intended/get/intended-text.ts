@@ -18,14 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Human-readable `sonar architecture get intended --format text`.
+// Human-readable `sonar architecture intended get --format text`.
 
-import type { IntendedArchitecture, IntendedGroup } from '@/core/architecture/architecture-api.ts';
+import type {
+  IntendedArchitecture,
+  IntendedGroup,
+} from '@/commands/architecture/_common/architecture-api.ts';
 import {
   GROUP_KEY_SEPARATOR,
   type IntendedGroupView,
   type IntendedView,
-} from '@/core/architecture/intended-model.ts';
+} from '@/commands/architecture/_common/intended-model.ts';
 import { bold, dim } from '@/core/ui/colors.ts';
 
 const MAX_TEXT_LINES = 120;

@@ -117,7 +117,7 @@ export function assertGroupExists(models: IntendedArchitecture[], component: str
   if (models.some((model) => findGroup(model.groups, component) !== undefined)) return;
   throw new CommandFailedError(`No group '${component}' in the intended architecture.`, {
     remediationHint:
-      "Run 'sonar architecture get intended' without --component to list the top-level group keys.",
+      "Run 'sonar architecture intended get' without --component to list the top-level group keys.",
   });
 }
 

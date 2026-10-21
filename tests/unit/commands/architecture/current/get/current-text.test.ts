@@ -20,13 +20,13 @@
 
 import { describe, expect, it } from 'bun:test';
 
+import type { GraphSlice } from '@/commands/architecture/_common/graph.ts';
 import {
   formatCurrentText as formatColored,
   formatSliceLimit,
   relativeLabels,
   uniqueLabels,
-} from '@/commands/architecture/current-text.ts';
-import type { GraphSlice } from '@/core/architecture/graph.ts';
+} from '@/commands/architecture/current/get/current-text.ts';
 import { stripAnsi } from '@/core/ui/colors.ts';
 
 const formatCurrentText: typeof formatColored = (...args) => stripAnsi(formatColored(...args));
@@ -98,8 +98,8 @@ describe('formatCurrentText', () => {
         }),
         groups: ['app', 'core'],
         drillDown: [
-          'sonar architecture get current --project p --component app',
-          'sonar architecture get current --project p --component core',
+          'sonar architecture current get --project p --component app',
+          'sonar architecture current get --project p --component core',
         ],
       },
     ]);
@@ -113,8 +113,8 @@ describe('formatCurrentText', () => {
         '  app <-> core  (7)',
         'plus 3 units to nodes outside this view',
         'Drill down:',
-        '  sonar architecture get current --project p --component app',
-        '  sonar architecture get current --project p --component core',
+        '  sonar architecture current get --project p --component app',
+        '  sonar architecture current get --project p --component core',
       ].join('\n'),
     );
   });

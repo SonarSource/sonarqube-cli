@@ -79,7 +79,7 @@ export interface IntendedArchitecture {
 }
 
 export interface ArchitectureApi {
-  /** The current architecture per analyzed language; `[]` when nothing was analyzed yet. */
+  /** The current architecture per analyzed language; `[]` when the public API returns no current graphs. */
   getCurrent(language?: Ecosystem): Promise<CurrentGraph[]>;
   /** The intended architecture per language; `[]` when the project has none. */
   getIntended(): Promise<IntendedArchitecture[]>;

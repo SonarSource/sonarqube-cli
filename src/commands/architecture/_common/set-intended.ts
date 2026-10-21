@@ -163,7 +163,7 @@ function writeFailure(
   if (backupPath !== undefined) {
     lines.push(
       `The previous export is saved in ${backupPath}`,
-      `After inspecting the current state, restore it with: sonar architecture set intended --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
+      `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
   return new CommandFailedError(lines.join('\n'), { cause: error });
@@ -203,7 +203,7 @@ function staleError(projectKey: string): CommandFailedError {
   return new CommandFailedError(
     `The intended architecture of '${projectKey}' changed since the file was read; nothing was changed.`,
     {
-      remediationHint: `Run 'sonar architecture get intended --project ${projectKey} --format json' again and reapply your edits.`,
+      remediationHint: `Run 'sonar architecture intended get --project ${projectKey} --format json' again and reapply your edits.`,
     },
   );
 }

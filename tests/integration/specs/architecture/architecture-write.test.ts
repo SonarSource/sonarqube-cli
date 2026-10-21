@@ -18,14 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar architecture set intended`
+// Integration tests for `sonar architecture intended set`
 
 import { existsSync, readFileSync } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { IntendedArchitecture } from '@/core/architecture/architecture-api.ts';
-import { shellQuote } from '@/core/architecture/shell-quote.ts';
+import type { IntendedArchitecture } from '@/commands/architecture/_common/architecture-api.ts';
+import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
@@ -76,7 +76,7 @@ function writes(server: FakeSonarQubeServer): RecordedRequest[] {
     .filter((request) => request.path.startsWith('/architecture/') && request.method !== 'GET');
 }
 
-describe('sonar architecture set', () => {
+describe('sonar architecture intended set', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -107,7 +107,7 @@ describe('sonar architecture set', () => {
 
   async function readSavedFile(): Promise<{ revision: string; models: IntendedArchitecture[] }> {
     const result = await harness.run(
-      `architecture get intended --project ${PROJECT} --format json`,
+      `architecture intended get --project ${PROJECT} --format json`,
     );
     expect(result.exitCode).toBe(0);
     return JSON.parse(result.stdout) as { revision: string; models: IntendedArchitecture[] };
@@ -148,7 +148,7 @@ describe('sonar architecture set', () => {
           );
 
           const dryRun = await harness.run(
-            `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+            `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
           );
           expect(dryRun.exitCode).toBe(0);
           const oldPath = direction === 'nest' ? ['UI/API'] : ['UI', 'API'];
@@ -159,7 +159,7 @@ describe('sonar architecture set', () => {
           expect(writes(server)).toEqual([]);
 
           const result = await harness.run(
-            `architecture set intended --project ${PROJECT} --file model.json`,
+            `architecture intended set --project ${PROJECT} --file model.json`,
           );
           expect(result.exitCode).toBe(0);
           expect(result.stdout).toContain(`Updated the intended architecture of '${PROJECT}'.`);
@@ -169,7 +169,7 @@ describe('sonar architecture set', () => {
 
           harness.cwd.writeFile('model.json', JSON.stringify(saved));
           const unchanged = await harness.run(
-            `architecture set intended --project ${PROJECT} --file model.json`,
+            `architecture intended set --project ${PROJECT} --file model.json`,
           );
           expect(unchanged.exitCode).toBe(0);
           expect(unchanged.stdout).toContain('already matches the file; nothing was written.');
@@ -186,7 +186,7 @@ describe('sonar architecture set', () => {
         JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
       );
       const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json`,
+        `architecture intended set --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(1);
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
@@ -208,7 +208,7 @@ describe('sonar architecture set', () => {
         JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
       );
       const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json`,
+        `architecture intended set --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(1);
       const backup = backupPathFrom(result.stderr);
@@ -252,14 +252,14 @@ describe('sonar architecture set', () => {
         JSON.stringify({ ...(await readSavedFile()), models: next }),
       );
       const dry = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+        `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
       );
       expect(dry.exitCode).toBe(0);
       expect(dry.stdout).toContain('group order java <root>:');
       expect(dry.stdout).toContain('group order java Domain: A, B -> B, A');
       expect(writes(server)).toEqual([]);
       const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json`,
+        `architecture intended set --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(0);
       expect((await readSavedFile()).models).toEqual(publicModels(next));
@@ -273,7 +273,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
         );
 
         expect(result.exitCode).toBe(0);
@@ -301,7 +301,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify({ models: NEXT }));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(0);
@@ -340,7 +340,7 @@ describe('sonar architecture set', () => {
         );
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(1);
@@ -363,7 +363,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(0);
@@ -390,7 +390,7 @@ describe('sonar architecture set', () => {
         JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
       );
       const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json`,
+        `architecture intended set --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Patch response failed (400)');
@@ -409,11 +409,11 @@ describe('sonar architecture set', () => {
         JSON.stringify({ ...(await readSavedFile()), models: NEXT }),
       );
       const result = await harness.run(
-        `architecture set intended --project ${PROJECT} --file model.json`,
+        `architecture intended set --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(1);
       const backup = backupPathFrom(result.stderr);
-      const command = `sonar architecture set intended --project ${PROJECT} --file ${shellQuote(backup)}`;
+      const command = `sonar architecture intended set --project ${PROJECT} --file ${shellQuote(backup)}`;
       expect(result.stderr).toContain(command);
       expect((await readSavedFile()).models).toEqual(publicModels(NEXT));
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
@@ -433,7 +433,7 @@ describe('sonar architecture set', () => {
         );
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
         );
 
         expect(result.exitCode).toBe(1);
@@ -447,14 +447,14 @@ describe('sonar architecture set', () => {
       'refuses when the model changes between the first read and the PATCH',
       async () => {
         const server = await startWith((fake) =>
-          // Read 1 is the test's own get intended, read 2 the set's first read.
+          // Read 1 is the test's own intended get, read 2 the set's first read.
           fake.withIntended(SAVED).changeIntendedBeforeRead(3, NEXT, true),
         );
         const saved = await readSavedFile();
         harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(1);
@@ -475,19 +475,19 @@ describe('sonar architecture set', () => {
         };
         const server = await startWith((fake) => fake.withIntended([...SAVED, TS_MODEL]));
         const read = await harness.run(
-          `architecture get intended --project ${PROJECT} --language java --format json`,
+          `architecture intended get --project ${PROJECT} --language java --format json`,
         );
         const java = JSON.parse(read.stdout) as { revision: string; language: string };
         expect(java.language).toBe('java');
         harness.cwd.writeFile('model.json', JSON.stringify({ ...java, models: NEXT }));
 
         const dryRun = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
         );
         expect(dryRun.exitCode).toBe(0);
         expect(writes(server)).toEqual([]);
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
         expect(result.exitCode).toBe(0);
         expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
@@ -501,17 +501,17 @@ describe('sonar architecture set', () => {
       async () => {
         const server = await startWith((fake) => fake.withIntended(SAVED));
         const read = await harness.run(
-          `architecture get intended --project ${PROJECT} --depth 1 --format json`,
+          `architecture intended get --project ${PROJECT} --depth 1 --format json`,
         );
         harness.cwd.writeFile('model.json', read.stdout);
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
         );
 
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(
-          'Export again without --component or --depth: sonar architecture get intended --format json.',
+          'Export again without --component or --depth: sonar architecture intended get --format json.',
         );
         expect(writes(server)).toEqual([]);
       },
@@ -525,7 +525,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify(await readSavedFile()));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(0);
@@ -549,7 +549,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify({ models: NEXT }));
 
         const result = await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json`,
+          `architecture intended set --project ${PROJECT} --file model.json`,
         );
 
         expect(result.exitCode).toBe(1);
@@ -568,7 +568,7 @@ describe('sonar architecture set', () => {
         harness.cwd.writeFile('model.json', JSON.stringify({ ...saved, models: NEXT }));
 
         await harness.run(
-          `architecture set intended --project ${PROJECT} --file model.json --dry-run`,
+          `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
         );
 
         expect(

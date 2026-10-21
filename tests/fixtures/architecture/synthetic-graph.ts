@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { StructureGraph, StructureNode } from '@/core/architecture/architecture-api.ts';
+import type {
+  StructureGraph,
+  StructureNode,
+} from '@/commands/architecture/_common/architecture-api.ts';
 
 // Generated entirely from counters; no captured project or analysis data.
 const MODULE_COUNT = 28;

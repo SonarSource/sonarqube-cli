@@ -20,9 +20,9 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { formatIntendedText } from '@/commands/architecture/intended-text.ts';
-import type { IntendedArchitecture } from '@/core/architecture/architecture-api.ts';
-import { viewIntended } from '@/core/architecture/intended-model.ts';
+import type { IntendedArchitecture } from '@/commands/architecture/_common/architecture-api.ts';
+import { viewIntended } from '@/commands/architecture/_common/intended-model.ts';
+import { formatIntendedText } from '@/commands/architecture/intended/get/intended-text.ts';
 import { stripAnsi } from '@/core/ui/colors.ts';
 
 const MODEL: IntendedArchitecture = {

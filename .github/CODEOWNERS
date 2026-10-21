@@ -4,3 +4,10 @@
 src/commands/admin/onboard-ci/ @sonarsource/orchestration-workflow-squad @sonarsource/agentic-sdlc-development-experience-squad
 tests/integration/specs/admin/onboard-ci-gitlab.test.ts @sonarsource/orchestration-workflow-squad @sonarsource/agentic-sdlc-development-experience-squad
 tests/unit/commands/admin/onboard-ci/ @sonarsource/orchestration-workflow-squad @sonarsource/agentic-sdlc-development-experience-squad
+
+# Architecture commands and their tests
+src/commands/architecture/ @sonarsource/quality-architecture-squad @sonarsource/agentic-sdlc-development-experience-squad
+tests/unit/commands/architecture/ @sonarsource/quality-architecture-squad @sonarsource/agentic-sdlc-development-experience-squad
+tests/integration/specs/architecture/ @sonarsource/quality-architecture-squad @sonarsource/agentic-sdlc-development-experience-squad
+tests/fixtures/architecture/ @sonarsource/quality-architecture-squad @sonarsource/agentic-sdlc-development-experience-squad
+tests/integration/harness/fake-architecture.ts @sonarsource/quality-architecture-squad @sonarsource/agentic-sdlc-development-experience-squad

@@ -22,10 +22,10 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { IntendedArchitecture } from '@/core/architecture/architecture-api.ts';
-import { diffIntended } from '@/core/architecture/intended-diff.ts';
-import { revisionOf } from '@/core/architecture/intended-model.ts';
-import { parseIntendedFile } from '@/core/architecture/intended-validation.ts';
+import type { IntendedArchitecture } from '@/commands/architecture/_common/architecture-api.ts';
+import { diffIntended } from '@/commands/architecture/_common/intended-diff.ts';
+import { revisionOf } from '@/commands/architecture/_common/intended-model.ts';
+import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
 
 const MODEL: IntendedArchitecture = {
   type: 'file',
@@ -53,7 +53,7 @@ function problemsOf(raw: unknown): string {
 }
 
 describe('parseIntendedFile', () => {
-  it('accepts the get intended output and a bare array with explicit type', () => {
+  it('accepts the intended get output and a bare array with explicit type', () => {
     expect(parseIntendedFile({ revision: 'r', models: [MODEL] })).toEqual({
       revision: 'r',
       models: [MODEL],
@@ -130,7 +130,7 @@ describe('parseIntendedFile', () => {
   it('keeps the language of a file read with --language, and refuses other languages in it', () => {
     expect(parseIntendedFile({ language: 'ts', models: [MODEL] }).language).toBe('ts');
     expect(problemsOf({ language: 'java', models: [MODEL] })).toContain(
-      'The file holds only the java model (get intended --language java), but models[0] is ts.',
+      'The file holds only the java model (intended get --language java), but models[0] is ts.',
     );
     expect(problemsOf({ language: 'go', models: [] })).toContain('"language" must be one of');
   });
@@ -226,7 +226,7 @@ describe('partial export remediation', () => {
     } catch (error) {
       const rejection = error as Error & { remediationHint?: string };
       expect(rejection.message).toContain('partial view');
-      expect(rejection.remediationHint).toContain('sonar architecture get intended --format json');
+      expect(rejection.remediationHint).toContain('sonar architecture intended get --format json');
       expect(rejection.remediationHint).not.toContain('Each model requires');
     }
   });

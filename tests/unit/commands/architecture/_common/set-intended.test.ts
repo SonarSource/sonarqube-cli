@@ -28,9 +28,9 @@ import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } fro
 import type {
   ArchitectureApi,
   IntendedArchitecture,
-} from '@/core/architecture/architecture-api.ts';
-import { setIntended } from '@/core/architecture/set-intended.ts';
-import { shellQuote } from '@/core/architecture/shell-quote.ts';
+} from '@/commands/architecture/_common/architecture-api.ts';
+import { setIntended } from '@/commands/architecture/_common/set-intended.ts';
+import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
 import { ForbiddenApiError } from '@/core/server/errors.ts';
 
 const MODEL: IntendedArchitecture = {

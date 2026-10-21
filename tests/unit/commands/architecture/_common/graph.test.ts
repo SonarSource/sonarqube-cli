@@ -23,16 +23,16 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import type { StructureGraph } from '@/core/architecture/architecture-api.ts';
+import type { StructureGraph } from '@/commands/architecture/_common/architecture-api.ts';
 import {
   feedbackPairs,
   indexStructure,
   sliceGraph,
   topLevelKeys,
-} from '@/core/architecture/graph.ts';
+} from '@/commands/architecture/_common/graph.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
-import { SYNTHETIC_GRAPH } from '../../../fixtures/architecture/synthetic-graph';
+import { SYNTHETIC_GRAPH } from '../../../../fixtures/architecture/synthetic-graph';
 
 const GRAPH: StructureGraph = {
   id: 'g',

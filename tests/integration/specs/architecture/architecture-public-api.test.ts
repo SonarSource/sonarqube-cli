@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for `sonar architecture get` on the public architecture API
+// Integration tests for architecture reads on the public architecture API
 
 import { readFileSync } from 'node:fs';
 
@@ -27,8 +27,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   type IntendedArchitecture,
   type StructureGraph,
-} from '@/core/architecture/architecture-api.ts';
-import { shellQuote } from '@/core/architecture/shell-quote.ts';
+} from '@/commands/architecture/_common/architecture-api.ts';
+import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
@@ -80,7 +80,7 @@ const INTENDED: IntendedArchitecture[] = [
   },
 ];
 
-describe('sonar architecture get on the public API', () => {
+describe('sonar architecture reads on the public API', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
@@ -104,10 +104,10 @@ describe('sonar architecture get on the public API', () => {
   }
 
   for (const command of [
-    'arch get current --language java --format json',
-    'arch get intended --format json',
-    'arch set intended --file model.json --dry-run',
-    'arch set intended --file model.json',
+    'arch current get --language java --format json',
+    'arch intended get --format json',
+    'arch intended set --file model.json --dry-run',
+    'arch intended set --file model.json',
   ]) {
     it(`uses a key-only local configuration with the authenticated connection: ${command}`, async () => {
       const server = await cloudServerWith((project) =>
@@ -135,26 +135,31 @@ describe('sonar architecture get on the public API', () => {
     });
   }
 
-  it('never discovers an unconfigured project through a git remote, but accepts an explicit key', async () => {
-    const server = await cloudServerWith((project) =>
-      project.withArchitecture((architecture) => architecture.withStructure('java', GRAPH)),
-    );
+  it('uses the shared git-remote project discovery and accepts an explicit key', async () => {
+    const server = await harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken(TOKEN)
+      .withProject(PROJECT, (project) =>
+        project.withArchitecture((architecture) => architecture.withStructure('java', GRAPH)),
+      )
+      .withGitRemoteBinding('https://github.com/example/repository.git', PROJECT)
+      .start();
+    harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     initGitRepo(harness.cwd.path);
     git(['remote', 'add', 'origin', 'https://github.com/example/repository.git'], harness.cwd.path);
 
-    const missing = await harness.run('arch get current --language java --format json');
-    expect(missing.exitCode).toBe(1);
-    expect(missing.stderr).toContain('Could not determine project key.');
-    expect(missing.stderr).toContain('Use --project <key>');
-    expect(missing.stderr).toContain('run from inside a linked project directory');
+    const discovered = await harness.run('arch current get --language java --format json');
+    expect(discovered.exitCode).toBe(0);
+    expect(JSON.parse(discovered.stdout).project).toBe(PROJECT);
     const explicit = await harness.run(
-      `arch get current -p ${PROJECT} --language java --format json`,
+      `arch current get -p ${PROJECT} --language java --format json`,
     );
     expect(explicit.exitCode).toBe(0);
     expect(JSON.parse(explicit.stdout).project).toBe(PROJECT);
     const paths = server.getRecordedRequests().map(({ path }) => path);
-    expect(paths.some((path) => path.includes('dop-translation'))).toBe(false);
-    expect(paths).not.toContain('/api/components/search_projects');
+    expect(paths.some((path) => path.includes('dop-translation'))).toBe(true);
+    expect(paths).toContain('/api/components/search_projects');
     expect(paths).not.toContain('/api/navigation/component');
   });
 
@@ -189,7 +194,7 @@ describe('sonar architecture get on the public API', () => {
         ),
       );
       const result = await harness.run(
-        `arch get intended -p ${PROJECT} --component Domain/Billing --format json`,
+        `arch intended get -p ${PROJECT} --component Domain/Billing --format json`,
       );
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout) as { partial: boolean; models: unknown[] };
@@ -239,9 +244,9 @@ describe('sonar architecture get on the public API', () => {
           ),
       ),
     );
-    const intended = await harness.run(`arch get intended -p ${PROJECT} --format json`);
+    const intended = await harness.run(`arch intended get -p ${PROJECT} --format json`);
     const current = await harness.run(
-      `arch get current -p ${PROJECT} --language java --format json`,
+      `arch current get -p ${PROJECT} --language java --format json`,
     );
     expect(intended.exitCode).toBe(0);
     expect(current.exitCode).toBe(0);
@@ -277,7 +282,7 @@ describe('sonar architecture get on the public API', () => {
           ),
         ),
       );
-      const result = await harness.run(`arch get intended -p ${PROJECT} --format json`);
+      const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Invalid public intended architecture response');
       expect(result.stdout + result.stderr).not.toContain('malformed-secret-canary');
@@ -308,7 +313,7 @@ describe('sonar architecture get on the public API', () => {
         ),
       );
       const result = await harness.run(
-        `arch get current -p ${PROJECT} --language java --format json`,
+        `arch current get -p ${PROJECT} --language java --format json`,
       );
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('Invalid public current architecture response');
@@ -325,10 +330,10 @@ describe('sonar architecture get on the public API', () => {
       );
 
       const current = await harness.run(
-        `architecture get current --project ${PROJECT} --language java --format json`,
+        `architecture current get --project ${PROJECT} --language java --format json`,
       );
       const intended = await harness.run(
-        `architecture get intended --project ${PROJECT} --format json`,
+        `architecture intended get --project ${PROJECT} --format json`,
       );
 
       expect(current.exitCode).toBe(0);
@@ -378,7 +383,7 @@ describe('sonar architecture get on the public API', () => {
     await cloudServerWith((p) =>
       p.withArchitecture((a) => a.withStructure('java', [first, later])),
     );
-    const all = await harness.run(`arch get current -p ${PROJECT} --language java --format json`);
+    const all = await harness.run(`arch current get -p ${PROJECT} --language java --format json`);
     expect(all.exitCode).toBe(0);
     const payload = JSON.parse(all.stdout) as {
       languages: Array<{ language: string; graphId?: string; nodes: Array<{ key: string }> }>;
@@ -389,7 +394,7 @@ describe('sonar architecture get on the public API', () => {
     ]);
     expect(payload.languages.every((view) => view.graphId === undefined)).toBe(true);
     const drill = await harness.run(
-      `arch get current -p ${PROJECT} --language java --component later --format json`,
+      `arch current get -p ${PROJECT} --language java --component later --format json`,
     );
     expect(drill.exitCode).toBe(0);
     const focused = JSON.parse(drill.stdout) as {
@@ -413,7 +418,7 @@ describe('sonar architecture get on the public API', () => {
     }));
     await cloudServerWith((p) => p.withArchitecture((a) => a.withStructure('java', graphs)));
     const result = await harness.run(
-      `arch get current -p ${PROJECT} --language java --format json`,
+      `arch current get -p ${PROJECT} --language java --format json`,
     );
     expect(result.exitCode).toBe(0);
     const payload = JSON.parse(result.stdout) as {
@@ -440,7 +445,7 @@ describe('sonar architecture get on the public API', () => {
           .withStructure('py', graphs),
       ),
     );
-    const result = await harness.run(`arch get current -p ${PROJECT} --format json`);
+    const result = await harness.run(`arch current get -p ${PROJECT} --format json`);
     expect(result.exitCode).toBe(0);
     const payload = JSON.parse(result.stdout) as {
       languages: Array<{ nodes: unknown[]; capped: boolean }>;
@@ -460,13 +465,13 @@ describe('sonar architecture get on the public API', () => {
       .start();
     harness.withAuth(server.baseUrl(), TOKEN);
     const current = await harness.run(
-      `architecture get current --project ${PROJECT} --language java --format json`,
+      `architecture current get --project ${PROJECT} --language java --format json`,
     );
     expect(current.exitCode).toBe(0);
     expect(JSON.parse(current.stdout).languages[0]).not.toHaveProperty('graphId');
     const before = server.getRecordedRequests().length;
     const intended = await harness.run(
-      `architecture get intended --project ${PROJECT} --format json`,
+      `architecture intended get --project ${PROJECT} --format json`,
     );
     expect(intended.exitCode).toBe(1);
     expect(intended.stderr).toContain('confirmed public endpoint');
@@ -492,7 +497,7 @@ describe('sonar architecture get on the public API', () => {
         p.withArchitecture((a) => a.withStatus('current-architectures', status, body)),
       );
       const result = await harness.run(
-        `architecture get current --project ${PROJECT} --language java --format json`,
+        `architecture current get --project ${PROJECT} --language java --format json`,
       );
       expect(result.exitCode).toBe(1);
       const paths = server
@@ -519,7 +524,7 @@ describe('sonar architecture get on the public API', () => {
         ),
       );
 
-      const result = await harness.run(`architecture get current --project ${PROJECT}`, {});
+      const result = await harness.run(`architecture current get --project ${PROJECT}`, {});
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
@@ -554,7 +559,7 @@ function writes(server: FakeSonarQubeServer): RecordedRequest[] {
     .filter(({ path, method }) => path.startsWith('/architecture/') && method !== 'GET');
 }
 
-describe('sonar architecture set on the public API', () => {
+describe('sonar architecture intended set on the public API', () => {
   let harness: TestHarness;
   beforeEach(async () => {
     harness = await TestHarness.create();
@@ -575,11 +580,11 @@ describe('sonar architecture set on the public API', () => {
   }
   async function setFile(file: unknown, suffix = '') {
     harness.cwd.writeFile('model.json', JSON.stringify(file));
-    return harness.run(`architecture set intended --project ${PROJECT} --file model.json${suffix}`);
+    return harness.run(`architecture intended set --project ${PROJECT} --file model.json${suffix}`);
   }
   async function readSaved() {
     const result = await harness.run(
-      `architecture get intended --project ${PROJECT} --format json`,
+      `architecture intended get --project ${PROJECT} --format json`,
     );
     expect(result.exitCode).toBe(0);
     return JSON.parse(result.stdout) as { revision: string; models: IntendedArchitecture[] };
@@ -619,7 +624,7 @@ describe('sonar architecture set on the public API', () => {
       .start();
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     const exported = await harness.run(
-      'arch get intended -p multi-shop --language java --format json',
+      'arch intended get -p multi-shop --language java --format json',
     );
     expect(exported.exitCode).toBe(0);
     const file = JSON.parse(exported.stdout) as {
@@ -632,12 +637,12 @@ describe('sonar architecture set on the public API', () => {
       .groups.push({ label: 'ScopedLayer', patterns: ['scoped:**'] });
     harness.cwd.writeFile('multi-scoped.json', JSON.stringify(file));
     const preview = await harness.run(
-      'arch set intended -p multi-shop --file multi-scoped.json --dry-run',
+      'arch intended set -p multi-shop --file multi-scoped.json --dry-run',
     );
     expect(preview.exitCode).toBe(0);
     expect(writes(server)).toEqual([]);
-    const applied = await harness.run('arch set intended -p multi-shop --file multi-scoped.json');
-    const actual = await harness.run('arch get intended -p multi-shop --format json');
+    const applied = await harness.run('arch intended set -p multi-shop --file multi-scoped.json');
+    const actual = await harness.run('arch intended get -p multi-shop --format json');
     const saved = JSON.parse(actual.stdout) as { models: IntendedArchitecture[] };
     expect(saved.models).toEqual(publicModels([cs, ...file.models]));
     expect(applied.exitCode).toBe(0);
@@ -667,18 +672,18 @@ describe('sonar architecture set on the public API', () => {
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     harness.cwd.writeFile('create-lazy.json', JSON.stringify({ models: INTENDED }));
     expect(
-      (await harness.run('arch set intended -p lazy-shop --file create-lazy.json')).exitCode,
+      (await harness.run('arch intended set -p lazy-shop --file create-lazy.json')).exitCode,
     ).toBe(0);
-    const exported = await harness.run('arch get intended -p lazy-shop --format json');
+    const exported = await harness.run('arch intended get -p lazy-shop --format json');
     const file = JSON.parse(exported.stdout) as {
       revision: string;
       models: IntendedArchitecture[];
     };
     harness.cwd.writeFile('update-lazy.json', JSON.stringify({ ...file, models: NEXT }));
     expect(
-      (await harness.run('arch set intended -p lazy-shop --file update-lazy.json')).exitCode,
+      (await harness.run('arch intended set -p lazy-shop --file update-lazy.json')).exitCode,
     ).toBe(0);
-    const saved = await harness.run('arch get intended -p lazy-shop --format json');
+    const saved = await harness.run('arch intended get -p lazy-shop --format json');
     expect((JSON.parse(saved.stdout) as { models: IntendedArchitecture[] }).models).toEqual(
       publicModels(NEXT),
     );

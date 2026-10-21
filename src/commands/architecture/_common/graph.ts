@@ -26,7 +26,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { StructureGraph, StructureNode } from './architecture-api.ts';
 
 export const DEFAULT_MAX_NODES = 150;
-export const DEFAULT_MAX_EDGES = 2 * DEFAULT_MAX_NODES;
+export const DEFAULT_MAX_EDGES = 20;
 const MAX_DRILL_DOWN_HINTS = 5;
 export const MAX_FEEDBACK_PAIRS = 5;
 
@@ -163,7 +163,7 @@ export function sliceGraph(
   if (component !== undefined && rootId === undefined) {
     throw new CommandFailedError(`No node '${component}' in the current architecture.`, {
       remediationHint:
-        "Run 'sonar architecture get current' without --component to list the top-level node keys.",
+        "Run 'sonar architecture current get' without --component to list the top-level node keys.",
     });
   }
 

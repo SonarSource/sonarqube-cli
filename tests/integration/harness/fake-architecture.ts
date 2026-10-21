@@ -25,7 +25,7 @@ import type {
   IntendedArchitecture,
   IntendedGroup,
   StructureGraph,
-} from '@/core/architecture/architecture-api.ts';
+} from '@/commands/architecture/_common/architecture-api.ts';
 
 export const FAKE_SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 

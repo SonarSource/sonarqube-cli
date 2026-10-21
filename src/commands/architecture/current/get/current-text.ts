@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Human-readable `sonar architecture get current --format text`.
+// Human-readable `sonar architecture current get --format text`.
 
-import type { GraphSlice } from '@/core/architecture/graph.ts';
+import type { GraphSlice } from '@/commands/architecture/_common/graph.ts';
 import { bold, cyan, dim } from '@/core/ui/colors.ts';
 
 const MAX_TEXT_EDGES = 20;

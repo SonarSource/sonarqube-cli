@@ -25,7 +25,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
 import { wholeFile } from '@/core/framework/resources/whole-file.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
@@ -45,7 +45,7 @@ export interface InstallSkillOptions {
 
 export async function installSkill(
   options: InstallSkillOptions,
-  ctx: CommandInvocationContext,
+  ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const global = options.global === true;
   const targetRoot = global ? homedir() : projectRoot();

@@ -18,16 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// `sonar architecture set intended`
+// `sonar architecture intended set`
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { createArchitectureApi } from '@/core/architecture/architecture-api.ts';
-import { toArchitectureError } from '@/core/architecture/errors.ts';
-import type { IntendedDiff } from '@/core/architecture/intended-diff.ts';
-import { parseIntendedFile } from '@/core/architecture/intended-validation.ts';
-import { setIntended as setIntendedModel } from '@/core/architecture/set-intended.ts';
+import { createArchitectureApi } from '@/commands/architecture/_common/architecture-api.ts';
+import { toArchitectureError } from '@/commands/architecture/_common/errors.ts';
+import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff.ts';
+import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
+import { setIntended as setIntendedModel } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import {
   type CommandAuthenticatedInvocationContext,
@@ -36,7 +36,7 @@ import {
 import { CLI_DIR } from '@/core/config-constants.ts';
 import { green, red, yellow } from '@/core/ui/colors.ts';
 
-import { resolveProject } from './index.ts';
+import { resolveProject } from '../../_common/project.ts';
 
 export const CLI_ARCHITECTURE_SET = 'CliArchitectureSet';
 

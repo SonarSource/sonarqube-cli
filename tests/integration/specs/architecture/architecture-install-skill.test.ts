@@ -42,14 +42,26 @@ describe('sonar architecture install-skill', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
+    const server = await harness.newFakeServer().asSonarCloud().withAuthToken('test-token').start();
+    harness.withAuth(server.recordedAuthServerUrl(), 'test-token', 'my-org');
   });
 
   afterEach(async () => {
     await harness.dispose();
   });
 
+  it('requires authentication before installing any files', async () => {
+    await harness.dispose();
+    harness = await TestHarness.create();
+    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
+    const result = await harness.run('arch install-skill');
+    expect(result.exitCode).not.toBe(0);
+    expect(harness.cwd.exists(SKILL_PATHS[0])).toBe(false);
+    expect(harness.cwd.exists(SKILL_PATHS[1])).toBe(false);
+  });
+
   it(
-    'installs the skill for Claude Code and Cursor without auth, and a re-run changes nothing',
+    'installs the skill for authenticated users, and a re-run changes nothing',
     async () => {
       const first = await harness.run('arch install-skill');
 
