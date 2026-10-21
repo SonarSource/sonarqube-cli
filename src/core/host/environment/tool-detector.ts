@@ -22,13 +22,15 @@
 
 import { InvalidOptionError } from '../../commands/command-error.ts';
 import logger from '../../observability/logger.ts';
-import { spawnProcess } from '../../process/process.ts';
+import { spawnProcess, spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
 const WSL_EXECUTABLE = 'wsl.exe';
+const RUNTIME_PROBE_TIMEOUT_MS = 3000;
+const RUNTIME_PROBE_TIMEOUT_MESSAGE = 'Container runtime probe timed out';
 const MAX_RUNTIME_ERROR_LINES = 3;
 const MAX_RUNTIME_ERROR_LENGTH = 1000;
 
@@ -76,6 +78,66 @@ async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<bool
   } catch {
     return false;
   }
+}
+
+export type ContainerRuntimeHealth =
+  | { status: 'ready'; runtime: ContainerRuntime; viaWsl: boolean }
+  | { status: 'not_ready'; runtime: ContainerRuntime; viaWsl: boolean; reason?: 'timeout' }
+  | { status: 'not_found' };
+
+type RuntimeProbeResult = 'ready' | 'failed' | 'timed_out' | 'missing';
+
+async function probeRuntime(
+  runtime: ContainerRuntime,
+  viaWsl: boolean,
+  args: string[],
+): Promise<RuntimeProbeResult> {
+  try {
+    const result = await spawnProcessWithTimeout(
+      viaWsl ? WSL_EXECUTABLE : runtime,
+      viaWsl ? [runtime, ...args] : args,
+      {},
+      RUNTIME_PROBE_TIMEOUT_MS,
+      RUNTIME_PROBE_TIMEOUT_MESSAGE,
+    );
+    return result.exitCode === 0 ? 'ready' : 'failed';
+  } catch (error) {
+    if (error instanceof Error && error.message === RUNTIME_PROBE_TIMEOUT_MESSAGE) {
+      return 'timed_out';
+    }
+    return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'missing' : 'failed';
+  }
+}
+
+async function probeRuntimeSet(viaWsl: boolean): Promise<ContainerRuntimeHealth> {
+  let firstNativeFailure: ContainerRuntime | undefined;
+  for (const runtime of CONTAINER_RUNTIMES) {
+    const result = await probeRuntime(runtime, viaWsl, ['info']);
+    if (result === 'ready') return { status: 'ready', runtime, viaWsl };
+    if (result === 'timed_out') {
+      return { status: 'not_ready', runtime, viaWsl, reason: 'timeout' };
+    }
+    if (!viaWsl && result === 'failed') firstNativeFailure ??= runtime;
+  }
+  const installed = await Promise.all(
+    CONTAINER_RUNTIMES.map((runtime) => probeRuntime(runtime, viaWsl, ['--version'])),
+  );
+  const installedIndex = installed.indexOf('ready');
+  if (installedIndex >= 0) {
+    return { status: 'not_ready', runtime: CONTAINER_RUNTIMES[installedIndex], viaWsl };
+  }
+  return firstNativeFailure
+    ? { status: 'not_ready', runtime: firstNativeFailure, viaWsl }
+    : { status: 'not_found' };
+}
+
+export async function checkContainerRuntimeHealth(): Promise<ContainerRuntimeHealth> {
+  const windows = isWindows();
+  const mode = getWslMode(windows);
+  if (mode === 'always') return probeRuntimeSet(true);
+  const native = await probeRuntimeSet(false);
+  if (native.status !== 'not_found' || mode === 'never') return native;
+  return probeRuntimeSet(true);
 }
 
 export interface ContainerRuntimeDetection {
