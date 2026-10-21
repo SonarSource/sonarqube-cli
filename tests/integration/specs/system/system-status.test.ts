@@ -625,9 +625,29 @@ describe('system status', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'shows declarative integration with path from installed resources',
-    async () => {
+  it.each(['absent', 'unrelated', 'sonar', 'invalid'])(
+    'shows recorded Codex path with isolated managed configuration: %s',
+    async (kind) => {
+      const managedPath = join(harness.userHome.path, 'requirements.toml');
+      harness.withExtraEnv({ __SQCLI_DEV_CODEX_REQUIREMENTS_PATH: managedPath });
+      if (kind !== 'absent') {
+        const command =
+          kind === 'sonar' ? 'sonar hook agent-session-start --agent codex' : 'another-tool';
+        harness.userHome.writeFile(
+          'requirements.toml',
+          kind === 'invalid'
+            ? 'invalid [toml'
+            : `[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = "${command}"
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "another-tool stop"
+`,
+        );
+      }
       harness.state().withRawState(
         JSON.stringify(
           baseState({
@@ -649,8 +669,19 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Codex: CONFIGURED');
-      expect(normalizePath(result.stdout)).toContain('.codex/hooks.json');
+      expect(result.stdout).toContain('Codex: RECORDED AS INSTALLED');
+      expect(result.stdout).toContain(
+        'Status does not verify hook delivery to the current session.',
+      );
+      expect(normalizePath(result.stdout)).toContain(
+        'Codex: RECORDED AS INSTALLED (~/.codex/hooks.json)',
+      );
+      if (kind === 'sonar') {
+        expect(result.stdout).toContain(`Managed Sonar hooks (${managedPath}): SessionStart`);
+        expect(result.stdout).not.toContain('SessionStart, Stop');
+      } else {
+        expect(result.stdout).not.toContain('Managed Sonar hooks');
+      }
     },
     { timeout: 15000 },
   );
