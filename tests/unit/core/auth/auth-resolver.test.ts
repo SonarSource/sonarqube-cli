@@ -177,7 +177,7 @@ describe('AuthResolver', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance({ console: fake });
@@ -209,7 +209,7 @@ describe('AuthResolver', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance({ console: fake });
@@ -245,7 +245,7 @@ describe('AuthResolver', () => {
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
 
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance();
@@ -418,7 +418,7 @@ describe('AuthResolver cloud server URL validation', () => {
     state.auth.isAuthenticated = true;
 
     const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-    await handle.seedToken('https://evil.example.com', FAKE_TOKEN, 'my-org');
+    await handle.seedToken('https://evil.example.com', FAKE_TOKEN);
 
     try {
       const result = await new AuthResolver().resolveAuth();

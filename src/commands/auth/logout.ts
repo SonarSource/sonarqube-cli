@@ -50,7 +50,7 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   const org = active.orgKey;
   let token: string | undefined;
   try {
-    token = (await getToken(server, org)) ?? undefined;
+    token = (await getToken(server)) ?? undefined;
   } catch (err) {
     console.warn(
       `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
@@ -64,7 +64,7 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   });
 
   try {
-    await deleteToken(server, org);
+    await deleteToken(server);
   } catch (err) {
     console.warn(
       `Could not delete the local token: ${(err as Error).message}. Continuing with local logout.`,

@@ -21,15 +21,6 @@
 import { normalizeServerUrl } from '../host/keychain.ts';
 import type { ResolvedAuth } from './auth-resolver.ts';
 
-export type RecordedConnectionCredentialSource = 'active' | 'stored-token' | 'different-server';
-
-export function recordedConnectionCredentialSource(
-  auth: ResolvedAuth,
-  serverUrl: string,
-  orgKey: string | undefined,
-): RecordedConnectionCredentialSource {
-  if (normalizeServerUrl(auth.serverUrl) !== normalizeServerUrl(serverUrl)) {
-    return 'different-server';
-  }
-  return auth.orgKey === orgKey ? 'active' : 'stored-token';
+export function authMatchesRecordedServer(auth: ResolvedAuth, serverUrl: string): boolean {
+  return normalizeServerUrl(auth.serverUrl) === normalizeServerUrl(serverUrl);
 }

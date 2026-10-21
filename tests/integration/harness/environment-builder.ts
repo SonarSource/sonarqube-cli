@@ -210,11 +210,12 @@ export class EnvironmentBuilder {
   private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
+  private _cliVersion?: string;
   private _telemetryEnabled = false;
   private _statsDisabled = false;
   private _dockerMockRunning?: boolean;
   private _dockerMockBinDir?: string;
-  private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
+  private readonly keychainTokens: Array<{ account: string; token: string }> = [];
   private readonly sqaaFeatures: SqaaFeatureConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
   private readonly installedFeatureSeeds: Array<(state: CliState) => void> = [];
@@ -256,7 +257,7 @@ export class EnvironmentBuilder {
       serverUrl,
       org ? 'cloud' : 'on-premise',
       org,
-    ).withKeychainToken(serverUrl, token, org);
+    ).withKeychainToken(serverUrl, token);
   }
 
   /** Seeded Cloud auth on a loopback fake (needs SONARQUBE_CLI_SONARCLOUD_* URL overrides). */
@@ -382,8 +383,23 @@ export class EnvironmentBuilder {
   /**
    * Stores a token in the file-based keychain when writeTo() is called.
    */
-  withKeychainToken(serverURL: string, token: string, org?: string): this {
-    this.keychainTokens.push({ serverURL, token, org });
+  withKeychainToken(serverURL: string, token: string): this {
+    this.keychainTokens.push({ account: generateKeychainAccount(serverURL), token });
+    return this;
+  }
+
+  /**
+   * Stores a token under the `hostname:org` account an older CLI used, to exercise the
+   * post-update move to the server-only account.
+   */
+  withLegacyKeychainToken(serverURL: string, token: string, org: string): this {
+    this.keychainTokens.push({ account: `${new URL(serverURL).hostname}:${org}`, token });
+    return this;
+  }
+
+  /** Records an older CLI version in state, so the first run executes the post-update actions. */
+  withCliVersion(version: string): this {
+    this._cliVersion = version;
     return this;
   }
 
@@ -547,8 +563,8 @@ export class EnvironmentBuilder {
   build(binDir?: string): CliState {
     // Default to the current CLI version so post-update is a no-op. Tests that
     // need to exercise the upgrade migration inject a stale version via
-    // withRawState().
-    const state = getDefaultState(CURRENT_CLI_VERSION);
+    // withCliVersion() or withRawState().
+    const state = getDefaultState(this._cliVersion ?? CURRENT_CLI_VERSION);
 
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';
@@ -663,8 +679,8 @@ export class EnvironmentBuilder {
 
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};
-      for (const { serverURL, token, org } of this.keychainTokens) {
-        tokens[generateKeychainAccount(serverURL, org)] = token;
+      for (const { account, token } of this.keychainTokens) {
+        tokens[account] = token;
       }
       const payload = JSON.stringify({ tokens }, null, 2);
       if (canWriteFile(keychainFile)) {
