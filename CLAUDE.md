@@ -51,11 +51,6 @@ The rest of this documentation loads on demand, never at session start. Content 
 
 `AGENTS.md` is a symlink to this root file, so Codex, Cursor and Copilot get this content but neither on-demand mechanism — open the file above directly when a task touches its area.
 
-## Gitar dependency reviews
-
-`.gitar/rules/renovate-safety.md` contains the trigger, bounded evidence checks,
-and advisory summary instructions for major/minor Renovate updates.
-
 ## Network access
 
 Every HTTP request the CLI issues itself must carry the proxy/TLS configuration resolved by `src/core/host/connectivity/network-config.ts`, so `src/core/server/fetch.ts` is the only module allowed to call the runtime `fetch` — an ESLint `no-restricted-syntax` rule (scoped to `src/**`, disabled in that one file) rejects `fetch(...)` and `<obj>.fetch(...)` anywhere else. It exports two wrappers, both of which resolve `buildFetchNetworkOptions(url)` themselves:
