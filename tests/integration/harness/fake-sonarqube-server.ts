@@ -2096,7 +2096,7 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (path === '/api/alm_integration/search_gitlab_repos') {
+        if (path === '/api/alm_integrations/search_gitlab_repos') {
           const repos = (gitlabRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.projectName || r.name.includes(query.projectName),
           );

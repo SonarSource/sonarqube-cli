@@ -181,7 +181,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
       await api.searchGitlabRepos('my-gitlab', 2, 50);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_gitlab_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_gitlab_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-gitlab',
         p: '2',
