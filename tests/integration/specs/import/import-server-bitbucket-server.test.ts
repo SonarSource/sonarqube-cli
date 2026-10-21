@@ -133,12 +133,12 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     ).toEqual(['ALPHA/a1', 'ALPHA/a2', 'ALPHA/a3', 'GAMMA/g1', 'GAMMA/g2']);
     const requests = server.getRecordedRequests();
     const projectLists = requests.filter(
-      (r) => r.path === '/api/alm_integration/list_bitbucketserver_projects',
+      (r) => r.path === '/api/alm_integrations/list_bitbucketserver_projects',
     );
     expect(projectLists.map((r) => r.query.start)).toEqual(['0', '2']);
     expect(projectLists.every((r) => r.query.almSetting === 'my-bbs')).toBe(true);
     const searches = requests.filter(
-      (r) => r.path === '/api/alm_integration/search_bitbucketserver_repos',
+      (r) => r.path === '/api/alm_integrations/search_bitbucketserver_repos',
     );
     expect(searches.map((r) => [r.query.projectName, r.query.start])).toEqual([
       ['Alpha', '0'],
@@ -234,7 +234,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     expect(
       server
         .getRecordedRequests()
-        .some((r) => r.path === '/api/alm_integration/list_bitbucketserver_projects'),
+        .some((r) => r.path === '/api/alm_integrations/list_bitbucketserver_projects'),
     ).toBe(false);
   });
 });
