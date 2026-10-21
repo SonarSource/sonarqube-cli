@@ -625,9 +625,42 @@ describe('system status', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'shows declarative integration with path from installed resources',
-    async () => {
+  it.each([
+    'absent',
+    'unrelated',
+    'sonar',
+    'sonar-unix',
+    'sonar-windows',
+    'sonar-quoted',
+    'invalid',
+  ])(
+    'shows recorded Codex path with isolated managed configuration: %s',
+    async (kind) => {
+      const managedPath = join(harness.userHome.path, 'requirements.toml');
+      harness.withExtraEnv({ __SQCLI_DEV_CODEX_REQUIREMENTS_PATH: managedPath });
+      if (kind !== 'absent') {
+        const sonarCommands: Record<string, string> = {
+          sonar: 'sonar hook agent-session-start --agent codex',
+          'sonar-unix': '/usr/local/bin/sonar hook agent-session-start --agent codex',
+          'sonar-windows': String.raw`C:\Sonar\sonar.exe hook codex-prompt-submit`,
+          'sonar-quoted': String.raw`"C:\Program Files\Sonar\sonar.exe" hook codex-post-tool-use`,
+        };
+        const command = sonarCommands[kind] ?? 'another-tool';
+        harness.userHome.writeFile(
+          'requirements.toml',
+          kind === 'invalid'
+            ? 'invalid [toml'
+            : `[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = ${JSON.stringify(command)}
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "another-tool stop"
+`,
+        );
+      }
       harness.state().withRawState(
         JSON.stringify(
           baseState({
@@ -649,8 +682,17 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Codex: CONFIGURED');
-      expect(normalizePath(result.stdout)).toContain('.codex/hooks.json');
+      expect(result.stdout).toContain('Codex: INSTALLED');
+      expect(result.stdout).not.toContain(
+        'Status does not verify hook delivery to the current session.',
+      );
+      expect(normalizePath(result.stdout)).toContain('Codex: INSTALLED (~/.codex/hooks.json)');
+      if (kind.startsWith('sonar')) {
+        expect(result.stdout).toContain(`Managed Sonar hooks (${managedPath}): SessionStart`);
+        expect(result.stdout).not.toContain('SessionStart, Stop');
+      } else {
+        expect(result.stdout).not.toContain('Managed Sonar hooks');
+      }
     },
     { timeout: 15000 },
   );
