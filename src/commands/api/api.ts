@@ -52,6 +52,13 @@ Examples:
   # Get the current analysis engine JAR (V2 api)
   $ sonar api get "/analysis/engine"
 
+Output:
+  Successful requests print the response body to stdout.
+  Failed HTTP requests exit with code 1 and print this error to stderr:
+    SonarQube API error: <status> <status text> - <response body>
+  The response body is shown as returned by the server, without JSON parsing.
+  If the body is empty, the separator and body are omitted.
+
 V1 and V2 routing:
   Both cloud and server have V1 and V2 versions of their APIs.
   This tool automatically switches its behavior based on the endpoint path you choose.
