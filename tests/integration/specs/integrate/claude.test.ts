@@ -97,6 +97,8 @@ describe('integrate claude', () => {
       // Completion summary
       expect(result.stdout).toContain('Installed');
       expect(result.stdout).toContain('Setup complete!');
+      expect(result.stderr).toContain('MCP container networking:');
+      expect(result.stderr).toContain('mcp.container.serverUrl');
       expect(result.stdout).toContain('secret scanning hooks');
       expect(result.stdout).toContain('paste this into Claude');
     },

@@ -38,6 +38,12 @@ import {
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import {
+  isLoopbackServerUrl,
+  mcpLoopbackAdvice,
+  readMcpContainerSettings,
+  resolveMcpContainerNetworking,
+} from '@/core/host/mcp/mcp-network.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
@@ -54,6 +60,9 @@ export interface McpRunOptions {
 
 const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
 const INTERNAL_ERROR_CODE = -32000;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
+const CONTAINER_SHUTDOWN_EXIT_CODES = new Set([INTERRUPTED_EXIT_CODE, TERMINATED_EXIT_CODE]);
 
 function debugLog(message: string): void {
   logger.debug(message);
@@ -113,7 +122,20 @@ export async function runMcp(
       ? { withFsMount: true, projectRoot, projectKey }
       : { withFsMount: false, projectKey };
 
-    const config = resolveMcpContainerCommand(auth, detection, context, options, resolvedNetwork);
+    const settings = await readMcpContainerSettings();
+    const container = resolveMcpContainerNetworking(auth, detection, settings);
+    const config = resolveMcpContainerCommand(
+      auth,
+      detection,
+      context,
+      {
+        ...options,
+        containerNetwork: container.network,
+        containerAddHost: container.addHost,
+        containerServerUrl: container.serverUrl,
+      },
+      resolvedNetwork,
+    );
     cachedCaCertPath = config.cachedCaCertPath;
 
     if (options.debug) {
@@ -132,6 +154,18 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
+        const networkHint = mcpLoopbackAdvice(auth, settings);
+        if (
+          code !== null &&
+          code !== 0 &&
+          !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
+          isLoopbackServerUrl(container.serverUrl) &&
+          networkHint
+        ) {
+          process.stderr.write(
+            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
+          );
+        }
         resolve();
       });
     });
