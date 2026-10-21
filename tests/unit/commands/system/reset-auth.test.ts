@@ -80,7 +80,7 @@ describe('purgeAuth keychain read failures', () => {
     expect(result.item.status).toBe('warn');
     expect(result.item.detail).toContain('could not read keychain entry');
     expect(result.item.detail).toContain('1 keychain operation failed');
-    expect(deleteTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'sonarsource');
+    expect(deleteTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io');
   });
 
   it('reports multiple keychain operation failures for one connection', async () => {

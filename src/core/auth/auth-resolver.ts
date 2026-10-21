@@ -228,7 +228,7 @@ export class AuthResolver {
     }
 
     // Look up token in keychain
-    const token = await getToken(serverUrl, orgKey);
+    const token = await getToken(serverUrl);
     if (token) {
       return new ResolvedAuth({ token, serverUrl, orgKey, connectionType, source: 'state' });
     }
