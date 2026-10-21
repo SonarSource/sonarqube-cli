@@ -282,7 +282,7 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetch({ repositories: [], isLastPage: true });
       await api.searchBitbucketCloudRepos('my-bbc', 2, 50);
       const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.pathname).toBe('/api/alm_integration/search_bitbucketcloud_repos');
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketcloud_repos');
       expect(Object.fromEntries(url.searchParams)).toEqual({
         almSetting: 'my-bbc',
         p: '2',
