@@ -20,9 +20,21 @@
 
 // Integration tests for `sonar auth org`
 
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+
+const STORED_TOKEN = 'stored-token';
+const TOKEN_NAME = 'cli-browser-token';
+
+function readKeychainTokens(keychainFile: string): Record<string, string> {
+  const store = JSON.parse(readFileSync(keychainFile, 'utf-8')) as {
+    tokens: Record<string, string>;
+  };
+  return store.tokens;
+}
 
 describe('auth org', () => {
   let harness: TestHarness;
@@ -84,4 +96,129 @@ describe('auth org', () => {
     },
     { timeout: 15000 },
   );
+
+  describe('with an explicit organization key', () => {
+    function signInToOrgA(serverUrl: string) {
+      harness
+        .state()
+        .withActiveConnection(serverUrl, 'cloud', 'org-a')
+        .withTokenName(TOKEN_NAME)
+        .withKeychainToken(serverUrl, STORED_TOKEN);
+    }
+
+    function activeConnection() {
+      return harness.stateJsonFile.asJson().auth.connections[0] as {
+        orgKey?: string;
+        tokenName?: string;
+        organizationUuidV4?: string;
+      };
+    }
+
+    function cloudServer() {
+      return harness
+        .newFakeServer()
+        .withAuthToken(STORED_TOKEN)
+        .withOrganizations([
+          { key: 'org-a', name: 'Org A' },
+          { key: 'org-b', name: 'Org B' },
+        ]);
+    }
+
+    it(
+      'switches the stored connection to the organization and reports it',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-b');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Switched to organization: org-b');
+        expect(activeConnection().orgKey).toBe('org-b');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'keeps the token name and the keychain entry',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-b');
+
+        expect(result.exitCode).toBe(0);
+        expect(activeConnection().tokenName).toBe(TOKEN_NAME);
+        expect(Object.values(readKeychainTokens(harness.keychainJsonFile))).toEqual([STORED_TOKEN]);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'refreshes the organization identity of the connection',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-b');
+
+        expect(result.exitCode).toBe(0);
+        expect(activeConnection().organizationUuidV4).toBe('org-b-uuid-v4');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'makes no change when the organization is already active',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-a');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Already using organization: org-a');
+        expect(activeConnection().orgKey).toBe('org-a');
+        expect(activeConnection().organizationUuidV4).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 and keeps the active organization when the token is not a member',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-c');
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("❌ You are not a member of organization 'org-c'.");
+        expect(output).toContain('  → Choose an organization you belong to, then try again.');
+        expect(activeConnection().orgKey).toBe('org-a');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 and keeps the active organization when membership cannot be verified',
+      async () => {
+        const server = await cloudServer().withOrganizationsSearchError(500).start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org org-b');
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("❌ Could not verify organization 'org-b'");
+        expect(output).not.toContain('not a member');
+        expect(output).toContain(
+          '  → Check your network connection and the server status, then try again.',
+        );
+        expect(activeConnection().orgKey).toBe('org-a');
+      },
+      { timeout: 15000 },
+    );
+  });
 });

@@ -310,7 +310,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('org')
     .description('Switch the active SonarQube Cloud organization without logging in again')
     .argument('[org]', 'SonarQube Cloud organization key')
-    .authenticatedAction((ctx) => authOrg(ctx));
+    .authenticatedAction((ctx, org: string | undefined) => authOrg(org, ctx));
 
   auth
     .command('logout')
