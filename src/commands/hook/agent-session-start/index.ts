@@ -28,10 +28,16 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
+import {
+  type CompleteProjectMapping,
+  isSameConnection,
+} from '@/core/project-discovery/project-discovery-result.ts';
+import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -43,6 +49,7 @@ import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { piAdapter } from './agent-adapters/pi-adapter.ts';
+import { buildMultiProjectContext } from './multi-project-context.ts';
 import type {
   SessionStartAgent,
   SessionStartAgentAdapter,
@@ -97,16 +104,10 @@ export async function resolveSessionStartContext(
   }
   const { auth } = connection;
 
-  const discovered = await discoverProject(input.startDir ?? process.cwd(), {
-    auth,
-    silent: true,
-    console: ctx.console,
-  });
-  if (!discovered.projectKey) {
-    logSkip('no project key resolved');
+  const target = await resolveSessionStartTarget(input.startDir ?? process.cwd(), auth, ctx);
+  if (!target) {
     return null;
   }
-  noteProject(auth, discovered.projectKey);
 
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(connection),
@@ -127,8 +128,8 @@ export async function resolveSessionStartContext(
     binaryPath,
     scaEnabled,
     context: {
-      workspaceDir: discovered.projectRoot,
-      projectKey: discovered.projectKey,
+      workspaceDir: target.workspaceDir,
+      projectKey: target.projectKey,
       serverUrl: auth.serverUrl,
       token: auth.token,
       organization: auth.orgKey,
@@ -143,7 +144,44 @@ export async function resolveSessionStartContext(
     return null;
   }
 
-  return { additionalContext: result.stdout };
+  return {
+    additionalContext: target.projects
+      ? `${result.stdout.trimEnd()}\n\n${buildMultiProjectContext(target.workspaceDir, target.projects)}`
+      : result.stdout,
+  };
+}
+
+/** A multi-project workspace has no `projectKey`: CAG renders the session-start context from the organization alone. */
+type SessionStartTarget =
+  | { workspaceDir: string; projectKey: string; projects?: undefined }
+  | { workspaceDir: string; projectKey?: undefined; projects: CompleteProjectMapping[] };
+
+async function resolveSessionStartTarget(
+  startDir: string,
+  auth: ResolvedAuth,
+  ctx: CommandInvocationContext,
+): Promise<SessionStartTarget | null> {
+  const invocationDir = canonicalizePath(startDir);
+  const discovered = await discoverProjects(invocationDir, {
+    auth,
+    silent: true,
+    console: ctx.console,
+  });
+  const scoped = discovered.scope(invocationDir);
+  if (scoped.length === 0) {
+    logSkip('no project key resolved');
+    return null;
+  }
+  if (scoped.length === 1) {
+    const [{ projectRoot, projectKey }] = scoped;
+    noteProject(auth, projectKey);
+    return { workspaceDir: projectRoot, projectKey };
+  }
+  if (!isSameConnection(scoped)) {
+    logSkip('projects in this workspace use different connections');
+    return null;
+  }
+  return { workspaceDir: invocationDir, projects: scoped };
 }
 
 function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
