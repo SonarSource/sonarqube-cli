@@ -34,6 +34,8 @@ import { GROUP_KEY_SEPARATOR } from './intended-model.ts';
 const MAX_GROUP_DEPTH = 64;
 const MAX_GROUPS = 50_000;
 const MAX_REPORTED_PROBLEMS = 10;
+const FULL_EXPORT_HINT =
+  'Export again without --component or --depth: sonar architecture get intended --format json.';
 export const VALID_MODEL_RULES =
   'Each model requires type (file or namespace), a supported language, groups and constraints arrays. ' +
   'Groups require a label; optional patterns contain strings. Constraints require from and to strings. ' +
@@ -65,9 +67,7 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
     throw invalidModel(['The file must hold "models": an array of intended architectures.']);
   }
   if (isPartialView(file)) {
-    throw invalidModel([
-      'The file is a partial view (--component/--depth). Read it again without --component and --depth: get intended --format json.',
-    ]);
+    throw partialViewError();
   }
   const problems: string[] = [];
   if (
@@ -114,7 +114,7 @@ function parseModel(
     return undefined;
   }
   if (isPartialView(value)) {
-    problems.push(`${where} is a partial view; export the complete intended architecture.`);
+    throw partialViewError();
   }
   const { language } = value;
   if (typeof language !== 'string' || !isEcosystem(language)) {
@@ -166,7 +166,7 @@ function parseGroups(
       return [];
     }
     if (raw.hiddenSubgroups !== undefined && raw.hiddenSubgroups !== null) {
-      problems.push(`Group "${raw.label}" is a partial view with hidden subgroups.`);
+      throw partialViewError();
     }
     const key = `${prefix}${raw.label}`;
     const name = `Group "${key}" (${language})`;
@@ -218,6 +218,12 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
     }
     seen.add(pair);
     return [{ from, to }];
+  });
+}
+
+function partialViewError(): CommandFailedError {
+  return new CommandFailedError('The file is a partial view; nothing was changed.', {
+    remediationHint: FULL_EXPORT_HINT,
   });
 }
 

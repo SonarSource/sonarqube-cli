@@ -32,6 +32,7 @@ import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts
 import { revisionOf } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
 import { shellQuote } from './shell-quote.ts';
+import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;
 
@@ -50,6 +51,7 @@ export interface SetIntendedOptions {
   projectKey: string;
   dryRun: boolean;
   backupDir: string;
+  onReplacement?: () => void;
 }
 
 export async function setIntended(
@@ -64,6 +66,7 @@ export async function setIntended(
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
+  if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.();
   if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
   if (current.length === 0) {
@@ -85,36 +88,29 @@ async function writeModel(
   projectKey: string,
   backupPath?: string,
 ): Promise<void> {
+  let writeError: unknown;
   try {
     if (operation === 'create') await api.createIntended(next);
     else if (operation === 'update') await api.updateIntended(next);
     else await api.deleteIntended();
-    if (revisionOf(await api.getIntended()) !== revisionOf(next)) {
-      throw new CommandFailedError(
-        'The public read after writing does not match the requested model.',
-      );
-    }
   } catch (error) {
-    await reconcileWrite(api, next, projectKey, error, backupPath);
+    writeError = toArchitectureError(error, projectKey);
+    if (error instanceof IntendedModelIdentityError)
+      throw writeFailure(projectKey, writeError, backupPath);
   }
-}
-
-async function reconcileWrite(
-  api: ArchitectureApi,
-  next: IntendedArchitecture[],
-  projectKey: string,
-  error: unknown,
-  backupPath?: string,
-): Promise<void> {
-  const writeError = toArchitectureError(error, projectKey);
-  let saved: IntendedArchitecture[];
-  try {
-    saved = await api.getIntended();
-  } catch (readError) {
-    throw writeFailure(projectKey, writeError, backupPath, readError);
+  const expectedRevision = revisionOf(next);
+  let readError: unknown;
+  for (const delay of [0, 100, 250, 500]) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      if (revisionOf(await api.getIntended()) === expectedRevision) return;
+      readError = undefined;
+    } catch (error) {
+      readError = error;
+      if (error instanceof IntendedModelIdentityError) break;
+    }
   }
-  if (revisionOf(saved) === revisionOf(next)) return;
-  throw writeFailure(projectKey, writeError, backupPath);
+  throw writeFailure(projectKey, writeError, backupPath, readError);
 }
 
 function writeFailure(
@@ -124,15 +120,16 @@ function writeFailure(
   readError?: unknown,
 ): CommandFailedError {
   const lines = [
-    'The architecture write failed; inspect the current server state before restoring. No automatic rollback was attempted.',
-    `Write failed: ${messageOf(error)}`,
+    'The architecture write could not be confirmed; inspect the current server state before restoring. No automatic rollback was attempted.',
+    'The public read after writing did not confirm the requested model within the verification window.',
   ];
+  if (error !== undefined) lines.push(`Write failed: ${messageOf(error)}`);
   if (readError !== undefined)
     lines.push(`The server state is unknown. Read failed: ${messageOf(readError)}`);
   if (backupPath !== undefined) {
     lines.push(
       `The previous export is saved in ${backupPath}`,
-      `Restore it with: sonar architecture set intended --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
+      `After inspecting the current state, restore it with: sonar architecture set intended --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
   return new CommandFailedError(lines.join('\n'), { cause: error });

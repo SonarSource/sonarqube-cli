@@ -34,7 +34,6 @@ import {
   type StructureGraph,
   type StructureNode,
 } from './architecture-api.ts';
-import { revisionOf } from './intended-model.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -194,6 +193,8 @@ function publicNode(value: unknown, depth: number, budget: { count: number }): S
   };
 }
 
+export class IntendedModelIdentityError extends CommandFailedError {}
+
 export class SonarArchitectureApi implements ArchitectureApi {
   private readonly http: SonarHttpClient;
   private idsPromise?: Promise<ArchitectureIds>;
@@ -252,7 +253,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     }
     const id = response.intendedArchitectures.at(0)?.id;
     if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
-      throw new CommandFailedError(
+      throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
       );
     }
@@ -267,14 +268,14 @@ export class SonarArchitectureApi implements ArchitectureApi {
         intendedArchitectures: models,
       })
       .orThrow();
-    this.verifySaved(response, models);
+    this.verifySaved(response);
   }
 
   async updateIntended(models: IntendedArchitecture[]): Promise<void> {
     const response = await this.http
       .patch<IntendedArchitecturesDto | null>(this.modelPath(), { intendedArchitectures: models })
       .orThrow();
-    this.verifySaved(response, models);
+    this.verifySaved(response);
   }
 
   async deleteIntended(): Promise<void> {
@@ -290,10 +291,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return `${this.path('intended-architectures')}/${encodeURIComponent(this.intendedModelId)}`;
   }
 
-  private verifySaved(
-    response: IntendedArchitecturesDto | null,
-    models: IntendedArchitecture[],
-  ): void {
+  private verifySaved(response: IntendedArchitecturesDto | null): void {
     if (
       !Array.isArray(response?.intendedArchitectures) ||
       response.intendedArchitectures.length === 0
@@ -304,19 +302,14 @@ export class SonarArchitectureApi implements ArchitectureApi {
     }
     const ids = new Set(response.intendedArchitectures.map(({ id }) => id));
     const id = response.intendedArchitectures.at(0)?.id;
-    if (
-      ids.size !== 1 ||
-      typeof id !== 'string' ||
-      !MODEL_ID.test(id) ||
-      (this.intendedModelId !== undefined && this.intendedModelId !== id)
-    ) {
-      throw new CommandFailedError(
-        'Invalid public intended architecture write response: unexpected server model id.',
+    if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
+      throw new IntendedModelIdentityError(
+        'The intended architecture model identity changed; read the current state before retrying.',
       );
     }
-    if (revisionOf(response.intendedArchitectures.map(toIntended)) !== revisionOf(models)) {
+    if (ids.size !== 1 || typeof id !== 'string' || !MODEL_ID.test(id)) {
       throw new CommandFailedError(
-        'Invalid public intended architecture write response: returned content does not match the requested model.',
+        'Invalid public intended architecture write response: unexpected server model id.',
       );
     }
     this.intendedModelId = id;

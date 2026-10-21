@@ -22,6 +22,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   formatCurrentText as formatColored,
+  formatSliceLimit,
   relativeLabels,
   uniqueLabels,
 } from '@/commands/architecture/current-text.ts';
@@ -34,6 +35,9 @@ function slice(overrides: Partial<GraphSlice>): GraphSlice {
   return {
     root: '',
     depth: 1,
+    requestedDepth: 1,
+    nodeLimit: 150,
+    levels: [{ depth: 1, nodes: 0 }],
     totalNodes: 10,
     nodes: [],
     edges: [],
@@ -137,11 +141,12 @@ describe('formatCurrentText', () => {
     ]);
     const lines = text.split('\n');
     expect(lines[0]).toBe(
-      'p (ts): 0 top-level group(s):  — 0 of 10 node(s) in view, 1 level(s) below src, capped at 0 nodes',
+      'p (ts): 0 top-level group(s):  — 0 of 10 node(s) in view, 1 level(s) below src, capped by the 150-node limit',
     );
-    expect(lines[1]).toBe('25 dependencies, heaviest 20:');
-    expect(lines[22]).toBe('  … 5 more');
-    expect(lines[23]).toBe('8 feedback pair(s), heaviest 5:');
+    expect(lines[1]).toBe('Levels 1 (0) shown, 0 nodes.');
+    expect(lines[2]).toBe('25 dependencies, heaviest 20:');
+    expect(lines[23]).toBe('  … 5 more');
+    expect(lines[24]).toBe('8 feedback pair(s), heaviest 5:');
     expect(lines.at(-1)).toBe('  … 3 more pair(s)');
   });
 
@@ -162,5 +167,48 @@ describe('formatCurrentText', () => {
       '1 dependency:',
       '  A -> B  (2)',
     ]);
+  });
+});
+
+describe('formatSliceLimit', () => {
+  it('names the shown levels and actual cap rather than treating the shown count as the limit', () => {
+    expect(
+      formatSliceLimit(
+        slice({
+          depth: 2,
+          requestedDepth: 10,
+          nodeLimit: 150,
+          levels: [
+            { depth: 1, nodes: 11 },
+            { depth: 2, nodes: 99 },
+          ],
+          nodes: Array.from({ length: 110 }, () => ({
+            key: 'test',
+            kind: 'class',
+            children: 0,
+            descendants: 0,
+            truncated: false,
+          })),
+          omittedLevel: { depth: 3, nodes: 389 },
+          capped: true,
+        }),
+      ),
+    ).toBe(
+      'Levels 1 (11), 2 (99) shown, 110 nodes. Level 3 (389 nodes) would exceed the 150-node cap.',
+    );
+  });
+  it('reports a partially shown first level without suggesting omitted siblings are discoverable', () => {
+    const message = formatSliceLimit(
+      slice({
+        depth: 1,
+        nodeLimit: 1,
+        levels: [{ depth: 1, nodes: 1 }],
+        nodes: [{ key: 'test', kind: 'class', children: 0, descendants: 0, truncated: false }],
+        omittedLevel: { depth: 1, nodes: 2 },
+        capped: true,
+      }),
+    );
+    expect(message).toContain('Level 1 has 2 nodes; only 1 fit within the 1-node cap.');
+    expect(message).toContain('Omitted siblings cannot be discovered');
   });
 });

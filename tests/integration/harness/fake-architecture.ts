@@ -74,6 +74,21 @@ export class FakeArchitecture {
   private nextModelId = 1;
   private modelNamespace = '00000000';
   private intendedReads = 0;
+  private readonly staleReads = new Map<number, unknown[]>();
+  private staleWriteResponse = false;
+
+  withStaleWriteResponse(): this {
+    this.staleWriteResponse = true;
+    return this;
+  }
+
+  staleIntendedRead(readNumber: number): this {
+    this.staleReads.set(
+      readNumber,
+      this.models.flatMap((model) => this.exportModel(model)),
+    );
+    return this;
+  }
   private readonly readFailures = new Map<number, number>();
   private intendedCreates = 0;
   private intendedUpdates = 0;
@@ -213,6 +228,8 @@ export class FakeArchitecture {
 
   private readIntended(): unknown[] {
     this.intendedReads++;
+    const stale = this.staleReads.get(this.intendedReads);
+    if (stale !== undefined) return stale;
     const change = this.intendedChanges.get(this.intendedReads);
     if (change) {
       const existing = this.models.at(0);
@@ -252,11 +269,15 @@ export class FakeArchitecture {
     const parsed = parseWriteBody(body, true);
     if (!parsed)
       return json({ message: 'POST requires projectId and intendedArchitectures only' }, 400);
+    const previous = this.models.flatMap((model) => this.exportModel(model));
     const model = this.toSavedModel(parsed);
     this.models.push(model);
     return this.committedCreateFailures.has(++this.intendedCreates)
       ? json({ message: 'Create response failed after commit' }, 500)
-      : json({ intendedArchitectures: this.exportModel(model) }, 201);
+      : json(
+          { intendedArchitectures: this.staleWriteResponse ? previous : this.exportModel(model) },
+          201,
+        );
   }
 
   private updateIntendedArchitectures(id: string | undefined, body: string | undefined): Response {
@@ -264,12 +285,15 @@ export class FakeArchitecture {
     if (!model) return json({ message: 'Model not found' }, 404);
     const parsed = parseWriteBody(body, false);
     if (!parsed) return json({ message: 'PATCH requires intendedArchitectures only' }, 400);
+    const previous = this.exportModel(model);
     const failure = this.updateFailures.get(++this.intendedUpdates);
     if (!failure || failure.committed)
       model.perspectives = parsed.map(({ type, ...rest }) => ({ qualifiers: type, ...rest }));
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json({ intendedArchitectures: this.exportModel(model) });
+      : json({
+          intendedArchitectures: this.staleWriteResponse ? previous : this.exportModel(model),
+        });
   }
 
   private exportModel({ id, perspectives }: SavedModel): unknown[] {
@@ -301,7 +325,12 @@ function exportGroup({
   groups,
   ...rest
 }: SavedGroup): IntendedGroup {
-  return groups ? { ...rest, groups: groups.map(exportGroup) } : rest;
+  return {
+    ...rest,
+    groups: (groups ?? []).map(exportGroup),
+    interface: rest.interface ?? false,
+    interfaceAccess: rest.interfaceAccess ?? false,
+  };
 }
 
 interface ArchitectureProject {
@@ -336,6 +365,7 @@ export function routeArchitectureRequest(
   if (resource === 'current-architectures') {
     const expectedOrganization = isCloud ? query.organizationId : FAKE_SERVER_ORGANIZATION_ID;
     if (
+      !query.branchId ||
       !query.ecosystem ||
       !query.organizationId ||
       query.organizationId !== expectedOrganization
@@ -343,6 +373,7 @@ export function routeArchitectureRequest(
       return json({ message: 'organizationId, branchId and ecosystem are required' }, 400);
     }
     project = projects.find(({ key }) => fakeMainBranchId(key) === query.branchId);
+    if (!project) return json({ currentArchitectures: [] });
   } else if (modelId !== undefined) {
     project = projects.find(({ architecture }) =>
       architecture?.hasModel(decodeURIComponent(modelId)),

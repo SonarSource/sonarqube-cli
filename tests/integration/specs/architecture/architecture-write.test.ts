@@ -165,7 +165,7 @@ describe('sonar architecture set', () => {
           expect(result.stdout).toContain(`Updated the intended architecture of '${PROJECT}'.`);
           expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
           const saved = await readSavedFile();
-          expect(saved.models).toEqual(next);
+          expect(saved.models).toEqual(publicModels(next));
 
           harness.cwd.writeFile('model.json', JSON.stringify(saved));
           const unchanged = await harness.run(
@@ -190,12 +190,18 @@ describe('sonar architecture set', () => {
       );
       expect(result.exitCode).toBe(1);
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
-      expect((await readSavedFile()).models).toEqual(SAVED);
+      expect((await readSavedFile()).models).toEqual(publicModels(SAVED));
     });
 
     it('reports backup instructions when PATCH verification is unavailable', async () => {
       const server = await startWith((fake) =>
-        fake.withIntended(SAVED).failModelUpdate(1).failIntendedRead(4),
+        fake
+          .withIntended(SAVED)
+          .failModelUpdate(1)
+          .failIntendedRead(4)
+          .failIntendedRead(5)
+          .failIntendedRead(6)
+          .failIntendedRead(7),
       );
       harness.cwd.writeFile(
         'model.json',
@@ -209,7 +215,7 @@ describe('sonar architecture set', () => {
       expect(result.stderr).toContain(`--file ${shellQuote(backup)}`);
       expect(result.stderr).toContain('server state is unknown');
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
-      expect((await readSavedFile()).models).toEqual(SAVED);
+      expect((await readSavedFile()).models).toEqual(publicModels(SAVED));
     });
 
     it('includes top-level and nested sibling order in the dry run and applies it', async () => {
@@ -256,7 +262,7 @@ describe('sonar architecture set', () => {
         `architecture set intended --project ${PROJECT} --file model.json`,
       );
       expect(result.exitCode).toBe(0);
-      expect((await readSavedFile()).models).toEqual(next);
+      expect((await readSavedFile()).models).toEqual(publicModels(next));
     });
 
     it(
@@ -368,9 +374,9 @@ describe('sonar architecture set', () => {
         const backup = backupPathFrom(result.stdout);
         expect(JSON.parse(readFileSync(backup, 'utf8'))).toEqual({
           project: PROJECT,
-          models: SAVED,
+          models: publicModels(SAVED),
         });
-        expect((await readSavedFile()).models).toEqual(NEXT);
+        expect((await readSavedFile()).models).toEqual(publicModels(NEXT));
       },
       { timeout: 15000 },
     );
@@ -391,7 +397,7 @@ describe('sonar architecture set', () => {
       expect(result.stderr).toContain('No automatic rollback was attempted');
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
       expect(existsSync(backupPathFrom(result.stderr))).toBe(true);
-      expect((await readSavedFile()).models).toEqual(SAVED);
+      expect((await readSavedFile()).models).toEqual(publicModels(SAVED));
     });
 
     it('prints a usable quoted restore command without automatically overwriting concurrent state', async () => {
@@ -409,11 +415,11 @@ describe('sonar architecture set', () => {
       const backup = backupPathFrom(result.stderr);
       const command = `sonar architecture set intended --project ${PROJECT} --file ${shellQuote(backup)}`;
       expect(result.stderr).toContain(command);
-      expect((await readSavedFile()).models).toEqual(NEXT);
+      expect((await readSavedFile()).models).toEqual(publicModels(NEXT));
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
       const recovery = await harness.run(command.slice('sonar '.length));
       expect(recovery.exitCode).toBe(0);
-      expect((await readSavedFile()).models).toEqual(SAVED);
+      expect((await readSavedFile()).models).toEqual(publicModels(SAVED));
       expect(writes(server).map(({ method }) => method)).toEqual(['PATCH', 'PATCH']);
     });
 
@@ -485,7 +491,7 @@ describe('sonar architecture set', () => {
         );
         expect(result.exitCode).toBe(0);
         expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
-        expect((await readSavedFile()).models).toEqual([TS_MODEL, ...NEXT]);
+        expect((await readSavedFile()).models).toEqual(publicModels([TS_MODEL, ...NEXT]));
       },
       { timeout: 20000 },
     );
@@ -505,7 +511,7 @@ describe('sonar architecture set', () => {
 
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(
-          'Read it again without --component and --depth: get intended --format json.',
+          'Export again without --component or --depth: sonar architecture get intended --format json.',
         );
         expect(writes(server)).toEqual([]);
       },
@@ -585,3 +591,17 @@ describe('sonar architecture set', () => {
     );
   });
 });
+
+function publicModels(models: IntendedArchitecture[]): IntendedArchitecture[] {
+  function group(
+    value: IntendedArchitecture['groups'][number],
+  ): IntendedArchitecture['groups'][number] {
+    return {
+      ...value,
+      groups: (value.groups ?? []).map(group),
+      interface: value.interface ?? false,
+      interfaceAccess: value.interfaceAccess ?? false,
+    };
+  }
+  return models.map((model) => ({ ...model, groups: model.groups.map(group) }));
+}

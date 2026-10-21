@@ -45,7 +45,7 @@ import {
   discoverProject,
 } from '@/core/project-discovery/project-info.ts';
 
-import { formatCurrentText } from './current-text.ts';
+import { formatCurrentText, formatSliceLimit } from './current-text.ts';
 import { formatIntendedText } from './intended-text.ts';
 
 export const ARCHITECTURE_FORMATS = ['toon', 'json'] as const;
@@ -209,7 +209,7 @@ function drillDownCommands(
 
 function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string, unknown> {
   const where = slice.root ? `below '${slice.root}'` : 'from the top level';
-  const cap = slice.capped ? ` Capped at ${slice.nodes.length} nodes.` : '';
+  const cap = slice.capped ? ` ${formatSliceLimit(slice)}` : '';
   const edgeCap =
     slice.omittedEdges > 0
       ? ` Showing the ${slice.edges.length} heaviest of ${slice.edges.length + slice.omittedEdges} dependencies.`

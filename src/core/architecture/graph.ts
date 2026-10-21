@@ -68,6 +68,10 @@ export interface GraphSlice {
   /** Node key the slice starts below, `''` for the top level. */
   root: string;
   depth: number;
+  requestedDepth: number;
+  nodeLimit: number;
+  levels: Array<{ depth: number; nodes: number }>;
+  omittedLevel?: { depth: number; nodes: number };
   totalNodes: number;
   nodes: SliceNode[];
   /** The heaviest dependencies between visible nodes, at most `maxEdges`. */
@@ -90,6 +94,11 @@ export interface GraphSlice {
  */
 function childSeparator(node: StructureNode): string {
   if (node.separator) return node.separator;
+  if (node.kind === 'file' && (node.nodes?.length ?? 0) > 0) {
+    throw new CommandFailedError(
+      'Cannot derive keys for a file with children without a public separator. No inferred keys were returned.',
+    );
+  }
   if (node.kind === 'module') return ':';
   if (node.kind === 'directory' || node.kind === 'folder') return '/';
   return '.';
@@ -108,6 +117,11 @@ export function indexStructure(graph: StructureGraph): IndexedGraph {
   };
 
   const walk = (node: StructureNode, key: string, parentId?: number): number => {
+    if (index.idByKey.has(key) || index.key.has(node.id)) {
+      throw new CommandFailedError(
+        'The public current architecture has ambiguous node keys or duplicate node ids. No inferred keys were returned.',
+      );
+    }
     index.key.set(node.id, key);
     index.kind.set(node.id, node.kind);
     index.idByKey.set(key, node.id);
@@ -156,13 +170,21 @@ export function sliceGraph(
   const visible: number[] = [];
   let frontier = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
   let capped = false;
+  const levels: GraphSlice['levels'] = [];
+  let omittedLevel: GraphSlice['omittedLevel'];
   for (let level = 1; level <= depth && frontier.length > 0; level++) {
     if (visible.length + frontier.length > maxNodes) {
       capped = true;
-      if (visible.length === 0) visible.push(...largest(graph, frontier, maxNodes));
+      omittedLevel = { depth: level, nodes: frontier.length };
+      if (visible.length === 0) {
+        const kept = largest(graph, frontier, maxNodes);
+        visible.push(...kept);
+        if (kept.length > 0) levels.push({ depth: level, nodes: kept.length });
+      }
       break;
     }
     visible.push(...frontier);
+    levels.push({ depth: level, nodes: frontier.length });
     frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
   }
 
@@ -175,7 +197,11 @@ export function sliceGraph(
 
   return {
     root: component ?? '',
-    depth,
+    depth: levels.at(-1)?.depth ?? 0,
+    requestedDepth: depth,
+    nodeLimit: maxNodes,
+    levels,
+    ...(omittedLevel === undefined ? {} : { omittedLevel }),
     totalNodes: totalBelow,
     nodes,
     edges: edges.slice(0, maxEdges),

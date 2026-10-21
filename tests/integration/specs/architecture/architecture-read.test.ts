@@ -91,6 +91,11 @@ interface CurrentPayload {
     feedbackPairs: { total: number; heaviest: Array<{ from: string; to: string; weight: number }> };
     outsideViewWeight: number;
     capped: boolean;
+    depth: number;
+    requestedDepth: number;
+    nodeLimit: number;
+    levels: Array<{ depth: number; nodes: number }>;
+    omittedLevel?: { depth: number; nodes: number };
     drillDown: string[];
   }>;
 }
@@ -167,7 +172,16 @@ describe('sonar architecture get', () => {
       expect(java.drillDown[0]).toStartWith(
         `sonar architecture get current --project ${PROJECT} --component `,
       );
-      expect(java.summary).toContain('Capped at');
+      expect(java.summary).toContain('would exceed the 150-node cap');
+      expect(java.requestedDepth).toBe(3);
+      expect(java.depth).toBe(2);
+      expect(java.nodeLimit).toBe(150);
+      expect(java.nodes).toHaveLength(56);
+      expect(java.levels).toEqual([
+        { depth: 1, nodes: 28 },
+        { depth: 2, nodes: 28 },
+      ]);
+      expect(java.omittedLevel).toEqual({ depth: 3, nodes: 168 });
       expect(result.stdout.length).toBeLessThan(JSON.stringify(SYNTHETIC_GRAPH).length / 2);
     },
     { timeout: 15000 },
@@ -433,7 +447,7 @@ describe('sonar architecture get', () => {
 
       expect(result.exitCode).toBe(0);
       const payload = JSON.parse(result.stdout) as { revision: string; models: unknown[] };
-      expect(payload.models).toEqual(INTENDED);
+      expect(payload.models).toEqual(publicModels(INTENDED));
       expect(payload.revision).toMatch(/^[0-9a-f]{64}$/);
       const intendedCall = server
         .getRecordedRequests()
@@ -472,7 +486,7 @@ describe('sonar architecture get', () => {
 
       expect(whole.language).toBeUndefined();
       expect(java.language).toBe('java');
-      expect(java.models).toEqual(INTENDED);
+      expect(java.models).toEqual(publicModels(INTENDED));
       expect(java.revision).toBe(whole.revision);
       expect(domain.revision).toBe(whole.revision);
     },
@@ -552,3 +566,17 @@ describe('sonar architecture get', () => {
     { timeout: 15000 },
   );
 });
+
+function publicModels(models: IntendedArchitecture[]): IntendedArchitecture[] {
+  function group(
+    value: IntendedArchitecture['groups'][number],
+  ): IntendedArchitecture['groups'][number] {
+    return {
+      ...value,
+      groups: (value.groups ?? []).map(group),
+      interface: value.interface ?? false,
+      interfaceAccess: value.interfaceAccess ?? false,
+    };
+  }
+  return models.map((model) => ({ ...model, groups: model.groups.map(group) }));
+}

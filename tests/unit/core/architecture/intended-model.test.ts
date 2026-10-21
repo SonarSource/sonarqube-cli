@@ -217,3 +217,17 @@ describe('revisionOf', () => {
     );
   });
 });
+
+describe('partial export remediation', () => {
+  it('offers a complete export rather than irrelevant schema rules', () => {
+    try {
+      parseIntendedFile({ partial: true, models: [] });
+      throw new Error('Expected rejection');
+    } catch (error) {
+      const rejection = error as Error & { remediationHint?: string };
+      expect(rejection.message).toContain('partial view');
+      expect(rejection.remediationHint).toContain('sonar architecture get intended --format json');
+      expect(rejection.remediationHint).not.toContain('Each model requires');
+    }
+  });
+});

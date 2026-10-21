@@ -74,6 +74,40 @@ describe('intended backup safety', () => {
   function clear(backupDir: string) {
     return setIntended(api(), { models: [] }, { projectKey: 'test', dryRun: false, backupDir });
   }
+  for (const dryRun of [false, true]) {
+    it(`warns before replacing an existing model (dryRun=${dryRun})`, async () => {
+      let warnings = 0;
+      await setIntended(
+        api(),
+        { models: [{ ...MODEL, groups: [] }] },
+        {
+          projectKey: 'test',
+          dryRun,
+          backupDir: root,
+          onReplacement: () => {
+            warnings++;
+          },
+        },
+      );
+      expect(warnings).toBe(1);
+    });
+  }
+  it('does not warn for an unchanged model or a creation', async () => {
+    let warnings = 0;
+    const options = {
+      projectKey: 'test',
+      dryRun: false,
+      backupDir: root,
+      onReplacement: () => {
+        warnings++;
+      },
+    };
+    await setIntended(api(), { models: [MODEL] }, options);
+    const empty = api();
+    await empty.deleteIntended();
+    await setIntended(empty, { models: [MODEL] }, options);
+    expect(warnings).toBe(0);
+  });
   it('quotes project and backup arguments with spaces and emits permission guidance once', async () => {
     const backend = api();
     backend.updateIntended = () => Promise.reject(new ForbiddenApiError('Missing permission'));

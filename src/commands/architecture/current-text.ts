@@ -48,13 +48,14 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
   const names = groups.slice(0, MAX_GROUP_NAMES).map(label);
   if (groups.length > names.length) names.push(`… ${groups.length - names.length} more`);
   const where = slice.root ? `below ${slice.root}` : 'from the top level';
-  const cap = slice.capped ? `, capped at ${slice.nodes.length} nodes` : '';
+  const cap = slice.capped ? `, capped by the ${slice.nodeLimit}-node limit` : '';
   const lines = [
     bold(
       `${projectKey} (${language}): ${groups.length} top-level group(s): ${names.join(', ')} — ` +
         `${slice.nodes.length} of ${slice.totalNodes} node(s) in view, ${slice.depth} level(s) ${where}${cap}`,
     ),
   ];
+  if (slice.capped) lines.push(formatSliceLimit(slice));
   if (base !== undefined) lines.push(dim(`Names are relative to ${base}`));
 
   lines.push(...formatDependencies(slice, label), ...formatFeedbackPairs(slice, label));
@@ -153,4 +154,15 @@ export function uniqueLabels(keys: string[]): Map<string, string> {
     labels.set(key, label);
   }
   return labels;
+}
+
+export function formatSliceLimit(slice: GraphSlice): string {
+  const levels = slice.levels.map((level) => `${level.depth} (${level.nodes})`).join(', ');
+  const shown = `Levels ${levels || 'none'} shown, ${slice.nodes.length} nodes.`;
+  const omitted = slice.omittedLevel;
+  if (omitted === undefined) return shown;
+  if (slice.depth === omitted.depth) {
+    return `${shown} Level ${omitted.depth} has ${omitted.nodes} nodes; only ${slice.nodes.length} fit within the ${slice.nodeLimit}-node cap. Omitted siblings cannot be discovered through this capped view.`;
+  }
+  return `${shown} Level ${omitted.depth} (${omitted.nodes} nodes) would exceed the ${slice.nodeLimit}-node cap.`;
 }

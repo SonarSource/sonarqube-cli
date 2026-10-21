@@ -67,13 +67,15 @@ export async function setIntended(
   const file = parseIntendedFile(await readJsonFile(options.file));
   const projectKey = await resolveProject(options, ctx);
   const dryRun = options.dryRun === true;
-  ctx.console.warn(
-    'The public API exports imported organization patterns as copies. Replacing or restoring this export may flatten those imports; their original references cannot be recovered from the backup.',
-  );
   const result = await setIntendedModel(createArchitectureApi(ctx.connection, projectKey), file, {
     projectKey,
     dryRun,
     backupDir: BACKUP_DIR,
+    onReplacement: () => {
+      ctx.console.warn(
+        'Public exports do not identify imported organization patterns or include all model metadata. Replacing or restoring an export may remove import links and metadata. If organization features are disabled, imported groups may be exported without their contents. The export cannot recover omitted data.',
+      );
+    },
   }).catch((error: unknown) => {
     throw toArchitectureError(error, projectKey);
   });

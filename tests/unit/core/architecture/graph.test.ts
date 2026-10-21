@@ -83,6 +83,38 @@ describe('indexStructure', () => {
     expect(index.descendants.get(1)).toBe(3);
   });
 
+  it('requires a public separator for file containers and accepts it when supplied', () => {
+    const container = {
+      id: 1,
+      name: 'app.ts',
+      kind: 'file',
+      edges: [],
+      nodes: [{ id: 2, name: 'API', kind: 'class', edges: [] }],
+    };
+    expect(() => indexStructure({ nodeCount: 2, edgeCount: 0, nodes: [container] })).toThrow(
+      'without a public separator',
+    );
+    const indexed = indexStructure({
+      nodeCount: 2,
+      edgeCount: 0,
+      nodes: [{ ...container, separator: ':' }],
+    });
+    expect([...indexed.idByKey.keys()]).toEqual(['app.ts', 'app.ts:API']);
+  });
+
+  it('refuses colliding inferred keys instead of silently replacing a node', () => {
+    expect(() =>
+      indexStructure({
+        nodeCount: 2,
+        edgeCount: 0,
+        nodes: [
+          { id: 1, name: 'same', kind: 'module', edges: [] },
+          { id: 2, name: 'same', kind: 'module', edges: [] },
+        ],
+      }),
+    ).toThrow('ambiguous node keys');
+  });
+
   it("prefers the node's own separator over the one inferred from its kind", () => {
     const index = indexStructure({
       id: 'f',
@@ -138,13 +170,29 @@ describe('sliceGraph', () => {
       'src/index.ts',
     ]);
     expect(slice.capped).toBe(true);
+    expect(slice.depth).toBe(2);
+    expect(slice.requestedDepth).toBe(3);
+    expect(slice.levels).toEqual([
+      { depth: 1, nodes: 3 },
+      { depth: 2, nodes: 2 },
+    ]);
+    expect(slice.omittedLevel).toEqual({ depth: 3, nodes: 2 });
+    expect(slice.nodeLimit).toBe(5);
     expect(slice.drillDown).toEqual(['app:com.example.web']);
   });
 
   it('keeps the largest nodes when even the first level is over the cap', () => {
     const slice = sliceGraph(index, undefined, 1, 1);
     expect(slice.nodes.map(({ key }) => key)).toEqual(['app']);
-    expect(slice).toMatchObject({ capped: true, omittedNodes: 6 });
+    expect(slice).toMatchObject({
+      capped: true,
+      omittedNodes: 6,
+      depth: 1,
+      requestedDepth: 1,
+      nodeLimit: 1,
+      levels: [{ depth: 1, nodes: 1 }],
+      omittedLevel: { depth: 1, nodes: 3 },
+    });
   });
 
   it('starts below a component', () => {
