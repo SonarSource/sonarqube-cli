@@ -97,33 +97,33 @@ describe('auth org', () => {
     { timeout: 15000 },
   );
 
+  function signInToOrgA(serverUrl: string) {
+    harness
+      .state()
+      .withActiveConnection(serverUrl, 'cloud', 'org-a')
+      .withTokenName(TOKEN_NAME)
+      .withKeychainToken(serverUrl, STORED_TOKEN);
+  }
+
+  function activeConnection() {
+    return harness.stateJsonFile.asJson().auth.connections[0] as {
+      orgKey?: string;
+      tokenName?: string;
+      organizationUuidV4?: string;
+    };
+  }
+
+  function cloudServer() {
+    return harness
+      .newFakeServer()
+      .withAuthToken(STORED_TOKEN)
+      .withOrganizations([
+        { key: 'org-a', name: 'Org A' },
+        { key: 'org-b', name: 'Org B' },
+      ]);
+  }
+
   describe('with an explicit organization key', () => {
-    function signInToOrgA(serverUrl: string) {
-      harness
-        .state()
-        .withActiveConnection(serverUrl, 'cloud', 'org-a')
-        .withTokenName(TOKEN_NAME)
-        .withKeychainToken(serverUrl, STORED_TOKEN);
-    }
-
-    function activeConnection() {
-      return harness.stateJsonFile.asJson().auth.connections[0] as {
-        orgKey?: string;
-        tokenName?: string;
-        organizationUuidV4?: string;
-      };
-    }
-
-    function cloudServer() {
-      return harness
-        .newFakeServer()
-        .withAuthToken(STORED_TOKEN)
-        .withOrganizations([
-          { key: 'org-a', name: 'Org A' },
-          { key: 'org-b', name: 'Org B' },
-        ]);
-    }
-
     it(
       'switches the stored connection to the organization and reports it',
       async () => {
@@ -216,6 +216,85 @@ describe('auth org', () => {
         expect(output).toContain(
           '  → Check your network connection and the server status, then try again.',
         );
+        expect(activeConnection().orgKey).toBe('org-a');
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  describe('without an organization key', () => {
+    it(
+      'switches to the organization chosen from the picker and marks the active one',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const session = harness.runInteractive('auth org');
+        await session.waitText('Select an organization');
+        session.keyDown();
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toMatch(/Org A\s+org-a\s+\S*active/);
+        expect(result.stdout).toContain('Switched to organization: org-b');
+        expect(activeConnection().orgKey).toBe('org-b');
+        expect(activeConnection().tokenName).toBe(TOKEN_NAME);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'makes no change when the active organization is chosen',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const session = harness.runInteractive('auth org');
+        await session.waitText('Select an organization');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already using organization: org-a');
+        expect(activeConnection().orgKey).toBe('org-a');
+        expect(activeConnection().organizationUuidV4).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 and keeps the active organization when the organizations cannot be listed',
+      async () => {
+        const server = await cloudServer().withOrganizationsSearchError(500).start();
+        signInToOrgA(server.baseUrl());
+
+        const result = await harness.run('auth org');
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('❌ Could not list your organizations');
+        expect(output).toContain(
+          '  → Check your network connection and the server status, then try again.',
+        );
+        expect(activeConnection().orgKey).toBe('org-a');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'exits with code 1 and keeps the active organization when the selection is cancelled',
+      async () => {
+        const server = await cloudServer().start();
+        signInToOrgA(server.baseUrl());
+
+        const session = harness.runInteractive('auth org');
+        await session.waitText('Select an organization');
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('Organization selection cancelled');
         expect(activeConnection().orgKey).toBe('org-a');
       },
       { timeout: 15000 },
