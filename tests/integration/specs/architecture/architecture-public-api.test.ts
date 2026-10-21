@@ -1009,7 +1009,8 @@ describe('sonar architecture set on the public API', () => {
     );
     const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('write stopped because the model identity changed');
+    expect(result.stderr).toContain('server acknowledged the architecture write');
+    expect(result.stderr).toContain('resulting state is unknown; inspect it before restoring');
     expect(result.stderr).not.toContain('verification');
     expect(result.stderr).not.toContain('public read after writing did not confirm');
     expect(

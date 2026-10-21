@@ -145,7 +145,7 @@ function writeFailure(
       'The architecture write could not be confirmed; inspect the current server state before restoring. No automatic rollback was attempted.',
     rejected: 'The server rejected the architecture write. No automatic rollback was attempted.',
     'identity-changed':
-      'The architecture write stopped because the model identity changed. No automatic rollback was attempted.',
+      'The server acknowledged the architecture write but returned a different model identity. The resulting state is unknown; inspect it before restoring. No automatic rollback was attempted.',
   };
   const lines = [messages[outcome]];
   if (outcome === 'unconfirmed')
