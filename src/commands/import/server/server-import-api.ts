@@ -207,7 +207,7 @@ export class ServerImportApiClient {
   ): Promise<{ repositories: BitbucketCloudRepositoryResponse[] }> {
     const response = await this.client
       .get<{ repositories?: BitbucketCloudRepositoryResponse[] }>(
-        '/api/alm_integration/search_bitbucketcloud_repos',
+        '/api/alm_integrations/search_bitbucketcloud_repos',
         { almSetting: settingKey, p: pageIndex, ps: pageSize },
       )
       .orThrow();

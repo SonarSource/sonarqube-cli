@@ -2152,7 +2152,7 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/alm_integration/search_bitbucketcloud_repos') {
+        if (path === '/api/alm_integrations/search_bitbucketcloud_repos') {
           const repos = (bitbucketCloudRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.repositoryName || r.name.includes(query.repositoryName),
           );
