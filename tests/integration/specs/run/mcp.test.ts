@@ -223,6 +223,32 @@ describe('run mcp', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    [130, undefined],
+    [143, undefined],
+    [1, 'http://sonarqube:9000'],
+  ])(
+    'omits loopback advice for exit %s and container URL %s',
+    async (exitCode, serverUrl) => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker(exitCode);
+      if (serverUrl) {
+        expect(
+          (await harness.run(`config set mcp.container.serverUrl ${serverUrl}`)).exitCode,
+        ).toBe(0);
+      }
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(exitCode);
+      expect(result.stderr).not.toContain('The MCP container exited with an error');
+    },
+    { timeout: 15000 },
+  );
+
   it(
     'uses persistent container network settings on launch',
     async () => {
