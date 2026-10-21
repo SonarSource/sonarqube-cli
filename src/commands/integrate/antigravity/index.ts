@@ -25,6 +25,7 @@ import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/ag
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
 import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
+import { warnIfMcpRuntimeUnavailable } from '../_common/mcp-runtime-warning.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { resolveVortexSetup } from '../_common/vortex.ts';
 import { supportedIntegrations } from '../index.ts';
@@ -81,4 +82,5 @@ export async function integrateAntigravity(
       });
     },
   });
+  await warnIfMcpRuntimeUnavailable(console, ANTIGRAVITY_INTEGRATION_ID, targetRoot);
 }
