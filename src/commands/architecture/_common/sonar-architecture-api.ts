@@ -48,8 +48,8 @@ interface ArchitectureIds {
   projectId: string;
 }
 
-interface IntendedModelExportDto extends IntendedArchitecture {
-  id: string;
+interface IntendedModelExportDto extends Omit<IntendedArchitecture, 'type'> {
+  qualifiers: IntendedArchitecture['type'];
 }
 
 interface CurrentArchitecturesDto {
@@ -57,6 +57,7 @@ interface CurrentArchitecturesDto {
 }
 
 interface IntendedArchitecturesDto {
+  id?: string;
   intendedArchitectures: IntendedModelExportDto[];
 }
 
@@ -88,9 +89,14 @@ function objectField(value: unknown): Record<string, unknown> {
 }
 
 function toIntended(value: unknown): IntendedArchitecture {
-  const { type, language, groups, constraints } = objectField(value);
+  const raw = objectField(value);
+  const { qualifiers: type, language, groups, constraints } = raw;
+  const label = raw.label ?? undefined;
+  const description = raw.description ?? undefined;
   if (
     (type !== 'file' && type !== 'namespace') ||
+    (label !== undefined && typeof label !== 'string') ||
+    (description !== undefined && typeof description !== 'string') ||
     typeof language !== 'string' ||
     !(ECOSYSTEMS as readonly string[]).includes(language) ||
     !Array.isArray(groups) ||
@@ -100,6 +106,8 @@ function toIntended(value: unknown): IntendedArchitecture {
   const budget = { count: 0 };
   return {
     type,
+    ...(label === undefined ? {} : { label }),
+    ...(description === undefined ? {} : { description }),
     language: language as Ecosystem,
     groups: groups.map((group: unknown) => publicGroup(group, 0, budget)),
     constraints: constraints.map((value: unknown) => {
@@ -113,9 +121,22 @@ function toIntended(value: unknown): IntendedArchitecture {
 function publicGroup(value: unknown, depth: number, budget: { count: number }): IntendedGroup {
   if (depth > MAX_PUBLIC_GROUP_DEPTH || ++budget.count > MAX_PUBLIC_GROUPS)
     return invalidPublicModel();
-  const group = objectField(value);
+  const group = { ...objectField(value) };
+  for (const field of [
+    'description',
+    'patternId',
+    'patterns',
+    'groups',
+    'interface',
+    'interfaceAccess',
+  ]) {
+    if (group[field] === null) group[field] = undefined;
+  }
   if (
     typeof group.label !== 'string' ||
+    (group.description !== undefined && typeof group.description !== 'string') ||
+    (group.patternId !== undefined &&
+      (typeof group.patternId !== 'string' || !MODEL_ID.test(group.patternId))) ||
     (group.patterns !== undefined &&
       (!Array.isArray(group.patterns) ||
         group.patterns.some((pattern: unknown) => typeof pattern !== 'string'))) ||
@@ -126,6 +147,8 @@ function publicGroup(value: unknown, depth: number, budget: { count: number }): 
     return invalidPublicModel();
   return {
     label: group.label,
+    ...(group.description === undefined ? {} : { description: group.description }),
+    ...(group.patternId === undefined ? {} : { patternId: group.patternId }),
     ...(group.patterns === undefined ? {} : { patterns: group.patterns as string[] }),
     ...(group.groups === undefined
       ? {}
@@ -214,7 +237,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         .get<CurrentArchitecturesDto | null>(this.path('current-architectures'), {
           organizationId,
           branchId,
-          ecosystem,
+          language: ecosystem,
         })
         .orThrow();
       if (!Array.isArray(response?.currentArchitectures)) {
@@ -245,13 +268,15 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Invalid public intended architecture response: each model must be an object.',
       );
     }
-    const ids = new Set(response.intendedArchitectures.map(({ id }) => id));
-    if ([...ids].some((id) => typeof id !== 'string' || !MODEL_ID.test(id)) || ids.size > 1) {
+    const id = response.id;
+    if (
+      (id !== undefined && (typeof id !== 'string' || !MODEL_ID.test(id))) ||
+      (response.intendedArchitectures.length > 0 && id === undefined)
+    ) {
       throw new CommandFailedError(
-        'Invalid public intended architecture response: expected one stored model with a server id.',
+        'Invalid public intended architecture response: expected a root server model id.',
       );
     }
-    const id = response.intendedArchitectures.at(0)?.id;
     if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
       throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
@@ -265,7 +290,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const response = await this.http
       .post<IntendedArchitecturesDto | null>(this.path('intended-architectures'), {
         projectId: await this.projectId(),
-        intendedArchitectures: models,
+        intendedArchitectures: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
       })
       .orThrow();
     this.verifySaved(response);
@@ -273,7 +298,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
 
   async updateIntended(models: IntendedArchitecture[]): Promise<void> {
     const response = await this.http
-      .patch<IntendedArchitecturesDto | null>(this.modelPath(), { intendedArchitectures: models })
+      .patch<IntendedArchitecturesDto | null>(this.modelPath(), {
+        intendedArchitectures: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
+      })
       .orThrow();
     this.verifySaved(response);
   }
@@ -300,18 +327,18 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Invalid public intended architecture write response: missing model envelope or server id.',
       );
     }
-    const ids = new Set(response.intendedArchitectures.map(({ id }) => id));
-    const id = response.intendedArchitectures.at(0)?.id;
+    const id = response.id;
     if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
       throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
       );
     }
-    if (ids.size !== 1 || typeof id !== 'string' || !MODEL_ID.test(id)) {
+    if (typeof id !== 'string' || !MODEL_ID.test(id)) {
       throw new CommandFailedError(
         'Invalid public intended architecture write response: unexpected server model id.',
       );
     }
+    response.intendedArchitectures.forEach(toIntended);
     this.intendedModelId = id;
   }
 

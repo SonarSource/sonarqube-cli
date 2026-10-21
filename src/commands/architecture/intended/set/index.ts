@@ -23,7 +23,10 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { createArchitectureApi } from '@/commands/architecture/_common/architecture-api.ts';
+import {
+  createArchitectureApi,
+  type IntendedGroup,
+} from '@/commands/architecture/_common/architecture-api.ts';
 import { toArchitectureError } from '@/commands/architecture/_common/errors.ts';
 import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff.ts';
 import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
@@ -71,9 +74,10 @@ export async function setIntended(
     projectKey,
     dryRun,
     backupDir: BACKUP_DIR,
-    onReplacement: () => {
+    onReplacement: (current) => {
+      if (!current.some((model) => containsPatternImport(model.groups))) return;
       ctx.console.warn(
-        'Public exports do not identify imported organization patterns or include all model metadata. Replacing or restoring an export may remove import links and metadata. If organization features are disabled, imported groups may be exported without their contents. The export cannot recover omitted data.',
+        'Pattern-linked groups retain their patternId. The server resolves their contents and ignores submitted expanded children.',
       );
     },
   }).catch((error: unknown) => {
@@ -154,5 +158,11 @@ function recordSet(
     new TelemetryFact<ArchitectureSetPayload>(CLI_ARCHITECTURE_SET, payload, {
       auth: ctx.auth,
     }),
+  );
+}
+
+function containsPatternImport(groups: IntendedGroup[]): boolean {
+  return groups.some(
+    (group) => group.patternId !== undefined || containsPatternImport(group.groups ?? []),
   );
 }

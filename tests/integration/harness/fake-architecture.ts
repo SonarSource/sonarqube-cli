@@ -48,6 +48,8 @@ interface SavedGroup extends IntendedGroup {
 }
 
 interface SavedPerspective {
+  label?: string;
+  description?: string;
   qualifiers: IntendedArchitecture['type'];
   language: Ecosystem;
   groups?: SavedGroup[];
@@ -71,10 +73,14 @@ interface ArchitectureRequest {
 export class FakeArchitecture {
   private readonly structure = new Map<Ecosystem, StructureGraph[]>();
   private models: SavedModel[] = [];
+  private readonly patternGroups = new Map<string, SavedGroup[]>();
   private nextModelId = 1;
   private modelNamespace = '00000000';
   private intendedReads = 0;
-  private readonly staleReads = new Map<number, unknown[]>();
+  private readonly staleReads = new Map<
+    number,
+    { id?: string; intendedArchitectures: unknown[] }
+  >();
   private staleWriteResponse = false;
 
   withStaleWriteResponse(): this {
@@ -83,10 +89,7 @@ export class FakeArchitecture {
   }
 
   staleIntendedRead(readNumber: number): this {
-    this.staleReads.set(
-      readNumber,
-      this.models.flatMap((model) => this.exportModel(model)),
-    );
+    this.staleReads.set(readNumber, this.exportEnvelope());
     return this;
   }
   private readonly readFailures = new Map<number, number>();
@@ -130,6 +133,7 @@ export class FakeArchitecture {
 
   /** One saved model in the models API shape, e.g. with a group importing a pattern. */
   withSavedPerspectives(perspectives: SavedPerspective[]): this {
+    for (const perspective of perspectives) this.rememberPatterns(perspective.groups ?? []);
     this.models = [
       {
         id: this.allocateModelId(),
@@ -198,7 +202,7 @@ export class FakeArchitecture {
 
     switch (`${resource}:${request.method}`) {
       case 'current-architectures:GET': {
-        const graphs = this.structure.get(request.query.ecosystem as Ecosystem) ?? [];
+        const graphs = this.structure.get(request.query.language as Ecosystem) ?? [];
         return json({ currentArchitectures: graphs.map(({ id: _id, ...graph }) => graph) });
       }
       case 'intended-architectures:GET': {
@@ -207,7 +211,7 @@ export class FakeArchitecture {
           this.intendedReads++;
           return json({ message: 'Read failed' }, status);
         }
-        return json({ intendedArchitectures: this.readIntended() });
+        return json(this.readIntended());
       }
       case 'intended-architectures:POST':
         return request.contentType === 'application/json'
@@ -226,7 +230,7 @@ export class FakeArchitecture {
     }
   }
 
-  private readIntended(): unknown[] {
+  private readIntended(): { id?: string; intendedArchitectures: unknown[] } {
     this.intendedReads++;
     const stale = this.staleReads.get(this.intendedReads);
     if (stale !== undefined) return stale;
@@ -240,15 +244,14 @@ export class FakeArchitecture {
         }));
       else this.models = [this.toSavedModel(change.models)];
     }
-    return this.models.slice(0, 1).flatMap(({ id, perspectives }) =>
-      perspectives.map((perspective) => ({
-        id,
-        type: perspective.qualifiers,
-        language: perspective.language,
-        groups: (perspective.groups ?? []).map(exportGroup),
-        constraints: perspective.constraints,
-      })),
-    );
+    return this.exportEnvelope();
+  }
+
+  private exportEnvelope(): { id?: string; intendedArchitectures: unknown[] } {
+    const model = this.models[0];
+    return model
+      ? { id: model.id, intendedArchitectures: this.exportModel(model) }
+      : { intendedArchitectures: [] };
   }
 
   private deleteModel(modelId: string | undefined): Response {
@@ -269,15 +272,12 @@ export class FakeArchitecture {
     const parsed = parseWriteBody(body, true);
     if (!parsed)
       return json({ message: 'POST requires projectId and intendedArchitectures only' }, 400);
-    const previous = this.models.flatMap((model) => this.exportModel(model));
+    const previous = this.exportEnvelope();
     const model = this.toSavedModel(parsed);
     this.models.push(model);
     return this.committedCreateFailures.has(++this.intendedCreates)
       ? json({ message: 'Create response failed after commit' }, 500)
-      : json(
-          { intendedArchitectures: this.staleWriteResponse ? previous : this.exportModel(model) },
-          201,
-        );
+      : json(this.staleWriteResponse ? previous : this.exportEnvelope(), 201);
   }
 
   private updateIntendedArchitectures(id: string | undefined, body: string | undefined): Response {
@@ -285,46 +285,60 @@ export class FakeArchitecture {
     if (!model) return json({ message: 'Model not found' }, 404);
     const parsed = parseWriteBody(body, false);
     if (!parsed) return json({ message: 'PATCH requires intendedArchitectures only' }, 400);
-    const previous = this.exportModel(model);
+    const previous = this.exportEnvelope();
     const failure = this.updateFailures.get(++this.intendedUpdates);
     if (!failure || failure.committed)
-      model.perspectives = parsed.map(({ type, ...rest }) => ({ qualifiers: type, ...rest }));
+      model.perspectives = parsed.map(({ type, groups, ...rest }) => ({
+        qualifiers: type,
+        groups: this.saveGroups(groups),
+        ...rest,
+      }));
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json({
-          intendedArchitectures: this.staleWriteResponse ? previous : this.exportModel(model),
-        });
+      : json(this.staleWriteResponse ? previous : this.exportEnvelope());
   }
 
-  private exportModel({ id, perspectives }: SavedModel): unknown[] {
+  private exportModel({ perspectives }: SavedModel): unknown[] {
     return perspectives.map(({ qualifiers, groups, ...rest }) => ({
-      id,
-      type: qualifiers,
+      qualifiers,
       groups: (groups ?? []).map(exportGroup),
       ...rest,
+    }));
+  }
+
+  private rememberPatterns(groups: SavedGroup[]): void {
+    for (const group of groups) {
+      if (group.patternId !== undefined)
+        this.patternGroups.set(group.patternId, group.groups ?? []);
+      this.rememberPatterns(group.groups ?? []);
+    }
+  }
+
+  private saveGroups(groups: IntendedGroup[]): SavedGroup[] {
+    return groups.map((group) => ({
+      ...group,
+      ...(group.patternId === undefined
+        ? group.groups === undefined
+          ? {}
+          : { groups: this.saveGroups(group.groups) }
+        : { groups: this.patternGroups.get(group.patternId) ?? [] }),
     }));
   }
 
   private toSavedModel(models: IntendedArchitecture[]): SavedModel {
     return {
       id: this.allocateModelId(),
-      perspectives: models.map(({ type, language, groups, constraints }) => ({
+      perspectives: models.map(({ type, groups, ...rest }) => ({
         qualifiers: type,
-        language,
-        groups,
-        constraints,
+        groups: this.saveGroups(groups),
+        ...rest,
       })),
     };
   }
 }
 
 /** The export leaves out what only the models API knows. */
-function exportGroup({
-  description: _description,
-  patternId: _patternId,
-  groups,
-  ...rest
-}: SavedGroup): IntendedGroup {
+function exportGroup({ groups, ...rest }: SavedGroup): IntendedGroup {
   return {
     ...rest,
     groups: (groups ?? []).map(exportGroup),
@@ -366,11 +380,11 @@ export function routeArchitectureRequest(
     const expectedOrganization = isCloud ? query.organizationId : FAKE_SERVER_ORGANIZATION_ID;
     if (
       !query.branchId ||
-      !query.ecosystem ||
+      !query.language ||
       !query.organizationId ||
       query.organizationId !== expectedOrganization
     ) {
-      return json({ message: 'organizationId, branchId and ecosystem are required' }, 400);
+      return json({ message: 'organizationId, branchId and language are required' }, 400);
     }
     project = projects.find(({ key }) => fakeMainBranchId(key) === query.branchId);
     if (!project) return json({ currentArchitectures: [] });
@@ -408,15 +422,27 @@ function parseWriteBody(
     return undefined;
   if (
     parsed.intendedArchitectures.some(
-      (model: IntendedArchitecture & { id?: string }) =>
+      (model: {
+        qualifiers?: unknown;
+        type?: unknown;
+        id?: unknown;
+        groups?: unknown;
+        constraints?: unknown;
+      }) =>
         !model ||
         model.id !== undefined ||
+        model.type !== undefined ||
+        (model.qualifiers !== 'file' && model.qualifiers !== 'namespace') ||
         !Array.isArray(model.groups) ||
         !Array.isArray(model.constraints),
     )
   )
     return undefined;
-  return parsed.intendedArchitectures as IntendedArchitecture[];
+  return (
+    parsed.intendedArchitectures as (Omit<IntendedArchitecture, 'type'> & {
+      qualifiers: IntendedArchitecture['type'];
+    })[]
+  ).map(({ qualifiers, ...rest }) => ({ type: qualifiers, ...rest }));
 }
 
 function isResource(value: string | undefined): value is ArchitectureResource {

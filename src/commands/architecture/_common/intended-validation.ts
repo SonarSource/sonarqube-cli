@@ -39,7 +39,7 @@ const FULL_EXPORT_HINT =
 export const VALID_MODEL_RULES =
   'Each model requires type (file or namespace), a supported language, groups and constraints arrays. ' +
   'Groups require a label; optional patterns contain strings. Constraints require from and to strings. ' +
-  'Group keys must be unambiguous and duplicate constraints are rejected by this client.';
+  'Sibling group labels must be unique and duplicate constraints are rejected by this client.';
 
 /** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
@@ -134,20 +134,27 @@ function parseModel(
   };
   if (!Array.isArray(value.groups)) problems.push(`${where}.groups must be an array.`);
   if (!Array.isArray(value.constraints)) problems.push(`${where}.constraints must be an array.`);
-  const groups = parseGroups(value.groups, '', 0, context);
+  const groups = parseGroups(value.groups, [], 0, context);
   const constraints = parseConstraints(value.constraints, context);
-  return { type, language, groups, constraints };
+  const metadata: Pick<IntendedArchitecture, 'label' | 'description'> = {};
+  for (const field of ['label', 'description'] as const) {
+    if (value[field] != null) {
+      if (typeof value[field] !== 'string') problems.push(`${where}.${field} must be a string.`);
+      else metadata[field] = value[field];
+    }
+  }
+  return { type, language, groups, constraints, ...metadata };
 }
 
 function parseGroups(
   value: unknown,
-  prefix: string,
+  parent: string[],
   depth: number,
   context: GroupContext,
 ): IntendedGroup[] {
-  if (value === undefined) return [];
+  if (value == null) return [];
   const { problems, language } = context;
-  const owner = prefix || `the ${language} model`;
+  const owner = parent.join(GROUP_KEY_SEPARATOR) || `the ${language} model`;
   if (!Array.isArray(value)) {
     problems.push(`Groups of ${owner} must be an array.`);
     return [];
@@ -168,28 +175,43 @@ function parseGroups(
     if (raw.hiddenSubgroups !== undefined && raw.hiddenSubgroups !== null) {
       throw partialViewError();
     }
-    const key = `${prefix}${raw.label}`;
+    const path = [...parent, raw.label];
+    const key = path.join(GROUP_KEY_SEPARATOR);
+    const identity = JSON.stringify(path);
     const name = `Group "${key}" (${language})`;
-    if (context.keys.has(key)) problems.push(`${name} is defined twice.`);
-    context.keys.add(key);
+    if (context.keys.has(identity)) problems.push(`${name} is defined twice.`);
+    context.keys.add(identity);
 
     const patterns = parsePatterns(raw.patterns, name, problems);
     const group: IntendedGroup = { label: raw.label, patterns };
+    if (raw.description != null) {
+      if (typeof raw.description !== 'string')
+        problems.push(`${name}.description must be a string.`);
+      else group.description = raw.description;
+    }
+    if (raw.patternId != null) {
+      if (
+        typeof raw.patternId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.patternId)
+      )
+        problems.push(`${name}.patternId must be a UUID.`);
+      else group.patternId = raw.patternId;
+    }
     for (const flag of ['interface', 'interfaceAccess'] as const) {
       const flagValue = raw[flag];
       if (typeof flagValue === 'boolean') group[flag] = flagValue;
-      else if (flagValue !== undefined) {
+      else if (flagValue != null) {
         problems.push(`${name}.${flag} must be true or false.`);
       }
     }
-    const subgroups = parseGroups(raw.groups, `${key}${GROUP_KEY_SEPARATOR}`, depth + 1, context);
+    const subgroups = parseGroups(raw.groups, path, depth + 1, context);
     if (subgroups.length > 0) group.groups = subgroups;
     return [group];
   });
 }
 
 function parsePatterns(value: unknown, name: string, problems: string[]): string[] {
-  if (value === undefined) return [];
+  if (value == null) return [];
   if (!Array.isArray(value) || value.some((pattern) => typeof pattern !== 'string')) {
     problems.push(`${name} needs "patterns": an array of strings.`);
     return [];
@@ -199,7 +221,7 @@ function parsePatterns(value: unknown, name: string, problems: string[]): string
 }
 
 function parseConstraints(value: unknown, context: GroupContext): IntendedConstraint[] {
-  if (value === undefined) return [];
+  if (value == null) return [];
   const { problems, language } = context;
   if (!Array.isArray(value)) {
     problems.push(`Constraints of the ${language} model must be an array.`);

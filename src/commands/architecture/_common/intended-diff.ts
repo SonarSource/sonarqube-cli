@@ -34,6 +34,8 @@ export interface IntendedDiff {
 }
 
 interface FlatGroup {
+  description?: string;
+  patternId?: string;
   path: string[];
   patterns: string[];
   interface: boolean;
@@ -81,6 +83,14 @@ function diffPerspective(
   if (!before) diff.added.push(`model ${language}`);
   if (before && after && before.type !== after.type)
     diff.changed.push(`model ${language}: type ${before.type} -> ${after.type}`);
+  if (before && after) {
+    for (const field of ['label', 'description'] as const) {
+      if (before[field] !== after[field])
+        diff.changed.push(
+          `model ${language}: ${field} ${JSON.stringify(before[field] ?? null)} -> ${JSON.stringify(after[field] ?? null)}`,
+        );
+    }
+  }
   diffGroups(
     language,
     flattenGroups(before?.groups ?? []),
@@ -111,7 +121,7 @@ function diffGroupOrder(
   }
   for (const group of after) {
     const previous = beforeByLabel.get(group.label);
-    if (previous) {
+    if (previous && previous.patternId === undefined && group.patternId === undefined) {
       const key = parent ? `${parent}${GROUP_KEY_SEPARATOR}${group.label}` : group.label;
       diffGroupOrder(language, previous.groups ?? [], group.groups ?? [], key, diff);
     }
@@ -126,13 +136,15 @@ function flattenGroups(groups: IntendedGroup[], parent: string[] = []): Map<stri
   const flat = new Map<string, FlatGroup>();
   for (const group of groups) {
     const path = [...parent, group.label];
-    flat.set(path.join(GROUP_KEY_SEPARATOR), {
+    flat.set(JSON.stringify(path), {
       path,
+      description: group.description,
+      patternId: group.patternId?.toLowerCase(),
       patterns: group.patterns ?? [],
       interface: group.interface === true,
       interfaceAccess: group.interfaceAccess === true,
     });
-    const children = flattenGroups(group.groups ?? [], path);
+    const children = flattenGroups(group.patternId === undefined ? (group.groups ?? []) : [], path);
     for (const [childKey, child] of children) flat.set(childKey, child);
   }
   return flat;
@@ -144,16 +156,38 @@ function diffGroups(
   after: Map<string, FlatGroup>,
   diff: IntendedDiff,
 ): void {
-  for (const key of before.keys()) {
-    if (!after.has(key)) diff.removed.push(`group ${language} ${key}`);
+  const previousByDisplayKey = new Map<string, { identity: string; group: FlatGroup }[]>();
+  const nextCounts = new Map<string, number>();
+  for (const [identity, group] of before) {
+    const displayKey = group.path.join(GROUP_KEY_SEPARATOR);
+    const entries = previousByDisplayKey.get(displayKey) ?? [];
+    entries.push({ identity, group });
+    previousByDisplayKey.set(displayKey, entries);
   }
-  for (const [key, group] of after) {
-    const old = before.get(key);
-    if (!old) {
+  for (const group of after.values()) {
+    const key = group.path.join(GROUP_KEY_SEPARATOR);
+    nextCounts.set(key, (nextCounts.get(key) ?? 0) + 1);
+  }
+  const matched = new Set<string>();
+  for (const [identity, group] of after) {
+    const key = group.path.join(GROUP_KEY_SEPARATOR);
+    const candidates = previousByDisplayKey.get(key) ?? [];
+    const exact = before.get(identity);
+    const previous = exact
+      ? { identity, group: exact }
+      : candidates.length === 1 && nextCounts.get(key) === 1
+        ? candidates[0]
+        : undefined;
+    if (!previous) {
       diff.added.push(`group ${language} ${key} [${group.patterns.join(', ')}]`);
       continue;
     }
-    diffExistingGroup(language, key, old, group, diff);
+    matched.add(previous.identity);
+    diffExistingGroup(language, key, previous.group, group, diff);
+  }
+  for (const [identity, group] of before) {
+    if (!matched.has(identity))
+      diff.removed.push(`group ${language} ${group.path.join(GROUP_KEY_SEPARATOR)}`);
   }
 }
 
@@ -176,6 +210,12 @@ function diffExistingGroup(
   }
   for (const pattern of newPatterns) {
     if (!oldPatterns.has(pattern)) diff.added.push(`pattern ${language} ${key} ${pattern}`);
+  }
+  for (const field of ['description', 'patternId'] as const) {
+    if (old[field] !== group[field])
+      diff.changed.push(
+        `group ${language} ${key}: ${field} ${JSON.stringify(old[field] ?? null)} -> ${JSON.stringify(group[field] ?? null)}`,
+      );
   }
   for (const flag of ['interface', 'interfaceAccess'] as const) {
     if (old[flag] !== group[flag]) {

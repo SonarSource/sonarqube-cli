@@ -80,6 +80,10 @@ const INTENDED: IntendedArchitecture[] = [
   },
 ];
 
+function wireModels(models: IntendedArchitecture[]) {
+  return models.map(({ type, ...model }) => ({ qualifiers: type, ...model }));
+}
+
 describe('sonar architecture reads on the public API', () => {
   let harness: TestHarness;
 
@@ -211,11 +215,94 @@ describe('sonar architecture reads on the public API', () => {
     });
   }
 
+  it('reads the public root id and qualifiers schema with all documented metadata', async () => {
+    const response = {
+      id: '00000000-0000-4000-8000-000000000001',
+      intendedArchitectures: [
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          label: 'Layers',
+          description: 'Perspective description',
+          groups: [
+            {
+              label: 'Shared',
+              description: 'Group description',
+              patternId: '11111111-1111-4111-8111-111111111111',
+              groups: [{ label: 'Imported', patterns: ['src:**'] }],
+            },
+          ],
+          constraints: [],
+        },
+      ],
+    };
+    await cloudServerWith((project) =>
+      project.withArchitecture((architecture) =>
+        architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+      ),
+    );
+    const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
+    expect(result.exitCode).toBe(0);
+    const exported = JSON.parse(result.stdout);
+    expect(exported.models).toEqual([
+      {
+        type: 'namespace',
+        language: 'java',
+        label: 'Layers',
+        description: 'Perspective description',
+        groups: response.intendedArchitectures[0].groups,
+        constraints: [],
+      },
+    ]);
+    expect(exported.models[0]).not.toHaveProperty('id');
+    expect(exported.models[0]).not.toHaveProperty('qualifiers');
+  });
+
+  it('normalizes nullable optional fields from the public response while preserving false', async () => {
+    const response = {
+      id: '00000000-0000-4000-8000-000000000001',
+      intendedArchitectures: [
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          label: null,
+          description: null,
+          groups: [
+            {
+              label: 'Domain',
+              description: null,
+              patternId: null,
+              patterns: ['src:**'],
+              groups: [],
+              interface: false,
+              interfaceAccess: null,
+            },
+          ],
+          constraints: [],
+        },
+      ],
+    };
+    await cloudServerWith((project) =>
+      project.withArchitecture((architecture) =>
+        architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+      ),
+    );
+    const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).models).toEqual([
+      {
+        type: 'namespace',
+        language: 'java',
+        groups: [{ label: 'Domain', patterns: ['src:**'], groups: [], interface: false }],
+        constraints: [],
+      },
+    ]);
+  });
+
   it('drops unexpected nested intended fields and unsupported current graph ids', async () => {
     const hidden = 'synthetic-private-canary';
     const model = {
-      ...INTENDED[0],
-      id: '00000000-0000-4000-8000-000000000001',
+      ...wireModels(INTENDED)[0],
       groups: [
         {
           label: 'A',
@@ -233,7 +320,10 @@ describe('sonar architecture reads on the public API', () => {
           .withStatus(
             'intended-architectures',
             200,
-            JSON.stringify({ intendedArchitectures: [model] }),
+            JSON.stringify({
+              id: '00000000-0000-4000-8000-000000000001',
+              intendedArchitectures: [model],
+            }),
             'GET',
           )
           .withStatus(
@@ -260,7 +350,7 @@ describe('sonar architecture reads on the public API', () => {
   });
 
   for (const malformed of [
-    { type: { privateField: 'malformed-secret-canary' } },
+    { qualifiers: { privateField: 'malformed-secret-canary' } },
     { language: { privateField: 'malformed-secret-canary' } },
     { groups: [{ label: { privateField: 'malformed-secret-canary' } }] },
     { groups: [{ label: 'A', patterns: [{ privateField: 'malformed-secret-canary' }] }] },
@@ -274,9 +364,8 @@ describe('sonar architecture reads on the public API', () => {
             'intended-architectures',
             200,
             JSON.stringify({
-              intendedArchitectures: [
-                { ...INTENDED[0], id: '00000000-0000-4000-8000-000000000001', ...malformed },
-              ],
+              id: '00000000-0000-4000-8000-000000000001',
+              intendedArchitectures: [{ ...wireModels(INTENDED)[0], ...malformed }],
             }),
             'GET',
           ),
@@ -348,7 +437,7 @@ describe('sonar architecture reads on the public API', () => {
       expect(currentCall?.query).toEqual({
         organizationId: 'my-org-uuid-v4',
         branchId: fakeMainBranchId(PROJECT),
-        ecosystem: 'java',
+        language: 'java',
       });
       const intendedCall = requests.find(
         ({ path }) => path === '/architecture/intended-architectures',
@@ -649,14 +738,158 @@ describe('sonar architecture intended set on the public API', () => {
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect(JSON.parse(writes(server)[0].body!)).toEqual({
-      intendedArchitectures: [
+      intendedArchitectures: wireModels([
         ...publicModels([cs]),
         ...file.models.map((model) => ({
           ...model,
           groups: model.groups.map(({ groups: _groups, ...group }) => group),
         })),
-      ],
+      ]),
     });
+  });
+
+  it('round-trips public metadata and import links while the server owns linked contents', async () => {
+    const patternId = '11111111-1111-4111-8111-111111111111';
+    const server = await startWith((fake) =>
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          label: 'Layers',
+          description: 'Perspective description',
+          groups: [
+            {
+              label: 'Shared',
+              description: 'Group description',
+              patternId,
+              groups: [{ label: 'Imported', patterns: ['src:**'] }],
+            },
+          ],
+          constraints: [],
+        },
+      ]),
+    );
+    const original = await readSaved();
+    const changed = structuredClone(original);
+    changed.models[0].description = 'Updated perspective';
+    changed.models[0].groups[0].description = 'Updated group';
+    const preview = await setFile(changed, ' --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain('description');
+    expect(preview.stderr).toContain('Pattern-linked groups retain their patternId');
+    const result = await setFile(changed);
+    expect(result.exitCode).toBe(0);
+    expect(writes(server)).toHaveLength(1);
+    const body = JSON.parse(writes(server)[0].body!);
+    expect(body.intendedArchitectures[0]).toMatchObject({
+      qualifiers: 'namespace',
+      label: 'Layers',
+      description: 'Updated perspective',
+    });
+    expect(body.intendedArchitectures[0]).not.toHaveProperty('type');
+    expect(body.intendedArchitectures[0]).not.toHaveProperty('id');
+    expect(body.intendedArchitectures[0].groups[0].patternId).toBe(patternId);
+    const saved = await readSaved();
+    expect(saved.models[0].groups[0]).toMatchObject({
+      description: 'Updated group',
+      patternId,
+      groups: original.models[0].groups[0].groups,
+    });
+    expect(saved.models[0].description).toBe('Updated perspective');
+  });
+
+  it('allows adding a regular sibling after a full export of a linked leaf', async () => {
+    const server = await startWith((fake) =>
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          groups: [{ label: 'Shared', patternId: 'abcdefab-abcd-4abc-8abc-abcdefabcdef' }],
+          constraints: [],
+        },
+      ]),
+    );
+    const file = await readSaved();
+    file.models[0].groups.push({ label: 'Storage', patterns: ['src:storage.**'] });
+    expect((await setFile(file, ' --dry-run')).exitCode).toBe(0);
+    expect((await setFile(file)).exitCode).toBe(0);
+    expect(writes(server)).toHaveLength(1);
+    expect((await readSaved()).models[0].groups[0].patternId).toBe(
+      'abcdefab-abcd-4abc-8abc-abcdefabcdef',
+    );
+  });
+
+  it('refuses edits inside an unchanged pattern link before writing', async () => {
+    const patternId = 'abcdefab-abcd-4abc-8abc-abcdefabcdef';
+    const server = await startWith((fake) =>
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          groups: [
+            { label: 'Shared', patternId, groups: [{ label: 'Imported', patterns: ['src:**'] }] },
+          ],
+          constraints: [],
+        },
+      ]),
+    );
+    const file = await readSaved();
+    file.models[0].groups[0].patternId = patternId.toUpperCase();
+    file.models[0].groups[0].groups = [{ label: 'Rewritten' }];
+    const result = await setFile(file);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Cannot edit expanded children');
+    expect(writes(server)).toEqual([]);
+  });
+
+  it('verifies a changed pattern link using writable fields instead of echoed expansion', async () => {
+    const server = await startWith((fake) =>
+      fake.withSavedPerspectives([
+        {
+          qualifiers: 'namespace',
+          language: 'java',
+          groups: [
+            {
+              label: 'Shared',
+              patternId: '11111111-1111-4111-8111-111111111111',
+              groups: [{ label: 'Old expansion', patterns: ['src:**'] }],
+            },
+          ],
+          constraints: [],
+        },
+      ]),
+    );
+    const file = await readSaved();
+    file.models[0].groups[0].patternId = '22222222-2222-4222-8222-222222222222';
+    const result = await setFile(file);
+    expect(result.exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models[0].groups[0]).toMatchObject({
+      patternId: '22222222-2222-4222-8222-222222222222',
+      groups: [],
+    });
+  });
+
+  it('refuses an ambiguous slash selector without losing groups in a complete export', async () => {
+    await startWith((fake) =>
+      fake.withIntended([
+        {
+          ...INTENDED[0],
+          groups: [
+            { label: 'UI/API', patterns: ['literal:**'] },
+            { label: 'UI', groups: [{ label: 'API', patterns: ['nested:**'] }] },
+          ],
+        },
+      ]),
+    );
+    const result = await harness.run(
+      `arch intended get -p ${PROJECT} --component UI/API --format json`,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Ambiguous group key');
+    const full = await readSaved();
+    expect(full.models[0].groups).toHaveLength(2);
+    expect(full.models[0].groups[1].groups?.[0].patterns).toEqual(['nested:**']);
   });
 
   it('keeps lazily-created model UUIDs distinct from another project', async () => {
@@ -704,7 +937,7 @@ describe('sonar architecture intended set on the public API', () => {
       expect(call.headers['content-type']).toBe('application/json');
       expect(JSON.parse(call.body!)).toEqual({
         projectId: fakeMainBranchId(PROJECT),
-        intendedArchitectures: models,
+        intendedArchitectures: wireModels(models),
       });
       expect((await readSaved()).models).toEqual(publicModels(models));
     });
@@ -721,7 +954,7 @@ describe('sonar architecture intended set on the public API', () => {
     expect(call.path).toBe(`${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`);
     expect(call.query).toEqual({});
     expect(call.headers['content-type']).toBe('application/merge-patch+json');
-    expect(JSON.parse(call.body!)).toEqual({ intendedArchitectures: desired });
+    expect(JSON.parse(call.body!)).toEqual({ intendedArchitectures: wireModels(desired) });
     expect((await readSaved()).models).toEqual(publicModels(desired));
   });
   it('preserves other perspectives when changing the second qualifier of one language', async () => {
@@ -882,10 +1115,8 @@ describe('sonar architecture intended set on the public API', () => {
   }
   it('does not trust a successful PATCH response when the public read returns different persisted content', async () => {
     const response = {
-      intendedArchitectures: NEXT.map((model) => ({
-        ...model,
-        id: '00000000-0000-4000-8000-000000000001',
-      })),
+      id: '00000000-0000-4000-8000-000000000001',
+      intendedArchitectures: wireModels(NEXT),
     };
     const server = await startWith((fake) =>
       fake
@@ -1004,10 +1235,8 @@ describe('sonar architecture intended set on the public API', () => {
         'intended-architectures',
         200,
         JSON.stringify({
-          intendedArchitectures: INTENDED.map((model) => ({
-            ...model,
-            id: '00000000-0000-4000-8000-000000000002',
-          })),
+          id: '00000000-0000-4000-8000-000000000002',
+          intendedArchitectures: wireModels(INTENDED),
         }),
         'PATCH',
       ),
@@ -1050,7 +1279,7 @@ describe('fake current architecture branch lookup', () => {
         {
           method: 'GET',
           path: '/architecture/current-architectures',
-          query: { organizationId: 'org', ecosystem: 'ts', ...(branchId ? { branchId } : {}) },
+          query: { organizationId: 'org', language: 'ts', ...(branchId ? { branchId } : {}) },
         },
         [],
         true,

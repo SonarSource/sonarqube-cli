@@ -73,6 +73,8 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
 function formatDependencies(slice: GraphSlice, label: (key: string) => string): string[] {
   const totalEdges = slice.edges.length + slice.omittedEdges;
   const shownEdges = slice.edges.slice(0, MAX_TEXT_EDGES);
+  if (totalEdges > 0 && shownEdges.length === 0)
+    return [`${totalEdges} dependencies: none shown within the shared response budget.`];
   let suffix = totalEdges ? ':' : '';
   if (totalEdges > shownEdges.length) suffix = `, heaviest ${shownEdges.length}:`;
   const lines = [`${totalEdges} dependenc${totalEdges === 1 ? 'y' : 'ies'}${suffix}`];
@@ -86,6 +88,8 @@ function formatDependencies(slice: GraphSlice, label: (key: string) => string): 
 function formatFeedbackPairs(slice: GraphSlice, label: (key: string) => string): string[] {
   const { total, heaviest } = slice.feedbackPairs;
   if (total <= 0) return [];
+  if (heaviest.length === 0)
+    return [`${total} feedback pair(s): none shown within the shared response budget.`];
   const suffix = total > heaviest.length ? `, heaviest ${heaviest.length}` : '';
   const lines = [`${total} feedback pair(s)${suffix}:`];
   for (const { from, to, weight } of heaviest) {

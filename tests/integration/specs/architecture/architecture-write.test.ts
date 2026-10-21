@@ -313,7 +313,7 @@ describe('sonar architecture intended set', () => {
         ]);
         expect(JSON.parse(calls[0].body ?? '{}')).toEqual({
           projectId: 'shop-branch-id',
-          intendedArchitectures: NEXT,
+          intendedArchitectures: NEXT.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
         });
       },
       { timeout: 15000 },

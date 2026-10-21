@@ -168,7 +168,7 @@ describe('revisionOf', () => {
     };
     const namespace: IntendedArchitecture = { ...file, type: 'namespace' };
     expect(revisionOf([namespace, file])).toBe(
-      'c4674bae74ea8f6687b40418c8b3ffc770e3ad1bed780b71084eb44f274d1543',
+      '4db11f0eaccbd703960dc6141001dce437cebcd9ab08edf8ca7827da52bdd1c5',
     );
   });
 
@@ -213,8 +213,61 @@ describe('revisionOf', () => {
       ],
     };
     expect(revisionOf([MODEL, java])).toBe(
-      '3152b86662ac658fb72940b33750e23eba7dd2c7c83491c57474485e512515eb',
+      '4f1baa7d43ee72995a008af71ce75927b7c3cfc36e9fc7a6b2c94be212284935',
     );
+  });
+});
+
+describe('public metadata and structural identity', () => {
+  it('keeps public metadata through validation and includes it in revision and diff', () => {
+    const original: IntendedArchitecture = {
+      type: 'namespace',
+      language: 'java',
+      label: 'Layers',
+      description: 'Perspective',
+      groups: [
+        {
+          label: 'Shared',
+          description: 'Group',
+          patternId: '11111111-1111-4111-8111-111111111111',
+        },
+      ],
+      constraints: [],
+    };
+    expect(parseIntendedFile([original]).models[0]).toMatchObject(original);
+    for (const changed of [
+      { ...original, label: 'Renamed' },
+      { ...original, description: 'Edited' },
+      { ...original, groups: [{ ...original.groups[0], description: 'Edited' }] },
+      {
+        ...original,
+        groups: [{ ...original.groups[0], patternId: '22222222-2222-4222-8222-222222222222' }],
+      },
+    ]) {
+      expect(revisionOf([changed])).not.toBe(revisionOf([original]));
+      expect(diffIntended([original], [changed]).changed).toHaveLength(1);
+    }
+    expect(() =>
+      parseIntendedFile([{ ...original, groups: [{ label: 'Shared', patternId: 'bad-id' }] }]),
+    ).toThrow('patternId must be a UUID');
+  });
+
+  it('does not overwrite literal and nested slash paths in a diff', () => {
+    const before: IntendedArchitecture = {
+      type: 'namespace',
+      language: 'java',
+      groups: [
+        { label: 'UI/API', patterns: ['literal:**'] },
+        { label: 'UI', groups: [{ label: 'API', patterns: ['nested:**'] }] },
+      ],
+      constraints: [],
+    };
+    const after = structuredClone(before);
+    after.groups[0].patterns = ['changed:**'];
+    const diff = diffIntended([before], [after]);
+    expect(diff.removed).toEqual(['pattern java UI/API literal:**']);
+    expect(diff.added).toEqual(['pattern java UI/API changed:**']);
+    expect(parseIntendedFile([after]).models[0].groups).toHaveLength(2);
   });
 });
 

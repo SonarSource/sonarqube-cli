@@ -83,8 +83,9 @@ a new preview and confirmation.
 
 The clients write the complete set of language/type perspectives. Failed writes are checked
 by a read and are never automatically rolled back. A concurrent change after preflight can
-still race the write. Public exports flatten imported organization patterns and omit metadata,
-so replacement and restoration cannot preserve those links or omitted metadata. Include these
+still race the write. Preserve public labels, descriptions and patternId import links. The server resolves linked
+groups; submitted expanded children do not replace the referenced pattern. Unknown fields omitted
+by the public export cannot be preserved. Include these
 returned warnings when presenting the preview.
 
 If an operation fails, report the error and inspect the saved state before retrying. CLI writes

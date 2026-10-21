@@ -52,24 +52,30 @@ export interface IntendedView {
   constraints: IntendedConstraint[];
 }
 
-function canonicalGroup(group: IntendedGroup): unknown {
+function canonicalGroup(group: IntendedGroup, writable = false): unknown {
   return [
     group.label,
     [...(group.patterns ?? [])].sort(byCodeUnit),
     group.interface === true,
     group.interfaceAccess === true,
-    (group.groups ?? []).map(canonicalGroup),
+    writable && group.patternId !== undefined
+      ? []
+      : (group.groups ?? []).map((child) => canonicalGroup(child, writable)),
+    group.description ?? null,
+    group.patternId?.toLowerCase() ?? null,
   ];
 }
 
 /** Two models with the same canonical form are analyzed and drawn the same. */
-function canonical(models: IntendedArchitecture[]): unknown {
+function canonical(models: IntendedArchitecture[], writable = false): unknown {
   return models
     .map((model) => [
       model.language,
       model.type,
-      model.groups.map(canonicalGroup),
+      model.groups.map((group) => canonicalGroup(group, writable)),
       model.constraints.map(({ from, to }) => JSON.stringify([from, to])).sort(byCodeUnit),
+      model.label ?? null,
+      model.description ?? null,
     ])
     .sort(
       (a, b) => byCodeUnit(String(a[0]), String(b[0])) || byCodeUnit(String(a[1]), String(b[1])),
@@ -86,6 +92,49 @@ export function revisionOf(models: IntendedArchitecture[]): string {
   return createHash('sha256')
     .update(JSON.stringify(canonical(models)))
     .digest('hex');
+}
+
+export function writableRevisionOf(models: IntendedArchitecture[]): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(models, true)))
+    .digest('hex');
+}
+
+export function assertImportedGroupsUnchanged(
+  current: IntendedArchitecture[],
+  next: IntendedArchitecture[],
+): void {
+  for (const model of next) {
+    const previous = current.find(
+      (candidate) => candidate.type === model.type && candidate.language === model.language,
+    );
+    if (previous) checkImportedGroups(previous.groups, model.groups, []);
+  }
+}
+
+function checkImportedGroups(
+  before: IntendedGroup[],
+  after: IntendedGroup[],
+  parent: string[],
+): void {
+  const previous = new Map(before.map((group) => [group.label, group]));
+  for (const group of after) {
+    const old = previous.get(group.label);
+    if (!old) continue;
+    const path = [...parent, group.label];
+    if (
+      old.patternId !== undefined &&
+      old.patternId.toLowerCase() === group.patternId?.toLowerCase() &&
+      JSON.stringify((old.groups ?? []).map((child) => canonicalGroup(child))) !==
+        JSON.stringify((group.groups ?? []).map((child) => canonicalGroup(child)))
+    ) {
+      throw new CommandFailedError(
+        `Cannot edit expanded children of pattern-linked group ${JSON.stringify(path)}; the server resolves them from patternId. Nothing was changed.`,
+      );
+    }
+    if (group.patternId === undefined)
+      checkImportedGroups(old.groups ?? [], group.groups ?? [], path);
+  }
 }
 
 /** The groups `depth` levels below the group `component` (or the top level) of one model. */
@@ -125,16 +174,21 @@ function isWithin(key: string, component: string): boolean {
   return key === component || key.startsWith(`${component}${GROUP_KEY_SEPARATOR}`);
 }
 
-function findGroup(groups: IntendedGroup[], key: string, prefix = ''): IntendedGroup | undefined {
-  for (const group of groups) {
-    const groupKey = `${prefix}${group.label}`;
-    if (groupKey === key) return group;
-    if (key.startsWith(`${groupKey}${GROUP_KEY_SEPARATOR}`)) {
-      const found = findGroup(group.groups ?? [], key, `${groupKey}${GROUP_KEY_SEPARATOR}`);
-      if (found) return found;
+function findGroup(groups: IntendedGroup[], key: string): IntendedGroup | undefined {
+  const matches: IntendedGroup[] = [];
+  function visit(children: IntendedGroup[], prefix: string): void {
+    for (const group of children) {
+      const groupKey = `${prefix}${group.label}`;
+      if (groupKey === key) matches.push(group);
+      visit(group.groups ?? [], `${groupKey}${GROUP_KEY_SEPARATOR}`);
     }
   }
-  return undefined;
+  visit(groups, '');
+  if (matches.length > 1)
+    throw new CommandFailedError(
+      `Ambiguous group key '${key}'; use a complete intended export without --component.`,
+    );
+  return matches[0];
 }
 
 function viewGroup(group: IntendedGroup, prefix: string, depth: number): IntendedGroupView {

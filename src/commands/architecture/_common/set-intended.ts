@@ -36,7 +36,7 @@ import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
 import { toArchitectureError } from './errors.ts';
 import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts';
-import { revisionOf } from './intended-model.ts';
+import { assertImportedGroupsUnchanged, revisionOf, writableRevisionOf } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
 import { shellQuote } from './shell-quote.ts';
 import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
@@ -66,7 +66,7 @@ export interface SetIntendedOptions {
   projectKey: string;
   dryRun: boolean;
   backupDir: string;
-  onReplacement?: () => void;
+  onReplacement?: (current: IntendedArchitecture[]) => void;
 }
 
 export async function setIntended(
@@ -76,12 +76,13 @@ export async function setIntended(
 ): Promise<SetIntendedResult> {
   const current = await api.getIntended();
   const next = file.language === undefined ? file.models : withLanguage(current, file);
+  assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   const unchecked = file.revision === undefined;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
-  if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.();
+  if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
   if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
   if (current.length === 0) {
@@ -125,12 +126,12 @@ async function verifyWrite(
   backupPath: string | undefined,
   writeError: unknown,
 ): Promise<void> {
-  const expectedRevision = revisionOf(next);
+  const expectedRevision = writableRevisionOf(next);
   let readError: unknown;
   for (const delay of VERIFICATION_DELAYS_MS) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     try {
-      if (revisionOf(await api.getIntended()) === expectedRevision) return;
+      if (writableRevisionOf(await api.getIntended()) === expectedRevision) return;
       readError = undefined;
     } catch (error) {
       readError = error;

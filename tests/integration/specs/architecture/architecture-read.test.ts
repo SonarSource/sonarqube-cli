@@ -189,6 +189,17 @@ describe('sonar architecture reads', () => {
       expect(view.edges.length + view.omittedEdges).toBe(56);
     }
     expect(languages[0].edges).toHaveLength(0);
+    expect(languages[0].summary).toContain(
+      'No dependencies shown within the shared response budget',
+    );
+    expect(languages[0].summary).toContain(
+      'No feedback pairs shown within the shared response budget',
+    );
+    const text = await harness.run(`architecture current get -p ${PROJECT} --format text`);
+    expect(text.stdout).toContain('56 dependencies: none shown within the shared response budget');
+    expect(text.stdout).toContain(
+      '28 feedback pair(s): none shown within the shared response budget',
+    );
     expect(languages[1].edges.every((edge) => edge.weight >= 100)).toBe(true);
     expect(languages[0].nodes.map(({ key }) => key)).toEqual(
       Array.from({ length: 8 }, (_, id) => `node-${id}`),
@@ -385,7 +396,7 @@ describe('sonar architecture reads', () => {
           .filter((request) => request.path === '/architecture/current-architectures');
       expect(
         structureCalls()
-          .map((request) => request.query.ecosystem)
+          .map((request) => request.query.language)
           .sort(),
       ).toEqual(['cs', 'java', 'js', 'py', 'ts']);
       for (const call of structureCalls()) {
@@ -469,7 +480,7 @@ describe('sonar architecture reads', () => {
       expect(structure?.query).toEqual({
         organizationId: 'my-org-uuid-v4',
         branchId: fakeMainBranchId(PROJECT),
-        ecosystem: 'java',
+        language: 'java',
       });
       const intendedCall = requests.find(
         (request) => request.path === '/architecture/intended-architectures',

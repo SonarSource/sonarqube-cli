@@ -59,6 +59,8 @@ export interface CurrentGraph {
 
 export interface IntendedGroup {
   label: string;
+  description?: string;
+  patternId?: string;
   patterns?: string[];
   groups?: IntendedGroup[];
   interface?: boolean;
@@ -72,6 +74,8 @@ export interface IntendedConstraint {
 
 /** The intended architecture of one language, as SonarQube exports it. */
 export interface IntendedArchitecture {
+  label?: string;
+  description?: string;
   type: 'file' | 'namespace';
   language: Ecosystem;
   groups: IntendedGroup[];

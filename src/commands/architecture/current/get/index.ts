@@ -114,11 +114,13 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
   const cap = slice.capped ? ` ${formatSliceLimit(slice)}` : '';
   const edgeCap =
     slice.omittedEdges > 0
-      ? ` Showing the ${slice.edges.length} heaviest of ${slice.edges.length + slice.omittedEdges} dependencies.`
+      ? slice.edges.length === 0
+        ? ` No dependencies shown within the shared response budget; ${slice.omittedEdges} omitted.`
+        : ` Showing the ${slice.edges.length} heaviest of ${slice.edges.length + slice.omittedEdges} dependencies.`
       : '';
   return {
     language: current.ecosystem,
-    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}`,
+    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
     ...slice,
   };
 }
