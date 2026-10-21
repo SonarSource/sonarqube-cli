@@ -21,12 +21,29 @@
 // Integrate command — setup SonarQube integration for OpenCode.
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
 import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { OPENCODE_INTEGRATION_ID, type OpenCodeIntegrationOptions } from './declaration.ts';
+import { detectLegacyOpenCodeVersion } from './version.ts';
+
+const WARNING_PREFIX = '  ⚠️  ';
+const ARROW_PREFIX = '     → ';
+
+function legacyDetectedMessage(version: string): string {
+  return [
+    `${WARNING_PREFIX}OpenCode ${version} detected. These plugins require OpenCode 2.0 or later.`,
+    `${ARROW_PREFIX}Upgrade OpenCode to 2.0 or later.`,
+  ].join('\n');
+}
+
+const LEGACY_SETUP_COMPLETE_MESSAGE = [
+  `${WARNING_PREFIX}Setup complete, but plugins are inactive until you upgrade to OpenCode 2.0.`,
+  `${ARROW_PREFIX}Upgrade OpenCode to activate them.`,
+].join('\n');
 
 export async function integrateOpenCode(
   options: IntegrateAgentOptions,
@@ -38,6 +55,11 @@ export async function integrateOpenCode(
   }
 
   await displayAgentIntegratePrelude('OpenCode', auth, console);
+  const legacyVersion = await detectLegacyOpenCodeVersion();
+  if (legacyVersion) {
+    console.text(legacyDetectedMessage(legacyVersion), yellow, 'stderr');
+    console.blank();
+  }
 
   await finalizeAgentInstall<OpenCodeIntegrationOptions>({
     integrationId: OPENCODE_INTEGRATION_ID,
@@ -45,4 +67,8 @@ export async function integrateOpenCode(
     auth,
     ctx,
   });
+  if (legacyVersion) {
+    console.blank();
+    console.text(LEGACY_SETUP_COMPLETE_MESSAGE, yellow, 'stderr');
+  }
 }
