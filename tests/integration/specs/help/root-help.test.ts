@@ -61,7 +61,7 @@ function getExpectedRootHelp(): string {
     '    import                                                                     Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only) [BETA]',
     '    integrate <git|claude|copilot|codex|antigravity|cursor|opencode|devin|pi>  Setup SonarQube integration for AI coding agents, git and others',
     '',
-    '    auth <login|logout|status>                                                 Manage authentication tokens and credentials',
+    '    auth <login|org|logout|status>                                             Manage authentication tokens and credentials',
     '    config <get|list|set|unset>                                                Configure CLI settings',
     '    system <status|reset>                                                      System diagnostics and maintenance commands for the SonarQube CLI installation',
     '    allowlist <secrets>                                                        Manage local allowlists for SonarQube analyzers',
