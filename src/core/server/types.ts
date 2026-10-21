@@ -146,6 +146,7 @@ export interface ProjectBranch {
   name: string;
   isMain: boolean;
   type: string;
+  branchId?: string;
 }
 
 export interface ProjectBranchesResponse {
