@@ -1056,20 +1056,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   hookCommand
     .command('opencode-pre-tool-use')
-    .description(
-      'OpenCode tool.execute.before handler: scan files for secrets before agent reads them',
-    )
+    .description('OpenCode execute.before handler: scan files for secrets before agent reads them')
     .anonymousAction(handleHookInvocation(opencodePreToolUse));
 
   hookCommand
     .command('opencode-chat-message')
-    .description('OpenCode chat.message handler: mask secrets in a message before it is sent')
+    .description('OpenCode prompt handler: mask secrets in a message before it is sent')
     .anonymousAction(handleHookInvocation(opencodeChatMessage));
 
   hookCommand
     .command('opencode-post-tool-use')
     .description(
-      'OpenCode tool.execute.after handler: run Vortex analysis after agent edits or writes a file',
+      'OpenCode execute.after handler: run Vortex analysis after agent edits or writes a file',
     )
     .anonymousAction(handleHookInvocation(opencodePostToolUse));
 
