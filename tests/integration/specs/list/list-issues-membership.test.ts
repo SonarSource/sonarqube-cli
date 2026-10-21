@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
 describe('list issues — project membership', () => {
@@ -48,15 +49,18 @@ describe('list issues — project membership', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
-        "Project 'missing-project' not found in organization 'my-org', or you do not have access to it.",
+        "Project 'missing-project' could not be found or is not accessible.",
       );
       expect(result.stderr).toContain(
-        "Check the key with 'sonar list projects' and the organization with 'sonar auth status'.",
+        "Run 'sonar list org' to check your organization membership.",
       );
       expect(result.stdout).not.toContain('No issues found');
       expect(result.stdout).not.toContain('"issues"');
+      expect(
+        server.getRecordedRequests().filter((r) => r.path === '/api/issues/search'),
+      ).toHaveLength(0);
       const lookup = server.getRecordedRequests().find((r) => r.path === '/api/components/show');
-      expect(lookup?.query.component).toBe('missing-project');
+      expect(lookup?.query).toEqual({ component: 'missing-project' });
     },
   );
 
@@ -77,41 +81,67 @@ describe('list issues — project membership', () => {
 
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).issues).toEqual([]);
-      const lookup = server
-        .getRecordedRequests()
-        .find((r) => r.path === '/api/components/show' && r.query.component === 'my-project');
-      expect(lookup).toBeDefined();
+      const lookup = server.getRecordedRequests().find((r) => r.path === '/api/components/show');
+      expect(lookup?.query).toEqual({ component: 'my-project' });
     },
   );
 
-  it('validates project membership with one exact lookup', async () => {
+  it('validates project membership with one exact lookup before returning populated results', async () => {
     const server = await harness
       .newFakeServer()
       .asSonarCloud()
       .withAuthToken('test-token')
       .withProject('my-project-suffix')
-      .withProject('my-project')
+      .withProject('my-project', (p) => p.withIssue({ ruleKey: 'java:S100', message: 'Fix this' }))
       .start();
     harness.withAuth(server.baseUrl(), 'test-token', 'my-org');
 
     const result = await harness.run('list issues --project my-project');
 
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout).issues).toEqual([]);
-    const lookups = server.getRecordedRequests().filter((r) => r.path === '/api/components/show');
+    expect(JSON.parse(result.stdout).issues).toHaveLength(1);
+    const requests = server.getRecordedRequests();
+    const lookups = requests.filter((r) => r.path === '/api/components/show');
     expect(lookups).toHaveLength(1);
-    expect(lookups[0]?.query.component).toBe('my-project');
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/components/search')).toBe(
-      false,
+    expect(lookups[0]?.query).toEqual({ component: 'my-project' });
+    expect(requests.indexOf(lookups[0])).toBeLessThan(
+      requests.findIndex((r) => r.path === '/api/issues/search'),
     );
+    expect(requests.some((r) => r.path === '/api/components/search')).toBe(false);
   });
 
-  it('rejects a browsable project in a different organization', async () => {
+  it('rejects a different organization before file, branch, mode, or populated issue lookups', async () => {
     const server = await harness
       .newFakeServer()
       .asSonarCloud()
       .withAuthToken('test-token')
-      .withProject('my-project', (p) => p.withOrganization('other-org'))
+      .withProject('my-project', (p) =>
+        p.withOrganization('other-org').withIssue({ ruleKey: 'java:S100', message: 'Fix this' }),
+      )
+      .start();
+    harness.withAuth(server.baseUrl(), 'test-token', 'my-org');
+
+    const result = await harness.run(
+      'list issues --project my-project --file src/foo.ts --severities HIGH',
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "Project 'my-project' belongs to organization 'other-org', but the active organization is 'my-org'.",
+    );
+    expect(result.stderr).toContain(
+      "Run 'sonar auth org other-org' to switch to that organization.",
+    );
+    expect(result.stdout).not.toContain('"issues"');
+    expect(server.getRecordedRequests().map((r) => r.path)).toEqual(['/api/components/show']);
+  });
+
+  it.each([undefined, ''])('rejects absent organization metadata (%s)', async (organization) => {
+    const server = await harness
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('test-token')
+      .withProject('my-project', (p) => p.withOrganization(organization))
       .start();
     harness.withAuth(server.baseUrl(), 'test-token', 'my-org');
 
@@ -119,26 +149,13 @@ describe('list issues — project membership', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
-      "not found in organization 'my-org', or you do not have access to it.",
+      "Project 'my-project' could not be found or is not accessible.",
     );
+    expect(result.stderr).toContain("Run 'sonar list org' to check your organization membership.");
+    expect(server.getRecordedRequests().map((r) => r.path)).toEqual(['/api/components/show']);
   });
 
-  it('reports an inaccessible project when the response omits organization metadata', async () => {
-    const server = await harness
-      .newFakeServer()
-      .asSonarCloud()
-      .withAuthToken('test-token')
-      .withProject('my-project', (p) => p.withOrganization(undefined))
-      .start();
-    harness.withAuth(server.baseUrl(), 'test-token', 'my-org');
-
-    const result = await harness.run('list issues --project my-project');
-
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('or you do not have access to it.');
-  });
-
-  it.each([403, 500])('handles a project lookup failure with HTTP %s', async (status) => {
+  it.each([403, 500, 429, 401])('rejects a project lookup failure with HTTP %s', async (status) => {
     const server = await harness
       .newFakeServer()
       .asSonarCloud()
@@ -149,60 +166,45 @@ describe('list issues — project membership', () => {
 
     const result = await harness.run('list issues --project my-project');
 
+    expect(result.exitCode).toBe(1);
     if (status === 403) {
-      expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(
-        "Project 'my-project' not found in organization 'my-org', or you do not have access to it.",
+        "Project 'my-project' could not be found or is not accessible.",
       );
       expect(result.stderr).toContain(
-        "Check the key with 'sonar list projects' and the organization with 'sonar auth status'.",
+        "Run 'sonar list org' to check your organization membership.",
       );
-      expect(result.stdout).not.toContain('"issues"');
-      return;
+    } else {
+      expect(result.stderr).toContain(
+        status === 429 ? 'Rate limit reached (429)' : `SonarQube API error: ${status}`,
+      );
+      expect(result.stderr).not.toContain('organization membership');
     }
-
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout).issues).toEqual([]);
-    expect(result.stderr).not.toContain('Lookup failed');
-    expect(result.stderr).not.toContain('not found in organization');
-    const logFile = harness.cliHome.file('logs', 'sonarqube-cli.log');
-    expect(logFile.exists() ? logFile.asText() : '').not.toContain(
-      'Project membership lookup failed',
-    );
-
-    const debugResult = await harness.run('list issues --project my-project', {
-      extraEnv: { LOG_LEVEL: 'DEBUG' },
-    });
-    expect(debugResult.exitCode).toBe(0);
-    expect(logFile.asText()).toContain(
-      '[DEBUG] Project membership lookup failed; keeping the empty issue result.',
-    );
-    expect(logFile.asText()).toContain(String(status));
+    expect(result.stdout).not.toContain('"issues"');
+    expect(server.getRecordedRequests().map((r) => r.path)).toEqual(['/api/components/show']);
   });
 
-  it('skips the membership lookup when issues are present', async () => {
+  it('records a failed command when the organization check rejects the project', async () => {
     const server = await harness
       .newFakeServer()
       .asSonarCloud()
       .withAuthToken('test-token')
-      .withProject('my-project', (p) =>
-        p
-          .withIssue({ ruleKey: 'java:S100', message: 'Fix this', severity: 'MAJOR' })
-          .withComponentShowError(403),
-      )
+      .withProject('my-project', (p) => p.withOrganization('other-org'))
       .start();
     harness.withAuth(server.baseUrl(), 'test-token', 'my-org');
+    harness.state().withTelemetryEnabled();
 
     const result = await harness.run('list issues --project my-project');
 
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.stdout).issues).toHaveLength(1);
-    expect(server.getRecordedRequests().some((r) => r.path === '/api/components/show')).toBe(false);
+    expect(result.exitCode).toBe(1);
+    const [event] = readCommandEvents(harness.sonarUserHome.path);
+    expect(event.event_payload.command).toBe('list');
+    expect(event.event_payload.result).toBe('failure');
   });
 
   it('preserves Server empty-result behavior without a membership lookup', async () => {
-    const builder = harness.newFakeServer();
-    const server = await builder
+    const server = await harness
+      .newFakeServer()
       .withAuthToken('test-token')
       .withProject('my-project', (p) => p.withComponentShowError(403))
       .start();

@@ -22,16 +22,13 @@
 
 import { encode as encodeToToon } from '@toon-format/toon';
 
-import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { resolveFileComponentKey } from '@/core/file-component.ts';
-import logger from '@/core/observability/logger.ts';
 import { resolveProjectKey } from '@/core/project-discovery/project-info.ts';
+import { assertProjectInOrganization } from '@/core/project-organization.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
-import { ComponentsClient } from '@/core/server/components.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
-import { HTTP_STATUS_FORBIDDEN } from '@/core/server/http-constants.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { SystemClient } from '@/core/server/system.ts';
@@ -149,32 +146,6 @@ function parseSeverities(
   return mode === 'mqr' ? { impactSeverities: values.join(',') } : { severities: values.join(',') };
 }
 
-async function assertProjectInOrganization(
-  projectKey: string,
-  ctx: CommandAuthenticatedInvocationContext,
-): Promise<void> {
-  const organization = ctx.auth.orgKey;
-  if (!ctx.connection.httpClient.isCloud || !organization) return;
-
-  const lookup = await new ComponentsClient(ctx.connection.httpClient).getComponent(projectKey);
-  if (
-    lookup.isErr() &&
-    !(lookup.error instanceof AccessDeniedError && lookup.error.status === HTTP_STATUS_FORBIDDEN)
-  ) {
-    logger.debug('Project membership lookup failed; keeping the empty issue result.', lookup.error);
-    return;
-  }
-  if (lookup.isOk() && lookup.value?.organization === organization) return;
-
-  throw new CommandFailedError(
-    `Project '${projectKey}' not found in organization '${organization}', or you do not have access to it.`,
-    {
-      remediationHint:
-        "Check the key with 'sonar list projects' and the organization with 'sonar auth status'.",
-    },
-  );
-}
-
 /**
  * Issues search command handler
  */
@@ -206,6 +177,7 @@ export async function listIssues(
 
   const projectKey = await resolveProjectKey(options.project, auth, console);
   noteProject(auth, projectKey);
+  await assertProjectInOrganization(ctx.connection, projectKey);
 
   const client = ctx.connection.httpClient;
   const issuesClient = new IssuesClient(client);
@@ -262,10 +234,6 @@ export async function listIssues(
   };
 
   const result = await issuesClient.searchIssues(params).orThrow();
-
-  if (result.issues.length === 0) {
-    await assertProjectInOrganization(projectKey, ctx);
-  }
 
   let output: string;
 

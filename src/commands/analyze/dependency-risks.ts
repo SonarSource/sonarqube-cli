@@ -28,6 +28,7 @@ import { resolveFormatOption } from '@/core/commands/params.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
 import { resolveProjectKey } from '@/core/project-discovery/project-info.ts';
+import { assertProjectInOrganization } from '@/core/project-organization.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -73,6 +74,7 @@ export async function analyzeDependencyRisks(
 
   const projectKey = await resolveProjectKey(options.project, auth, ctx.console);
   noteProject(auth, projectKey);
+  await assertProjectInOrganization(ctx.connection, projectKey);
 
   const client = createScaScanApi(ctx.connection.httpClient);
   const orchestrator = new ScaScanOrchestrator(
