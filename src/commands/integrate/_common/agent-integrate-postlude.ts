@@ -45,6 +45,7 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
    * here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
+  installTarget?: ReturnType<typeof resolveIntegrateInstallTarget>;
 }
 
 /**
@@ -58,7 +59,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
 ): Promise<void> {
   const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
-  const { installRoot, installScope } = resolveIntegrateInstallTarget();
+  const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
     serverUrl: auth.serverUrl,
     orgKey: auth.orgKey,
