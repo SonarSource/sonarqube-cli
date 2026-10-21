@@ -30,6 +30,8 @@ export interface CompleteProjectMapping {
 
 /** `projectKey`/`serverUrl` not guaranteed — `discoverServer()`/`discoverOrganization()` never need `projectKey`, so they accept this directly. */
 export interface PartialProjectMapping {
+  /** True only after an authenticated remote lookup succeeds with no bindings. */
+  gitRemoteBindingNotFound?: boolean;
   projectRoot: string;
   projectKey?: string;
   serverUrl?: string;
