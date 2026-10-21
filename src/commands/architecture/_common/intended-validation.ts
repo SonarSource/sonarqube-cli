@@ -183,20 +183,11 @@ function parseGroups(
     context.keys.add(identity);
 
     const patterns = parsePatterns(raw.patterns, name, problems);
-    const group: IntendedGroup = { label: raw.label, patterns };
-    if (raw.description != null) {
-      if (typeof raw.description !== 'string')
-        problems.push(`${name}.description must be a string.`);
-      else group.description = raw.description;
-    }
-    if (raw.patternId != null) {
-      if (
-        typeof raw.patternId !== 'string' ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.patternId)
-      )
-        problems.push(`${name}.patternId must be a UUID.`);
-      else group.patternId = raw.patternId;
-    }
+    const group: IntendedGroup = {
+      label: raw.label,
+      patterns,
+      ...parseGroupMetadata(raw, name, problems),
+    };
     for (const flag of ['interface', 'interfaceAccess'] as const) {
       const flagValue = raw[flag];
       if (typeof flagValue === 'boolean') group[flag] = flagValue;
@@ -208,6 +199,27 @@ function parseGroups(
     if (raw.groups != null) group.groups = subgroups;
     return [group];
   });
+}
+
+function parseGroupMetadata(
+  raw: Record<string, unknown>,
+  name: string,
+  problems: string[],
+): Pick<IntendedGroup, 'description' | 'patternId'> {
+  const metadata: Pick<IntendedGroup, 'description' | 'patternId'> = {};
+  if (raw.description != null) {
+    if (typeof raw.description !== 'string') problems.push(`${name}.description must be a string.`);
+    else metadata.description = raw.description;
+  }
+  if (raw.patternId != null) {
+    if (
+      typeof raw.patternId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw.patternId)
+    )
+      problems.push(`${name}.patternId must be a UUID.`);
+    else metadata.patternId = raw.patternId;
+  }
+  return metadata;
 }
 
 function parsePatterns(value: unknown, name: string, problems: string[]): string[] {

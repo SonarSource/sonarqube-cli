@@ -173,11 +173,9 @@ function diffGroups(
     const key = group.path.join(GROUP_KEY_SEPARATOR);
     const candidates = previousByDisplayKey.get(key) ?? [];
     const exact = before.get(identity);
-    const previous = exact
-      ? { identity, group: exact }
-      : candidates.length === 1 && nextCounts.get(key) === 1
-        ? candidates[0]
-        : undefined;
+    let previous: { identity: string; group: FlatGroup } | undefined;
+    if (exact) previous = { identity, group: exact };
+    else if (candidates.length === 1 && nextCounts.get(key) === 1) previous = candidates[0];
     if (!previous) {
       diff.added.push(`group ${language} ${key} [${group.patterns.join(', ')}]`);
       continue;

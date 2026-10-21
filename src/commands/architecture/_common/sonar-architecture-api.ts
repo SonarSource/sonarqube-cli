@@ -121,17 +121,7 @@ function toIntended(value: unknown): IntendedArchitecture {
 function publicGroup(value: unknown, depth: number, budget: { count: number }): IntendedGroup {
   if (depth > MAX_PUBLIC_GROUP_DEPTH || ++budget.count > MAX_PUBLIC_GROUPS)
     return invalidPublicModel();
-  const group = { ...objectField(value) };
-  for (const field of [
-    'description',
-    'patternId',
-    'patterns',
-    'groups',
-    'interface',
-    'interfaceAccess',
-  ]) {
-    if (group[field] === null) group[field] = undefined;
-  }
+  const group = normalizeOptionalGroupFields(objectField(value));
   if (
     typeof group.label !== 'string' ||
     (group.description !== undefined && typeof group.description !== 'string') ||
@@ -158,6 +148,21 @@ function publicGroup(value: unknown, depth: number, budget: { count: number }): 
     ...(group.interface === undefined ? {} : { interface: group.interface }),
     ...(group.interfaceAccess === undefined ? {} : { interfaceAccess: group.interfaceAccess }),
   };
+}
+
+function normalizeOptionalGroupFields(raw: Record<string, unknown>): Record<string, unknown> {
+  const group = { ...raw };
+  for (const field of [
+    'description',
+    'patternId',
+    'patterns',
+    'groups',
+    'interface',
+    'interfaceAccess',
+  ]) {
+    if (group[field] === null) group[field] = undefined;
+  }
+  return group;
 }
 
 function invalidPublicGraph(): never {
