@@ -88,6 +88,7 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
+import { authOrg } from './auth/org.ts';
 import {
   authStatus,
   type AuthStatusOptions,
@@ -304,6 +305,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
     .option('--with-token', 'Read an existing token from standard input')
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
+
+  auth
+    .command('org')
+    .description('Switch the active SonarQube Cloud organization without logging in again')
+    .argument('[org]', 'SonarQube Cloud organization key')
+    .authenticatedAction((ctx) => authOrg(ctx));
 
   auth
     .command('logout')
