@@ -63,6 +63,7 @@ describe('run mcp', () => {
         '  echo ARGS: %*',
         '  echo ENV_TOKEN=%SONARQUBE_TOKEN%',
         '  echo ENV_URL=%SONARQUBE_URL%',
+        '  echo ENV_JAVA_OPTS=%JAVA_OPTS%',
         '  echo ENV_PROJECT_KEY=%SONARQUBE_PROJECT_KEY%',
         '  echo ENV_DEBUG_ENABLED=%SONARQUBE_DEBUG_ENABLED%',
         '  echo ENV_READ_ONLY=%SONARQUBE_READ_ONLY%',
@@ -82,6 +83,7 @@ describe('run mcp', () => {
         String.raw`    printf "ARGS: %s\n" "$*"`,
         String.raw`    printf "ENV_TOKEN=%s\n" "$SONARQUBE_TOKEN"`,
         String.raw`    printf "ENV_URL=%s\n" "$SONARQUBE_URL"`,
+        String.raw`    printf "ENV_JAVA_OPTS=%s\n" "$JAVA_OPTS"`,
         String.raw`    printf "ENV_PROJECT_KEY=%s\n" "$SONARQUBE_PROJECT_KEY"`,
         String.raw`    printf "ENV_DEBUG_ENABLED=%s\n" "$SONARQUBE_DEBUG_ENABLED"`,
         String.raw`    printf "ENV_READ_ONLY=%s\n" "$SONARQUBE_READ_ONLY"`,
@@ -298,6 +300,36 @@ describe('run mcp', () => {
       expect(result.stdout).toContain(`ENV_URL=${expectedContainerUrl}`);
       if (process.platform === 'linux') {
         expect(result.stdout).toContain('--network host');
+      }
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([false, true])(
+    'preserves proxy bypass when automatic networking is %s',
+    async (autoNetwork) => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+      expect(
+        (await harness.run(`config set mcp.container.autoNetwork ${autoNetwork}`)).exitCode,
+      ).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: {
+          PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}`,
+          SONAR_HTTP_PROXY_URL: 'http://proxy.example:8080',
+          SONAR_NO_PROXY: 'localhost,127.*,corp.example',
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const usesHostAlias = autoNetwork && process.platform !== 'linux';
+      const bypass = `localhost|127.*|corp.example${usesHostAlias ? '|host.docker.internal' : ''}`;
+      expect(result.stdout).toContain(`-Dhttp.nonProxyHosts=${bypass}`);
+      expect(result.stdout).toContain('-Dhttp.proxyHost=proxy.example');
+      if (!usesHostAlias) {
+        expect(result.stdout).not.toContain('host.docker.internal');
       }
     },
     { timeout: 15000 },

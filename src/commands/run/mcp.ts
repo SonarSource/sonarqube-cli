@@ -133,6 +133,7 @@ export async function runMcp(
         containerNetwork: container.network,
         containerAddHost: container.addHost,
         containerServerUrl: container.serverUrl,
+        containerProxyBypassHost: container.proxyBypassHost,
       },
       resolvedNetwork,
     );
