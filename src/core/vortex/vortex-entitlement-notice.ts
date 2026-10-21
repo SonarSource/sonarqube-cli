@@ -20,7 +20,7 @@
 
 import logger from '@/core/observability/logger.ts';
 
-import { loadState, saveState, tryLoadState } from '../state/state-manager.ts';
+import { tryLoadState, updateState } from '../state/state-manager.ts';
 import { isWithinCooldown, ONE_DAY_MS } from '../time/cooldown.ts';
 
 /**
@@ -36,9 +36,9 @@ export function isVortexEntitlementLossNoticeDue(): boolean {
 /** Best-effort: a failed write only costs one extra warning, so failures are swallowed. */
 export function recordVortexEntitlementLossWarned(): void {
   try {
-    const state = loadState();
-    state.config.vortexEntitlementLossNotice = { lastWarnedAt: new Date().toISOString() };
-    saveState(state);
+    updateState((state) => {
+      state.config.vortexEntitlementLossNotice = { lastWarnedAt: new Date().toISOString() };
+    });
   } catch (err) {
     logger.debug(`Failed to record Vortex entitlement-loss notice: ${(err as Error).message}`);
   }

@@ -53,7 +53,7 @@ import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -226,29 +226,42 @@ async function persistLoginCredentials(
   const actualToken = token || (await getKeystoreToken(server, org));
 
   if (actualToken) {
-    await recordConnectionFromAuth(
-      new ResolvedAuth({
-        token: actualToken,
-        serverUrl: server,
-        orgKey: org,
-        connectionType: isCloud ? 'cloud' : 'on-premise',
-        source: 'state',
-      }),
-      {
-        tokenName: connectionTokenName,
-        force: true,
-        refreshIdentity: options.refreshIdentity,
-      },
-    );
+    try {
+      await recordConnectionFromAuth(
+        new ResolvedAuth({
+          token: actualToken,
+          serverUrl: server,
+          orgKey: org,
+          connectionType: isCloud ? 'cloud' : 'on-premise',
+          source: 'state',
+        }),
+        {
+          tokenName: connectionTokenName,
+          force: true,
+          refreshIdentity: options.refreshIdentity,
+        },
+      );
+    } catch (error) {
+      throw new CommandFailedError(
+        `Token saved, but login state could not be updated: ${String(error)}`,
+      );
+    }
     return;
   }
 
-  addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-    orgKey: org,
-    region: cloudRegionFromUrl(server),
-    tokenName: connectionTokenName,
-  });
-  saveState(state);
+  try {
+    updateState((latest) => {
+      addOrUpdateConnection(latest, server, isCloud ? 'cloud' : 'on-premise', {
+        orgKey: org,
+        region: cloudRegionFromUrl(server),
+        tokenName: connectionTokenName,
+      });
+    });
+  } catch (error) {
+    throw new CommandFailedError(
+      `Token saved, but login state could not be updated: ${String(error)}`,
+    );
+  }
 }
 
 function assertNoEnvironmentAuthentication(): void {

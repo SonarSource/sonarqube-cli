@@ -71,7 +71,7 @@ describe('SonarCommand', () => {
   let resolveAuthSpy: ReturnType<typeof spyOn>;
   let originalAlphaEnv: string | undefined;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
   let originalExitCode: number | string | null | undefined;
 
   beforeEach(() => {
@@ -86,7 +86,7 @@ describe('SonarCommand', () => {
     process.exitCode = originalExitCode ?? 0;
     resolveAuthSpy?.mockRestore();
     loadStateSpy?.mockRestore();
-    saveStateSpy?.mockRestore();
+    updateStateSpy?.mockRestore();
     if (originalAlphaEnv === undefined) {
       delete process.env[ALPHA_ENV_VAR];
     } else {
@@ -547,7 +547,9 @@ describe('SonarCommand', () => {
     it('warns once for the command in the current CLI version', async () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      updateStateSpy = spyOn(stateManager, 'updateState').mockImplementation((update) =>
+        update(state),
+      );
       const command = sonarCommand('preview')
         .stage(Stage.Beta())
         .anonymousAction((_ctx) => {});
@@ -559,13 +561,15 @@ describe('SonarCommand', () => {
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe("'preview' is in beta and may change.");
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
-      expect(saveStateSpy).toHaveBeenCalledTimes(1);
+      expect(updateStateSpy).toHaveBeenCalledTimes(1);
     });
 
     it('warns independently for each Beta command', async () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      updateStateSpy = spyOn(stateManager, 'updateState').mockImplementation((update) =>
+        update(state),
+      );
       const first = sonarCommand('first')
         .stage(Stage.Beta())
         .anonymousAction((_ctx) => {});
@@ -585,7 +589,9 @@ describe('SonarCommand', () => {
       const state = getDefaultState(VERSION);
       state.config.betaCommandWarnings = { preview: '0.0.1' };
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      updateStateSpy = spyOn(stateManager, 'updateState').mockImplementation((update) =>
+        update(state),
+      );
       const command = sonarCommand('preview')
         .stage(Stage.Beta())
         .anonymousAction((_ctx) => {});
@@ -1186,7 +1192,9 @@ describe('SonarCommand', () => {
     it('keeps Open Beta options visible with a [BETA] tag and warns once on use', async () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
-      saveStateSpy = spyOn(stateManager, 'saveState').mockImplementation(() => {});
+      updateStateSpy = spyOn(stateManager, 'updateState').mockImplementation((update) =>
+        update(state),
+      );
       const cmd = commandWithStagedOption(
         new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()),
       );
