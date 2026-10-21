@@ -104,7 +104,7 @@ export interface RequestPayloadTooLargeMeta {
   maxFiles?: number;
 }
 
-/** Thrown by the API client on any HTTP 403 (Forbidden) POST response. */
+/** Thrown by the API client on any HTTP 403 (Forbidden) POST, PATCH or DELETE response. */
 export class ForbiddenApiError extends Error {
   constructor(body: string) {
     super(body);
