@@ -212,6 +212,77 @@ describe('authStatus with FakeConsole', () => {
     expect(output).not.toContain('This project expects a different connection');
   });
 
+  describe.each(['env', 'state'] as const)(
+    'organization membership with %s credentials',
+    (source) => {
+      function membershipContext() {
+        return contextFor(
+          new ResolvedAuth({
+            connectionType: 'cloud',
+            orgKey: 'sonarsource',
+            serverUrl: 'https://sonarcloud.io',
+            source,
+            token: 'a-token',
+          }),
+        );
+      }
+
+      beforeEach(() => {
+        const tokenSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
+        restorers.push(() => tokenSpy.mockRestore());
+      });
+
+      it('reports factual membership guidance and fails in text mode', async () => {
+        spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue({
+          status: 'not_member',
+        });
+        const { ctx, fake } = membershipContext();
+        try {
+          await authStatus({}, ctx);
+          expect.unreachable('Missing membership must fail');
+        } catch (error) {
+          expect(error).toBeInstanceOf(CommandFailedError);
+          expect((error as CommandFailedError).exitCode).toBe(1);
+          expect((error as CommandFailedError).remediationHint).not.toContain('Regenerate');
+        }
+        const output = rendered(fake);
+        expect(output).toContain('This token resolves no membership for that organization.');
+        expect(output).toContain('Ask an organization administrator to add your account');
+        expect(output).toContain('check which account');
+        expect(output).toContain('the token was created with.');
+        expect(output).not.toContain('created before you joined');
+        expect(output).not.toContain('stays invalid');
+        expect(output).not.toContain('regenerate');
+      });
+
+      it.each([
+        { membership: { status: 'not_member' as const }, expected: 'organization_inaccessible' },
+        {
+          membership: { status: 'check_failed' as const, reason: 'Membership lookup failed' },
+          expected: 'organization_membership_unverified',
+        },
+      ])('preserves JSON status $expected and exit code 1', async ({ membership, expected }) => {
+        spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue(membership);
+        const { ctx, fake } = membershipContext();
+        const originalExitCode = process.exitCode;
+        try {
+          process.exitCode = 0;
+          await authStatus({ format: 'json' }, ctx);
+          expect(process.exitCode).toBe(1);
+        } finally {
+          process.exitCode = originalExitCode ?? 0;
+        }
+        expect(fake.calls).toHaveLength(1);
+        expect(fake.calls[0]?.method).toBe('print');
+        expect(JSON.parse(String(fake.calls[0]?.args[0]))).toMatchObject({
+          status: expected,
+          server: 'https://sonarcloud.io',
+          org: 'sonarsource',
+        });
+      });
+    },
+  );
+
   it('prints "No saved connection" through ctx.console when nothing is stored', async () => {
     const authResolver = new AuthResolver();
     spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
