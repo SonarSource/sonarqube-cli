@@ -1527,6 +1527,21 @@ ${result.stderr}`).toContain('Installation cancelled');
   );
 
   it(
+    'cancels the installation instead of hanging when stdin is closed at the mode prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+
+      const result = await harness.run('integrate claude');
+
+      expect(result.exitCode).toBe(1);
+      expect(`${result.stdout}
+${result.stderr}`).toContain('Installation cancelled');
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'asks before installing Vortex when the org is entitled and a project key is known',
     async () => {
       const server = await harness
