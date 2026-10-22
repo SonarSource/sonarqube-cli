@@ -32,5 +32,5 @@ export const opencodePreToolUse = createPreToolUseHook({
   callerCommand: SECRETS_CALLER_COMMANDS.opencodePreToolUse,
   logPrefix: 'opencode-pre-tool-use',
   blockOnUnexpectedExitCode: false,
-  blockedFileReason: (filePath) => `Sonar detected secrets in file: ${filePath}`,
+  blockedFileReason: (filePath) => `Sonar detected secrets in file: ${filePath}.`,
 });
