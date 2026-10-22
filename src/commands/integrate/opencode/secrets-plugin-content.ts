@@ -18,135 +18,92 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { OPENCODE_PLUGIN_HELPERS_CONTENT } from './plugin-helpers-content.ts';
+
 export const OPENCODE_PLUGIN_MANAGED_MARKER = 'Managed by `sonar integrate opencode`';
 
-export const OPENCODE_SECRETS_PLUGIN_CONTENT = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.
-import type { Plugin } from '@opencode-ai/plugin';
+export const OPENCODE_PLUGIN_MANAGED_HEADER = `// ${OPENCODE_PLUGIN_MANAGED_MARKER} — do not edit by hand.`;
 
-interface PreToolUseDecision {
-  block: boolean;
-  reason?: string;
+export const OPENCODE_SECRETS_PLUGIN_CONTENT = String.raw`${OPENCODE_PLUGIN_MANAGED_HEADER}
+${OPENCODE_PLUGIN_HELPERS_CONTENT}
+const HOOK_TIMEOUT_MS = 60000;
+const BYPASS_WARNING =
+  'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action.';
+
+const MASKED_NOTICE = '[Sonar] A secret was detected in this message and masked before it was sent.';
+
+function isDecision(value: any): boolean {
+  return (
+    typeof value?.block === 'boolean' &&
+    (value.redactedText === undefined || typeof value.redactedText === 'string')
+  );
 }
 
-interface ChatMessageDecision {
-  block: boolean;
-  reason?: string;
-  redactedText?: string;
-  secretsFound?: number;
-}
-
-// Unlike the other agents' shell hooks (which fail OPEN — skip scanning — when the \`sonar\`
-// binary isn't on PATH at all), this plugin fails CLOSED: any error spawning or parsing the
-// \`sonar hook\` subprocess response blocks the action as a precaution instead of silently
-// letting it through.
-async function callSonarHook<T>($: any, subcommand: string, payload: unknown): Promise<T> {
-  const result = await $\`sonar hook \${subcommand} < \${new Response(JSON.stringify(payload))}\`
-    .quiet()
-    .nothrow();
-  if (result.exitCode !== 0) {
-    throw new Error(\`sonar hook \${subcommand} exited with code \${result.exitCode}: \${result.stderr}\`);
+function dropMentions(prompt: any): void {
+  for (const attachments of [prompt.files, prompt.agents, prompt.skills]) {
+    for (const attachment of attachments ?? []) delete attachment.mention;
   }
-  return result.json() as T;
 }
 
-function makeSyntheticPart(output: any, text: string): any {
-  return {
-    id: \`prt_\${crypto.randomUUID().replace(/-/g, '')}\`,
-    sessionID: output.message.sessionID,
-    messageID: output.message.id,
-    type: 'text',
-    synthetic: true,
-    text,
-  };
+function blockedMessage(reason: string): string {
+  return '[Sonar] Message blocked: ' + reason + '. Blocked as a precaution — original content was not sent.';
 }
 
-export const SonarSecretsPlugin: Plugin = async ({ $ }) => {
-  return {
-    'tool.execute.before': async (input, output) => {
-      if (input.tool !== 'read') return;
-      const filePath = (output.args as { filePath?: string } | undefined)?.filePath;
-      if (!filePath) return;
+export default {
+  id: 'sonar-secrets',
+  async setup(ctx: any) {
+    const directory: string = ctx.location.directory;
 
-      let decision: PreToolUseDecision;
+    await ctx.tool.hook('execute.before', async (event: any) => {
+      if (event.tool !== 'read') return;
+      const path = event.input?.path;
+      if (typeof path !== 'string' || !path) return;
+
+      let decision: { block: boolean; reason?: string };
       try {
-        decision = await callSonarHook<PreToolUseDecision>($, 'opencode-pre-tool-use', {
-          tool: input.tool,
-          filePath,
-          sessionID: input.sessionID,
-        });
-      } catch (err) {
-        throw new Error(
-          \`Sonar: could not verify this file for secrets (\${err instanceof Error ? err.message : String(err)}). Blocking as a precaution.\`,
+        decision = await runHook(
+          'opencode-pre-tool-use',
+          { tool: event.tool, filePath: toFullPath(path, directory), sessionID: event.sessionID },
+          HOOK_TIMEOUT_MS,
+          directory,
         );
+        if (!isDecision(decision)) throw new Error('unexpected answer from sonar');
+      } catch (error) {
+        throw new Error('Sonar: could not verify this file for secrets (' + errorMessage(error) + '). Blocking as a precaution.');
       }
 
       if (decision.block) {
-        throw new Error(decision.reason ?? 'Sonar blocked this file read.');
+        throw new Error((decision.reason ?? 'Sonar blocked this file read.') + ' ' + BYPASS_WARNING);
       }
-    },
-    'chat.message': async (input, output) => {
-      // Collected separately and pushed after the loop — appending directly to
-      // output.parts while iterating it would make the for-of visit the new
-      // (synthetic) part too, since array iterators re-check .length live.
-      const newParts: any[] = [];
-      let totalSecretsFound = 0;
-      const blockedReasons: string[] = [];
+    });
 
-      // Unlike tool.execute.before, a thrown Error here is NOT surfaced usefully to the user —
-      // OpenCode shows only a generic "Unexpected server error" for a chat.message failure, with
-      // no indication of what happened. So instead of throwing when scanning fails or is
-      // unavailable, we replace the message's own text with an explanation: the model still
-      // receives a normal user-turn message (just not the original, unverified one) and can tell
-      // the user in its own words, instead of the conversation dying on an opaque platform error.
-      for (const part of output.parts as any[]) {
-        if (typeof part.text !== 'string' || !part.text) continue;
-
-        let decision: ChatMessageDecision;
-        try {
-          decision = await callSonarHook<ChatMessageDecision>($, 'opencode-chat-message', {
-            text: part.text,
-            sessionID: input.sessionID,
-          });
-        } catch (err) {
-          const reason = \`could not verify this message for secrets (\${err instanceof Error ? err.message : String(err)})\`;
-          part.text = \`[Sonar] Message blocked: \${reason}. Blocked as a precaution — original content was not sent.\`;
-          blockedReasons.push(reason);
-          continue;
-        }
+    await ctx.session.hook('prompt', async (event: any) => {
+      try {
+        const decision: { block: boolean; reason?: string; redactedText?: string; secretsFound?: number } =
+          await runHook(
+            'opencode-chat-message',
+            { text: event.prompt.text, sessionID: event.sessionID },
+            HOOK_TIMEOUT_MS,
+            directory,
+          );
+        if (!isDecision(decision)) throw new Error('unexpected answer from sonar');
 
         if (decision.block) {
-          const reason = decision.reason ?? 'Sonar blocked this message.';
-          part.text = \`[Sonar] Message blocked: \${reason} Blocked as a precaution — original content was not sent.\`;
-          blockedReasons.push(reason);
-          continue;
+          const reason = (decision.reason ?? 'Sonar blocked this message').replace(/\.$/, '');
+          event.prompt.text = blockedMessage(reason);
+          dropMentions(event.prompt);
+          return;
         }
 
         if (decision.redactedText !== undefined) {
-          part.text = decision.redactedText;
-          totalSecretsFound += decision.secretsFound ?? 0;
+          event.prompt.text = decision.redactedText + '\n\n' + MASKED_NOTICE;
+          dropMentions(event.prompt);
         }
+      } catch (error) {
+        event.prompt.text = blockedMessage('could not verify this message for secrets (' + errorMessage(error) + ')');
+        dropMentions(event.prompt);
       }
-
-      if (blockedReasons.length > 0) {
-        newParts.push(
-          makeSyntheticPart(
-            output,
-            \`<system-reminder>\\nSonar Vortex: this message could not be verified for secrets (\${blockedReasons.join('; ')}) and was replaced with a placeholder — it was NOT sent as originally written. Tell the user their message was blocked and why, and ask them to retry once the issue is resolved.\\n</system-reminder>\`,
-          ),
-        );
-      } else if (totalSecretsFound > 0) {
-        newParts.push(
-          makeSyntheticPart(
-            output,
-            \`<system-reminder>\\nSonar Vortex: \${totalSecretsFound} secret(s) were detected in this message and masked before being sent. Tell the user which secret(s) were found and masked, and remind them to rotate any real credentials.\\n</system-reminder>\`,
-          ),
-        );
-      }
-
-      if (newParts.length > 0) {
-        (output.parts as any[]).push(...newParts);
-      }
-    },
-  };
+    });
+  },
 };
 `;
