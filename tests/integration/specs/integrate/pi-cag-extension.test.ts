@@ -143,4 +143,36 @@ describe('integrate pi: Vortex Context extension, run against the real CLI', () 
     },
     { timeout: 60000 },
   );
+  it(
+    'shows a failure without recording a successful announcement and retries after recovery',
+    async () => {
+      await setUp();
+      harness.state().withContextAugmentationBinaryInstalled({ sessionContextStdout: '' });
+      const failed = await runPiExtension(harness, extensionPath, [SESSION_START, SESSION_START]);
+      expect(failed.sentMessages).toEqual([
+        {
+          customType: 'sonar-cag-warning',
+          content: [
+            {
+              type: 'text',
+              text: "Vortex context was not loaded. The context command returned no context. Run 'sonar system status' and check the CLI debug logs.",
+            },
+          ],
+          display: true,
+        },
+      ]);
+      harness.state().withContextAugmentationBinaryInstalled({ sessionContextStdout: CAG_CONTEXT });
+      const recovered = await runPiExtension(harness, extensionPath, [SESSION_START], {
+        entries: [{ type: 'custom_message', customType: 'sonar-cag-warning', display: true }],
+      });
+      expect(recovered.sentMessages).toEqual([
+        {
+          customType: ANNOUNCE_TYPE,
+          content: [{ type: 'text', text: `${CAG_CONTEXT}\n` }],
+          display: false,
+        },
+      ]);
+    },
+    { timeout: 60000 },
+  );
 });
