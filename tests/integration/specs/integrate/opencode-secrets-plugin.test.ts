@@ -27,6 +27,7 @@ import { SECRETS_INACTIVE_UNAUTHENTICATED } from '@/commands/hook/hook-dependenc
 import { OPENCODE_PLUGIN_MANAGED_MARKER } from '@/commands/integrate/opencode/secrets-plugin-content.ts';
 
 import { TestHarness } from '../../harness';
+import { pathWithoutOpenCode } from '../../harness/opencode-path';
 import { promptEvent, readEvent, runOpenCodePlugin } from '../../harness/opencode-plugin-host';
 import { IS_WINDOWS } from '../../harness/platform';
 
@@ -53,7 +54,9 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       'sonar-project.properties',
       [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
     );
-    const install = await harness.run('integrate opencode --non-interactive');
+    const install = await harness.run('integrate opencode --non-interactive', {
+      extraEnv: { PATH: pathWithoutOpenCode() },
+    });
     expect(install.exitCode).toBe(0);
     pluginPath = harness.userHome.file(...PLUGIN_PATH).path;
   }
