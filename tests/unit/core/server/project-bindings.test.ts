@@ -272,13 +272,13 @@ describe('ProjectBindingsClient', () => {
           ok: true,
           status: 200,
           json: () => Promise.resolve(page1),
-          text: () => Promise.resolve(''),
+          text: () => Promise.resolve(JSON.stringify(page1)),
         } as Response)
         .mockResolvedValueOnce({
           ok: true,
           status: 200,
           json: () => Promise.resolve(page2),
-          text: () => Promise.resolve(''),
+          text: () => Promise.resolve(JSON.stringify(page2)),
         } as Response);
       const result = await client.getAllProjectBindings('dop-id').orThrow();
       expect(result.size).toBe(3);
