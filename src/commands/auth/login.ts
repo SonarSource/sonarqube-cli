@@ -113,6 +113,11 @@ export async function authLogin(
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
+    if (reusedExistingToken && orgOption) {
+      console.info(
+        `The stored token was reused. Next time, run 'sonar auth org <org>' to switch organization without logging in again.`,
+      );
+    }
     if (invocationAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,

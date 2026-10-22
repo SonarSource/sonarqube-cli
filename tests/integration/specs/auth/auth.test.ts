@@ -346,6 +346,90 @@ describe('auth login', () => {
   );
 
   it(
+    'points to `auth org` when --org is passed and the stored token is reused',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('stored-token')
+        .withOrganizations([
+          { key: 'org-a', name: 'Org A' },
+          { key: 'org-b', name: 'Org B' },
+        ])
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud', 'org-a')
+        .withTokenName('cli-browser-token')
+        .withKeychainToken(server.baseUrl(), 'stored-token');
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()} --org org-b`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "The stored token was reused. Next time, run 'sonar auth org <org>' to switch organization without logging in again.",
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not point to `auth org` when --org is not passed',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('stored-token')
+        .withOrganizations([{ key: 'org-a', name: 'Org A' }])
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud', 'org-a')
+        .withTokenName('cli-browser-token')
+        .withKeychainToken(server.baseUrl(), 'stored-token');
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Token already exists for');
+      expect(result.stdout).not.toContain('sonar auth org');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not point to `auth org` when --org is passed and a new token is generated',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'org-b', name: 'Org B' }])
+        .start();
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()} --org org-b`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      expect(result.stdout).not.toContain('sonar auth org');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 1 when organization is not found on SonarCloud',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
