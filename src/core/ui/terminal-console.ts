@@ -195,6 +195,31 @@ export function checkboxComponent(isSelected: boolean, unavailable: boolean): st
   return '◯';
 }
 
+interface PromptCancellation {
+  signal: AbortSignal;
+  run<TValue>(prompt: Prompt<TValue>): ReturnType<Prompt<TValue>['prompt']>;
+}
+
+/** Cancels the prompt when stdin reaches EOF, since clack would otherwise wait forever. */
+function promptCancellation(): PromptCancellation {
+  const controller = new AbortController();
+  const abort = (): void => {
+    controller.abort();
+  };
+  if (process.stdin.readableEnded) abort();
+  process.stdin.once('end', abort);
+  return {
+    signal: controller.signal,
+    async run(prompt) {
+      try {
+        return await prompt.prompt();
+      } finally {
+        process.stdin.off('end', abort);
+      }
+    },
+  };
+}
+
 /** Production {@link Console}: writes to stdout/stderr. */
 export class TerminalConsole implements Console {
   private formattedOutputMode = false;
@@ -353,7 +378,9 @@ export class TerminalConsole implements Console {
   }
 
   async textPrompt(message: string): Promise<string | null> {
+    const cancellation = promptCancellation();
     const prompt = new TextPrompt({
+      signal: cancellation.signal,
       render() {
         if (this.state === 'submit') return `  ${green('✓')}  ${message} ${dim(this.value ?? '')}`;
         if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
@@ -363,13 +390,15 @@ export class TerminalConsole implements Console {
       },
     });
 
-    const result = await prompt.prompt();
+    const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result ?? null;
   }
 
   async passwordPrompt(message: string): Promise<string | null> {
+    const cancellation = promptCancellation();
     const prompt = new PasswordPrompt({
+      signal: cancellation.signal,
       render() {
         if (this.state === 'submit') return `  ${green('✓')}  ${message}`;
         if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
@@ -379,13 +408,15 @@ export class TerminalConsole implements Console {
       },
     });
 
-    const result = await prompt.prompt();
+    const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result ?? null;
   }
 
   async confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
+    const cancellation = promptCancellation();
     const prompt = new ConfirmPrompt({
+      signal: cancellation.signal,
       active: 'Yes',
       inactive: 'No',
       initialValue: defaultValue,
@@ -399,13 +430,15 @@ export class TerminalConsole implements Console {
       },
     });
 
-    const result = await prompt.prompt();
+    const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result ?? null;
   }
 
   async selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {
+    const cancellation = promptCancellation();
     const prompt = new SelectPrompt({
+      signal: cancellation.signal,
       options,
       render() {
         if (this.state === 'submit') {
@@ -423,7 +456,7 @@ export class TerminalConsole implements Console {
       },
     });
 
-    const result = await prompt.prompt();
+    const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result as T;
   }
@@ -462,8 +495,10 @@ export class TerminalConsole implements Console {
       }
     }
 
+    const cancellation = promptCancellation();
     const prompt = new MultiSelectLoadMorePrompt(
       {
+        signal: cancellation.signal,
         render() {
           if (this.state === 'submit') {
             const selectedLabel = `${selected.length} of ${getTotal()} selected`;
@@ -557,7 +592,7 @@ export class TerminalConsole implements Console {
       }
     });
 
-    const result = await prompt.prompt();
+    const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result ?? [];
   }
