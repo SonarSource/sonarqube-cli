@@ -123,13 +123,14 @@ export class SonarHttpClient {
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       return new ServiceUnavailableError();
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
+    const sendsJson = method === 'POST' || method === 'PUT';
+    if (sendsJson && response.status === HTTP_STATUS_BAD_REQUEST) {
       return await parseBadRequestError(response, this.isCloud);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+    if (sendsJson && response.status === HTTP_STATUS_FORBIDDEN) {
       return new ForbiddenApiError(await response.text());
     }
 
@@ -325,6 +326,26 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       this.toStatusCheckedResult(response, 'POST', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Make PUT request to SonarQube API using Bearer token, sending and parsing JSON. */
+  put<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest(
+          'PUT',
+          this.commonHeaders('json'),
+          POST_REQUEST_TIMEOUT_MS,
+          JSON.stringify(body),
+        ),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'PUT', () => response.json() as Promise<T>),
     );
   }
 
