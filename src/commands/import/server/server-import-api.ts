@@ -114,11 +114,15 @@ function patStatusOfFailure(error: HttpClientError): PatStatus {
   return status;
 }
 
-function countOrganizations(response: {
-  organizations?: unknown[];
-  paging?: { total?: number };
-}): number | undefined {
-  if (!Array.isArray(response.organizations)) return undefined;
+function countOrganizations(
+  response:
+    | {
+        organizations?: unknown[];
+        paging?: { total?: number };
+      }
+    | undefined,
+): number | undefined {
+  if (response === undefined || !Array.isArray(response.organizations)) return undefined;
   const total = response.paging?.total;
   return typeof total === 'number'
     ? Math.max(total, response.organizations.length)
