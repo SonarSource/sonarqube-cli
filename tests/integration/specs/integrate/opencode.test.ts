@@ -332,6 +332,8 @@ describe('integrate opencode — Vortex Context feature', () => {
       const agentsMd = harness.userHome.file('.config', 'opencode', 'AGENTS.md').asText();
       expect(agentsMd).toContain('<!-- sonar:begin:sonar-context-augmentation-protocol -->');
       expect(agentsMd).toContain(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY.trim());
+      expect(agentsMd).toContain('In a repository with several SonarQube projects');
+      expect(agentsMd).toContain('sonar link list --path <path>');
       expect(agentsMd).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
       expect(
         findInstalledSubfeature(
