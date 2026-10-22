@@ -20,6 +20,9 @@
 
 // Integration tests for `sonar integrate opencode`'s MCP server feature.
 
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
@@ -36,6 +39,8 @@ import type { CliState } from '@/core/state/state.ts';
 
 import { type CliResult, TestHarness } from '../../harness';
 import { readCagInvocations } from '../../harness/cag-helpers';
+import { pathWithoutOpenCode } from '../../harness/opencode-path';
+import { IS_WINDOWS } from '../../harness/platform';
 import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
@@ -69,6 +74,7 @@ describe('integrate opencode — MCP server configuration', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.state().withSecretsBinaryInstalled();
+    harness.withExtraEnv({ PATH: pathWithoutOpenCode() });
   });
 
   afterEach(async () => {
@@ -195,6 +201,7 @@ describe('integrate opencode — Vortex SQAA feature', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.state().withSecretsBinaryInstalled();
+    harness.withExtraEnv({ PATH: pathWithoutOpenCode() });
   });
 
   afterEach(async () => {
@@ -297,6 +304,7 @@ describe('integrate opencode — Vortex Context feature', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.state().withSecretsBinaryInstalled();
+    harness.withExtraEnv({ PATH: pathWithoutOpenCode() });
   });
 
   afterEach(async () => {
@@ -429,6 +437,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
   beforeEach(async () => {
     harness = await TestHarness.create();
     harness.state().withSecretsBinaryInstalled();
+    harness.withExtraEnv({ PATH: pathWithoutOpenCode() });
   });
 
   afterEach(async () => {
@@ -516,6 +525,130 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
       expect(findOpenCodeFeature(harness, 'mcp-server')).toBeDefined();
       const config = readOpenCodeConfig(harness);
       expect(config.mcp?.sonarqube).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+});
+
+describe.skipIf(IS_WINDOWS)('integrate opencode — OpenCode version notices', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.state().withSecretsBinaryInstalled();
+    harness.withExtraEnv({ PATH: pathWithoutOpenCode() });
+    const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
+    harness.withAuth(server.baseUrl(), 'tok');
+    harness.cwd.writeFile(
+      'sonar-project.properties',
+      [`sonar.host.url=${server.baseUrl()}`, 'sonar.projectKey=proj'].join('\n'),
+    );
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function installFakeOpenCode(versionOutput: string, exitCode = 0): () => boolean {
+    const binDir = join(harness.userHome.path, 'fake-opencode-bin');
+    const marker = join(binDir, 'invoked');
+    mkdirSync(binDir, { recursive: true });
+    const script = join(binDir, 'opencode');
+    writeFileSync(
+      script,
+      `#!/bin/sh\necho "$@" >> "${marker}"\necho "${versionOutput}"\nexit ${exitCode}\n`,
+    );
+    chmodSync(script, 0o755);
+    harness.withExtraEnv({ PATH: `${binDir}:${pathWithoutOpenCode()}` });
+    return () => existsSync(marker) && readFileSync(marker, 'utf8').trim() === '--version';
+  }
+
+  async function installAndExpectNoNotice(): Promise<void> {
+    const result = await harness.run('integrate opencode --non-interactive');
+
+    expect(result.exitCode).toBe(0);
+    expect(findOpenCodeFeature(harness, 'mcp-server', 'global')).toBeDefined();
+    expect(result.stderr).not.toContain('plugins are inactive');
+  }
+
+  it(
+    'warns once after the install when OpenCode 1.x is installed',
+    async () => {
+      const wasAsked = installFakeOpenCode('1.19.3');
+
+      const result = await harness.run('integrate opencode --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(wasAsked()).toBe(true);
+      const message =
+        'OpenCode 1.19.3 detected. SonarQube setup is complete, but plugins are inactive until you upgrade to OpenCode 2.0.';
+      expect(result.stderr.split(message).length - 1).toBe(1);
+      expect(result.stderr).not.toContain('These plugins require');
+      expect(result.stderr).not.toContain('re-run');
+      expect(findOpenCodeFeature(harness, 'mcp-server', 'global')).toBeDefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'warns as well when OpenCode is older than 1.0',
+    async () => {
+      installFakeOpenCode('0.15.8');
+
+      const result = await harness.run('integrate opencode --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        'OpenCode 0.15.8 detected. SonarQube setup is complete, but plugins are inactive until you upgrade to OpenCode 2.0.',
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'shows no notice when OpenCode 2.x is installed',
+    async () => {
+      const wasAsked = installFakeOpenCode('opencode v2.0.30');
+
+      await installAndExpectNoNotice();
+
+      expect(wasAsked()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'shows no notice when opencode --version fails, even if it printed a 1.x version',
+    async () => {
+      const wasAsked = installFakeOpenCode('1.19.3', 1);
+
+      await installAndExpectNoNotice();
+
+      expect(wasAsked()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'shows no notice when opencode --version prints no version',
+    async () => {
+      const wasAsked = installFakeOpenCode('something unexpected');
+
+      await installAndExpectNoNotice();
+
+      expect(wasAsked()).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'shows no notice when OpenCode is not installed',
+    async () => {
+      const emptyBinDir = join(harness.userHome.path, 'empty-bin');
+      mkdirSync(emptyBinDir, { recursive: true });
+      harness.withExtraEnv({ PATH: emptyBinDir });
+
+      await installAndExpectNoNotice();
     },
     { timeout: 30000 },
   );
