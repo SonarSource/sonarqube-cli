@@ -291,8 +291,7 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       ResultAsync.fromPromise(
-        (async (): Promise<TValue | undefined> =>
-          response.ok ? readOkGetJsonBody<TValue>(response) : undefined)(),
+        response.ok ? readOkGetJsonBody<TValue>(response) : Promise.resolve(undefined),
         (err) =>
           new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
       ).map((value) => ({ response, value })),
