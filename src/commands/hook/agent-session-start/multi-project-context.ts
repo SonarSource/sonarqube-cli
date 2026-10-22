@@ -24,6 +24,10 @@ import { SESSION_START_PROJECT_LIST_LIMIT } from '@/core/config-constants.ts';
 import { isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 
+/** Shared with the static Vortex Context instructions of agents that get no session-start hook. */
+export const UNRESOLVED_PROJECT_RECOVERY =
+  'If a command reports that it cannot determine a single project, run `sonar link list --path <path>` with the file or directory to work on: it lists the projects at, under or enclosing that path, nearest first. Then retry from the directory of the project that contains it.';
+
 const HEADING = '## Multi-project workspace';
 const INTRO =
   'This directory contains several SonarQube projects, and `sonar context` commands work on one project at a time.';
@@ -40,7 +44,7 @@ export function buildMultiProjectContext(
   if (projects.length > limit) {
     return `${HEADING}
 
-${INTRO} Run them from inside a project's directory. If a command reports that it cannot determine a single project, run \`sonar link list --path <path>\` with the file or directory to work on: it lists the projects at, under or enclosing that path, nearest first, and a single result is the project to use. Then retry from that project's directory.
+${INTRO} Run them from inside a project's directory. ${UNRESOLVED_PROJECT_RECOVERY}
 `;
   }
 
