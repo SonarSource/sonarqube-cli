@@ -24,6 +24,7 @@ import { OPENCODE_PLUGIN_MANAGED_MARKER } from '@/commands/integrate/opencode/se
 
 import { TestHarness } from '../../harness';
 import type { SqaaResponseConfig } from '../../harness/fake-sonarqube-server';
+import { pathWithoutOpenCode } from '../../harness/opencode-path';
 import {
   completedEvent,
   type OpenCodePluginStepResult,
@@ -78,6 +79,7 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
 
     const install = await harness.run('integrate opencode --non-interactive', {
       extraEnv: {
+        PATH: pathWithoutOpenCode(),
         SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
         SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
       },
