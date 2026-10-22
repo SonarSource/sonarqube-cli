@@ -420,5 +420,119 @@ describe('sonar hook git-pre-commit', () => {
       },
       { timeout: 30000 },
     );
+
+    describe('in a monorepo linked with .sonar-config.json', () => {
+      async function startScaServer(...projectKeys: string[]) {
+        let builder = harness.newFakeServer().withAuthToken(VALID_TOKEN).withScaEnabled(true);
+        for (const projectKey of projectKeys) {
+          builder = builder.withProject(projectKey).withProjectSettings(projectKey, []);
+        }
+        const server = await builder.start();
+        harness.state().withSecretsBinaryInstalled();
+        harness.state().withScaScannerBinaryInstalled();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+        return server;
+      }
+
+      function linkProjects(serverUrl: string, projects: Record<string, unknown>[]) {
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile(
+          '.sonar-config.json',
+          JSON.stringify({
+            projects: projects.map((project) => ({
+              serverUrl,
+              organization: TEST_ORG,
+              ...project,
+            })),
+          }),
+        );
+      }
+
+      function stageManifest(dir: string) {
+        harness.cwd.writeFile(`${dir}/package.json`, PACKAGE_JSON_CONTENT);
+        stageFile(harness.cwd.path, `${dir}/package.json`, PACKAGE_JSON_CONTENT);
+      }
+
+      function scannedProjects(server: {
+        getRecordedRequests(): { path: string; query: Record<string, string> }[];
+      }) {
+        return server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/settings/values')
+          .map((request) => request.query.component);
+      }
+
+      it(
+        'scans each project with a changed manifest and reports progress',
+        async () => {
+          const server = await startScaServer('api', 'web');
+          linkProjects(server.baseUrl(), [
+            { projectKey: 'api', path: 'services/api' },
+            { projectKey: 'web', path: 'apps/web' },
+          ]);
+          stageManifest('services/api');
+          stageManifest('apps/web');
+
+          const result = await harness.run('hook git-pre-commit --dependency-risks', {
+            timeoutMs: 90_000,
+          });
+
+          // Each scan fails open against the fake SCA backend, so the commit goes through.
+          expect(result.exitCode).toBe(0);
+          expect(scannedProjects(server)).toEqual(['api', 'web']);
+          expect(result.stderr).toContain('Scanning dependency risks for api (1/2)');
+          expect(result.stderr).toContain('Scanning dependency risks for web (2/2)');
+          expect(result.stderr).toContain(
+            'Dependency-risks scan failed for web; commit not blocked.',
+          );
+        },
+        { timeout: 120000 },
+      );
+
+      it(
+        'skips projects without changed manifests and projects on another connection',
+        async () => {
+          const server = await startScaServer('api', 'web', 'docs');
+          linkProjects(server.baseUrl(), [
+            { projectKey: 'api', path: 'services/api' },
+            { projectKey: 'web', path: 'apps/web', organization: 'other-org' },
+            { projectKey: 'docs', path: 'docs' },
+          ]);
+          harness.cwd.writeFile('docs/.keep', '');
+          stageManifest('services/api');
+          stageManifest('apps/web');
+
+          const result = await harness.run('hook git-pre-commit --dependency-risks', {
+            timeoutMs: 60_000,
+          });
+
+          expect(result.exitCode).toBe(0);
+          expect(scannedProjects(server)).toEqual(['api']);
+          expect(result.stderr).toContain(
+            'Dependency-risks scan skipped for web: it is linked to a connection other than the active one',
+          );
+        },
+        { timeout: 90000 },
+      );
+
+      it(
+        'skips when the changed manifests are outside every linked project',
+        async () => {
+          const server = await startScaServer('api');
+          harness.cwd.writeFile('services/api/.keep', '');
+          linkProjects(server.baseUrl(), [{ projectKey: 'api', path: 'services/api' }]);
+          stageManifest('tools');
+
+          const result = await harness.run('hook git-pre-commit --dependency-risks');
+
+          expect(result.exitCode).toBe(0);
+          expect(scannedProjects(server)).toEqual([]);
+          expect(result.stdout + result.stderr).toContain(
+            'No dependency manifests changed in a linked project',
+          );
+        },
+        { timeout: 30000 },
+      );
+    });
   });
 });

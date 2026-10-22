@@ -24,8 +24,8 @@ import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 
 import type { ScaScannerSpawner } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-scanner-spawner.ts';
 import {
-  anyFileMatches,
   ScaWatchPatternsRunner,
+  selectMatchingFiles,
 } from '../../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 
 const okInstaller: ScaScannerInstaller = { install: () => Promise.resolve('/bin/sca') };
@@ -74,7 +74,16 @@ describe('ScaWatchPatternsRunner', () => {
   });
 });
 
-describe('anyFileMatches', () => {
+describe('selectMatchingFiles', () => {
+  const anyFileMatches = (files: string[], patterns: string[]) =>
+    selectMatchingFiles(files, patterns).length > 0;
+
+  it('returns only the matching files', () => {
+    expect(selectMatchingFiles(['a/package.json', 'a/index.ts'], ['package.json'])).toEqual([
+      'a/package.json',
+    ]);
+  });
+
   it('returns false for empty inputs', () => {
     expect(anyFileMatches([], ['package.json'])).toBe(false);
     expect(anyFileMatches(['package.json'], [])).toBe(false);
