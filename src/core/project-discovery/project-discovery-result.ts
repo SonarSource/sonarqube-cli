@@ -91,6 +91,15 @@ function selectMappingForPath<T extends { projectRoot: string }>(
   return selected;
 }
 
+/** What a run started in `path` covers: the closest mapping containing it, plus every mapping inside it. */
+function focusOnPath<T extends { projectRoot: string }>(mappings: T[], path: string): T[] {
+  const target = canonicalizePath(path);
+  const closest = selectMappingForPath(mappings, target);
+  return mappings.filter(
+    (mapping) => mapping === closest || isAncestorOrSelf(target, mapping.projectRoot),
+  );
+}
+
 /** Paths sharing one mapping, as given by the caller (not canonicalized). */
 export interface MappingGroup<T extends { projectRoot: string }> {
   mapping: T;
@@ -152,6 +161,14 @@ export class DiscoveredProjects {
 
   scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {
     return scopeByAncestry(this.projects, path);
+  }
+
+  /**
+   * The mappings a run started in `path` covers: from inside a project, only the closest one
+   * (unlike `scope()`, which also keeps every outer project); from above projects, all of them.
+   */
+  focusedOn(path: string): DiscoveredProjects {
+    return new DiscoveredProjects(this.repoRoot, focusOnPath(this.projects, path));
   }
 
   /** The single mapping owning `path` (nearest root wins), unlike `scope()`, which keeps every mapping on the same ancestry line. */

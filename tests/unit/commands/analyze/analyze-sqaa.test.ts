@@ -33,6 +33,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
+import { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
@@ -77,13 +78,21 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverProject result carrying just enough for discoverSqaaProject to resolve `projectKey`. */
+/** discoverProjects result with one project rooted at cwd, or none when `projectKey` is undefined. */
 function makeDiscoveredProject(projectKey: string | undefined) {
-  return {
-    repoRoot: process.cwd(),
-    projectRoot: process.cwd(),
-    projectKey,
-  };
+  return new DiscoveredProjects(
+    process.cwd(),
+    projectKey
+      ? [
+          {
+            projectRoot: process.cwd(),
+            projectKey,
+            serverUrl: SONARCLOUD_URL,
+            organization: TEST_ORG,
+          },
+        ]
+      : [],
+  );
 }
 
 beforeEach(() => {
@@ -99,7 +108,7 @@ beforeEach(() => {
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
-  discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue(
+  discoverProjectSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
     makeDiscoveredProject(TEST_PROJECT),
   );
 

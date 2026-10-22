@@ -25,11 +25,11 @@ import type { Console } from '@/core/ui/console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
-import type { RunContext, RunTally } from './sqaa-analysis.ts';
-import { runAnalyses } from './sqaa-analysis.ts';
+import type { RunTally } from './sqaa-analysis.ts';
+import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
-import type { ChangeSetResult } from './sqaa-changeset.ts';
+import type { ChangeSetResult, IgnoredFile } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
@@ -46,15 +46,19 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
-import type { ResolvedSqaaFileEntry } from './sqaa-file-arg.ts';
-import { resolveSqaaPath, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
+import {
+  assertInsideProjectRoots,
+  resolveSqaaPath,
+  type SqaaPath,
+  withDisplayFilePath,
+} from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import type {
   AnalyzeSqaaRunOptions,
   SingleFileRunOptions,
   SqaaBatchRunOptions,
-  SqaaResolvedContext,
+  SqaaProjectGroup,
 } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -156,29 +160,60 @@ function displaySingleFileReport(
   displaySqaaResults(file.issues, file.errors, file.path, console, displayDepth);
 }
 
-export async function runSqaaAnalysesTallyForResolved(
-  paths: SqaaPath[],
-  resolved: SqaaResolvedContext,
-  branch: string | undefined,
-  wireDepth: SqaaDeepWireDepth | undefined,
-  displayDepth: SqaaAnalysisDepth,
-  console: Console,
+/** A project's files with the paths SQAA and the user's report need for each. */
+export interface SqaaGroupPaths {
+  group: SqaaProjectGroup;
+  paths: SqaaPath[];
+}
+
+/** Throws when a group's file is outside its own root, which resolution rules out. */
+export function resolveSqaaGroupPaths(
+  groups: SqaaProjectGroup[],
+  displayBase: string,
+): SqaaGroupPaths[] {
+  return groups.map((group) => ({
+    group,
+    paths: group.files.map((file) => resolveSqaaPath(file, group.projectRoot, displayBase)),
+  }));
+}
+
+/**
+ * Analyzes each project's files in turn and merges the tallies. Every project gets its own
+ * progress because `runAnalyses` indexes progress by position within its own paths. A global
+ * error (auth, entitlement) applies to the whole organization, so it stops the remaining projects.
+ */
+export async function runSqaaGroups(
+  groupPaths: SqaaGroupPaths[],
+  connection: SonarConnection,
+  run: {
+    branch: string | undefined;
+    wireDepth: SqaaDeepWireDepth | undefined;
+    displayDepth: SqaaAnalysisDepth;
+    console: Console;
+    silent: boolean;
+  },
 ): Promise<RunTally> {
-  const silentProgress = new SqaaProgress({
-    files: paths.map((p) => p.displayPath),
-    silent: true,
-    console,
-  });
-  const ctx: RunContext = {
-    paths,
-    connection: resolved.connection,
-    projectKey: resolved.projectKey,
-    branch,
-    progress: silentProgress,
-    analysisDepth: wireDepth,
-    displayAnalysisDepth: displayDepth,
-  };
-  return runAnalyses(ctx);
+  const tallies: RunTally[] = [];
+  for (const { group, paths } of groupPaths) {
+    const progress = new SqaaProgress({
+      files: paths.map((p) => p.displayPath),
+      silent: run.silent,
+      console: run.console,
+    });
+    const tally = await runAnalyses({
+      paths,
+      connection,
+      projectKey: group.projectKey,
+      branch: run.branch,
+      progress,
+      analysisDepth: run.wireDepth,
+      displayAnalysisDepth: run.displayDepth,
+    });
+    progress.finish();
+    tallies.push(tally);
+    if (tally.globalError) break;
+  }
+  return mergeTallies(tallies);
 }
 
 export async function fetchSingleFileReport(
@@ -239,11 +274,14 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
     requestedConnection,
     explicitProject,
     console,
+    [file],
   );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
+  assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
 
-  const { connection, projectKey, projectRoot } = resolved;
+  const { connection } = resolved;
+  const [{ projectKey, projectRoot }] = resolved.groups;
   const { auth } = connection;
   const path = resolveSqaaPath(file, projectRoot);
   const fileContent = readSqaaFileContent(file);
@@ -275,65 +313,23 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   finishSqaaTelemetryFromReport(report, { telemetryCallerCommand, telemetryCtx, auth }, durationMs);
 }
 
-export async function runSqaaAnalysisOnExplicitFiles(
-  entries: ResolvedSqaaFileEntry[],
-  options: SqaaBatchRunOptions,
-): Promise<void> {
-  const {
-    resolved,
-    branch,
-    format = 'text',
-    wireDepth,
-    displayDepth = 'STANDARD',
-    console,
-  } = options;
-  const cwd = process.cwd();
-  // Unlike change-set files, which are skipped as `outside-project`, a file the user named
-  // explicitly that lies outside the project root is an input error: this throws rather than
-  // silently dropping it from the run.
-  const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
-  const allPaths = paths.map((p) => p.displayPath);
-
-  if (format === 'json') {
-    const { result: tally, durationMs } = await timed(() =>
-      runSqaaAnalysesTallyForResolved(
-        paths,
-        resolved,
-        branch,
-        wireDepth,
-        displayDepth,
-        options.console,
-      ),
-    );
-    const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
-    await printSqaaJsonReport(report, resolved.connection, console);
-    finishSqaaRun(tally, durationMs, options);
-    return;
-  }
-
-  const progress = new SqaaProgress({ files: allPaths, console: options.console });
-  const ctx: RunContext = {
-    paths,
-    connection: resolved.connection,
-    projectKey: resolved.projectKey,
-    branch,
-    progress,
-    analysisDepth: wireDepth,
-    displayAnalysisDepth: displayDepth,
-  };
-  const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
-  progress.finish();
-  if (tally.globalError instanceof SqaaForbiddenError) {
-    await printVortexUnavailableForForbidden(resolved.connection, console);
-  }
-  printSqaaTextReport({ tally, allPaths, ignoredPaths: [], analysisDepth: displayDepth }, console);
-  finishSqaaRun(tally, durationMs, options);
+export async function runSqaaAnalysisOnExplicitFiles(options: SqaaBatchRunOptions): Promise<void> {
+  await runSqaaBatch(options, process.cwd(), []);
 }
 
 export async function runSqaaAnalysisOnFiles(
   changeSet: ChangeSetResult,
   options: SqaaBatchRunOptions,
 ): Promise<void> {
+  await runSqaaBatch(options, changeSet.repoRoot, changeSet.ignored);
+}
+
+/** `displayBase` is what reported paths are relative to: cwd for `--file`, the repository root for a change set. */
+async function runSqaaBatch(
+  options: SqaaBatchRunOptions,
+  displayBase: string,
+  ignored: IgnoredFile[],
+): Promise<void> {
   const {
     resolved,
     branch,
@@ -342,48 +338,30 @@ export async function runSqaaAnalysisOnFiles(
     displayDepth = 'STANDARD',
     console,
   } = options;
-  const { files, ignored, repoRoot } = changeSet;
-  const { connection, projectKey } = resolved;
-  const paths = files.map((f) => resolveSqaaPath(f, resolved.projectRoot, repoRoot));
-  const allPaths = paths.map((p) => p.displayPath);
+  const { connection } = resolved;
+  const groupPaths = resolveSqaaGroupPaths(resolved.groups, displayBase);
+  const allPaths = groupPaths.flatMap(({ paths }) => paths.map((p) => p.displayPath));
+  const isJson = format === 'json';
 
-  if (format === 'json') {
-    const { result: tally, durationMs } = await timed(() =>
-      runSqaaAnalysesTallyForResolved(
-        paths,
-        resolved,
-        branch,
-        wireDepth,
-        displayDepth,
-        options.console,
-      ),
-    );
-    const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
+  const { result: tally, durationMs } = await timed(() =>
+    runSqaaGroups(groupPaths, connection, {
+      branch,
+      wireDepth,
+      displayDepth,
+      console,
+      silent: isJson,
+    }),
+  );
+
+  if (isJson) {
+    const report = buildJsonReport(tally, ignored, allPaths, displayBase, displayDepth);
     await printSqaaJsonReport(report, connection, console);
-    finishSqaaRun(tally, durationMs, options);
-    return;
+  } else {
+    if (tally.globalError instanceof SqaaForbiddenError) {
+      await printVortexUnavailableForForbidden(connection, console);
+    }
+    const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, displayBase));
+    printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth }, console);
   }
-
-  const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, repoRoot));
-  const progress = new SqaaProgress({
-    files: allPaths,
-    ignoredFiles: ignoredPaths,
-    console: options.console,
-  });
-  const ctx: RunContext = {
-    paths,
-    connection,
-    projectKey,
-    branch,
-    progress,
-    analysisDepth: wireDepth,
-    displayAnalysisDepth: displayDepth,
-  };
-  const { result: tally, durationMs } = await timed(() => runAnalyses(ctx));
-  progress.finish();
-  if (tally.globalError instanceof SqaaForbiddenError) {
-    await printVortexUnavailableForForbidden(connection, console);
-  }
-  printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth }, console);
   finishSqaaRun(tally, durationMs, options);
 }
