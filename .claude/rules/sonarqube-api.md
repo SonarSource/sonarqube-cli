@@ -26,7 +26,7 @@ layer even when it lives right next to the client conceptually: `OrganizationSum
 `toOrganizationSummary()` sit one level up, in `src/core/domain/organization.ts`, since deriving a
 display view from already-fetched data isn't an API concern, and more than one command needs the
 same derived `isAdmin`/`isActive` view. Command-specific surfaces
-sit with their command: `ImportApiClient`
+sit with their command: `SonarArchitectureApi` (`src/commands/architecture/_common/sonar-architecture-api.ts`, public architecture endpoints), `ImportApiClient`
 (`src/commands/import/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
 `RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
 `OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`
