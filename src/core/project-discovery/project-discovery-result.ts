@@ -54,14 +54,24 @@ export function isSameConnection(mappings: ProjectMapping[]): boolean {
   );
 }
 
+/** A mapping on the ancestry line of a scoped path. */
+export type ScopedProjectMapping<T> = T & {
+  /** The project root is the path or encloses it, rather than sitting below it. */
+  contains: boolean;
+};
+
 /** Matches on the same ancestry line as `path`, either direction — no nearest-wins, so a nested path can match more than one. */
-function scopeByAncestry<T extends { projectRoot: string }>(mappings: T[], path: string): T[] {
+function scopeByAncestry<T extends { projectRoot: string }>(
+  mappings: T[],
+  path: string,
+): ScopedProjectMapping<T>[] {
   const target = canonicalizePath(path);
-  return mappings.filter(
-    (mapping) =>
-      isAncestorOrSelf(mapping.projectRoot, target) ||
-      isAncestorOrSelf(target, mapping.projectRoot),
-  );
+  return mappings.flatMap((mapping) => {
+    const contains = isAncestorOrSelf(mapping.projectRoot, target);
+    return contains || isAncestorOrSelf(target, mapping.projectRoot)
+      ? [{ ...mapping, contains }]
+      : [];
+  });
 }
 
 /**
@@ -73,7 +83,7 @@ export class ProjectDiscoveryResult {
   repoRoot?: string;
   projects: ProjectMapping[] = [];
 
-  scope(path: string): ProjectMapping[] {
+  scope(path: string): ScopedProjectMapping<ProjectMapping>[] {
     return scopeByAncestry(this.projects, path);
   }
 }
@@ -85,7 +95,7 @@ export class DiscoveredProjects {
     public readonly projects: CompleteProjectMapping[],
   ) {}
 
-  scope(path: string): CompleteProjectMapping[] {
+  scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {
     return scopeByAncestry(this.projects, path);
   }
 }
