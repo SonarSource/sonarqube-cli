@@ -194,9 +194,10 @@ export async function runSqaaGroups(
   },
 ): Promise<RunTally> {
   const tallies: RunTally[] = [];
-  for (const { group, paths } of groupPaths) {
+  for (const [index, { group, paths }] of groupPaths.entries()) {
     const progress = new SqaaProgress({
       files: paths.map((p) => p.displayPath),
+      project: { key: group.projectKey, index: index + 1, total: groupPaths.length },
       silent: run.silent,
       console: run.console,
     });
@@ -241,11 +242,17 @@ export async function fetchSingleFileReport(
         withDisplayFilePath(response.issues, path.displayPath),
         response.errors,
         displayDepth,
+        projectKey,
       ),
     };
   } catch (err) {
     const error = err as Error;
-    const report = singleFileFailureReport(path.displayPath, error.message, displayDepth);
+    const report = singleFileFailureReport(
+      path.displayPath,
+      error.message,
+      displayDepth,
+      projectKey,
+    );
     if (isGlobalSqaaError(error)) {
       report.globalError = {
         kind: globalSqaaErrorKind(error),
@@ -340,7 +347,11 @@ async function runSqaaBatch(
   } = options;
   const { connection } = resolved;
   const groupPaths = resolveSqaaGroupPaths(resolved.groups, displayBase);
-  const allPaths = groupPaths.flatMap(({ paths }) => paths.map((p) => p.displayPath));
+  const projects = groupPaths.map(({ group, paths }) => ({
+    projectKey: group.projectKey,
+    paths: paths.map((p) => p.displayPath),
+  }));
+  const allPaths = projects.flatMap(({ paths }) => paths);
   const isJson = format === 'json';
 
   const { result: tally, durationMs } = await timed(() =>
@@ -354,14 +365,17 @@ async function runSqaaBatch(
   );
 
   if (isJson) {
-    const report = buildJsonReport(tally, ignored, allPaths, displayBase, displayDepth);
+    const report = buildJsonReport(tally, ignored, allPaths, displayBase, displayDepth, projects);
     await printSqaaJsonReport(report, connection, console);
   } else {
     if (tally.globalError instanceof SqaaForbiddenError) {
       await printVortexUnavailableForForbidden(connection, console);
     }
     const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, displayBase));
-    printSqaaTextReport({ tally, allPaths, ignoredPaths, analysisDepth: displayDepth }, console);
+    printSqaaTextReport(
+      { tally, allPaths, ignoredPaths, projects, analysisDepth: displayDepth },
+      console,
+    );
   }
   finishSqaaRun(tally, durationMs, options);
 }

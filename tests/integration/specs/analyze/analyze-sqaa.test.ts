@@ -3245,6 +3245,77 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
   );
 
   it(
+    'groups the text report under a header per project when run from the repository root',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic');
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout;
+      const headerA = output.indexOf('app-a · 1 file · 0 issues');
+      const headerB = output.indexOf('app-b · 1 file · 0 issues');
+      expect(headerA).toBeGreaterThanOrEqual(0);
+      expect(headerB).toBeGreaterThan(headerA);
+      expect(output.indexOf('packages/a/src/x.ts')).toBeGreaterThan(headerA);
+      expect(output.indexOf('packages/a/src/x.ts')).toBeLessThan(headerB);
+      expect(output.indexOf('packages/b/lib/y.ts')).toBeGreaterThan(headerB);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'lists files owned by no project under their own Not analyzed section, after the last project',
+    async () => {
+      await startMonorepoServer();
+      harness.cwd.writeFile('docs/readme.md', '# docs');
+
+      const result = await harness.run('analyze agentic');
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout;
+      const ignoredHeader = output.indexOf('Not analyzed · 1 file');
+      expect(ignoredHeader).toBeGreaterThan(output.indexOf('packages/b/lib/y.ts'));
+      expect(output.indexOf('docs/readme.md')).toBeGreaterThan(ignoredHeader);
+      expect(output).toContain('[IGNORED]');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows no project header when only one project is analyzed',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic', {
+        cwd: join(harness.cwd.path, 'packages/a'),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('packages/a/src/x.ts');
+      expect(result.stdout).not.toContain('app-a ·');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'tags each JSON file entry with the project it was analyzed against',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic --format json');
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as { files: { path: string; project?: string }[] };
+      expect(report.files.map((f) => [f.path, f.project])).toEqual([
+        ['packages/a/src/x.ts', PROJECT_A],
+        ['packages/b/lib/y.ts', PROJECT_B],
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'pins every file to --project and still relativizes to that project’s own root',
     async () => {
       const server = await startMonorepoServer();

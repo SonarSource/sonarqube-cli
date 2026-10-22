@@ -67,7 +67,11 @@ async function buildSqaaJsonReportFromEntries(
 ): Promise<SqaaJsonReport> {
   const cwd = process.cwd();
   const groupPaths = resolveSqaaGroupPaths(resolved.groups, cwd);
-  const allPaths = groupPaths.flatMap(({ paths }) => paths.map((p) => p.displayPath));
+  const projects = groupPaths.map(({ group, paths }) => ({
+    projectKey: group.projectKey,
+    paths: paths.map((p) => p.displayPath),
+  }));
+  const allPaths = projects.flatMap(({ paths }) => paths);
   if (allPaths.length === 1) {
     const [{ group, paths }] = groupPaths;
     const [path] = paths;
@@ -96,7 +100,7 @@ async function buildSqaaJsonReportFromEntries(
       silent: true,
     }),
   );
-  const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
+  const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth, projects);
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
@@ -145,7 +149,11 @@ async function buildSqaaJsonReportFromChangeSet(
 
   const { ignored, repoRoot } = changeSet;
   const groupPaths = resolveSqaaGroupPaths(resolved.groups, repoRoot);
-  const allPaths = groupPaths.flatMap(({ paths }) => paths.map((p) => p.displayPath));
+  const projects = groupPaths.map(({ group, paths }) => ({
+    projectKey: group.projectKey,
+    paths: paths.map((p) => p.displayPath),
+  }));
+  const allPaths = projects.flatMap(({ paths }) => paths);
   const { result: tally, durationMs } = await timed(() =>
     runSqaaGroups(groupPaths, resolved.connection, {
       branch: resolvedBranch,
@@ -155,7 +163,7 @@ async function buildSqaaJsonReportFromChangeSet(
       silent: true,
     }),
   );
-  const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
+  const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth, projects);
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
