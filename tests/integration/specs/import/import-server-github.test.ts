@@ -81,7 +81,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 3 repositories');
     const paths = server.getRecordedRequests().map((r) => r.path);
-    expect(paths).not.toContain('/api/alm_integration/check_pat');
+    expect(paths).not.toContain('/api/alm_integrations/check_pat');
     const organizationCalls = server
       .getRecordedRequests()
       .filter((r) => r.path === '/api/alm_integrations/list_github_organizations');
