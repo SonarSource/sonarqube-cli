@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { NetworkConfigError } from '@/core/errors.ts';
+import { NetworkConfigError, ProjectOrganizationError } from '@/core/errors.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 
 export function remediationHintFor(err: unknown): string | undefined {
@@ -27,6 +27,11 @@ export function remediationHintFor(err: unknown): string | undefined {
   }
   if (err instanceof NetworkConfigError) {
     return 'You can also check current network configuration and errors using `sonar system status`.';
+  }
+  if (err instanceof ProjectOrganizationError) {
+    return err.actualOrganization
+      ? `Run 'sonar auth org ${err.actualOrganization}' to switch to that organization.`
+      : "Run 'sonar list org' to check your organization membership.";
   }
   if (err instanceof RateLimitError) {
     return 'Wait a moment and try again.';
