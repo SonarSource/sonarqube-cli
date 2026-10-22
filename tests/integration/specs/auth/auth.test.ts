@@ -2061,11 +2061,13 @@ describe('auth status', () => {
         "Connected, but organization 'my-org' is not accessible with this token",
       );
       expect(result.stdout).toContain('This token resolves no membership for that organization.');
-      expect(result.stdout).toContain('Either regenerate it');
-      // The remediation path is the actionable part of this message, and it was wrong until
-      // review caught it. Assert it so the next UI change breaks a test rather than a user.
-      expect(result.stdout).toContain('My Account > Access Tokens');
-      expect(result.stdout).toContain('You can also ask an organization administrator to add');
+      expect(result.stdout).toContain('Ask an organization administrator to add your account');
+      expect(result.stdout).toContain('check which account');
+      expect(result.stdout).toContain('the token was created with.');
+      expect(result.stdout).not.toContain('created before you joined');
+      expect(result.stdout).not.toContain('stays invalid');
+      expect(result.stdout).not.toMatch(/regenerat/i);
+      expect(result.stderr).not.toMatch(/regenerat/i);
     },
     { timeout: 15000 },
   );
