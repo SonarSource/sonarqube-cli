@@ -148,7 +148,7 @@ import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { integrateOpenCode } from './integrate/opencode';
 import { integratePi } from './integrate/pi';
-import { link, linkMonorepo, type LinkOptions } from './link';
+import { link, type LinkOptions } from './link';
 import {
   DEFAULT_STATUSES,
   listIssues,
@@ -220,13 +220,10 @@ ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
 Supports one project per repository. Linking again replaces the existing link.
-For a monorepo, use 'sonar link monorepo' to link several directories.
-`;
 
-const linkMonorepoExtraHelp = `
-Link each local directory to an existing SonarQube Cloud or Server project:
-  sonar link monorepo api_project --path services/api
-  sonar link monorepo web_project --path services/web
+For a monorepo, use --monorepo to link several directories:
+  sonar link --monorepo api_project --path services/api
+  sonar link --monorepo web_project --path services/web
 
 Paths are relative to the repository root (the current directory outside Git).
 Mappings are saved in the projects array in .sonar-config.json.
@@ -793,8 +790,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
-  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
-  const linkCommand = COMMAND_TREE.command('link')
+  // Overwrites the single .sonar-config.json project binding, or with --monorepo
+  // appends to (or updates) the `projects` array (barebones; UX will change)
+  COMMAND_TREE.command('link')
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'core',
@@ -802,20 +800,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     })
     .argument('<projectKey>', 'SonarQube project key')
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .option(
+      '--monorepo',
+      'Add or update this directory in the projects array instead of replacing the single link',
+    )
     .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
       link(projectKey, options, ctx),
-    );
-
-  // Appends to (or updates) the `projects` array instead of overwriting the single binding
-  linkCommand
-    .command('monorepo')
-    .description('Link a local directory to a project in the .sonar-config.json projects array')
-    .argument('<projectKey>', 'SonarQube project key')
-    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
-    .addHelpText('after', linkMonorepoExtraHelp)
-    .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
-      linkMonorepo(projectKey, options, ctx),
     );
 
   // Configure things related to the CLI

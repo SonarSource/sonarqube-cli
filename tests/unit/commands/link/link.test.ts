@@ -35,7 +35,7 @@ import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 
-import { link, linkMonorepo, type LinkOptions } from '../../../../src/commands/link/index.ts';
+import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const onPremAuth = new ResolvedAuth({
@@ -164,14 +164,14 @@ describe('link', () => {
     expect(setSpy).toHaveBeenCalled();
     const warnings = fake.calls.filter((c) => c.method === 'warn');
     expect(warnings).toHaveLength(1);
-    expect(String(warnings[0].args[0])).toContain("'sonar link monorepo'");
+    expect(String(warnings[0].args[0])).toContain("'sonar link --monorepo'");
     expect(fake.calls.filter((c) => c.method === 'success')).toHaveLength(0);
   });
 
-  it('linkMonorepo writes through addProject and never calls set', async () => {
+  it('link with monorepo writes through addProject and never calls set', async () => {
     const addSpy = spyOn(sharedProjectConfigRepository, 'addProject').mockResolvedValue(undefined);
     try {
-      await linkMonorepo('my_project', { path: '.' }, ctxFor(onPremAuth));
+      await link('my_project', { path: '.', monorepo: true }, ctxFor(onPremAuth));
 
       expect(addSpy).toHaveBeenCalledWith(process.cwd(), {
         projectKey: 'my_project',

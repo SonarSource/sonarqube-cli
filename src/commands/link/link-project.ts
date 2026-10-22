@@ -39,6 +39,7 @@ import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 export interface LinkOptions {
   path: string;
+  monorepo?: boolean;
 }
 
 function deriveEntry(
@@ -68,8 +69,18 @@ function deriveEntry(
 /** Resolves to whether the written link takes effect (a shadowed link does not). */
 type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<boolean>;
 
-/** Single-project link: replaces the legacy singular `project` binding. */
 export function linkProject(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return options.monorepo
+    ? linkMonorepoProject(projectKey, options, ctx)
+    : linkSingleProject(projectKey, options, ctx);
+}
+
+/** Single-project link: replaces the legacy singular `project` binding. */
+function linkSingleProject(
   projectKey: string,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
@@ -78,7 +89,7 @@ export function linkProject(
     const shadowed = await sharedProjectConfigRepository.set(dir, entry);
     if (shadowed) {
       ctx.console.warn(
-        `${join(dir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link monorepo' to update the projects array.`,
+        `${join(dir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
       );
     }
     return !shadowed;
@@ -86,7 +97,7 @@ export function linkProject(
 }
 
 /** Monorepo link: adds or updates a mapping in the `projects` array. */
-export function linkMonorepoProject(
+function linkMonorepoProject(
   projectKey: string,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,

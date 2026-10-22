@@ -18,8 +18,4 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export {
-  linkProject as link,
-  linkMonorepoProject as linkMonorepo,
-  type LinkOptions,
-} from './link-project.ts';
+export { linkProject as link, type LinkOptions } from './link-project.ts';

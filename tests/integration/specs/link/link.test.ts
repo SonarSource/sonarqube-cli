@@ -215,7 +215,7 @@ describe('sonar link', () => {
     const result = await harness.run('link my_project --path .');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain("'sonar link monorepo'");
+    expect(result.stdout + result.stderr).toContain("'sonar link --monorepo'");
     expect(result.stdout).not.toContain('Linked ');
     expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
   });
@@ -226,10 +226,10 @@ describe('sonar link', () => {
       harness.cwd.writeFile('services/api/.keep', '');
       harness.cwd.writeFile('services/web/.keep', '');
       expect((await harness.run('link legacy --path .')).exitCode).toBe(0);
-      expect((await harness.run('link monorepo api --path services/api')).exitCode).toBe(0);
-      expect((await harness.run('link monorepo web --path services/web')).exitCode).toBe(0);
+      expect((await harness.run('link api --monorepo --path services/api')).exitCode).toBe(0);
+      expect((await harness.run('link web --monorepo --path services/web')).exitCode).toBe(0);
 
-      const result = await harness.run('link monorepo api2 --path ./services/api/');
+      const result = await harness.run('link api2 --monorepo --path ./services/api/');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('(monorepo mapping)');
@@ -246,7 +246,7 @@ describe('sonar link', () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ projects: {} }));
 
-      const result = await harness.run('link monorepo api');
+      const result = await harness.run('link api --monorepo');
 
       expect(result.exitCode).not.toBe(0);
       expect(harness.cwd.file('.sonar-config.json').asText()).toBe(
@@ -258,7 +258,7 @@ describe('sonar link', () => {
       const result = await harness.run('link --help');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('monorepo');
+      expect(result.stdout).toContain('--monorepo');
     });
   });
 });
