@@ -341,7 +341,7 @@ describe('runDepRisksStage', () => {
       thrown = e;
     }
 
-    expect(orchestratorRunSpy.mock.calls[0][1]).toBe('discovered-key');
+    expect(orchestratorRunSpy.mock.calls[0][1]).toMatchObject({ projectKey: 'discovered-key' });
     expect((thrown as CommandFailedError).remediationHint).toContain(
       "sonar analyze dependency-risks -p discovered-key'",
     );

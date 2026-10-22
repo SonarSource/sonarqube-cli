@@ -133,7 +133,12 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
       new ScaScannerNoopInstaller(binaryPath),
       new DefaultScaScannerSpawner(),
       new ResolveOnlySecretsInstaller(),
-    ).run(options.connection.auth, project, SCA_CALLER_COMMANDS.gitPreCommit, options.ctx);
+    ).run(
+      options.connection.auth,
+      { projectKey: project, baseDir: process.cwd() },
+      SCA_CALLER_COMMANDS.gitPreCommit,
+      options.ctx,
+    );
     viewModel = buildDependencyRisksViewModel(scan.response, filter);
   } catch (err) {
     // The orchestrator already emitted a failures_count:1 event if the SCA scan itself failed;
