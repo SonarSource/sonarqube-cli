@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { UNRESOLVED_PROJECT_RECOVERY } from '@/commands/hook/agent-session-start/multi-project-context.ts';
 import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type {
@@ -96,6 +97,8 @@ The \`sonar-context-augmentation\` skill gives you this project's coding standar
 At the start of every task that involves reading or changing code, load the \`sonar-context-augmentation\` skill and follow it. Before writing or editing code, run \`sonar context guidelines get\`. To locate symbols, callers or usages, prefer \`sonar context navigation\` over \`grep\` or \`find\`.
 
 When you start a subagent, ask it to load the \`sonar-context-augmentation\` skill as its first step.
+
+In a repository with several SonarQube projects, \`sonar context\` commands work on one project at a time: run them from inside a project's directory. ${UNRESOLVED_PROJECT_RECOVERY}
 `;
 
 export interface ContextAugmentationSkillFeatureOptions {
