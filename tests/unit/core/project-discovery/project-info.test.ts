@@ -1446,6 +1446,18 @@ describe('discoverProjects', () => {
     expect(result.scope(deepInsideProject1).map((p) => p.projectKey)).toEqual(['proj1']);
   });
 
+  it('scope() tags each project with whether it contains the path', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(testDir).map((p) => p.contains)).toEqual([false, false]);
+    expect(result.scope(join(project1, 'src')).map((p) => p.contains)).toEqual([true]);
+    expect(result.scope(project1).map((p) => p.contains)).toEqual([true]);
+  });
+
   it('scope() narrows to one project when invoked exactly at its own root', async () => {
     const project1 = join(testDir, 'project1');
     const project2 = join(testDir, 'project2');
