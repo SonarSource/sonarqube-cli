@@ -174,10 +174,9 @@ function displayOrganizationMembershipMismatch(
     [
       ...connectionLines(serverUrl, orgKey),
       '',
-      'This token resolves no membership for that organization. Either regenerate it',
-      '(My Account > Access Tokens). A token created before you joined the',
-      'organization stays invalid for it. You can also ask an organization administrator to add',
-      'your account.',
+      'This token resolves no membership for that organization.',
+      'Ask an organization administrator to add your account, or check which account',
+      'the token was created with.',
     ],
     `! Connected, but organization '${orgKey}' is not accessible with this token`,
     NOTE_STYLES.warn,
@@ -242,7 +241,7 @@ function failOrganizationMembershipStatus(
     format,
     new CommandFailedError('Organization membership check failed for this token.', {
       remediationHint:
-        "Regenerate the token or verify your organization access, then rerun 'sonar auth status'.",
+        "Verify your account and organization access, then rerun 'sonar auth status'.",
     }),
   );
 }
