@@ -279,7 +279,7 @@ describe('sonar import on SonarQube Server', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        "DevOps platform setting 'my-gitlab' was not found.",
+        "Could not check the personal access token for DevOps platform setting 'my-gitlab': the server answered 404.",
       );
     });
 
