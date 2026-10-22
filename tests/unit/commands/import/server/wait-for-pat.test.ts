@@ -105,7 +105,21 @@ describe('waitForPat', () => {
 
     expect(result).toBe('timeout');
     expect(h.sleeps).toEqual([1000, 1000, 500]);
-    expect(h.polls()).toBe(3);
+    expect(h.polls()).toBe(2);
+  });
+
+  it('does not start a check once the sleep has used the remaining time', async () => {
+    const h = harness(['valid']);
+
+    const result = await waitForPat({
+      ...h.options,
+      initial: 'missing',
+      intervalMs: 1000,
+      timeoutMs: 1000,
+    });
+
+    expect(result).toBe('timeout');
+    expect(h.polls()).toBe(0);
   });
 
   it('resolves aborted without polling when already aborted', async () => {
@@ -158,6 +172,102 @@ describe('waitForPat', () => {
 
     expect(await pending).toBe('aborted');
     expect(polls).toBe(0);
+  });
+
+  it('stops waiting as soon as the signal aborts while a check is running', async () => {
+    const h = harness(['valid']);
+    const controller = new AbortController();
+    let started = false;
+
+    const pending = waitForPat({
+      ...h.options,
+      initial: 'missing',
+      signal: controller.signal,
+      check: () => {
+        started = true;
+        return new Promise<PatStatus>(() => undefined);
+      },
+    });
+    setTimeout(() => controller.abort(), 10);
+
+    expect(await pending).toBe('aborted');
+    expect(started).toBe(true);
+  });
+
+  it('does not return valid from a check that finishes after the signal aborted', async () => {
+    const h = harness(['valid']);
+    const controller = new AbortController();
+
+    const result = await waitForPat({
+      ...h.options,
+      initial: 'missing',
+      signal: controller.signal,
+      check: () => {
+        controller.abort();
+        return Promise.resolve<PatStatus>('valid');
+      },
+    });
+
+    expect(result).toBe('aborted');
+  });
+
+  it('stops waiting at the deadline while a check is still running', async () => {
+    let started = false;
+
+    const result = await waitForPat({
+      initial: 'missing',
+      intervalMs: 1,
+      timeoutMs: 40,
+      check: () => {
+        started = true;
+        return new Promise<PatStatus>(() => undefined);
+      },
+    });
+
+    expect(result).toBe('timeout');
+    expect(started).toBe(true);
+  });
+
+  it('does not return valid from a check that finishes after the deadline', async () => {
+    let clock = 0;
+
+    const result = await waitForPat({
+      initial: 'missing',
+      intervalMs: 1000,
+      timeoutMs: 5000,
+      sleep: (ms) => {
+        clock += ms;
+        return Promise.resolve();
+      },
+      now: () => clock,
+      check: () => {
+        clock = 6000;
+        return Promise.resolve<PatStatus>('valid');
+      },
+    });
+
+    expect(result).toBe('timeout');
+  });
+
+  it('ignores the failure of a check that settles after the wait has ended', async () => {
+    const controller = new AbortController();
+    let fail: (error: Error) => void = () => undefined;
+
+    const pending = waitForPat({
+      initial: 'missing',
+      intervalMs: 1,
+      timeoutMs: 60_000,
+      signal: controller.signal,
+      check: () =>
+        new Promise<PatStatus>((_resolve, reject) => {
+          fail = reject;
+        }),
+    });
+    setTimeout(() => controller.abort(), 10);
+
+    expect(await pending).toBe('aborted');
+    fail(new ServerError(500, 'late'));
+    await new Promise((resolve) => setTimeout(resolve, 5));
   });
 
   it('propagates an error thrown by check unchanged', async () => {
