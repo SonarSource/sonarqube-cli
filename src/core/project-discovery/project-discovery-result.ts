@@ -81,6 +81,7 @@ function scopeByAncestry<T extends { projectRoot: string }>(
  */
 export class ProjectDiscoveryResult {
   repoRoot?: string;
+  fromSharedConfig = false;
   projects: ProjectMapping[] = [];
 
   scope(path: string): ScopedProjectMapping<ProjectMapping>[] {
@@ -93,6 +94,8 @@ export class DiscoveredProjects {
   constructor(
     public readonly repoRoot: string | undefined,
     public readonly projects: CompleteProjectMapping[],
+    /** Whether the projects came from `.sonar-config.json` rather than a single-project source. */
+    public readonly fromSharedConfig = false,
   ) {}
 
   scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {
