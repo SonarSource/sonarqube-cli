@@ -37,11 +37,17 @@ export interface WaitForPatOptions {
   now?: () => number;
 }
 
+const ABORTED = Symbol('aborted');
+const TIMED_OUT = Symbol('timed-out');
+
 /**
  * Polls `check` until the user has connected a usable token in the web UI. Errors thrown by
  * `check` propagate unchanged. When the wait started from `missing`, a later `invalid` means the
  * user connected a bad token and the wait stops; when it started from `invalid`, `invalid` is
  * the stale token and the wait continues.
+ *
+ * Both the abort signal and the deadline apply to a check in flight too: the wait ends as soon as
+ * either happens, and whatever that check answers afterwards is ignored.
  */
 export async function waitForPat(options: WaitForPatOptions): Promise<WaitForPatResult> {
   const {
@@ -64,7 +70,16 @@ export async function waitForPat(options: WaitForPatOptions): Promise<WaitForPat
     if (signal?.aborted) {
       break;
     }
-    const status = await check();
+    if (now() >= deadline) {
+      return 'timeout';
+    }
+    const status = await settleBeforeEnd(check(), signal, deadline - now());
+    if (status === ABORTED || signal?.aborted) {
+      break;
+    }
+    if (status === TIMED_OUT || now() >= deadline) {
+      return 'timeout';
+    }
     if (status === 'valid') {
       return 'valid';
     }
@@ -73,6 +88,42 @@ export async function waitForPat(options: WaitForPatOptions): Promise<WaitForPat
     }
   }
   return 'aborted';
+}
+
+/** Resolves with `pending`'s outcome, or early when `signal` aborts or `timeoutMs` elapses. */
+function settleBeforeEnd<T>(
+  pending: Promise<T>,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<T | typeof ABORTED | typeof TIMED_OUT> {
+  return new Promise((resolve, reject) => {
+    const finish = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      finish();
+      resolve(ABORTED);
+    };
+    const timer = setTimeout(
+      () => {
+        finish();
+        resolve(TIMED_OUT);
+      },
+      Math.max(timeoutMs, 0),
+    );
+    signal?.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      (value) => {
+        finish();
+        resolve(value);
+      },
+      (error: unknown) => {
+        finish();
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
 }
 
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
