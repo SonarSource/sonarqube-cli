@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// tool.execute.before callback handler for OpenCode — scans files for secrets before the agent
+// execute.before hook handler for OpenCode 2.0 — scans files for secrets before the agent
 // reads them. Unlike the other agents' shell-script hooks, the OpenCode plugin calls this
 // subcommand directly (no intermediate hook script) and always expects a JSON decision on
 // stdout, whether the read is allowed or blocked — OpenCode has no "silent stdout means allow"

@@ -115,7 +115,7 @@ export async function runAndEmitTextSecretsScan(
 /**
  * Same scan as {@link runAndEmitTextSecretsScan}, but also returns the parsed issues (location +
  * masked replacement per finding) instead of discarding them — needed by callers that redact the
- * text in place rather than only deciding whether to block (e.g. OpenCode's `chat.message` hook).
+ * text in place rather than only deciding whether to block (e.g. OpenCode's `prompt` hook).
  */
 export async function runAndEmitTextSecretsScanWithIssues(
   callerCommand: SecretsCallerCommand,
