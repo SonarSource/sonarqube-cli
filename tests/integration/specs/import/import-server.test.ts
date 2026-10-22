@@ -19,8 +19,8 @@
  */
 
 // Integration tests for `sonar import` against SonarQube Server: setting selection and the
-// personal access token (PAT) gate. No platform can be listed yet, so a run that gets past the
-// gate ends on "not supported yet".
+// personal access token (PAT) gate. Listing repositories is covered per platform in
+// import-server-<platform>.test.ts.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -227,7 +227,7 @@ describe('sonar import on SonarQube Server', () => {
         `${server.baseUrl()}/projects/create?mode=github&dopSetting=gh-id,`,
       );
       const paths = server.getRecordedRequests().map((r) => r.path);
-      expect(paths).toContain('/api/alm_integration/list_github_organizations');
+      expect(paths).toContain('/api/alm_integrations/list_github_organizations');
       expect(paths).not.toContain('/api/alm_integration/check_pat');
     });
 
