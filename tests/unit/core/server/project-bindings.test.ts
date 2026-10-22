@@ -29,6 +29,18 @@ import { lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 const SERVER_URL = 'https://sonarqube.example.com';
 const TOKEN = 'squ_test_token';
 
+function okJsonResponse(body: unknown): Response {
+  const payload = JSON.stringify(body);
+  return {
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: new Headers(),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(payload),
+  } as Response;
+}
+
 describe('ProjectBindingsClient', () => {
   let client: ProjectBindingsClient;
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -98,19 +110,12 @@ describe('ProjectBindingsClient', () => {
     it('resolves SonarCloud project key via bindings then search_projects', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({ bindings: [{ projectId: 'proj:abc' }] }),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () =>
-            Promise.resolve({ components: [{ key: 'cloud-project-key', name: 'Cloud Project' }] }),
-        } as Response);
+        .mockResolvedValueOnce(okJsonResponse({ bindings: [{ projectId: 'proj:abc' }] }))
+        .mockResolvedValueOnce(
+          okJsonResponse({
+            components: [{ key: 'cloud-project-key', name: 'Cloud Project' }],
+          }),
+        );
 
       const key = await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow();
       expect(key).toBe('cloud-project-key');
@@ -147,19 +152,12 @@ describe('ProjectBindingsClient', () => {
       const remoteWithCredentials = 'https://user:token@github.com/foo/bar.git';
       const sanitizedRemote = 'https://github.com/foo/bar.git';
       fetchSpy = spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({ bindings: [{ projectId: 'proj:abc' }] }),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () =>
-            Promise.resolve({ components: [{ key: 'cloud-project-key', name: 'Cloud Project' }] }),
-        } as Response);
+        .mockResolvedValueOnce(okJsonResponse({ bindings: [{ projectId: 'proj:abc' }] }))
+        .mockResolvedValueOnce(
+          okJsonResponse({
+            components: [{ key: 'cloud-project-key', name: 'Cloud Project' }],
+          }),
+        );
 
       const key = await cloudClient
         .getProjectKeyByGitRemote(remoteWithCredentials, 'my-org')
@@ -182,12 +180,7 @@ describe('ProjectBindingsClient', () => {
     it('returns undefined when SonarCloud search_projects request fails', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({ bindings: [{ projectId: 'proj:abc' }] }),
-        } as Response)
+        .mockResolvedValueOnce(okJsonResponse({ bindings: [{ projectId: 'proj:abc' }] }))
         .mockResolvedValueOnce({
           ok: false,
           status: 403,
@@ -204,18 +197,8 @@ describe('ProjectBindingsClient', () => {
     it('returns undefined when SonarCloud search_projects omits components', async () => {
       const cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
       fetchSpy = spyOn(globalThis, 'fetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({ bindings: [{ projectId: 'proj:abc' }] }),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve({}),
-        } as Response);
+        .mockResolvedValueOnce(okJsonResponse({ bindings: [{ projectId: 'proj:abc' }] }))
+        .mockResolvedValueOnce(okJsonResponse({}));
 
       expect(
         await cloudClient.getProjectKeyByGitRemote(remoteUrl, 'my-org').orThrow(),

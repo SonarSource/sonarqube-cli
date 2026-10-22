@@ -226,7 +226,23 @@ export class SonarHttpClient {
    * Make GET request to SonarQube API
    */
   get<T>(endpoint: string, params?: QueryParams): ResultAsync<T, HttpClientError> {
-    return this.getSafe<T>(endpoint, params).andThen((result) => this.toGetResult(result));
+    return this.getSafe<T>(endpoint, params).andThen((result) =>
+      this.resolveGetResult(result, false).andThen((value) => okAsync(value as T)),
+    );
+  }
+
+  /**
+   * Like `get`, but allows a successful response with no JSON body (204 or empty text).
+   * Use for endpoints such as `check_pat` that answer with 204 and no payload.
+   */
+  getAllowEmptyBody<T>(
+    endpoint: string,
+    params?: QueryParams,
+    timeoutMs?: number,
+  ): ResultAsync<T | undefined, HttpClientError> {
+    return this.getSafe<T>(endpoint, params, timeoutMs).andThen((result) =>
+      this.resolveGetResult(result, true),
+    );
   }
 
   /**
@@ -244,17 +260,28 @@ export class SonarHttpClient {
       if (result.response.status === HTTP_STATUS_NOT_FOUND) {
         return okAsync(null);
       }
-      return this.toGetResult(result);
+      return this.resolveGetResult(result, false).andThen((value) => okAsync(value as T));
     });
   }
 
-  private toGetResult<T>(result: SafeGetResult<T>): ResultAsync<T, HttpClientError> {
+  private resolveGetResult<T>(
+    result: SafeGetResult<T>,
+    allowEmpty: boolean,
+  ): ResultAsync<T | undefined, HttpClientError> {
     return ResultAsync.fromPromise(this.buildStatusError(result.response, 'GET'), toError).andThen(
       (error) => {
         if (error) {
           return errAsync(error);
         }
-        return okAsync(result.value as T);
+        if (result.value === undefined && !allowEmpty) {
+          return errAsync(
+            new UnexpectedApiError(
+              result.response.status,
+              'SonarQube API error: empty response body',
+            ),
+          );
+        }
+        return okAsync(result.value);
       },
     );
   }
@@ -406,6 +433,17 @@ export class SonarHttpClient {
   }
 }
 
+async function readOkGetJsonBody<T>(response: Response): Promise<T | undefined> {
+  if (response.status === HTTP_STATUS_NO_CONTENT) {
+    return undefined;
+  }
+  const text = await response.text();
+  if (text.trim().length === 0) {
+    return undefined;
+  }
+  return JSON.parse(text) as T;
+}
+
 /**
  * Wraps whatever escaped the request itself as a `TransportError`: a throw from
  * `fetchAuthenticated` (DNS/TLS/proxy failure, connection refused, timeout, abort), before
@@ -419,20 +457,6 @@ export class SonarHttpClient {
  * it would drop its remediation hint. It stays classified as critical in
  * `isCriticalFailure` regardless.
  */
-async function readOkGetJsonBody<T>(response: Response): Promise<T | undefined> {
-  if (response.status === HTTP_STATUS_NO_CONTENT) {
-    return undefined;
-  }
-  if (typeof response.text === 'function') {
-    const text = await response.text();
-    if (text.trim().length === 0) {
-      return undefined;
-    }
-    return JSON.parse(text) as T;
-  }
-  return (await response.json()) as T;
-}
-
 function toError(err: unknown): HttpClientError {
   if (err instanceof NetworkConfigError) {
     return err;
