@@ -179,6 +179,9 @@ export async function applyLocalConfigAcrossLookupPaths(
       continue;
     }
     if (!local.hasSonarProps && !local.hasSonarLintConfig) {
+      logger.debug(
+        `Project discovery local config: no usable sonar-project.properties or .sonarlint config at ${checkPath}`,
+      );
       continue;
     }
 
@@ -189,9 +192,11 @@ export async function applyLocalConfigAcrossLookupPaths(
         config.serverUrl = options.auth.serverUrl;
         config.organization = options.auth.orgKey;
       }
+      logger.debug(`Project discovery local config: project resolved at ${checkPath}`);
       config.projectRoot = projectRoot;
       return true;
     }
+    logger.debug(`Project discovery local config: no project key at ${checkPath}`);
   }
 
   return false;

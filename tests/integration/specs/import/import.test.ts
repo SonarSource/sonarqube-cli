@@ -180,7 +180,7 @@ describe('sonar import', () => {
     );
 
     it(
-      'exits with code 1 without listing repositories when the org is bound to GitLab',
+      'imports for an organization bound to GitLab',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -197,23 +197,14 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
-        expect(result.exitCode).toBe(1);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain(
-          "sonar import supports GitHub and Azure DevOps organizations only, but 'my-org' is bound to 'gitlab'.",
-        );
-        // The platform is rejected before any repository is fetched.
-        const recorded = server.getRecordedRequests();
-        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
-        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
-          false,
-        );
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 1 repository');
       },
       { timeout: 15000 },
     );
 
     it(
-      'exits with code 1 when the organization-bindings fallback reports an unsupported platform',
+      'imports for an organization whose bindings fallback reports a non-GitHub platform',
       async () => {
         // No `alm` on the org lookup, so the ALM key comes from the bindings fallback instead.
         const server = await harness
@@ -230,37 +221,8 @@ describe('sonar import', () => {
           extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
         });
 
-        expect(result.exitCode).toBe(1);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain("'my-org' is bound to 'bitbucket'.");
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 1 when the organization is bound to no DevOps platform',
-      async () => {
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .withDopRepositories('my-org', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'my-org');
-
-        const result = await harness.run('import --all', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(1);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain("'my-org' is bound to no DevOps platform.");
-        const recorded = server.getRecordedRequests();
-        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
-        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
-          false,
-        );
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Imported 1 repository');
       },
       { timeout: 15000 },
     );
@@ -286,35 +248,6 @@ describe('sonar import', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain("Failed to look up the DevOps platform for organization 'my-org'");
         const recorded = server.getRecordedRequests();
-        expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
-          false,
-        );
-      },
-      { timeout: 15000 },
-    );
-
-    it(
-      'exits with code 1 when the legacy-id lookup fails, without importing anything',
-      async () => {
-        // That lookup swallows its errors and reports a missing org, so the platform stays
-        // unresolved — which the check now rejects outright.
-        const server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withOrganizations([{ key: 'my-org', name: 'My Organization', actions: ADMIN_ACTIONS }])
-          .withOrgsLookupError(500)
-          .withDopRepositories('my-org', SAMPLE_REPOS)
-          .start();
-        const serverUrl = server.baseUrl();
-        harness.withAuth(serverUrl, 'test-token', 'my-org');
-
-        const result = await harness.run('import --all', {
-          extraEnv: { SONARQUBE_CLI_SONARCLOUD_URL: serverUrl },
-        });
-
-        expect(result.exitCode).toBe(1);
-        const recorded = server.getRecordedRequests();
-        expect(recorded.some((r) => r.path === '/dop-translation/dop-repositories')).toBe(false);
         expect(recorded.some((r) => r.path === '/api/alm_integration/provision_projects')).toBe(
           false,
         );

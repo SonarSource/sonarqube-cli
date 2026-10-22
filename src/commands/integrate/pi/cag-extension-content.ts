@@ -29,6 +29,7 @@ const ANNOUNCE_CUSTOM_TYPE = 'sonar-cag-announce';
 
 interface SessionStartAnswer {
   additionalContext?: string;
+  userMessage?: string;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -38,12 +39,20 @@ export default function (pi: ExtensionAPI) {
       .some((entry) => (entry as { customType?: string }).customType === ANNOUNCE_CUSTOM_TYPE);
     if (alreadyAnnounced) return;
     try {
-      const { additionalContext } = await runHook<SessionStartAnswer>(
+      const { additionalContext, userMessage } = await runHook<SessionStartAnswer>(
         'agent-session-start --agent pi',
         { sessionID: ctx.sessionManager.getSessionId(), cwd: ctx.cwd },
         SESSION_START_HOOK_TIMEOUT_MS,
         ctx.cwd,
       );
+      if (typeof userMessage === 'string' && userMessage) {
+        pi.sendMessage({
+          customType: 'sonar-cag-warning',
+          content: [{ type: 'text', text: userMessage }],
+          display: true,
+        });
+        return;
+      }
       if (typeof additionalContext !== 'string' || !additionalContext) return;
       pi.sendMessage({
         customType: ANNOUNCE_CUSTOM_TYPE,

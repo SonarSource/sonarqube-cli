@@ -31,7 +31,7 @@ import {
   authMatchesConnection,
   getActiveConnection,
 } from '../state/state-manager.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import {
   EMPTY_IDENTITY,
   identityFromConnection,
@@ -45,8 +45,6 @@ export interface RecordConnectionOptions {
   tokenName?: string;
   /** Bypasses the no-op check below to always refresh. */
   force?: boolean;
-  /** Marks the connection as having no keychain entry behind it. */
-  envOnly?: boolean;
   /** Ignores identity inherited from the active connection and resolves it for this token. */
   refreshIdentity?: boolean;
 }
@@ -63,57 +61,92 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
-  // Logout treats envOnly as already logged out, so never stamp it on a
-  // keychain-backed (login-created) connection — that would leave the stored
-  // token behind, unrevoked. A keychain we cannot read (headless CI, no
-  // libsecret) must not break env-var recording, so it degrades to "unknown".
-  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
+  const storedToken = auth.comesFromEnv() ? await readStoredToken(auth) : null;
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (envOnly && seedConnection.envOnly !== true) {
-      seedConnection.envOnly = true;
-      saveState(state);
+    if (auth.comesFromEnv()) {
+      const envOnly = shouldRecordEnvOnly(auth, seedConnection, storedToken);
+      if (seedConnection.envOnly === (envOnly || undefined)) {
+        return seedConnection;
+      }
+      return updateState((latest) => {
+        const connection = getActiveConnection(latest);
+        if (connection?.id === seedConnection.id && authMatchesConnection(auth, connection)) {
+          syncEnvOnly(auth, connection, storedToken);
+          return connection;
+        }
+        return seedConnection;
+      });
     }
     return seedConnection;
   }
 
-  const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
-    orgKey: auth.orgKey,
-    region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: resolveRecordedTokenName(options, seedConnection?.tokenName),
-    envOnly,
-  });
-
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
-  applyIdentityToConnection(connection, auth, identity);
-
-  saveState(state);
-  return connection;
+  return updateState((latest) => {
+    const activeConnection = getActiveConnection(latest);
+    const matchingConnection =
+      activeConnection && authMatchesConnection(auth, activeConnection)
+        ? activeConnection
+        : undefined;
+    const connection = addOrUpdateConnection(latest, auth.serverUrl, auth.connectionType, {
+      orgKey: auth.orgKey,
+      region: cloudRegionFromUrl(auth.serverUrl),
+      tokenName: resolveRecordedTokenName(auth, options, matchingConnection?.tokenName),
+      envOnly: shouldRecordEnvOnly(auth, matchingConnection, storedToken),
+    });
+    applyIdentityToConnection(connection, auth, identity);
+    return connection;
+  });
 }
 
 function resolveRecordedTokenName(
+  auth: ResolvedAuth,
   options: RecordConnectionOptions,
   seedTokenName: string | undefined,
 ): string | undefined {
   if ('tokenName' in options) {
     return options.tokenName;
   }
-  if (options.envOnly) {
+  if (auth.comesFromEnv()) {
     return seedTokenName;
   }
   return undefined;
 }
 
-async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
+function shouldRecordEnvOnly(
+  auth: ResolvedAuth,
+  connection: AuthConnection | undefined,
+  storedToken: string | null,
+): boolean {
+  return (
+    auth.comesFromEnv() &&
+    (connection === undefined || connection.envOnly === true) &&
+    storedToken !== auth.token
+  );
+}
+
+function syncEnvOnly(
+  auth: ResolvedAuth,
+  connection: AuthConnection,
+  storedToken: string | null,
+): void {
+  if (shouldRecordEnvOnly(auth, connection, storedToken)) {
+    connection.envOnly = true;
+  } else {
+    delete connection.envOnly;
+  }
+}
+
+async function readStoredToken(auth: ResolvedAuth): Promise<string | null> {
   try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
+    return await getToken(auth.serverUrl, auth.orgKey);
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
-    return true;
+    return null;
   }
 }
 

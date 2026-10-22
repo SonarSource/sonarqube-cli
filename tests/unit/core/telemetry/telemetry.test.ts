@@ -119,7 +119,7 @@ function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let saveStateSpy: ReturnType<typeof spyOn>;
+let updateStateSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let testDir: string;
@@ -152,7 +152,9 @@ beforeEach(() => {
   delete process.env.CODEX_THREAD_ID;
   delete process.env.GEMINI_SESSION_ID;
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
-  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+  updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+    update(stateRepository.loadState()),
+  );
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
   spawnSpy = spyOn(Bun, 'spawn').mockReturnValue({ unref: () => {} } as ReturnType<
     typeof Bun.spawn
@@ -162,7 +164,7 @@ beforeEach(() => {
 
 afterEach(() => {
   loadStateSpy.mockRestore();
-  saveStateSpy.mockRestore();
+  updateStateSpy.mockRestore();
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
   restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);

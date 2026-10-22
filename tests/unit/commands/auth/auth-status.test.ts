@@ -110,6 +110,47 @@ describe('authStatus with FakeConsole', () => {
     expect(output).toContain('another-org');
   });
 
+  it('warns for another port on the same host even when the keychain has a token', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: undefined,
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://sq.example.com:9001',
+    });
+    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('stored-token');
+    restorers.push(
+      () => discoverProjectSpy.mockRestore(),
+      () => getTokenSpy.mockRestore(),
+    );
+    const auth = new ResolvedAuth({
+      connectionType: 'on-premise',
+      serverUrl: 'https://sq.example.com:9000',
+      source: 'env',
+      token: 'environment-token',
+    });
+
+    const { ctx, fake } = contextFor(auth);
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).toContain('This project expects a different connection');
+    expect(getTokenSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts equivalent recorded server URLs without a warning', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'sonarsource',
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://SONARCLOUD.IO/',
+    });
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
+  });
+
   it('says nothing extra when the project records the same connection', async () => {
     const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       organization: 'sonarsource',
@@ -167,7 +208,7 @@ describe('authStatus with FakeConsole', () => {
       organization: 'another-org',
       projectKey: 'a-project',
       projectRoot: process.cwd(),
-      serverUrl: 'https://regional.sonarcloud.io',
+      serverUrl: 'https://sonarcloud.io',
     });
     const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('stored-token');
     restorers.push(
@@ -179,7 +220,7 @@ describe('authStatus with FakeConsole', () => {
     await authStatus({}, ctx);
 
     expect(rendered(fake)).not.toContain('This project expects a different connection');
-    expect(getTokenSpy).toHaveBeenCalledWith('https://regional.sonarcloud.io', 'another-org');
+    expect(getTokenSpy).toHaveBeenCalledWith('https://sonarcloud.io', 'another-org');
   });
 
   // Reporting must not become a reason to fail. Discovery reads the filesystem and can throw

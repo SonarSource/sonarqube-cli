@@ -60,7 +60,7 @@ let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let saveStateSpy: ReturnType<typeof spyOn>;
+let updateStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
@@ -91,7 +91,9 @@ beforeEach(() => {
   FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());
-  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+  updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+    update(stateRepository.loadState()),
+  );
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
@@ -124,7 +126,7 @@ beforeEach(() => {
 afterEach(() => {
   process.exitCode = 0;
   loadStateSpy.mockRestore();
-  saveStateSpy.mockRestore();
+  updateStateSpy.mockRestore();
   existsSpy.mockRestore();
   statSyncSpy.mockRestore();
   readFileSpy.mockRestore();

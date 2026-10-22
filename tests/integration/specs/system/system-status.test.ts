@@ -565,6 +565,30 @@ describe('system status', () => {
   );
 
   it(
+    'recommends container networking for a configured MCP server with a loopback connection',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      harness.state().withAuth(server.baseUrl(), 'my-token');
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+      harness.state().withRawState(
+        JSON.stringify({
+          ...mcpClaudeIntegrationState(harness.userHome.path),
+          auth: harness.state().build().auth,
+        }),
+      );
+
+      const result = await harness.run('system status --json');
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as { recommendations: string[] };
+      expect(json.recommendations.some((item) => item.includes('mcp.container.serverUrl'))).toBe(
+        true,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'shows INVALID CONFIG status and recommends re-integration when claude.json has malformed sonarqube entry',
     async () => {
       harness.userHome.writeFile(
@@ -625,9 +649,42 @@ describe('system status', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'shows declarative integration with path from installed resources',
-    async () => {
+  it.each([
+    'absent',
+    'unrelated',
+    'sonar',
+    'sonar-unix',
+    'sonar-windows',
+    'sonar-quoted',
+    'invalid',
+  ])(
+    'shows recorded Codex path with isolated managed configuration: %s',
+    async (kind) => {
+      const managedPath = join(harness.userHome.path, 'requirements.toml');
+      harness.withExtraEnv({ __SQCLI_DEV_CODEX_REQUIREMENTS_PATH: managedPath });
+      if (kind !== 'absent') {
+        const sonarCommands: Record<string, string> = {
+          sonar: 'sonar hook agent-session-start --agent codex',
+          'sonar-unix': '/usr/local/bin/sonar hook agent-session-start --agent codex',
+          'sonar-windows': String.raw`C:\Sonar\sonar.exe hook codex-prompt-submit`,
+          'sonar-quoted': String.raw`"C:\Program Files\Sonar\sonar.exe" hook codex-post-tool-use`,
+        };
+        const command = sonarCommands[kind] ?? 'another-tool';
+        harness.userHome.writeFile(
+          'requirements.toml',
+          kind === 'invalid'
+            ? 'invalid [toml'
+            : `[[hooks.SessionStart]]
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = ${JSON.stringify(command)}
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "another-tool stop"
+`,
+        );
+      }
       harness.state().withRawState(
         JSON.stringify(
           baseState({
@@ -649,14 +706,23 @@ describe('system status', () => {
       const result = await harness.run('system status');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('Codex: CONFIGURED');
-      expect(normalizePath(result.stdout)).toContain('.codex/hooks.json');
+      expect(result.stdout).toContain('Codex: INSTALLED');
+      expect(result.stdout).not.toContain(
+        'Status does not verify hook delivery to the current session.',
+      );
+      expect(normalizePath(result.stdout)).toContain('Codex: INSTALLED (~/.codex/hooks.json)');
+      if (kind.startsWith('sonar')) {
+        expect(result.stdout).toContain(`Managed Sonar hooks (${managedPath}): SessionStart`);
+        expect(result.stdout).not.toContain('SessionStart, Stop');
+      } else {
+        expect(result.stdout).not.toContain('Managed Sonar hooks');
+      }
     },
     { timeout: 15000 },
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP not running when docker available but container absent',
+    'reports a ready Docker runtime for configured MCP',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
       harness.state().withDockerMock(false);
@@ -669,12 +735,35 @@ describe('system status', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('Runtime: READY (docker)');
     },
     { timeout: 15000 },
   );
 
   it.skipIf(IS_WINDOWS)(
-    'shows MCP configured status without checking docker',
+    'reports a Docker runtime that is not ready and a remedy',
+    async () => {
+      const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness.state().withDockerMock(false, 1);
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+
+      const result = await harness.run('system status', {
+        extraEnv: { PATH: harness.cwd.path },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('CONFIGURED');
+      expect(result.stdout).toContain('MCP Runtime: NOT READY (docker)');
+      expect(result.stdout).toContain('docker is not ready. Start or repair it.');
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(IS_WINDOWS)(
+    'reports a container runtime that was not found for configured MCP in JSON',
     async () => {
       const mcpConfigPath = join(harness.userHome.path, '.claude.json');
       harness
@@ -682,10 +771,49 @@ describe('system status', () => {
         .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
       harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
 
-      const result = await harness.run('system status');
+      const result = await harness.run('system status --json', {
+        extraEnv: { PATH: harness.cwd.path },
+      });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('CONFIGURED');
+      const json = JSON.parse(result.stdout) as {
+        mcpRuntime: { status: string };
+        healthy: boolean;
+        recommendations: string[];
+      };
+      expect(json.mcpRuntime.status).toBe('not_found');
+      expect(json.healthy).toBe(false);
+      expect(json.recommendations).toContain(
+        'SonarQube MCP Server needs Docker, Podman, or nerdctl. Install and start one to use the MCP server.',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it.skipIf(!IS_WINDOWS)(
+    'reports an invalid WSL mode without aborting status',
+    async () => {
+      const mcpConfigPath = join(harness.userHome.path, '.claude.json');
+      harness
+        .state()
+        .withRawState(JSON.stringify(mcpStateWithFeature(harness.userHome.path, mcpConfigPath)));
+      harness.userHome.writeFile('.claude.json', VALID_MCP_CONFIG);
+
+      const result = await harness.run('system status --json', {
+        extraEnv: { SONARQUBE_CLI_MCP_WSL: 'invalid' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const json = JSON.parse(result.stdout) as {
+        mcpRuntime: null;
+        healthy: boolean;
+        recommendations: string[];
+      };
+      expect(json.mcpRuntime).toBeNull();
+      expect(json.healthy).toBe(false);
+      expect(json.recommendations).toContain(
+        'SONARQUBE_CLI_MCP_WSL must be auto, always, or never.',
+      );
     },
     { timeout: 15000 },
   );
@@ -1254,7 +1382,7 @@ describe('system status', () => {
       expect(result.exitCode).toBe(0);
       // Should not contain any "MCP Server" line when no MCP is configured
       const lines = result.stdout.split('\n');
-      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      const mcpLines = lines.filter((line) => line.includes('• MCP Server:'));
       expect(mcpLines).toHaveLength(0);
     },
     { timeout: 15000 },
@@ -1297,8 +1425,9 @@ describe('system status', () => {
 
       // Count MCP Server lines — should be 2 (one for each integration)
       const lines = stdout.split('\n');
-      const mcpLines = lines.filter((l) => l.includes('MCP Server'));
+      const mcpLines = lines.filter((line) => line.includes('• MCP Server:'));
       expect(mcpLines).toHaveLength(2);
+      expect(lines.filter((line) => line.includes('MCP Runtime:'))).toHaveLength(1);
 
       // Both should show CONFIGURED status
       mcpLines.forEach((line) => {

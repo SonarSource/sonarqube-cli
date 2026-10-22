@@ -35,14 +35,20 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as keychainModule from '@/core/host/keychain.ts';
+import type { CliState } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
+import * as identityFetchModule from '@/core/telemetry/identity-fetch.ts';
 
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
 import { mockIdentityGetSafe } from '../telemetry/identity-api-mock.ts';
 
 function serverAuth(token: string, serverUrl = 'https://sq.example.com'): ResolvedAuth {
   return new ResolvedAuth({ token, serverUrl, connectionType: 'on-premise', source: 'state' });
+}
+
+function envServerAuth(token: string, serverUrl = 'https://sq.example.com'): ResolvedAuth {
+  return new ResolvedAuth({ token, serverUrl, connectionType: 'on-premise', source: 'env' });
 }
 
 function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
@@ -52,6 +58,12 @@ function cloudAuth(token: string, orgKey = 'my-org'): ResolvedAuth {
     orgKey,
     connectionType: 'cloud',
     source: 'state',
+  });
+}
+
+function writeStateFixture(state: CliState): void {
+  updateState((latest) => {
+    Object.assign(latest, state);
   });
 }
 
@@ -93,7 +105,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe();
 
@@ -108,7 +120,7 @@ describe('recordConnectionFromAuth', () => {
   it('replaces a mismatched active connection and fetches fresh identity', async () => {
     const state = loadState();
     addOrUpdateConnection(state, 'https://old.example.com', 'on-premise');
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'fresh-user' }],
@@ -128,6 +140,44 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('records login after another process changes the prior connection during identity lookup', async () => {
+    const initial = loadState();
+    addOrUpdateConnection(initial, 'https://old.example.com', 'on-premise');
+    writeStateFixture(initial);
+    const identitySpy = spyOn(identityFetchModule, 'resolveTelemetryIdentity').mockImplementation(
+      () => {
+        const concurrent = loadState();
+        addOrUpdateConnection(concurrent, 'https://old.example.com', 'on-premise', {
+          envOnly: true,
+        });
+        concurrent.config.cliVersion = '2.0.0';
+        writeStateFixture(concurrent);
+        return Promise.resolve({
+          user_uuid: 'new-user',
+          organization_uuid_v4: null,
+          sqs_installation_id: 'new-server',
+        });
+      },
+    );
+
+    try {
+      const connection = await recordConnectionFromAuth(
+        serverAuth('new-token', 'https://new.example.com'),
+        {
+          force: true,
+          tokenName: 'new-token',
+        },
+      );
+      const saved = loadState();
+      expect(connection.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.serverUrl).toBe('https://new.example.com');
+      expect(getActiveConnection(saved)?.tokenName).toBe('new-token');
+      expect(saved.config.cliVersion).toBe('2.0.0');
+    } finally {
+      identitySpy.mockRestore();
+    }
+  });
+
   it('without force, a matching complete connection wins over a new tokenName', async () => {
     const state = loadState();
     const existing = addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', {
@@ -137,7 +187,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
       tokenName: 'ignored-token-name',
@@ -155,7 +205,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'u';
     existing.organizationUuidV4 = 'o';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe();
     const connection = await recordConnectionFromAuth(cloudAuth('t4'), {
@@ -176,7 +226,7 @@ describe('recordConnectionFromAuth', () => {
     existing.userUuid = 'old-user';
     existing.organizationUuidV4 = 'old-org';
     existing.enterpriseUuid = null;
-    saveState(state);
+    writeStateFixture(state);
 
     const getSafeSpy = mockIdentityGetSafe({
       user: [{ ok: true, id: 'new-user' }],
@@ -211,21 +261,22 @@ describe('recordConnectionFromAuth', () => {
   it('marks the connection envOnly when recorded via the env-var path', async () => {
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-env' }] });
 
-    const connection = await recordConnectionFromAuth(serverAuth('t6'), { envOnly: true });
+    const connection = await recordConnectionFromAuth(envServerAuth('t6'));
 
     expect(connection.envOnly).toBe(true);
     getSafeSpy.mockRestore();
   });
 
-  it('updates a matching complete connection with the envOnly marker', async () => {
+  it('keeps the envOnly marker on a matching complete env connection', async () => {
     const state = loadState();
     const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
-    saveState(state);
+    existing.envOnly = true;
+    writeStateFixture(state);
     const getSafeSpy = mockIdentityGetSafe();
 
-    const connection = await recordConnectionFromAuth(serverAuth('t7'), { envOnly: true });
+    const connection = await recordConnectionFromAuth(envServerAuth('t7'));
 
     expect(connection.envOnly).toBe(true);
     expect(connection.sqsInstallationId).toBe('sqs-existing');
@@ -233,16 +284,137 @@ describe('recordConnectionFromAuth', () => {
     getSafeSpy.mockRestore();
   });
 
+  it('keeps envOnly when an existing env connection uses a different token from the keychain', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    existing.envOnly = true;
+    writeStateFixture(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe();
+
+    try {
+      const connection = await recordConnectionFromAuth(envServerAuth('different-env-token'));
+
+      expect(connection.envOnly).toBe(true);
+      expect(getActiveConnection(loadState())?.envOnly).toBe(true);
+      expect(getSafeSpy).not.toHaveBeenCalled();
+    } finally {
+      getSafeSpy.mockRestore();
+    }
+  });
+
+  it('uses the latest connection when a login replaces envOnly during keychain lookup', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    existing.envOnly = true;
+    writeStateFixture(state);
+    const getTokenSpy = spyOn(keychainModule, 'getToken').mockImplementation(() => {
+      updateState((latest) => {
+        const current = getActiveConnection(latest);
+        if (current) {
+          delete current.envOnly;
+        }
+        latest.config.cliVersion = '2.0.0';
+      });
+      return Promise.resolve('env-token');
+    });
+    const getSafeSpy = mockIdentityGetSafe();
+
+    try {
+      const connection = await recordConnectionFromAuth(envServerAuth('env-token'));
+      const saved = loadState();
+
+      expect(connection.envOnly).toBeUndefined();
+      expect(getActiveConnection(saved)?.envOnly).toBeUndefined();
+      expect(saved.config.cliVersion).toBe('2.0.0');
+      expect(getSafeSpy).not.toHaveBeenCalled();
+    } finally {
+      getTokenSpy.mockRestore();
+      getSafeSpy.mockRestore();
+    }
+  });
+
+  it('does not mark a keychain-backed connection envOnly when env vars match the same server', async () => {
+    const state = loadState();
+    const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    existing.userUuid = null;
+    existing.sqsInstallationId = 'sqs-existing';
+    writeStateFixture(state);
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe();
+
+    try {
+      const connection = await recordConnectionFromAuth(envServerAuth('different-env-token'));
+
+      expect(connection.envOnly).toBeUndefined();
+      expect(getActiveConnection(loadState())?.envOnly).toBeUndefined();
+      expect(getSafeSpy).not.toHaveBeenCalled();
+    } finally {
+      getSafeSpy.mockRestore();
+    }
+  });
+
+  for (const envServerUrl of ['https://sq.example.com/', 'https://SQ.EXAMPLE.COM']) {
+    it(`keeps a keychain-backed connection for equivalent env URL ${envServerUrl}`, async () => {
+      const state = loadState();
+      const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+      existing.userUuid = null;
+      existing.sqsInstallationId = 'sqs-existing';
+      writeStateFixture(state);
+      await keychain.seedToken('https://sq.example.com', 'login-token');
+      const getSafeSpy = mockIdentityGetSafe();
+
+      try {
+        const connection = await recordConnectionFromAuth(
+          envServerAuth('different-env-token', envServerUrl),
+        );
+
+        expect(connection.envOnly).toBeUndefined();
+        expect(connection.serverUrl).toBe('https://sq.example.com');
+        expect(getActiveConnection(loadState())?.envOnly).toBeUndefined();
+        expect(getSafeSpy).not.toHaveBeenCalled();
+      } finally {
+        getSafeSpy.mockRestore();
+      }
+    });
+  }
+
+  it('keeps a keychain-backed connection when the keychain is unreachable during an env run', async () => {
+    const state = loadState();
+    addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
+    writeStateFixture(state);
+    const getTokenSpy = spyOn(keychainModule, 'getToken').mockRejectedValue(
+      new CommandFailedError('Failed to access the system keychain.'),
+    );
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
+
+    try {
+      const connection = await recordConnectionFromAuth(envServerAuth('env-token'));
+
+      expect(connection.envOnly).toBeUndefined();
+      expect(getActiveConnection(loadState())?.envOnly).toBeUndefined();
+      expect(connection.sqsInstallationId).toBe('sqs-enriched');
+    } finally {
+      getTokenSpy.mockRestore();
+      getSafeSpy.mockRestore();
+    }
+  });
+
   it('does not stamp envOnly on a matching complete connection that has a keychain token', async () => {
     const state = loadState();
     const existing = addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
     existing.userUuid = null;
     existing.sqsInstallationId = 'sqs-existing';
-    saveState(state);
+    existing.envOnly = true;
+    writeStateFixture(state);
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe();
 
-    const connection = await recordConnectionFromAuth(serverAuth('t7-keychain'), { envOnly: true });
+    const connection = await recordConnectionFromAuth(envServerAuth('login-token'));
 
     expect(connection.envOnly).toBeUndefined();
     expect(connection.sqsInstallationId).toBe('sqs-existing');
@@ -253,32 +425,41 @@ describe('recordConnectionFromAuth', () => {
   it('does not stamp envOnly on a keychain-backed connection that still needs identity', async () => {
     const state = loadState();
     addOrUpdateConnection(state, 'https://sq.example.com', 'on-premise');
-    saveState(state);
+    writeStateFixture(state);
     await keychain.seedToken('https://sq.example.com', 'login-token');
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-enriched' }] });
 
-    const connection = await recordConnectionFromAuth(serverAuth('t-env-keychain'), {
-      envOnly: true,
-    });
+    const connection = await recordConnectionFromAuth(envServerAuth('login-token'));
 
     expect(connection.envOnly).toBeUndefined();
     expect(connection.sqsInstallationId).toBe('sqs-enriched');
     getSafeSpy.mockRestore();
   });
 
-  it('still records the connection when the keychain is unreachable, without stamping envOnly', async () => {
+  it('marks an env connection envOnly when its token differs from the stored token', async () => {
+    await keychain.seedToken('https://sq.example.com', 'login-token');
+    const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-env' }] });
+
+    try {
+      const connection = await recordConnectionFromAuth(envServerAuth('different-env-token'));
+
+      expect(connection.envOnly).toBe(true);
+    } finally {
+      getSafeSpy.mockRestore();
+    }
+  });
+
+  it('records an envOnly connection when the keychain is unreachable', async () => {
     const getTokenSpy = spyOn(keychainModule, 'getToken').mockRejectedValue(
       new CommandFailedError('Failed to access the system keychain.'),
     );
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-no-keychain' }] });
 
     try {
-      const connection = await recordConnectionFromAuth(serverAuth('t-unreachable'), {
-        envOnly: true,
-      });
+      const connection = await recordConnectionFromAuth(envServerAuth('t-unreachable'));
 
       expect(connection.serverUrl).toBe('https://sq.example.com');
-      expect(connection.envOnly).toBeUndefined();
+      expect(connection.envOnly).toBe(true);
       expect(getActiveConnection(loadState())?.serverUrl).toBe('https://sq.example.com');
     } finally {
       getTokenSpy.mockRestore();
@@ -286,7 +467,7 @@ describe('recordConnectionFromAuth', () => {
     }
   });
 
-  it('leaves envOnly unset for a login-style call (no envOnly option)', async () => {
+  it('leaves envOnly unset for auth from saved state', async () => {
     const getSafeSpy = mockIdentityGetSafe({ status: [{ ok: true, id: 'sqs-login' }] });
 
     const connection = await recordConnectionFromAuth(serverAuth('t8'), {

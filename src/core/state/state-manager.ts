@@ -26,21 +26,21 @@
 import crypto from 'node:crypto';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { normalizeServerUrl } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { pathComparisonKey } from '../io/fs-utils.ts';
-import { loadState, saveState } from './state-repository.ts';
+import { updateState } from './state-repository.ts';
 
-export { loadState, saveState };
-export { tryLoadState } from './state-repository.ts';
+export { loadState, tryLoadState, updateState } from './state-repository.ts';
 
 import { type AuthConnection, type CliState, type CloudRegion } from './state.ts';
 
 export function authMatchesConnection(auth: ResolvedAuth, conn: AuthConnection): boolean {
   return (
-    auth.serverUrl === conn.serverUrl &&
+    normalizeServerUrl(auth.serverUrl) === normalizeServerUrl(conn.serverUrl) &&
     (auth.connectionType !== 'cloud' || auth.orgKey === conn.orgKey)
   );
 }
@@ -142,18 +142,18 @@ export function recordInstalledDependency(
   console: Console,
 ): void {
   try {
-    const state = loadState();
-    state.dependencies.installed = state.dependencies.installed.filter(
-      (dependency) => dependency.id !== id,
-    );
-    state.dependencies.installed.push({
-      id,
-      version,
-      path,
-      updatedAt: new Date().toISOString(),
-      updatedByCliVersion: VERSION,
+    updateState((state) => {
+      state.dependencies.installed = state.dependencies.installed.filter(
+        (dependency) => dependency.id !== id,
+      );
+      state.dependencies.installed.push({
+        id,
+        version,
+        path,
+        updatedAt: new Date().toISOString(),
+        updatedByCliVersion: VERSION,
+      });
     });
-    saveState(state);
   } catch (err) {
     console.warn(`Failed to update state: ${(err as Error).message}`);
     logger.warn(`Failed to update state: ${(err as Error).message}`);

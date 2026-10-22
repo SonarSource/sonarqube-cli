@@ -575,7 +575,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('codex')
     .description(
-      'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
+      'Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
@@ -1013,7 +1013,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
     )
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
-    .addHelpText(`after`, projectKeyExtraHelp)
+    .addHelpText(
+      `after`,
+      `${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+    )
     .anonymousAction(
       (
         ctx,
