@@ -30,5 +30,6 @@ export const piAdapter: SessionStartAgentAdapter = {
     const p = payload as PiSessionStartPayload;
     return { sessionId: p.sessionID, startDir: p.cwd, eventName: undefined };
   },
-  emit: ({ additionalContext }) => ({ additionalContext }),
+  emit: ({ additionalContext, userMessage }) =>
+    userMessage ? { userMessage } : { additionalContext },
 };

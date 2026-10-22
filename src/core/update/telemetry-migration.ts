@@ -43,7 +43,7 @@ function migrateStateQueue(): void {
   }
   const legacyEvents = updateState((state) => {
     const events = state.telemetry.events ?? [];
-    delete state.telemetry.events;
+    state.telemetry.events = [];
     return events;
   });
   if (legacyEvents.length === 0) {

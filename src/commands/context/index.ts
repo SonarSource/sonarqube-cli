@@ -21,13 +21,12 @@
 import { spawn } from 'node:child_process';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { recordedConnectionCredentialSource } from '@/core/auth/recorded-connection.ts';
+import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken, MissingKeychainError } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -110,65 +109,26 @@ async function resolveRecordedContextAugmentationConfig(
   };
 }
 
-async function resolveContextToken(
+function resolveContextToken(
   auth: ResolvedAuth,
   serverUrl: string,
   organization: string | undefined,
-): Promise<string> {
-  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
-  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
-  const credentialSource = recordedConnectionCredentialSource(auth, serverUrl, organization);
-  if (credentialSource === 'active') {
+): string {
+  if (authMatchesRecordedServer(auth, serverUrl)) {
     return auth.token;
   }
 
-  if (credentialSource === 'different-server') {
-    const remediationHint = auth.comesFromEnv()
-      ? `Environment credentials point at ${auth.serverUrl}. Set SONARQUBE_CLI_SERVER=${serverUrl}` +
-        organizationHint +
-        ' with a matching SONARQUBE_CLI_TOKEN, or unset SONARQUBE_CLI_TOKEN, SONARQUBE_CLI_SERVER, and SONARQUBE_CLI_ORG, then ' +
-        `run sonar auth login --server ${serverUrl}.`
-      : `Run sonar auth login --server ${serverUrl} first.`;
-    throw new CommandFailedError(
-      `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
-      { remediationHint },
-    );
-  }
-
-  let token: string | null = null;
-  let keychainUnavailable = false;
-  try {
-    token = await getToken(serverUrl, organization);
-  } catch (err) {
-    if (!(err instanceof MissingKeychainError)) {
-      throw err;
-    }
-    // Treat a missing keychain as no stored token so the recorded-connection error below
-    // surfaces with guidance that does not require keychain access.
-    keychainUnavailable = true;
-    logger.debug(`Keychain lookup failed for ${serverUrl}: ${err.message}`);
-  }
-  if (token) {
-    return token;
-  }
-
+  const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
+  const remediationHint = auth.comesFromEnv()
+    ? `Environment credentials point at ${auth.serverUrl}. Set SONARQUBE_CLI_SERVER=${serverUrl}` +
+      organizationHint +
+      ' with a matching SONARQUBE_CLI_TOKEN, or unset SONARQUBE_CLI_TOKEN, SONARQUBE_CLI_SERVER, and SONARQUBE_CLI_ORG, then ' +
+      `run sonar auth login --server ${serverUrl}.`
+    : `Run sonar auth login --server ${serverUrl} first.`;
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
-    {
-      // With a working keychain, logging in is the fix. If libsecret cannot be loaded,
-      // `sonar auth login` cannot store its token in that keychain.
-      //
-      // Environment credentials for another organization on this server are ignored here.
-      remediationHint: keychainUnavailable
-        ? 'The system keychain is unavailable because libsecret could not be loaded. Install or repair libsecret, or ' +
-          `authenticate with environment variables matching the recorded connection: set SONARQUBE_CLI_TOKEN and SONARQUBE_CLI_SERVER=${serverUrl}` +
-          organizationHint +
-          '. ' +
-          'Credentials for another organization on this server are ignored. ' +
-          'If the connection above is itself wrong, re-run sonar integrate claude or ' +
-          'sonar integrate copilot from this project to record the right one.'
-        : 'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
-    },
+    { remediationHint },
   );
 }
 
@@ -210,7 +170,7 @@ export async function runContextPassthrough(
       organization,
       projectKey: recordedConfig.projectKey,
       serverUrl,
-      token: await resolveContextToken(auth, serverUrl, organization),
+      token: resolveContextToken(auth, serverUrl, organization),
       workspaceDir: recordedConfig.workspaceDir,
     });
   }

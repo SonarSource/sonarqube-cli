@@ -574,6 +574,7 @@ export class FakeSonarQubeServerBuilder {
     [];
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
+  private projectBindingsStatusCode = 200;
   private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
@@ -898,6 +899,11 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withProjectBindingsStatus(statusCode: number): this {
+    this.projectBindingsStatusCode = statusCode;
+    return this;
+  }
+
   withProjectBindings(
     bindings: Array<{ projectKey: string; repository: string; dopSettingId: string }>,
   ): this {
@@ -976,6 +982,7 @@ export class FakeSonarQubeServerBuilder {
       projectBindings,
       hasProvisionProjects,
       boundProjectsStatusCode,
+      projectBindingsStatusCode,
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
@@ -1741,6 +1748,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/dop-translation/project-bindings' && req.method === 'GET') {
+          if (projectBindingsStatusCode !== 200) {
+            return new Response('{}', { status: projectBindingsStatusCode });
+          }
           const projectKey = projectKeysByGitRemote.get(query.url ?? '');
           return new Response(
             JSON.stringify({ bindings: projectKey ? [{ projectId: `id-${projectKey}` }] : [] }),
@@ -2078,6 +2088,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {
+          if (projectBindingsStatusCode !== 200) {
+            return new Response('{}', { status: projectBindingsStatusCode });
+          }
           const { dopSettingId, pageSize: pageSizeStr, pageIndex: pageIndexStr } = query;
           const pageSize = Number.parseInt(pageSizeStr ?? '500', 10);
           const pageIndex = Number.parseInt(pageIndexStr ?? '1', 10);

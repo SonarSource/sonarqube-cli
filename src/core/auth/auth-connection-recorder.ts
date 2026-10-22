@@ -143,7 +143,7 @@ function syncEnvOnly(
 
 async function readStoredToken(auth: ResolvedAuth): Promise<string | null> {
   try {
-    return await getToken(auth.serverUrl, auth.orgKey);
+    return await getToken(auth.serverUrl);
   } catch (err) {
     logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
     return null;
