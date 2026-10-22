@@ -193,7 +193,7 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     cursorPreToolUse: true,
     devinPreToolUse: true,
     opencodePreToolUse: true,
-    // Unlike the other stop-point commands above, chat.message masks the secret and lets the
+    // Unlike the other stop-point commands above, the prompt hook masks the secret and lets the
     // message through — it never stops the user, so it is not a stop point.
     opencodeChatMessage: false,
     piPreToolUse: true,
