@@ -30,6 +30,7 @@ import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
+  HTTP_STATUS_NO_CONTENT,
   HTTP_STATUS_NOT_FOUND,
   HTTP_STATUS_PAYLOAD_TOO_LARGE,
   HTTP_STATUS_SERVICE_UNAVAILABLE,
@@ -253,15 +254,7 @@ export class SonarHttpClient {
         if (error) {
           return errAsync(error);
         }
-        if (result.value === undefined) {
-          return errAsync(
-            new UnexpectedApiError(
-              result.response.status,
-              'SonarQube API error: empty response body',
-            ),
-          );
-        }
-        return okAsync(result.value);
+        return okAsync(result.value as T);
       },
     );
   }
@@ -298,8 +291,7 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       ResultAsync.fromPromise(
-        (async (): Promise<TValue | undefined> =>
-          response.ok ? ((await response.json()) as TValue) : undefined)(),
+        response.ok ? readOkGetJsonBody<TValue>(response) : Promise.resolve(undefined),
         (err) =>
           new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
       ).map((value) => ({ response, value })),
@@ -427,6 +419,17 @@ export class SonarHttpClient {
  * it would drop its remediation hint. It stays classified as critical in
  * `isCriticalFailure` regardless.
  */
+async function readOkGetJsonBody<T>(response: Response): Promise<T | undefined> {
+  if (response.status === HTTP_STATUS_NO_CONTENT) {
+    return undefined;
+  }
+  const text = await response.text();
+  if (text.trim().length === 0) {
+    return undefined;
+  }
+  return JSON.parse(text) as T;
+}
+
 function toError(err: unknown): HttpClientError {
   if (err instanceof NetworkConfigError) {
     return err;
