@@ -198,6 +198,11 @@ describe('ServerImportApiClient', () => {
       expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 0 });
     });
 
+    it('prefers the reported total when the page holds only part of the organizations', async () => {
+      fetchSpy = mockFetch({ organizations: [{ key: 'a' }, { key: 'b' }], paging: { total: 150 } });
+      expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 150 });
+    });
+
     it('trusts a positive total over an empty page', async () => {
       fetchSpy = mockFetch({ organizations: [], paging: { total: 3 } });
       expect(await api.probeGithubPat('gh')).toEqual({ status: 'valid', organizationCount: 3 });

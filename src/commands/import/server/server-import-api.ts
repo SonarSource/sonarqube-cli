@@ -119,9 +119,10 @@ function countOrganizations(response: {
   paging?: { total?: number };
 }): number | undefined {
   if (!Array.isArray(response.organizations)) return undefined;
-  return response.organizations.length > 0
-    ? response.organizations.length
-    : (response.paging?.total ?? 0);
+  const total = response.paging?.total;
+  return typeof total === 'number'
+    ? Math.max(total, response.organizations.length)
+    : response.organizations.length;
 }
 
 /** `check_pat` answers 204 with no body, which the JSON client reports as a parse failure. */
