@@ -23,7 +23,7 @@ export default tseslint.config(
     rules: {
       'headers/header-format': ['error', {
         source: 'file',
-        path: 'LICENSE',
+        path: 'LICENSE_HEADER',
         blockPrefix: '\n'
       }],
     },
