@@ -99,12 +99,6 @@ export async function resolveOrg(
   client: ImportApiClient,
   orgKey: string | undefined,
 ): Promise<ResolvedOrg> {
-  if (!client.isCloud) {
-    throw new CommandFailedError('The sonar import command is only supported on SonarQube Cloud.', {
-      remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
-    });
-  }
-
   if (!orgKey) {
     throw new CommandFailedError('No SonarQube Cloud organization is configured.', {
       remediationHint: "Run 'sonar auth login' and connect to an organization, then retry.",
