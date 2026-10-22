@@ -22,8 +22,9 @@
 // None of them returns or accepts a personal access token: the CLI only asks the server
 // whether the caller has a usable one.
 
-import type { HttpClientError } from '@/core/server/errors.ts';
+import { type HttpClientError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NO_CONTENT } from '@/core/server/http-constants.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
 
@@ -107,22 +108,24 @@ export class ServerImportApiClient {
 }
 
 function patStatusOfFailure(error: HttpClientError): PatStatus {
+  if (isEmptySuccess(error)) return 'valid';
   const status = patStatusFromError(error);
   if (status === undefined) throw error;
   return status;
 }
 
-function countOrganizations(
-  response:
-    | {
-        organizations?: unknown[];
-        paging?: { total?: number };
-      }
-    | undefined,
-): number | undefined {
-  if (response === undefined || !Array.isArray(response.organizations)) return undefined;
+function countOrganizations(response: {
+  organizations?: unknown[];
+  paging?: { total?: number };
+}): number | undefined {
+  if (!Array.isArray(response.organizations)) return undefined;
   const total = response.paging?.total;
   return typeof total === 'number'
     ? Math.max(total, response.organizations.length)
     : response.organizations.length;
+}
+
+/** `check_pat` answers 204 with no body, which the JSON client reports as a parse failure. */
+function isEmptySuccess(error: HttpClientError): boolean {
+  return error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NO_CONTENT;
 }
