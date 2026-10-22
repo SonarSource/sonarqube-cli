@@ -33,37 +33,21 @@ function repo(projectName: string, name: string, extra: Partial<AzureRepositoryR
   return { name, projectName, ...extra };
 }
 
-function listerOver(reposByProject: Record<string, AzureRepositoryResponse[]>) {
-  const listAzureProjects = mock(() =>
-    Promise.resolve(Object.keys(reposByProject).map((name) => ({ name }))),
-  );
-  const searchAzureRepos = mock((_key: string, projectName: string) =>
-    Promise.resolve(reposByProject[projectName]),
-  );
-  const api = { listAzureProjects, searchAzureRepos } as unknown as ServerImportApiClient;
-  return {
-    fetch: azureSupport.listRepositories(api, SETTING),
-    listAzureProjects,
-    searchAzureRepos,
-  };
+function listerOver(repositories: AzureRepositoryResponse[]) {
+  const searchAzureRepos = mock((_key: string) => Promise.resolve(repositories));
+  const api = { searchAzureRepos } as unknown as ServerImportApiClient;
+  return { fetch: azureSupport.listRepositories(api, SETTING), searchAzureRepos };
 }
 
 describe('azureSupport.listRepositories', () => {
-  it('lists the projects of the setting, then the repositories of each project in order', async () => {
-    const { fetch, listAzureProjects, searchAzureRepos } = listerOver({
-      Alpha: [repo('Alpha', 'a1')],
-      Beta: [repo('Beta', 'b1')],
-    });
+  it('searches the repositories of every project in one request, without a project filter', async () => {
+    const { fetch, searchAzureRepos } = listerOver([repo('Alpha', 'a1'), repo('Beta', 'b1')]);
     await fetch(1, 50);
-    expect(listAzureProjects).toHaveBeenCalledWith('my-azure');
-    expect(searchAzureRepos.mock.calls).toEqual([
-      ['my-azure', 'Alpha'],
-      ['my-azure', 'Beta'],
-    ]);
+    expect(searchAzureRepos.mock.calls).toEqual([['my-azure']]);
   });
 
   it('maps a repository to project/repository, identified by name within its project', async () => {
-    const { fetch } = listerOver({ 'My Project': [repo('My Project', 'web-app')] });
+    const { fetch } = listerOver([repo('My Project', 'web-app')]);
     expect(await fetch(1, 50)).toEqual({
       repositories: [
         {
@@ -80,39 +64,31 @@ describe('azureSupport.listRepositories', () => {
   });
 
   it('keeps same-named repositories of different projects apart', async () => {
-    const { fetch } = listerOver({ A: [repo('A', 'api')], B: [repo('B', 'api')] });
+    const { fetch } = listerOver([repo('A', 'api'), repo('B', 'api')]);
     const { repositories } = await fetch(1, 50);
     expect(repositories.map((r) => r.id)).toEqual(['A/api', 'B/api']);
     expect(repositories.map((r) => r.projectIdentifier)).toEqual(['A', 'B']);
   });
 
   it('carries the key of the project a repository is already bound to', async () => {
-    const { fetch } = listerOver({
-      A: [repo('A', 'a1', { sqProjectKey: 'A_a1', sqProjectName: 'a1' }), repo('A', 'a2')],
-    });
+    const { fetch } = listerOver([
+      repo('A', 'a1', { sqProjectKey: 'A_a1', sqProjectName: 'a1' }),
+      repo('A', 'a2', { sqProjectKey: '' }),
+      repo('A', 'a3'),
+    ]);
     const { repositories } = await fetch(1, 50);
-    expect(repositories.map((r) => r.boundProjectKey)).toEqual(['A_a1', undefined]);
+    expect(repositories.map((r) => r.boundProjectKey)).toEqual(['A_a1', undefined, undefined]);
   });
 
-  it('is empty when the server has no project', async () => {
-    const { fetch, searchAzureRepos } = listerOver({});
-    expect(await fetch(1, 50)).toEqual({ repositories: [], total: 0 });
-    expect(searchAzureRepos).not.toHaveBeenCalled();
-  });
-
-  it('is empty when the projects have no repository', async () => {
-    const { fetch } = listerOver({ A: [], B: [] });
+  it('is empty when the token sees no repository', async () => {
+    const { fetch } = listerOver([]);
     expect(await fetch(1, 50)).toEqual({ repositories: [], total: 0 });
   });
 
-  it('cuts the repositories of all projects into pages, a short page being the last', async () => {
-    const names = (project: string, from: number, to: number) =>
-      Array.from({ length: to - from }, (_, i) => repo(project, `r${from + i}`));
-    const { fetch } = listerOver({
-      A: names('A', 0, 3),
-      Empty: [],
-      B: names('B', 3, 8),
-    });
+  it('cuts the repositories into pages, a short page being the last', async () => {
+    const { fetch } = listerOver(
+      Array.from({ length: 8 }, (_, i) => repo(i < 3 ? 'A' : 'B', `r${i}`)),
+    );
 
     const pages = [await fetch(1, 3), await fetch(2, 3), await fetch(3, 3)];
 
@@ -125,63 +101,40 @@ describe('azureSupport.listRepositories', () => {
   });
 
   it('returns an empty page after the last full one', async () => {
-    const { fetch } = listerOver({ A: [repo('A', 'a1'), repo('A', 'a2')] });
+    const { fetch } = listerOver([repo('A', 'a1'), repo('A', 'a2')]);
     expect((await fetch(1, 2)).repositories).toHaveLength(2);
     expect((await fetch(2, 2)).repositories).toEqual([]);
   });
 
   it('does not ask the server again once everything is read', async () => {
-    const { fetch, listAzureProjects, searchAzureRepos } = listerOver({
-      A: [repo('A', 'a1'), repo('A', 'a2')],
-      B: [repo('B', 'b1')],
-    });
+    const { fetch, searchAzureRepos } = listerOver([
+      repo('A', 'a1'),
+      repo('A', 'a2'),
+      repo('B', 'b1'),
+    ]);
     await fetch(1, 2);
     await fetch(2, 2);
-    expect(listAzureProjects).toHaveBeenCalledTimes(1);
-    expect(searchAzureRepos).toHaveBeenCalledTimes(2);
+    expect(searchAzureRepos).toHaveBeenCalledTimes(1);
   });
 
-  describe('when a request fails', () => {
-    it('retries the page and skips nothing', async () => {
-      const listAzureProjects = mock(() => Promise.resolve([{ name: 'A' }, { name: 'B' }]));
-      let bAttempts = 0;
-      const searchAzureRepos = mock((_key: string, projectName: string) => {
-        bAttempts += projectName === 'B' ? 1 : 0;
-        if (projectName === 'B' && bAttempts === 1) return Promise.reject(new Error('boom'));
-        return Promise.resolve([
-          repo(projectName, `${projectName}1`),
-          repo(projectName, `${projectName}2`),
-        ]);
-      });
-      const api = { listAzureProjects, searchAzureRepos } as unknown as ServerImportApiClient;
-      const fetch = azureSupport.listRepositories(api, SETTING);
-
-      const failure = await fetch(1, 3).catch((e: unknown) => e);
-      expect((failure as Error).message).toBe('boom');
-      const first = await fetch(1, 3);
-      const second = await fetch(2, 3);
-
-      expect(first.repositories.map((r) => r.id)).toEqual(['A/A1', 'A/A2', 'B/B1']);
-      expect(second.repositories.map((r) => r.id)).toEqual(['B/B2']);
-      expect(listAzureProjects).toHaveBeenCalledTimes(1);
-      expect(searchAzureRepos.mock.calls.filter(([, project]) => project === 'A')).toHaveLength(1);
+  it('searches again when the request failed, then serves the same page', async () => {
+    let attempts = 0;
+    const searchAzureRepos = mock(() => {
+      attempts++;
+      return attempts === 1
+        ? Promise.reject(new Error('boom'))
+        : Promise.resolve([repo('A', 'a1'), repo('A', 'a2'), repo('B', 'b1')]);
     });
+    const api = { searchAzureRepos } as unknown as ServerImportApiClient;
+    const fetch = azureSupport.listRepositories(api, SETTING);
 
-    it('lists the projects again when that was what failed', async () => {
-      let attempts = 0;
-      const listAzureProjects = mock(() => {
-        attempts++;
-        return attempts === 1
-          ? Promise.reject(new Error('boom'))
-          : Promise.resolve([{ name: 'A' }]);
-      });
-      const searchAzureRepos = mock(() => Promise.resolve([repo('A', 'a1')]));
-      const api = { listAzureProjects, searchAzureRepos } as unknown as ServerImportApiClient;
-      const fetch = azureSupport.listRepositories(api, SETTING);
+    const failure = await fetch(1, 2).catch((e: unknown) => e);
+    expect((failure as Error).message).toBe('boom');
+    const first = await fetch(1, 2);
+    const second = await fetch(2, 2);
 
-      const failure = await fetch(1, 50).catch((e: unknown) => e);
-      expect((failure as Error).message).toBe('boom');
-      expect((await fetch(1, 50)).repositories.map((r) => r.id)).toEqual(['A/a1']);
-    });
+    expect(first.repositories.map((r) => r.id)).toEqual(['A/a1', 'A/a2']);
+    expect(second.repositories.map((r) => r.id)).toEqual(['B/b1']);
+    expect(searchAzureRepos).toHaveBeenCalledTimes(2);
   });
 });

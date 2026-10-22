@@ -977,7 +977,7 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /** Repositories of an Azure DevOps setting key; `list_azure_projects` reports their distinct project names. */
+  /** Repositories of every project of an Azure DevOps setting key, which `search_azure_repos` returns unless `projectName` filters them. */
   withAzureRepos(settingKey: string, repos: FakeAzureRepo[]): this {
     this.azureRepos.set(settingKey, repos);
     return this;
@@ -990,9 +990,9 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
-   * Projects and repositories the Bitbucket Server endpoints return for a setting key. Both
-   * endpoints page with `start` / `isLastPage` / `nextPageStart` and never return more than
-   * `pageLimit` items per request, like Bitbucket Server capping `limit`.
+   * Projects and repositories `search_bitbucketserver_repos` returns for a setting key, flattened
+   * across projects. It pages with `start` / `isLastPage` / `nextPageStart` and never returns more
+   * than `pageLimit` items per request, like Bitbucket Server capping `limit`.
    */
   withBitbucketServerProjects(
     settingKey: string,
@@ -2240,14 +2240,6 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/alm_integrations/list_azure_projects') {
-          const names = (azureRepos.get(query.almSetting ?? '') ?? []).map((r) => r.projectName);
-          return new Response(
-            JSON.stringify({ projects: [...new Set(names)].map((name) => ({ name })) }),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
-        }
-
         if (path === '/api/alm_integrations/search_bitbucketcloud_repos') {
           const repos = (bitbucketCloudRepos.get(query.almSetting ?? '') ?? []).filter(
             (r) => !query.repositoryName || r.name.includes(query.repositoryName),
@@ -2274,22 +2266,11 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
-        if (
-          path === '/api/alm_integrations/list_bitbucketserver_projects' ||
-          path === '/api/alm_integrations/search_bitbucketserver_repos'
-        ) {
+        if (path === '/api/alm_integrations/search_bitbucketserver_repos') {
           const configured = bitbucketServerProjects.get(query.almSetting ?? '');
-          const projects = configured?.projects ?? [];
-          const items =
-            path === '/api/alm_integrations/list_bitbucketserver_projects'
-              ? projects.map(({ key, name }) => ({ key, name }))
-              : projects
-                  .filter((p) =>
-                    p.name.toLowerCase().includes((query.projectName ?? '').toLowerCase()),
-                  )
-                  .flatMap((p) =>
-                    p.repos.map((r) => ({ ...r, projectKey: p.key, projectName: p.name })),
-                  );
+          const items = (configured?.projects ?? [])
+            .filter((p) => p.name.toLowerCase().includes((query.projectName ?? '').toLowerCase()))
+            .flatMap((p) => p.repos.map((r) => ({ ...r, projectKey: p.key, projectName: p.name })));
           const start = Number.parseInt(query.start ?? '0', 10);
           const limit = Math.min(
             Number.parseInt(query.pageSize ?? '25', 10),
@@ -2297,16 +2278,12 @@ export class FakeSonarQubeServerBuilder {
           );
           const end = start + limit;
           const isLastPage = end >= items.length;
-          const listKey =
-            path === '/api/alm_integrations/list_bitbucketserver_projects'
-              ? 'projects'
-              : 'repositories';
           return new Response(
             JSON.stringify({
               isLastPage,
               ...(isLastPage ? {} : { nextPageStart: end }),
               paging: { pageSize: items.slice(start, end).length },
-              [listKey]: items.slice(start, end),
+              repositories: items.slice(start, end),
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
