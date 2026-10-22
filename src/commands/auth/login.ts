@@ -89,11 +89,11 @@ export async function authLogin(
   }
 
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
-  // keeps the keychain account, the recorded connection and the resolved organization consistent.
+  // keeps the recorded connection and the resolved organization consistent.
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption, console);
+    const auth = await getOrGenerateToken(server, console);
     const { token, tokenName, reusedExistingToken } = auth;
 
     const org = await resolveOrganization(
@@ -192,18 +192,18 @@ async function persistLoginCredentials(
 ): Promise<void> {
   const state = loadState();
   const existingConnection = getActiveConnection(state);
-  const matchesExistingConnection = matchesLoginConnection(existingConnection, server, org);
+  const sameServerAsExisting = isSameServer(existingConnection, server);
 
-  await revokePreviousLoginToken(existingConnection, server, org, token, options);
+  await revokePreviousLoginToken(existingConnection, server, token, options);
 
-  await deleteStaleTokens(state.auth.connections, server, org);
-  await saveToken(server, token, org);
+  await deleteStaleTokens(state.auth.connections, server);
+  await saveToken(server, token);
 
   const connectionTokenName =
-    options.reusedExistingToken && existingConnection && matchesExistingConnection
+    options.reusedExistingToken && existingConnection && sameServerAsExisting
       ? existingConnection.tokenName
       : options.tokenName;
-  const actualToken = token || (await getKeystoreToken(server, org));
+  const actualToken = token || (await getKeystoreToken(server));
 
   if (actualToken) {
     try {
@@ -247,18 +247,13 @@ async function persistLoginCredentials(
 async function revokePreviousLoginToken(
   connection: AuthConnection | undefined,
   server: string,
-  org: string | undefined,
   token: string,
   options: PersistLoginOptions,
 ): Promise<void> {
-  if (
-    options.reusedExistingToken ||
-    !connection?.tokenName ||
-    !matchesLoginConnection(connection, server, org)
-  ) {
+  if (options.reusedExistingToken || !connection?.tokenName || !isSameServer(connection, server)) {
     return;
   }
-  const previousToken = await getKeystoreToken(server, org);
+  const previousToken = await getKeystoreToken(server);
   if (!previousToken || previousToken === token) {
     return;
   }
@@ -274,15 +269,10 @@ async function revokePreviousLoginToken(
   }
 }
 
-function matchesLoginConnection(
-  connection: AuthConnection | undefined,
-  server: string,
-  org: string | undefined,
-): boolean {
+function isSameServer(connection: AuthConnection | undefined, server: string): boolean {
   return (
     connection !== undefined &&
-    normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server) &&
-    connection.orgKey === org
+    normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server)
   );
 }
 
@@ -385,7 +375,6 @@ async function discardGeneratedToken(
  */
 async function getOrGenerateToken(
   server: string,
-  org: string | undefined,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
   const recordedConnection = loadState().auth.connections.some(
@@ -393,10 +382,9 @@ async function getOrGenerateToken(
       !connection.envOnly &&
       normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
   );
-  const existingToken = recordedConnection ? await getKeystoreToken(server, org) : null;
+  const existingToken = recordedConnection ? await getKeystoreToken(server) : null;
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
-    console.print(`Token already exists for: ${displayServer}`);
+    console.print(`Token already exists for: ${server}`);
     console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
   }

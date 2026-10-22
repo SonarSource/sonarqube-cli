@@ -40,6 +40,7 @@ import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './b
 import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
 import { migrateLegacyStateConfig } from './legacy-config-migration.ts';
+import { migrateLegacyKeychainTokens } from './legacy-keychain-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**
@@ -120,6 +121,8 @@ async function runActions(deps: PostUpdateDependencies): Promise<void> {
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
+  // Before migrateAgentIntegrationsToGlobalScope: it resolves auth, which reads the moved token.
+  await migrateLegacyKeychainTokens(deps.console);
   // After the mappings migration: it is the last read of project-scope attrs.
   // Before reconciliation: that would re-apply the artifacts this deletes.
   await migrateAgentIntegrationsToGlobalScope(deps);
