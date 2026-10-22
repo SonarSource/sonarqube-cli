@@ -16,8 +16,8 @@ becomes an `HttpClientError` on the error side of a `ResultAsync` (CLI-844 — t
 `fetchAuthenticated`, since they all carry the bearer token. It also exposes `apiHostFor(endpoint)`,
 which resolves the region-specific Cloud API host for an endpoint family — call sites pass its
 result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
-`get` rejects a successful response with no JSON body; `getAllowEmptyBody` is the opt-in for
-endpoints that answer 204 or empty text (e.g. `check_pat`).
+A successful GET with no body (204 or empty text) resolves to `Ok(undefined)` at runtime; type
+endpoints that omit a body as `get<void>` (or handle optional fields when the wire shape allows it).
 
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
 whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its

@@ -155,23 +155,9 @@ describe('SonarHttpClient', () => {
         json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
         text: () => Promise.resolve(''),
       } as unknown as Response);
-      const result = await client.getAllowEmptyBody('/api/alm_integration/check_pat');
+      const result = await client.get<void>('/api/alm_integration/check_pat');
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBeUndefined();
-    });
-
-    it('returns an error when get receives 204 with no response body', async () => {
-      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 204,
-        statusText: 'No Content',
-        headers: new Headers(),
-        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
-        text: () => Promise.resolve(''),
-      } as unknown as Response);
-      const result = await client.get('/api/alm_integration/check_pat');
-      expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe('SonarQube API error: empty response body');
     });
   });
 

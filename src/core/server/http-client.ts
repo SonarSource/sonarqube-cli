@@ -223,26 +223,11 @@ export class SonarHttpClient {
   }
 
   /**
-   * Make GET request to SonarQube API
+   * Make GET request to SonarQube API. A 204 or empty body resolves to `Ok(undefined)`; use
+   * `get<void>` when the endpoint carries no JSON payload.
    */
   get<T>(endpoint: string, params?: QueryParams): ResultAsync<T, HttpClientError> {
-    return this.getSafe<T>(endpoint, params).andThen((result) =>
-      this.resolveGetResult(result, false).andThen((value) => okAsync(value as T)),
-    );
-  }
-
-  /**
-   * Like `get`, but allows a successful response with no JSON body (204 or empty text).
-   * Use for endpoints such as `check_pat` that answer with 204 and no payload.
-   */
-  getAllowEmptyBody<T>(
-    endpoint: string,
-    params?: QueryParams,
-    timeoutMs?: number,
-  ): ResultAsync<T | undefined, HttpClientError> {
-    return this.getSafe<T>(endpoint, params, timeoutMs).andThen((result) =>
-      this.resolveGetResult(result, true),
-    );
+    return this.getSafe<T>(endpoint, params).andThen((result) => this.toGetResult(result));
   }
 
   /**
@@ -260,28 +245,17 @@ export class SonarHttpClient {
       if (result.response.status === HTTP_STATUS_NOT_FOUND) {
         return okAsync(null);
       }
-      return this.resolveGetResult(result, false).andThen((value) => okAsync(value as T));
+      return this.toGetResult(result);
     });
   }
 
-  private resolveGetResult<T>(
-    result: SafeGetResult<T>,
-    allowEmpty: boolean,
-  ): ResultAsync<T | undefined, HttpClientError> {
+  private toGetResult<T>(result: SafeGetResult<T>): ResultAsync<T, HttpClientError> {
     return ResultAsync.fromPromise(this.buildStatusError(result.response, 'GET'), toError).andThen(
       (error) => {
         if (error) {
           return errAsync(error);
         }
-        if (result.value === undefined && !allowEmpty) {
-          return errAsync(
-            new UnexpectedApiError(
-              result.response.status,
-              'SonarQube API error: empty response body',
-            ),
-          );
-        }
-        return okAsync(result.value);
+        return okAsync(result.value as T);
       },
     );
   }

@@ -86,7 +86,7 @@ export class ServerImportApiClient {
    */
   async probeGithubPat(settingKey: string): Promise<PatProbe> {
     return this.client
-      .getAllowEmptyBody<{
+      .get<{
         organizations?: unknown[];
         paging?: { total?: number };
       }>('/api/alm_integrations/list_github_organizations', { almSetting: settingKey })
@@ -101,7 +101,7 @@ export class ServerImportApiClient {
 
   private patStatusOf(endpoint: string, settingKey: string): Promise<PatStatus> {
     return this.client
-      .getAllowEmptyBody(endpoint, { almSetting: settingKey })
+      .get<unknown>(endpoint, { almSetting: settingKey })
       .match(() => 'valid', patStatusOfFailure);
   }
 }
