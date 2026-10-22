@@ -423,11 +423,14 @@ async function readOkGetJsonBody<T>(response: Response): Promise<T | undefined> 
   if (response.status === HTTP_STATUS_NO_CONTENT) {
     return undefined;
   }
-  const text = await response.text();
-  if (text.trim().length === 0) {
-    return undefined;
+  if (typeof response.text === 'function') {
+    const text = await response.text();
+    if (text.trim().length === 0) {
+      return undefined;
+    }
+    return JSON.parse(text) as T;
   }
-  return JSON.parse(text) as T;
+  return (await response.json()) as T;
 }
 
 function toError(err: unknown): HttpClientError {
