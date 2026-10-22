@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { ProjectOrganizationError } from '@/core/errors.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { AccessDeniedError } from '@/core/server/errors.ts';
@@ -41,16 +41,5 @@ export async function assertProjectInOrganization(
   const actualOrganization = lookup.isOk() ? lookup.value?.organization : undefined;
   if (actualOrganization === organization) return;
 
-  if (actualOrganization) {
-    throw new CommandFailedError(
-      `Project '${projectKey}' belongs to organization '${actualOrganization}', but the active organization is '${organization}'.`,
-      {
-        remediationHint: `Run 'sonar auth org ${actualOrganization}' to switch to that organization.`,
-      },
-    );
-  }
-
-  throw new CommandFailedError(`Project '${projectKey}' could not be found or is not accessible.`, {
-    remediationHint: "Run 'sonar list org' to check your organization membership.",
-  });
+  throw new ProjectOrganizationError(projectKey, organization, actualOrganization);
 }
