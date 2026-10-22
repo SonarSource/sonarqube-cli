@@ -181,3 +181,67 @@ describe('DiscoveredProjects.groupByMapping', () => {
     ).toEqual({ groups: [], unmapped: [] });
   });
 });
+
+describe('DiscoveredProjects.focusedOn', () => {
+  it('keeps every project when run from above them', () => {
+    const root = tempRepo('focus-root', ['packages/a', 'packages/b']);
+    const a = mapping(root, 'packages/a', 'acme_a');
+    const b = mapping(root, 'packages/b', 'acme_b');
+
+    expect(new DiscoveredProjects(root, [a, b]).focusedOn(root).projects).toEqual([a, b]);
+  });
+
+  it('keeps only the project run from its root', () => {
+    const root = tempRepo('focus-project', ['packages/a', 'packages/b']);
+    const a = mapping(root, 'packages/a', 'acme_a');
+    const b = mapping(root, 'packages/b', 'acme_b');
+
+    expect(new DiscoveredProjects(root, [a, b]).focusedOn(a.projectRoot).projects).toEqual([a]);
+  });
+
+  it('keeps only the project run from a subdirectory of it', () => {
+    const root = tempRepo('focus-subdir', ['packages/a/src/main', 'packages/b']);
+    const a = mapping(root, 'packages/a', 'acme_a');
+    const b = mapping(root, 'packages/b', 'acme_b');
+
+    expect(
+      new DiscoveredProjects(root, [a, b]).focusedOn(join(root, 'packages/a/src/main')).projects,
+    ).toEqual([a]);
+  });
+
+  it('keeps only the closest project when run inside a nested one', () => {
+    const root = tempRepo('focus-nested-inside', ['packages/a/inner/src']);
+    const outer = mapping(root, 'packages/a', 'acme_outer');
+    const inner = mapping(root, 'packages/a/inner', 'acme_inner');
+
+    expect(
+      new DiscoveredProjects(root, [outer, inner]).focusedOn(join(root, 'packages/a/inner/src'))
+        .projects,
+    ).toEqual([inner]);
+  });
+
+  it('keeps the project and the projects nested in it when run from its root', () => {
+    const root = tempRepo('focus-nested-above', ['packages/a/inner', 'packages/b']);
+    const outer = mapping(root, 'packages/a', 'acme_outer');
+    const inner = mapping(root, 'packages/a/inner', 'acme_inner');
+    const b = mapping(root, 'packages/b', 'acme_b');
+
+    expect(
+      new DiscoveredProjects(root, [outer, inner, b]).focusedOn(outer.projectRoot).projects,
+    ).toEqual([outer, inner]);
+  });
+
+  it('keeps nothing when run from a directory no project touches', () => {
+    const root = tempRepo('focus-none', ['packages/a', 'docs']);
+    const a = mapping(root, 'packages/a', 'acme_a');
+
+    expect(new DiscoveredProjects(root, [a]).focusedOn(join(root, 'docs')).projects).toEqual([]);
+  });
+
+  it('keeps the repository root of the discovery', () => {
+    const root = tempRepo('focus-repo-root', ['packages/a']);
+    const a = mapping(root, 'packages/a', 'acme_a');
+
+    expect(new DiscoveredProjects(root, [a]).focusedOn(a.projectRoot).repoRoot).toBe(root);
+  });
+});

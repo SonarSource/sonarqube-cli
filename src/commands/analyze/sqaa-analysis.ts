@@ -110,6 +110,19 @@ function emptyTally(): RunTally {
   return { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 };
 }
 
+/** Combines per-project tallies into one run tally; results keep the order the tallies were given in. */
+export function mergeTallies(tallies: RunTally[]): RunTally {
+  const merged = emptyTally();
+  for (const tally of tallies) {
+    merged.allResults.push(...tally.allResults);
+    merged.totalIssues += tally.totalIssues;
+    merged.totalErrors += tally.totalErrors;
+    merged.totalFailures += tally.totalFailures;
+    merged.globalError ??= tally.globalError;
+  }
+  return merged;
+}
+
 function prepareChunks(
   ctx: RunContext,
   fileIndexByAbsolutePath: Map<string, number>,
