@@ -63,6 +63,13 @@ export interface SqaaProjectGroup {
   files: string[];
 }
 
+/** One project's files as the report shows them, so the display layer can group findings by project. */
+export interface SqaaDisplayProject {
+  projectKey: string;
+  /** Display paths, in the order they are reported. */
+  paths: string[];
+}
+
 export interface SqaaResolvedRun {
   connection: SonarConnection;
   groups: SqaaProjectGroup[];
