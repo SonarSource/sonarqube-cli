@@ -28,7 +28,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import {
-  excludeOutsideProject,
+  excludeOutsideProjects,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -39,7 +39,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertInsideProjectRoot } from './sqaa-paths.ts';
+import { assertInsideProjectRoots } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
@@ -169,17 +169,19 @@ async function analyzeSqaaExplicitFiles(
   }
 
   const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
+    project,
+    console,
+    entries.map((e) => e.absolutePath),
+  );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  assertInsideProjectRoot(
-    entries.map((e) => e.absolutePath),
-    resolved.projectRoot,
-  );
+  assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
   if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
 
-  await runSqaaAnalysisOnExplicitFiles(entries, {
+  await runSqaaAnalysisOnExplicitFiles({
     resolved,
     branch: resolvedBranch,
     format,
@@ -235,11 +237,16 @@ async function analyzeSqaaChangeSet(params: {
     return;
   }
 
-  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
+    project,
+    console,
+    fullChangeSet.files,
+  );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  const changeSet = excludeOutsideProject(fullChangeSet, resolved.projectRoot);
+  const changeSet = excludeOutsideProjects(fullChangeSet, resolved.unmapped);
   if (changeSet.files.length === 0) {
     printAllChangeSetFilesExcluded(console);
     return;
