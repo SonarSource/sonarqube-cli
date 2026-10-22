@@ -25,7 +25,7 @@
  * Call setup() in beforeEach and teardown() in afterEach.
  */
 
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -36,11 +36,15 @@ export interface KeychainTestHandle {
    * Seed a token into the file-based keychain and clear the cache
    * so the next read goes to the backend.
    */
-  seedToken(serverUrl: string, token: string, org?: string): Promise<void>;
+  seedToken(serverUrl: string, token: string): Promise<void>;
+  /**
+   * Seed a token under the `hostname:org` account an older CLI used, and clear the cache.
+   */
+  seedLegacyToken(serverUrl: string, token: string, org: string): void;
   /**
    * Save a token via the keychain module (cache is updated).
    */
-  saveToken(serverUrl: string, token: string, org?: string): Promise<void>;
+  saveToken(serverUrl: string, token: string): Promise<void>;
   setup(): void;
   teardown(): void;
 }
@@ -50,13 +54,23 @@ export function createKeychainTestHandle(): KeychainTestHandle {
   let savedKeychainFile: string | undefined;
 
   return {
-    async seedToken(serverUrl: string, token: string, org?: string) {
-      await realSaveToken(serverUrl, token, org);
+    async seedToken(serverUrl: string, token: string) {
+      await realSaveToken(serverUrl, token);
       clearSecretCache();
     },
 
-    async saveToken(serverUrl: string, token: string, org?: string) {
-      await realSaveToken(serverUrl, token, org);
+    seedLegacyToken(serverUrl: string, token: string, org: string) {
+      const keychainFile = join(testDir, 'keychain.json');
+      const store = existsSync(keychainFile)
+        ? (JSON.parse(readFileSync(keychainFile, 'utf-8')) as { tokens: Record<string, string> })
+        : { tokens: {} };
+      store.tokens[`${new URL(serverUrl).hostname}:${org}`] = token;
+      writeFileSync(keychainFile, JSON.stringify(store), 'utf-8');
+      clearSecretCache();
+    },
+
+    async saveToken(serverUrl: string, token: string) {
+      await realSaveToken(serverUrl, token);
     },
 
     setup() {
