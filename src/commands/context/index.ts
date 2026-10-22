@@ -27,10 +27,9 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import type { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
+import { unresolvedProjectError } from '@/core/project-discovery/unresolved-project.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -113,37 +112,9 @@ async function resolveRecordedContextAugmentationConfig(
   }
   // Only `.sonar-config.json` yields several projects; without it, CAG's own "integration context missing" error already says what to do.
   if (requiresSingleProject && discovered.fromSharedConfig) {
-    throw new CommandFailedError(
-      `Could not determine a single SonarQube project for ${canonicalizePath(cwd)}.`,
-      {
-        remediationHint: unresolvedProjectHint(discovered, cwd),
-      },
-    );
+    throw unresolvedProjectError(discovered, cwd);
   }
   return {};
-}
-
-function unresolvedProjectHint(discovered: DiscoveredProjects, path: string): string {
-  const dir = canonicalizePath(path);
-  const scoped = discovered.scope(dir);
-  if (scoped.length === 0) {
-    return (
-      `${dir} is not inside any project linked in .sonar-config.json. ` +
-      `Run 'sonar link list' from the repository root (${discovered.repoRoot ?? dir}) to see where they are.`
-    );
-  }
-  const enclosingCount = scoped.filter((project) => project.contains).length;
-  if (enclosingCount > 1) {
-    return (
-      `${dir} is inside ${enclosingCount} nested projects, which are not supported yet. ` +
-      "Run 'sonar link list' to list them, then work from a directory that belongs to only one."
-    );
-  }
-  return (
-    `${scoped.length} projects are linked at or under ${dir}. ` +
-    "Run 'sonar link list --path <path>' with the file or directory to work on; a single result is its project. " +
-    "Then re-run from that project's directory."
-  );
 }
 
 const PROJECTLESS_FLAGS = new Set(['--help', '-h', '--version', '-V']);
