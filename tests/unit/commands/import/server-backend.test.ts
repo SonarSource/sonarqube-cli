@@ -18,42 +18,73 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
 import { ServerBackend } from '@/commands/import/server-backend.ts';
-import type { Console } from '@/core/ui/console.ts';
+import { ENV_IMPORT_PAT_POLL_INTERVAL_MS } from '@/core/config-constants.ts';
 
-describe('ServerBackend importing a Bitbucket Server repository', () => {
-  it('puts the bound project with the repository slug and the Bitbucket project key', async () => {
-    const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
+import { FakeConsole } from '../../../_common/fake-console.ts';
+
+const GITLAB = { id: 'gl-id', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.example.com' };
+
+const MANAGED_ENV = [
+  'CI',
+  'SONARQUBE_CLI_MOCK_TTY',
+  'SONARQUBE_CLI_DISABLE_BROWSER',
+  ENV_IMPORT_PAT_POLL_INTERVAL_MS,
+] as const;
+
+describe('ServerBackend PAT wait', () => {
+  const saved = new Map<string, string | undefined>();
+
+  beforeEach(() => {
+    for (const name of MANAGED_ENV) {
+      saved.set(name, process.env[name]);
+    }
+    process.env.CI = 'false';
+    process.env.SONARQUBE_CLI_MOCK_TTY = '1';
+    process.env.SONARQUBE_CLI_DISABLE_BROWSER = 'true';
+    process.env[ENV_IMPORT_PAT_POLL_INTERVAL_MS] = '20';
+  });
+
+  afterEach(() => {
+    for (const name of MANAGED_ENV) {
+      const value = saved.get(name);
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  });
+
+  it('stops waiting on SIGINT, fails with the connect URL and removes its listener', async () => {
+    const listenersBefore = process.listenerCount('SIGINT');
+    let checks = 0;
     const api = {
-      listDopSettings: () =>
-        Promise.resolve([{ id: 'bb-id', key: 'my-bbs', type: 'bitbucket' as const }]),
-      checkPat: () => Promise.resolve('valid' as const),
-      listBitbucketServerProjects: () =>
-        Promise.resolve({ projects: [{ key: 'PRJ', name: 'Project' }], nextStart: undefined }),
-      searchBitbucketServerRepos: () =>
-        Promise.resolve({
-          repositories: [{ id: 5, slug: 'my-repo', name: 'My Repo', projectKey: 'PRJ' }],
-          nextStart: undefined,
-        }),
-      putBoundProject,
+      listDopSettings: () => Promise.resolve([GITLAB]),
+      checkPat: () => {
+        checks++;
+        return Promise.resolve('missing');
+      },
     } as unknown as ServerImportApiClient;
-    const backend = new ServerBackend(api, 'https://sonarqube.example.com');
+    const backend = new ServerBackend(api, 'https://sonar.example.com');
 
-    const plan = await backend.plan({ repo: ['PRJ/my-repo'], nonInteractive: true }, {
-      info: () => undefined,
-    } as unknown as Console);
-    if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
-    await plan.importRepo(plan.selection.repos[0]);
+    const planning = backend.plan({ all: true }, new FakeConsole());
+    const settled = planning.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    while (checks < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    process.emit('SIGINT');
 
-    expect(putBoundProject).toHaveBeenCalledWith({
-      projectKey: 'PRJ_my-repo',
-      projectName: 'My Repo',
-      devOpsPlatformSettingId: 'bb-id',
-      repositoryIdentifier: 'my-repo',
-      projectIdentifier: 'PRJ',
+    expect(await settled).toMatchObject({
+      message: expect.stringContaining('Stopped waiting.'),
+      remediationHint: expect.stringContaining('https://sonar.example.com/projects/create?'),
     });
+    expect(process.listenerCount('SIGINT')).toBe(listenersBefore);
   });
 });
