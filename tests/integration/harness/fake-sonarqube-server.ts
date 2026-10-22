@@ -490,6 +490,17 @@ export class FakeSonarQubeServer {
   }
 }
 
+export interface FakeGitlabRepo {
+  id: number | string;
+  name: string;
+  pathName: string;
+  slug: string;
+  pathSlug: string;
+  url?: string;
+  sqProjectKey?: string;
+  sqProjectName?: string;
+}
+
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
@@ -560,6 +571,8 @@ export class FakeSonarQubeServerBuilder {
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
   private dopSettingsStatusCode?: number;
+  private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
+  private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
   private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
 
@@ -897,6 +910,18 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Repositories `search_gitlab_repos` returns for a GitLab setting key (`id` as the server sends it). */
+  withGitlabRepos(settingKey: string, repos: FakeGitlabRepo[]): this {
+    this.gitlabRepos.set(settingKey, repos);
+    return this;
+  }
+
+  /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
+  withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
+    this.boundProjectFailures.set(repositoryIdentifier, { status, message });
+    return this;
+  }
+
   /** Makes `GET /api/v2/dop-translation/dop-settings` answer with this status (e.g. 404 on an older server). */
   withDopSettingsError(statusCode: number): this {
     this.dopSettingsStatusCode = statusCode;
@@ -978,6 +1003,8 @@ export class FakeSonarQubeServerBuilder {
       boundProjectsStatusCode,
       dopSettingsStatusCode,
       patResponses,
+      gitlabRepos,
+      boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
@@ -1008,7 +1035,7 @@ export class FakeSonarQubeServerBuilder {
         req.headers.forEach((v, k) => {
           headers[k] = v;
         });
-        const body = req.method === 'POST' ? await req.text() : undefined;
+        const body = req.method === 'POST' || req.method === 'PUT' ? await req.text() : undefined;
 
         requests.push({
           method: req.method,
@@ -2069,6 +2096,22 @@ export class FakeSonarQubeServerBuilder {
           });
         }
 
+        if (path === '/api/alm_integrations/search_gitlab_repos') {
+          const repos = (gitlabRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.projectName || r.name.includes(query.projectName),
+          );
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '20', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize, total: repos.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
         if (
           path === '/api/alm_integrations/check_pat' ||
           path === '/api/alm_integrations/list_github_organizations'
@@ -2123,7 +2166,10 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
+        if (
+          path === '/api/v2/dop-translation/bound-projects' &&
+          (req.method === 'POST' || req.method === 'PUT')
+        ) {
           if (boundProjectsStatusCode !== undefined) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
               status: boundProjectsStatusCode,
@@ -2135,11 +2181,31 @@ export class FakeSonarQubeServerBuilder {
             repositoryIdentifier: string;
             devOpsPlatformSettingId: string;
           };
-          projectBindings.push({
-            projectKey: payload.projectKey,
-            repository: payload.repositoryIdentifier,
-            dopSettingId: payload.devOpsPlatformSettingId,
-          });
+          const failure = boundProjectFailures.get(payload.repositoryIdentifier);
+          if (failure) {
+            return new Response(JSON.stringify({ message: failure.message }), {
+              status: failure.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const existed = projectBindings.some((b) => b.projectKey === payload.projectKey);
+          if (!existed || req.method === 'POST') {
+            projectBindings.push({
+              projectKey: payload.projectKey,
+              repository: payload.repositoryIdentifier,
+              dopSettingId: payload.devOpsPlatformSettingId,
+            });
+          }
+          if (req.method === 'PUT') {
+            return new Response(
+              JSON.stringify({
+                projectId: `project-${payload.projectKey}`,
+                bindingId: `binding-${payload.projectKey}`,
+                newProjectCreated: !existed,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
           return new Response(JSON.stringify({}), {
             status: 201,
             headers: { 'Content-Type': 'application/json' },

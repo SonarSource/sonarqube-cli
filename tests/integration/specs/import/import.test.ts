@@ -92,7 +92,7 @@ describe('sonar import', () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run('import');
+      const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
