@@ -60,70 +60,68 @@ export async function waitForPat(options: WaitForPatOptions): Promise<WaitForPat
     now = Date.now,
   } = options;
   const deadline = now() + timeoutMs;
+  const stopped = () => stopReason(signal, deadline, now);
 
-  while (!signal?.aborted) {
-    const remaining = deadline - now();
-    if (remaining <= 0) {
-      return 'timeout';
-    }
-    await sleep(Math.min(intervalMs, remaining), signal);
-    if (signal?.aborted) {
-      break;
-    }
-    if (now() >= deadline) {
-      return 'timeout';
-    }
+  const poll = async (): Promise<WaitForPatResult> => {
+    const before = stopped();
+    if (before) return before;
+    await sleep(Math.min(intervalMs, deadline - now()), signal);
+    const afterSleep = stopped();
+    if (afterSleep) return afterSleep;
     const status = await settleBeforeEnd(check(), signal, deadline - now());
-    if (status === ABORTED || signal?.aborted) {
-      break;
-    }
-    if (status === TIMED_OUT || now() >= deadline) {
-      return 'timeout';
-    }
-    if (status === 'valid') {
-      return 'valid';
-    }
-    if (status === 'invalid' && initial === 'missing') {
-      return 'invalid';
-    }
-  }
-  return 'aborted';
+    return stopped() ?? outcomeOf(status, initial) ?? poll();
+  };
+  return poll();
 }
 
-/** Resolves with `pending`'s outcome, or early when `signal` aborts or `timeoutMs` elapses. */
-function settleBeforeEnd<T>(
+function stopReason(
+  signal: AbortSignal | undefined,
+  deadline: number,
+  now: () => number,
+): 'aborted' | 'timeout' | undefined {
+  if (signal?.aborted) return 'aborted';
+  if (now() >= deadline) return 'timeout';
+  return undefined;
+}
+
+/** `undefined` means the wait goes on. */
+function outcomeOf(
+  status: PatStatus | typeof ABORTED | typeof TIMED_OUT,
+  initial: WaitForPatOptions['initial'],
+): WaitForPatResult | undefined {
+  if (status === ABORTED) return 'aborted';
+  if (status === TIMED_OUT) return 'timeout';
+  if (status === 'valid') return 'valid';
+  if (status === 'invalid' && initial === 'missing') return 'invalid';
+  return undefined;
+}
+
+/** Settles like `pending`, or early when `signal` aborts or `timeoutMs` elapses. */
+async function settleBeforeEnd<T>(
   pending: Promise<T>,
   signal: AbortSignal | undefined,
   timeoutMs: number,
 ): Promise<T | typeof ABORTED | typeof TIMED_OUT> {
-  return new Promise((resolve, reject) => {
-    const finish = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-    };
-    const onAbort = () => {
-      finish();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  const ended = new Promise<typeof ABORTED | typeof TIMED_OUT>((resolve) => {
+    onAbort = () => {
       resolve(ABORTED);
     };
-    const timer = setTimeout(
+    timer = setTimeout(
       () => {
-        finish();
         resolve(TIMED_OUT);
       },
       Math.max(timeoutMs, 0),
     );
     signal?.addEventListener('abort', onAbort, { once: true });
-    pending.then(
-      (value) => {
-        finish();
-        resolve(value);
-      },
-      (error: unknown) => {
-        finish();
-        reject(error instanceof Error ? error : new Error(String(error)));
-      },
-    );
   });
+  try {
+    return await Promise.race([pending, ended]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
