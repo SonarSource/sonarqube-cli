@@ -216,6 +216,14 @@ export class FakeArchitecture {
 
   private readonly deletedDirectiveIds = new Set<string>();
 
+  private directiveReads = 0;
+  private readonly directiveReadFailures = new Map<number, number>();
+
+  withDirectiveReadFailure(readNumber: number, status: number): this {
+    this.directiveReadFailures.set(readNumber, status);
+    return this;
+  }
+
   private directiveDeleteReadResponse?: { status: number; body: string };
 
   withDirectiveDeleteReadResponse(status: number, body: string): this {
@@ -240,6 +248,8 @@ export class FakeArchitecture {
     switch (`${resource}:${request.method}`) {
       case 'project-directives:GET': {
         if (request.modelId) {
+          const failure = this.directiveReadFailures.get(++this.directiveReads);
+          if (failure !== undefined) return json({ message: 'Directive read failed' }, failure);
           const directive = this.directives.find((item) => item.id === request.modelId);
           return directive
             ? json(exportDirective(directive))

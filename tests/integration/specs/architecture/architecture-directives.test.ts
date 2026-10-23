@@ -161,6 +161,55 @@ describe('public project directives', () => {
     },
   );
 
+  it.each([
+    { operation: 'update', create: false },
+    { operation: 'delete', create: false },
+    { operation: 'update', create: true },
+    { operation: 'delete', create: true },
+  ])(
+    'keeps a write-time missing directive as a definite rejection: %j',
+    async ({ operation, create }) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('token')
+        .withProject('shop', (p) =>
+          p.withArchitecture((a) =>
+            a
+              .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+              .withDirectiveReadFailure(2, 404),
+          ),
+        )
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: create ? [{ ...directive, fromNodeKey: 'app:new' }] : [],
+          [operation]: [{ id, ...(operation === 'update' ? { description: 'updated' } : {}) }],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`Directive ${id} was not found`);
+      expect(result.stderr).not.toContain('may already have been applied');
+      expect(result.stderr).not.toContain('sonar list projects');
+      if (create) {
+        expect(result.stderr).toContain('stopped after 1 confirmed writes');
+        expect(result.stderr).toContain('The server rejected the next directive');
+      }
+      expect(
+        server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((r) => r.method === 'POST' && r.path.includes('project-directives')),
+      ).toHaveLength(create ? 1 : 0);
+    },
+  );
+
   it('does not suggest another page for an empty project', async () => {
     await configured();
     const read = await h.run('arch directives get -p shop --format text');

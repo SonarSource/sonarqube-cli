@@ -39,6 +39,7 @@ import {
   directiveId,
   type DirectiveInput,
   directiveKey,
+  DirectiveNotFoundError,
   type DirectivePage,
   isDefiniteRejection,
   parseProjectDirective,
@@ -388,8 +389,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .orThrow()
       .catch((error: unknown) => {
         if (error instanceof AccessDeniedError && error.status === 404)
-          throw new CommandFailedError(
+          throw new DirectiveNotFoundError(
             `Directive ${id} was not found or is not accessible in the selected project.`,
+            { cause: error },
           );
         throw error;
       });

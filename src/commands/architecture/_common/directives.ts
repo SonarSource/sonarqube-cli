@@ -30,6 +30,8 @@ import {
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
 
+export class DirectiveNotFoundError extends CommandFailedError {}
+
 export const DIRECTIVE_TYPES = ['REMOVE_EDGE', 'RENAME_NODE', 'MOVE_NODE'] as const;
 export interface DirectiveInput {
   type: (typeof DIRECTIVE_TYPES)[number];
@@ -155,6 +157,7 @@ export function directiveKey(directive: DirectiveInput): string {
 }
 export function isDefiniteRejection(error: unknown): boolean {
   return (
+    error instanceof DirectiveNotFoundError ||
     error instanceof BadRequestError ||
     error instanceof ForbiddenApiError ||
     error instanceof AccessDeniedError ||
