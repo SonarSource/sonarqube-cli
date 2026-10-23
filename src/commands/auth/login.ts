@@ -23,12 +23,8 @@ import {
   organizationMembershipError,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
+import { switchOrganization } from '@/core/auth/auth-connection-recorder.ts';
 import {
-  recordConnectionFromAuth,
-  switchOrganization,
-} from '@/core/auth/auth-connection-recorder.ts';
-import {
-  assertValidServerUrl,
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
@@ -44,28 +40,22 @@ import {
 } from '@/core/auth/token.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
-import {
-  deleteStaleTokens,
-  getToken as getKeystoreToken,
-  normalizeServerUrl,
-  saveToken,
-} from '@/core/host/keychain.ts';
-import { discoverServer } from '@/core/project-discovery/project-info.ts';
+import { getToken as getKeystoreToken, normalizeServerUrl } from '@/core/host/keychain.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
-import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, updateState } from '@/core/state/state-repository.ts';
+import { getActiveConnection } from '@/core/state/state-manager.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { isSameServer, persistLoginCredentials } from './persist-login.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
 } from './revoke-server-token.ts';
+import { confirmServerTrust, resolveServer } from './select-server.ts';
 
 /**
  * Login command - authenticate and save token with organization
@@ -86,7 +76,7 @@ export async function authLogin(
   }
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
-  const server = await resolveServer(options, console);
+  const server = await resolveServer(options.server, console);
   const isCloud = isSonarQubeCloud(server);
   if (!isCloud) {
     await confirmServerTrust(server, console);
@@ -291,98 +281,6 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
   console.success(`Authentication successful for: ${displayServer}`);
 }
 
-interface PersistLoginOptions {
-  tokenName?: string;
-  refreshIdentity?: boolean;
-  console?: Console;
-}
-
-async function persistLoginCredentials(
-  server: string,
-  isCloud: boolean,
-  org: string | undefined,
-  token: string,
-  options: PersistLoginOptions = {},
-): Promise<void> {
-  const state = loadState();
-  await revokePreviousLoginToken(getActiveConnection(state), server, token, options);
-
-  await deleteStaleTokens(state.auth.connections, server);
-  await saveToken(server, token);
-
-  const actualToken = token || (await getKeystoreToken(server));
-
-  if (actualToken) {
-    try {
-      await recordConnectionFromAuth(
-        new ResolvedAuth({
-          token: actualToken,
-          serverUrl: server,
-          orgKey: org,
-          connectionType: isCloud ? 'cloud' : 'on-premise',
-          source: 'state',
-        }),
-        {
-          tokenName: options.tokenName,
-          force: true,
-          refreshIdentity: options.refreshIdentity,
-        },
-      );
-    } catch (error) {
-      throw new CommandFailedError(
-        `Token saved, but login state could not be updated: ${String(error)}`,
-      );
-    }
-    return;
-  }
-
-  try {
-    updateState((latest) => {
-      addOrUpdateConnection(latest, server, isCloud ? 'cloud' : 'on-premise', {
-        orgKey: org,
-        region: cloudRegionFromUrl(server),
-        tokenName: options.tokenName,
-      });
-    });
-  } catch (error) {
-    throw new CommandFailedError(
-      `Token saved, but login state could not be updated: ${String(error)}`,
-    );
-  }
-}
-
-async function revokePreviousLoginToken(
-  connection: AuthConnection | undefined,
-  server: string,
-  token: string,
-  options: PersistLoginOptions,
-): Promise<void> {
-  if (!connection?.tokenName || !isSameServer(connection, server)) {
-    return;
-  }
-  const previousToken = await getKeystoreToken(server);
-  if (!previousToken || previousToken === token) {
-    return;
-  }
-  const outcome = await revokeServerTokenIfPossible(
-    { serverUrl: server, tokenName: connection.tokenName },
-    previousToken,
-  );
-  if (options.console) {
-    reportRevokeServerTokenOutcome(outcome, {
-      continuingMessage: 'Continuing with login.',
-      console: options.console,
-    });
-  }
-}
-
-function isSameServer(connection: AuthConnection | undefined, server: string): boolean {
-  return (
-    connection !== undefined &&
-    normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server)
-  );
-}
-
 function assertNoEnvironmentAuthentication(): void {
   if (!process.env[ENV_TOKEN] || !(process.env[ENV_SERVER] || process.env[ENV_ORG])) {
     return;
@@ -493,71 +391,6 @@ function findRecordedConnection(server: string): AuthConnection | undefined {
       normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
   );
   return matching.find((connection) => connection.id === activeId) ?? matching[0];
-}
-
-export async function confirmServerTrust(server: string, console: Console): Promise<void> {
-  if (isSonarQubeCloud(server)) {
-    return;
-  }
-  console.warn('Only connect to servers you trust.');
-  const confirmed = await console.confirmPrompt(`Connect to: ${server}?`, true);
-  if (!confirmed) {
-    throw new CommandFailedError('Login cancelled');
-  }
-}
-
-async function selectServerFromPrompt(console: Console): Promise<string> {
-  const serverType = await console.selectPrompt('Where would you like to connect?', [
-    { value: 'cloud', label: 'SonarQube Cloud' },
-    { value: 'server', label: 'SonarQube Server (self-hosted)' },
-  ]);
-
-  if (serverType === null) {
-    throw new CommandFailedError('Server selection cancelled');
-  }
-
-  if (serverType === 'cloud') {
-    const region = await console.selectPrompt('Which SonarQube Cloud region?', [
-      { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
-      { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
-    ]);
-    if (region === null) {
-      throw new CommandFailedError('Server selection cancelled');
-    }
-    return region;
-  }
-
-  const url = await console.promptUntilValid(
-    'Enter server URL',
-    (v) => !!v.trim() && isValidServerUrl(v.trim()),
-    'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
-  );
-  if (url === null) {
-    throw new CommandFailedError('Server selection cancelled');
-  }
-  return url.trim();
-}
-
-async function resolveServer(options: AuthLoginOptions, console: Console): Promise<string> {
-  let server: string;
-  if (options.server) {
-    server = options.server;
-  } else {
-    const configServer = await discoverServer(console);
-    if (configServer) {
-      assertValidServerUrl(
-        configServer,
-        'Fix serverUrl in .sonar-config.json or pass --server <url>.',
-      );
-      return configServer;
-    }
-    server = await selectServerFromPrompt(console);
-  }
-  assertValidServerUrl(
-    server,
-    "Run 'sonar auth login' again and enter an HTTP(S) URL with a host.",
-  );
-  return server;
 }
 
 function validateLoginOptions(options: AuthLoginOptions): void {
