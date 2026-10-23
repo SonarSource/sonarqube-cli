@@ -23,7 +23,7 @@
 // whether the caller has a usable one.
 
 import type { HttpClientError } from '@/core/server/errors.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
 
@@ -146,10 +146,13 @@ export class ServerImportApiClient {
   /** Server-enforced max `ps` for the `search_*_repos` endpoints. */
   static readonly SEARCH_MAX_PAGE_SIZE = 100;
 
-  private readonly client: SonarHttpClient;
+  private readonly client: Pick<SonarHttpClient, 'get' | 'put'>;
 
   constructor(client: SonarHttpClient) {
-    this.client = client;
+    this.client = {
+      get: (endpoint, params) => client.get(withPercentEncodedQuery(endpoint, params)),
+      put: (endpoint, body) => client.put(endpoint, body),
+    };
   }
 
   /** The configured DevOps platform settings; kinds this CLI does not know are left out. */
@@ -381,4 +384,16 @@ function nextBitbucketStart(
     return undefined;
   }
   return nextPageStart;
+}
+
+/**
+ * Setting keys may contain spaces. The HTTP client would send them as `+`, which not every
+ * server decodes back to a space; `%20` is understood everywhere.
+ */
+function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefined): string {
+  if (!params) return endpoint;
+  const query = Object.entries(params)
+    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
+    .join('&');
+  return `${endpoint}?${query}`;
 }
