@@ -146,10 +146,12 @@ function unresolvedProjectHint(discovered: DiscoveredProjects, path: string): st
   );
 }
 
-/** Management (`tool`), hook (`__hook`) and help requests run without a project, so they never fail on an ambiguous one. */
+const PROJECTLESS_FLAGS = new Set(['--help', '-h', '--version', '-V']);
+
+/** Management (`tool`), hook (`__hook`), help and version requests run without a project, so they never fail on an ambiguous one. */
 function requiresSingleProject(forwarded: string[]): boolean {
   const [action] = forwarded;
-  if (forwarded.includes('--help') || forwarded.includes('-h')) {
+  if (forwarded.some((arg) => PROJECTLESS_FLAGS.has(arg))) {
     return false;
   }
   return action !== 'tool' && !action.startsWith('__');

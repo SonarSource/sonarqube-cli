@@ -578,7 +578,7 @@ describe('sonar context passthrough', () => {
       expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(webRoot);
     });
 
-    it.each([['tool status'], ['__hook Claude'], ['compass --help'], ['compass get -h']])(
+    it.each([['tool status'], ['__hook Claude'], ['compass --help'], ['compass get -h'], ['-V']])(
       'still forwards "%s", which needs no project',
       async (command) => {
         const result = await harness.run(`context ${command}`);
@@ -588,6 +588,13 @@ describe('sonar context passthrough', () => {
         expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
       },
     );
+
+    it('still forwards --version, which needs no project', async () => {
+      const result = await harness.run('context --version');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('sonar-context-augmentation 0.0.0-test');
+    });
   });
 
   it(
