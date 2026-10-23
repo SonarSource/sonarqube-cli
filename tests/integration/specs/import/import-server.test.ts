@@ -19,8 +19,8 @@
  */
 
 // Integration tests for `sonar import` against SonarQube Server: setting selection and the
-// personal access token (PAT) gate. No platform can be listed yet, so a run that gets past the
-// gate ends on "not supported yet".
+// personal access token (PAT) gate. Listing repositories is covered per platform in
+// import-server-<platform>.test.ts.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
