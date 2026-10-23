@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { resolveSqaaContext } from '@/commands/analyze/sqaa-context.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -47,6 +48,36 @@ describe('resolveSqaaContext', () => {
       ),
     ).toBeNull();
     expect(fake.findCall('warn', 'SonarQube Cloud organization is required')).toBeDefined();
+  });
+
+  it('hands back the groups, ignored files and roots of a resolved run', () => {
+    const connection = {} as SonarConnection;
+    const groups = [{ projectKey: 'app-a', projectRoot: '/repo/a', files: ['/repo/a/x.ts'] }];
+
+    expect(
+      resolveSqaaContext(
+        {
+          kind: 'resolved',
+          connection,
+          groups,
+          ignored: [
+            { path: '/repo/y.ts', reason: 'outside-project' },
+            { path: '/repo/z.ts', reason: 'other-connection' },
+          ],
+          projectRoots: ['/repo/a'],
+        },
+        { requireProject: true },
+        fake,
+      ),
+    ).toEqual({
+      connection,
+      groups,
+      ignored: [
+        { path: '/repo/y.ts', reason: 'outside-project' },
+        { path: '/repo/z.ts', reason: 'other-connection' },
+      ],
+      projectRoots: ['/repo/a'],
+    });
   });
 
   it('fails on a missing project when the command requires one', () => {
