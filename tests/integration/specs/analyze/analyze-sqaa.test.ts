@@ -3277,7 +3277,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
       const ignoredHeader = output.indexOf('Not analyzed · 1 file');
       expect(ignoredHeader).toBeGreaterThan(output.indexOf('packages/b/lib/y.ts'));
       expect(output.indexOf('docs/readme.md')).toBeGreaterThan(ignoredHeader);
-      expect(output).toContain('[IGNORED]');
+      expect(output).toContain('[IGNORED: not in a mapped project]');
     },
     { timeout: 15000 },
   );
