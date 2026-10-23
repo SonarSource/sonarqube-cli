@@ -20,8 +20,6 @@
 
 // Shared helpers and types for copilot integration tests.
 
-import { mkdirSync } from 'node:fs';
-
 import { hookScriptName, IS_WINDOWS, TestHarness } from '../../harness';
 import {
   findInstalledFeature,
@@ -102,16 +100,4 @@ export function findCopilotFeature(
   scope?: string,
 ): InstalledIntegrationFeature | undefined {
   return findInstalledFeature(harness, 'copilot-cli', featureId, scope);
-}
-
-/**
- * Force the global hook configuration update to fail by pre-seeding
- * `hooks.json` with invalid JSON.
- */
-export function obstructHooksJson(harness: TestHarness): void {
-  harness.userHome.writeFile('.copilot/hooks/hooks.json', '{ invalid json\n');
-}
-
-export function obstructPromptHookScript(harness: TestHarness): void {
-  mkdirSync(harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH).path, { recursive: true });
 }
