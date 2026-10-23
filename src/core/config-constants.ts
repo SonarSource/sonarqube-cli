@@ -239,6 +239,9 @@ export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 
 export const SHARED_PROJECT_CONFIG_FILE_NAME = '.sonar-config.json';
 
+/** Most projects the session-start context lists up front before pointing at `sonar link list`. */
+export const SESSION_START_PROJECT_LIST_LIMIT = 50;
+
 // ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
