@@ -456,6 +456,95 @@ describe('auth login', () => {
     { timeout: 15000 },
   );
 
+  describe('when the stored token is reused and the account is not a member of --org', () => {
+    async function startReusedLoginServer() {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('stored-token')
+        .withOrganizations([{ key: 'org-a', name: 'Org A' }])
+        .start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud', 'org-a')
+        .withTokenName('cli-browser-token')
+        .withKeychainToken(server.baseUrl(), 'stored-token');
+      return server;
+    }
+
+    function cloudUrlEnv(serverUrl: string) {
+      return {
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+      };
+    }
+
+    function expectLoginLeftUntouched(server: { baseUrl(): string }) {
+      const connections = harness.stateJsonFile.asJson().auth.connections as Array<{
+        orgKey?: string;
+        tokenName?: string;
+      }>;
+      expect(connections).toHaveLength(1);
+      expect(connections[0]).toMatchObject({ orgKey: 'org-a', tokenName: 'cli-browser-token' });
+      expect(
+        readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+      ).toBe('stored-token');
+    }
+
+    it(
+      'fails without switching and leaves the login untouched',
+      async () => {
+        const server = await startReusedLoginServer();
+
+        const result = await harness.run(`auth login --server ${server.baseUrl()} --org org-b`, {
+          extraEnv: cloudUrlEnv(server.baseUrl()),
+        });
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toContain("Your account isn't a member of 'org-b'.");
+        expect(result.stdout).toContain('Active organization unchanged: org-a');
+        expect(result.stderr).toContain("Could not switch to 'org-b'");
+        expect(result.stderr).toContain(
+          "Check the organization key, or ask an org admin to add you. To use another account, run 'sonar auth logout', then 'sonar auth login --org org-b'.",
+        );
+        expect(result.stdout).not.toContain('Switched to');
+        expectLoginLeftUntouched(server);
+        expect(
+          server
+            .getRecordedRequests()
+            .filter((request) => request.path === '/api/user_tokens/revoke'),
+        ).toHaveLength(0);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'reports a failed membership lookup as unverified rather than as a decline',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('stored-token')
+          .withOrganizationsSearchError(500)
+          .start();
+        harness
+          .state()
+          .withActiveConnection(server.baseUrl(), 'cloud', 'org-a')
+          .withTokenName('cli-browser-token')
+          .withKeychainToken(server.baseUrl(), 'stored-token');
+
+        const result = await harness.run(`auth login --server ${server.baseUrl()} --org org-b`, {
+          extraEnv: cloudUrlEnv(server.baseUrl()),
+        });
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain("Could not verify organization 'org-b'");
+        expect(result.stdout).not.toContain("isn't a member");
+        expect(result.stderr).not.toContain('Could not switch to');
+        expectLoginLeftUntouched(server);
+      },
+      { timeout: 15000 },
+    );
+  });
+
   it(
     'does not point to `auth org` when --org is not passed',
     async () => {

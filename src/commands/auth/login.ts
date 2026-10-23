@@ -20,6 +20,7 @@
 
 import {
   assertOrganizationMember,
+  organizationMembershipError,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
 import {
@@ -125,13 +126,14 @@ async function switchReusedLoginOrganization(
   auth: BrowserAuthResult,
   console: Console,
 ): Promise<void> {
-  await assertOrganizationMember(
-    new OrganizationsClient(new SonarHttpClient(server, auth.token)),
-    org,
-  );
-
   const activeConnection = getActiveConnection(loadState());
-  if (isSameServer(activeConnection, server) && activeConnection?.orgKey === org) {
+  const activeOrgKey = isSameServer(activeConnection, server)
+    ? activeConnection?.orgKey
+    : undefined;
+
+  await assertMemberOrDeclineSwitch(server, org, auth.token, activeOrgKey, console);
+
+  if (activeOrgKey === org) {
     console.print(`Already using organization: ${org}`);
     return;
   }
@@ -148,6 +150,32 @@ async function switchReusedLoginOrganization(
   );
   console.print('→ Next time, switch directly: sonar auth org <org>');
   console.success(`Switched to '${org}'`);
+}
+
+async function assertMemberOrDeclineSwitch(
+  server: string,
+  org: string,
+  token: string,
+  activeOrgKey: string | undefined,
+  console: Console,
+): Promise<void> {
+  const membership = await new OrganizationsClient(
+    new SonarHttpClient(server, token),
+  ).checkMembership(org);
+  if (membership.status === 'member') {
+    return;
+  }
+  if (membership.status === 'check_failed') {
+    throw organizationMembershipError(org, membership);
+  }
+
+  console.info(`Your account isn't a member of '${org}'.`);
+  if (activeOrgKey) {
+    console.print(`Active organization unchanged: ${activeOrgKey}`);
+  }
+  throw new CommandFailedError(`Could not switch to '${org}'`, {
+    remediationHint: `Check the organization key, or ask an org admin to add you. To use another account, run 'sonar auth logout', then 'sonar auth login --org ${org}'.`,
+  });
 }
 
 async function completeLogin(
