@@ -18,6 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  SECRETS_ERROR_SCANNING_TEMPLATE,
+  SECRETS_NOTICE_BLOCKED_TEMPLATE,
+  SECRETS_NOTICE_REDACTED,
+} from '@/core/config-constants.ts';
+
 import { OPENCODE_PLUGIN_HELPERS_CONTENT } from './plugin-helpers-content.ts';
 
 export const OPENCODE_PLUGIN_MANAGED_MARKER = 'Managed by `sonar integrate opencode`';
@@ -30,7 +36,13 @@ const HOOK_TIMEOUT_MS = 60000;
 const BYPASS_WARNING =
   'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action.';
 
-const MASKED_NOTICE = '[Sonar] A secret was detected in this message and masked before it was sent.';
+const SECRETS_NOTICE_REDACTED = ${JSON.stringify(SECRETS_NOTICE_REDACTED)};
+const SECRETS_NOTICE_BLOCKED_TEMPLATE = ${JSON.stringify(SECRETS_NOTICE_BLOCKED_TEMPLATE)};
+const SECRETS_ERROR_SCANNING_TEMPLATE = ${JSON.stringify(SECRETS_ERROR_SCANNING_TEMPLATE)};
+
+function blockedMessage(reason: string): string {
+  return SECRETS_NOTICE_BLOCKED_TEMPLATE.replace('{reason}', () => reason);
+}
 
 function isDecision(value: any): boolean {
   return (
@@ -43,10 +55,6 @@ function dropMentions(prompt: any): void {
   for (const attachments of [prompt.files, prompt.agents, prompt.skills]) {
     for (const attachment of attachments ?? []) delete attachment.mention;
   }
-}
-
-function blockedMessage(reason: string): string {
-  return '[Sonar] Message blocked: ' + reason + '. Blocked as a precaution — original content was not sent.';
 }
 
 export default {
@@ -89,18 +97,17 @@ export default {
         if (!isDecision(decision)) throw new Error('unexpected answer from sonar');
 
         if (decision.block) {
-          const reason = (decision.reason ?? 'Sonar blocked this message').replace(/\.$/, '');
-          event.prompt.text = blockedMessage(reason);
+          event.prompt.text = blockedMessage(decision.reason!);
           dropMentions(event.prompt);
           return;
         }
 
         if (decision.redactedText !== undefined) {
-          event.prompt.text = decision.redactedText + '\n\n' + MASKED_NOTICE;
+          event.prompt.text = decision.redactedText + '\n\n' + SECRETS_NOTICE_REDACTED;
           dropMentions(event.prompt);
         }
       } catch (error) {
-        event.prompt.text = blockedMessage('could not verify this message for secrets (' + errorMessage(error) + ')');
+        event.prompt.text = blockedMessage(SECRETS_ERROR_SCANNING_TEMPLATE.replace('{reason}', () => errorMessage(error)));
         dropMentions(event.prompt);
       }
     });
