@@ -22,7 +22,10 @@ import {
   assertOrganizationMember,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
-import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
+import {
+  recordConnectionFromAuth,
+  switchOrganization,
+} from '@/core/auth/auth-connection-recorder.ts';
 import {
   assertValidServerUrl,
   ENV_ORG,
@@ -94,30 +97,13 @@ export async function authLogin(
 
   try {
     const auth = await getOrGenerateToken(server, console);
-    const { token, tokenName, reusedExistingToken } = auth;
 
-    const org = await resolveOrganization(
-      server,
-      isCloud,
-      orgOption,
-      auth,
-      console,
-      invocationAuth?.orgKey,
-    );
-
-    await persistLoginCredentials(server, isCloud, org, token, {
-      tokenName,
-      reusedExistingToken,
-      console,
-    });
-
-    const displayServer = isCloud ? `${server} (${org})` : server;
-    console.success(`Authentication successful for: ${displayServer}`);
-    if (reusedExistingToken && orgOption) {
-      console.info(
-        `The stored token was reused. Next time, run 'sonar auth org <org>' to switch organization without logging in again.`,
-      );
+    if (auth.reusedExistingToken && orgOption) {
+      await switchReusedLoginOrganization(server, orgOption, auth, console);
+    } else {
+      await completeLogin(server, isCloud, orgOption, auth, console, invocationAuth?.orgKey);
     }
+
     if (invocationAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
@@ -131,6 +117,57 @@ export async function authLogin(
       process.stdin.pause();
     }
   }
+}
+
+async function switchReusedLoginOrganization(
+  server: string,
+  org: string,
+  auth: BrowserAuthResult,
+  console: Console,
+): Promise<void> {
+  await assertOrganizationMember(
+    new OrganizationsClient(new SonarHttpClient(server, auth.token)),
+    org,
+  );
+
+  const activeConnection = getActiveConnection(loadState());
+  if (isSameServer(activeConnection, server) && activeConnection?.orgKey === org) {
+    console.print(`Already using organization: ${org}`);
+    return;
+  }
+
+  await switchOrganization(
+    new ResolvedAuth({
+      token: auth.token,
+      serverUrl: server,
+      connectionType: 'cloud',
+      source: 'state',
+    }),
+    org,
+    auth.tokenName,
+  );
+  console.print('→ Next time, switch directly: sonar auth org <org>');
+  console.success(`Switched to '${org}'`);
+}
+
+async function completeLogin(
+  server: string,
+  isCloud: boolean,
+  orgOption: string | undefined,
+  auth: BrowserAuthResult & { reusedExistingToken: boolean },
+  console: Console,
+  activeOrgKey: string | undefined,
+): Promise<void> {
+  const org = await resolveOrganization(server, isCloud, orgOption, auth, console, activeOrgKey);
+
+  await persistLoginCredentials(server, isCloud, org, auth.token, {
+    tokenName: auth.tokenName,
+    reusedExistingToken: auth.reusedExistingToken,
+    console,
+  });
+
+  const displayServer = isCloud ? `${server} (${org})` : server;
+  console.success(`Authentication successful for: ${displayServer}`);
 }
 
 async function authLoginWithToken(options: AuthLoginOptions, console: Console): Promise<void> {
@@ -382,22 +419,32 @@ async function getOrGenerateToken(
   server: string,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const recordedConnection = loadState().auth.connections.some(
-    (connection) =>
-      !connection.envOnly &&
-      normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
-  );
+  const recordedConnection = findRecordedConnection(server);
   const existingToken = recordedConnection ? await getKeystoreToken(server) : null;
   if (existingToken) {
-    console.print(`Token already exists for: ${server}`);
-    console.print('You are already authenticated');
-    return { token: existingToken, reusedExistingToken: true };
+    console.info(`Already authenticated on ${server}.`);
+    return {
+      token: existingToken,
+      tokenName: recordedConnection?.tokenName,
+      reusedExistingToken: true,
+    };
   }
 
   console.print(`\nAuthenticating with: ${server}`);
   const authResult = await generateTokenViaBrowser(server, console);
   console.discreetSuccess('Token received');
   return { ...authResult, reusedExistingToken: false };
+}
+
+function findRecordedConnection(server: string): AuthConnection | undefined {
+  const state = loadState();
+  const activeId = getActiveConnection(state)?.id;
+  const matching = state.auth.connections.filter(
+    (connection) =>
+      !connection.envOnly &&
+      normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
+  );
+  return matching.find((connection) => connection.id === activeId) ?? matching[0];
 }
 
 export async function confirmServerTrust(server: string, console: Console): Promise<void> {

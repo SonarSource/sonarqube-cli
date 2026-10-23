@@ -186,7 +186,7 @@ describe('env-var auth — state sync', () => {
       const loginResult = await loginSession.waitFinish();
       expect(loginResult.exitCode).toBe(0);
       expect(loginResult.stdout).toContain(`Authenticating with: ${envServer.baseUrl()}`);
-      expect(loginResult.stdout).not.toContain('Token already exists');
+      expect(loginResult.stdout).not.toContain('Already authenticated on');
       expect(
         envServer
           .getRecordedRequests()
