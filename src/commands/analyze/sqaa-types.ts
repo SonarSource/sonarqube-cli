@@ -54,15 +54,35 @@ export interface AnalyzeSqaaOptions {
   forcedDepth?: SqaaAnalysisDepth;
 }
 
-export interface SqaaResolvedContext {
-  connection: SonarConnection;
+/** The files of one run that belong to one SonarQube project. */
+export interface SqaaProjectGroup {
   projectKey: string;
   /** Base for the paths sent to SQAA, which matches them against the project's analysis root. */
   projectRoot: string;
+  /** Absolute paths. */
+  files: string[];
+}
+
+/** One project's files as the report shows them, so the display layer can group findings by project. */
+export interface SqaaDisplayProject {
+  projectKey: string;
+  /** Display paths, in the order they are reported. */
+  paths: string[];
+}
+
+export interface SqaaResolvedRun {
+  connection: SonarConnection;
+  groups: SqaaProjectGroup[];
+  /** Files under no project root. */
+  unmapped: string[];
+  /** Files owned by a project recorded against another server or organization; never uploaded. */
+  otherConnection: string[];
+  /** Every root the files were matched against, so an error about `unmapped` can name them. */
+  projectRoots: string[];
 }
 
 export interface SqaaBatchRunOptions {
-  resolved: SqaaResolvedContext;
+  resolved: SqaaResolvedRun;
   console: Console;
   branch?: string;
   format?: OutputFormat;

@@ -19,8 +19,17 @@
  */
 
 import { normalizeServerUrl } from '../host/keychain.ts';
-import type { ResolvedAuth } from './auth-resolver.ts';
+import { isSonarQubeCloud, type ResolvedAuth } from './auth-resolver.ts';
 
 export function authMatchesRecordedServer(auth: ResolvedAuth, serverUrl: string): boolean {
   return normalizeServerUrl(auth.serverUrl) === normalizeServerUrl(serverUrl);
+}
+
+/** Stricter than `authMatchesRecordedServer`: on Cloud the organization must match too, since uploads go to one organization. */
+export function authMatchesRecordedConnection(
+  auth: ResolvedAuth,
+  recorded: { serverUrl: string; organization?: string },
+): boolean {
+  if (!authMatchesRecordedServer(auth, recorded.serverUrl)) return false;
+  return !isSonarQubeCloud(auth.serverUrl) || recorded.organization === auth.orgKey;
 }

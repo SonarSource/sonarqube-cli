@@ -68,6 +68,42 @@ export function assertInsideProjectRoot(
   throw new InvalidOptionError(`Files must be inside the project root '${projectRoot}':\n${list}`);
 }
 
+/**
+ * Throws when `unmapped` files sit under none of `projectRoots`. A single root keeps the
+ * message of {@link assertInsideProjectRoot}; several name every root the files were tried against.
+ */
+export function assertInsideProjectRoots(
+  unmapped: string[],
+  projectRoots: string[],
+  displayBase: string = process.cwd(),
+): void {
+  if (unmapped.length === 0) return;
+  if (projectRoots.length === 1) {
+    assertInsideProjectRoot(unmapped, projectRoots[0], displayBase);
+    return;
+  }
+  const files = unmapped
+    .map((p) => '  ' + (toRelativePosixPathOrNull(p, displayBase) ?? p))
+    .join('\n');
+  throw new InvalidOptionError(
+    `Files must be inside one of the project roots (${projectRoots.join(', ')}):\n${files}`,
+  );
+}
+
+/** Explicit files owned by a project of another connection are an input error: they are never uploaded. */
+export function assertNoOtherConnectionFiles(
+  otherConnection: string[],
+  displayBase: string = process.cwd(),
+): void {
+  if (otherConnection.length === 0) return;
+  const files = otherConnection
+    .map((p) => '  ' + (toRelativePosixPathOrNull(p, displayBase) ?? p))
+    .join('\n');
+  throw new InvalidOptionError(
+    `Files belong to a project linked to another server or organization than the active connection:\n${files}`,
+  );
+}
+
 /** Throws when `absolutePath` is outside `projectRoot` or `displayBase`. */
 export function resolveSqaaPath(
   absolutePath: string,
