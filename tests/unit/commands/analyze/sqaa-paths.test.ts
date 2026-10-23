@@ -22,7 +22,10 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { assertInsideProjectRoot } from '@/commands/analyze/sqaa-paths.ts';
+import {
+  assertInsideProjectRoot,
+  assertInsideProjectRoots,
+} from '@/commands/analyze/sqaa-paths.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
 describe('assertInsideProjectRoot', () => {
@@ -61,6 +64,36 @@ describe('assertInsideProjectRoot', () => {
     ).toThrow(
       new InvalidOptionError(
         `Files must be inside the project root '${projectRoot}':\n  x.ts\n  lib/y.ts`,
+      ),
+    );
+  });
+});
+
+describe('assertInsideProjectRoots', () => {
+  const repoRoot = join('/', 'repo');
+  const rootA = join(repoRoot, 'packages', 'a');
+  const rootB = join(repoRoot, 'packages', 'b');
+
+  it('accepts an empty list of unmapped files', () => {
+    expect(() => assertInsideProjectRoots([], [rootA, rootB], repoRoot)).not.toThrow();
+  });
+
+  it('keeps the single-root message when there is one root', () => {
+    expect(() => assertInsideProjectRoots([join(repoRoot, 'x.ts')], [rootA], repoRoot)).toThrow(
+      new InvalidOptionError(`File must be inside the project root '${rootA}': x.ts`),
+    );
+  });
+
+  it('names every root and every file when there are several roots', () => {
+    expect(() =>
+      assertInsideProjectRoots(
+        [join(repoRoot, 'x.ts'), join(repoRoot, 'docs', 'y.md')],
+        [rootA, rootB],
+        repoRoot,
+      ),
+    ).toThrow(
+      new InvalidOptionError(
+        `Files must be inside one of the project roots (${rootA}, ${rootB}):\n  x.ts\n  docs/y.md`,
       ),
     );
   });

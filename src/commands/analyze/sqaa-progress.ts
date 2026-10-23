@@ -53,7 +53,8 @@ export class SqaaProgress {
   private readonly silent: boolean;
   private readonly console: Console;
   private readonly processableTotal: number;
-  private liveLineRendered = false;
+  private readonly projectLabel?: string;
+  private liveLineCount = 0;
 
   private runPhase: RunPhase = 'idle';
   private retryLabel?: string;
@@ -64,6 +65,8 @@ export class SqaaProgress {
   constructor(opts: {
     files: string[];
     ignoredFiles?: string[];
+    /** Names which project this run is for; shown only when the analysis spans more than one. */
+    project?: { key: string; index: number; total: number };
     isTTY?: boolean;
     silent?: boolean;
     console: Console;
@@ -77,6 +80,10 @@ export class SqaaProgress {
     this.silent = opts.silent ?? false;
     this.console = opts.console;
     this.processableTotal = opts.files.length;
+    const { project } = opts;
+    if (project && project.total > 1) {
+      this.projectLabel = `Project ${project.index}/${project.total} · ${project.key}`;
+    }
   }
 
   start(): void {
@@ -211,16 +218,22 @@ export class SqaaProgress {
     this.dotAnimationTimer = undefined;
   }
 
+  private buildLiveLines(): string[] {
+    const line = this.buildLiveLine();
+    return this.projectLabel ? [cyan(this.projectLabel), line] : [line];
+  }
+
   private renderLiveLine(): void {
     this.eraseLiveLine();
-    process.stdout.write(this.buildLiveLine() + '\n');
-    this.liveLineRendered = true;
+    const lines = this.buildLiveLines();
+    process.stdout.write(lines.join('\n') + '\n');
+    this.liveLineCount = lines.length;
   }
 
   private eraseLiveLine(): void {
-    if (!this.liveLineRendered) return;
-    readline.moveCursor(process.stdout, 0, -1);
-    readline.clearLine(process.stdout, 0);
-    this.liveLineRendered = false;
+    for (; this.liveLineCount > 0; this.liveLineCount--) {
+      readline.moveCursor(process.stdout, 0, -1);
+      readline.clearLine(process.stdout, 0);
+    }
   }
 }
