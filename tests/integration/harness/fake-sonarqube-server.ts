@@ -532,6 +532,19 @@ export interface FakeBitbucketCloudRepo {
   sqProjectKey?: string;
 }
 
+export interface FakeBitbucketServerRepo {
+  id: number;
+  slug: string;
+  name: string;
+  sqProjectKey?: string;
+}
+
+export interface FakeBitbucketServerProject {
+  key: string;
+  name: string;
+  repos: FakeBitbucketServerRepo[];
+}
+
 export class FakeSonarQubeServerBuilder {
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
@@ -606,6 +619,10 @@ export class FakeSonarQubeServerBuilder {
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
   private readonly bitbucketCloudRepos = new Map<string, FakeBitbucketCloudRepo[]>();
+  private readonly bitbucketServerProjects = new Map<
+    string,
+    { projects: FakeBitbucketServerProject[]; pageLimit: number }
+  >();
   private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
   private readonly patResponses = new Map<string, { status: number; message?: string }>();
   private readonly analyzedProjectKeys = new Set<string>();
@@ -967,6 +984,20 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Projects and repositories the Bitbucket Server endpoints return for a setting key. Both
+   * endpoints page with `start` / `isLastPage` / `nextPageStart` and never return more than
+   * `pageLimit` items per request, like Bitbucket Server capping `limit`.
+   */
+  withBitbucketServerProjects(
+    settingKey: string,
+    projects: FakeBitbucketServerProject[],
+    pageLimit = 100,
+  ): this {
+    this.bitbucketServerProjects.set(settingKey, { projects, pageLimit });
+    return this;
+  }
+
   /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
   withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
     this.boundProjectFailures.set(repositoryIdentifier, { status, message });
@@ -1061,6 +1092,7 @@ export class FakeSonarQubeServerBuilder {
       gitlabRepos,
       azureRepos,
       bitbucketCloudRepos,
+      bitbucketServerProjects,
       boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
@@ -2220,6 +2252,44 @@ export class FakeSonarQubeServerBuilder {
           return new Response(JSON.stringify({ repositories }), {
             headers: { 'Content-Type': 'application/json' },
           });
+        }
+
+        if (
+          path === '/api/alm_integrations/list_bitbucketserver_projects' ||
+          path === '/api/alm_integrations/search_bitbucketserver_repos'
+        ) {
+          const configured = bitbucketServerProjects.get(query.almSetting ?? '');
+          const projects = configured?.projects ?? [];
+          const items =
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
+              ? projects.map(({ key, name }) => ({ key, name }))
+              : projects
+                  .filter((p) =>
+                    p.name.toLowerCase().includes((query.projectName ?? '').toLowerCase()),
+                  )
+                  .flatMap((p) =>
+                    p.repos.map((r) => ({ ...r, projectKey: p.key, projectName: p.name })),
+                  );
+          const start = Number.parseInt(query.start ?? '0', 10);
+          const limit = Math.min(
+            Number.parseInt(query.pageSize ?? '25', 10),
+            configured?.pageLimit ?? 100,
+          );
+          const end = start + limit;
+          const isLastPage = end >= items.length;
+          const listKey =
+            path === '/api/alm_integrations/list_bitbucketserver_projects'
+              ? 'projects'
+              : 'repositories';
+          return new Response(
+            JSON.stringify({
+              isLastPage,
+              ...(isLastPage ? {} : { nextPageStart: end }),
+              paging: { pageSize: items.slice(start, end).length },
+              [listKey]: items.slice(start, end),
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
         }
 
         if (
