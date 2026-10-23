@@ -62,20 +62,14 @@ export async function setProjectDirectives(
   });
   const prefix = options.dryRun ? 'Would' : 'Did';
   for (const item of result.toCreate) {
+    const perspective = item.graphPerspective ? ` [${item.graphPerspective}]` : '';
     ctx.console.info(
-      `${prefix} create: ${item.type} ${item.ecosystem} ${item.graphType}${item.graphPerspective ? ` [${item.graphPerspective}]` : ''} ${item.fromNodeKey} -> ${item.toNodeKey}`,
+      `${prefix} create: ${item.type} ${item.ecosystem} ${item.graphType}${perspective} ${item.fromNodeKey} -> ${item.toNodeKey}`,
     );
     if (item.description !== undefined)
       ctx.console.info(`  description: ${JSON.stringify(item.description)}`);
   }
-  for (const change of result.changes) {
-    ctx.console.info(`${prefix} update: ${change.id}`);
-    for (const key of Object.keys(change.after) as (keyof typeof change.after)[])
-      if (change.before[key] !== change.after[key])
-        ctx.console.info(
-          `  ${key}: ${change.before[key] === undefined ? '(unset)' : JSON.stringify(change.before[key])} -> ${JSON.stringify(change.after[key])}`,
-        );
-  }
+  for (const change of result.changes) printUpdate(ctx, prefix, change);
   for (const item of result.toDelete)
     ctx.console.info(
       `${prefix} delete: ${item.id} ${item.type} ${item.fromNodeKey} -> ${item.toNodeKey}`,
@@ -89,4 +83,17 @@ export async function setProjectDirectives(
   ctx.console.warn(
     'Concurrent edits can race the reads; the public API has no conditional writes. Changes are applied individually without automatic retry or rollback.',
   );
+}
+
+function printUpdate(
+  ctx: CommandAuthenticatedInvocationContext,
+  prefix: string,
+  change: Awaited<ReturnType<typeof applyDirectiveChanges>>['changes'][number],
+): void {
+  ctx.console.info(`${prefix} update: ${change.id}`);
+  for (const key of Object.keys(change.after) as (keyof typeof change.after)[])
+    if (change.before[key] !== change.after[key])
+      ctx.console.info(
+        `  ${key}: ${change.before[key] === undefined ? '(unset)' : JSON.stringify(change.before[key])} -> ${JSON.stringify(change.after[key])}`,
+      );
 }

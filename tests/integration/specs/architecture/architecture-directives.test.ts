@@ -348,6 +348,7 @@ describe('public project directives', () => {
 
   it('stops a mixed batch after a rejected update and reports the confirmed creation without deleting', async () => {
     const id = '00000000-0000-4000-8000-000000000001';
+    const removed = '00000000-0000-4000-8000-000000000002';
     const server = await h
       .newFakeServer()
       .asSonarCloud()
@@ -355,7 +356,10 @@ describe('public project directives', () => {
       .withProject('shop', (p) =>
         p.withArchitecture((a) =>
           a
-            .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+            .withDirectives([
+              { ...directive, id, projectId: 'shop-branch-id' },
+              { ...directive, id: removed, projectId: 'shop-branch-id', fromNodeKey: 'delete:me' },
+            ])
             .withStatus('project-directives', 403, '{"message":"update rejected"}', 'PATCH'),
         ),
       )
@@ -366,6 +370,7 @@ describe('public project directives', () => {
       JSON.stringify({
         create: [{ ...directive, fromNodeKey: 'new:source' }],
         update: [{ id, description: 'changed' }],
+        delete: [{ id: removed }],
       }),
     );
     const result = await h.run('arch directives set -p shop --file changes.json');

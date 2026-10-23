@@ -27,8 +27,18 @@ import {
   RequestPayloadTooLargeError,
   UnexpectedApiError,
 } from '@/core/server/errors.ts';
+import {
+  HTTP_STATUS_BAD_REQUEST,
+  HTTP_STATUS_INTERNAL_SERVER_ERROR,
+  HTTP_STATUS_REQUEST_TIMEOUT,
+} from '@/core/server/http-constants.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+
+const MAX_DIRECTIVE_ENUM_LENGTH = 30;
+const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
+const DIRECTIVE_UUID_LENGTH = 36;
+export const DEFAULT_DIRECTIVES_PAGE_SIZE = 50;
 
 export class DirectiveNotFoundError extends CommandFailedError {}
 
@@ -74,12 +84,12 @@ function stringField(value: Record<string, unknown>, name: string, max: number):
 }
 export function parseDirective(value: unknown): DirectiveInput {
   const object = record(value);
-  const type = stringField(object, 'type', 30);
+  const type = stringField(object, 'type', MAX_DIRECTIVE_ENUM_LENGTH);
   const ecosystem = stringField(object, 'ecosystem', 10);
-  const graphType = stringField(object, 'graphType', 30);
-  if (!DIRECTIVE_TYPES.some((item) => item === type))
+  const graphType = stringField(object, 'graphType', MAX_DIRECTIVE_ENUM_LENGTH);
+  if (!(DIRECTIVE_TYPES as readonly string[]).includes(type))
     throw new CommandFailedError('Directive type must be REMOVE_EDGE, RENAME_NODE or MOVE_NODE.');
-  if (!ECOSYSTEMS.some((item) => item === ecosystem))
+  if (!(ECOSYSTEMS as readonly string[]).includes(ecosystem))
     throw new CommandFailedError('Unsupported directive ecosystem.');
   if (graphType !== 'file_graph' && graphType !== 'namespace_graph')
     throw new CommandFailedError('Directive graphType must be file_graph or namespace_graph.');
@@ -91,7 +101,7 @@ export function parseDirective(value: unknown): DirectiveInput {
     toNodeKey: stringField(object, 'toNodeKey', 1000),
   };
   for (const [name, max] of [
-    ['graphPerspective', 255],
+    ['graphPerspective', MAX_DIRECTIVE_PERSPECTIVE_LENGTH],
     ['description', 10000],
   ] as const) {
     const field = object[name];
@@ -107,7 +117,7 @@ export function parseDirective(value: unknown): DirectiveInput {
 }
 export function parseProjectDirective(value: unknown): ProjectDirective {
   const object = record(value);
-  const id = stringField(object, 'id', 36);
+  const id = stringField(object, 'id', DIRECTIVE_UUID_LENGTH);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
     throw new CommandFailedError('Public directive response has an invalid id.');
   if (object.origin != null && typeof object.origin !== 'string')
@@ -164,9 +174,9 @@ export function isDefiniteRejection(error: unknown): boolean {
     error instanceof RateLimitError ||
     error instanceof RequestPayloadTooLargeError ||
     (error instanceof UnexpectedApiError &&
-      error.status >= 400 &&
-      error.status < 500 &&
-      error.status !== 408)
+      error.status >= HTTP_STATUS_BAD_REQUEST &&
+      error.status < HTTP_STATUS_INTERNAL_SERVER_ERROR &&
+      error.status !== HTTP_STATUS_REQUEST_TIMEOUT)
   );
 }
 
@@ -232,7 +242,7 @@ function parseUpdates(items: unknown[]): DirectiveUpdate[] {
     if (ids.has(id)) throw new CommandFailedError('Repeated directive id. Nothing was changed.');
     ids.add(id);
     const changes: Record<string, unknown> = {};
-    const editable = [
+    const editable = new Set([
       'type',
       'ecosystem',
       'graphType',
@@ -240,9 +250,9 @@ function parseUpdates(items: unknown[]): DirectiveUpdate[] {
       'toNodeKey',
       'graphPerspective',
       'description',
-    ];
+    ]);
     for (const [key, field] of Object.entries(object)) {
-      if (editable.includes(key)) {
+      if (editable.has(key)) {
         if (field === null)
           throw new CommandFailedError(
             'Directive fields cannot be cleared with null by the public API. Nothing was changed.',
@@ -259,12 +269,12 @@ function parseUpdates(items: unknown[]): DirectiveUpdate[] {
 
 async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
   const changes: { id: string; before: ProjectDirective; after: DirectiveInput }[] = [];
-  for (const update of updates) {
+  await inSequence(updates, async (update) => {
     const before = await api.getDirective(update.id);
     const after = parseDirective({ ...before, ...update.changes });
     if (directiveKey(before) !== directiveKey(after) || before.description !== after.description)
       changes.push({ id: update.id, before, after });
-  }
+  });
   return { changes, skipped: updates.length - changes.length };
 }
 
@@ -320,21 +330,18 @@ export async function applyDirectiveChanges(
 ) {
   const updates = await planUpdates(api, changes.update);
   const toDelete: ProjectDirective[] = [];
-  for (const id of changes.delete) toDelete.push(await api.getDirective(id));
+  await inSequence(changes.delete, async (id) => {
+    toDelete.push(await api.getDirective(id));
+  });
   const moving = updates.changes.filter(
     (change) => directiveKey(change.before) !== directiveKey(change.after),
   );
   const known =
     changes.create.length || moving.length ? await existingDirectiveKeys(api) : new Set<string>();
-  const afterKeys = new Set<string>();
-  for (const change of moving) {
-    const key = directiveKey(change.after);
-    if (known.has(key) || afterKeys.has(key))
-      throw new CommandFailedError(
-        'An update would duplicate another directive. Nothing was changed.',
-      );
-    afterKeys.add(key);
-  }
+  validateUpdatedIdentities(
+    moving.map((change) => change.after),
+    known,
+  );
   const creations = planCreates(changes.create, known);
   const touchedKeys = new Set([
     ...updates.changes.flatMap((change) => [
@@ -361,21 +368,21 @@ export async function applyDirectiveChanges(
   let attempted = 'creation';
   let target = 'the current list';
   try {
-    for (const directive of result.toCreate) {
+    await inSequence(result.toCreate, async (directive) => {
       attempted = `create ${directive.type} ${directive.fromNodeKey} -> ${directive.toNodeKey}`;
       result.created.push(await api.createDirective(directive));
-    }
-    for (const change of result.changes) {
+    });
+    await inSequence(result.changes, async (change) => {
       attempted = `update ${change.id}`;
       target = `directive ${change.id}`;
       result.updated.push(await api.updateDirective(change.id, change.after));
-    }
-    for (const directive of result.toDelete) {
+    });
+    await inSequence(result.toDelete, async (directive) => {
       attempted = `delete ${directive.id}`;
       target = `directive ${directive.id}`;
       await api.deleteDirective(directive.id);
       result.deleted.push(directive.id);
-    }
+    });
   } catch (error) {
     const confirmed = result.created.length + result.updated.length + result.deleted.length;
     if (!confirmed && isDefiniteRejection(error)) throw error;
@@ -385,4 +392,20 @@ export async function applyDirectiveChanges(
     );
   }
   return result;
+}
+
+function inSequence<T>(items: T[], action: (item: T) => Promise<void>): Promise<void> {
+  return items.reduce((previous, item) => previous.then(() => action(item)), Promise.resolve());
+}
+
+function validateUpdatedIdentities(updates: DirectiveInput[], known: Set<string>): void {
+  const afterKeys = new Set<string>();
+  for (const update of updates) {
+    const key = directiveKey(update);
+    if (known.has(key) || afterKeys.has(key))
+      throw new CommandFailedError(
+        'An update would duplicate another directive. Nothing was changed.',
+      );
+    afterKeys.add(key);
+  }
 }

@@ -23,6 +23,7 @@ import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { AccessDeniedError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 import {
@@ -388,7 +389,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .get<unknown>(this.directivePath(id))
       .orThrow()
       .catch((error: unknown) => {
-        if (error instanceof AccessDeniedError && error.status === 404)
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
           throw new DirectiveNotFoundError(
             `Directive ${id} was not found or is not accessible in the selected project.`,
             { cause: error },
@@ -427,7 +428,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       await this.http.delete(this.directivePath(id)).orThrow();
       deleteAccepted = true;
       const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
-      if (response.status !== 404)
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
         throw new CommandFailedError(
           `Expected HTTP 404 after deletion, received ${response.status}.`,
         );

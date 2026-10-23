@@ -23,6 +23,7 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { resolveFormatOption } from '@/core/commands/params.ts';
 
 import { createDirectivesApi } from '../../_common/architecture-api.ts';
+import { DEFAULT_DIRECTIVES_PAGE_SIZE } from '../../_common/directives.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
 import {
@@ -60,7 +61,7 @@ export async function getDirectives(
     return;
   }
   const { directives, page } = await createDirectivesApi(ctx.connection, projectKey)
-    .getDirectivesPage(options.page ?? 1, options.pageSize ?? 50)
+    .getDirectivesPage(options.page ?? 1, options.pageSize ?? DEFAULT_DIRECTIVES_PAGE_SIZE)
     .catch((error: unknown) => {
       throw toArchitectureError(error, projectKey);
     });
@@ -75,8 +76,10 @@ export async function getDirectives(
   ctx.console.info(
     `Page ${page.pageIndex}: ${directives.length} of ${page.total} directives.${page.pageIndex * page.pageSize < page.total ? ' Use --page to continue.' : ''}`,
   );
-  for (const directive of directives)
+  for (const directive of directives) {
+    const perspective = directive.graphPerspective ? ` [${directive.graphPerspective}]` : '';
     ctx.console.info(
-      `${directive.id}: ${directive.type} ${directive.ecosystem} ${directive.graphType}${directive.graphPerspective ? ` [${directive.graphPerspective}]` : ''} ${directive.fromNodeKey} -> ${directive.toNodeKey}`,
+      `${directive.id}: ${directive.type} ${directive.ecosystem} ${directive.graphType}${perspective} ${directive.fromNodeKey} -> ${directive.toNodeKey}`,
     );
+  }
 }
