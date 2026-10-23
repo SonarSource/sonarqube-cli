@@ -191,6 +191,31 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(result.stdout).toContain('project already existed, binding updated');
   });
 
+  it('does not rebind an existing project that is not bound to the repository', async () => {
+    const server = await startServer((s) =>
+      s
+        .withGitlabRepos('my-gitlab', [
+          gitlabRepo(11, 'group/repo-a'),
+          gitlabRepo(12, 'group/repo-b'),
+          gitlabRepo(13, 'group/repo-c'),
+        ])
+        .withProject('group_repo-a')
+        .withProjectBindings([
+          { projectKey: 'group_repo-b', repository: '99', dopSettingId: 'gl-id' },
+        ]),
+    );
+
+    const result = await harness.run('import --all');
+
+    expect(result.exitCode).toBe(1);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('Imported 1 of 3 repositories (2 failed)');
+    expect(output).toContain(
+      "A project with key 'group_repo-a' already exists and is not bound to group/repo-a; the CLI did not change it.",
+    );
+    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['13']);
+  });
+
   it('keeps importing the others and exits 1 when one repository fails', async () => {
     const server = await startServer((s) =>
       s
