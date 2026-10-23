@@ -73,7 +73,7 @@ export async function getDirectives(
       'No directives are visible. Check project access and whether any directives are defined.',
     );
   ctx.console.info(
-    `Page ${page.pageIndex}: ${directives.length} of ${page.total} directives. Use --page to continue.`,
+    `Page ${page.pageIndex}: ${directives.length} of ${page.total} directives.${page.pageIndex * page.pageSize < page.total ? ' Use --page to continue.' : ''}`,
   );
   for (const directive of directives)
     ctx.console.info(

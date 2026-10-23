@@ -176,7 +176,7 @@ async function existingDirectiveKeys(api: DirectivesApi): Promise<Set<string>> {
     total ??= page.page.total;
     if (page.page.total !== total || ids.size + page.directives.length > total)
       throw new CommandFailedError(
-        'The public directives list changed while reading it. Read it again before creating directives.',
+        'The public directives list changed while reading it. Read it again before changing directives.',
       );
     for (const directive of page.directives) {
       const id = directive.id.toLowerCase();
@@ -193,9 +193,7 @@ async function existingDirectiveKeys(api: DirectivesApi): Promise<Set<string>> {
   }
 }
 
-async function planCreates(api: DirectivesApi, directives: DirectiveInput[]) {
-  if (directives.length === 0) return { toCreate: [] as DirectiveInput[], skipped: 0 };
-  const known = await existingDirectiveKeys(api);
+function planCreates(directives: DirectiveInput[], known: Set<string>) {
   const toCreate: DirectiveInput[] = [];
   let skipped = 0;
   for (const directive of directives) {
@@ -320,7 +318,21 @@ export async function applyDirectiveChanges(
   const updates = await planUpdates(api, changes.update);
   const toDelete: ProjectDirective[] = [];
   for (const id of changes.delete) toDelete.push(await api.getDirective(id));
-  const creations = await planCreates(api, changes.create);
+  const moving = updates.changes.filter(
+    (change) => directiveKey(change.before) !== directiveKey(change.after),
+  );
+  const known =
+    changes.create.length || moving.length ? await existingDirectiveKeys(api) : new Set<string>();
+  const afterKeys = new Set<string>();
+  for (const change of moving) {
+    const key = directiveKey(change.after);
+    if (known.has(key) || afterKeys.has(key))
+      throw new CommandFailedError(
+        'An update would duplicate another directive. Nothing was changed.',
+      );
+    afterKeys.add(key);
+  }
+  const creations = planCreates(changes.create, known);
   const touchedKeys = new Set([
     ...updates.changes.flatMap((change) => [
       directiveKey(change.before),

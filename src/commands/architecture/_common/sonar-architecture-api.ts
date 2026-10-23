@@ -21,6 +21,7 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import { AccessDeniedError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
@@ -382,7 +383,16 @@ export class SonarArchitectureApi implements ArchitectureApi {
 
   async getDirective(id: string): Promise<ProjectDirective> {
     const projectId = await this.projectId('Project directives');
-    const result = await this.http.get<unknown>(this.directivePath(id)).orThrow();
+    const result = await this.http
+      .get<unknown>(this.directivePath(id))
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === 404)
+          throw new CommandFailedError(
+            `Directive ${id} was not found or is not accessible in the selected project.`,
+          );
+        throw error;
+      });
     const directive = parseProjectDirective(result);
     if (directive.id.toLowerCase() !== directiveId(id) || directive.projectId !== projectId)
       throw new CommandFailedError(

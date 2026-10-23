@@ -49,6 +49,126 @@ describe('public project directives', () => {
     h.cwd.writeFile('deletes.json', JSON.stringify({ delete: [{ id }] }));
     return 'arch directives set -p shop --file deletes.json';
   }
+  it.each(['existing', 'batch', 'pending-delete', 'later-page'])(
+    'refuses identity collisions before any write: %s',
+    async (kind) => {
+      const first = '00000000-0000-4000-8000-000000000001';
+      const second = '00000000-0000-4000-8000-000000000002';
+      const rows: ProjectDirective[] = [
+        { ...directive, id: first, projectId: 'shop-branch-id' },
+        { ...directive, id: second, projectId: 'shop-branch-id', fromNodeKey: 'app:other' },
+      ];
+      if (kind === 'later-page')
+        rows.splice(
+          1,
+          0,
+          ...Array.from({ length: 99 }, (_, i) => ({
+            ...directive,
+            id: `00000000-0000-4000-8000-${String(i + 3).padStart(12, '0')}`,
+            projectId: 'shop-branch-id',
+            fromNodeKey: `filler:${i}`,
+          })),
+        );
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('token')
+        .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives(rows)))
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+      const update =
+        kind === 'batch'
+          ? [
+              { id: first, fromNodeKey: 'app:new' },
+              { id: second, fromNodeKey: 'app:new' },
+            ]
+          : [{ id: first, fromNodeKey: 'app:other' }];
+      for (const create of [[], [{ ...directive, fromNodeKey: 'new:source' }]]) {
+        h.cwd.writeFile(
+          'changes.json',
+          JSON.stringify({
+            create,
+            update,
+            ...(kind === 'pending-delete' ? { delete: [{ id: second }] } : {}),
+          }),
+        );
+        for (const flag of ['', ' --dry-run']) {
+          const result = await h.run(`arch directives set -p shop --file changes.json${flag}`);
+          expect(result.exitCode).not.toBe(0);
+          expect(result.stderr).toContain('An update would duplicate another directive');
+        }
+      }
+      expect(
+        server
+          .getRecordedRequests()
+          .filter(
+            (r) =>
+              ['POST', 'PATCH', 'DELETE'].includes(r.method) &&
+              r.path.includes('project-directives'),
+          ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('allows an update to a new directive identity after checking all existing identities', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const server = await h
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('token')
+      .withProject('shop', (p) =>
+        p.withArchitecture((a) =>
+          a.withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }]),
+        ),
+      )
+      .start();
+    h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:new' }] }));
+    expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    const read = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(JSON.parse(read.stdout).directive.fromNodeKey).toBe('app:new');
+  });
+
+  it.each(['get', 'update', 'delete'])(
+    'identifies an unknown directive without blaming the project: %s',
+    async (operation) => {
+      const server = await configured();
+      const id = '00000000-0000-4000-8000-000000000999';
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: [directive],
+          [operation]: [{ id, ...(operation === 'update' ? { description: 'updated' } : {}) }],
+        }),
+      );
+      const result = await h.run(
+        operation === 'get'
+          ? `arch directives get -p shop --id ${id}`
+          : 'arch directives set -p shop --file changes.json',
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`Directive ${id} was not found`);
+      expect(result.stderr).not.toContain('sonar list projects');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter(
+            (r) =>
+              ['POST', 'PATCH', 'DELETE'].includes(r.method) &&
+              r.path.includes('project-directives'),
+          ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('does not suggest another page for an empty project', async () => {
+    await configured();
+    const read = await h.run('arch directives get -p shop --format text');
+    expect(read.exitCode).toBe(0);
+    expect(read.stdout).toContain('No directives are visible');
+    expect(read.stdout).not.toContain('Use --page to continue');
+  });
+
   it('previews and applies a mixed change file, preserving unmentioned directives and unchanged fields', async () => {
     const first = '00000000-0000-4000-8000-000000000001';
     const second = '00000000-0000-4000-8000-000000000002';
@@ -498,6 +618,12 @@ describe('public project directives', () => {
     );
     expect(secondPage.exitCode).toBe(0);
     expect(JSON.parse(secondPage.stdout).directives).toHaveLength(1);
+    const firstText = await h.run('arch directives get -p shop --format text --page-size 100');
+    expect(firstText.stdout).toContain('Use --page to continue');
+    const lastText = await h.run(
+      'arch directives get -p shop --format text --page 2 --page-size 100',
+    );
+    expect(lastText.stdout).not.toContain('Use --page to continue');
     h.cwd.writeFile(
       'directives.json',
       JSON.stringify({ create: [existing[100], directive, directive] }),
@@ -808,5 +934,6 @@ describe('public project directives', () => {
     expect(read.exitCode).toBe(0);
     expect(read.stdout).toContain('Page 2: 0 of 1 directives');
     expect(read.stdout).not.toContain('No directives are visible');
+    expect(read.stdout).not.toContain('Use --page to continue');
   });
 });
