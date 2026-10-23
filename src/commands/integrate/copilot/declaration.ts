@@ -63,12 +63,13 @@ import {
   SCRIPT_REL_DIR,
   upsertCopilotHooks,
 } from './hooks.ts';
-import { INSTRUCTIONS_FILENAME, PROJECT_INSTRUCTIONS_REL_DIR } from './instructions.ts';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
 const PROMPT_SECRETS_MARKER = 'sonar-prompt-secrets';
+const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
+const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
 
 export type CopilotIntegrationOptions = IntegrateAgentOptions;
 
