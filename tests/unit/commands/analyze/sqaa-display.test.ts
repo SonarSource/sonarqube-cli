@@ -482,6 +482,30 @@ describe('printSqaaTextReport grouped by project', () => {
     );
   });
 
+  it('shows the re-run hint for any outside-project file when a repo root path is given', () => {
+    const run = (repoRootFromCwd?: string) => {
+      fake.calls.length = 0;
+      printSqaaTextReport(
+        {
+          tally: { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 },
+          allPaths: [],
+          ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
+          repoRootFromCwd,
+          analysisDepth: 'STANDARD',
+        },
+        fake,
+      );
+      return getMockTextLines(fake);
+    };
+
+    const withHint = run('..');
+    expect(withHint.some((l) => l.includes('docs/readme.md'))).toBe(false);
+    expect(withHint.some((l) => l.includes('files  [IGNORED'))).toBe(false);
+    expect(withHint.some((l) => l.includes('1 file is not in a project mapped'))).toBe(true);
+    expect(withHint.some((l) => l.includes('cd .. && sonar analyze agentic'))).toBe(true);
+    expect(run().some((l) => l.includes('sonar analyze agentic'))).toBe(false);
+  });
+
   it('keeps a skipped file under its own project', () => {
     printSqaaTextReport(
       {

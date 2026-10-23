@@ -30,8 +30,8 @@ import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';
-import { formatIgnoredHeader, formatProjectHeader } from './sqaa-display-headers.ts';
-import { renderIgnoredRows } from './sqaa-display-ignored.ts';
+import { formatProjectHeader } from './sqaa-display-headers.ts';
+import { renderIgnoredLines } from './sqaa-display-ignored.ts';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.ts';
 import type { SqaaDisplayProject } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
@@ -93,10 +93,11 @@ export interface SqaaRunSummaryStats {
 export interface PrintSqaaTextReportOptions {
   tally: RunTally;
   allPaths: string[];
-  /** Paths already made relative to the report base, each with why it was left out. */
+  /** Report-relative paths, each with why it was left out. */
   ignored?: Array<{ path: string; reason: IgnoredFile['reason'] }>;
   /** When it names more than one project, findings are grouped under a header per project. */
   projects?: SqaaDisplayProject[];
+  repoRootFromCwd?: string;
   analysisDepth: SqaaAnalysisDepth;
 }
 
@@ -473,41 +474,30 @@ function renderProjectSectionLines(
 }
 
 function renderChangeSetReportLines(
-  tally: RunTally,
-  allPaths: string[],
-  ignored: NonNullable<PrintSqaaTextReportOptions['ignored']>,
+  options: PrintSqaaTextReportOptions,
   colored: boolean,
-  projects: SqaaDisplayProject[] = [],
 ): string[] {
+  const { tally, allPaths, ignored = [], projects = [], repoRootFromCwd } = options;
   const resultMap = buildResultMap(tally.allResults);
-
   const grouped = projects.length > 1;
   const bodyLines = grouped
     ? renderProjectSectionLines(projects, resultMap, colored)
     : renderPathsLines(allPaths, resultMap, colored);
 
-  const ignoredRows = renderIgnoredRows(
-    ignored,
-    SQAA_COLLAPSE_CLEAN_THRESHOLD,
-    (path, label) => formatSkippedOrIgnoredRow(path, label, colored),
+  const ignoredLines = renderIgnoredLines(ignored, grouped, {
+    collapseThreshold: SQAA_COLLAPSE_CLEAN_THRESHOLD,
+    formatFileRow: (path, label) => formatSkippedOrIgnoredRow(path, label, colored),
     colored,
-  );
-  // Ignored files belong to no project, so under project headers they get their own section
-  // instead of reading as the last project's files.
-  const ignoredLines =
-    grouped && ignored.length > 0
-      ? ['', formatIgnoredHeader(ignored.length, colored), ...ignoredRows]
-      : ignoredRows;
-
+    repoRootFromCwd,
+  });
   return [...bodyLines, ...ignoredLines];
 }
 
 /** Unified change-set text report (file rows, inline issues, summary footer). */
 export function printSqaaTextReport(options: PrintSqaaTextReportOptions, console: Console): void {
-  const { tally, allPaths, ignored = [], projects, analysisDepth } = options;
-  const stats = computeRunSummaryStats(tally, allPaths, analysisDepth);
+  const stats = computeRunSummaryStats(options.tally, options.allPaths, options.analysisDepth);
 
-  for (const line of renderChangeSetReportLines(tally, allPaths, ignored, true, projects)) {
+  for (const line of renderChangeSetReportLines(options, true)) {
     console.text(line);
   }
 
