@@ -137,9 +137,11 @@ export async function resolveSqaaConnectionAndProject(
   const keys =
     groups.length > 0
       ? groups.map(({ mapping }) => mapping.projectKey)
-      : focused.projects.map((mapping) => mapping.projectKey);
+      : focused.projects
+          .filter((mapping) => authMatchesRecordedConnection(auth, mapping))
+          .map((mapping) => mapping.projectKey);
   const [firstKey] = keys;
-  if (keys.every((key) => key === firstKey)) noteProject(auth, firstKey);
+  if (keys.length > 0 && keys.every((key) => key === firstKey)) noteProject(auth, firstKey);
 
   return {
     kind: 'resolved',

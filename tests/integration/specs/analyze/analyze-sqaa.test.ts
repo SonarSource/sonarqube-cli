@@ -3044,7 +3044,12 @@ describe('analyze agentic — project root below the repository root', () => {
       harness.cwd.writeFile(
         '.sonar-config.json',
         JSON.stringify({
-          project: { serverUrl: server.baseUrl(), projectKey: TEST_PROJECT, path: 'pkg' },
+          project: {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: TEST_PROJECT,
+            path: 'pkg',
+          },
         }),
       );
       harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
@@ -3173,8 +3178,18 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
       '.sonar-config.json',
       JSON.stringify({
         projects: [
-          { serverUrl: server.baseUrl(), projectKey: PROJECT_A, path: 'packages/a' },
-          { serverUrl: server.baseUrl(), projectKey: PROJECT_B, path: 'packages/b' },
+          {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: PROJECT_A,
+            path: 'packages/a',
+          },
+          {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: PROJECT_B,
+            path: 'packages/b',
+          },
         ],
       }),
     );
