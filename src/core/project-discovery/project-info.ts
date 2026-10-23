@@ -182,6 +182,7 @@ async function discoverProjectMappings(
     );
 
     const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    result.fromSharedConfig = sharedConfigProjects !== null;
     result.projects =
       sharedConfigProjects ??
       (await discoverProjectWithoutSharedConfig(
@@ -207,7 +208,11 @@ export async function discoverProjects(
   options: DiscoverProjectOptions,
 ): Promise<DiscoveredProjects> {
   const result = await discoverProjectMappings(startDir, options);
-  return new DiscoveredProjects(result.repoRoot, result.projects.filter(isCompleteProjectMapping));
+  return new DiscoveredProjects(
+    result.repoRoot,
+    result.projects.filter(isCompleteProjectMapping),
+    result.fromSharedConfig,
+  );
 }
 
 /** Zero or ambiguous matches both degrade to "nothing resolved". */
