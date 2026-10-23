@@ -18,6 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  SECRETS_ERROR_SCANNING_TEMPLATE,
+  SECRETS_NOTICE_BLOCKED_TEMPLATE,
+} from '@/core/config-constants.ts';
+
 import { PI_EXTENSION_HELPERS } from './extension-helpers.ts';
 
 export const PI_EXTENSION_MANAGED_MARKER = 'Managed by `sonar integrate pi`';
@@ -27,6 +32,12 @@ import { existsSync } from 'node:fs';
 
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 ${PI_EXTENSION_HELPERS}
+const SECRETS_NOTICE_BLOCKED_TEMPLATE = ${JSON.stringify(SECRETS_NOTICE_BLOCKED_TEMPLATE)};
+const SECRETS_ERROR_SCANNING_TEMPLATE = ${JSON.stringify(SECRETS_ERROR_SCANNING_TEMPLATE)};
+
+function blockedMessage(reason: string): string {
+  return SECRETS_NOTICE_BLOCKED_TEMPLATE.replace('{reason}', () => reason);
+}
 const NARROW_NO_BREAK_SPACE = '\u202F';
 const CURLY_APOSTROPHE = '\u2019';
 const NO_BYPASS_SENTENCE =
@@ -74,18 +85,14 @@ function resolveReadPath(path: string, cwd: string): string {
   return candidates.find((candidate) => existsSync(candidate)) ?? resolved;
 }
 
-function blockedPlaceholder(reason: string): string {
-  return '[Sonar] Message blocked: ' + reason + ' Blocked as a precaution — original content was not sent.';
-}
-
 async function protectText(text: string, sessionID: string): Promise<string> {
   if (!text) return text;
   try {
     const decision = await runDecisionHook<ChatMessageDecision>('pi-chat-message', { text, sessionID });
-    if (decision.block) return blockedPlaceholder(decision.reason ?? 'Sonar blocked this message.');
+    if (decision.block) return blockedMessage(decision.reason!);
     return decision.redactedText ?? text;
   } catch (error) {
-    return blockedPlaceholder('could not verify this message for secrets (' + describeError(error) + ').');
+    return blockedMessage(SECRETS_ERROR_SCANNING_TEMPLATE.replace('{reason}', () => describeError(error)));
   }
 }
 
@@ -127,7 +134,7 @@ export default function (pi: ExtensionAPI) {
       );
       return { message: { ...message, content } };
     } catch (error) {
-      return { message: { ...message, content: blockedPlaceholder('could not verify this message for secrets (' + describeError(error) + ').') } };
+      return { message: { ...message, content: blockedMessage(SECRETS_ERROR_SCANNING_TEMPLATE.replace('{reason}', () => describeError(error))) } };
     }
   });
 }
