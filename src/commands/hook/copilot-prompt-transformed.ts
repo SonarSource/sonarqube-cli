@@ -51,7 +51,7 @@ export async function copilotPromptTransformed(
 ): Promise<HookCommandResult> {
   let agentSessionId: string | null = null;
   try {
-    const payload = await readStdinJson<PromptTransformedPayload | null>();
+    const payload = await readStdinJson<PromptTransformedPayload | null>().catch(() => null);
     agentSessionId = typeof payload?.sessionId === 'string' ? payload.sessionId : null;
     const text = payload?.transformedPrompt;
     if (typeof text !== 'string' || !text) {

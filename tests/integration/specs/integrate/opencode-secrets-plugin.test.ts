@@ -260,7 +260,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       expect(text).not.toContain(GITHUB_TEST_TOKEN);
       expect(text).toContain('my token is ghp');
       expect(text).toEndWith(
-        '[Sonar] A secret was detected in this message and masked before it was sent.',
+        '[SonarQube] Secrets were redacted from this message. Let the user know that SonarQube redacted them.',
       );
     },
     { timeout: 60000 },
@@ -278,7 +278,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       expect(run.results[0].error).toBeNull();
       const text = run.results[0].event.prompt.text as string;
       expect(text).not.toContain(GITHUB_TEST_TOKEN);
-      expect(text.split('[Sonar] A secret was detected')).toHaveLength(2);
+      expect(text.split('[SonarQube] Secrets were redacted')).toHaveLength(2);
     },
     { timeout: 60000 },
   );
@@ -310,9 +310,12 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
 
       expect(run.results[0].error).toBeNull();
       expect(run.results[0].event.prompt.text).toStartWith(
-        `[Sonar] Message blocked: ${SECRETS_INACTIVE_UNAUTHENTICATED.replace(/\.$/, '')}. Blocked as a precaution`,
+        `[SonarQube] Message blocked: ${SECRETS_INACTIVE_UNAUTHENTICATED}. Blocked as a precaution`,
       );
       expect(run.results[0].event.prompt.text).not.toContain(GITHUB_TEST_TOKEN);
+      expect(run.results[0].event.prompt.text).toEndWith(
+        'Let the user know that SonarQube blocked this message.',
+      );
     },
     { timeout: 60000 },
   );
@@ -345,7 +348,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       });
 
       expect(run.results[0].event.prompt.text).toStartWith(
-        '[Sonar] Message blocked: could not verify this message for secrets',
+        '[SonarQube] Message blocked: could not verify this message for secrets',
       );
     },
     { timeout: 60000 },
@@ -365,7 +368,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
 
       expect(run.results[0].error).toBeNull();
       expect(run.results[0].event.prompt.text).toStartWith(
-        '[Sonar] Message blocked: could not verify this message for secrets',
+        '[SonarQube] Message blocked: could not verify this message for secrets',
       );
     },
     { timeout: 60000 },
@@ -389,7 +392,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
       const text = run.results[0].event.prompt.text as string;
       expect(text).toStartWith('xxxxxxxx');
       expect(text).toEndWith(
-        '[Sonar] A secret was detected in this message and masked before it was sent.',
+        '[SonarQube] Secrets were redacted from this message. Let the user know that SonarQube redacted them.',
       );
       expect(text.length).toBeGreaterThan(2_000_000);
     },
@@ -468,7 +471,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
 
       const text = run.results[0].event.prompt.text as string;
       expect(text).toStartWith(
-        '[Sonar] Message blocked: could not verify this message for secrets',
+        '[SonarQube] Message blocked: could not verify this message for secrets',
       );
       expect(text).not.toContain(GITHUB_TEST_TOKEN);
     },
