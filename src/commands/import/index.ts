@@ -47,7 +47,7 @@ function createProvisionTask(
     progress.update(repo.slug, 'running');
     try {
       const outcome = await plan.importRepo(repo);
-      progress.update(repo.slug, 'done', outcome.detail);
+      progress.update(repo.slug, 'done', outcome?.detail);
     } catch (err) {
       progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));
       throw err;

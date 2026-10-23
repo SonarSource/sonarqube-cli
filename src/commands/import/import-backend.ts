@@ -36,7 +36,7 @@ export interface ImportPlan {
   /** Maps a listed repository to the shape `importRepo` expects. */
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */
-  importRepo(repo: ResolvedRepo): Promise<ImportRepoOutcome>;
+  importRepo(repo: ResolvedRepo): Promise<ImportRepoOutcome | undefined>;
 }
 
 /** One SonarQube flavour's way of resolving the import target and provisioning repositories. */

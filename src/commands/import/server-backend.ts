@@ -68,9 +68,9 @@ export class ServerBackend implements ImportBackend {
 
     const support = SUPPORTED_PLATFORMS[setting.type];
     if (!support) {
-      throw new CommandFailedError(`Importing from ${label} is not supported yet.`, {
-        remediationHint: 'Support for more DevOps platforms is being added.',
-      });
+      throw new CommandFailedError(
+        `Importing from ${label} is not supported yet. Support for more DevOps platforms is being added.`,
+      );
     }
 
     const repositories = new Map<string, ServerRepository>();
@@ -110,7 +110,7 @@ export class ServerBackend implements ImportBackend {
     repositories: Map<string, ServerRepository>,
     claimedKeys: Map<string, string>,
     resolved: ResolvedRepo,
-  ): Promise<ImportRepoOutcome> {
+  ): Promise<ImportRepoOutcome | undefined> {
     const repository = repositories.get(resolved.installationKey);
     if (!repository) {
       throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
@@ -131,7 +131,7 @@ export class ServerBackend implements ImportBackend {
       repositoryIdentifier: repository.repositoryIdentifier,
       projectIdentifier: repository.projectIdentifier,
     });
-    return newProjectCreated ? {} : { detail: 'project already existed, binding updated' };
+    return newProjectCreated ? undefined : { detail: 'project already existed, binding updated' };
   }
 
   private async loadSettings(): Promise<DopSetting[]> {

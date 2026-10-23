@@ -84,7 +84,6 @@ export class CloudBackend implements ImportBackend {
           );
         }
         await client.requestAutoscanEligibility(result.projects[0].projectKey);
-        return {};
       },
     };
   }
