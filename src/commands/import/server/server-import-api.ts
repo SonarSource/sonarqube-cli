@@ -118,6 +118,21 @@ interface BitbucketServerPagingResponse {
   nextPageStart?: number;
 }
 
+/** A GitHub organization as `list_github_organizations` returns it; `key` is the login. */
+export interface GithubOrganizationResponse {
+  key: string;
+  name?: string;
+}
+
+/** A GitHub repository as `list_github_repositories` returns it; `key` is `owner/repo`. */
+export interface GithubRepositoryResponse {
+  id: number | string;
+  key: string;
+  name: string;
+  url?: string;
+  sqProjectKey?: string;
+}
+
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
@@ -273,6 +288,46 @@ export class ServerImportApiClient {
       repositories: response.repositories ?? [],
       nextStart: nextBitbucketStart(response, start),
     };
+  }
+
+  /** One page of the GitHub organizations the caller's token can see (`pageIndex` starts at 1). */
+  async listGithubOrganizations(
+    settingKey: string,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<{ organizations: GithubOrganizationResponse[]; total?: number }> {
+    const response = await this.client
+      .get<{
+        organizations?: GithubOrganizationResponse[];
+        paging?: { total?: number };
+      }>('/api/alm_integrations/list_github_organizations', {
+        almSetting: settingKey,
+        p: pageIndex,
+        ps: pageSize,
+      })
+      .orThrow();
+    return { organizations: response.organizations ?? [], total: response.paging?.total };
+  }
+
+  /** One page of the repositories of a GitHub organization (`pageIndex` starts at 1). */
+  async listGithubRepositories(
+    settingKey: string,
+    organization: string,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<{ repositories: GithubRepositoryResponse[]; total?: number }> {
+    const response = await this.client
+      .get<{
+        repositories?: GithubRepositoryResponse[];
+        paging?: { total?: number };
+      }>('/api/alm_integrations/list_github_repositories', {
+        almSetting: settingKey,
+        organization,
+        p: pageIndex,
+        ps: pageSize,
+      })
+      .orThrow();
+    return { repositories: response.repositories ?? [], total: response.paging?.total };
   }
 
   /**
