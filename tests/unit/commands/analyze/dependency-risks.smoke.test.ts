@@ -24,7 +24,10 @@ import { ScaScanOrchestrator } from '@/commands/analyze/dependency-risk-helpers/
 import type { AnalyzeProjectResponse } from '@/commands/analyze/dependency-risk-helpers/sca-scanner.ts';
 import { analyzeDependencyRisks } from '@/commands/analyze/dependency-risks.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { okAsync } from '@/core/result.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -244,7 +247,16 @@ describe('analyzeDependencyRisks - output format', () => {
 
   beforeEach(() => {
     fake = new FakeConsole();
-    FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
+    const httpClient = new SonarHttpClient(FAKE_AUTH.serverUrl, FAKE_AUTH.token);
+    spyOn(httpClient, 'getOrNullIf404').mockReturnValue(
+      okAsync({ component: { key: 'my-project', organization: 'my-org' } }),
+    );
+    FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(
+      FAKE_AUTH,
+      fake,
+      undefined,
+      createCliRuntime({ httpClientFactory: () => httpClient }),
+    );
     runSpy = spyOn(ScaScanOrchestrator.prototype, 'run').mockResolvedValue({
       response: SCAN_RESULT_STUB,
       scanDurationMs: 0,

@@ -29,7 +29,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/sca-scanner.ts';
 
-import { readCommandEvents } from '../../../_common/telemetry-helpers';
+import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 
 const VALID_TOKEN = 'integration-test-token';
@@ -48,6 +48,89 @@ describe('analyze dependency-risks', () => {
     await harness.dispose();
   });
 
+  it.each([
+    { name: 'wrong organization', organization: 'other-org', exists: true, status: undefined },
+    { name: 'missing project', organization: TEST_ORG, exists: false, status: undefined },
+    { name: 'forbidden project', organization: TEST_ORG, exists: true, status: 403 },
+  ])(
+    'rejects $name before SCA enablement, settings, installation, or scanning',
+    async ({ organization, exists, status }) => {
+      const builder = harness.newFakeServer().withAuthToken(VALID_TOKEN).withScaEnabled(false);
+      if (exists) {
+        builder.withProject('demo', (p) => {
+          p.withOrganization(organization);
+          if (status) p.withComponentShowError(status);
+        });
+      }
+      const server = await builder.start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+      const result = await harness.run('analyze dependency-risks --project demo --format json');
+
+      expect(result.exitCode).toBe(1);
+      if (organization === 'other-org') {
+        expect(result.stderr).toContain(
+          "Project 'demo' belongs to organization 'other-org', but the active organization is 'my-org'.",
+        );
+        expect(result.stderr).toContain(
+          "Run 'sonar auth org other-org' to switch to that organization.",
+        );
+      } else {
+        expect(result.stderr).toContain("Project 'demo' could not be found or is not accessible.");
+        expect(result.stderr).toContain(
+          "Run 'sonar list org' to check your organization membership.",
+        );
+      }
+      expect(result.stdout).not.toContain('"packages"');
+      expect(result.stderr).not.toContain('Synchronizing settings');
+      expect(result.stderr).not.toContain('Discovering dependency manifests');
+      expect(server.getRecordedRequests().map((r) => r.path)).toEqual(['/api/components/show']);
+      expect(harness.cliHome.file('bin', buildLocalBinaryName(detectPlatform())).exists()).toBe(
+        false,
+      );
+    },
+  );
+
+  it('checks SCA enablement when the project belongs to the active organization', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withProject('demo')
+      .withScaEnabled(false)
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'Software Composition Analysis is not available for the current connection.',
+    );
+    const requests = server.getRecordedRequests();
+    expect(requests.find((r) => r.path === '/api/components/show')?.query).toEqual({
+      component: 'demo',
+    });
+    expect(requests.some((r) => r.path.endsWith('/sca/feature-enabled'))).toBe(true);
+  });
+
+  it('records a failed command without an analysis event when project membership is rejected', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withProject('demo', (p) => p.withOrganization('other-org'))
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+    harness.state().withTelemetryEnabled();
+
+    const result = await harness.run('analyze dependency-risks --project demo');
+
+    expect(result.exitCode).toBe(1);
+    const [event] = readCommandEvents(harness.sonarUserHome.path);
+    expect(event.event_payload.command).toBe('analyze');
+    expect(event.event_payload.result).toBe('failure');
+    expect(readAnalysisEvents(harness.sonarUserHome.path)).toHaveLength(0);
+  });
+
   it(
     'exits with code 1 when not authenticated',
     async () => {
@@ -62,7 +145,7 @@ describe('analyze dependency-risks', () => {
   );
 
   it(
-    'exits with code 1 when project does not exist (settings 404)',
+    'exits with code 1 before settings when the Cloud project does not exist',
     async () => {
       const server = await harness
         .newFakeServer()
@@ -74,9 +157,9 @@ describe('analyze dependency-risks', () => {
       const result = await harness.run('analyze dependency-risks --project demo');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain("Project 'demo' not found");
+      expect(result.stderr).toContain("Project 'demo' could not be found or is not accessible.");
       expect(server.getRecordedRequests().some((r) => r.path === '/api/settings/values')).toBe(
-        true,
+        false,
       );
     },
     { timeout: 15000 },
@@ -89,6 +172,7 @@ describe('analyze dependency-risks', () => {
         .newFakeServer()
         .withAuthToken(VALID_TOKEN)
         .withScaEnabled(false)
+        .withProject('demo')
         .start();
       harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
@@ -323,6 +407,7 @@ describe('analyze dependency-risks', () => {
       .withAuthToken(VALID_TOKEN)
       .withVersion('1.0')
       .withScaEnabled(false)
+      .withProject('demo')
       .start();
     harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
 
