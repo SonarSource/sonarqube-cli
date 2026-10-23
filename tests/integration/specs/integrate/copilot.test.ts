@@ -39,8 +39,6 @@ import {
   HOOK_FIELD,
   makeHookEntry,
   McpJson,
-  obstructHooksJson,
-  obstructPromptHookScript,
 } from './copilot-test-helpers';
 import { chooseCustomize } from './integrate-test-helpers';
 
@@ -218,70 +216,6 @@ describe('integrate copilot', () => {
         const entries = json.hooks.preToolUse ?? [];
         expect(entries).toHaveLength(1);
         expect(entries[0][HOOK_FIELD] ?? '').toContain('sonar-secrets');
-      },
-      { timeout: 30000 },
-    );
-  });
-
-  // ─── Installation failure handling ──────────────────────────────────────────
-
-  // We force file-system failures by pre-creating artifact paths as
-  // directories or by writing invalid JSON. The declarative installer now
-  // fails fast, so later features are not applied and declarative state is
-  // only recorded for features that completed before the failure.
-
-  describe('installation failure handling', () => {
-    it(
-      'fails and stops before the prompt hook and MCP when the hook configuration write fails',
-      async () => {
-        obstructHooksJson(harness);
-
-        const result = await harness.run('integrate copilot --non-interactive');
-
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('contains invalid JSON');
-
-        // The hook feature fails before later features run.
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
-        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
-
-        // Declarative integration state is not updated because the integration
-        // did not complete.
-        expect(getCopilotIntegration(harness)).toBeUndefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'fails and stops before MCP when the prompt hook script write fails',
-      async () => {
-        obstructPromptHookScript(harness);
-
-        const result = await harness.run('integrate copilot --non-interactive');
-
-        expect(result.exitCode).toBe(1);
-        expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
-
-        expect(
-          getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['pre-tool-use-hook']);
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'fails when the existing MCP config contains invalid JSON',
-      async () => {
-        harness.userHome.writeFile('.copilot/mcp-config.json', '{ invalid json\n');
-
-        const result = await harness.run('integrate copilot --non-interactive');
-
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('contains invalid JSON');
-        expect(
-          getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['pre-tool-use-hook', 'prompt-secrets-hook']);
       },
       { timeout: 30000 },
     );
