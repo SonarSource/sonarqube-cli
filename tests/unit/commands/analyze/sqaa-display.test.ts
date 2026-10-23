@@ -402,7 +402,7 @@ describe('printSqaaTextReport grouped by project', () => {
       {
         tally: twoProjectTally(),
         allPaths: twoProjects.flatMap((p) => p.paths),
-        ignoredPaths: ['docs/readme.md'],
+        ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
         projects: twoProjects,
         analysisDepth: 'STANDARD',
       },
@@ -416,7 +416,7 @@ describe('printSqaaTextReport grouped by project', () => {
     expect(header).toBeGreaterThan(texts.findIndex((l) => l.includes('packages/b/z.ts')));
     expect(texts[header - 1]).toBe('');
     expect(row).toBe(header + 1);
-    expect(texts[row]).toContain('[IGNORED]');
+    expect(texts[row]).toContain('[IGNORED: not in a mapped project]');
   });
 
   it('adds no ignored section when nothing was ignored', () => {
@@ -438,7 +438,7 @@ describe('printSqaaTextReport grouped by project', () => {
       {
         tally: twoProjectTally(),
         allPaths: ['packages/a/x.ts'],
-        ignoredPaths: ['docs/readme.md'],
+        ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
         projects: [{ projectKey: 'app-a', paths: ['packages/a/x.ts'] }],
         analysisDepth: 'STANDARD',
       },
@@ -448,7 +448,38 @@ describe('printSqaaTextReport grouped by project', () => {
     const texts = getMockTextLines(fake);
 
     expect(texts.some((l) => l.startsWith('Not analyzed'))).toBe(false);
-    expect(texts.some((l) => l.includes('docs/readme.md') && l.includes('[IGNORED]'))).toBe(true);
+    expect(
+      texts.some(
+        (l) => l.includes('docs/readme.md') && l.includes('[IGNORED: not in a mapped project]'),
+      ),
+    ).toBe(true);
+  });
+
+  it('collapses ignored files per reason once a category is too large', () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({
+      path: `vscode/copy ${i}`,
+      reason: 'outside-project' as const,
+    }));
+
+    printSqaaTextReport(
+      {
+        tally: { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 },
+        allPaths: [],
+        ignored: [{ path: 'a.bin', reason: 'binary' }, ...many],
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+
+    expect(texts.some((l) => l.includes('21 files') && l.includes('not in a mapped project'))).toBe(
+      true,
+    );
+    expect(texts.some((l) => l.includes('vscode/copy'))).toBe(false);
+    expect(texts.some((l) => l.includes('a.bin') && l.includes('[IGNORED: binary file]'))).toBe(
+      true,
+    );
   });
 
   it('keeps a skipped file under its own project', () => {

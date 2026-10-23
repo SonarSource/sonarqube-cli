@@ -371,9 +371,12 @@ async function runSqaaBatch(
     if (tally.globalError instanceof SqaaForbiddenError) {
       await printVortexUnavailableForForbidden(connection, console);
     }
-    const ignoredPaths = ignored.map((f) => ignoredReportPath(f.path, displayBase));
+    const ignoredRows = ignored.map((f) => ({
+      path: ignoredReportPath(f.path, displayBase),
+      reason: f.reason,
+    }));
     printSqaaTextReport(
-      { tally, allPaths, ignoredPaths, projects, analysisDepth: displayDepth },
+      { tally, allPaths, ignored: ignoredRows, projects, analysisDepth: displayDepth },
       console,
     );
   }
