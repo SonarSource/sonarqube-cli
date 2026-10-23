@@ -49,6 +49,12 @@ export interface ScaScanResult {
   scanDurationMs: number;
 }
 
+export interface ScaScanTarget {
+  projectKey: string;
+  /** The directory the scanner analyzes: the project's root. */
+  baseDir: string;
+}
+
 export class ScaScanOrchestrator {
   constructor(
     private readonly client: ScaScanApi,
@@ -59,7 +65,7 @@ export class ScaScanOrchestrator {
 
   async run(
     auth: ResolvedAuth,
-    projectKey: string,
+    { projectKey, baseDir }: ScaScanTarget,
     callerCommand: ScaCallerCommand,
     ctx: CommandInvocationContext,
   ): Promise<ScaScanResult> {
@@ -71,7 +77,6 @@ export class ScaScanOrchestrator {
     const properties = parseAnalysisProperties(settings);
     logger.debug(`Resolved analysis properties: ${JSON.stringify(properties)}`);
     const { apiBaseUrl, downloadBaseUrl } = buildScaUrls(auth);
-    const baseDir = process.cwd();
     const invocation: ScaScannerInvocation = {
       baseDir,
       apiBaseUrl,
