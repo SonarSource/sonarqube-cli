@@ -20,7 +20,7 @@
 
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
@@ -101,6 +101,23 @@ export async function recordConnectionFromAuth(
     applyIdentityToConnection(connection, auth, identity);
     return connection;
   });
+}
+
+export async function switchOrganization(
+  auth: ResolvedAuth,
+  org: string,
+  tokenName: string | undefined,
+): Promise<AuthConnection> {
+  return recordConnectionFromAuth(
+    new ResolvedAuth({
+      token: auth.token,
+      serverUrl: auth.serverUrl,
+      orgKey: org,
+      connectionType: auth.connectionType,
+      source: auth.source,
+    }),
+    { force: true, tokenName },
+  );
 }
 
 function resolveRecordedTokenName(
