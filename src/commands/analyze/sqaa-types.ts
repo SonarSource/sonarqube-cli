@@ -24,7 +24,9 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
+import type { IgnoredFile } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
+import type { SqaaPath } from './sqaa-paths.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -54,15 +56,47 @@ export interface AnalyzeSqaaOptions {
   forcedDepth?: SqaaAnalysisDepth;
 }
 
-export interface SqaaResolvedContext {
-  connection: SonarConnection;
+/** The files of one run that belong to one SonarQube project. */
+export interface SqaaProjectGroup {
   projectKey: string;
   /** Base for the paths sent to SQAA, which matches them against the project's analysis root. */
   projectRoot: string;
+  /** Absolute paths. */
+  files: string[];
+}
+
+/** A project's files with every path a run needs for each (see `SqaaPath`). */
+export interface SqaaProjectFiles {
+  projectKey: string;
+  files: SqaaPath[];
+}
+
+/** One run's files, resolved once; the display views are derived from `projects`, never built by callers. */
+export interface SqaaRunFiles {
+  projects: SqaaProjectFiles[];
+  displayProjects: SqaaDisplayProject[];
+  /** Every display path of the run, in project order. */
+  displayPaths: string[];
+}
+
+/** One project's files as the report shows them, so the display layer can group findings by project. */
+export interface SqaaDisplayProject {
+  projectKey: string;
+  /** Display paths, in the order they are reported. */
+  paths: string[];
+}
+
+export interface SqaaResolvedRun {
+  connection: SonarConnection;
+  groups: SqaaProjectGroup[];
+  /** Files no project of the active connection owns, each with why (`outside-project` or `other-connection`). */
+  ignored: IgnoredFile[];
+  /** Every root the files were matched against, so an error about `outside-project` files can name them. */
+  projectRoots: string[];
 }
 
 export interface SqaaBatchRunOptions {
-  resolved: SqaaResolvedContext;
+  resolved: SqaaResolvedRun;
   console: Console;
   branch?: string;
   format?: OutputFormat;
