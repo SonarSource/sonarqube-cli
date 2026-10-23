@@ -20,11 +20,12 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { FileResult, RunTally } from '@/commands/analyze/sqaa-analysis.ts';
 import type { SqaaIssue } from '@/commands/analyze/sqaa-wire-types.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
-import type { FileResult, RunTally } from '../../../../src/commands/analyze/sqaa-analysis.ts';
 import {
+  buildJsonReport,
   computeRunSummaryStats,
   formatSqaaIssueLinePlain,
   formatSqaaPathPlain,
@@ -340,5 +341,278 @@ describe('computeRunSummaryStats', () => {
         hasGlobalError: false,
       }),
     ).toBe('2 files analyzed · 2 failures · STANDARD analysis');
+  });
+});
+
+describe('printSqaaTextReport grouped by project', () => {
+  let fake: FakeConsole;
+
+  beforeEach(() => {
+    fake = new FakeConsole();
+  });
+
+  afterEach(() => {
+    process.exitCode = 0;
+  });
+
+  const twoProjects = [
+    { projectKey: 'app-a', paths: ['packages/a/x.ts', 'packages/a/y.ts'] },
+    { projectKey: 'app-b', paths: ['packages/b/z.ts'] },
+  ];
+
+  function twoProjectTally(): RunTally {
+    return {
+      allResults: [
+        success('packages/a/x.ts', [SAMPLE_ISSUE, SAMPLE_ISSUE]),
+        success('packages/a/y.ts'),
+        success('packages/b/z.ts', [SAMPLE_ISSUE]),
+      ],
+      totalIssues: 3,
+      totalErrors: 0,
+      totalFailures: 0,
+    };
+  }
+
+  it('puts each project under a header with its file and issue counts', () => {
+    printSqaaTextReport(
+      {
+        tally: twoProjectTally(),
+        allPaths: twoProjects.flatMap((p) => p.paths),
+        projects: twoProjects,
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+    const headerA = texts.indexOf('app-a · 2 files · 2 issues');
+    const headerB = texts.indexOf('app-b · 1 file · 1 issue');
+
+    expect(headerA).toBeGreaterThanOrEqual(0);
+    expect(headerB).toBeGreaterThan(headerA);
+    expect(texts.findIndex((l) => l.includes('packages/a/x.ts'))).toBeGreaterThan(headerA);
+    expect(texts.findIndex((l) => l.includes('packages/a/y.ts'))).toBeLessThan(headerB);
+    expect(texts.findIndex((l) => l.includes('packages/b/z.ts'))).toBeGreaterThan(headerB);
+    expect(texts[headerB - 1]).toBe('');
+    expect(texts.at(-1)).toContain('3 files analyzed');
+  });
+
+  it('puts ignored rows in their own section after every project', () => {
+    printSqaaTextReport(
+      {
+        tally: twoProjectTally(),
+        allPaths: twoProjects.flatMap((p) => p.paths),
+        ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
+        projects: twoProjects,
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+    const header = texts.indexOf('Not analyzed · 1 file');
+    const row = texts.findIndex((l) => l.includes('docs/readme.md'));
+
+    expect(header).toBeGreaterThan(texts.findIndex((l) => l.includes('packages/b/z.ts')));
+    expect(texts[header - 1]).toBe('');
+    expect(row).toBe(header + 1);
+    expect(texts[row]).toContain('[IGNORED: not in a mapped project]');
+  });
+
+  it('adds no ignored section when nothing was ignored', () => {
+    printSqaaTextReport(
+      {
+        tally: twoProjectTally(),
+        allPaths: twoProjects.flatMap((p) => p.paths),
+        projects: twoProjects,
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    expect(getMockTextLines(fake).some((l) => l.startsWith('Not analyzed'))).toBe(false);
+  });
+
+  it('leaves ignored rows without a header when the run covers one project', () => {
+    printSqaaTextReport(
+      {
+        tally: twoProjectTally(),
+        allPaths: ['packages/a/x.ts'],
+        ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
+        projects: [{ projectKey: 'app-a', paths: ['packages/a/x.ts'] }],
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+
+    expect(texts.some((l) => l.startsWith('Not analyzed'))).toBe(false);
+    expect(
+      texts.some(
+        (l) => l.includes('docs/readme.md') && l.includes('[IGNORED: not in a mapped project]'),
+      ),
+    ).toBe(true);
+  });
+
+  it('collapses ignored files per reason once a category is too large', () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({
+      path: `vscode/copy ${i}`,
+      reason: 'outside-project' as const,
+    }));
+
+    printSqaaTextReport(
+      {
+        tally: { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 },
+        allPaths: [],
+        ignored: [{ path: 'a.bin', reason: 'binary' }, ...many],
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+
+    expect(texts.some((l) => l.includes('21 files') && l.includes('not in a mapped project'))).toBe(
+      true,
+    );
+    expect(texts.some((l) => l.includes('vscode/copy'))).toBe(false);
+    expect(texts.some((l) => l.includes('a.bin') && l.includes('[IGNORED: binary file]'))).toBe(
+      true,
+    );
+  });
+
+  it('shows the re-run hint for any outside-project file when a repo root path is given', () => {
+    const run = (repoRootFromCwd?: string) => {
+      fake.calls.length = 0;
+      printSqaaTextReport(
+        {
+          tally: { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 },
+          allPaths: [],
+          ignored: [{ path: 'docs/readme.md', reason: 'outside-project' }],
+          repoRootFromCwd,
+          analysisDepth: 'STANDARD',
+        },
+        fake,
+      );
+      return getMockTextLines(fake);
+    };
+
+    const withHint = run('..');
+    expect(withHint.some((l) => l.includes('docs/readme.md'))).toBe(false);
+    expect(withHint.some((l) => l.includes('files  [IGNORED'))).toBe(false);
+    expect(withHint.some((l) => l.includes('1 file is not in a project mapped'))).toBe(true);
+    expect(withHint.some((l) => l.includes('cd .. && sonar analyze agentic'))).toBe(true);
+    expect(run().some((l) => l.includes('sonar analyze agentic'))).toBe(false);
+  });
+
+  it('keeps a skipped file under its own project', () => {
+    printSqaaTextReport(
+      {
+        tally: {
+          allResults: [success('packages/a/x.ts'), success('packages/a/y.ts')],
+          totalIssues: 0,
+          totalErrors: 0,
+          totalFailures: 0,
+        },
+        allPaths: twoProjects.flatMap((p) => p.paths),
+        projects: twoProjects,
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+
+    expect(texts.findIndex((l) => l.includes('packages/b/z.ts') && l.includes('[SKIPPED]'))).toBe(
+      texts.indexOf('app-b · 1 file · 0 issues') + 1,
+    );
+  });
+
+  it('collapses clean files within each project, not across the run', () => {
+    const clean = Array.from(
+      { length: SQAA_COLLAPSE_CLEAN_THRESHOLD + 1 },
+      (_, i) => `packages/a/clean-${i}.ts`,
+    );
+    const projects = [
+      { projectKey: 'app-a', paths: clean },
+      { projectKey: 'app-b', paths: ['packages/b/z.ts'] },
+    ];
+
+    printSqaaTextReport(
+      {
+        tally: {
+          allResults: [...clean.map((p) => success(p)), success('packages/b/z.ts')],
+          totalIssues: 0,
+          totalErrors: 0,
+          totalFailures: 0,
+        },
+        allPaths: projects.flatMap((p) => p.paths),
+        projects,
+        analysisDepth: 'STANDARD',
+      },
+      fake,
+    );
+
+    const texts = getMockTextLines(fake);
+
+    expect(texts.filter((l) => l.includes('clean-0.ts'))).toHaveLength(0);
+    expect(texts.some((l) => l.includes('packages/b/z.ts'))).toBe(true);
+  });
+
+  it('renders a single project exactly as an ungrouped run', () => {
+    const grouped = new FakeConsole();
+    const tally = twoProjectTally();
+    const allPaths = ['packages/a/x.ts', 'packages/a/y.ts', 'packages/b/z.ts'];
+
+    printSqaaTextReport({ tally, allPaths, analysisDepth: 'STANDARD' }, fake);
+    printSqaaTextReport(
+      {
+        tally,
+        allPaths,
+        projects: [{ projectKey: 'app-a', paths: allPaths }],
+        analysisDepth: 'STANDARD',
+      },
+      grouped,
+    );
+
+    expect(getMockTextLines(grouped)).toEqual(getMockTextLines(fake));
+  });
+});
+
+describe('buildJsonReport project field', () => {
+  const tally: RunTally = {
+    allResults: [success('packages/a/x.ts', [SAMPLE_ISSUE]), failure('packages/b/z.ts', 'boom')],
+    totalIssues: 1,
+    totalErrors: 0,
+    totalFailures: 1,
+  };
+  const allPaths = ['packages/a/x.ts', 'packages/b/z.ts'];
+
+  it('tags files and failures with the project they were analyzed against', () => {
+    const report = buildJsonReport(tally, [], allPaths, undefined, 'STANDARD', [
+      { projectKey: 'app-a', paths: ['packages/a/x.ts'] },
+      { projectKey: 'app-b', paths: ['packages/b/z.ts'] },
+    ]);
+
+    expect(report.files.map((f) => f.project)).toEqual(['app-a']);
+    expect(report.failures.map((f) => f.project)).toEqual(['app-b']);
+    expect(report.summary).toEqual({ totalIssues: 1, totalFailures: 1, totalSkipped: 0 });
+  });
+
+  it('tags a single-project run too, so the shape does not depend on the project count', () => {
+    const report = buildJsonReport(tally, [], allPaths, undefined, 'STANDARD', [
+      { projectKey: 'app-a', paths: allPaths },
+    ]);
+
+    expect(report.files[0].project).toBe('app-a');
+    expect(report.failures[0].project).toBe('app-a');
+  });
+
+  it('leaves the field out when no projects are given', () => {
+    const report = buildJsonReport(tally, [], allPaths);
+
+    expect('project' in report.files[0]).toBe(false);
+    expect('project' in report.failures[0]).toBe(false);
   });
 });
