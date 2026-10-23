@@ -36,6 +36,7 @@ export interface ResolvedMcpContainerNetworking {
   network?: string;
   addHost?: string;
   serverUrl: string;
+  proxyBypassHost?: string;
 }
 
 export async function readMcpContainerSettings(): Promise<McpContainerSettings> {
@@ -122,7 +123,7 @@ export function resolveMcpContainerNetworking(
   }
   const containerUrl = new URL(auth.serverUrl);
   containerUrl.hostname = hostAlias;
-  return { serverUrl: containerUrl.toString() };
+  return { serverUrl: containerUrl.toString(), proxyBypassHost: hostAlias };
 }
 
 export function mcpLoopbackAdvice(
