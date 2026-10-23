@@ -633,6 +633,7 @@ export class FakeSonarQubeServerBuilder {
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
   private projectBindingsStatusCode = 200;
+  private boundProjectsPutStatusCode?: number;
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
@@ -1061,6 +1062,12 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Makes `PUT` on bound-projects answer with this status (405 on a server older than 2025.6); `POST` keeps working. */
+  withoutBoundProjectsPut(statusCode = 405): this {
+    this.boundProjectsPutStatusCode = statusCode;
+    return this;
+  }
+
   withAnalyzedProjects(projectKeys: string[]): this {
     for (const key of projectKeys) {
       this.analyzedProjectKeys.add(key);
@@ -1123,6 +1130,7 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       projectBindingsStatusCode,
+      boundProjectsPutStatusCode,
       dopSettingsStatusCode,
       patResponses,
       gitlabRepos,
@@ -2432,6 +2440,9 @@ export class FakeSonarQubeServerBuilder {
               status: boundProjectsStatusCode,
               headers: { 'Content-Type': 'application/json' },
             });
+          }
+          if (req.method === 'PUT' && boundProjectsPutStatusCode !== undefined) {
+            return new Response('', { status: boundProjectsPutStatusCode });
           }
           const payload = JSON.parse(body ?? '{}') as {
             projectKey: string;
