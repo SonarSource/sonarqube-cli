@@ -287,7 +287,7 @@ export const SECRETS_NOTICE_REDACTED =
   '[SonarQube] Secrets were redacted from this message. Let the user know that SonarQube redacted them.';
 
 export const SECRETS_NOTICE_BLOCKED_TEMPLATE =
-  '[SonarQube] Message blocked: {reason}. Blocked as a precaution — original content was not sent. Let the user know that SonarQube blocked this message.';
+  '[SonarQube] Message blocked: {reason}\nBlocked as a precaution — original content was not sent. Let the user know that SonarQube blocked this message.';
 
 export const SECRETS_ERROR_SCANNING_TEMPLATE =
   'could not verify this message for secrets ({reason})';
