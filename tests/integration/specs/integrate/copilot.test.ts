@@ -35,11 +35,12 @@ import {
   GLOBAL_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH,
   GLOBAL_INSTRUCTIONS_PATH,
+  GLOBAL_PROMPT_HOOK_SCRIPT_PATH,
   HOOK_FIELD,
   makeHookEntry,
   McpJson,
   obstructHooksJson,
-  obstructInstructionsFile,
+  obstructPromptHookScript,
 } from './copilot-test-helpers';
 import { chooseCustomize } from './integrate-test-helpers';
 
@@ -65,7 +66,7 @@ describe('integrate copilot', () => {
 
   describe('install (default: global)', () => {
     it(
-      'writes hook script (executable), hooks.json, instructions, and mcp-config.json under ~/.copilot/',
+      'writes executable read and prompt hooks, hooks.json, and mcp-config.json under ~/.copilot/',
       async () => {
         const result = await harness.run('integrate copilot --non-interactive');
 
@@ -77,11 +78,11 @@ describe('integrate copilot', () => {
 
         expect(harness.userHome.exists('.copilot', 'hooks', 'hooks.json')).toBe(true);
 
-        const instructionsFile = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH);
-        expect(instructionsFile.exists()).toBe(true);
-        expect(instructionsFile.asText()).toContain(
-          '# SonarQube secrets scanning for prompts protocol',
-        );
+        const promptScript = harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH);
+        expect(promptScript.exists()).toBe(true);
+        expect(promptScript.isExecutable).toBe(true);
+        expect(promptScript.asText()).toContain('sonar hook copilot-prompt-transformed');
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
 
         // mcp-config.json: present and registers the sonarqube MCP server using
         // the PATH command `sonar` (Windows PATHEXT resolves sonar.exe).
@@ -119,6 +120,13 @@ describe('integrate copilot', () => {
         expect(command.startsWith(homePathNorm)).toBe(true);
         expect(command).toContain('.copilot/hooks/sonar-secrets');
         expect(command).toContain('pretool-secrets');
+        expect(json.hooks.userPromptTransformed).toHaveLength(1);
+        const promptEntry = json.hooks.userPromptTransformed?.[0];
+        expect(promptEntry?.type).toBe('command');
+        expect(promptEntry?.timeoutSec).toBe(60);
+        expect(normalizePath(promptEntry?.[HOOK_FIELD] ?? '')).toBe(
+          normalizePath(harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH).path),
+        );
       },
       { timeout: 30000 },
     );
@@ -134,21 +142,22 @@ describe('integrate copilot', () => {
           copilotIntegration?.features
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
-        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
+        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-hook']);
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
+        expect(findCopilotFeature(harness, 'prompt-secrets-hook')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
 
     it(
-      'running twice yields exactly one preToolUse entry in hooks.json',
+      'running twice yields exactly one entry for each secrets hook in hooks.json',
       async () => {
         await harness.run('integrate copilot --non-interactive');
         await harness.run('integrate copilot --non-interactive');
 
         const json = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
         expect(json.hooks.preToolUse).toHaveLength(1);
+        expect(json.hooks.userPromptTransformed).toHaveLength(1);
       },
       { timeout: 60000 },
     );
@@ -174,6 +183,7 @@ describe('integrate copilot', () => {
             version: 1,
             hooks: {
               preToolUse: [makeHookEntry('/other/tool/run.sh')],
+              userPromptTransformed: [makeHookEntry('/other/tool/prompt.sh')],
             },
           }),
         );
@@ -186,6 +196,8 @@ describe('integrate copilot', () => {
         expect(entries).toHaveLength(2);
         expect(entries.find((e) => (e[HOOK_FIELD] ?? '').includes('/other/tool/'))).toBeDefined();
         expect(entries.find((e) => (e[HOOK_FIELD] ?? '').includes('sonar-secrets'))).toBeDefined();
+        expect(json.hooks.userPromptTransformed).toHaveLength(2);
+        expect(json.hooks.userPromptTransformed?.[0]?.[HOOK_FIELD]).toBe('/other/tool/prompt.sh');
       },
       { timeout: 30000 },
     );
@@ -209,40 +221,6 @@ describe('integrate copilot', () => {
       },
       { timeout: 30000 },
     );
-
-    it(
-      'preserves pre-existing global instructions and appends the managed prompt-secrets block',
-      async () => {
-        // sonarqube.instructions.md is marker-managed: the CLI only owns
-        // its sonar:begin/end block and preserves any surrounding content.
-        harness.userHome.writeFile(
-          '.copilot/instructions/sonarqube.instructions.md',
-          '# pre-existing\n',
-        );
-
-        const result = await harness.run('integrate copilot --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# pre-existing');
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'is idempotent: running twice yields exactly one prompt-secrets section',
-      async () => {
-        await harness.run('integrate copilot --non-interactive');
-        await harness.run('integrate copilot --non-interactive');
-
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        const headingCount =
-          body.split('# SonarQube secrets scanning for prompts protocol').length - 1;
-        expect(headingCount).toBe(1);
-      },
-      { timeout: 60000 },
-    );
   });
 
   // ─── Installation failure handling ──────────────────────────────────────────
@@ -254,7 +232,7 @@ describe('integrate copilot', () => {
 
   describe('installation failure handling', () => {
     it(
-      'fails and stops before instructions + MCP when the hook configuration write fails',
+      'fails and stops before the prompt hook and MCP when the hook configuration write fails',
       async () => {
         obstructHooksJson(harness);
 
@@ -265,6 +243,7 @@ describe('integrate copilot', () => {
 
         // The hook feature fails before later features run.
         expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(false);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
 
         // Declarative integration state is not updated because the integration
@@ -275,17 +254,15 @@ describe('integrate copilot', () => {
     );
 
     it(
-      'fails and stops before MCP when the instructions write fails',
+      'fails and stops before MCP when the prompt hook script write fails',
       async () => {
-        obstructInstructionsFile(harness);
+        obstructPromptHookScript(harness);
 
         const result = await harness.run('integrate copilot --non-interactive');
 
         expect(result.exitCode).toBe(1);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
 
-        // The hook feature completed before the instructions write failed, so
-        // only that feature is recorded.
         expect(
           getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
         ).toEqual(['pre-tool-use-hook']);
@@ -304,7 +281,7 @@ describe('integrate copilot', () => {
         expect(result.stdout + result.stderr).toContain('contains invalid JSON');
         expect(
           getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['pre-tool-use-hook', 'prompt-secrets-instructions']);
+        ).toEqual(['pre-tool-use-hook', 'prompt-secrets-hook']);
       },
       { timeout: 30000 },
     );
@@ -344,7 +321,7 @@ describe('integrate copilot', () => {
     }
 
     it(
-      'writes secrets and SQAA as independent marker blocks when the org is entitled and a project key is discovered',
+      'installs prompt scanning alongside SQAA instructions when the org is entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
@@ -354,12 +331,12 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# Vortex analysis protocol');
         expect(body).toContain('sonar analyze agentic --depth DEEP');
         expect(body).toContain('--file');
 
-        const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-instructions');
+        const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-hook');
         expect(promptSecrets?.scope).toBe('global');
         expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
@@ -377,7 +354,7 @@ describe('integrate copilot', () => {
         });
         await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets instructions?');
+        await session.accept('Install prompt-secrets hook?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
@@ -401,7 +378,7 @@ describe('integrate copilot', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
+        expect(body).not.toContain('# SonarQube secrets scanning for prompts protocol');
         expect(body).toContain('# Vortex analysis');
         expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
@@ -419,9 +396,7 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# Vortex analysis');
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -434,9 +409,7 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# Vortex analysis');
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -462,10 +435,8 @@ describe('integrate copilot', () => {
         // Command must not abort — degraded success.
         expect(result.exitCode).toBe(0);
 
-        // Instructions file still written, but without the SQAA section.
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).not.toContain('# Vortex analysis');
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(true);
       },
       { timeout: 30000 },
     );
@@ -478,6 +449,30 @@ describe('integrate copilot', () => {
 
   describe('interactive feature selection', () => {
     it(
+      'removes only the prompt hook when that installed feature is declined',
+      async () => {
+        await harness.run('integrate copilot --non-interactive');
+        harness.state().withRawState(harness.stateJsonFile.asText());
+        const session = harness.runInteractive('integrate copilot');
+        await chooseCustomize(session);
+        await session.accept('pre-tool-use hook (currently installed)  Keep?');
+        await session.decline('prompt-secrets hook (currently installed)  Keep?');
+        await session.accept('Proceed with removal?');
+        await session.accept('MCP server (currently installed)  Keep?');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeUndefined();
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
+        const hooks = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
+        expect(hooks.hooks.preToolUse).toHaveLength(1);
+        expect(hooks.hooks.userPromptTransformed ?? []).toHaveLength(0);
+      },
+      { timeout: 60000 },
+    );
+
+    it(
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
@@ -486,7 +481,7 @@ describe('integrate copilot', () => {
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets instructions?');
+        await session.accept('Install prompt-secrets hook?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
@@ -494,20 +489,17 @@ describe('integrate copilot', () => {
         const output = result.stdout + result.stderr;
         // Each opted feature surfaced its confirm prompt.
         expect(output).toContain('Install pre-tool-use hook?');
-        expect(output).toContain('Install prompt-secrets instructions?');
+        expect(output).toContain('Install prompt-secrets hook?');
         expect(output).toContain('Install MCP server?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
         expect(harness.userHome.file(...GLOBAL_HOOK_SCRIPT_PATH).exists()).toBe(true);
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(true);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
-        // No SQAA marker block was written (Server hubs absent).
-        expect(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText()).not.toContain(
-          '# Vortex analysis',
-        );
+        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
         // Declarative state records only the accepted features.
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeDefined();
-        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
+        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
       },
@@ -528,7 +520,7 @@ describe('integrate copilot', () => {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
           await chooseCustomize(session);
           await session.accept('Install pre-tool-use hook?');
-          await session.accept('Install prompt-secrets instructions?');
+          await session.accept('Install prompt-secrets hook?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -552,18 +544,20 @@ describe('integrate copilot', () => {
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
         await session.decline('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets instructions?');
+        await session.accept('Install prompt-secrets hook?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        // Hook was declined: no hook artifacts and no state entry.
-        expect(harness.userHome.exists('.copilot', 'hooks')).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(false);
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeUndefined();
         // The accepted features are still installed.
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(true);
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(true);
+        const hooks = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
+        expect(hooks.hooks.preToolUse ?? []).toHaveLength(0);
+        expect(hooks.hooks.userPromptTransformed).toHaveLength(1);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
-        expect(findCopilotFeature(harness, 'prompt-secrets-instructions')).toBeDefined();
+        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
       },
       { timeout: 30000 },
