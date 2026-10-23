@@ -163,6 +163,20 @@ describe('SonarHttpClient', () => {
       const result = await client.get('/api/authentication/validate');
       expect(result.isErr()).toBe(true);
     });
+
+    it('succeeds on 204 with no response body', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+        text: () => Promise.resolve(''),
+      } as unknown as Response);
+      const result = await client.get<void>('/api/alm_integration/check_pat');
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBeUndefined();
+    });
   });
 
   describe('bearer token not forwarded on redirect', () => {
@@ -276,6 +290,21 @@ describe('SonarHttpClient', () => {
       const result = await client.getSafe('/api/some/endpoint');
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+    });
+
+    it('returns undefined value on 204 without calling json()', async () => {
+      const json = () => Promise.reject(new Error('json must not be called'));
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+        json,
+        text: () => Promise.resolve(''),
+      } as unknown as Response);
+      const result = await client.getSafe('/api/alm_integration/check_pat').orThrow();
+      expect(result.response.status).toBe(204);
+      expect(result.value).toBeUndefined();
     });
 
     it('resolves to an error result instead of throwing on an unusable server URL', async () => {
