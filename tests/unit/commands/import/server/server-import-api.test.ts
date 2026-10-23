@@ -176,6 +176,91 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('searchGitlabRepos', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
+      await api.searchGitlabRepos('my-gitlab', 2, 50);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_gitlab_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-gitlab',
+        p: '2',
+        ps: '50',
+      });
+    });
+
+    it('returns the repositories and the reported total', async () => {
+      fetchSpy = mockFetch({
+        repositories: [{ id: 1, name: 'a', slug: 'a', pathSlug: 'g', sqProjectKey: 'g_a' }],
+        paging: { pageIndex: 1, pageSize: 50, total: 9 },
+      });
+      expect(await api.searchGitlabRepos('s', 1, 50)).toEqual({
+        repositories: [{ id: 1, name: 'a', slug: 'a', pathSlug: 'g', sqProjectKey: 'g_a' }],
+        total: 9,
+      });
+    });
+
+    it('treats an empty result as no repositories and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchGitlabRepos('s', 1, 50)).toEqual({
+        repositories: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchGitlabRepos('s', 1, 50).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('putBoundProject', () => {
+    const request = {
+      projectKey: 'group_repo',
+      projectName: 'repo',
+      devOpsPlatformSettingId: 'gl-id',
+      repositoryIdentifier: '42',
+    };
+
+    it('PUTs the project as JSON with monorepo off', async () => {
+      fetchSpy = mockFetch({ projectId: 'p', bindingId: 'b', newProjectCreated: true });
+      await api.putBoundProject(request);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
+        '/api/v2/dop-translation/bound-projects',
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('PUT');
+      expect(JSON.parse(init.body as string)).toEqual({ ...request, monorepo: false });
+    });
+
+    it('passes projectIdentifier through when given', async () => {
+      fetchSpy = mockFetch({ newProjectCreated: true });
+      await api.putBoundProject({ ...request, projectIdentifier: 'proj' });
+      expect(JSON.parse(lastFetchInit(fetchSpy).body as string)).toMatchObject({
+        projectIdentifier: 'proj',
+      });
+    });
+
+    it('reports whether the project was new', async () => {
+      fetchSpy = mockFetch({ newProjectCreated: false });
+      expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: false });
+    });
+
+    it('rejects with the server message on a 400', async () => {
+      fetchSpy = mockFetchSeq(badRequest("personal access token for 's' is missing"));
+      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+      expect((error as BadRequestError).message).toContain('is missing');
+    });
+
+    it('rejects on a 500 from the platform', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
   it('probeGithubPat is missing on "No personal access token found"', async () => {
     fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
     expect(await api.probeGithubPat('gh')).toEqual({ status: 'missing' });

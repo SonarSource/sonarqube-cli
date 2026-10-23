@@ -64,7 +64,29 @@ function isDopPlatform(type: string): type is DopPlatform {
   return (DOP_PLATFORMS as readonly string[]).includes(type);
 }
 
+/** A GitLab project as `search_gitlab_repos` returns it; `sqProjectKey` is set once it is bound. */
+export interface GitlabRepositoryResponse {
+  id: number | string;
+  name: string;
+  pathName?: string;
+  slug: string;
+  pathSlug?: string;
+  sqProjectKey?: string;
+}
+
+export interface BoundProjectRequest {
+  projectKey: string;
+  projectName: string;
+  devOpsPlatformSettingId: string;
+  repositoryIdentifier: string;
+  /** Needed for Azure DevOps and Bitbucket Server only. */
+  projectIdentifier?: string;
+}
+
 export class ServerImportApiClient {
+  /** Server-enforced max `ps` for the `search_*_repos` endpoints. */
+  static readonly SEARCH_MAX_PAGE_SIZE = 100;
+
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
@@ -105,6 +127,39 @@ export class ServerImportApiClient {
         }),
         (error): PatProbe => ({ status: patStatusOfFailure(error) }),
       );
+  }
+
+  /** One page of the GitLab projects the caller's token can see (`pageIndex` starts at 1). */
+  async searchGitlabRepos(
+    settingKey: string,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<{ repositories: GitlabRepositoryResponse[]; total?: number }> {
+    const response = await this.client
+      .get<{
+        repositories?: GitlabRepositoryResponse[];
+        paging?: { total?: number };
+      }>('/api/alm_integrations/search_gitlab_repos', {
+        almSetting: settingKey,
+        p: pageIndex,
+        ps: pageSize,
+      })
+      .orThrow();
+    return { repositories: response.repositories ?? [], total: response.paging?.total };
+  }
+
+  /**
+   * Creates the project and binds it to the repository, or updates the binding when a project
+   * with that key already exists (the endpoint is idempotent). `newProjectCreated` tells which.
+   */
+  async putBoundProject(request: BoundProjectRequest): Promise<{ newProjectCreated: boolean }> {
+    const response = await this.client
+      .put<{ newProjectCreated?: boolean }>('/api/v2/dop-translation/bound-projects', {
+        ...request,
+        monorepo: false,
+      })
+      .orThrow();
+    return { newProjectCreated: response.newProjectCreated ?? true };
   }
 
   private patStatusOf(endpoint: string, settingKey: string): Promise<PatStatus> {
