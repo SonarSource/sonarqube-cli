@@ -24,6 +24,11 @@ import type { DopRepository } from './import-api.ts';
 import type { RepoResolution, ResolvedRepo } from './resolve-options';
 import type { ImportOptions } from './types';
 
+/** What happened to one repository, when more than "imported" is worth saying. */
+export interface ImportRepoOutcome {
+  detail?: string;
+}
+
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
 export interface ImportPlan {
   selection: RepoResolution;
@@ -31,7 +36,7 @@ export interface ImportPlan {
   /** Maps a listed repository to the shape `importRepo` expects. */
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */
-  importRepo(repo: ResolvedRepo): Promise<void>;
+  importRepo(repo: ResolvedRepo): Promise<ImportRepoOutcome | undefined>;
 }
 
 /** One SonarQube flavour's way of resolving the import target and provisioning repositories. */
