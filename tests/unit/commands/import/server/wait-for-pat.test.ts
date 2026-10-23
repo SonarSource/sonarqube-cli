@@ -287,4 +287,18 @@ describe('waitForPat', () => {
     expect(await pending.catch((error: unknown) => error)).toBe(failure);
     expect(polls).toBe(2);
   });
+
+  it('propagates a rejection that is not an Error unchanged', async () => {
+    const h = harness(['missing']);
+    const failure = { code: 'not-an-error' };
+
+    const pending = waitForPat({
+      ...h.options,
+      initial: 'missing',
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case under test
+      check: () => Promise.reject(failure),
+    });
+
+    expect(await pending.catch((error: unknown) => error)).toBe(failure);
+  });
 });
