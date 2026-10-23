@@ -20,13 +20,6 @@
 
 // Copilot CLI custom instructions.
 //
-// Copilot ignores the output of the userPromptSubmitted and postToolUse
-// hooks, so we cannot block secret-leaking prompts or push SQAA findings to
-// the agent in-band. Instead, we install markdown instruction sections that
-// (a) ask the agent to warn the user when a prompt appears to contain a
-// secret, and (b) direct the agent to run `sonar analyze agentic` at
-// end-of-turn for files modified in that turn.
-
 import { join } from 'node:path';
 
 export const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
