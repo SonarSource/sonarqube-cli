@@ -21,6 +21,7 @@
 // Connection and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import type { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
@@ -59,6 +60,7 @@ export type SqaaResolution =
       connection: SonarConnection;
       groups: SqaaProjectGroup[];
       unmapped: string[];
+      otherConnection: string[];
       projectRoots: string[];
     }
   | { kind: 'no-org'; explicitProject: boolean }
@@ -107,6 +109,7 @@ export async function resolveSqaaConnectionAndProject(
       groups:
         inside.length > 0 ? [{ projectKey: explicitProject, projectRoot, files: inside }] : [],
       unmapped: files.filter((file) => !inside.includes(file)),
+      otherConnection: [],
       projectRoots: [projectRoot],
     };
   }
@@ -114,7 +117,14 @@ export async function resolveSqaaConnectionAndProject(
   // Run from inside a project, only that project (the closest) is analyzed; run from above
   // several, all of them. Files owned by any other project are unmapped, not analyzed.
   const focused = discovered.focusedOn(lookupDir);
-  const { groups, unmapped } = focused.groupByMapping(files);
+  const { groups: allGroups, unmapped } = focused.groupByMapping(files);
+  // Source goes through the active connection only, so a project recorded against another
+  // server or organization is never uploaded to it. Grouping stays nearest-wins first, so
+  // a file of such a nested project is not handed to the project above it.
+  const groups = allGroups.filter(({ mapping }) => authMatchesRecordedConnection(auth, mapping));
+  const otherConnection = allGroups
+    .filter(({ mapping }) => !authMatchesRecordedConnection(auth, mapping))
+    .flatMap(({ paths }) => paths);
   // Nothing configured for the directory the command runs in, not merely for these files:
   // that stays the "no project" outcome rather than a run that silently excludes everything.
   if (groups.length === 0 && focused.projects.length === 0) {
@@ -140,6 +150,7 @@ export async function resolveSqaaConnectionAndProject(
       files: paths,
     })),
     unmapped,
+    otherConnection,
     projectRoots: focused.projects.map((mapping) => mapping.projectRoot),
   };
 }

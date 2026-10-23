@@ -167,4 +167,15 @@ describe('excludeOutsideProjects', () => {
 
     expect(excludeOutsideProjects(changeSet, [])).toEqual(changeSet);
   });
+
+  it('reports files of another-connection projects as ignored with their own reason', () => {
+    const result = excludeOutsideProjects(
+      { files: ['/repo/a/x.ts', '/repo/b/z.ts'], ignored: [], repoRoot: '/repo' },
+      [],
+      ['/repo/b/z.ts'],
+    );
+
+    expect(result.files).toEqual(['/repo/a/x.ts']);
+    expect(result.ignored).toEqual([{ path: '/repo/b/z.ts', reason: 'other-connection' }]);
+  });
 });

@@ -90,6 +90,20 @@ export function assertInsideProjectRoots(
   );
 }
 
+/** Explicit files owned by a project of another connection are an input error: they are never uploaded. */
+export function assertNoOtherConnectionFiles(
+  otherConnection: string[],
+  displayBase: string = process.cwd(),
+): void {
+  if (otherConnection.length === 0) return;
+  const files = otherConnection
+    .map((p) => '  ' + (toRelativePosixPathOrNull(p, displayBase) ?? p))
+    .join('\n');
+  throw new InvalidOptionError(
+    `Files belong to a project linked to another server or organization than the active connection:\n${files}`,
+  );
+}
+
 /** Throws when `absolutePath` is outside `projectRoot` or `displayBase`. */
 export function resolveSqaaPath(
   absolutePath: string,

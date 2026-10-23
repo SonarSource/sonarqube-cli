@@ -61,12 +61,19 @@ describe('resolveSqaaContext', () => {
           connection,
           groups,
           unmapped: ['/repo/y.ts'],
+          otherConnection: ['/repo/z.ts'],
           projectRoots: ['/repo/a'],
         },
         { requireProject: true },
         fake,
       ),
-    ).toEqual({ connection, groups, unmapped: ['/repo/y.ts'], projectRoots: ['/repo/a'] });
+    ).toEqual({
+      connection,
+      groups,
+      unmapped: ['/repo/y.ts'],
+      otherConnection: ['/repo/z.ts'],
+      projectRoots: ['/repo/a'],
+    });
   });
 
   it('fails on a missing project when the command requires one', () => {

@@ -39,7 +39,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertInsideProjectRoots } from './sqaa-paths.ts';
+import { assertInsideProjectRoots, assertNoOtherConnectionFiles } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
@@ -178,6 +178,7 @@ async function analyzeSqaaExplicitFiles(
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
+  assertNoOtherConnectionFiles(resolved.otherConnection);
   assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
   if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
 
@@ -246,7 +247,11 @@ async function analyzeSqaaChangeSet(params: {
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  const changeSet = excludeOutsideProjects(fullChangeSet, resolved.unmapped);
+  const changeSet = excludeOutsideProjects(
+    fullChangeSet,
+    resolved.unmapped,
+    resolved.otherConnection,
+  );
   if (changeSet.files.length === 0) {
     printAllChangeSetFilesExcluded(console);
     return;

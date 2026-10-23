@@ -79,7 +79,13 @@ function makeCloudState() {
 }
 
 /** discoverProjects result with one project rooted at cwd, or none when `projectKey` is undefined. */
-function makeDiscoveredProject(projectKey: string | undefined) {
+function makeDiscoveredProject(
+  projectKey: string | undefined,
+  recorded: { serverUrl: string; organization?: string } = {
+    serverUrl: SONARCLOUD_URL,
+    organization: TEST_ORG,
+  },
+) {
   return new DiscoveredProjects(
     process.cwd(),
     projectKey
@@ -87,8 +93,7 @@ function makeDiscoveredProject(projectKey: string | undefined) {
           {
             projectRoot: process.cwd(),
             projectKey,
-            serverUrl: SONARCLOUD_URL,
-            organization: TEST_ORG,
+            ...recorded,
           },
         ]
       : [],
@@ -378,6 +383,10 @@ describe('buildSqaaJsonReport', () => {
       source: 'state',
     });
 
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, { serverUrl: 'https://mysonar.company.com' }),
+    );
+
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'] },
       new CommandAuthenticatedInvocationContext(onPremiseAuth, fake).connection,
@@ -386,6 +395,20 @@ describe('buildSqaaJsonReport', () => {
     expect(report).not.toBeNull();
     expect(createAnalysisSpy).toHaveBeenCalled();
     expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
+  });
+
+  it('refuses explicit files owned by a project linked to another connection', async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, { serverUrl: 'https://other.example.com' }),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT.connection, {
+        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+      }),
+    ).rejects.toThrow(/another server or organization/);
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
   it('returns a failure entry when the API call fails', async () => {

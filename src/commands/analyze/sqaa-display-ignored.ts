@@ -32,6 +32,7 @@ const IGNORED_REASON_LABELS: Record<IgnoredReason, string> = {
   oversized: 'file too large',
   'outside-repository': 'outside the repository',
   'outside-project': 'not in a mapped project',
+  'other-connection': 'project linked to another server or organization',
 };
 
 export function formatIgnoredLabel(reason: IgnoredReason): `[IGNORED: ${string}]` {

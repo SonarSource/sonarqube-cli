@@ -75,6 +75,8 @@ export interface SqaaResolvedRun {
   groups: SqaaProjectGroup[];
   /** Files under no project root. */
   unmapped: string[];
+  /** Files owned by a project recorded against another server or organization; never uploaded. */
+  otherConnection: string[];
   /** Every root the files were matched against, so an error about `unmapped` can name them. */
   projectRoots: string[];
 }
