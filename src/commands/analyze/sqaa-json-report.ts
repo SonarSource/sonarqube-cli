@@ -25,7 +25,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { readSqaaFileContent } from './sqaa-api.ts';
 import {
   type ChangeSetResult,
-  excludeOutsideProjects,
+  excludeIgnoredFiles,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -43,14 +43,9 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertInsideProjectRoots, assertNoOtherConnectionFiles } from './sqaa-paths.ts';
+import { assertExplicitFilesAnalyzable, resolveSqaaRunFiles, soleFile } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
-import {
-  fetchSingleFileReport,
-  finishSqaaTelemetryFromReport,
-  resolveSqaaGroupPaths,
-  runSqaaGroups,
-} from './sqaa-run.ts';
+import { fetchSingleFileReport, finishSqaaTelemetryFromReport, runSqaaGroups } from './sqaa-run.ts';
 import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions, SqaaResolvedRun } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -66,20 +61,14 @@ async function buildSqaaJsonReportFromEntries(
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport> {
   const cwd = process.cwd();
-  const groupPaths = resolveSqaaGroupPaths(resolved.groups, cwd);
-  const projects = groupPaths.map(({ group, paths }) => ({
-    projectKey: group.projectKey,
-    paths: paths.map((p) => p.displayPath),
-  }));
-  const allPaths = projects.flatMap(({ paths }) => paths);
-  if (allPaths.length === 1) {
-    const [{ group, paths }] = groupPaths;
-    const [path] = paths;
+  const files = resolveSqaaRunFiles(resolved.groups, cwd);
+  if (files.displayPaths.length === 1) {
+    const { projectKey, file: path } = soleFile(files);
     const fileContent = readSqaaFileContent(path.absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
         resolved.connection,
-        group.projectKey,
+        projectKey,
         path,
         fileContent,
         branch,
@@ -92,7 +81,7 @@ async function buildSqaaJsonReportFromEntries(
   }
 
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaGroups(groupPaths, resolved.connection, {
+    runSqaaGroups(files.projects, resolved.connection, {
       branch,
       wireDepth,
       displayDepth,
@@ -100,7 +89,14 @@ async function buildSqaaJsonReportFromEntries(
       silent: true,
     }),
   );
-  const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth, projects);
+  const report = buildJsonReport(
+    tally,
+    [],
+    files.displayPaths,
+    cwd,
+    displayDepth,
+    files.displayProjects,
+  );
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
@@ -131,11 +127,7 @@ async function buildSqaaJsonReportFromChangeSet(
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
-  const changeSet = excludeOutsideProjects(
-    fullChangeSet,
-    resolved.unmapped,
-    resolved.otherConnection,
-  );
+  const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
   if (changeSet.files.length === 0) {
     return allExcludedReport(changeSet);
   }
@@ -152,14 +144,9 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { ignored, repoRoot } = changeSet;
-  const groupPaths = resolveSqaaGroupPaths(resolved.groups, repoRoot);
-  const projects = groupPaths.map(({ group, paths }) => ({
-    projectKey: group.projectKey,
-    paths: paths.map((p) => p.displayPath),
-  }));
-  const allPaths = projects.flatMap(({ paths }) => paths);
+  const files = resolveSqaaRunFiles(resolved.groups, repoRoot);
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaGroups(groupPaths, resolved.connection, {
+    runSqaaGroups(files.projects, resolved.connection, {
       branch: resolvedBranch,
       wireDepth,
       displayDepth,
@@ -167,7 +154,14 @@ async function buildSqaaJsonReportFromChangeSet(
       silent: true,
     }),
   );
-  const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth, projects);
+  const report = buildJsonReport(
+    tally,
+    ignored,
+    files.displayPaths,
+    repoRoot,
+    displayDepth,
+    files.displayProjects,
+  );
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
@@ -209,8 +203,7 @@ export async function buildSqaaJsonReport(
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
-    assertNoOtherConnectionFiles(resolved.otherConnection);
-    assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
+    assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
     if (entries.length === 1) {
       const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
       return buildSqaaJsonReportFromEntries(

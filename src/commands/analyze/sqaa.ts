@@ -28,7 +28,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import {
-  excludeOutsideProjects,
+  excludeIgnoredFiles,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -39,7 +39,7 @@ import {
   resolveSqaaContext,
 } from './sqaa-context.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertInsideProjectRoots, assertNoOtherConnectionFiles } from './sqaa-paths.ts';
+import { assertExplicitFilesAnalyzable } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
@@ -178,8 +178,7 @@ async function analyzeSqaaExplicitFiles(
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  assertNoOtherConnectionFiles(resolved.otherConnection);
-  assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
+  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
   if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
 
   await runSqaaAnalysisOnExplicitFiles({
@@ -247,11 +246,7 @@ async function analyzeSqaaChangeSet(params: {
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
 
-  const changeSet = excludeOutsideProjects(
-    fullChangeSet,
-    resolved.unmapped,
-    resolved.otherConnection,
-  );
+  const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
   if (changeSet.files.length === 0) {
     printAllChangeSetFilesExcluded(console);
     return;

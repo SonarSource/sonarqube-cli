@@ -50,7 +50,7 @@ describe('resolveSqaaContext', () => {
     expect(fake.findCall('warn', 'SonarQube Cloud organization is required')).toBeDefined();
   });
 
-  it('hands back the groups, unmapped files and roots of a resolved run', () => {
+  it('hands back the groups, ignored files and roots of a resolved run', () => {
     const connection = {} as SonarConnection;
     const groups = [{ projectKey: 'app-a', projectRoot: '/repo/a', files: ['/repo/a/x.ts'] }];
 
@@ -60,8 +60,10 @@ describe('resolveSqaaContext', () => {
           kind: 'resolved',
           connection,
           groups,
-          unmapped: ['/repo/y.ts'],
-          otherConnection: ['/repo/z.ts'],
+          ignored: [
+            { path: '/repo/y.ts', reason: 'outside-project' },
+            { path: '/repo/z.ts', reason: 'other-connection' },
+          ],
           projectRoots: ['/repo/a'],
         },
         { requireProject: true },
@@ -70,8 +72,10 @@ describe('resolveSqaaContext', () => {
     ).toEqual({
       connection,
       groups,
-      unmapped: ['/repo/y.ts'],
-      otherConnection: ['/repo/z.ts'],
+      ignored: [
+        { path: '/repo/y.ts', reason: 'outside-project' },
+        { path: '/repo/z.ts', reason: 'other-connection' },
+      ],
       projectRoots: ['/repo/a'],
     });
   });

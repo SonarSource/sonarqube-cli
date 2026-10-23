@@ -20,7 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { runSqaaGroups, type SqaaGroupPaths } from '@/commands/analyze/sqaa-run.ts';
+import { runSqaaGroups } from '@/commands/analyze/sqaa-run.ts';
+import type { SqaaProjectFiles } from '@/commands/analyze/sqaa-types.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -40,11 +41,16 @@ const CONNECTION: SonarConnection = {
   httpClient: new SonarHttpClient('https://sonarcloud.io', 't'),
 };
 
-function groupOf(projectKey: string, file: string): SqaaGroupPaths {
-  const absolutePath = `/repo/${projectKey}/${file}`;
+function groupOf(projectKey: string, file: string): SqaaProjectFiles {
   return {
-    group: { projectKey, projectRoot: `/repo/${projectKey}`, files: [absolutePath] },
-    paths: [{ absolutePath, displayPath: `${projectKey}/${file}`, serverPath: file }],
+    projectKey,
+    files: [
+      {
+        absolutePath: `/repo/${projectKey}/${file}`,
+        displayPath: `${projectKey}/${file}`,
+        serverPath: file,
+      },
+    ],
   };
 }
 

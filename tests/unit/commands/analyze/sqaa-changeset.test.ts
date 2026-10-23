@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
-  excludeOutsideProjects,
+  excludeIgnoredFiles,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -143,39 +143,32 @@ describe('resolveChangeSet', () => {
   );
 });
 
-describe('excludeOutsideProjects', () => {
-  it('moves unmapped files to ignored as outside-project, after the existing ignores', () => {
-    const result = excludeOutsideProjects(
+describe('excludeIgnoredFiles', () => {
+  it('moves the ignored files out of the change set, after the existing ignores', () => {
+    const result = excludeIgnoredFiles(
       {
         files: ['/repo/a/x.ts', '/repo/docs/y.md', '/repo/b/z.ts'],
         ignored: [{ path: '/repo/logo.png', reason: 'binary' }],
         repoRoot: '/repo',
       },
-      ['/repo/docs/y.md'],
+      [
+        { path: '/repo/docs/y.md', reason: 'outside-project' },
+        { path: '/repo/b/z.ts', reason: 'other-connection' },
+      ],
     );
 
-    expect(result.files).toEqual(['/repo/a/x.ts', '/repo/b/z.ts']);
+    expect(result.files).toEqual(['/repo/a/x.ts']);
     expect(result.ignored).toEqual([
       { path: '/repo/logo.png', reason: 'binary' },
       { path: '/repo/docs/y.md', reason: 'outside-project' },
+      { path: '/repo/b/z.ts', reason: 'other-connection' },
     ]);
     expect(result.repoRoot).toBe('/repo');
   });
 
-  it('leaves the change set as it was when every file is mapped', () => {
+  it('leaves the change set as it was when nothing is ignored', () => {
     const changeSet = { files: ['/repo/a/x.ts'], ignored: [], repoRoot: '/repo' };
 
-    expect(excludeOutsideProjects(changeSet, [])).toEqual(changeSet);
-  });
-
-  it('reports files of another-connection projects as ignored with their own reason', () => {
-    const result = excludeOutsideProjects(
-      { files: ['/repo/a/x.ts', '/repo/b/z.ts'], ignored: [], repoRoot: '/repo' },
-      [],
-      ['/repo/b/z.ts'],
-    );
-
-    expect(result.files).toEqual(['/repo/a/x.ts']);
-    expect(result.ignored).toEqual([{ path: '/repo/b/z.ts', reason: 'other-connection' }]);
+    expect(excludeIgnoredFiles(changeSet, [])).toEqual(changeSet);
   });
 });

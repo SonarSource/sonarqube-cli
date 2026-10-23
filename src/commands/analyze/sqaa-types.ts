@@ -24,7 +24,9 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
+import type { IgnoredFile } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
+import type { SqaaPath } from './sqaa-paths.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const VALID_FORMATS = ['text', 'json'] as const;
@@ -63,6 +65,20 @@ export interface SqaaProjectGroup {
   files: string[];
 }
 
+/** A project's files with every path a run needs for each (see `SqaaPath`). */
+export interface SqaaProjectFiles {
+  projectKey: string;
+  files: SqaaPath[];
+}
+
+/** One run's files, resolved once; the display views are derived from `projects`, never built by callers. */
+export interface SqaaRunFiles {
+  projects: SqaaProjectFiles[];
+  displayProjects: SqaaDisplayProject[];
+  /** Every display path of the run, in project order. */
+  displayPaths: string[];
+}
+
 /** One project's files as the report shows them, so the display layer can group findings by project. */
 export interface SqaaDisplayProject {
   projectKey: string;
@@ -73,11 +89,9 @@ export interface SqaaDisplayProject {
 export interface SqaaResolvedRun {
   connection: SonarConnection;
   groups: SqaaProjectGroup[];
-  /** Files under no project root. */
-  unmapped: string[];
-  /** Files owned by a project recorded against another server or organization; never uploaded. */
-  otherConnection: string[];
-  /** Every root the files were matched against, so an error about `unmapped` can name them. */
+  /** Files no project of the active connection owns, each with why (`outside-project` or `other-connection`). */
+  ignored: IgnoredFile[];
+  /** Every root the files were matched against, so an error about `outside-project` files can name them. */
   projectRoots: string[];
 }
 
