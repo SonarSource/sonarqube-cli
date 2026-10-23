@@ -20,8 +20,9 @@
 
 // Organizations command - list organizations the authenticated user can switch into
 
+import { assertOrganizationsSupported } from '@/commands/components/organization/cloud-guard.ts';
 import { formatOrganizationRows } from '@/commands/components/organization/rows.ts';
-import { CommandFailedError, type InvalidOptionError } from '@/core/commands/command-error.ts';
+import type { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption, resolvePageOptions } from '@/core/commands/params.ts';
 import { type OrganizationSummary, toOrganizationSummary } from '@/core/domain/organization.ts';
@@ -69,13 +70,7 @@ function fetchAndPrintOrganizations(
   format: (typeof VALID_FORMATS)[number],
   { pageSize, page }: { pageSize: number; page: number },
 ): ResultAsync<void, Error> {
-  const { auth } = ctx;
-
-  if (auth.connectionType !== 'cloud') {
-    return errAsync(
-      new CommandFailedError('Organizations are only applicable to SonarQube Cloud connection.'),
-    );
-  }
+  assertOrganizationsSupported(ctx.auth);
 
   const organizationsClient = new OrganizationsClient(ctx.connection.httpClient);
 

@@ -173,7 +173,7 @@ function toSelectOption({ key, text }: OrganizationRow): SelectOption<string> {
   return { value: key, label: text };
 }
 
-async function getUserSelectedOrganization(
+export async function getUserSelectedOrganization(
   client: OrganizationsClient,
   console: Console,
   activeOrgKey: string | undefined,
