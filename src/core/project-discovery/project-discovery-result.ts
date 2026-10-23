@@ -171,12 +171,10 @@ export class DiscoveredProjects {
     return new DiscoveredProjects(this.repoRoot, focusOnPath(this.projects, path));
   }
 
-  /** The single mapping owning `path` (nearest root wins), unlike `scope()`, which keeps every mapping on the same ancestry line. */
-  mappingFor(path: string): CompleteProjectMapping | undefined {
-    return selectMappingForPath(this.projects, path);
-  }
-
-  /** `mappingFor()` applied to each path, for callers that fan work out per project. */
+  /**
+   * Each path assigned to the single mapping owning it (nearest root wins, unlike `scope()`, which
+   * keeps every mapping on the same ancestry line), for callers that fan work out per project.
+   */
   groupByMapping(paths: string[]): MappingGroups<CompleteProjectMapping> {
     return groupPathsByMapping(this.projects, paths);
   }

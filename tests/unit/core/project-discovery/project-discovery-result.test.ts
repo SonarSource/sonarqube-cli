@@ -45,41 +45,36 @@ function mapping(root: string, subdir: string, projectKey: string): CompleteProj
   };
 }
 
-describe('DiscoveredProjects.mappingFor', () => {
-  it('returns the mapping whose root contains the path', () => {
+function ownerOf(projects: DiscoveredProjects, path: string): CompleteProjectMapping | undefined {
+  return projects.groupByMapping([path]).groups[0]?.mapping;
+}
+
+describe('DiscoveredProjects.groupByMapping owner of a single path', () => {
+  it('is the mapping whose root contains the path', () => {
     const root = tempRepo('contains', ['packages/a', 'packages/b']);
     const a = mapping(root, 'packages/a', 'acme_a');
     const b = mapping(root, 'packages/b', 'acme_b');
-    const projects = new DiscoveredProjects(root, [a, b]);
 
-    expect(projects.mappingFor(join(root, 'packages/b/src/index.ts'))).toBe(b);
+    expect(
+      ownerOf(new DiscoveredProjects(root, [a, b]), join(root, 'packages/b/src/index.ts')),
+    ).toBe(b);
   });
 
   it('matches a path equal to the project root', () => {
     const root = tempRepo('self', ['packages/a']);
     const a = mapping(root, 'packages/a', 'acme_a');
 
-    expect(new DiscoveredProjects(root, [a]).mappingFor(a.projectRoot)).toBe(a);
+    expect(ownerOf(new DiscoveredProjects(root, [a]), a.projectRoot)).toBe(a);
   });
 
-  it('picks the deepest root for nested projects regardless of file order', () => {
+  it('is the deepest root for nested projects regardless of mapping order', () => {
     const root = tempRepo('nested', ['packages/a/inner']);
     const outer = mapping(root, 'packages/a', 'acme_outer');
     const inner = mapping(root, 'packages/a/inner', 'acme_inner');
     const file = join(root, 'packages/a/inner/src/index.ts');
 
-    expect(new DiscoveredProjects(root, [outer, inner]).mappingFor(file)).toBe(inner);
-    expect(new DiscoveredProjects(root, [inner, outer]).mappingFor(file)).toBe(inner);
-  });
-
-  it('still selects the outer project for files beside the nested one', () => {
-    const root = tempRepo('beside', ['packages/a/inner']);
-    const outer = mapping(root, 'packages/a', 'acme_outer');
-    const inner = mapping(root, 'packages/a/inner', 'acme_inner');
-
-    expect(
-      new DiscoveredProjects(root, [outer, inner]).mappingFor(join(root, 'packages/a/index.ts')),
-    ).toBe(outer);
+    expect(ownerOf(new DiscoveredProjects(root, [outer, inner]), file)).toBe(inner);
+    expect(ownerOf(new DiscoveredProjects(root, [inner, outer]), file)).toBe(inner);
   });
 
   it('keeps the first entry when two mappings share a root', () => {
@@ -88,33 +83,26 @@ describe('DiscoveredProjects.mappingFor', () => {
     const second = mapping(root, 'packages/a', 'acme_second');
 
     expect(
-      new DiscoveredProjects(root, [first, second]).mappingFor(join(root, 'packages/a/x.ts')),
+      ownerOf(new DiscoveredProjects(root, [first, second]), join(root, 'packages/a/x.ts')),
     ).toBe(first);
-  });
-
-  it('returns undefined for a path under no mapping', () => {
-    const root = tempRepo('none', ['packages/a', 'docs']);
-    const projects = new DiscoveredProjects(root, [mapping(root, 'packages/a', 'acme_a')]);
-
-    expect(projects.mappingFor(join(root, 'docs/readme.md'))).toBeUndefined();
   });
 
   it('does not treat a sibling sharing a name prefix as contained', () => {
     const root = tempRepo('prefix', ['packages/app', 'packages/app-extra']);
     const app = mapping(root, 'packages/app', 'acme_app');
+    const sibling = join(root, 'packages/app-extra/x.ts');
 
-    expect(
-      new DiscoveredProjects(root, [app]).mappingFor(join(root, 'packages/app-extra/x.ts')),
-    ).toBeUndefined();
+    expect(new DiscoveredProjects(root, [app]).groupByMapping([sibling])).toEqual({
+      groups: [],
+      unmapped: [sibling],
+    });
   });
 
   it('matches a path that does not exist on disk', () => {
     const root = tempRepo('missing', ['packages/a']);
     const a = mapping(root, 'packages/a', 'acme_a');
 
-    expect(new DiscoveredProjects(root, [a]).mappingFor(join(root, 'packages/a/deleted.ts'))).toBe(
-      a,
-    );
+    expect(ownerOf(new DiscoveredProjects(root, [a]), join(root, 'packages/a/deleted.ts'))).toBe(a);
   });
 });
 
