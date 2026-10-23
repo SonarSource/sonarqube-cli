@@ -49,6 +49,13 @@ export const GLOBAL_HOOK_SCRIPT_PATH = [
   'build-scripts',
   PRETOOL_SECRETS_SCRIPT,
 ] as const;
+export const GLOBAL_PROMPT_HOOK_SCRIPT_PATH = [
+  '.copilot',
+  'hooks',
+  'sonar-prompt-secrets',
+  'build-scripts',
+  hookScriptName('prompt-secrets'),
+] as const;
 export const PROJECT_INSTRUCTIONS_PATH = [
   '.github',
   'instructions',
@@ -71,7 +78,7 @@ export interface CopilotHookEntry {
 
 export interface CopilotHooksJson {
   version: number;
-  hooks: { preToolUse?: CopilotHookEntry[] };
+  hooks: { preToolUse?: CopilotHookEntry[]; userPromptTransformed?: CopilotHookEntry[] };
 }
 
 export interface McpJson {
@@ -105,11 +112,6 @@ export function obstructHooksJson(harness: TestHarness): void {
   harness.userHome.writeFile('.copilot/hooks/hooks.json', '{ invalid json\n');
 }
 
-/**
- * Force the global instructions write to fail by pre-creating the target
- * file path as a directory.
- */
-export function obstructInstructionsFile(harness: TestHarness): void {
-  mkdirSync(harness.userHome.file('.copilot', 'instructions').path, { recursive: true });
-  mkdirSync(harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).path);
+export function obstructPromptHookScript(harness: TestHarness): void {
+  mkdirSync(harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH).path, { recursive: true });
 }
