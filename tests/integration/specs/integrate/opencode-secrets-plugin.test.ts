@@ -310,7 +310,7 @@ describe('integrate opencode: secrets plugin, run against the real CLI', () => {
 
       expect(run.results[0].error).toBeNull();
       expect(run.results[0].event.prompt.text).toStartWith(
-        `[SonarQube] Message blocked: ${SECRETS_INACTIVE_UNAUTHENTICATED}. Blocked as a precaution`,
+        `[SonarQube] Message blocked: ${SECRETS_INACTIVE_UNAUTHENTICATED}\nBlocked as a precaution`,
       );
       expect(run.results[0].event.prompt.text).not.toContain(GITHUB_TEST_TOKEN);
       expect(run.results[0].event.prompt.text).toEndWith(
