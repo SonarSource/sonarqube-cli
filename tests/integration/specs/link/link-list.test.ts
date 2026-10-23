@@ -20,6 +20,7 @@
 
 // Integration tests for `sonar link list`
 
+import { rmSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -162,6 +163,19 @@ describe('sonar link list', () => {
 
     expect(listedKeys(anchored.stdout)).toEqual(['api', 'api-v2']);
     expect(listedKeys(checkoutDirectory.stdout)).toEqual([]);
+  });
+
+  it('matches --pattern against directories relative to the current directory outside git', async () => {
+    rmSync(join(harness.cwd.path, '.git'), { recursive: true, force: true });
+    harness.cwd.writeFile(
+      'services/.sonar-config.json',
+      JSON.stringify({ projects: [{ projectKey: 'api', path: 'api', serverUrl: SERVER_URL }] }),
+    );
+
+    const result = await harness.run('link list --path services --pattern "^services/api$"');
+
+    expect(result.exitCode).toBe(0);
+    expect(listedKeys(result.stdout)).toEqual(['api']);
   });
 
   it.each([

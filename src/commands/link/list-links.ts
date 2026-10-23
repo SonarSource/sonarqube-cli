@@ -68,7 +68,9 @@ export async function listLinks(
   });
   const matching = discovered
     .scope(path)
-    .filter((project) => matchesPattern(project, discovered.repoRoot ?? startDir, pattern))
+    .filter((project) =>
+      matchesPattern(project, discovered.repoRoot ?? canonicalizePath(process.cwd()), pattern),
+    )
     .map((project) => ({ project, distance: treeDistance(path, project.projectRoot) }))
     .sort(
       (a, b) =>
@@ -105,7 +107,7 @@ function compilePattern(pattern: string | undefined): RegExp | undefined {
   } catch (error) {
     throw new InvalidOptionError(
       `Invalid --pattern option: ${(error as Error).message}`,
-      'Pass a regular expression matched against project keys and directories relative to the repository root, e.g. --pattern "api".',
+      'Pass a regular expression matched against project keys and directories relative to the repository root (the current directory outside a git repository), e.g. --pattern "api".',
     );
   }
 }
