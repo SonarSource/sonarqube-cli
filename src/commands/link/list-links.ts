@@ -66,11 +66,10 @@ export async function listLinks(
     silent: true,
     console: ctx.console,
   });
+  const patternBaseDir = discovered.repoRoot ?? canonicalizePath(process.cwd());
   const matching = discovered
     .scope(path)
-    .filter((project) =>
-      matchesPattern(project, discovered.repoRoot ?? canonicalizePath(process.cwd()), pattern),
-    )
+    .filter((project) => matchesPattern(project, patternBaseDir, pattern))
     .map((project) => ({ project, distance: treeDistance(path, project.projectRoot) }))
     .sort(
       (a, b) =>
