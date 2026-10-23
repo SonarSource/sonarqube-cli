@@ -25,7 +25,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { readSqaaFileContent } from './sqaa-api.ts';
 import {
   type ChangeSetResult,
-  excludeOutsideProject,
+  excludeOutsideProjects,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -42,19 +42,16 @@ import {
   makeReport,
   type SqaaJsonReport,
 } from './sqaa-display.ts';
-import { type ResolvedSqaaFileEntry, resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertInsideProjectRoot, resolveSqaaPath } from './sqaa-paths.ts';
+import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { assertInsideProjectRoots, assertNoOtherConnectionFiles } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   fetchSingleFileReport,
   finishSqaaTelemetryFromReport,
-  runSqaaAnalysesTallyForResolved,
+  resolveSqaaGroupPaths,
+  runSqaaGroups,
 } from './sqaa-run.ts';
-import type {
-  AnalyzeSqaaOptions,
-  AnalyzeSqaaRunOptions,
-  SqaaResolvedContext,
-} from './sqaa-types.ts';
+import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions, SqaaResolvedRun } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
@@ -62,22 +59,27 @@ type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
 };
 
 async function buildSqaaJsonReportFromEntries(
-  entries: ResolvedSqaaFileEntry[],
-  resolved: SqaaResolvedContext,
+  resolved: SqaaResolvedRun,
   branch: string | undefined,
   wireDepth: SqaaDeepWireDepth | undefined,
   displayDepth: SqaaAnalysisDepth,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport> {
   const cwd = process.cwd();
-  const paths = entries.map((e) => resolveSqaaPath(e.absolutePath, resolved.projectRoot, cwd));
-  if (paths.length === 1) {
+  const groupPaths = resolveSqaaGroupPaths(resolved.groups, cwd);
+  const projects = groupPaths.map(({ group, paths }) => ({
+    projectKey: group.projectKey,
+    paths: paths.map((p) => p.displayPath),
+  }));
+  const allPaths = projects.flatMap(({ paths }) => paths);
+  if (allPaths.length === 1) {
+    const [{ group, paths }] = groupPaths;
     const [path] = paths;
     const fileContent = readSqaaFileContent(path.absolutePath);
     const { result: fetchResult, durationMs } = await timed(() =>
       fetchSingleFileReport(
         resolved.connection,
-        resolved.projectKey,
+        group.projectKey,
         path,
         fileContent,
         branch,
@@ -89,18 +91,16 @@ async function buildSqaaJsonReportFromEntries(
     return fetchResult.report;
   }
 
-  const allPaths = paths.map((p) => p.displayPath);
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaAnalysesTallyForResolved(
-      paths,
-      resolved,
+    runSqaaGroups(groupPaths, resolved.connection, {
       branch,
       wireDepth,
       displayDepth,
-      runOptions.telemetryCtx.console,
-    ),
+      console: runOptions.telemetryCtx.console,
+      silent: true,
+    }),
   );
-  const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth);
+  const report = buildJsonReport(tally, [], allPaths, cwd, displayDepth, projects);
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
@@ -122,11 +122,20 @@ async function buildSqaaJsonReportFromChangeSet(
   }
 
   const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
+    project,
+    console,
+    fullChangeSet.files,
+  );
   const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
   if (!resolved) return null;
 
-  const changeSet = excludeOutsideProject(fullChangeSet, resolved.projectRoot);
+  const changeSet = excludeOutsideProjects(
+    fullChangeSet,
+    resolved.unmapped,
+    resolved.otherConnection,
+  );
   if (changeSet.files.length === 0) {
     return allExcludedReport(changeSet);
   }
@@ -142,20 +151,23 @@ async function buildSqaaJsonReportFromChangeSet(
     return null;
   }
 
-  const { files, ignored, repoRoot } = changeSet;
-  const paths = files.map((f) => resolveSqaaPath(f, resolved.projectRoot, repoRoot));
-  const allPaths = paths.map((p) => p.displayPath);
+  const { ignored, repoRoot } = changeSet;
+  const groupPaths = resolveSqaaGroupPaths(resolved.groups, repoRoot);
+  const projects = groupPaths.map(({ group, paths }) => ({
+    projectKey: group.projectKey,
+    paths: paths.map((p) => p.displayPath),
+  }));
+  const allPaths = projects.flatMap(({ paths }) => paths);
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaAnalysesTallyForResolved(
-      paths,
-      resolved,
-      resolvedBranch,
+    runSqaaGroups(groupPaths, resolved.connection, {
+      branch: resolvedBranch,
       wireDepth,
       displayDepth,
       console,
-    ),
+      silent: true,
+    }),
   );
-  const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth);
+  const report = buildJsonReport(tally, ignored, allPaths, repoRoot, displayDepth, projects);
   finishSqaaTelemetryFromReport(report, runOptions, durationMs);
   return report;
 }
@@ -188,18 +200,20 @@ export async function buildSqaaJsonReport(
     const entries = resolveSqaaFileArgs(rawFiles);
     const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
     const { console } = runOptions.telemetryCtx;
-    const resolution = await resolveSqaaConnectionAndProject(connection, project, console);
+    const resolution = await resolveSqaaConnectionAndProject(
+      connection,
+      project,
+      console,
+      entries.map((e) => e.absolutePath),
+    );
     const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
     if (!resolved) return null;
 
-    assertInsideProjectRoot(
-      entries.map((e) => e.absolutePath),
-      resolved.projectRoot,
-    );
+    assertNoOtherConnectionFiles(resolved.otherConnection);
+    assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
     if (entries.length === 1) {
       const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
       return buildSqaaJsonReportFromEntries(
-        entries,
         resolved,
         resolvedBranch,
         wireDepth,
@@ -216,7 +230,6 @@ export async function buildSqaaJsonReport(
     }
 
     return buildSqaaJsonReportFromEntries(
-      entries,
       resolved,
       resolvedBranch,
       wireDepth,

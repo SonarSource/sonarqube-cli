@@ -271,3 +271,72 @@ describe('SqaaProgress — silent flag (used by --format json)', () => {
     await progress.retryingChunk(0, 1, 3, 1);
   });
 });
+
+describe('SqaaProgress — project label', () => {
+  const CURSOR_UP = '\x1B[1A';
+
+  function ttyProgress(project?: { key: string; index: number; total: number }): SqaaProgress {
+    return new SqaaProgress({
+      files: FILES,
+      project,
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
+  }
+
+  function countOccurrences(text: string, needle: string): number {
+    return text.split(needle).length - 1;
+  }
+
+  it('shows which project is running, and out of how many, above the live line', () => {
+    const progress = ttyProgress({ key: 'app-a', index: 1, total: 2 });
+
+    const start = captureStdout(() => progress.start());
+    captureStdout(() => progress.finish());
+
+    expect(start).toContain('Project 1/2 · app-a');
+    expect(start).toMatch(/Project 1\/2 · app-a[\s\S]*Analyzing 3 files\.+/);
+    expect(countNewlines(start)).toBe(2);
+  });
+
+  it('erases both lines when the live display is redrawn', () => {
+    const progress = ttyProgress({ key: 'app-a', index: 1, total: 2 });
+    captureStdout(() => progress.start());
+
+    const redraw = captureStdout(() => progress.update(0, 'done'));
+    captureStdout(() => progress.finish());
+
+    expect(countOccurrences(redraw, CURSOR_UP)).toBe(2);
+    expect(redraw).toContain('Project 1/2 · app-a');
+    expect(redraw).toContain('(1/3)');
+    expect(countNewlines(redraw)).toBe(2);
+  });
+
+  it('erases both lines on finish', () => {
+    const progress = ttyProgress({ key: 'app-a', index: 1, total: 2 });
+    captureStdout(() => progress.start());
+
+    const finish = captureStdout(() => progress.finish());
+
+    expect(countOccurrences(finish, CURSOR_UP)).toBe(2);
+    expect(finish).not.toContain('Project');
+  });
+
+  it('shows no project line when the analysis covers a single project', () => {
+    const progress = ttyProgress({ key: 'app-a', index: 1, total: 1 });
+
+    const start = captureStdout(() => progress.start());
+    const finish = captureStdout(() => progress.finish());
+
+    expect(start).not.toContain('Project');
+    expect(countNewlines(start)).toBe(1);
+    expect(countOccurrences(finish, CURSOR_UP)).toBe(1);
+  });
+
+  it('shows no project line when no project is given', () => {
+    const start = captureStdout(() => ttyProgress().start());
+
+    expect(start).not.toContain('Project');
+    expect(countNewlines(start)).toBe(1);
+  });
+});

@@ -29,7 +29,7 @@ import {
 } from './sqaa-depth.ts';
 import type { SqaaResolution } from './sqaa-resolution.ts';
 import { confirmLargeChangeset } from './sqaa-resolution.ts';
-import type { OutputFormat, SqaaResolvedContext } from './sqaa-types.ts';
+import type { OutputFormat, SqaaResolvedRun } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
@@ -55,13 +55,15 @@ export function resolveSqaaContext(
   resolution: SqaaResolution,
   policy: { requireProject: boolean },
   console: Console,
-): SqaaResolvedContext | null {
+): SqaaResolvedRun | null {
   switch (resolution.kind) {
     case 'resolved':
       return {
         connection: resolution.connection,
-        projectKey: resolution.projectKey,
-        projectRoot: resolution.projectRoot,
+        groups: resolution.groups,
+        unmapped: resolution.unmapped,
+        otherConnection: resolution.otherConnection,
+        projectRoots: resolution.projectRoots,
       };
     case 'no-org':
       if (resolution.explicitProject) {

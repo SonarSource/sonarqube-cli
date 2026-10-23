@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   distributeChunkResponse,
+  mergeTallies,
   runAnalyses,
   shouldContinueAfterChunk,
 } from '@/commands/analyze/sqaa-analysis.ts';
@@ -256,5 +257,55 @@ describe('runAnalyses partial 413', () => {
     expect(tally.totalFailures).toBe(1);
     expect(tally.allResults).toHaveLength(2);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('mergeTallies', () => {
+  const success = (file: string, issues: number) => ({
+    file,
+    filePath: file,
+    issues: Array.from({ length: issues }, () => ({}) as never),
+    errors: null,
+  });
+
+  it('sums the counters and keeps results in tally order', () => {
+    const merged = mergeTallies([
+      { allResults: [success('/a/x.ts', 2)], totalIssues: 2, totalErrors: 1, totalFailures: 0 },
+      {
+        allResults: [{ file: '/b/y.ts', filePath: 'y.ts', failure: new Error('boom') }],
+        totalIssues: 0,
+        totalErrors: 0,
+        totalFailures: 1,
+      },
+    ]);
+
+    expect(merged.allResults.map((r) => r.file)).toEqual(['/a/x.ts', '/b/y.ts']);
+    expect(merged).toMatchObject({ totalIssues: 2, totalErrors: 1, totalFailures: 1 });
+    expect(merged.globalError).toBeUndefined();
+  });
+
+  it('keeps the first global error', () => {
+    const first = new Error('forbidden');
+    const merged = mergeTallies([
+      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0, globalError: first },
+      {
+        allResults: [],
+        totalIssues: 0,
+        totalErrors: 0,
+        totalFailures: 0,
+        globalError: new Error('later'),
+      },
+    ]);
+
+    expect(merged.globalError).toBe(first);
+  });
+
+  it('returns an empty tally for no runs', () => {
+    expect(mergeTallies([])).toEqual({
+      allResults: [],
+      totalIssues: 0,
+      totalErrors: 0,
+      totalFailures: 0,
+    });
   });
 });
