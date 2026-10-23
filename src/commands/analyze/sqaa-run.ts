@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { relative } from 'node:path';
+
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -328,7 +330,7 @@ export async function runSqaaAnalysisOnFiles(
   changeSet: ChangeSetResult,
   options: SqaaBatchRunOptions,
 ): Promise<void> {
-  await runSqaaBatch(options, changeSet.repoRoot, changeSet.ignored);
+  await runSqaaBatch(options, changeSet.repoRoot, changeSet.ignored, changeSet.repoRoot);
 }
 
 /** `displayBase` is what reported paths are relative to: cwd for `--file`, the repository root for a change set. */
@@ -336,6 +338,7 @@ async function runSqaaBatch(
   options: SqaaBatchRunOptions,
   displayBase: string,
   ignored: IgnoredFile[],
+  repoRoot?: string,
 ): Promise<void> {
   const {
     resolved,
@@ -375,8 +378,16 @@ async function runSqaaBatch(
       path: ignoredReportPath(f.path, displayBase),
       reason: f.reason,
     }));
+    const repoRootFromCwd = repoRoot ? relative(process.cwd(), repoRoot) : undefined;
     printSqaaTextReport(
-      { tally, allPaths, ignored: ignoredRows, projects, analysisDepth: displayDepth },
+      {
+        tally,
+        allPaths,
+        ignored: ignoredRows,
+        projects,
+        repoRootFromCwd,
+        analysisDepth: displayDepth,
+      },
       console,
     );
   }

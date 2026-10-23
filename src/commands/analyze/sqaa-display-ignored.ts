@@ -20,9 +20,10 @@
 
 // Rendering of the "Not analyzed" rows: one row per ignored file, collapsed per reason when large.
 
-import { bold, dim } from '@/core/ui/colors.ts';
+import { bold, dim, softBlue } from '@/core/ui/colors.ts';
 
 import type { IgnoredFile } from './sqaa-changeset.ts';
+import { formatIgnoredHeader } from './sqaa-display-headers.ts';
 
 type IgnoredReason = IgnoredFile['reason'];
 
@@ -44,15 +45,31 @@ function formatIgnoredCollapsedRow(count: number, reason: IgnoredReason, colored
   return `  ${icon}  ${countLabel} files  ${colored ? dim(label) : label}`;
 }
 
+function formatOutsideProjectHint(count: number, cdTarget: string, colored: boolean): string[] {
+  const info = `${count} ${count === 1 ? 'file is' : 'files are'} not in a project mapped from this folder.`;
+  const hint = ` Run from the repository root to include them: cd ${cdTarget} && sonar analyze agentic`;
+  return colored
+    ? [`  ${softBlue('ℹ')}  ${info}`, `  ${dim('→')} ${hint}`]
+    : [`  ℹ  ${info}`, `  → ${hint}`];
+}
+
+export interface IgnoredLinesOptions {
+  collapseThreshold: number;
+  formatFileRow: (path: string, label: `[IGNORED: ${string}]`) => string;
+  colored: boolean;
+  /** Path from cwd to the repo root; enables the re-run hint for outside-project files. */
+  repoRootFromCwd?: string;
+}
+
 /**
  * Ignored files as report rows. A reason with more than `collapseThreshold` files collapses to one
- * row at the position of its first file; other reasons keep one row per file.
+ * row at the position of its first file; other reasons keep one row per file. When
+ * `repoRootFromCwd` is given and any file is outside every project, a re-run hint follows the rows and replaces
+ * those files' own rows.
  */
-export function renderIgnoredRows(
+function renderIgnoredRows(
   ignored: Array<{ path: string; reason: IgnoredReason }>,
-  collapseThreshold: number,
-  formatFileRow: (path: string, label: `[IGNORED: ${string}]`) => string,
-  colored: boolean,
+  { collapseThreshold, formatFileRow, colored, repoRootFromCwd }: IgnoredLinesOptions,
 ): string[] {
   const countByReason = new Map<IgnoredReason, number>();
   for (const { reason } of ignored) {
@@ -61,6 +78,8 @@ export function renderIgnoredRows(
   const collapsed = new Set<IgnoredReason>();
   const rows: string[] = [];
   for (const { path, reason } of ignored) {
+    // The hint's count line stands in for these rows.
+    if (repoRootFromCwd && reason === 'outside-project') continue;
     const count = countByReason.get(reason) ?? 0;
     if (count <= collapseThreshold) {
       rows.push(formatFileRow(path, formatIgnoredLabel(reason)));
@@ -69,5 +88,24 @@ export function renderIgnoredRows(
       rows.push(formatIgnoredCollapsedRow(count, reason, colored));
     }
   }
+  const outsideProjectCount = countByReason.get('outside-project') ?? 0;
+  if (repoRootFromCwd && outsideProjectCount > 0) {
+    rows.push(...formatOutsideProjectHint(outsideProjectCount, repoRootFromCwd, colored));
+  }
   return rows;
+}
+
+/**
+ * The "Not analyzed" lines. Ignored files belong to no project, so under project headers (`grouped`)
+ * they get their own section instead of reading as the last project's files.
+ */
+export function renderIgnoredLines(
+  ignored: Array<{ path: string; reason: IgnoredReason }>,
+  grouped: boolean,
+  options: IgnoredLinesOptions,
+): string[] {
+  const rows = renderIgnoredRows(ignored, options);
+  return grouped && ignored.length > 0
+    ? ['', formatIgnoredHeader(ignored.length, options.colored), ...rows]
+    : rows;
 }
