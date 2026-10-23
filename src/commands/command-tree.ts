@@ -130,6 +130,7 @@ import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
 import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
+import { copilotPromptTransformed } from './hook/copilot-prompt-transformed.ts';
 import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
 import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
@@ -1146,6 +1147,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'PreToolUse handler for GitHub Copilot CLI: scan files for secrets before agent reads them',
     )
     .anonymousAction((ctx) => copilotPreToolUse(ctx));
+
+  hookCommand
+    .command('copilot-prompt-transformed')
+    .description('Copilot userPromptTransformed handler: mask secrets before the prompt is sent')
+    .anonymousAction(handleHookInvocation(copilotPromptTransformed));
 
   hookCommand
     .command('antigravity-pre-tool-use')
