@@ -30,15 +30,14 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
-import { isInsideProjectRoot, resolveSqaaPath } from '../analyze/sqaa-paths.ts';
+import { resolveSqaaPath } from '../analyze/sqaa-paths.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
+import { resolveHookProject } from './sqaa-hook-project.ts';
 import { readStdinJson } from './stdin.ts';
 import { resolveVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
@@ -78,29 +77,19 @@ async function analyzeEditedFile(
     return undefined;
   }
 
-  const { projectKey, projectRoot } = await discoverProject(process.cwd(), {
-    auth,
-    silent: true,
-    console: ctx.console,
-  });
-  if (!projectKey) {
-    return undefined;
-  }
-
-  noteProject(auth, projectKey);
-
   const canonicalPath = canonicalizePath(filePath);
   const normalizedPath = toRelativePosixPath(canonicalPath);
   if (normalizedPath == null) {
     logger.debug(`${options.logPrefix} SQAA skipped: file outside cwd: ${filePath}`);
     return undefined;
   }
-  if (!isInsideProjectRoot(canonicalPath, projectRoot)) {
-    logger.debug(
-      `${options.logPrefix} SQAA skipped: file outside project root ${projectRoot}: ${filePath}`,
-    );
+
+  const project = await resolveHookProject(auth, ctx.console, canonicalPath);
+  if (!project) {
+    logger.debug(`${options.logPrefix} SQAA skipped: no project owns ${filePath}`);
     return undefined;
   }
+  const { projectKey, projectRoot } = project;
 
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;

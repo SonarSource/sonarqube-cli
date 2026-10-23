@@ -53,7 +53,7 @@ interface SqaaDepthResolution {
  */
 export function resolveSqaaContext(
   resolution: SqaaResolution,
-  policy: { requireProject: boolean },
+  policy: { requireProject: boolean; silentSkip?: boolean },
   console: Console,
 ): SqaaResolvedRun | null {
   switch (resolution.kind) {
@@ -70,9 +70,11 @@ export function resolveSqaaContext(
           remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
         });
       }
-      console.warn(
-        'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
-      );
+      if (!policy.silentSkip) {
+        console.warn(
+          'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
+        );
+      }
       return null;
     case 'no-project':
       if (policy.requireProject) {
@@ -84,9 +86,11 @@ export function resolveSqaaContext(
           },
         );
       }
-      console.warn(
-        "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
-      );
+      if (!policy.silentSkip) {
+        console.warn(
+          "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
+        );
+      }
       return null;
   }
 }

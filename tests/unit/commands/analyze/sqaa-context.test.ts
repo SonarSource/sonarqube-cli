@@ -90,4 +90,12 @@ describe('resolveSqaaContext', () => {
     expect(resolveSqaaContext({ kind: 'no-project' }, { requireProject: false }, fake)).toBeNull();
     expect(fake.findCall('warn', 'no project configured')).toBeDefined();
   });
+
+  it('skips without a warning on a missing project or organization when asked to skip silently', () => {
+    const policy = { requireProject: false, silentSkip: true };
+
+    expect(resolveSqaaContext({ kind: 'no-project' }, policy, fake)).toBeNull();
+    expect(resolveSqaaContext({ kind: 'no-org', explicitProject: false }, policy, fake)).toBeNull();
+    expect(fake.findCall('warn', 'Vortex analysis skipped')).toBeUndefined();
+  });
 });

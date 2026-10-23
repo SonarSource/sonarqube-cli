@@ -29,6 +29,7 @@ import {
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
   SQAA_OPENCODE_POST_TOOL_USE_CALLER_COMMAND,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { opencodePostToolUse } from '@/commands/hook/opencode-post-tool-use.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
@@ -39,8 +40,8 @@ import { vortexUnavailableHookMessage } from '@/core/vortex/availability-message
 import * as entitlement from '@/core/vortex/entitlement.ts';
 import * as entitlementNotice from '@/core/vortex/vortex-entitlement-notice.ts';
 
-import { opencodePostToolUse } from '../../../../src/commands/hook/opencode-post-tool-use.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+import { discoveredProjects, projectMapping } from '../../../_common/discovered-projects.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 
@@ -69,7 +70,7 @@ describe('opencodePostToolUse', () => {
   let createAnalysisSpy: ReturnType<typeof spyOn>;
   let recordTelemetrySpy: ReturnType<typeof spyOn>;
   let spawnProcessSpy: ReturnType<typeof spyOn>;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  let discoverProjectsSpy: ReturnType<typeof spyOn>;
   let ctx: CommandInvocationContext;
 
   function writtenResult(): Record<string, unknown> {
@@ -100,11 +101,9 @@ describe('opencodePostToolUse', () => {
     });
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
-    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      repoRoot: process.cwd(),
-      projectRoot: process.cwd(),
-      projectKey: 'my-project',
-    });
+    discoverProjectsSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
+      discoveredProjects(projectMapping('my-project')),
+    );
     createAnalysisSpy = spyOn(
       clientModule.SqaaAnalysisClient.prototype,
       'createAnalysis',
@@ -123,7 +122,7 @@ describe('opencodePostToolUse', () => {
     createAnalysisSpy.mockRestore();
     recordTelemetrySpy.mockRestore();
     spawnProcessSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
+    discoverProjectsSpy.mockRestore();
   });
 
   it('writes the analysis summary as context when no issues are found', async () => {
@@ -206,6 +205,14 @@ describe('opencodePostToolUse', () => {
           source: 'state' as const,
         }),
       ),
+    );
+
+    discoverProjectsSpy.mockResolvedValue(
+      discoveredProjects({
+        ...projectMapping('my-project'),
+        serverUrl: 'https://sonar.example.com',
+        organization: undefined,
+      }),
     );
 
     await opencodePostToolUse(ctx);
@@ -292,11 +299,7 @@ describe('opencodePostToolUse', () => {
     });
 
     it('when no project key can be discovered', async () => {
-      discoverProjectSpy.mockResolvedValue({
-        repoRoot: process.cwd(),
-        projectRoot: process.cwd(),
-        projectKey: undefined,
-      });
+      discoverProjectsSpy.mockResolvedValue(discoveredProjects());
 
       await opencodePostToolUse(ctx);
 

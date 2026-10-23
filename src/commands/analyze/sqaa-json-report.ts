@@ -124,7 +124,11 @@ async function buildSqaaJsonReportFromChangeSet(
     console,
     fullChangeSet.files,
   );
-  const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
+  const resolved = resolveSqaaContext(
+    resolution,
+    { requireProject: false, silentSkip: runOptions.silentSkip },
+    console,
+  );
   if (!resolved) return null;
 
   const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
@@ -200,7 +204,11 @@ export async function buildSqaaJsonReport(
       console,
       entries.map((e) => e.absolutePath),
     );
-    const resolved = resolveSqaaContext(resolution, { requireProject: false }, console);
+    const resolved = resolveSqaaContext(
+      resolution,
+      { requireProject: false, silentSkip: runOptions.silentSkip },
+      console,
+    );
     if (!resolved) return null;
 
     assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);

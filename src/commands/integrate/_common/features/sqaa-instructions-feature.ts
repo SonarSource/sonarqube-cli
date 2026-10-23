@@ -40,7 +40,7 @@ These instructions were installed by \`sonar integrate\` at the user's request. 
 
 At the end of a turn that changed file contents in the workspace (create, edit, patch, or format), run Vortex analysis before your final reply or handoff. Analyze all files changed in the turn in one command.
 
-Pass each modified path with \`--file\`, relative to the project root (for example, \`src/foo.ts\`). Use \`--depth DEEP\` even for one file so the analysis includes cross-file findings.
+Pass each modified path with \`--file\`, relative to the directory you run the command from (for example, \`src/foo.ts\`). Use \`--depth DEEP\` even for one file so the analysis includes cross-file findings.
 
 \`\`\`bash
 sonar analyze agentic --depth DEEP --file <path/to/file1> --file <path/to/file2>
@@ -53,6 +53,8 @@ sonar analyze agentic --depth DEEP
 \`\`\`
 
 Per-edit hooks use faster STANDARD analysis. The end-of-turn check uses DEEP depth, including when only one file changed.
+
+In a repository with several Sonar projects (a monorepo), the directory you run the command from decides what is analyzed. From the monorepo root, one command analyzes every changed file against the project that owns it. From inside one project, only that project is analyzed: a \`--file\` path outside the current directory is rejected, and changes in other projects are listed as not analyzed. Run the command from a directory that contains every file changed this turn, usually the monorepo root. Files owned by no project are skipped in the change-set report and rejected as \`--file\` paths; leave them out rather than retrying.
 
 After the analysis:
 
