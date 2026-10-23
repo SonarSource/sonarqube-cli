@@ -30,8 +30,6 @@ import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display.ts';
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-discovery/project-info.ts';
-import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import {
   formatSqaaJsonReportForHook,
@@ -66,25 +64,19 @@ export async function codexPostToolUse(ctx: CommandInvocationContext): Promise<H
   }
   const { auth } = connection;
 
-  const { projectKey } = await discoverProject(process.cwd(), {
-    auth,
-    silent: true,
-    console: ctx.console,
-  });
-  if (!projectKey) return { agentSessionId: fromHook };
-
-  noteProject(auth, projectKey);
-
   const runStart = performance.now();
   let report: SqaaJsonReport | null;
   try {
+    // No `project`: the change set is split across the projects that own its files, and a
+    // repository with none configured skips without output.
     report = await buildSqaaJsonReport(
-      { project: projectKey, force: true, format: 'json', forcedDepth: 'STANDARD' },
+      { force: true, format: 'json', forcedDepth: 'STANDARD' },
       connection,
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
         telemetryCtx: ctx,
+        silentSkip: true,
       },
     );
   } catch (err) {

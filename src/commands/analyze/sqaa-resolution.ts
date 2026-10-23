@@ -21,17 +21,25 @@
 // Connection and project-key resolution for SQAA commands.
 
 import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
+import type {
+  CompleteProjectMapping,
+  DiscoveredProjects,
+} from '@/core/project-discovery/project-discovery-result.ts';
 import {
-  type DiscoveredProject,
-  discoverProject,
   type DiscoverProjectOptions,
+  discoverProjects,
 } from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
+
+import type { IgnoredFile } from './sqaa-changeset.ts';
+import { isInsideProjectRoot } from './sqaa-paths.ts';
+import type { SqaaProjectGroup } from './sqaa-types.ts';
 
 const LARGE_CHANGESET_HINT =
   'For faster feedback, try targeting your changes:\n' +
@@ -41,23 +49,33 @@ const LARGE_CHANGESET_HINT =
   '  --depth STANDARD  faster analysis (change-set / multi-file default is DEEP)';
 
 /**
- * Outcome of resolving a connection + project key for SQAA. This resolver reports
+ * Outcome of resolving a connection + projects for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
- * - `resolved`: usable connection and project key.
+ * - `resolved`: usable connection, with the files split per project (`groups`) and the files
+ *   no project of the active connection owns (`ignored`). Both can be empty-handed: every file may be ignored.
  * - `no-org`: Cloud is authenticated but has no organization. `explicitProject` tells the
  *   caller whether the user named a project, which is what makes this fatal rather than a skip.
  * - `no-project`: auth is fine but no project is configured. The caller
  *   decides whether this is an error or a graceful skip.
  */
 export type SqaaResolution =
-  | { kind: 'resolved'; connection: SonarConnection; projectKey: string; projectRoot: string }
+  | {
+      kind: 'resolved';
+      connection: SonarConnection;
+      groups: SqaaProjectGroup[];
+      ignored: IgnoredFile[];
+      projectRoots: string[];
+    }
   | { kind: 'no-org'; explicitProject: boolean }
   | { kind: 'no-project' };
 
 /**
- * Checks the connection is usable for SQAA and resolves the project key. Never throws or warns — every
- * unusable outcome comes back as a `kind`, and the caller owns what it means
- * (see `resolveSqaaContext` in sqaa-context.ts).
+ * Checks the connection is usable for SQAA and assigns each of `files` to its project. Never
+ * throws or warns — every unusable outcome comes back as a `kind`, and the caller owns what it
+ * means (see `resolveSqaaContext` in sqaa-context.ts).
+ *
+ * Without `explicitProject`, each file goes to the project with the deepest root containing it,
+ * so a monorepo's files fan out to several projects. An explicit project pins every file to it.
  *
  * Not side-effect-free: on a successful resolution it publishes the project key for
  * `project_uuid` telemetry (see `noteProject`). This is the single choke point for every SQAA
@@ -68,6 +86,7 @@ export async function resolveSqaaConnectionAndProject(
   connection: SonarConnection,
   explicitProject: string | undefined,
   console: Console,
+  files: string[],
   startDir?: string,
 ): Promise<SqaaResolution> {
   const { auth } = connection;
@@ -79,56 +98,116 @@ export async function resolveSqaaConnectionAndProject(
   // An explicit --project already supplies the key, so skip the git-remote binding lookup
   // (a server round trip). Discovery still runs because the project root is needed to build
   // server paths, and known mappings and local config are enough to find it.
-  const discovered = await discoverSqaaProject(auth, console, lookupDir, {
+  const discovered = await discoverSqaaProjects(auth, console, lookupDir, {
     useGitRemoteBinding: !explicitProject,
   });
-  const projectKey = explicitProject ?? discovered.projectKey;
-  if (!projectKey) return { kind: 'no-project' };
 
-  noteProject(auth, projectKey);
+  if (explicitProject) {
+    noteProject(auth, explicitProject);
+    const projectRoot = resolveExplicitProjectRoot(discovered, explicitProject, lookupDir);
+    const inside = files.filter((file) => isInsideProjectRoot(file, projectRoot));
+    return {
+      kind: 'resolved',
+      connection,
+      groups:
+        inside.length > 0 ? [{ projectKey: explicitProject, projectRoot, files: inside }] : [],
+      ignored: ignoredFiles(
+        files.filter((file) => !inside.includes(file)),
+        'outside-project',
+      ),
+      projectRoots: [projectRoot],
+    };
+  }
+
+  // Run from inside a project, only that project (the closest) is analyzed; run from above
+  // several, all of them. Files owned by any other project are unmapped, not analyzed.
+  const focused = discovered.focusedOn(lookupDir);
+  const { groups: allGroups, unmapped } = focused.groupByMapping(files);
+  // Source goes through the active connection only, so a project recorded against another
+  // server or organization is never uploaded to it. Grouping stays nearest-wins first, so
+  // a file of such a nested project is not handed to the project above it.
+  const onActiveConnection = (mapping: CompleteProjectMapping): boolean =>
+    authMatchesRecordedConnection(auth, mapping);
+  const [groups, otherConnectionGroups] = partition(allGroups, ({ mapping }) =>
+    onActiveConnection(mapping),
+  );
+  // Nothing configured for the directory the command runs in, not merely for these files:
+  // that stays the "no project" outcome rather than a run that silently excludes everything.
+  if (groups.length === 0 && focused.projects.length === 0) {
+    logger.debug('Vortex analysis: no project key discovered');
+    return { kind: 'no-project' };
+  }
+
+  // `project_uuid` holds one project, so a run spanning several leaves it unset rather than
+  // attributing the whole run to one of them.
+  const keys =
+    groups.length > 0
+      ? groups.map(({ mapping }) => mapping.projectKey)
+      : focused.projects.filter(onActiveConnection).map((mapping) => mapping.projectKey);
+  const [firstKey] = keys;
+  if (keys.length > 0 && keys.every((key) => key === firstKey)) noteProject(auth, firstKey);
+
   return {
     kind: 'resolved',
     connection,
-    projectKey,
-    projectRoot: resolveSqaaProjectRoot(discovered, projectKey, lookupDir),
+    groups: groups.map(({ mapping, paths }) => ({
+      projectKey: mapping.projectKey,
+      projectRoot: mapping.projectRoot,
+      files: paths,
+    })),
+    ignored: [
+      ...ignoredFiles(unmapped, 'outside-project'),
+      ...ignoredFiles(
+        otherConnectionGroups.flatMap(({ paths }) => paths),
+        'other-connection',
+      ),
+    ],
+    projectRoots: focused.projects.map((mapping) => mapping.projectRoot),
   };
 }
 
-/**
- * A discovered root only describes the discovered key, so an explicit `--project` naming a
- * different one falls back to the repository root.
- */
-function resolveSqaaProjectRoot(
-  discovered: DiscoveredProject,
-  projectKey: string,
-  lookupDir: string,
-): string {
-  if (discovered.projectKey === projectKey) return discovered.projectRoot;
-  return discovered.repoRoot ?? canonicalizePath(lookupDir);
+function ignoredFiles(paths: string[], reason: IgnoredFile['reason']): IgnoredFile[] {
+  return paths.map((path) => ({ path, reason }));
+}
+
+function partition<T>(items: T[], predicate: (item: T) => boolean): [T[], T[]] {
+  const matching: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) (predicate(item) ? matching : rest).push(item);
+  return [matching, rest];
 }
 
 /**
- * Look up the current project via the shared project-discovery pipeline
- * (`discoverProject`): the known-server-project-mapping cache, local config files, then a
- * git-remote-binding lookup against the server. Falls back to `process.cwd()` when no
- * `startDir` is given, so it works from a subdirectory or outside git.
+ * A discovered mapping only describes its own key, so an explicit `--project` naming one that
+ * discovery did not find falls back to the repository root.
  */
-export async function discoverSqaaProject(
+function resolveExplicitProjectRoot(
+  discovered: DiscoveredProjects,
+  projectKey: string,
+  lookupDir: string,
+): string {
+  const mapping = discovered.projects.find((project) => project.projectKey === projectKey);
+  return mapping?.projectRoot ?? discovered.repoRoot ?? canonicalizePath(lookupDir);
+}
+
+/**
+ * Look up every project mapping for the directory via the shared project-discovery pipeline
+ * (`discoverProjects`): shared project config, the known-server-project-mapping cache, local
+ * config files, then a git-remote-binding lookup against the server. Falls back to
+ * `process.cwd()` when no `startDir` is given, so it works from a subdirectory or outside git.
+ */
+export function discoverSqaaProjects(
   auth: ResolvedAuth,
   console: Console,
   startDir?: string,
   options: Pick<DiscoverProjectOptions, 'useGitRemoteBinding'> = {},
-): Promise<DiscoveredProject> {
-  const discovered = await discoverProject(startDir ?? process.cwd(), {
+): Promise<DiscoveredProjects> {
+  return discoverProjects(startDir ?? process.cwd(), {
     auth,
     silent: true,
     console,
     ...options,
   });
-  if (!discovered.projectKey) {
-    logger.debug('Vortex analysis: no project key discovered');
-  }
-  return discovered;
 }
 
 /**
