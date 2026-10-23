@@ -249,9 +249,13 @@ export class ServerBackend implements ImportBackend {
         : await this.api.checkPat(setting.key);
     } catch (error) {
       if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
-        throw new CommandFailedError(`DevOps platform setting '${setting.key}' was not found.`, {
-          remediationHint: 'It may have been removed. Run the command again to pick another one.',
-        });
+        throw new CommandFailedError(
+          `Could not check the personal access token for DevOps platform setting '${setting.key}': the server answered 404.`,
+          {
+            remediationHint:
+              'The setting may have been removed (run the command again to pick another one), or this SonarQube Server version may not offer the token check (every setting then answers 404: check the server version).',
+          },
+        );
       }
       throw mapRequestError(error, 'check the personal access token');
     }
