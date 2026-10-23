@@ -61,8 +61,7 @@ export function resolveSqaaContext(
       return {
         connection: resolution.connection,
         groups: resolution.groups,
-        unmapped: resolution.unmapped,
-        otherConnection: resolution.otherConnection,
+        ignored: resolution.ignored,
         projectRoots: resolution.projectRoots,
       };
     case 'no-org':

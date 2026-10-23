@@ -24,7 +24,10 @@ import { isSonarQubeCloud, type ResolvedAuth } from '@/core/auth/auth-resolver.t
 import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import type { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
+import type {
+  CompleteProjectMapping,
+  DiscoveredProjects,
+} from '@/core/project-discovery/project-discovery-result.ts';
 import {
   type DiscoverProjectOptions,
   discoverProjects,
@@ -34,6 +37,7 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import type { IgnoredFile } from './sqaa-changeset.ts';
 import { isInsideProjectRoot } from './sqaa-paths.ts';
 import type { SqaaProjectGroup } from './sqaa-types.ts';
 
@@ -48,7 +52,7 @@ const LARGE_CHANGESET_HINT =
  * Outcome of resolving a connection + projects for SQAA. This resolver reports
  * what it found and leaves the policy (skip vs. fail) to the caller:
  * - `resolved`: usable connection, with the files split per project (`groups`) and the files
- *   no project owns (`unmapped`). Both can be empty-handed: every file may be unmapped.
+ *   no project of the active connection owns (`ignored`). Both can be empty-handed: every file may be ignored.
  * - `no-org`: Cloud is authenticated but has no organization. `explicitProject` tells the
  *   caller whether the user named a project, which is what makes this fatal rather than a skip.
  * - `no-project`: auth is fine but no project is configured. The caller
@@ -59,8 +63,7 @@ export type SqaaResolution =
       kind: 'resolved';
       connection: SonarConnection;
       groups: SqaaProjectGroup[];
-      unmapped: string[];
-      otherConnection: string[];
+      ignored: IgnoredFile[];
       projectRoots: string[];
     }
   | { kind: 'no-org'; explicitProject: boolean }
@@ -108,8 +111,10 @@ export async function resolveSqaaConnectionAndProject(
       connection,
       groups:
         inside.length > 0 ? [{ projectKey: explicitProject, projectRoot, files: inside }] : [],
-      unmapped: files.filter((file) => !inside.includes(file)),
-      otherConnection: [],
+      ignored: ignoredFiles(
+        files.filter((file) => !inside.includes(file)),
+        'outside-project',
+      ),
       projectRoots: [projectRoot],
     };
   }
@@ -121,10 +126,11 @@ export async function resolveSqaaConnectionAndProject(
   // Source goes through the active connection only, so a project recorded against another
   // server or organization is never uploaded to it. Grouping stays nearest-wins first, so
   // a file of such a nested project is not handed to the project above it.
-  const groups = allGroups.filter(({ mapping }) => authMatchesRecordedConnection(auth, mapping));
-  const otherConnection = allGroups
-    .filter(({ mapping }) => !authMatchesRecordedConnection(auth, mapping))
-    .flatMap(({ paths }) => paths);
+  const onActiveConnection = (mapping: CompleteProjectMapping): boolean =>
+    authMatchesRecordedConnection(auth, mapping);
+  const [groups, otherConnectionGroups] = partition(allGroups, ({ mapping }) =>
+    onActiveConnection(mapping),
+  );
   // Nothing configured for the directory the command runs in, not merely for these files:
   // that stays the "no project" outcome rather than a run that silently excludes everything.
   if (groups.length === 0 && focused.projects.length === 0) {
@@ -137,9 +143,7 @@ export async function resolveSqaaConnectionAndProject(
   const keys =
     groups.length > 0
       ? groups.map(({ mapping }) => mapping.projectKey)
-      : focused.projects
-          .filter((mapping) => authMatchesRecordedConnection(auth, mapping))
-          .map((mapping) => mapping.projectKey);
+      : focused.projects.filter(onActiveConnection).map((mapping) => mapping.projectKey);
   const [firstKey] = keys;
   if (keys.length > 0 && keys.every((key) => key === firstKey)) noteProject(auth, firstKey);
 
@@ -151,10 +155,26 @@ export async function resolveSqaaConnectionAndProject(
       projectRoot: mapping.projectRoot,
       files: paths,
     })),
-    unmapped,
-    otherConnection,
+    ignored: [
+      ...ignoredFiles(unmapped, 'outside-project'),
+      ...ignoredFiles(
+        otherConnectionGroups.flatMap(({ paths }) => paths),
+        'other-connection',
+      ),
+    ],
     projectRoots: focused.projects.map((mapping) => mapping.projectRoot),
   };
+}
+
+function ignoredFiles(paths: string[], reason: IgnoredFile['reason']): IgnoredFile[] {
+  return paths.map((path) => ({ path, reason }));
+}
+
+function partition<T>(items: T[], predicate: (item: T) => boolean): [T[], T[]] {
+  const matching: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) (predicate(item) ? matching : rest).push(item);
+  return [matching, rest];
 }
 
 /**

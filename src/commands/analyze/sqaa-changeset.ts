@@ -53,21 +53,16 @@ export interface ChangeSetResult {
   repoRoot: string;
 }
 
-/** SQAA paths are relative to a project root, so a file under none cannot be analyzed. */
-export function excludeOutsideProjects(
+/** SQAA paths are relative to a project root, so a file no project of the connection owns cannot be analyzed. */
+export function excludeIgnoredFiles(
   changeSet: ChangeSetResult,
-  unmapped: string[],
-  otherConnection: string[] = [],
+  ignored: IgnoredFile[],
 ): ChangeSetResult {
-  const outside = new Set([...unmapped, ...otherConnection]);
+  const excluded = new Set(ignored.map(({ path }) => path));
   return {
     ...changeSet,
-    files: changeSet.files.filter((file) => !outside.has(file)),
-    ignored: [
-      ...changeSet.ignored,
-      ...unmapped.map((path): IgnoredFile => ({ path, reason: 'outside-project' })),
-      ...otherConnection.map((path): IgnoredFile => ({ path, reason: 'other-connection' })),
-    ],
+    files: changeSet.files.filter((file) => !excluded.has(file)),
+    ignored: [...changeSet.ignored, ...ignored],
   };
 }
 

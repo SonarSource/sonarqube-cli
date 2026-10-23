@@ -49,9 +49,9 @@ import {
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
 import {
-  assertInsideProjectRoots,
-  assertNoOtherConnectionFiles,
-  resolveSqaaPath,
+  assertExplicitFilesAnalyzable,
+  resolveSqaaRunFiles,
+  soleFile,
   type SqaaPath,
   withDisplayFilePath,
 } from './sqaa-paths.ts';
@@ -61,7 +61,7 @@ import type {
   AnalyzeSqaaRunOptions,
   SingleFileRunOptions,
   SqaaBatchRunOptions,
-  SqaaProjectGroup,
+  SqaaProjectFiles,
 } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -163,30 +163,13 @@ function displaySingleFileReport(
   displaySqaaResults(file.issues, file.errors, file.path, console, displayDepth);
 }
 
-/** A project's files with the paths SQAA and the user's report need for each. */
-export interface SqaaGroupPaths {
-  group: SqaaProjectGroup;
-  paths: SqaaPath[];
-}
-
-/** Throws when a group's file is outside its own root, which resolution rules out. */
-export function resolveSqaaGroupPaths(
-  groups: SqaaProjectGroup[],
-  displayBase: string,
-): SqaaGroupPaths[] {
-  return groups.map((group) => ({
-    group,
-    paths: group.files.map((file) => resolveSqaaPath(file, group.projectRoot, displayBase)),
-  }));
-}
-
 /**
  * Analyzes each project's files in turn and merges the tallies. Every project gets its own
  * progress because `runAnalyses` indexes progress by position within its own paths. A global
  * error (auth, entitlement) applies to the whole organization, so it stops the remaining projects.
  */
 export async function runSqaaGroups(
-  groupPaths: SqaaGroupPaths[],
+  projects: SqaaProjectFiles[],
   connection: SonarConnection,
   run: {
     branch: string | undefined;
@@ -197,17 +180,17 @@ export async function runSqaaGroups(
   },
 ): Promise<RunTally> {
   const tallies: RunTally[] = [];
-  for (const [index, { group, paths }] of groupPaths.entries()) {
+  for (const [index, { projectKey, files }] of projects.entries()) {
     const progress = new SqaaProgress({
-      files: paths.map((p) => p.displayPath),
-      project: { key: group.projectKey, index: index + 1, total: groupPaths.length },
+      files: files.map((file) => file.displayPath),
+      project: { key: projectKey, index: index + 1, total: projects.length },
       silent: run.silent,
       console: run.console,
     });
     const tally = await runAnalyses({
-      paths,
+      paths: files,
       connection,
-      projectKey: group.projectKey,
+      projectKey,
       branch: run.branch,
       progress,
       analysisDepth: run.wireDepth,
@@ -288,13 +271,11 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
-  assertNoOtherConnectionFiles(resolved.otherConnection);
-  assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
+  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
 
   const { connection } = resolved;
-  const [{ projectKey, projectRoot }] = resolved.groups;
+  const { projectKey, file: path } = soleFile(resolveSqaaRunFiles(resolved.groups, process.cwd()));
   const { auth } = connection;
-  const path = resolveSqaaPath(file, projectRoot);
   const fileContent = readSqaaFileContent(file);
 
   const { result: fetchResult, durationMs } = await timed(() =>
@@ -351,16 +332,11 @@ async function runSqaaBatch(
     console,
   } = options;
   const { connection } = resolved;
-  const groupPaths = resolveSqaaGroupPaths(resolved.groups, displayBase);
-  const projects = groupPaths.map(({ group, paths }) => ({
-    projectKey: group.projectKey,
-    paths: paths.map((p) => p.displayPath),
-  }));
-  const allPaths = projects.flatMap(({ paths }) => paths);
+  const files = resolveSqaaRunFiles(resolved.groups, displayBase);
   const isJson = format === 'json';
 
   const { result: tally, durationMs } = await timed(() =>
-    runSqaaGroups(groupPaths, connection, {
+    runSqaaGroups(files.projects, connection, {
       branch,
       wireDepth,
       displayDepth,
@@ -370,7 +346,14 @@ async function runSqaaBatch(
   );
 
   if (isJson) {
-    const report = buildJsonReport(tally, ignored, allPaths, displayBase, displayDepth, projects);
+    const report = buildJsonReport(
+      tally,
+      ignored,
+      files.displayPaths,
+      displayBase,
+      displayDepth,
+      files.displayProjects,
+    );
     await printSqaaJsonReport(report, connection, console);
   } else {
     if (tally.globalError instanceof SqaaForbiddenError) {
@@ -384,9 +367,9 @@ async function runSqaaBatch(
     printSqaaTextReport(
       {
         tally,
-        allPaths,
+        allPaths: files.displayPaths,
         ignored: ignoredRows,
-        projects,
+        projects: files.displayProjects,
         repoRootFromCwd,
         analysisDepth: displayDepth,
       },

@@ -23,8 +23,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 
 import {
+  assertExplicitFilesAnalyzable,
   assertInsideProjectRoot,
   assertInsideProjectRoots,
+  resolveSqaaRunFiles,
+  soleFile,
 } from '@/commands/analyze/sqaa-paths.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
@@ -96,5 +99,103 @@ describe('assertInsideProjectRoots', () => {
         `Files must be inside one of the project roots (${rootA}, ${rootB}):\n  x.ts\n  docs/y.md`,
       ),
     );
+  });
+});
+
+describe('assertExplicitFilesAnalyzable', () => {
+  const repoRoot = join('/', 'repo');
+  const rootA = join(repoRoot, 'packages', 'a');
+
+  it('accepts a run that ignored nothing', () => {
+    expect(() => assertExplicitFilesAnalyzable([], [rootA], repoRoot)).not.toThrow();
+  });
+
+  it('refuses a file owned by a project of another connection', () => {
+    expect(() =>
+      assertExplicitFilesAnalyzable(
+        [{ path: join(repoRoot, 'packages', 'b', 'x.ts'), reason: 'other-connection' }],
+        [rootA],
+        repoRoot,
+      ),
+    ).toThrow(
+      new InvalidOptionError(
+        'Files belong to a project linked to another server or organization than the active connection:\n  packages/b/x.ts',
+      ),
+    );
+  });
+
+  it('names the roots for a file owned by no project', () => {
+    expect(() =>
+      assertExplicitFilesAnalyzable(
+        [{ path: join(repoRoot, 'x.ts'), reason: 'outside-project' }],
+        [rootA],
+        repoRoot,
+      ),
+    ).toThrow(new InvalidOptionError(`File must be inside the project root '${rootA}': x.ts`));
+  });
+
+  it('reports the other-connection file first when both kinds are present', () => {
+    expect(() =>
+      assertExplicitFilesAnalyzable(
+        [
+          { path: join(repoRoot, 'x.ts'), reason: 'outside-project' },
+          { path: join(repoRoot, 'packages', 'b', 'y.ts'), reason: 'other-connection' },
+        ],
+        [rootA],
+        repoRoot,
+      ),
+    ).toThrow(/another server or organization/);
+  });
+
+  it('does not treat binary or oversized ignores as an input error', () => {
+    expect(() =>
+      assertExplicitFilesAnalyzable([{ path: 'x.png', reason: 'binary' }], [rootA], repoRoot),
+    ).not.toThrow();
+  });
+});
+
+describe('resolveSqaaRunFiles', () => {
+  const repoRoot = join('/', 'repo');
+  const groups = [
+    {
+      projectKey: 'app-a',
+      projectRoot: join(repoRoot, 'packages', 'a'),
+      files: [join(repoRoot, 'packages', 'a', 'src', 'x.ts')],
+    },
+    {
+      projectKey: 'app-b',
+      projectRoot: join(repoRoot, 'packages', 'b'),
+      files: [join(repoRoot, 'packages', 'b', 'y.ts'), join(repoRoot, 'packages', 'b', 'z.ts')],
+    },
+  ];
+
+  it('gives each file its server and display paths, project by project', () => {
+    const { projects } = resolveSqaaRunFiles(groups, repoRoot);
+
+    expect(projects.map(({ projectKey }) => projectKey)).toEqual(['app-a', 'app-b']);
+    expect(projects[0].files).toEqual([
+      {
+        absolutePath: groups[0].files[0],
+        serverPath: 'src/x.ts',
+        displayPath: 'packages/a/src/x.ts',
+      },
+    ]);
+    expect(projects[1].files.map((file) => file.serverPath)).toEqual(['y.ts', 'z.ts']);
+  });
+
+  it('derives the display views from the same files', () => {
+    const { displayProjects, displayPaths } = resolveSqaaRunFiles(groups, repoRoot);
+
+    expect(displayProjects).toEqual([
+      { projectKey: 'app-a', paths: ['packages/a/src/x.ts'] },
+      { projectKey: 'app-b', paths: ['packages/b/y.ts', 'packages/b/z.ts'] },
+    ]);
+    expect(displayPaths).toEqual(['packages/a/src/x.ts', 'packages/b/y.ts', 'packages/b/z.ts']);
+  });
+
+  it('returns the one file of a single-file run with its project', () => {
+    const run = resolveSqaaRunFiles(groups.slice(0, 1), repoRoot);
+
+    expect(soleFile(run)).toEqual({ projectKey: 'app-a', file: run.projects[0].files[0] });
   });
 });
