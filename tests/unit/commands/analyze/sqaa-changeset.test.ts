@@ -24,14 +24,14 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as processLib from '@/core/process/process.ts';
-
 import {
+  excludeOutsideProjects,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
-} from '../../../../src/commands/analyze/sqaa-changeset.ts';
-import { clearGitStdoutCache } from '../../../../src/core/host/git/worktree.ts';
+} from '@/commands/analyze/sqaa-changeset.ts';
+import { clearGitStdoutCache } from '@/core/host/git/worktree.ts';
+import * as processLib from '@/core/process/process.ts';
 
 let spawnProcessSpy: ReturnType<typeof spyOn>;
 let tempDir: string | undefined;
@@ -141,4 +141,30 @@ describe('resolveChangeSet', () => {
       expect(result.ignored).toEqual([{ path: symlinkPath, reason: 'outside-repository' }]);
     },
   );
+});
+
+describe('excludeOutsideProjects', () => {
+  it('moves unmapped files to ignored as outside-project, after the existing ignores', () => {
+    const result = excludeOutsideProjects(
+      {
+        files: ['/repo/a/x.ts', '/repo/docs/y.md', '/repo/b/z.ts'],
+        ignored: [{ path: '/repo/logo.png', reason: 'binary' }],
+        repoRoot: '/repo',
+      },
+      ['/repo/docs/y.md'],
+    );
+
+    expect(result.files).toEqual(['/repo/a/x.ts', '/repo/b/z.ts']);
+    expect(result.ignored).toEqual([
+      { path: '/repo/logo.png', reason: 'binary' },
+      { path: '/repo/docs/y.md', reason: 'outside-project' },
+    ]);
+    expect(result.repoRoot).toBe('/repo');
+  });
+
+  it('leaves the change set as it was when every file is mapped', () => {
+    const changeSet = { files: ['/repo/a/x.ts'], ignored: [], repoRoot: '/repo' };
+
+    expect(excludeOutsideProjects(changeSet, [])).toEqual(changeSet);
+  });
 });
