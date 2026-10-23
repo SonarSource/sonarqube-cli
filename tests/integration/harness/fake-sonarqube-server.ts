@@ -529,6 +529,7 @@ export class FakeSonarQubeServerBuilder {
   private systemVersion = '25.1.0.102122';
   private memberOrganizations?: Organization[];
   private memberOrganizationsTotal?: number;
+  private readonly memberOrganizationsByToken: Map<string, Organization[]> = new Map();
   // The default Cloud fixture answers `/organizations/organizations` only: it is neither a
   // membership nor visible to the v1 `organizations=` search, so seeding it leaves every
   // pre-existing v1 expectation untouched. Other keys return 404 unless a test configures them.
@@ -619,6 +620,12 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizations(orgs: Organization[]): this {
     this.memberOrganizations = orgs;
+    return this;
+  }
+
+  /** Give one bearer token its own memberships, so two accounts can disagree about an org. */
+  withOrganizationsForToken(token: string, orgs: Organization[]): this {
+    this.memberOrganizationsByToken.set(token, orgs);
     return this;
   }
 
@@ -940,6 +947,7 @@ export class FakeSonarQubeServerBuilder {
       systemVersion,
       memberOrganizations: configuredMemberOrganizations,
       memberOrganizationsTotal: rawMemberOrganizationsTotal,
+      memberOrganizationsByToken,
       visibleOrganizations,
       defaultResolvableOrganizations,
       currentUserId,
@@ -1613,10 +1621,15 @@ export class FakeSonarQubeServerBuilder {
           if (query.member === 'true') {
             const pageIndex = Number.parseInt(query.p ?? '1', 10);
             const pageSize = Number.parseInt(query.ps ?? '10', 10);
+            const tokenOrganizations = memberOrganizationsByToken.get(bearerToken ?? '');
             return new Response(
               JSON.stringify({
-                organizations: memberOrganizations,
-                paging: { pageIndex, pageSize, total: memberOrganizationsTotal },
+                organizations: tokenOrganizations ?? memberOrganizations,
+                paging: {
+                  pageIndex,
+                  pageSize,
+                  total: tokenOrganizations?.length ?? memberOrganizationsTotal,
+                },
               }),
               { headers: { 'Content-Type': 'application/json' } },
             );
