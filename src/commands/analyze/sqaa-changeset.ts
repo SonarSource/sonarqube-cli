@@ -42,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project';
+  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project' | 'other-connection';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -57,14 +57,16 @@ export interface ChangeSetResult {
 export function excludeOutsideProjects(
   changeSet: ChangeSetResult,
   unmapped: string[],
+  otherConnection: string[] = [],
 ): ChangeSetResult {
-  const outside = new Set(unmapped);
+  const outside = new Set([...unmapped, ...otherConnection]);
   return {
     ...changeSet,
     files: changeSet.files.filter((file) => !outside.has(file)),
     ignored: [
       ...changeSet.ignored,
       ...unmapped.map((path): IgnoredFile => ({ path, reason: 'outside-project' })),
+      ...otherConnection.map((path): IgnoredFile => ({ path, reason: 'other-connection' })),
     ],
   };
 }

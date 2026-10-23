@@ -50,6 +50,7 @@ import {
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
 import {
   assertInsideProjectRoots,
+  assertNoOtherConnectionFiles,
   resolveSqaaPath,
   type SqaaPath,
   withDisplayFilePath,
@@ -287,6 +288,7 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   );
   const resolved = resolveSqaaContext(resolution, { requireProject }, console);
   if (!resolved) return;
+  assertNoOtherConnectionFiles(resolved.otherConnection);
   assertInsideProjectRoots(resolved.unmapped, resolved.projectRoots);
 
   const { connection } = resolved;
