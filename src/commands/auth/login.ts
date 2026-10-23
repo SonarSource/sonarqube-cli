@@ -97,12 +97,24 @@ export async function authLogin(
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, console);
+    const storedLogin = await findStoredLogin(server);
+    if (storedLogin) {
+      console.info(`Already authenticated on ${server} — no re-authentication needed.`);
+    }
 
-    if (auth.reusedExistingToken && orgOption) {
-      await switchReusedLoginOrganization(server, orgOption, auth, console);
+    if (storedLogin && orgOption) {
+      await switchReusedLoginOrganization(
+        server,
+        isCloud,
+        orgOption,
+        storedLogin,
+        console,
+        invocationAuth?.orgKey,
+      );
+    } else if (storedLogin) {
+      await loginWithStoredToken(server, isCloud, storedLogin, console, invocationAuth?.orgKey);
     } else {
-      await completeLogin(server, isCloud, orgOption, auth, console, invocationAuth?.orgKey);
+      await loginWithNewToken(server, isCloud, orgOption, console, invocationAuth?.orgKey);
     }
 
     if (invocationAuth?.comesFromEnv()) {
@@ -122,16 +134,37 @@ export async function authLogin(
 
 async function switchReusedLoginOrganization(
   server: string,
+  isCloud: boolean,
   org: string,
   auth: BrowserAuthResult,
   console: Console,
+  invocationOrgKey: string | undefined,
 ): Promise<void> {
   const activeConnection = getActiveConnection(loadState());
   const activeOrgKey = isSameServer(activeConnection, server)
     ? activeConnection?.orgKey
     : undefined;
 
-  await assertMemberOrDeclineSwitch(server, org, auth.token, activeOrgKey, console);
+  const membership = await new OrganizationsClient(
+    new SonarHttpClient(server, auth.token),
+  ).checkMembership(org);
+  if (membership.status === 'check_failed') {
+    throw organizationMembershipError(org, membership);
+  }
+
+  if (membership.status === 'not_member') {
+    console.info(`Your account isn't a member of '${org}'.`);
+    if (await confirmSignInWithDifferentAccount(console)) {
+      await loginWithNewToken(server, isCloud, org, console, invocationOrgKey);
+      return;
+    }
+    if (activeOrgKey) {
+      console.print(`Active organization unchanged: ${activeOrgKey}`);
+    }
+    throw new CommandFailedError(`Could not switch to '${org}'`, {
+      remediationHint: `Check the organization key, or ask an org admin to add you. To use another account, run 'sonar auth logout', then 'sonar auth login --org ${org}'.`,
+    });
+  }
 
   if (activeOrgKey === org) {
     console.print(`Already using organization: ${org}`);
@@ -152,45 +185,57 @@ async function switchReusedLoginOrganization(
   console.success(`Switched to '${org}'`);
 }
 
-async function assertMemberOrDeclineSwitch(
+async function confirmSignInWithDifferentAccount(console: Console): Promise<boolean | null> {
+  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
+  return canPrompt && (await console.confirmPrompt('Sign in with a different account?', false));
+}
+
+async function loginWithStoredToken(
   server: string,
-  org: string,
-  token: string,
-  activeOrgKey: string | undefined,
+  isCloud: boolean,
+  auth: BrowserAuthResult,
   console: Console,
+  activeOrgKey: string | undefined,
 ): Promise<void> {
-  const membership = await new OrganizationsClient(
-    new SonarHttpClient(server, token),
-  ).checkMembership(org);
-  if (membership.status === 'member') {
-    return;
-  }
-  if (membership.status === 'check_failed') {
-    throw organizationMembershipError(org, membership);
+  const org = await resolveOrganization(server, isCloud, undefined, auth, console, activeOrgKey);
+  await completeLogin(server, isCloud, org, auth, console);
+}
+
+/**
+ * Sign in through the browser and save the new token.
+ *
+ * When the organization is rejected, discard the token this login just minted, so a typo does not
+ * leave an unusable token in the user's account.
+ */
+async function loginWithNewToken(
+  server: string,
+  isCloud: boolean,
+  orgOption: string | undefined,
+  console: Console,
+  activeOrgKey: string | undefined,
+): Promise<void> {
+  const auth = await generateToken(server, console);
+
+  let org: string | undefined;
+  try {
+    org = await resolveOrganization(server, isCloud, orgOption, auth, console, activeOrgKey);
+  } catch (error) {
+    await discardGeneratedToken(server, auth.token, auth.tokenName, console);
+    throw error;
   }
 
-  console.info(`Your account isn't a member of '${org}'.`);
-  if (activeOrgKey) {
-    console.print(`Active organization unchanged: ${activeOrgKey}`);
-  }
-  throw new CommandFailedError(`Could not switch to '${org}'`, {
-    remediationHint: `Check the organization key, or ask an org admin to add you. To use another account, run 'sonar auth logout', then 'sonar auth login --org ${org}'.`,
-  });
+  await completeLogin(server, isCloud, org, auth, console);
 }
 
 async function completeLogin(
   server: string,
   isCloud: boolean,
-  orgOption: string | undefined,
-  auth: BrowserAuthResult & { reusedExistingToken: boolean },
+  org: string | undefined,
+  auth: BrowserAuthResult,
   console: Console,
-  activeOrgKey: string | undefined,
 ): Promise<void> {
-  const org = await resolveOrganization(server, isCloud, orgOption, auth, console, activeOrgKey);
-
   await persistLoginCredentials(server, isCloud, org, auth.token, {
     tokenName: auth.tokenName,
-    reusedExistingToken: auth.reusedExistingToken,
     console,
   });
 
@@ -248,7 +293,6 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
 
 interface PersistLoginOptions {
   tokenName?: string;
-  reusedExistingToken?: boolean;
   refreshIdentity?: boolean;
   console?: Console;
 }
@@ -261,18 +305,11 @@ async function persistLoginCredentials(
   options: PersistLoginOptions = {},
 ): Promise<void> {
   const state = loadState();
-  const existingConnection = getActiveConnection(state);
-  const sameServerAsExisting = isSameServer(existingConnection, server);
-
-  await revokePreviousLoginToken(existingConnection, server, token, options);
+  await revokePreviousLoginToken(getActiveConnection(state), server, token, options);
 
   await deleteStaleTokens(state.auth.connections, server);
   await saveToken(server, token);
 
-  const connectionTokenName =
-    options.reusedExistingToken && existingConnection && sameServerAsExisting
-      ? existingConnection.tokenName
-      : options.tokenName;
   const actualToken = token || (await getKeystoreToken(server));
 
   if (actualToken) {
@@ -286,7 +323,7 @@ async function persistLoginCredentials(
           source: 'state',
         }),
         {
-          tokenName: connectionTokenName,
+          tokenName: options.tokenName,
           force: true,
           refreshIdentity: options.refreshIdentity,
         },
@@ -304,7 +341,7 @@ async function persistLoginCredentials(
       addOrUpdateConnection(latest, server, isCloud ? 'cloud' : 'on-premise', {
         orgKey: org,
         region: cloudRegionFromUrl(server),
-        tokenName: connectionTokenName,
+        tokenName: options.tokenName,
       });
     });
   } catch (error) {
@@ -320,7 +357,7 @@ async function revokePreviousLoginToken(
   token: string,
   options: PersistLoginOptions,
 ): Promise<void> {
-  if (options.reusedExistingToken || !connection?.tokenName || !isSameServer(connection, server)) {
+  if (!connection?.tokenName || !isSameServer(connection, server)) {
     return;
   }
   const previousToken = await getKeystoreToken(server);
@@ -390,15 +427,12 @@ async function warnIfEnvAuthPresent(
 
 /**
  * Resolve the organization, which only SonarQube Cloud has.
- *
- * When it is rejected, discard the token this login just minted, so a typo does not leave an
- * unusable token in the user's account.
  */
 async function resolveOrganization(
   server: string,
   isCloud: boolean,
   orgOption: string | undefined,
-  auth: BrowserAuthResult & { reusedExistingToken: boolean },
+  auth: BrowserAuthResult,
   console: Console,
   activeOrgKey: string | undefined,
 ): Promise<string | undefined> {
@@ -406,19 +440,12 @@ async function resolveOrganization(
     return undefined;
   }
 
-  try {
-    return await validateOrSelectOrganization(
-      new OrganizationsClient(new SonarHttpClient(server, auth.token)),
-      orgOption,
-      console,
-      activeOrgKey,
-    );
-  } catch (error) {
-    if (!auth.reusedExistingToken) {
-      await discardGeneratedToken(server, auth.token, auth.tokenName, console);
-    }
-    throw error;
-  }
+  return await validateOrSelectOrganization(
+    new OrganizationsClient(new SonarHttpClient(server, auth.token)),
+    orgOption,
+    console,
+    activeOrgKey,
+  );
 }
 
 /**
@@ -440,28 +467,21 @@ async function discardGeneratedToken(
   });
 }
 
-/**
- * Get token for authentication
- */
-async function getOrGenerateToken(
-  server: string,
-  console: Console,
-): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
+async function findStoredLogin(server: string): Promise<BrowserAuthResult | undefined> {
   const recordedConnection = findRecordedConnection(server);
   const existingToken = recordedConnection ? await getKeystoreToken(server) : null;
-  if (existingToken) {
-    console.info(`Already authenticated on ${server} — no re-authentication needed.`);
-    return {
-      token: existingToken,
-      tokenName: recordedConnection?.tokenName,
-      reusedExistingToken: true,
-    };
+  if (!existingToken) {
+    return undefined;
   }
 
+  return { token: existingToken, tokenName: recordedConnection?.tokenName };
+}
+
+async function generateToken(server: string, console: Console): Promise<BrowserAuthResult> {
   console.print(`\nAuthenticating with: ${server}`);
   const authResult = await generateTokenViaBrowser(server, console);
   console.discreetSuccess('Token received');
-  return { ...authResult, reusedExistingToken: false };
+  return authResult;
 }
 
 function findRecordedConnection(server: string): AuthConnection | undefined {

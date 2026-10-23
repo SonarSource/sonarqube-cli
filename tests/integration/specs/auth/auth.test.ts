@@ -507,6 +507,7 @@ describe('auth login', () => {
           "Check the organization key, or ask an org admin to add you. To use another account, run 'sonar auth logout', then 'sonar auth login --org org-b'.",
         );
         expect(result.stdout).not.toContain('Switched to');
+        expect(result.stdout).not.toContain('Sign in with a different account?');
         expectLoginLeftUntouched(server);
         expect(
           server
@@ -543,6 +544,105 @@ describe('auth login', () => {
       },
       { timeout: 15000 },
     );
+
+    describe('at a terminal', () => {
+      const SIGN_IN_PROMPT = 'Sign in with a different account?';
+
+      async function startTwoAccountServer(newAccountOrgs: Array<{ key: string; name: string }>) {
+        const server = await harness
+          .newFakeServer()
+          .withOrganizationsForToken('stored-token', [{ key: 'org-a', name: 'Org A' }])
+          .withOrganizationsForToken('new-token', newAccountOrgs)
+          .start();
+        harness
+          .state()
+          .withActiveConnection(server.baseUrl(), 'cloud', 'org-a')
+          .withTokenName('cli-browser-token')
+          .withKeychainToken(server.baseUrl(), 'stored-token');
+        return server;
+      }
+
+      function startLogin(server: { baseUrl(): string }) {
+        return harness.runInteractive(`auth login --server ${server.baseUrl()} --org org-b`, {
+          extraEnv: { ...cloudUrlEnv(server.baseUrl()), SONARQUBE_CLI_MOCK_TTY: '1' },
+          browserToken: 'new-token',
+          browserTokenName: 'cli-new-token',
+        });
+      }
+
+      function revokedTokenNames(server: {
+        getRecordedRequests(): Array<{ path: string; body?: string }>;
+      }) {
+        return server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/user_tokens/revoke')
+          .map((request) => request.body);
+      }
+
+      it(
+        'fails like a non-interactive run when the offer is declined',
+        async () => {
+          const server = await startTwoAccountServer([{ key: 'org-b', name: 'Org B' }]);
+
+          const session = startLogin(server);
+          await session.decline(SIGN_IN_PROMPT);
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(1);
+          expect(result.stdout).toContain('Active organization unchanged: org-a');
+          expect(result.stderr).toContain("Could not switch to 'org-b'");
+          expect(result.stdout).not.toContain('Authenticating with:');
+          expectLoginLeftUntouched(server);
+          expect(revokedTokenNames(server)).toEqual([]);
+        },
+        { timeout: 15000 },
+      );
+
+      it(
+        'replaces the login with a fresh one when the offer is accepted and the new account is a member',
+        async () => {
+          const server = await startTwoAccountServer([{ key: 'org-b', name: 'Org B' }]);
+
+          const session = startLogin(server);
+          await session.waitText(SIGN_IN_PROMPT);
+          session.write('y');
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('Authentication successful for:');
+          const connections = harness.stateJsonFile.asJson().auth.connections as Array<{
+            orgKey?: string;
+            tokenName?: string;
+          }>;
+          expect(connections).toHaveLength(1);
+          expect(connections[0]).toMatchObject({ orgKey: 'org-b', tokenName: 'cli-new-token' });
+          expect(
+            readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+          ).toBe('new-token');
+          expect(revokedTokenNames(server)).toEqual(['name=cli-browser-token']);
+        },
+        { timeout: 15000 },
+      );
+
+      it(
+        'keeps the old login and revokes the new token when the new account is not a member either',
+        async () => {
+          const server = await startTwoAccountServer([{ key: 'org-c', name: 'Org C' }]);
+
+          const session = startLogin(server);
+          await session.waitText(SIGN_IN_PROMPT);
+          session.write('y');
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain("You are not a member of organization 'org-b'.");
+          expect(result.stdout).not.toContain('Authentication successful');
+          expectLoginLeftUntouched(server);
+          expect(revokedTokenNames(server)).toEqual(['name=cli-new-token']);
+        },
+        { timeout: 15000 },
+      );
+    });
   });
 
   it(
@@ -569,6 +669,20 @@ describe('auth login', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Already authenticated on');
       expect(result.stdout).not.toContain('sonar auth org');
+      const connections = harness.stateJsonFile.asJson().auth.connections as Array<{
+        orgKey?: string;
+        tokenName?: string;
+      }>;
+      expect(connections).toHaveLength(1);
+      expect(connections[0]).toMatchObject({ orgKey: 'org-a', tokenName: 'cli-browser-token' });
+      expect(
+        readKeychainToken(harness.keychainJsonFile, generateKeychainAccount(server.baseUrl())),
+      ).toBe('stored-token');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/user_tokens/revoke'),
+      ).toHaveLength(0);
     },
     { timeout: 15000 },
   );
