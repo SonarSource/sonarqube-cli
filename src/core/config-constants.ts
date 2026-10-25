@@ -308,6 +308,7 @@ export const SECRETS_CALLER_COMMANDS = {
   claudePreToolUse: 'claude-pre-tool-use',
   copilotPreToolUse: 'copilot-pre-tool-use',
   copilotPromptTransformed: 'copilot-prompt-transformed',
+  codexPostToolUseSecrets: 'codex-post-tool-use-secrets',
   antigravityPreToolUse: 'antigravity-pre-tool-use',
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
