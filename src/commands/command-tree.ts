@@ -128,6 +128,7 @@ import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
 import { codexPostToolUse } from './hook/codex-post-tool-use.ts';
+import { codexPostToolUseSecrets } from './hook/codex-post-tool-use-secrets.ts';
 import { codexPromptSubmit } from './hook/codex-prompt-submit.ts';
 import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
 import { copilotPromptTransformed } from './hook/copilot-prompt-transformed.ts';
@@ -601,7 +602,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('codex')
     .description(
-      'Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.',
+      'Setup SonarQube integration for Codex. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
@@ -1240,6 +1241,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         agentSessionStart(ctx, options.agent),
       ),
     );
+
+  hookCommand
+    .command('codex-post-tool-use-secrets')
+    .description('PostToolUse handler for Codex: mask secrets in tool output')
+    .anonymousAction(handleHookInvocation(codexPostToolUseSecrets));
 
   hookCommand
     .command('codex-post-tool-use')

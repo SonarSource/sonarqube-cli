@@ -26,12 +26,9 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { jsonPatch, textSnippet, wholeFile } from '@/core/framework/features';
+import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
-import {
-  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_PROMPT_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -52,11 +49,7 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import {
-  SECRETS_ON_READ_BODY,
-  sonarBeginMarker,
-  sonarEndMarker,
-} from '../_common/instructions-templates.ts';
+import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
 
@@ -65,6 +58,7 @@ const HOOKS_FILE = 'hooks.json';
 const CONFIG_TOML_FILE = 'config.toml';
 const AGENTS_MD_FILE = 'AGENTS.md';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+const POSTTOOL_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/posttool-secrets';
 const POSTTOOL_SQAA_SCRIPT_REL = 'sonar-sqaa/build-scripts/posttool-sqaa';
 const SESSION_START_CONTEXT_LIMIT = 5_000;
 
@@ -78,32 +72,58 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: CODEX_DISPLAY_NAME,
   features: [
-    createSonarSecretsHooksFeature({
-      agentDisplayName: CODEX_DISPLAY_NAME,
-      configDir: CODEX_CONFIG_DIR,
-      hooksConfigFileName: HOOKS_FILE,
-      hooksPatchId: 'codex-hooks-secrets-hook',
-      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      scripts: [
-        {
-          id: 'prompt-secrets-script',
-          displayName: 'Codex UserPromptSubmit hook script',
-          scriptPath: PROMPT_SCRIPT_REL,
-          content: {
-            unix: buildUnixHookScript('codex-prompt-submit'),
-            windows: buildWindowsHookScript('codex-prompt-submit'),
+    {
+      ...createSonarSecretsHooksFeature<CodexIntegrationOptions>({
+        agentDisplayName: CODEX_DISPLAY_NAME,
+        configDir: CODEX_CONFIG_DIR,
+        hooksConfigFileName: HOOKS_FILE,
+        hooksPatchId: 'codex-hooks-secrets-hook',
+        previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
+        scripts: [
+          {
+            id: 'posttool-secrets-script',
+            displayName: 'Codex PostToolUse secrets hook script',
+            scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
+            content: {
+              unix: buildUnixHookScript('codex-post-tool-use-secrets'),
+              windows: buildWindowsHookScript('codex-post-tool-use-secrets'),
+            },
           },
-        },
+          {
+            id: 'prompt-secrets-script',
+            displayName: 'Codex UserPromptSubmit hook script',
+            scriptPath: PROMPT_SCRIPT_REL,
+            content: {
+              unix: buildUnixHookScript('codex-prompt-submit'),
+              windows: buildWindowsHookScript('codex-prompt-submit'),
+            },
+          },
+        ],
+        hookEntries: [
+          {
+            eventType: 'PostToolUse',
+            matcher: '*',
+            marker: 'sonar-secrets',
+            scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
+          },
+          {
+            eventType: 'UserPromptSubmit',
+            matcher: '*',
+            marker: 'sonar-secrets',
+            scriptPath: PROMPT_SCRIPT_REL,
+          },
+        ],
+      }),
+      replacedIds: ['secrets-instructions'],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'codex-secrets-instructions',
+          targetPath: resolveCodexAgentsMdPath,
+          startMarker: sonarBeginMarker('codex-secrets-on-read'),
+          endMarker: sonarEndMarker('codex-secrets-on-read'),
+        }),
       ],
-      hookEntries: [
-        {
-          eventType: 'UserPromptSubmit',
-          matcher: '*',
-          marker: 'sonar-secrets',
-          scriptPath: PROMPT_SCRIPT_REL,
-        },
-      ],
-    }),
+    },
     createVortexFeature<CodexIntegrationOptions>(
       [
         createSqaaHookSubfeature(),
@@ -117,21 +137,6 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
       ],
       resolveCodexSkillPath,
     ),
-    {
-      id: 'secrets-instructions',
-      displayName: 'secrets-on-read instructions',
-      previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      resources: [
-        textSnippet({
-          id: 'codex-secrets-instructions',
-          displayName: 'Codex AGENTS.md secrets instructions',
-          targetPath: resolveCodexAgentsMdPath,
-          startMarker: sonarBeginMarker('codex-secrets-on-read'),
-          endMarker: sonarEndMarker('codex-secrets-on-read'),
-          content: SECRETS_ON_READ_BODY,
-        }),
-      ],
-    },
     createMcpServerFeature<CodexIntegrationOptions>({
       resolveConfigPath: resolveCodexMcpConfigPath,
       format: 'toml',
