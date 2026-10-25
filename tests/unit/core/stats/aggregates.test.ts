@@ -189,6 +189,7 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     claudePreToolUse: true,
     copilotPreToolUse: true,
     copilotPromptTransformed: false,
+    codexPostToolUseSecrets: false,
     antigravityPreToolUse: true,
     cursorPreFileRead: true,
     cursorPreToolUse: true,
