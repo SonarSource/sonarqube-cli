@@ -485,7 +485,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
       );
 
       const session = harness.runInteractive('integrate opencode');
-      await chooseCustomize(session, true);
+      await chooseCustomize(session);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');

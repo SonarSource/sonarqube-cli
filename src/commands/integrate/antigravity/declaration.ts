@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import {
@@ -43,10 +42,6 @@ import {
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
-import {
-  ARCHITECTURE_SKILL_FILE,
-  createArchitectureSkillFeature,
-} from '../_common/features/architecture-skill-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
@@ -99,10 +94,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   id: ANTIGRAVITY_INTEGRATION_ID,
   displayName: ANTIGRAVITY_DISPLAY_NAME,
   features: [
-    createArchitectureSkillFeature({
-      targetRoot: homedir,
-      targetPath: () => join(ANTIGRAVITY_GLOBAL_SKILLS_DIR, ARCHITECTURE_SKILL_FILE),
-    }),
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',

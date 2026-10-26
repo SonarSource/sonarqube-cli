@@ -134,12 +134,7 @@ describe('integrate copilot', () => {
           copilotIntegration?.features
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
-        ).toEqual([
-          'architecture-skill',
-          'mcp-server',
-          'pre-tool-use-hook',
-          'prompt-secrets-instructions',
-        ]);
+        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
         expect(findCopilotFeature(harness, 'pre-tool-use-hook')?.scope).toBe('global');
         expect(findCopilotFeature(harness, 'prompt-secrets-instructions')?.scope).toBe('global');
       },
@@ -272,10 +267,9 @@ describe('integrate copilot', () => {
         expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
 
-        // Only the architecture skill completed before the hook configuration failed.
-        expect(
-          getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['architecture-skill']);
+        // Declarative integration state is not updated because the integration
+        // did not complete.
+        expect(getCopilotIntegration(harness)).toBeUndefined();
       },
       { timeout: 30000 },
     );
@@ -291,10 +285,10 @@ describe('integrate copilot', () => {
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
 
         // The hook feature completed before the instructions write failed, so
-        // the architecture skill and hook are recorded.
+        // only that feature is recorded.
         expect(
           getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['architecture-skill', 'pre-tool-use-hook']);
+        ).toEqual(['pre-tool-use-hook']);
       },
       { timeout: 30000 },
     );
@@ -310,7 +304,7 @@ describe('integrate copilot', () => {
         expect(result.stdout + result.stderr).toContain('contains invalid JSON');
         expect(
           getCopilotIntegration(harness)?.features.map((feature) => feature.featureId),
-        ).toEqual(['architecture-skill', 'pre-tool-use-hook', 'prompt-secrets-instructions']);
+        ).toEqual(['pre-tool-use-hook', 'prompt-secrets-instructions']);
       },
       { timeout: 30000 },
     );
@@ -381,7 +375,7 @@ describe('integrate copilot', () => {
         const session = harness.runInteractive('integrate copilot', {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await chooseCustomize(session, true);
+        await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install Vortex?');
@@ -490,7 +484,7 @@ describe('integrate copilot', () => {
         // is not_applicable. The three remaining
         // features (hook, prompt-secrets, MCP) each ask.
         const session = harness.runInteractive('integrate copilot');
-        await chooseCustomize(session, true);
+        await chooseCustomize(session);
         await session.accept('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install MCP server?');
@@ -532,7 +526,7 @@ describe('integrate copilot', () => {
         let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
-          await chooseCustomize(session, true);
+          await chooseCustomize(session);
           await session.accept('Install pre-tool-use hook?');
           await session.accept('Install prompt-secrets instructions?');
           await session.accept('Install MCP server?');
@@ -556,7 +550,7 @@ describe('integrate copilot', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate copilot');
-        await chooseCustomize(session, true);
+        await chooseCustomize(session);
         await session.decline('Install pre-tool-use hook?');
         await session.accept('Install prompt-secrets instructions?');
         await session.accept('Install MCP server?');

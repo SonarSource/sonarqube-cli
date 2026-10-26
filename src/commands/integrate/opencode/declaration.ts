@@ -28,10 +28,6 @@ import type {
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
-import {
-  ARCHITECTURE_SKILL_FILE,
-  createArchitectureSkillFeature,
-} from '../_common/features/architecture-skill-feature.ts';
 import { createContextAugmentationSkillSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
@@ -119,15 +115,6 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
   id: OPENCODE_INTEGRATION_ID,
   displayName: OPENCODE_DISPLAY_NAME,
   features: [
-    createArchitectureSkillFeature({
-      targetPath: (context) =>
-        join(
-          context.targetRoot,
-          context.scope === 'global' ? OPENCODE_GLOBAL_CONFIG_DIR : OPENCODE_PROJECT_CONFIG_DIR,
-          'skills',
-          ARCHITECTURE_SKILL_FILE,
-        ),
-    }),
     {
       id: SONAR_SECRETS_HOOKS_FEATURE_ID,
       displayName: 'secret scanning hooks',
