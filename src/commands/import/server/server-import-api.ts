@@ -32,6 +32,14 @@ const DOP_PLATFORMS = ['github', 'gitlab', 'azure', 'bitbucket', 'bitbucketcloud
 
 export type DopPlatform = (typeof DOP_PLATFORMS)[number];
 
+export const DOP_PLATFORM_LABELS: Record<DopPlatform, string> = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  azure: 'Azure DevOps',
+  bitbucket: 'Bitbucket Server',
+  bitbucketcloud: 'Bitbucket Cloud',
+};
+
 export interface DopSetting {
   id: string;
   key: string;
