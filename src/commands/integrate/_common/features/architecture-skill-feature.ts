@@ -26,7 +26,6 @@ import {
 } from '@/commands/architecture/skill-content.ts';
 import type { FeatureDeclaration, IntegrationContext } from '@/core/framework/features';
 import { textSnippet, wholeFile } from '@/core/framework/features';
-import { readTextFile } from '@/core/framework/resources/common.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
@@ -73,34 +72,5 @@ export function createArchitectureSkillFeature<TOptions extends IntegrateAgentOp
           ]
         : []),
     ],
-    operations: [
-      {
-        id: 'refresh-legacy-architecture-skills',
-        shouldApply: (context) => context.scope === 'global',
-        apply: refreshLegacySkills,
-      },
-    ],
   };
-}
-
-async function refreshLegacySkills(context: IntegrationContext): Promise<void> {
-  // Refresh existing Alpha copies without claiming ownership or deleting another agent's skill.
-  for (const directory of ['.claude', '.agents']) {
-    const path = join(context.targetRoot, directory, 'skills', ARCHITECTURE_SKILL_FILE);
-    try {
-      const existing = await readTextFile(path);
-      if (existing?.includes(ARCHITECTURE_SKILL_MARKER)) {
-        await wholeFile({
-          id: 'legacy-architecture-skill',
-          targetPath: path,
-          content: ARCHITECTURE_SKILL,
-          requiresForce: true,
-          managedMarker: ARCHITECTURE_SKILL_MARKER,
-        }).apply(context);
-      }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      context.console.warn(`Could not refresh a previous architecture skill at ${path}: ${reason}`);
-    }
-  }
 }

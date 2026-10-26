@@ -130,6 +130,7 @@ describe('sonar architecture reads', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('current');
     expect(result.stdout).not.toContain('[ALPHA]');
+    expect(result.stdout).not.toContain('install-skill');
     const alias = await harness.run('arch --help');
     expect(alias.exitCode).toBe(0);
     const help = await harness.run('--help');
