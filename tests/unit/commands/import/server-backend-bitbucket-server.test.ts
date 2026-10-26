@@ -32,8 +32,6 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
       listDopSettings: () =>
         Promise.resolve([{ id: 'bb-id', key: 'my-bbs', type: 'bitbucket' as const }]),
       checkPat: () => Promise.resolve('valid' as const),
-      listBitbucketServerProjects: () =>
-        Promise.resolve({ projects: [{ key: 'PRJ', name: 'Project' }], nextStart: undefined }),
       searchBitbucketServerRepos: () =>
         Promise.resolve({
           repositories: [{ id: 5, slug: 'my-repo', name: 'My Repo', projectKey: 'PRJ' }],
