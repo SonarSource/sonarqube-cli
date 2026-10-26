@@ -44,6 +44,7 @@ async function importAll(
 ) {
   const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
   const api = {
+    requireSupportedVersion: () => Promise.resolve(),
     listDopSettings: () =>
       Promise.resolve([{ id: 'gl-id', key: 'my-gitlab', type: 'gitlab' as const }]),
     checkPat: () => Promise.resolve('valid' as const),
