@@ -54,7 +54,11 @@ async function importAll(
         total: repos.length,
       }),
     lookupProject: (key: string) => Promise.resolve(lookups[key] ?? 'missing'),
-    searchProjectBindings: () => Promise.resolve(bindings),
+    findProjectBinding: (
+      _settingId: string,
+      _repository: string,
+      matches: (binding: ProjectBindingResponse) => boolean,
+    ) => Promise.resolve(bindings.find(matches)),
     putBoundProject,
   } as unknown as ServerImportApiClient;
   const backend = new ServerBackend(api, 'https://sonarqube.example.com');
