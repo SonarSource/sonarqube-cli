@@ -28,6 +28,7 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
   it('puts the bound project with the repository slug and the Bitbucket project key', async () => {
     const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
     const api = {
+      requireSupportedVersion: () => Promise.resolve(),
       listDopSettings: () =>
         Promise.resolve([{ id: 'bb-id', key: 'my-bbs', type: 'bitbucket' as const }]),
       checkPat: () => Promise.resolve('valid' as const),

@@ -63,6 +63,7 @@ describe('ServerBackend PAT wait', () => {
     const listenersBefore = process.listenerCount('SIGINT');
     let checks = 0;
     const api = {
+      requireSupportedVersion: () => Promise.resolve(),
       listDopSettings: () => Promise.resolve([GITLAB]),
       checkPat: () => {
         checks++;

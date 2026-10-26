@@ -447,15 +447,16 @@ describe('sonar import on SonarQube Server', () => {
   });
 
   describe('older servers', () => {
-    it('reports the detected version when the dop-settings API is missing', async () => {
-      await startServer((s) => s.withDopSettingsError(404).withVersion('9.9.0.65466'));
+    it('refuses a server older than 2025.1 before listing its DevOps platforms', async () => {
+      const server = await startServer((s) => s.withVersion('10.8.1.101195'));
 
       const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
-      const output = result.stdout + result.stderr;
-      expect(output).toContain('does not support importing repositories');
-      expect(output).toContain('Detected server version: 9.9.0.65466.');
+      expect(result.stdout + result.stderr).toContain(
+        'SonarQube Server 10.8.1.101195 is not supported by sonar import; 2025.1 or later is required.',
+      );
+      expect(server.getRecordedRequests().some((r) => r.path.includes('dop-settings'))).toBe(false);
     });
 
     it('explains the missing permission when listing settings is forbidden', async () => {
