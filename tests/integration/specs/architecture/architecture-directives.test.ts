@@ -262,7 +262,11 @@ describe('public project directives', () => {
   });
 
   it('reports unavailable graph views without presenting their keys as missing', async () => {
-    await configured();
+    await configured((api) =>
+      api.withStructure('java', [
+        { nodeCount: 1, edgeCount: 0, nodes: [{ id: 1, name: 'app', kind: 'module', edges: [] }] },
+      ]),
+    );
     h.cwd.writeFile(
       'changes.json',
       JSON.stringify({
@@ -270,6 +274,7 @@ describe('public project directives', () => {
           { ...directive, graphType: 'file_graph' },
           { ...directive, graphPerspective: 'Custom' },
           { ...directive, ecosystem: 'ts', graphType: 'file_graph' },
+          { ...directive, type: 'MOVE_NODE', ecosystem: 'ts', graphType: 'file_graph' },
         ],
       }),
     );
@@ -281,7 +286,12 @@ describe('public project directives', () => {
     expect(result.stderr).toContain(
       'Node keys were not checked for namespace_graph perspective Custom',
     );
-    expect(result.stderr).toContain("node 'app:a' was not found in the current ts graph");
+    expect(
+      result.stderr.match(
+        /No current ts graph is available; directive node keys were not checked\./g,
+      ),
+    ).toHaveLength(1);
+    expect(result.stderr).not.toContain('was not found in the current ts graph');
     expect(result.stderr).not.toContain('was not found in the current java graph');
   });
 

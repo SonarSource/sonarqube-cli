@@ -467,6 +467,10 @@ export async function warnDirectiveKeys(
     let keys: Set<string>;
     try {
       const graphs = await api.getCurrent(language);
+      if (graphs.length === 0) {
+        warn(`No current ${language} graph is available; directive node keys were not checked.`);
+        return;
+      }
       keys = new Set(graphs.flatMap(({ graph }) => [...indexStructure(graph).idByKey.keys()]));
     } catch {
       warn(
