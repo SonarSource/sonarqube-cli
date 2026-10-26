@@ -142,8 +142,8 @@ export interface GithubRepositoryResponse {
 /** First release whose `bound-projects` endpoint accepts PUT (create-or-update). */
 const PUT_BOUND_PROJECT_MIN_VERSION = '2025.6';
 
-/** First release with the v2 `dop-translation` endpoints, hence the oldest one `sonar import` supports. */
-const IMPORT_MIN_VERSION = '10.5';
+/** The previous LTA, the oldest release `sonar import` supports. */
+const IMPORT_MIN_VERSION = '2025.1';
 
 const BOUND_PROJECTS_ENDPOINT = '/api/v2/dop-translation/bound-projects';
 
@@ -376,20 +376,20 @@ export class ServerImportApiClient {
   }
 
   private async postBoundProject(body: unknown): Promise<{ newProjectCreated: boolean }> {
-    try {
-      const response = await this.client
-        .post<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
-        .orThrow();
-      return { newProjectCreated: response.newProjectCreated ?? true };
-    } catch (error) {
-      if (!isNotFound(error)) throw error;
-      const version = await this.version();
-      if (version === undefined || isAtLeast(version, IMPORT_MIN_VERSION)) throw error;
-      throw new CommandFailedError(
-        `SonarQube Server ${version} does not support importing repositories; ${IMPORT_MIN_VERSION} or later is required.`,
-        { remediationHint: 'Upgrade SonarQube Server, then retry.' },
-      );
-    }
+    const response = await this.client
+      .post<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
+      .orThrow();
+    return { newProjectCreated: response.newProjectCreated ?? true };
+  }
+
+  /** Refuses a server older than 2025.1; one whose version cannot be read is given the benefit of the doubt. */
+  async requireSupportedVersion(): Promise<void> {
+    const version = await this.version();
+    if (version === undefined || isAtLeast(version, IMPORT_MIN_VERSION)) return;
+    throw new CommandFailedError(
+      `SonarQube Server ${version} is not supported by sonar import; ${IMPORT_MIN_VERSION} or later is required.`,
+      { remediationHint: 'Upgrade SonarQube Server, then retry.' },
+    );
   }
 
   /**
@@ -459,8 +459,4 @@ function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefin
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
     .join('&');
   return `${endpoint}?${query}`;
-}
-
-function isNotFound(error: unknown): boolean {
-  return error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND;
 }

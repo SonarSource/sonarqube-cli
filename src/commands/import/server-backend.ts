@@ -63,6 +63,7 @@ export class ServerBackend implements ImportBackend {
 
   async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
     validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options) });
+    await this.api.requireSupportedVersion();
 
     const settings = await this.loadSettings();
     const setting = await selectSetting(settings, options, console);
