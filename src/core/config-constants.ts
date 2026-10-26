@@ -283,6 +283,15 @@ export const EXIT_CODE_SECRETS_FOUND = 51;
 
 export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
 
+export const SECRETS_NOTICE_REDACTED =
+  '[SonarQube] Secrets were redacted from this message. Let the user know that SonarQube redacted them.';
+
+export const SECRETS_NOTICE_BLOCKED_TEMPLATE =
+  '[SonarQube] Message blocked: {reason}\nBlocked as a precaution — original content was not sent. Let the user know that SonarQube blocked this message.';
+
+export const SECRETS_ERROR_SCANNING_TEMPLATE =
+  'could not verify this message for secrets ({reason})';
+
 /**
  * The `caller_command` value recorded on every sonar-secrets analysis event, one per
  * call site. `agentPromptSubmit` is shared by the Claude and Codex prompt-submit hooks
@@ -298,6 +307,7 @@ export const SECRETS_CALLER_COMMANDS = {
   cursorPromptSubmit: 'cursor-prompt-submit',
   claudePreToolUse: 'claude-pre-tool-use',
   copilotPreToolUse: 'copilot-pre-tool-use',
+  copilotPromptTransformed: 'copilot-prompt-transformed',
   antigravityPreToolUse: 'antigravity-pre-tool-use',
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
