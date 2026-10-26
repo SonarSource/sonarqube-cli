@@ -152,6 +152,18 @@ describe('AuthResolver', () => {
 
       expect(resolveIdentitySpy).toHaveBeenCalledTimes(2);
     });
+
+    it('still returns env auth when telemetry identity resolution fails', async () => {
+      resolveIdentitySpy.mockRejectedValue(new Error('identity cache unavailable'));
+
+      const result = await resolveViaInstance();
+
+      expect(result).toMatchObject({
+        token: FAKE_TOKEN_ENV,
+        serverUrl: SONARCLOUD_URL,
+        source: 'env' as const,
+      });
+    });
   });
 
   // ─── Env var: partial ──────────────────────────────────────────────────

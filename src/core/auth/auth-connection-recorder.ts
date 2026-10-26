@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
+// Persists keychain-backed login/org switches into state.auth.connections (not env-var auth).
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';

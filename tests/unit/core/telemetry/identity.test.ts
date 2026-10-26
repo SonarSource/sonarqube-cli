@@ -37,6 +37,7 @@ import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts
 import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import { addOrUpdateConnection, loadState, updateState } from '@/core/state/state-manager.ts';
 import {
+  activeConnectionForIdentitySeed,
   identityFromConnection,
   isIdentityCompleteForConnection,
   resolveCommandTelemetryIdentity,
@@ -115,6 +116,28 @@ afterEach(() => {
 });
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
+
+describe('activeConnectionForIdentitySeed()', () => {
+  it('returns undefined for env-var auth even when the active connection matches', () => {
+    const conn = cloudConn({ userUuid: 'saved-user', organizationUuidV4: 'saved-org' });
+    const envAuth = new ResolvedAuth({
+      token: 'env-token',
+      serverUrl: conn.serverUrl,
+      orgKey: conn.orgKey,
+      connectionType: 'cloud',
+      source: 'env',
+    });
+
+    expect(activeConnectionForIdentitySeed(envAuth, conn)).toBeUndefined();
+  });
+
+  it('returns the active connection for keychain auth when server and org match', () => {
+    const conn = cloudConn();
+    const auth = cloudAuth('keychain-token');
+
+    expect(activeConnectionForIdentitySeed(auth, conn)).toBe(conn);
+  });
+});
 
 describe('identityFromConnection()', () => {
   it('returns all-null identity when the connection is undefined', () => {
@@ -344,6 +367,29 @@ describe('resolveCommandTelemetryIdentity()', () => {
 
     expect(identity.user_uuid).toBeNull();
     expect(identity.sqs_installation_id).toBe('sqs-abc');
+    expect(getSafeSpy).not.toHaveBeenCalled();
+    getSafeSpy.mockRestore();
+  });
+
+  it('ignores a matching saved connection for env-var auth and uses the disk cache', async () => {
+    const envAuth = new ResolvedAuth({
+      token: 'env-telemetry-token',
+      serverUrl: 'https://sq.example.com',
+      connectionType: 'on-premise',
+      source: 'env',
+    });
+    const state = loadState();
+    const conn = addOrUpdateConnection(state, envAuth.serverUrl, 'on-premise');
+    conn.userUuid = 'saved-login-user';
+    conn.sqsInstallationId = 'saved-installation';
+    writeStateFixture(state);
+    seedDiskCache(envAuth, { userUuid: 'env-user', sqsInstallationId: 'env-installation' });
+    const getSafeSpy = mockIdentityGetSafe();
+
+    const { identity } = await resolveCommandTelemetryIdentity(envAuth);
+
+    expect(identity.user_uuid).toBe('env-user');
+    expect(identity.sqs_installation_id).toBe('env-installation');
     expect(getSafeSpy).not.toHaveBeenCalled();
     getSafeSpy.mockRestore();
   });
