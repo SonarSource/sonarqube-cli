@@ -28,15 +28,24 @@ import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http
 import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { ImportBackend, ImportPlan } from './import-backend.ts';
+import type { DopRepository } from './import-api.ts';
+import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-backend.ts';
+import type { OnlyPrivateProjects } from './repository-collection';
+import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
 import { buildConnectUrl } from './server/connect-url.ts';
 import type { PatStatus } from './server/pat-status.ts';
+import { SUPPORTED_PLATFORMS } from './server/platforms.ts';
+import { deriveProjectKey } from './server/project-key.ts';
 import {
   DOP_PLATFORM_LABELS,
   type DopSetting,
   type ServerImportApiClient,
 } from './server/server-import-api.ts';
+import type { ServerRepository } from './server/server-repository.ts';
 import type { ImportOptions } from './types';
+
+/** Every repository is selectable: SonarQube Server has no per-organization visibility rule. */
+const NO_VISIBILITY_RESTRICTION: OnlyPrivateProjects = { enabled: false, available: true };
 
 const NETWORK_HINT = 'Check your network connection and authentication, then retry.';
 
@@ -48,6 +57,8 @@ export class ServerBackend implements ImportBackend {
   ) {}
 
   async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+    validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options) });
+
     const settings = await this.loadSettings();
     const setting = await selectSetting(settings, options, console);
     const label = DOP_PLATFORM_LABELS[setting.type];
@@ -55,9 +66,72 @@ export class ServerBackend implements ImportBackend {
 
     await this.requireConnectedPat(setting);
 
-    throw new CommandFailedError(`Importing from ${label} is not supported yet.`, {
-      remediationHint: 'Support for more DevOps platforms is being added.',
+    const support = SUPPORTED_PLATFORMS[setting.type];
+    if (!support) {
+      throw new CommandFailedError(
+        `Importing from ${label} is not supported yet. Support for more DevOps platforms is being added.`,
+      );
+    }
+
+    const repositories = new Map<string, ServerRepository>();
+    const claimedKeys = new Map<string, string>();
+    const fetchServerPage = support.listRepositories(this.api, setting);
+    const selection = await selectRepos(
+      {
+        fetchPage: async (pageIndex, pageSize) => {
+          const page = await fetchServerPage(pageIndex, pageSize);
+          for (const repository of page.repositories) {
+            repositories.set(repository.id, repository);
+          }
+          return { repositories: page.repositories.map(toDopRepository), total: page.total };
+        },
+        scope: 'this DevOps platform',
+        platformScope: 'this DevOps platform',
+        noRepositoriesHint:
+          'The personal access token may not see any repository, or the DevOps platform connection may need to be reconfigured.',
+        notFoundHint:
+          'Check that the repository path(s) are correct and visible to your personal access token.',
+        almKey: undefined,
+        onlyPrivateProjects: NO_VISIBILITY_RESTRICTION,
+      },
+      { ...options, nonInteractive: !canPrompt(options), console },
+    );
+
+    return {
+      selection,
+      projectListUrl: `${this.serverUrl.replace(/\/$/, '')}/projects`,
+      toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
+      importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
+    };
+  }
+
+  private async importRepository(
+    setting: DopSetting,
+    repositories: Map<string, ServerRepository>,
+    claimedKeys: Map<string, string>,
+    resolved: ResolvedRepo,
+  ): Promise<ImportRepoOutcome | undefined> {
+    const repository = repositories.get(resolved.installationKey);
+    if (!repository) {
+      throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
+    }
+    const projectKey = deriveProjectKey(repository.slug);
+    const claimedBy = claimedKeys.get(projectKey);
+    if (claimedBy !== undefined && claimedBy !== repository.id) {
+      throw new CommandFailedError(
+        `Repository '${repository.slug}' would get the project key '${projectKey}', already used by another repository in this run.`,
+        { remediationHint: 'Import it from SonarQube Server in your browser instead.' },
+      );
+    }
+    claimedKeys.set(projectKey, repository.id);
+    const { newProjectCreated } = await this.api.putBoundProject({
+      projectKey,
+      projectName: repository.name,
+      devOpsPlatformSettingId: setting.id,
+      repositoryIdentifier: repository.repositoryIdentifier,
+      projectIdentifier: repository.projectIdentifier,
     });
+    return newProjectCreated ? undefined : { detail: 'project already existed, binding updated' };
   }
 
   private async loadSettings(): Promise<DopSetting[]> {
@@ -111,6 +185,19 @@ export class ServerBackend implements ImportBackend {
       throw mapRequestError(error, 'check the personal access token');
     }
   }
+}
+
+function toDopRepository(repository: ServerRepository): DopRepository {
+  const bound = repository.boundProjectKey;
+  return {
+    id: repository.id,
+    name: repository.name,
+    slug: repository.slug,
+    private: false,
+    archived: false,
+    boundProjectIds: bound ? [bound] : [],
+    importedInCurrentOrg: bound !== undefined,
+  };
 }
 
 function mapRequestError(error: unknown, action: string): unknown {
