@@ -57,6 +57,7 @@ function getExpectedRootHelp(): string {
     '    quality-gate|qg <status>                                                   Fetch quality gate status from SonarQube Cloud or Server',
     '    api <method> <endpoint>                                                    Make authenticated API requests to SonarQube',
     '    context [action] [args...]                                                 Augment AI agents with context from your codebase',
+    '    architecture|arch <current|intended>                                       Read and set the architecture of a project',
     '',
     '    import                                                                     Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only) [BETA]',
     '    integrate <git|claude|copilot|codex|antigravity|cursor|opencode|devin|pi>  Setup SonarQube integration for AI coding agents, git and others',
