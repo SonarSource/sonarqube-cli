@@ -195,7 +195,7 @@ describe('integrate antigravity', () => {
           const session = harness.runInteractive('integrate antigravity', {
             extraEnv,
           });
-          await chooseCustomize(session);
+          await chooseCustomize(session, true);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install MCP server?');
           await session.accept('Install prompt-secrets global rules?');
