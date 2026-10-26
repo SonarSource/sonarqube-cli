@@ -33,6 +33,10 @@ import {
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import {
+  ARCHITECTURE_SKILL_FILE,
+  createArchitectureSkillFeature,
+} from '../_common/features/architecture-skill-feature.ts';
+import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -78,6 +82,10 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: CODEX_DISPLAY_NAME,
   features: [
+    createArchitectureSkillFeature({
+      targetPath: (context) =>
+        join(context.targetRoot, '.agents', 'skills', ARCHITECTURE_SKILL_FILE),
+    }),
     createSonarSecretsHooksFeature({
       agentDisplayName: CODEX_DISPLAY_NAME,
       configDir: CODEX_CONFIG_DIR,

@@ -28,6 +28,10 @@ import type {
 import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
+import {
+  ARCHITECTURE_SKILL_FILE,
+  createArchitectureSkillFeature,
+} from '../_common/features/architecture-skill-feature.ts';
 import { createContextAugmentationExtensionSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
@@ -110,6 +114,15 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
   id: PI_INTEGRATION_ID,
   displayName: PI_DISPLAY_NAME,
   features: [
+    createArchitectureSkillFeature({
+      targetPath: (context) =>
+        join(
+          context.targetRoot,
+          context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR,
+          'skills',
+          ARCHITECTURE_SKILL_FILE,
+        ),
+    }),
     {
       id: SONAR_SECRETS_HOOKS_FEATURE_ID,
       displayName: 'secret scanning hooks',
