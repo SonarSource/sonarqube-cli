@@ -27,7 +27,7 @@ import type {
 } from './server-import-api.ts';
 import type { ServerRepository } from './server-repository.ts';
 
-type KeyGuardApi = Pick<ServerImportApiClient, 'lookupProject' | 'searchProjectBindings'>;
+type KeyGuardApi = Pick<ServerImportApiClient, 'lookupProject' | 'findProjectBinding'>;
 
 /**
  * `PUT bound-projects` overwrites the binding of an existing project with the same key, so the
@@ -69,13 +69,15 @@ async function isTakenByAnother(
   if (found !== 'found') {
     return found === 'hidden';
   }
-  const bindings = await api.searchProjectBindings(setting.id, repository.repositoryIdentifier);
-  return !bindings.some(
-    (binding) =>
-      binding.projectKey === projectKey &&
-      binding.devOpsPlatformSettingId === setting.id &&
-      bindsRepository(binding, setting, repository),
+  const binding = await api.findProjectBinding(
+    setting.id,
+    repository.repositoryIdentifier,
+    (candidate) =>
+      candidate.projectKey === projectKey &&
+      candidate.devOpsPlatformSettingId === setting.id &&
+      bindsRepository(candidate, setting, repository),
   );
+  return binding === undefined;
 }
 
 function bindsRepository(

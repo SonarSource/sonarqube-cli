@@ -48,7 +48,10 @@ function binding(overrides: Partial<ProjectBindingResponse> = {}): ProjectBindin
 function apiWith(lookup: 'found' | 'missing' | 'hidden', bindings: ProjectBindingResponse[] = []) {
   return {
     lookupProject: mock(() => Promise.resolve(lookup)),
-    searchProjectBindings: mock(() => Promise.resolve(bindings)),
+    findProjectBinding: mock(
+      (_settingId: string, _repository: string, matches: (b: ProjectBindingResponse) => boolean) =>
+        Promise.resolve(bindings.find(matches)),
+    ),
   };
 }
 
@@ -67,13 +70,13 @@ describe('assertProjectKeyUsable', () => {
     const api = apiWith('missing');
     expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
     expect(api.lookupProject).toHaveBeenCalledWith(KEY);
-    expect(api.searchProjectBindings).not.toHaveBeenCalled();
+    expect(api.findProjectBinding).not.toHaveBeenCalled();
   });
 
   it('lets a project bound to this repository on this setting go ahead', async () => {
     const api = apiWith('found', [binding()]);
     expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
-    expect(api.searchProjectBindings).toHaveBeenCalledWith('gl-id', '42');
+    expect(api.findProjectBinding).toHaveBeenCalledWith('gl-id', '42', expect.any(Function));
   });
 
   it('refuses a project bound to another repository', async () => {
@@ -99,7 +102,7 @@ describe('assertProjectKeyUsable', () => {
   it('refuses a project the caller cannot see, without looking at bindings', async () => {
     const api = apiWith('hidden');
     expect(await failureOf(api, GITLAB, repository(), KEY)).toMatchObject(refusal);
-    expect(api.searchProjectBindings).not.toHaveBeenCalled();
+    expect(api.findProjectBinding).not.toHaveBeenCalled();
   });
 
   it('compares repository identifiers case-insensitively', async () => {
@@ -163,7 +166,7 @@ describe('assertProjectKeyUsable', () => {
     it('fails the repository with the server message if the existence check fails', async () => {
       const api = {
         lookupProject: mock(() => Promise.reject(new ServerError(500, 'database down'))),
-        searchProjectBindings: mock(() => Promise.resolve([])),
+        findProjectBinding: mock(() => Promise.resolve(undefined)),
       };
       expect(await failureOf(api, GITLAB, repository(), KEY)).toMatchObject({
         message: `Could not check whether a project with key '${KEY}' already exists: database down`,
@@ -173,7 +176,7 @@ describe('assertProjectKeyUsable', () => {
     it('fails the repository if the bindings search fails', async () => {
       const api = {
         lookupProject: mock(() => Promise.resolve('found' as const)),
-        searchProjectBindings: mock(() => Promise.reject(new ServerError(502, 'bad gateway'))),
+        findProjectBinding: mock(() => Promise.reject(new ServerError(502, 'bad gateway'))),
       };
       expect(await failureOf(api, GITLAB, repository(), KEY)).toMatchObject({
         message: expect.stringContaining('bad gateway'),

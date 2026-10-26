@@ -33,6 +33,7 @@ import {
   HTTP_STATUS_METHOD_NOT_ALLOWED,
   HTTP_STATUS_NOT_FOUND,
 } from '@/core/server/http-constants.ts';
+import { hasNextPage, type Paging } from '@/core/server/paging.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
@@ -389,20 +390,29 @@ export class ServerImportApiClient {
   }
 
   /**
-   * The bindings of the projects the caller can see on one setting whose repository (or slug)
-   * equals `repository`, case-insensitively. Hidden projects are left out by the server.
+   * The first binding on one setting whose repository (or slug) equals `repository`,
+   * case-insensitively, and that `matches` accepts. Pages are read until one matches or none is
+   * left, since a monorepo can be bound to thousands of projects. The server requires 'Create
+   * Projects' and does not filter the bindings by per-project visibility.
    */
-  async searchProjectBindings(
+  async findProjectBinding(
     dopSettingId: string,
     repository: string,
-  ): Promise<ProjectBindingResponse[]> {
+    matches: (binding: ProjectBindingResponse) => boolean,
+    pageIndex = 1,
+  ): Promise<ProjectBindingResponse | undefined> {
     const response = await this.client
-      .get<{ projectBindings?: ProjectBindingResponse[] }>(
+      .get<{ projectBindings?: ProjectBindingResponse[]; page?: Partial<Paging> }>(
         '/api/v2/dop-translation/project-bindings',
-        { dopSettingId, repository, pageSize: PROJECT_BINDINGS_PAGE_SIZE },
+        { dopSettingId, repository, pageIndex, pageSize: PROJECT_BINDINGS_PAGE_SIZE },
       )
       .orThrow();
-    return response.projectBindings ?? [];
+    const bindings = response.projectBindings ?? [];
+    const match = bindings.find(matches);
+    if (match !== undefined || isLastBindingsPage(bindings.length, pageIndex, response.page)) {
+      return match;
+    }
+    return this.findProjectBinding(dopSettingId, repository, matches, pageIndex + 1);
   }
 
   /**
@@ -511,4 +521,11 @@ function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefin
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
     .join('&');
   return `${endpoint}?${query}`;
+}
+
+/** A short page ends the listing too, so a response without a `total` cannot loop forever. */
+function isLastBindingsPage(count: number, pageIndex: number, page?: Partial<Paging>): boolean {
+  const pageSize = page?.pageSize || PROJECT_BINDINGS_PAGE_SIZE;
+  if (count < pageSize) return true;
+  return page?.total !== undefined && !hasNextPage({ pageIndex, pageSize, total: page.total });
 }
