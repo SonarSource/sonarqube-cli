@@ -21,8 +21,6 @@
 // Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { getToken } from '@/core/host/keychain.ts';
-import logger from '@/core/observability/logger.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -54,6 +52,10 @@ export async function recordConnectionFromAuth(
   auth: ResolvedAuth,
   options: RecordConnectionOptions = {},
 ): Promise<AuthConnection> {
+  if (auth.comesFromEnv()) {
+    throw new Error('recordConnectionFromAuth must not be called for env-var auth');
+  }
+
   const state = loadState();
   const active = getActiveConnection(state);
   const seedConnection =
@@ -61,93 +63,32 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
-  const storedToken = auth.comesFromEnv() ? await readStoredToken(auth) : null;
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (auth.comesFromEnv()) {
-      const envOnly = shouldRecordEnvOnly(auth, seedConnection, storedToken);
-      if (seedConnection.envOnly === (envOnly || undefined)) {
-        return seedConnection;
-      }
-      return updateState((latest) => {
-        const connection = getActiveConnection(latest);
-        if (connection?.id === seedConnection.id && authMatchesConnection(auth, connection)) {
-          syncEnvOnly(auth, connection, storedToken);
-          return connection;
-        }
-        return seedConnection;
-      });
-    }
     return seedConnection;
   }
 
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
   return updateState((latest) => {
-    const activeConnection = getActiveConnection(latest);
-    const matchingConnection =
-      activeConnection && authMatchesConnection(auth, activeConnection)
-        ? activeConnection
-        : undefined;
     const connection = addOrUpdateConnection(latest, auth.serverUrl, auth.connectionType, {
       orgKey: auth.orgKey,
       region: cloudRegionFromUrl(auth.serverUrl),
-      tokenName: resolveRecordedTokenName(auth, options, matchingConnection?.tokenName),
-      envOnly: shouldRecordEnvOnly(auth, matchingConnection, storedToken),
+      tokenName: resolveRecordedTokenName(options),
     });
     applyIdentityToConnection(connection, auth, identity);
     return connection;
   });
 }
 
-function resolveRecordedTokenName(
-  auth: ResolvedAuth,
-  options: RecordConnectionOptions,
-  seedTokenName: string | undefined,
-): string | undefined {
+function resolveRecordedTokenName(options: RecordConnectionOptions): string | undefined {
   if ('tokenName' in options) {
     return options.tokenName;
   }
-  if (auth.comesFromEnv()) {
-    return seedTokenName;
-  }
   return undefined;
-}
-
-function shouldRecordEnvOnly(
-  auth: ResolvedAuth,
-  connection: AuthConnection | undefined,
-  storedToken: string | null,
-): boolean {
-  return (
-    auth.comesFromEnv() &&
-    (connection === undefined || connection.envOnly === true) &&
-    storedToken !== auth.token
-  );
-}
-
-function syncEnvOnly(
-  auth: ResolvedAuth,
-  connection: AuthConnection,
-  storedToken: string | null,
-): void {
-  if (shouldRecordEnvOnly(auth, connection, storedToken)) {
-    connection.envOnly = true;
-  } else {
-    delete connection.envOnly;
-  }
-}
-
-async function readStoredToken(auth: ResolvedAuth): Promise<string | null> {
-  try {
-    return await getToken(auth.serverUrl);
-  } catch (err) {
-    logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
-    return null;
-  }
 }
 
 /** Applies fetched identity fields to the connection, per connection type. */
