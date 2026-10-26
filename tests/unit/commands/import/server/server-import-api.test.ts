@@ -750,6 +750,87 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('lookupProject', () => {
+    it('asks components/show for the key, percent-encoded', async () => {
+      fetchSpy = mockFetch({ component: { key: 'group_repo:x' } });
+      expect(await api.lookupProject('group_repo:x')).toBe('found');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/components/show');
+      expect(lastFetchUrl(fetchSpy)).toContain('component=group_repo%3Ax');
+    });
+
+    it('is missing on a 404', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 404 }));
+      expect(await api.lookupProject('k')).toBe('missing');
+    });
+
+    it('is hidden on a 403', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 403 }));
+      expect(await api.lookupProject('k')).toBe('hidden');
+    });
+
+    it('rejects on a 500', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.lookupProject('k').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('findProjectBinding', () => {
+    const page = (keys: string[], total: number) =>
+      fakeResponse({
+        projectBindings: keys.map((projectKey) => ({
+          projectKey,
+          devOpsPlatformSettingId: 'gl-id',
+          repository: '42',
+        })),
+        page: { pageIndex: 1, pageSize: keys.length, total },
+      });
+
+    it('filters the v2 project-bindings by setting and repository', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'k', devOpsPlatformSettingId: 'gl-id', repository: '42' }],
+      });
+      expect(await api.findProjectBinding('gl-id', 'my repo', () => true)).toEqual({
+        projectKey: 'k',
+        devOpsPlatformSettingId: 'gl-id',
+        repository: '42',
+      });
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/v2/dop-translation/project-bindings');
+      expect(lastFetchUrl(fetchSpy)).toContain('repository=my%20repo');
+      expect(url.searchParams.get('dopSettingId')).toBe('gl-id');
+      expect(url.searchParams.get('pageIndex')).toBe('1');
+    });
+
+    it('finds nothing when the response has no bindings', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.findProjectBinding('gl-id', '42', () => true)).toBeUndefined();
+    });
+
+    it('reads later pages until a binding matches', async () => {
+      fetchSpy = mockFetchSeq(page(['a', 'b'], 6), page(['c', 'd'], 6), page(['e', 'f'], 6));
+      const found = await api.findProjectBinding('gl-id', '42', (b) => b.projectKey === 'd');
+      expect(found?.projectKey).toBe('d');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(new URL(lastFetchUrl(fetchSpy)).searchParams.get('pageIndex')).toBe('2');
+    });
+
+    it('stops after the last page when nothing matches', async () => {
+      fetchSpy = mockFetchSeq(page(['a', 'b'], 4), page(['c', 'd'], 4));
+      expect(await api.findProjectBinding('gl-id', '42', () => false)).toBeUndefined();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops on a short page when the response has no total', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'a', devOpsPlatformSettingId: 'gl-id', repository: '42' }],
+      });
+      expect(await api.findProjectBinding('gl-id', '42', () => false)).toBeUndefined();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('probeGithubPat is missing on "No personal access token found"', async () => {
     fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
     expect(await api.probeGithubPat('gh')).toEqual({ status: 'missing' });

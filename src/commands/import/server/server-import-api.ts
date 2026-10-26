@@ -23,12 +23,17 @@
 // whether the caller has a usable one.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { type HttpClientError, UnexpectedApiError } from '@/core/server/errors.ts';
+import {
+  AccessDeniedError,
+  type HttpClientError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
 import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   HTTP_STATUS_METHOD_NOT_ALLOWED,
   HTTP_STATUS_NOT_FOUND,
 } from '@/core/server/http-constants.ts';
+import { hasNextPage, type Paging } from '@/core/server/paging.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
@@ -146,6 +151,20 @@ const PUT_BOUND_PROJECT_MIN_VERSION = '2025.6';
 const IMPORT_MIN_VERSION = '2025.1';
 
 const BOUND_PROJECTS_ENDPOINT = '/api/v2/dop-translation/bound-projects';
+
+/**
+ * A project binding as `project-bindings` returns it. What `repository` and `slug` hold depends
+ * on the platform (Azure DevOps: repository name and project name; Bitbucket Server: project key
+ * and repository slug; the others: the repository identifier).
+ */
+export interface ProjectBindingResponse {
+  projectKey: string;
+  devOpsPlatformSettingId: string;
+  repository?: string | null;
+  slug?: string | null;
+}
+
+const PROJECT_BINDINGS_PAGE_SIZE = 500;
 
 export interface BoundProjectRequest {
   projectKey: string;
@@ -354,6 +373,49 @@ export class ServerImportApiClient {
   }
 
   /**
+   * Whether a project or component with this key exists. The server checks existence before
+   * visibility, so a 404 means it does not exist and a 403 means it exists but the caller cannot
+   * see it.
+   */
+  async lookupProject(projectKey: string): Promise<'found' | 'missing' | 'hidden'> {
+    return this.client.get<unknown>('/api/components/show', { component: projectKey }).match(
+      () => 'found',
+      (error) => {
+        if (error instanceof AccessDeniedError) {
+          return error.status === HTTP_STATUS_NOT_FOUND ? 'missing' : 'hidden';
+        }
+        throw error;
+      },
+    );
+  }
+
+  /**
+   * The first binding on one setting whose repository (or slug) equals `repository`,
+   * case-insensitively, and that `matches` accepts. Pages are read until one matches or none is
+   * left, since a monorepo can be bound to thousands of projects. The server requires 'Create
+   * Projects' and does not filter the bindings by per-project visibility.
+   */
+  async findProjectBinding(
+    dopSettingId: string,
+    repository: string,
+    matches: (binding: ProjectBindingResponse) => boolean,
+    pageIndex = 1,
+  ): Promise<ProjectBindingResponse | undefined> {
+    const response = await this.client
+      .get<{ projectBindings?: ProjectBindingResponse[]; page?: Partial<Paging> }>(
+        '/api/v2/dop-translation/project-bindings',
+        { dopSettingId, repository, pageIndex, pageSize: PROJECT_BINDINGS_PAGE_SIZE },
+      )
+      .orThrow();
+    const bindings = response.projectBindings ?? [];
+    const match = bindings.find(matches);
+    if (match !== undefined || isLastBindingsPage(bindings.length, pageIndex, response.page)) {
+      return match;
+    }
+    return this.findProjectBinding(dopSettingId, repository, matches, pageIndex + 1);
+  }
+
+  /**
    * Creates the project and binds it to the repository, or updates the binding when a project
    * with that key already exists (the endpoint is idempotent). `newProjectCreated` tells which.
    * Servers older than 2025.6 have no PUT: there it POSTs instead, which refuses to touch a
@@ -459,4 +521,11 @@ function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefin
     .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
     .join('&');
   return `${endpoint}?${query}`;
+}
+
+/** A short page ends the listing too, so a response without a `total` cannot loop forever. */
+function isLastBindingsPage(count: number, pageIndex: number, page?: Partial<Paging>): boolean {
+  const pageSize = page?.pageSize || PROJECT_BINDINGS_PAGE_SIZE;
+  if (count < pageSize) return true;
+  return page?.total !== undefined && !hasNextPage({ pageIndex, pageSize, total: page.total });
 }
