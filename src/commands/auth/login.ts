@@ -383,9 +383,7 @@ async function getOrGenerateToken(
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
   const recordedConnection = loadState().auth.connections.some(
-    (connection) =>
-      !connection.envOnly &&
-      normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
+    (connection) => normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
   );
   const existingToken = recordedConnection ? await getKeystoreToken(server) : null;
   if (existingToken) {
