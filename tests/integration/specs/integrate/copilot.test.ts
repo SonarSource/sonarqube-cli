@@ -79,7 +79,7 @@ describe('integrate copilot', () => {
         const promptScript = harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH);
         expect(promptScript.exists()).toBe(true);
         expect(promptScript.isExecutable).toBe(true);
-        expect(promptScript.asText()).toContain('sonar hook copilot-prompt-transformed');
+        expect(promptScript.asText()).toContain('sonar hook agent-secrets-masking --agent copilot');
         expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
 
         // mcp-config.json: present and registers the sonarqube MCP server using

@@ -307,7 +307,7 @@ export const SECRETS_CALLER_COMMANDS = {
   cursorPromptSubmit: 'cursor-prompt-submit',
   claudePreToolUse: 'claude-pre-tool-use',
   copilotPreToolUse: 'copilot-pre-tool-use',
-  copilotPromptTransformed: 'copilot-prompt-transformed',
+  agentSecretsMasking: 'agent-secrets-masking',
   antigravityPreToolUse: 'antigravity-pre-tool-use',
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
