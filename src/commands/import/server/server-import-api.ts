@@ -133,15 +133,6 @@ export interface GithubRepositoryResponse {
   sqProjectKey?: string;
 }
 
-/**
- * Outcome of a token probe. `organizationCount` is only set by the GitHub probe, from the
- * listing a `valid` token returned; it is absent when the response carried no listing to count.
- */
-export interface PatProbe {
-  status: PatStatus;
-  organizationCount?: number;
-}
-
 export interface BoundProjectRequest {
   projectKey: string;
   projectName: string;
