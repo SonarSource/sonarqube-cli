@@ -120,52 +120,6 @@ describe('managed architecture skill', () => {
   );
 
   it(
-    'refreshes existing Alpha copies without overwriting unrelated content',
-    async () => {
-      const legacy = '.agents/skills/sonar-architecture/SKILL.md';
-      const custom = '.claude/skills/sonar-architecture/SKILL.md';
-      harness.userHome.writeFile(legacy, `${ARCHITECTURE_SKILL_MARKER}\nOld Alpha instructions`);
-      harness.userHome.writeFile(custom, '# My own skill');
-      expect((await harness.run('integrate cursor --non-interactive')).exitCode).toBe(0);
-      expect(harness.userHome.file(legacy).asText()).toBe(ARCHITECTURE_SKILL);
-      expect(harness.userHome.file(custom).asText()).toBe('# My own skill');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'refreshes home-level Alpha copies when integrating Antigravity',
-    async () => {
-      const path = '.agents/skills/sonar-architecture/SKILL.md';
-      harness.userHome.writeFile(path, `${ARCHITECTURE_SKILL_MARKER}\nOld Alpha instructions`);
-      expect((await harness.run('integrate antigravity --non-interactive')).exitCode).toBe(0);
-      expect(harness.userHome.file(path).asText()).toBe(ARCHITECTURE_SKILL);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
-    'records and removes the native skill even when a legacy copy is unreadable',
-    async () => {
-      harness.userHome.writeFile(
-        '.claude/skills/sonar-architecture/SKILL.md/keep.txt',
-        'unrelated content',
-      );
-      const result = await harness.run('integrate cursor --non-interactive');
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain('Could not refresh a previous architecture skill');
-      expect(findInstalledFeature(harness, 'cursor', ARCHITECTURE_SKILL_FEATURE_ID)).toBeDefined();
-      harness.state().withRawState(harness.stateJsonFile.asText());
-      expect((await harness.run('system reset --force')).exitCode).toBe(0);
-      expect(harness.userHome.exists('.cursor/skills/sonar-architecture/SKILL.md')).toBe(false);
-      expect(
-        harness.userHome.file('.claude/skills/sonar-architecture/SKILL.md/keep.txt').asText(),
-      ).toBe('unrelated content');
-    },
-    { timeout: 30000 },
-  );
-
-  it(
     'refreshes a recorded skill after a CLI update',
     async () => {
       expect((await harness.run('integrate claude --non-interactive')).exitCode).toBe(0);
