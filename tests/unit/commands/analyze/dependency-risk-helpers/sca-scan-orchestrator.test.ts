@@ -70,6 +70,8 @@ function mockSpawner(payload: unknown) {
 // sonar-secrets is never resolved because discovery returns no manifests.
 const noopSecretsInstaller: SecretsInstaller = { install: () => Promise.resolve(null) };
 
+const TARGET = { projectKey: 'my-project', baseDir: '/repo/my-project' };
+
 function makeCtx() {
   return new CommandInvocationContext(new FakeConsole());
 }
@@ -85,7 +87,7 @@ describe('ScaScanOrchestrator', () => {
 
     const result = await orchestrator.run(
       CLOUD_AUTH,
-      'my-project',
+      TARGET,
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
       makeCtx(),
     );
@@ -104,16 +106,11 @@ describe('ScaScanOrchestrator', () => {
 
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      orchestrator.run(
-        CLOUD_AUTH,
-        'my-project',
-        SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-        makeCtx(),
-      ),
+      orchestrator.run(CLOUD_AUTH, TARGET, SCA_CALLER_COMMANDS.analyzeDependencyRisks, makeCtx()),
     ).rejects.toBeInstanceOf(CommandFailedError);
   });
 
-  it('passes projectKey and token from auth into the scanner invocation', async () => {
+  it('passes the target and token from auth into the scanner invocation', async () => {
     const spawn = mockSpawner(EMPTY_RESPONSE);
     const orchestrator = new ScaScanOrchestrator(
       makeClient(),
@@ -124,7 +121,7 @@ describe('ScaScanOrchestrator', () => {
 
     await orchestrator.run(
       CLOUD_AUTH,
-      'my-project',
+      TARGET,
       SCA_CALLER_COMMANDS.analyzeDependencyRisks,
       makeCtx(),
     );
@@ -133,6 +130,7 @@ describe('ScaScanOrchestrator', () => {
     expect(analyzeCall).toBeDefined();
     const [, args, env] = analyzeCall!;
     expect(args).toContain('--project-key=my-project');
+    expect(args).toContain('--base-dir=/repo/my-project');
     expect(args.some((arg) => arg.includes('--sonar-token'))).toBe(false);
     expect(env).toMatchObject({ SONAR_TOKEN: 'test-token' });
   });
@@ -155,12 +153,7 @@ describe('ScaScanOrchestrator', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        orchestrator.run(
-          CLOUD_AUTH,
-          'my-project',
-          SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-          makeCtx(),
-        ),
+        orchestrator.run(CLOUD_AUTH, TARGET, SCA_CALLER_COMMANDS.analyzeDependencyRisks, makeCtx()),
       ).rejects.toThrow('secrets pre-scan failed');
 
       const subcommands = spawn.mock.calls.map(([, args]) => args[0]);
@@ -192,12 +185,7 @@ describe('ScaScanOrchestrator', () => {
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        orchestrator.run(
-          CLOUD_AUTH,
-          'my-project',
-          SCA_CALLER_COMMANDS.analyzeDependencyRisks,
-          makeCtx(),
-        ),
+        orchestrator.run(CLOUD_AUTH, TARGET, SCA_CALLER_COMMANDS.analyzeDependencyRisks, makeCtx()),
       ).rejects.toBeInstanceOf(CommandFailedError);
 
       expect(emitSpy).toHaveBeenCalledTimes(1);
