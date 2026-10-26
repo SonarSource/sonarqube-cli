@@ -80,7 +80,6 @@ export function addOrUpdateConnection(
     orgKey?: string;
     region?: CloudRegion;
     tokenName?: string;
-    envOnly?: boolean;
   },
 ): AuthConnection {
   const connectionId = generateConnectionId(serverUrl, options?.orgKey);
@@ -102,10 +101,6 @@ export function addOrUpdateConnection(
 
   if (options?.tokenName) {
     connection.tokenName = options.tokenName;
-  }
-
-  if (options?.envOnly) {
-    connection.envOnly = true;
   }
 
   // Support only one connection - clear all previous and add new one

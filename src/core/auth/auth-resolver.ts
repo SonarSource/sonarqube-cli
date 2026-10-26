@@ -20,7 +20,6 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { okAsync, ResultAsync } from '@/core/result.ts';
@@ -36,6 +35,7 @@ import {
 } from '../server/server-url-validation.ts';
 import { getActiveConnection } from '../state/state-manager.ts';
 import { loadState } from '../state/state-repository.ts';
+import { resolveTelemetryIdentity } from '../telemetry/identity-fetch.ts';
 
 export { isValidServerUrl } from '../server/server-url-validation.ts';
 
@@ -138,8 +138,8 @@ export class AuthResolver {
   private async resolveOnce(options: ResolveAuthOptions): Promise<ResolvedAuth | null> {
     const envAuth = this.resolveFromEnv(options);
     if (envAuth) {
-      await recordConnectionFromAuth(envAuth).catch((err: unknown) => {
-        logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
+      await resolveTelemetryIdentity(envAuth).catch((err: unknown) => {
+        logger.debug(`Failed to resolve env-var telemetry identity: ${(err as Error).message}`);
       });
       return envAuth;
     }
@@ -202,7 +202,7 @@ export class AuthResolver {
     // instead of a misleading "not authenticated".
     const state = loadState();
     const active = getActiveConnection(state);
-    if (!active || active.envOnly) {
+    if (!active) {
       return null;
     }
     const connection = { serverUrl: active.serverUrl, orgKey: active.orgKey, type: active.type };

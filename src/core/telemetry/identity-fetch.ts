@@ -35,6 +35,15 @@ import { UsersClient } from '@/core/server/users.ts';
 
 import { getTelemetryDir } from '../config-constants.ts';
 import type { AuthConnection, ServerType } from '../state/state.ts';
+import { authMatchesConnection } from '../state/state-manager.ts';
+
+/** Saved connections seed identity for keychain auth only — env tokens use the disk cache. */
+export function activeConnectionForIdentitySeed(
+  auth: ResolvedAuth,
+  active: AuthConnection | undefined,
+): AuthConnection | undefined {
+  return active && !auth.comesFromEnv() && authMatchesConnection(auth, active) ? active : undefined;
+}
 
 export interface TelemetryIdentity {
   user_uuid: string | null;

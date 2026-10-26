@@ -79,13 +79,6 @@ export interface AuthConnection {
   enterpriseUuid?: string | null;
   /** Installation ID of the SonarQube Server (fetched at auth time, SQS only) */
   sqsInstallationId?: string | null;
-  /**
-   * Set when env-var auth records a new or already environment-only connection
-   * whose token does not match the stored token. An unreadable keychain counts
-   * as no match. Never set on an existing keychain-backed connection for the
-   * same server. Logout and stored-auth resolution skip these connections.
-   */
-  envOnly?: boolean;
 }
 
 /**
