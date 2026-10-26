@@ -101,9 +101,13 @@ a move, rename or dependency removal.
 
 Each directive requires type (REMOVE_EDGE, RENAME_NODE or MOVE_NODE), ecosystem, graphType
 (file_graph or namespace_graph), fromNodeKey and toNodeKey. Optional: graphPerspective and
-description. Returned IDs and origin are not sent in create requests.
+description. Returned IDs are not sent in create requests. The CLI records sonarqube-cli as the
+origin of new directives instead of copying an exported origin.
 
 Preview first, show what would be created and skipped, and apply only after the user confirms.
+When graphPerspective is omitted, creation uses default_perspective. Preview warns about keys missing
+from the current graph; review these warnings before confirming the write.
+
 Creation is additive: existing directives remain unchanged, and existing or repeated directives
 are skipped. Duplicate checks can race concurrent creates.
 

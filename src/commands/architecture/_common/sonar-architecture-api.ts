@@ -366,7 +366,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
   async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
     const projectId = await this.projectId('Project directives');
     const result = await this.http
-      .post<unknown>(this.path('project-directives'), { ...directive, projectId })
+      .post<unknown>(this.path('project-directives'), {
+        ...directive,
+        projectId,
+        origin: 'sonarqube-cli',
+      })
       .orThrow();
     const created = parseProjectDirective(result);
     if (created.projectId !== projectId)
@@ -405,15 +409,23 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
-    await this.getDirective(id);
-    const response = await this.http.patch<unknown>(this.directivePath(id), directive).orThrow();
+    const current = await this.getDirective(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
     const updated = parseProjectDirective(response);
     const projectId = await this.projectId('Project directives');
     if (
       updated.id.toLowerCase() !== directiveId(id) ||
       updated.projectId !== projectId ||
-      directiveKey(updated) !== directiveKey(directive) ||
-      updated.description !== directive.description
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
     )
       throw new CommandFailedError(
         'The directive update response did not confirm the requested directive. Inspect it before retrying.',

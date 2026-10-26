@@ -49,6 +49,242 @@ describe('public project directives', () => {
     h.cwd.writeFile('deletes.json', JSON.stringify({ delete: [{ id }] }));
     return 'arch directives set -p shop --file deletes.json';
   }
+  it('treats missing, null and default perspectives as one operation and sends the default on create', async () => {
+    const server = await configured((api) =>
+      api.withDirectives([
+        {
+          ...directive,
+          graphPerspective: 'default_perspective',
+          id: '00000000-0000-4000-8000-000000000001',
+          projectId: 'shop-branch-id',
+        },
+      ]),
+    );
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({
+        create: [
+          directive,
+          { ...directive, graphPerspective: null },
+          { ...directive, fromNodeKey: 'app:new' },
+          { ...directive, fromNodeKey: 'app:new', graphPerspective: 'default_perspective' },
+        ],
+      }),
+    );
+    const result = await h.run('arch directives set -p shop --file changes.json');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Created 1 directives');
+    expect(result.stdout).toContain('Skipped 3 existing');
+    const posts = server
+      .getRecordedRequests()
+      .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0].body!).graphPerspective).toBe('default_perspective');
+    expect(JSON.parse(posts[0].body!).origin).toBe('sonarqube-cli');
+  });
+
+  it.each([false, true])(
+    'rejects a full project before writing even with duplicate identities or pending deletions (dryRun=%s)',
+    async (dryRun) => {
+      const rows = Array.from({ length: 1000 }, (_, i) => ({
+        ...directive,
+        id: '00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0'),
+        projectId: 'shop-branch-id',
+      }));
+      const server = await configured((api) => api.withDirectives(rows));
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: [{ ...directive, fromNodeKey: 'app:new' }],
+          delete: [{ id: rows[0].id }],
+        }),
+      );
+      const result = await h.run(
+        'arch directives set -p shop --file changes.json' + (dryRun ? ' --dry-run' : ''),
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('limit of 1000 directives');
+      expect(
+        server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+      h.cwd.writeFile('changes.json', JSON.stringify({ create: [directive] }));
+      expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    },
+  );
+
+  it('creates up to the project capacity after skipping duplicates', async () => {
+    const rows = Array.from({ length: 999 }, (_, i) => ({
+      ...directive,
+      id: '00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0'),
+      projectId: 'shop-branch-id',
+    }));
+    const server = await configured((api) => api.withDirectives(rows));
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({ create: [directive, { ...directive, fromNodeKey: 'app:new' }] }),
+    );
+    expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    expect(
+      server
+        .getRecordedRequests()
+        .filter((r) => r.method === 'POST' && r.path.includes('project-directives')),
+    ).toHaveLength(1);
+  });
+
+  it('omits untouched optional PATCH fields and preserves the origin from the fresh guard read', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const original = {
+      ...directive,
+      id,
+      projectId: 'shop-branch-id',
+      description: 'old',
+      graphPerspective: 'old',
+      origin: 'old-origin',
+    };
+    const server = await configured((api) => {
+      api.withDirectives([original]);
+      const handle = api.handle.bind(api);
+      let reads = 0;
+      api.handle = (resource, request) => {
+        if (
+          resource === 'project-directives' &&
+          request.method === 'GET' &&
+          request.modelId &&
+          ++reads === 2
+        )
+          api.withDirectives([
+            {
+              ...original,
+              description: 'concurrent',
+              graphPerspective: 'concurrent',
+              origin: 'fresh-origin',
+            },
+          ]);
+        return handle(resource, request);
+      };
+    });
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:new' }] }));
+    const result = await h.run('arch directives set -p shop --file changes.json');
+    expect(result.exitCode).toBe(0);
+    const patch = JSON.parse(server.getRecordedRequests().find((r) => r.method === 'PATCH')!.body!);
+    expect(patch).toEqual({ ...directive, fromNodeKey: 'app:new', origin: 'fresh-origin' });
+    const read = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(JSON.parse(read.stdout).directive).toMatchObject({
+      description: 'concurrent',
+      graphPerspective: 'concurrent',
+      origin: 'fresh-origin',
+    });
+  });
+
+  it('reads persisted long optional fields and leaves them omitted from an unrelated update', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const server = await configured((api) =>
+      api.withDirectives([
+        {
+          ...directive,
+          id,
+          projectId: 'shop-branch-id',
+          graphPerspective: 'p'.repeat(256),
+          description: 'd'.repeat(10001),
+        },
+      ]),
+    );
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, toNodeKey: 'app:next' }] }));
+    expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    const patch = JSON.parse(server.getRecordedRequests().find((r) => r.method === 'PATCH')!.body!);
+    expect(patch).not.toHaveProperty('description');
+    expect(patch).not.toHaveProperty('graphPerspective');
+  });
+
+  it('warns on exact missing node keys using the complete current graph without rejecting writes', async () => {
+    const server = await configured((api) =>
+      api.withStructure('java', [
+        {
+          nodeCount: 3,
+          edgeCount: 0,
+          nodes: [
+            {
+              id: 1,
+              name: 'app',
+              kind: 'module',
+              separator: ':',
+              edges: [],
+              nodes: [
+                {
+                  id: 2,
+                  name: 'valid',
+                  kind: 'package',
+                  edges: [],
+                  nodes: [{ id: 3, name: 'deep', kind: 'class', edges: [] }],
+                },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({
+        create: [
+          { ...directive, fromNodeKey: 'app:valid.deep', toNodeKey: 'missing-edge' },
+          { ...directive, type: 'RENAME_NODE', fromNodeKey: 'app:valid', toNodeKey: 'new-label' },
+          {
+            ...directive,
+            type: 'MOVE_NODE',
+            fromNodeKey: 'missing-source',
+            toNodeKey: 'missing-target',
+          },
+        ],
+      }),
+    );
+    const result = await h.run('arch directives set -p shop --file changes.json --dry-run');
+    expect(result.exitCode).toBe(0);
+    for (const key of ['missing-edge', 'missing-source', 'missing-target'])
+      expect(result.stderr).toContain(`node '${key}' was not found`);
+    expect(result.stderr).not.toContain("node 'app:valid.deep' was not found");
+    expect(result.stderr).not.toContain("node 'new-label' was not found");
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
+    ).toHaveLength(1);
+    const written = await h.run('arch directives set -p shop --file changes.json');
+    expect(written.exitCode).toBe(0);
+    expect(written.stdout).toContain('Created 3 directives');
+  });
+
+  it('warns when the current graph cannot be read without blocking directive creation', async () => {
+    await configured((api) =>
+      api.withStatus('current-architectures', 403, '{"message":"not available"}'),
+    );
+    const result = await h.run('arch directives set -p shop --file directives.json');
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain('Could not check directive node keys');
+  });
+
+  it('reports unavailable graph views without presenting their keys as missing', async () => {
+    await configured();
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({
+        create: [
+          { ...directive, graphType: 'file_graph' },
+          { ...directive, graphPerspective: 'Custom' },
+          { ...directive, ecosystem: 'ts', graphType: 'file_graph' },
+        ],
+      }),
+    );
+    const result = await h.run('arch directives set -p shop --file changes.json --dry-run');
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain(
+      'Node keys were not checked for file_graph perspective default_perspective',
+    );
+    expect(result.stderr).toContain(
+      'Node keys were not checked for namespace_graph perspective Custom',
+    );
+    expect(result.stderr).toContain("node 'app:a' was not found in the current ts graph");
+    expect(result.stderr).not.toContain('was not found in the current java graph');
+  });
+
   it.each(['existing', 'batch', 'pending-delete', 'later-page'])(
     'refuses identity collisions before any write: %s',
     async (kind) => {
@@ -535,8 +771,15 @@ describe('public project directives', () => {
     expect((await h.run(`arch directives get -p shop --id ${id}`)).exitCode).not.toBe(0);
     const list = await h.run('arch directives get -p shop --format json');
     expect(JSON.parse(list.stdout).directives.map((d: ProjectDirective) => d.id)).toEqual([other]);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
+    ).toHaveLength(0);
     const patch = server.getRecordedRequests().find((r) => r.method === 'PATCH')!;
-    expect(JSON.parse(patch.body!)).toEqual({ ...directive, description: 'updated' });
+    expect(JSON.parse(patch.body!)).toEqual({
+      ...directive,
+      description: 'updated',
+      origin: 'SONAR_CLI',
+    });
   });
 
   it.each([
@@ -904,6 +1147,33 @@ describe('public project directives', () => {
     expect(JSON.parse(read.stdout).directives).toHaveLength(1);
   });
 
+  it('refuses short pages before mutation even if later pages could make the declared total', async () => {
+    const rows = Array.from({ length: 101 }, (_, i) => ({
+      ...directive,
+      id: '00000000-0000-4000-8000-' + String(i + 1).padStart(12, '0'),
+      projectId: 'shop-branch-id',
+    }));
+    const server = await configured((api) => {
+      const handle = api.handle.bind(api);
+      api.handle = (resource, request) =>
+        resource === 'project-directives' && request.method === 'GET'
+          ? Response.json({
+              projectDirectives:
+                request.query.pageIndex === '1' ? rows.slice(0, 99) : rows.slice(99),
+              page: { pageIndex: Number(request.query.pageIndex), pageSize: 100, total: 101 },
+            })
+          : handle(resource, request);
+    });
+    for (const flag of ['', ' --dry-run']) {
+      const result = await h.run('arch directives set -p shop --file directives.json' + flag);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Invalid public directives page');
+    }
+    expect(
+      server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+    ).toHaveLength(0);
+  });
+
   it('refuses changed pagination totals before creating directives', async () => {
     const items: ProjectDirective[] = Array.from({ length: 100 }, (_, i) => ({
       ...directive,
@@ -958,7 +1228,7 @@ describe('public project directives', () => {
       expect(server.getRecordedRequests().filter((r) => r.method === 'POST')).toHaveLength(0);
     },
   );
-  it('does not copy server-owned fields and distinguishes an empty later page from an empty list', async () => {
+  it('sets CLI origin instead of copying exported fields and distinguishes an empty later page from an empty list', async () => {
     const server = await configured();
     h.cwd.writeFile(
       'directives.json',
@@ -982,7 +1252,7 @@ describe('public project directives', () => {
     expect(posts).toHaveLength(1);
     const request = JSON.parse(posts[0].body!);
     expect(request).not.toHaveProperty('id');
-    expect(request).not.toHaveProperty('origin');
+    expect(request.origin).toBe('sonarqube-cli');
     expect(request.projectId).toBe('shop-branch-id');
     const read = await h.run('arch directives get -p shop --page 2 --page-size 1 --format text');
     expect(read.exitCode).toBe(0);

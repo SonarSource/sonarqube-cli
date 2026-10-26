@@ -33,12 +33,15 @@ import {
   HTTP_STATUS_REQUEST_TIMEOUT,
 } from '@/core/server/http-constants.ts';
 
-import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { type ArchitectureApi, type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { indexStructure } from './graph.ts';
 
 const MAX_DIRECTIVE_ENUM_LENGTH = 30;
 const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
 const DIRECTIVE_UUID_LENGTH = 36;
 export const DEFAULT_DIRECTIVES_PAGE_SIZE = 50;
+export const DEFAULT_DIRECTIVE_PERSPECTIVE = 'default_perspective';
+const MAX_PROJECT_DIRECTIVES = 1000;
 
 export class DirectiveNotFoundError extends CommandFailedError {}
 
@@ -82,7 +85,11 @@ function stringField(value: Record<string, unknown>, name: string, max: number):
     );
   return field;
 }
-export function parseDirective(value: unknown): DirectiveInput {
+function inputFieldLimit(name: string, max: number, inputFields?: Set<string>): number {
+  return inputFields && !inputFields.has(name) ? Infinity : max;
+}
+
+export function parseDirective(value: unknown, inputFields?: Set<string>): DirectiveInput {
   const object = record(value);
   const type = stringField(object, 'type', MAX_DIRECTIVE_ENUM_LENGTH);
   const ecosystem = stringField(object, 'ecosystem', 10);
@@ -97,8 +104,12 @@ export function parseDirective(value: unknown): DirectiveInput {
     type: type as DirectiveInput['type'],
     ecosystem: ecosystem as Ecosystem,
     graphType,
-    fromNodeKey: stringField(object, 'fromNodeKey', 1000),
-    toNodeKey: stringField(object, 'toNodeKey', 1000),
+    fromNodeKey: stringField(
+      object,
+      'fromNodeKey',
+      inputFieldLimit('fromNodeKey', 1000, inputFields),
+    ),
+    toNodeKey: stringField(object, 'toNodeKey', inputFieldLimit('toNodeKey', 1000, inputFields)),
   };
   for (const [name, max] of [
     ['graphPerspective', MAX_DIRECTIVE_PERSPECTIVE_LENGTH],
@@ -106,7 +117,7 @@ export function parseDirective(value: unknown): DirectiveInput {
   ] as const) {
     const field = object[name];
     if (field !== undefined && field !== null) {
-      if (typeof field !== 'string' || field.length > max)
+      if (typeof field !== 'string' || field.length > inputFieldLimit(name, max, inputFields))
         throw new CommandFailedError(
           `Directive ${name} must be a string of at most ${max} characters.`,
         );
@@ -123,7 +134,7 @@ export function parseProjectDirective(value: unknown): ProjectDirective {
   if (object.origin != null && typeof object.origin !== 'string')
     throw new CommandFailedError('Public directive origin must be a string.');
   return {
-    ...parseDirective(object),
+    ...parseDirective(object, new Set()),
     id,
     projectId: stringField(object, 'projectId', 1000),
     ...(object.origin == null ? {} : { origin: object.origin }),
@@ -152,7 +163,11 @@ function parseCreates(items: unknown[]): DirectiveInput[] {
       if (object[field] != null && typeof object[field] !== 'string')
         throw new CommandFailedError(`Directive ${field} must be a string when supplied.`);
     }
-    return parseDirective(object);
+    const directive = parseDirective(object);
+    return {
+      ...directive,
+      graphPerspective: directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
+    };
   });
 }
 export function directiveKey(directive: DirectiveInput): string {
@@ -162,7 +177,7 @@ export function directiveKey(directive: DirectiveInput): string {
     directive.graphType,
     directive.fromNodeKey,
     directive.toNodeKey,
-    directive.graphPerspective ?? '',
+    directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
   ]);
 }
 export function isDefiniteRejection(error: unknown): boolean {
@@ -180,7 +195,7 @@ export function isDefiniteRejection(error: unknown): boolean {
   );
 }
 
-async function existingDirectiveKeys(api: DirectivesApi): Promise<Set<string>> {
+async function existingDirectives(api: DirectivesApi) {
   const keys = new Set<string>();
   const ids = new Set<string>();
   let total: number | undefined;
@@ -200,7 +215,7 @@ async function existingDirectiveKeys(api: DirectivesApi): Promise<Set<string>> {
       ids.add(id);
       keys.add(directiveKey(directive));
     }
-    if (ids.size === total) return keys;
+    if (ids.size === total) return { keys, count: ids.size };
     if (page.directives.length === 0)
       throw new CommandFailedError('Incomplete public directives pagination.');
   }
@@ -268,12 +283,32 @@ function parseUpdates(items: unknown[]): DirectiveUpdate[] {
 }
 
 async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
-  const changes: { id: string; before: ProjectDirective; after: DirectiveInput }[] = [];
+  const changes: {
+    id: string;
+    before: ProjectDirective;
+    after: DirectiveInput;
+    patch: DirectiveInput;
+  }[] = [];
   await inSequence(updates, async (update) => {
     const before = await api.getDirective(update.id);
-    const after = parseDirective({ ...before, ...update.changes });
+    const after = parseDirective(
+      { ...before, ...update.changes },
+      new Set(Object.keys(update.changes)),
+    );
     if (directiveKey(before) !== directiveKey(after) || before.description !== after.description)
-      changes.push({ id: update.id, before, after });
+      changes.push({
+        id: update.id,
+        before,
+        after,
+        patch: {
+          type: after.type,
+          ecosystem: after.ecosystem,
+          graphType: after.graphType,
+          fromNodeKey: after.fromNodeKey,
+          toNodeKey: after.toNodeKey,
+          ...update.changes,
+        },
+      });
   });
   return { changes, skipped: updates.length - changes.length };
 }
@@ -327,6 +362,7 @@ export async function applyDirectiveChanges(
   api: DirectivesApi,
   changes: DirectiveChanges,
   dryRun: boolean,
+  onPlan?: (directives: DirectiveInput[]) => Promise<void>,
 ) {
   const updates = await planUpdates(api, changes.update);
   const toDelete: ProjectDirective[] = [];
@@ -336,13 +372,23 @@ export async function applyDirectiveChanges(
   const moving = updates.changes.filter(
     (change) => directiveKey(change.before) !== directiveKey(change.after),
   );
-  const known =
-    changes.create.length || moving.length ? await existingDirectiveKeys(api) : new Set<string>();
+  const existing =
+    changes.create.length || moving.length
+      ? await existingDirectives(api)
+      : { keys: new Set<string>(), count: 0 };
+  const known = existing.keys;
   validateUpdatedIdentities(
     moving.map((change) => change.after),
     known,
   );
   const creations = planCreates(changes.create, known);
+  if (
+    creations.toCreate.length &&
+    existing.count + creations.toCreate.length > MAX_PROJECT_DIRECTIVES
+  )
+    throw new CommandFailedError(
+      'The changes would exceed the limit of 1000 directives per project before deletions run. Nothing was changed.',
+    );
   const touchedKeys = new Set([
     ...updates.changes.flatMap((change) => [
       directiveKey(change.before),
@@ -364,6 +410,7 @@ export async function applyDirectiveChanges(
     updated: [] as ProjectDirective[],
     deleted: [] as string[],
   };
+  if (onPlan) await onPlan([...result.toCreate, ...moving.map((change) => change.after)]);
   if (dryRun) return result;
   let attempted = 'creation';
   let target = 'the current list';
@@ -375,7 +422,7 @@ export async function applyDirectiveChanges(
     await inSequence(result.changes, async (change) => {
       attempted = `update ${change.id}`;
       target = `directive ${change.id}`;
-      result.updated.push(await api.updateDirective(change.id, change.after));
+      result.updated.push(await api.updateDirective(change.id, change.patch));
     });
     await inSequence(result.toDelete, async (directive) => {
       attempted = `delete ${directive.id}`;
@@ -408,4 +455,47 @@ function validateUpdatedIdentities(updates: DirectiveInput[], known: Set<string>
       );
     afterKeys.add(key);
   }
+}
+
+export async function warnDirectiveKeys(
+  api: ArchitectureApi,
+  directives: DirectiveInput[],
+  warn: (message: string) => void,
+): Promise<void> {
+  const languages = [...new Set(directives.map((directive) => directive.ecosystem))];
+  await inSequence(languages, async (language) => {
+    let keys: Set<string>;
+    try {
+      const graphs = await api.getCurrent(language);
+      keys = new Set(graphs.flatMap(({ graph }) => [...indexStructure(graph).idByKey.keys()]));
+    } catch {
+      warn(
+        `Could not check directive node keys against the current ${language} graph. Review the keys before applying.`,
+      );
+      return;
+    }
+    for (const directive of directives.filter((item) => item.ecosystem === language)) {
+      const graphType = ['java', 'cs'].includes(language) ? 'namespace_graph' : 'file_graph';
+      if (
+        directive.graphType !== graphType ||
+        (directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE) !==
+          DEFAULT_DIRECTIVE_PERSPECTIVE
+      ) {
+        warn(
+          `Node keys were not checked for ${directive.graphType} perspective ${directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE}; the public current graph does not identify that view.`,
+        );
+        continue;
+      }
+      const checked =
+        directive.type === 'RENAME_NODE'
+          ? [directive.fromNodeKey]
+          : [directive.fromNodeKey, directive.toNodeKey];
+      for (const key of new Set(checked)) {
+        if (!keys.has(key))
+          warn(
+            `Directive ${directive.type}: node '${key}' was not found in the current ${language} graph. Review the key before applying.`,
+          );
+      }
+    }
+  });
 }
