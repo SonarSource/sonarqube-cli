@@ -710,40 +710,43 @@ describe('ServerImportApiClient', () => {
         expect((error as BadRequestError).message).toContain('already exists');
       });
 
-      it('reports an unsupported server, with its version, when POST answers 404', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          post: fakeResponse({}, { status: 404 }),
-          version: '10.4',
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(CommandFailedError);
-        expect((error as CommandFailedError).message).toBe(
-          'SonarQube Server 10.4 does not support importing repositories; 10.5 or later is required.',
-        );
-        expect((error as CommandFailedError).remediationHint).toContain('Upgrade');
-      });
-
-      it('keeps a POST 404 as the original error when the version cannot be read', async () => {
+      it('passes a 404 from POST through as the original error', async () => {
         fetchSpy = mockServer({
           put: fakeResponse({}, { status: 405 }),
           post: fakeResponse({}, { status: 404 }),
-          version: null,
         });
         const error = await api.putBoundProject(request).catch((e: unknown) => e);
         expect(error).toBeInstanceOf(UnexpectedApiError);
         expect((error as UnexpectedApiError).status).toBe(404);
       });
+    });
+  });
 
-      it('keeps a POST 404 on a 10.5+ server as the original error', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 405 }),
-          post: fakeResponse({}, { status: 404 }),
-          version: '10.8',
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(UnexpectedApiError);
+  describe('requireSupportedVersion', () => {
+    function mockVersion(version: string | null): ReturnType<typeof spyOn> {
+      return mockFetch(version === null ? {} : { status: 'UP', version }, {
+        status: version === null ? 500 : 200,
       });
+    }
+
+    it('refuses a server older than 2025.1, with its version', async () => {
+      fetchSpy = mockVersion('10.8.1.101195');
+      const error = await api.requireSupportedVersion().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(CommandFailedError);
+      expect((error as CommandFailedError).message).toBe(
+        'SonarQube Server 10.8.1.101195 is not supported by sonar import; 2025.1 or later is required.',
+      );
+      expect((error as CommandFailedError).remediationHint).toContain('Upgrade');
+    });
+
+    it.each(['2025.1.0.102418', '2026.1', '25.1.0.102122'])('accepts %s', async (version) => {
+      fetchSpy = mockVersion(version);
+      expect(await api.requireSupportedVersion()).toBeUndefined();
+    });
+
+    it('lets the import go on when the version cannot be read', async () => {
+      fetchSpy = mockVersion(null);
+      expect(await api.requireSupportedVersion()).toBeUndefined();
     });
   });
 
