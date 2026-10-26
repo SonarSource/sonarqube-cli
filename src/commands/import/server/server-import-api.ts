@@ -23,7 +23,11 @@
 // whether the caller has a usable one.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { type HttpClientError, UnexpectedApiError } from '@/core/server/errors.ts';
+import {
+  AccessDeniedError,
+  type HttpClientError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
 import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   HTTP_STATUS_METHOD_NOT_ALLOWED,
@@ -146,6 +150,20 @@ const PUT_BOUND_PROJECT_MIN_VERSION = '2025.6';
 const IMPORT_MIN_VERSION = '10.5';
 
 const BOUND_PROJECTS_ENDPOINT = '/api/v2/dop-translation/bound-projects';
+
+/**
+ * A project binding as `project-bindings` returns it. What `repository` and `slug` hold depends
+ * on the platform (Azure DevOps: repository name and project name; Bitbucket Server: project key
+ * and repository slug; the others: the repository identifier).
+ */
+export interface ProjectBindingResponse {
+  projectKey: string;
+  devOpsPlatformSettingId: string;
+  repository?: string | null;
+  slug?: string | null;
+}
+
+const PROJECT_BINDINGS_PAGE_SIZE = 500;
 
 export interface BoundProjectRequest {
   projectKey: string;
@@ -351,6 +369,40 @@ export class ServerImportApiClient {
       })
       .orThrow();
     return { repositories: response.repositories ?? [], total: response.paging?.total };
+  }
+
+  /**
+   * Whether a project or component with this key exists. The server checks existence before
+   * visibility, so a 404 means it does not exist and a 403 means it exists but the caller cannot
+   * see it.
+   */
+  async lookupProject(projectKey: string): Promise<'found' | 'missing' | 'hidden'> {
+    return this.client.get<unknown>('/api/components/show', { component: projectKey }).match(
+      () => 'found',
+      (error) => {
+        if (error instanceof AccessDeniedError) {
+          return error.status === HTTP_STATUS_NOT_FOUND ? 'missing' : 'hidden';
+        }
+        throw error;
+      },
+    );
+  }
+
+  /**
+   * The bindings of the projects the caller can see on one setting whose repository (or slug)
+   * equals `repository`, case-insensitively. Hidden projects are left out by the server.
+   */
+  async searchProjectBindings(
+    dopSettingId: string,
+    repository: string,
+  ): Promise<ProjectBindingResponse[]> {
+    const response = await this.client
+      .get<{ projectBindings?: ProjectBindingResponse[] }>(
+        '/api/v2/dop-translation/project-bindings',
+        { dopSettingId, repository, pageSize: PROJECT_BINDINGS_PAGE_SIZE },
+      )
+      .orThrow();
+    return response.projectBindings ?? [];
   }
 
   /**

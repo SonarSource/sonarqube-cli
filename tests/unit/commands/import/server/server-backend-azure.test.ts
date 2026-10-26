@@ -34,6 +34,7 @@ describe('ServerBackend importing from Azure DevOps', () => {
       checkPat: () => Promise.resolve('valid' as const),
       listAzureProjects: () => Promise.resolve([{ name: 'My Project' }]),
       searchAzureRepos: () => Promise.resolve([{ name: 'web-app', projectName: 'My Project' }]),
+      lookupProject: () => Promise.resolve('missing' as const),
       putBoundProject,
     } as unknown as ServerImportApiClient;
 
