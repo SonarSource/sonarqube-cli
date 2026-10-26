@@ -789,11 +789,7 @@ describe('integrate devin', () => {
               CONTEXT_AUGMENTATION_FEATURE_ID,
             ),
           ).toBeDefined();
-          expect(
-            harness.userHome.exists(
-              devinConfigRelPath(harness, join('skills', 'sonar-context-augmentation', 'SKILL.md')),
-            ),
-          ).toBe(false);
+          expect(harness.userHome.exists(devinConfigRelPath(harness, 'skills'))).toBe(false);
         },
         { timeout: 30000 },
       );

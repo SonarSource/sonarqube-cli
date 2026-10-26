@@ -39,8 +39,7 @@ tools.
 
 Use the installed CLI help or the exposed MCP tool definitions to discover supported operations,
 parameters, defaults and availability. Start with \`sonar architecture --help\`; the installed
-interface is the authority for syntax. Install the skill through \`sonar integrate\` so CLI
-updates refresh it.
+interface is the authority for syntax. The skill is installed as a local copy.
 
 Authenticate with the CLI before installing or using the skill. Use the configured connection and organization. Resolve the project from the user's request or
 integration configuration; ask if it is unknown. Use component references returned by reads.

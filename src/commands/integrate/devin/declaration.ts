@@ -36,10 +36,6 @@ import {
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import {
-  ARCHITECTURE_SKILL_FILE,
-  createArchitectureSkillFeature,
-} from '../_common/features/architecture-skill-feature.ts';
-import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -269,11 +265,6 @@ export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> =
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
   features: [
-    createArchitectureSkillFeature({
-      targetPath: (context) =>
-        join(resolveDevinConfigDir(context.targetRoot), 'skills', ARCHITECTURE_SKILL_FILE),
-      instructionsTargetPath: resolveDevinAgentsMdPath,
-    }),
     createDevinSecretsHooksFeature(),
     createDevinVortexFeature(),
     createSecretsInstructionsFeature(),

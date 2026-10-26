@@ -30,10 +30,6 @@ import { jsonPatch, sonarSecretsBinaryDependency, wholeFile } from '@/core/frame
 
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
-  ARCHITECTURE_SKILL_FILE,
-  createArchitectureSkillFeature,
-} from '../_common/features/architecture-skill-feature.ts';
-import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -118,10 +114,6 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
   id: CURSOR_INTEGRATION_ID,
   displayName: 'Cursor',
   features: [
-    createArchitectureSkillFeature({
-      targetPath: (context) =>
-        join(context.targetRoot, CURSOR_CONFIG_DIR, 'skills', ARCHITECTURE_SKILL_FILE),
-    }),
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
