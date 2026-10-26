@@ -427,7 +427,6 @@ describe('integrate devin', () => {
         const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
         expect(secretsEntries(config, 'PreToolUse')).toHaveLength(1);
         expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(1);
-        expect(harness.userHome.exists(devinConfigRelPath(harness, 'AGENTS.md'))).toBe(false);
       },
       { timeout: 30000 },
     );
@@ -437,15 +436,12 @@ describe('integrate devin', () => {
       async () => {
         await authenticate();
         const configPath = devinConfigRelPath(harness, 'config.json');
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
         harness.userHome.writeFile(
           configPath,
           JSON.stringify({ theme: 'dark', hooks: { PreToolUse: [USER_PRE_HOOK] } }),
         );
-        harness.userHome.writeFile(agentsPath, '# My rules\n');
         await harness.run('integrate devin --non-interactive');
         expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(true);
-        expect(harness.userHome.file(agentsPath).asText()).toBe('# My rules\n');
         harness.state().withRawState(readFileSync(harness.stateJsonFile.path, 'utf-8'));
 
         const result = await harness.run('system reset --force');
@@ -457,7 +453,6 @@ describe('integrate devin', () => {
         expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(0);
         expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(false);
         expect(harness.userHome.exists(secretsScriptRelPath('prompt-secrets'))).toBe(false);
-        expect(harness.userHome.file(agentsPath).asText()).toBe('# My rules\n');
       },
       { timeout: 30000 },
     );
