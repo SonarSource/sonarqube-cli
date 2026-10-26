@@ -90,10 +90,6 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './architecture/_common/read-options.ts';
 import { getCurrent as getCurrentArchitecture } from './architecture/current/get/index.ts';
-import {
-  installSkill as installArchitectureSkill,
-  type InstallSkillOptions,
-} from './architecture/install-skill.ts';
 import { getIntended as getIntendedArchitecture } from './architecture/intended/get/index.ts';
 import {
   type SetFileOptions,
@@ -900,10 +896,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
 
-  // Agent-facing architecture commands. Alpha — not in public docs (see admin above).
+  // Agent-facing architecture commands.
   const architecture = COMMAND_TREE.command('architecture')
     .alias('arch')
-    .stage(Stage.Alpha)
     .description('Read and set the architecture of a project')
     .rootHelp({ category: 'data' });
 
@@ -958,15 +953,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
-
-  architecture
-    .command('install-skill')
-    .description('Install the architecture skill for Claude Code and Cursor in this repository')
-    .option('--global', 'Install in the home directory instead of the repository')
-    .option('--force', 'Replace a SKILL.md that was not written by this command')
-    .authenticatedAction((ctx, options: InstallSkillOptions) =>
-      installArchitectureSkill(options, ctx),
-    );
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')

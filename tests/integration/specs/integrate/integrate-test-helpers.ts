@@ -20,8 +20,16 @@
 
 import type { InteractiveSession } from '../../harness';
 
-export async function chooseCustomize(session: InteractiveSession): Promise<void> {
+export async function chooseCustomize(
+  session: InteractiveSession,
+  architectureSkill = false,
+): Promise<void> {
   await session.waitText('How would you like to proceed?');
   session.keyDown();
   session.keyEnter();
+  if (architectureSkill) {
+    await session.accept(
+      /Install architecture skill\?|architecture skill \(currently installed\)  Keep\?/,
+    );
+  }
 }

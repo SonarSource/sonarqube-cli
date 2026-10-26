@@ -29,7 +29,6 @@ import {
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 import {
@@ -89,7 +88,6 @@ describe('sonar architecture reads on the public API', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
 
   afterEach(async () => {
@@ -652,7 +650,6 @@ describe('sonar architecture intended set on the public API', () => {
   let harness: TestHarness;
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
   afterEach(async () => {
     await harness.dispose();

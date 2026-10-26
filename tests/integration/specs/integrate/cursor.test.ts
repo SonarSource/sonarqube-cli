@@ -168,6 +168,7 @@ describe('integrate cursor', () => {
         const integration = getInstalledIntegration(harness, 'cursor');
         expect(integration).toBeDefined();
         expect(integration!.features.map((f) => f.featureId).sort()).toEqual([
+          'architecture-skill',
           'mcp-server',
           'sonar-secrets-hooks',
         ]);
@@ -500,7 +501,7 @@ describe('integrate cursor', () => {
         const session = harness.runInteractive('integrate cursor', {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
-        await chooseCustomize(session);
+        await chooseCustomize(session, true);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
@@ -537,7 +538,7 @@ describe('integrate cursor', () => {
           const session = harness.runInteractive('integrate cursor', {
             extraEnv: runEnv,
           });
-          await chooseCustomize(session);
+          await chooseCustomize(session, true);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install Vortex?');
           await session.accept('Install MCP server?');
