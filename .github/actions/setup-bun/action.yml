@@ -16,11 +16,42 @@ runs:
       with:
         version: 2026.9.14
 
-    - name: Install dependencies
+    - name: Fetch production Edge reader
+      if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+      id: edge
+      uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+      with:
+        secrets: |
+          development/artifactory-edge-prod/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USERNAME;
+          development/artifactory-edge-prod/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+    - name: Configure dependency registry
       shell: bash
       env:
-        ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ inputs.artifactory-username }}
-        ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ inputs.artifactory-password }}
-        BUN_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
-        NPM_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
-      run: bun ci
+        USE_EDGE: ${{ runner.os == 'Linux' && runner.environment == 'self-hosted' }}
+        READER_USERNAME: ${{ inputs.artifactory-username }}
+        EDGE_USERNAME: ${{ steps.edge.outputs.vault && fromJSON(steps.edge.outputs.vault).ARTIFACTORY_USERNAME || '' }}
+        READER_PASSWORD: ${{ inputs.artifactory-password }}
+        EDGE_PASSWORD: ${{ steps.edge.outputs.vault && fromJSON(steps.edge.outputs.vault).ARTIFACTORY_ACCESS_TOKEN || '' }}
+      run: |
+        set -euo pipefail
+        registry="https://repox.jfrog.io/artifactory/api/npm/npm/"
+        if [[ "$USE_EDGE" == "true" ]]; then
+          registry="https://repox-internal.sonar.build/artifactory/api/npm/npm/"
+          READER_USERNAME="$EDGE_USERNAME"
+          READER_PASSWORD="$EDGE_PASSWORD"
+        fi
+        if [[ -z "$READER_USERNAME" || -z "$READER_PASSWORD" ]]; then
+          echo "::error::The selected dependency registry requires a reader credential"
+          exit 1
+        fi
+        echo "BUN_CONFIG_REGISTRY=$registry" >> "$GITHUB_ENV"
+        echo "NPM_CONFIG_REGISTRY=$registry" >> "$GITHUB_ENV"
+        echo "BUN_CONFIG_TOKEN=$READER_PASSWORD" >> "$GITHUB_ENV"
+        echo "ARTIFACTORY_PRIVATE_READER_USERNAME=$READER_USERNAME" >> "$GITHUB_ENV"
+        echo "ARTIFACTORY_PRIVATE_READER_PASSWORD=$READER_PASSWORD" >> "$GITHUB_ENV"
+        echo "Dependency registry: $registry"
+
+    - name: Install dependencies
+      shell: bash
+      run: bun ci --network-concurrency 4
