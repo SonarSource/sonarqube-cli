@@ -150,7 +150,8 @@
   },
   "overrides": {
     "flatted": "3.4.4",
-    "follow-redirects": "1.16.1"
+    "follow-redirects": "1.16.1",
+    "picomatch": "4.0.7"
   },
   "lint-staged": {
     "*.ts": [
