@@ -26,7 +26,6 @@ import type {
   IntendedArchitecture,
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import {
   SYNTHETIC_GRAPH,
@@ -109,7 +108,6 @@ describe('sonar architecture reads', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
 
   afterEach(async () => {
@@ -127,28 +125,19 @@ describe('sonar architecture reads', () => {
     return server;
   }
 
-  it(
-    'is hidden and unknown without SONARQUBE_CLI_ALPHA',
-    async () => {
-      const result = await harness.run('architecture', {
-        extraEnv: { [ALPHA_ENV_VAR]: 'false' },
-      });
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain("unknown command 'architecture'");
-
-      const alias = await harness.run('arch current get', {
-        extraEnv: { [ALPHA_ENV_VAR]: 'false' },
-      });
-      expect(alias.exitCode).toBe(1);
-
-      const help = await harness.run('--help', { extraEnv: { [ALPHA_ENV_VAR]: 'false' } });
-      expect(help.stdout).not.toContain('architecture');
-    },
-    { timeout: 15000 },
-  );
+  it('exposes architecture commands and the arch alias without an Alpha flag', async () => {
+    const result = await harness.run('architecture --help');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('current');
+    expect(result.stdout).not.toContain('[ALPHA]');
+    const alias = await harness.run('arch --help');
+    expect(alias.exitCode).toBe(0);
+    const help = await harness.run('--help');
+    expect(help.stdout).toContain('architecture|arch');
+  });
 
   it(
-    'lists architecture with its arch alias in the Alpha root help',
+    'lists architecture with its arch alias in the root help',
     async () => {
       const help = await harness.run('--help');
       expect(help.stdout).toContain('architecture|arch <current|intended');

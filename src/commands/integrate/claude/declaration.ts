@@ -37,6 +37,10 @@ import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
 import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
+  ARCHITECTURE_SKILL_FILE,
+  createArchitectureSkillFeature,
+} from '../_common/features/architecture-skill-feature.ts';
+import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -148,6 +152,10 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: CLAUDE_DISPLAY_NAME,
   features: [
+    createArchitectureSkillFeature({
+      targetPath: (context) =>
+        join(context.targetRoot, CLAUDE_CONFIG_DIR, 'skills', ARCHITECTURE_SKILL_FILE),
+    }),
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Claude',
       configDir: CLAUDE_CONFIG_DIR,

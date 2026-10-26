@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/** Identifies a SKILL.md written by `sonar architecture install-skill`, which may overwrite it. */
+/** Identifies the Sonar-managed architecture skill for safe updates. */
 export const ARCHITECTURE_SKILL_MARKER = '<!-- sonar:architecture-skill -->';
 
 export const ARCHITECTURE_SKILL = `---
@@ -38,9 +38,9 @@ tools.
 ## Discover the installed interface
 
 Use the installed CLI help or the exposed MCP tool definitions to discover supported operations,
-parameters, defaults and availability. In CLI Alpha, enable \`SONARQUBE_CLI_ALPHA=true\` and start
-with \`sonar architecture --help\`. The skill is installed as a local copy; use the installed
-interface as the authority for syntax.
+parameters, defaults and availability. Start with \`sonar architecture --help\`; the installed
+interface is the authority for syntax. Install the skill through \`sonar integrate\` so CLI
+updates refresh it.
 
 Authenticate with the CLI before installing or using the skill. Use the configured connection and organization. Resolve the project from the user's request or
 integration configuration; ask if it is unknown. Use component references returned by reads.
