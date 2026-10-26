@@ -22,6 +22,8 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import type { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
 import { ServerBackend } from '@/commands/import/server-backend.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { BadRequestError } from '@/core/server/errors.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
 
@@ -52,6 +54,59 @@ describe('ServerBackend importing from Azure DevOps', () => {
       devOpsPlatformSettingId: 'az-id',
       repositoryIdentifier: 'web-app',
       projectIdentifier: 'My Project',
+    });
+  });
+
+  describe('when Azure DevOps lists nothing', () => {
+    const URL = 'https://sonarqube.example.com';
+
+    async function planFailure(api: object): Promise<CommandFailedError> {
+      const stubbed = { requireSupportedVersion: () => Promise.resolve(), ...api };
+      const error = await new ServerBackend(stubbed as unknown as ServerImportApiClient, URL)
+        .plan({ all: true, nonInteractive: true }, new FakeConsole())
+        .then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+      expect(error).toBeInstanceOf(CommandFailedError);
+      return error as CommandFailedError;
+    }
+
+    it('ends with the actionable error and the reconnect URL instead of "No repositories found"', async () => {
+      const error = await planFailure({
+        listDopSettings: () =>
+          Promise.resolve([{ id: 'az-id', key: 'my-azure', type: 'azure' as const }]),
+        checkPat: () => Promise.resolve('valid' as const),
+        searchAzureRepos: () => Promise.resolve([]),
+      });
+
+      expect(error.message).toContain('Azure DevOps did not return any repository');
+      expect(error.exitCode).toBe(1);
+      expect(error.remediationHint).toContain(`${URL}/projects/create?mode=azure&resetPat=1`);
+    });
+
+    it('maps the server not being able to read Azure DevOps to the same error', async () => {
+      const error = await planFailure({
+        listDopSettings: () =>
+          Promise.resolve([{ id: 'az-id', key: 'my-azure', type: 'azure' as const }]),
+        checkPat: () => Promise.resolve('valid' as const),
+        searchAzureRepos: () =>
+          Promise.reject(new BadRequestError('Unable to contact Azure DevOps server: boom')),
+      });
+
+      expect(error.message).toContain('Azure DevOps did not return any repository');
+      expect(error.remediationHint).toContain('resetPat=1');
+    });
+
+    it('keeps "No repositories found" for the other platforms', async () => {
+      const error = await planFailure({
+        listDopSettings: () =>
+          Promise.resolve([{ id: 'gl-id', key: 'my-gitlab', type: 'gitlab' as const }]),
+        checkPat: () => Promise.resolve('valid' as const),
+        searchGitlabRepos: () => Promise.resolve({ repositories: [], total: 0 }),
+      });
+
+      expect(error.message).toContain('No repositories found');
     });
   });
 });
