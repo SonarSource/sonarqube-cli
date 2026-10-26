@@ -24,6 +24,8 @@
 // list of dependency risks. Once the real scanner is wired, the happy-path
 // assertions will be expanded.
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
@@ -31,6 +33,7 @@ import { buildLocalBinaryName } from '@/core/host/install/sca-scanner.ts';
 
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
+import { initGitRepo } from '../hook/git-test-helpers';
 
 const VALID_TOKEN = 'integration-test-token';
 const TEST_ORG = 'my-org';
@@ -463,6 +466,74 @@ describe('analyze dependency-risks', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Using project key: demo');
     expect(result.stderr).not.toContain('Using auto-detected project key');
+  });
+
+  describe('in a monorepo linked with .sonar-config.json', () => {
+    beforeEach(() => {
+      harness.withAuth(FAKE_CLOUD_SERVER, VALID_TOKEN, TEST_ORG);
+      initGitRepo(harness.cwd.path);
+      for (const path of ['services/api', 'services/api/v2', 'apps/web']) {
+        harness.cwd.writeFile(`${path}/.keep`, '');
+      }
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api', path: 'services/api', serverUrl: FAKE_CLOUD_SERVER },
+            { projectKey: 'api-v2', path: 'services/api/v2', serverUrl: FAKE_CLOUD_SERVER },
+            { projectKey: 'web', path: 'apps/web', serverUrl: FAKE_CLOUD_SERVER },
+          ],
+        }),
+      );
+    });
+
+    it('fails from a directory with several projects and points at sonar link list', async () => {
+      const result = await harness.run('analyze dependency-risks');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Could not determine a single SonarQube project for ${harness.cwd.path}.`,
+      );
+      expect(result.stderr).toContain(`3 projects are linked at or under ${harness.cwd.path}.`);
+      expect(result.stderr).toContain('sonar link list --path <path>');
+    });
+
+    it('fails inside nested projects', async () => {
+      const result = await harness.run('analyze dependency-risks', {
+        cwd: join(harness.cwd.path, 'services', 'api', 'v2'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('is inside 2 nested projects, which are not supported yet.');
+    });
+
+    it('fails outside every linked project', async () => {
+      harness.cwd.writeFile('scripts/.keep', '');
+
+      const result = await harness.run('analyze dependency-risks', {
+        cwd: join(harness.cwd.path, 'scripts'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('is not inside any project linked in .sonar-config.json.');
+    });
+
+    it('auto-detects the project from a directory inside it', async () => {
+      harness.cwd.writeFile('apps/web/src/.keep', '');
+
+      const result = await harness.run('analyze dependency-risks', {
+        cwd: join(harness.cwd.path, 'apps', 'web', 'src'),
+      });
+
+      expect(result.stderr).toContain('Using auto-detected project key: web');
+    });
+
+    it('accepts an explicit --project from the repository root', async () => {
+      const result = await harness.run('analyze dependency-risks --project web');
+
+      expect(result.stderr).toContain('Using project key: web');
+      expect(result.stderr).not.toContain('Could not determine a single SonarQube project');
+    });
   });
 });
 
