@@ -127,6 +127,18 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['web']);
   });
 
+  it('explains an Azure DevOps setting that lists no repository and points to the reconnect URL', async () => {
+    const server = await startServer((s) => s.withAzureRepos('my-azure', []));
+
+    const result = await harness.run('import --all');
+
+    expect(result.exitCode).toBe(1);
+    const output = result.stdout + result.stderr;
+    expect(output).toContain('Azure DevOps did not return any repository');
+    expect(output).toContain(`${server.baseUrl()}/projects/create?mode=azure&resetPat=1`);
+    expect(putPayloads(server)).toHaveLength(0);
+  });
+
   it('still stops at the token gate before listing any project', async () => {
     const server = await startServer((s) =>
       s
