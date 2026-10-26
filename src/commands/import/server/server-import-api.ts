@@ -85,12 +85,6 @@ export interface GitlabRepositoryResponse {
   sqProjectKey?: string;
 }
 
-/** An Azure DevOps project as `list_azure_projects` returns it. */
-export interface AzureProjectResponse {
-  name: string;
-  description?: string;
-}
-
 /** An Azure DevOps repository as `search_azure_repos` returns it; `sqProjectKey` is set once bound. */
 export interface AzureRepositoryResponse {
   name: string;
@@ -106,12 +100,6 @@ export interface BitbucketCloudRepositoryResponse {
   name: string;
   workspace: string;
   sqProjectKey?: string;
-}
-
-/** A Bitbucket Server project as `list_bitbucketserver_projects` returns it. */
-export interface BitbucketServerProjectResponse {
-  key: string;
-  name: string;
 }
 
 /** A Bitbucket Server repository as `search_bitbucketserver_repos` returns it. */
@@ -249,25 +237,12 @@ export class ServerImportApiClient {
     return { repositories: response.repositories ?? [], total: response.paging?.total };
   }
 
-  /** Every Azure DevOps project the caller's token can see; the endpoint is not paged. */
-  async listAzureProjects(settingKey: string): Promise<AzureProjectResponse[]> {
-    const response = await this.client
-      .get<{ projects?: AzureProjectResponse[] }>('/api/alm_integrations/list_azure_projects', {
-        almSetting: settingKey,
-      })
-      .orThrow();
-    return response.projects ?? [];
-  }
-
-  /** Every repository of one Azure DevOps project; the endpoint is not paged. */
-  async searchAzureRepos(
-    settingKey: string,
-    projectName: string,
-  ): Promise<AzureRepositoryResponse[]> {
+  /** Every repository of every Azure DevOps project the caller's token can see; the endpoint is not paged. */
+  async searchAzureRepos(settingKey: string): Promise<AzureRepositoryResponse[]> {
     const response = await this.client
       .get<{ repositories?: AzureRepositoryResponse[] }>(
         '/api/alm_integrations/search_azure_repos',
-        { almSetting: settingKey, projectName },
+        { almSetting: settingKey },
       )
       .orThrow();
     return response.repositories ?? [];
@@ -292,38 +267,19 @@ export class ServerImportApiClient {
   }
 
   /**
-   * One page of the Bitbucket Server projects the caller's token can see. `start` is the offset
-   * to resume from (0 for the first page); `nextStart` is where the next page begins, absent on
-   * the last one.
-   */
-  async listBitbucketServerProjects(
-    settingKey: string,
-    start: number,
-    pageSize: number,
-  ): Promise<{ projects: BitbucketServerProjectResponse[]; nextStart?: number }> {
-    const response = await this.client
-      .get<BitbucketServerPagingResponse & { projects?: BitbucketServerProjectResponse[] }>(
-        '/api/alm_integrations/list_bitbucketserver_projects',
-        { almSetting: settingKey, start, pageSize },
-      )
-      .orThrow();
-    return { projects: response.projects ?? [], nextStart: nextBitbucketStart(response, start) };
-  }
-
-  /**
-   * One page of the repositories whose Bitbucket Server project name matches `projectName`. The
-   * server filters on the name, so a partial match can return another project's repositories.
+   * One page of the repositories of every Bitbucket Server project the caller's token can see.
+   * `start` is the offset to resume from (0 for the first page); `nextStart` is where the next
+   * page begins, absent on the last one.
    */
   async searchBitbucketServerRepos(
     settingKey: string,
-    projectName: string,
     start: number,
     pageSize: number,
   ): Promise<{ repositories: BitbucketServerRepositoryResponse[]; nextStart?: number }> {
     const response = await this.client
       .get<BitbucketServerPagingResponse & { repositories?: BitbucketServerRepositoryResponse[] }>(
         '/api/alm_integrations/search_bitbucketserver_repos',
-        { almSetting: settingKey, projectName, start, pageSize },
+        { almSetting: settingKey, start, pageSize },
       )
       .orThrow();
     return {
