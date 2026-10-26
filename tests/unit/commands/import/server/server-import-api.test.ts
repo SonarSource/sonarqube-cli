@@ -215,6 +215,68 @@ describe('ServerImportApiClient', () => {
     });
   });
 
+  describe('listAzureProjects', () => {
+    it('sends the setting key as almSetting, and nothing else', async () => {
+      fetchSpy = mockFetch({ projects: [] });
+      await api.listAzureProjects('my-azure');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/list_azure_projects');
+      expect(Object.fromEntries(url.searchParams)).toEqual({ almSetting: 'my-azure' });
+    });
+
+    it('returns the projects', async () => {
+      fetchSpy = mockFetch({ projects: [{ name: 'p1', description: 'd1' }, { name: 'p2' }] });
+      expect(await api.listAzureProjects('s')).toEqual([
+        { name: 'p1', description: 'd1' },
+        { name: 'p2' },
+      ]);
+    });
+
+    it('treats a response without projects as an empty list', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listAzureProjects('s')).toEqual([]);
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.listAzureProjects('s').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('searchAzureRepos', () => {
+    it('sends the setting key as almSetting and the project as projectName', async () => {
+      fetchSpy = mockFetch({ repositories: [] });
+      await api.searchAzureRepos('my-azure', 'My Project');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_azure_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-azure',
+        projectName: 'My Project',
+      });
+    });
+
+    it('returns the repositories with their project and the SonarQube project they are bound to', async () => {
+      const repositories = [
+        { name: 'r1', projectName: 'p1', sqProjectKey: 'p1_r1', sqProjectName: 'r1' },
+        { name: 'r2', projectName: 'p1' },
+      ];
+      fetchSpy = mockFetch({ repositories });
+      expect(await api.searchAzureRepos('s', 'p1')).toEqual(repositories);
+    });
+
+    it('treats a response without repositories as an empty list', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchAzureRepos('s', 'p1')).toEqual([]);
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchAzureRepos('s', 'p1').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
   describe('putBoundProject', () => {
     const request = {
       projectKey: 'group_repo',
