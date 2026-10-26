@@ -26,7 +26,7 @@
     "version:build_number": "bun build-scripts/set-build-number.ts",
     "fetch:signatures": "bun build-scripts/fetch-signatures.ts",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --release=\"${PROJECT_VERSION}\" dist/*.map",
-    "prepare": "husky"
+    "prepare": "bun ./node_modules/husky/bin.js"
   },
   "externalBinaries": {
     "sonar-secrets": {

@@ -9,6 +9,8 @@ Compiled binaries are produced via `build-scripts/build-binary.ts`, which inject
 
 Use the package.json scripts for full test runs.
 
+Dependency installation runs Husky through its JavaScript entry point with Bun so hook setup does not depend on platform-specific `node_modules/.bin` command shims.
+
 ```bash
 bun run lint              # ESLint (TypeScript-aware, includes import sort)
 bun run lint:fix          # Auto-fix safe issues
