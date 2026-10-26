@@ -26,6 +26,7 @@
  */
 
 import { mkdirSync } from 'node:fs';
+import { basename, isAbsolute } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -162,9 +163,12 @@ describe('sonar-context-augmentation passthrough behaviors (offline, real binary
     expect(output.hookSpecificOutput.updatedToolOutput.stdout).toContain(
       'output reduced to essential parts',
     );
-    expect(output.hookSpecificOutput.updatedToolOutput.stdout).toContain(
-      'sonar context distillate restore',
-    );
+    const rawOutputPath =
+      output.hookSpecificOutput.updatedToolOutput.stdout.match(
+        /read the original output file at `([^`]+)`/,
+      )?.[1] ?? '';
+    expect(isAbsolute(rawOutputPath)).toBe(true);
+    expect(basename(rawOutputPath)).toMatch(/^sonar-distillate-raw-[A-Za-z0-9]{6}\.txt$/);
     expect(output.hookSpecificOutput.updatedToolOutput.stdout).not.toContain(
       ':module0:compileJava',
     );
