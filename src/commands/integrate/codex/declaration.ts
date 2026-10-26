@@ -85,8 +85,8 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
             displayName: 'Codex PostToolUse secrets hook script',
             scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
             content: {
-              unix: buildUnixHookScript('codex-post-tool-use-secrets'),
-              windows: buildWindowsHookScript('codex-post-tool-use-secrets'),
+              unix: buildUnixHookScript('agent-secrets-masking --agent codex'),
+              windows: buildWindowsHookScript('agent-secrets-masking --agent codex'),
             },
           },
           {
