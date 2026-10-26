@@ -110,10 +110,15 @@ function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
     return false;
   }
   const record = value as Record<string, unknown>;
-  if (!isNonEmptyString(record.projectKey) || !isNonEmptyString(record.path)) {
+  if (!isSingleLineString(record.projectKey) || !isSingleLineString(record.path)) {
     return false;
   }
   return isCloudEntry(record) || isServerEntry(record) || isCustomCloudEntry(record);
+}
+
+/** A committed config is untrusted: a line break in a key or path would let it forge lines in hook and agent output. */
+function isSingleLineString(value: unknown): value is string {
+  return isNonEmptyString(value) && !/[\r\n]/.test(value);
 }
 
 /**
