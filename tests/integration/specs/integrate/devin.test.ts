@@ -46,9 +46,6 @@ import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 const TEST_ORG = 'my-org';
 const SQAA_HEADING = '# Vortex analysis protocol';
 const SQAA_BEGIN_MARKER = '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->';
-const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
-const SECRETS_BEGIN_MARKER = '<!-- sonar:begin:devin-secrets-on-read -->';
-const SECRETS_END_MARKER = '<!-- sonar:end:devin-secrets-on-read -->';
 
 interface DevinConfigFile {
   theme?: string;
@@ -416,63 +413,35 @@ describe('integrate devin', () => {
     );
 
     it(
-      'writes the secrets-on-read instructions to the global AGENTS.md and keeps the user content',
-      async () => {
-        await authenticate();
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
-        const userContent = '# My rules\n\nAlways use tabs.\n';
-        harness.userHome.writeFile(agentsPath, userContent);
-
-        const result = await harness.run('integrate devin --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(agentsPath).asText();
-        expect(body.startsWith(userContent)).toBe(true);
-        expect(body).toContain(SECRETS_BEGIN_MARKER);
-        expect(body).toContain(SECRETS_HEADING);
-        expect(body).toContain('sonar analyze secrets <path/to/file>');
-        expect(harness.cwd.exists('AGENTS.md')).toBe(false);
-        expect(
-          findInstalledFeature(harness, 'devin', 'secrets-instructions', 'global'),
-        ).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'is idempotent: re-running leaves one entry per event and one instructions block',
+      'is idempotent: re-running leaves one secrets hook per event',
       async () => {
         await authenticate();
         const configPath = devinConfigRelPath(harness, 'config.json');
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
 
         await harness.run('integrate devin --non-interactive');
         const firstConfig = harness.userHome.file(configPath).asJson();
-        const firstAgents = harness.userHome.file(agentsPath).asText();
         const result = await harness.run('integrate devin --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.file(configPath).asJson()).toEqual(firstConfig);
-        expect(harness.userHome.file(agentsPath).asText()).toBe(firstAgents);
-        expect(firstAgents.split(SECRETS_BEGIN_MARKER)).toHaveLength(2);
+        const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
+        expect(secretsEntries(config, 'PreToolUse')).toHaveLength(1);
+        expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(1);
       },
       { timeout: 30000 },
     );
 
     it(
-      'system reset removes only the secrets hooks, scripts and instructions block',
+      'system reset removes the secrets hooks and scripts while preserving user content',
       async () => {
         await authenticate();
         const configPath = devinConfigRelPath(harness, 'config.json');
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
         harness.userHome.writeFile(
           configPath,
           JSON.stringify({ theme: 'dark', hooks: { PreToolUse: [USER_PRE_HOOK] } }),
         );
-        harness.userHome.writeFile(agentsPath, '# My rules\n');
         await harness.run('integrate devin --non-interactive');
         expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(true);
-        expect(harness.userHome.file(agentsPath).asText()).toContain(SECRETS_END_MARKER);
         harness.state().withRawState(readFileSync(harness.stateJsonFile.path, 'utf-8'));
 
         const result = await harness.run('system reset --force');
@@ -484,9 +453,6 @@ describe('integrate devin', () => {
         expect(secretsEntries(config, 'UserPromptSubmit')).toHaveLength(0);
         expect(harness.userHome.exists(secretsScriptRelPath('pretool-secrets'))).toBe(false);
         expect(harness.userHome.exists(secretsScriptRelPath('prompt-secrets'))).toBe(false);
-        const agents = harness.userHome.file(agentsPath).asText();
-        expect(agents).toContain('# My rules');
-        expect(agents).not.toContain(SECRETS_HEADING);
       },
       { timeout: 30000 },
     );
@@ -661,9 +627,7 @@ describe('integrate devin', () => {
         expect(config.theme).toBe('dark');
         expect(config.hooks?.PostToolUse).toBeUndefined();
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(false);
-        expect(
-          harness.userHome.file(devinConfigRelPath(harness, 'AGENTS.md')).asText(),
-        ).not.toContain(SQAA_HEADING);
+        expect(harness.userHome.exists(devinConfigRelPath(harness, 'AGENTS.md'))).toBe(false);
         expect(findInstalledFeature(harness, 'devin', VORTEX_FEATURE_ID)).toBeUndefined();
         expect(result.stdout + result.stderr).toContain(
           'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
