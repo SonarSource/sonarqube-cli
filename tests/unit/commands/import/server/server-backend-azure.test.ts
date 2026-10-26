@@ -61,7 +61,8 @@ describe('ServerBackend importing from Azure DevOps', () => {
     const URL = 'https://sonarqube.example.com';
 
     async function planFailure(api: object): Promise<CommandFailedError> {
-      const error = await new ServerBackend(api as unknown as ServerImportApiClient, URL)
+      const stubbed = { requireSupportedVersion: () => Promise.resolve(), ...api };
+      const error = await new ServerBackend(stubbed as unknown as ServerImportApiClient, URL)
         .plan({ all: true, nonInteractive: true }, new FakeConsole())
         .then(
           () => undefined,
