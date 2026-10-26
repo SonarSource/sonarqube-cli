@@ -27,7 +27,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { load } from 'js-yaml';
 
 import { ARCHITECTURE_SKILL } from '@/commands/architecture/skill-content.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { TestHarness } from '../../harness';
 
@@ -41,7 +40,6 @@ describe('sonar architecture install-skill', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
     const server = await harness.newFakeServer().asSonarCloud().withAuthToken('test-token').start();
     harness.withAuth(server.recordedAuthServerUrl(), 'test-token', 'my-org');
   });
@@ -53,7 +51,6 @@ describe('sonar architecture install-skill', () => {
   it('requires authentication before installing any files', async () => {
     await harness.dispose();
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
     const result = await harness.run('arch install-skill');
     expect(result.exitCode).not.toBe(0);
     expect(harness.cwd.exists(SKILL_PATHS[0])).toBe(false);

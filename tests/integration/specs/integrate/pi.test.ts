@@ -92,7 +92,7 @@ describe('integrate pi — secrets scanning extension', () => {
       harness.userHome.writeFile('.pi/agent/extensions/other.ts', 'export default () => {};\n');
 
       const session = harness.runInteractive('integrate pi');
-      await chooseCustomize(session);
+      await chooseCustomize(session, true);
       await session.decline('secret scanning hooks (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.decline('Install MCP server?');
@@ -302,7 +302,7 @@ describe('integrate pi — MCP server configuration', () => {
       );
 
       const session = harness.runInteractive('integrate pi');
-      await chooseCustomize(session);
+      await chooseCustomize(session, true);
       await session.accept('secret scanning hooks (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');

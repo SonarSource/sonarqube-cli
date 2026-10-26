@@ -37,6 +37,10 @@ import {
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import {
+  ARCHITECTURE_SKILL_FILE,
+  createArchitectureSkillFeature,
+} from '../_common/features/architecture-skill-feature.ts';
+import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -82,6 +86,15 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
   id: COPILOT_INTEGRATION_ID,
   displayName: COPILOT_DISPLAY_NAME,
   features: [
+    createArchitectureSkillFeature({
+      targetPath: (context) =>
+        join(
+          context.targetRoot,
+          context.scope === 'global' ? '.copilot' : '.github',
+          'skills',
+          ARCHITECTURE_SKILL_FILE,
+        ),
+    }),
     {
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
