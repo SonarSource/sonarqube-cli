@@ -373,6 +373,23 @@ describe('runDepRisksStage', () => {
     );
   });
 
+  it('rejects a discovered project key spanning several lines', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      new DiscoveredProjects(REPO, [project('discovered\nkey', 'app')]),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(
+      runDepRisksStage({
+        project: undefined,
+        changedFiles: ['package.json'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      }),
+    ).rejects.toThrow('The project key must be a single line.');
+    expect(orchestratorRunSpy).not.toHaveBeenCalled();
+  });
+
   it('scans a baked -p from the root of the linked project with that key', async () => {
     discoverProjectsSpy.mockResolvedValue(
       new DiscoveredProjects(REPO, [project('demo', 'services/demo')], true),

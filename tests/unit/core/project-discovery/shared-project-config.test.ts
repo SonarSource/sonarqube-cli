@@ -202,6 +202,19 @@ describe('SharedProjectConfigFileRepository.load', () => {
     }
   });
 
+  it.each([
+    ['projectKey', { serverUrl: 'https://sq.example', projectKey: 'x\nforged', path: '.' }],
+    ['path', { serverUrl: 'https://sq.example', projectKey: 'x', path: '.\r\nforged' }],
+  ])('returns an empty array when %s spans several lines', async (_field, entry) => {
+    const dir = tempDir('multiline');
+    writeProjectConfig(dir, entry);
+    try {
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('returns an empty array for an invalid region value', async () => {
     const dir = tempDir('bad-region');
     writeProjectConfig(dir, { region: 'mars', organization: 'acme', projectKey: 'x', path: '.' });

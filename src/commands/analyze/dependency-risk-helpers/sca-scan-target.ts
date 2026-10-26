@@ -43,20 +43,14 @@ export async function resolveScaScanTarget(
   if (explicitProject) {
     assertSingleLineProjectKey(explicitProject);
     console.print(`     Using project key: ${explicitProject}`, 'stderr');
-    const discovered = await discoverProjects(cwd, {
-      auth,
-      silent: true,
-      console,
-      useGitRemoteBinding: false,
-    });
-    const linked = discovered.projects.find((project) => project.projectKey === explicitProject);
-    return { projectKey: explicitProject, baseDir: linked?.projectRoot ?? canonicalizePath(cwd) };
+    return resolveExplicitScaScanTarget(explicitProject, auth, console, cwd);
   }
 
   const discovered = await discoverProjects(cwd, { auth, silent: true, console });
   const scoped = discovered.scope(cwd);
   if (scoped.length === 1) {
     const [{ projectKey, projectRoot }] = scoped;
+    assertSingleLineProjectKey(projectKey);
     console.print(`     Using auto-detected project key: ${projectKey}`, 'stderr');
     return { projectKey, baseDir: projectRoot };
   }
@@ -67,4 +61,21 @@ export async function resolveScaScanTarget(
     remediationHint:
       "Use --project <key>, or run 'sonar link <projectKey>' to link one to this repository.",
   });
+}
+
+/** Scans from the root of the linked project with that key, or from `cwd` when none is linked. */
+export async function resolveExplicitScaScanTarget(
+  projectKey: string,
+  auth: ResolvedAuth,
+  console: Console,
+  cwd: string,
+): Promise<ScaScanTarget> {
+  const discovered = await discoverProjects(cwd, {
+    auth,
+    silent: true,
+    console,
+    useGitRemoteBinding: false,
+  });
+  const linked = discovered.projects.find((project) => project.projectKey === projectKey);
+  return { projectKey, baseDir: linked?.projectRoot ?? canonicalizePath(cwd) };
 }

@@ -72,6 +72,17 @@ describe('resolveScaScanTarget', () => {
     expect(target).toEqual({ projectKey: 'web', baseDir: join(REPO, 'apps', 'web') });
   });
 
+  it('rejects an auto-detected project key spanning several lines', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      new DiscoveredProjects(REPO, [project('web\nkey', 'apps/web')]),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(resolveScaScanTarget(undefined, AUTH, new FakeConsole(), REPO)).rejects.toThrow(
+      'The project key must be a single line.',
+    );
+  });
+
   it('scans the root of the linked project matching an explicit key', async () => {
     const target = await resolveScaScanTarget('api', AUTH, new FakeConsole(), REPO);
 

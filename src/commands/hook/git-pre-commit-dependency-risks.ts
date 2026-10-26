@@ -63,6 +63,7 @@ import {
   ScaScanOrchestrator,
   type ScaScanTarget,
 } from '../analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
+import { resolveExplicitScaScanTarget } from '../analyze/dependency-risk-helpers/sca-scan-target.ts';
 import type { Severity } from '../analyze/dependency-risk-helpers/sca-scanner.ts';
 import {
   ScaWatchPatternsRunner,
@@ -209,14 +210,7 @@ async function resolveScanTargets(
 
   if (options.project) {
     assertSingleLineProjectKey(options.project);
-    const discovered = await discoverProjects(cwd, {
-      auth,
-      silent: true,
-      console,
-      useGitRemoteBinding: false,
-    });
-    const linked = discovered.projects.find((project) => project.projectKey === options.project);
-    return [{ projectKey: options.project, baseDir: linked?.projectRoot ?? cwd }];
+    return [await resolveExplicitScaScanTarget(options.project, auth, console, cwd)];
   }
 
   const discovered = await discoverProjects(cwd, { auth, silent: true, console });
@@ -226,6 +220,7 @@ async function resolveScanTargets(
   }
   if (!discovered.fromSharedConfig) {
     const [{ projectKey, projectRoot }] = scoped;
+    assertSingleLineProjectKey(projectKey);
     return [{ projectKey, baseDir: projectRoot }];
   }
 
