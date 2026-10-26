@@ -135,7 +135,7 @@ describe('integrate codex', () => {
         );
         expect(outputScript.exists()).toBe(true);
         expect(outputScript.isExecutable).toBe(true);
-        expect(outputScript.asText()).toContain('sonar hook codex-post-tool-use-secrets');
+        expect(outputScript.asText()).toContain('sonar hook agent-secrets-masking --agent codex');
         const outputEntry = hooks.hooks?.PostToolUse?.[0];
         expect(outputEntry?.matcher).toBe('*');
         expect(outputEntry?.hooks?.[0]?.type).toBe('command');
