@@ -124,8 +124,8 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           displayName: 'Copilot prompt secrets hook script',
           targetPath: resolvePromptSecretsHookScriptPath,
           content: {
-            unix: buildUnixHookScript('copilot-prompt-transformed'),
-            windows: buildWindowsHookScript('copilot-prompt-transformed'),
+            unix: buildUnixHookScript('agent-secrets-masking --agent copilot'),
+            windows: buildWindowsHookScript('agent-secrets-masking --agent copilot'),
           },
           executable: true,
         }),
