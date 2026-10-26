@@ -36,6 +36,7 @@ import type { OnlyPrivateProjects } from './repository-collection';
 import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
 import { buildConnectUrl } from './server/connect-url.ts';
 import { explainImportFailure } from './server/import-failure.ts';
+import { assertProjectKeyUsable } from './server/key-guard.ts';
 import type { PatStatus } from './server/pat-status.ts';
 import { SUPPORTED_PLATFORMS } from './server/platforms.ts';
 import { deriveProjectKey } from './server/project-key.ts';
@@ -130,6 +131,7 @@ export class ServerBackend implements ImportBackend {
       );
     }
     claimedKeys.set(projectKey, repository.id);
+    await assertProjectKeyUsable(this.api, setting, repository, projectKey);
     const { newProjectCreated } = await this.api
       .putBoundProject({
         projectKey,
