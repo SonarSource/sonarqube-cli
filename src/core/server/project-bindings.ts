@@ -108,10 +108,44 @@ export class ProjectBindingsClient {
       });
   }
 
+  /**
+   * SonarQube Cloud only: true when the remote is bound to a project that the given organization
+   * does not contain. False when there is no binding or the project is in the organization;
+   * undefined when the lookup could not tell.
+   */
+  isGitRemoteBoundOutsideOrg(
+    remoteUrl: string,
+    orgKey: string,
+  ): ResultAsync<boolean | undefined, HttpClientError> {
+    if (!this.client.isCloud) {
+      return okAsync(false);
+    }
+    return this.getSqcProjectIdByRemoteUrl(stripGitRemoteUrlUserinfo(remoteUrl)).andThen(
+      (projectId) => {
+        if (!projectId) {
+          return okAsync(projectId === null ? false : undefined);
+        }
+        return this.searchSonarCloudProjectKeysById(projectId, orgKey).map((keys) =>
+          keys === undefined ? undefined : keys.length === 0,
+        );
+      },
+    );
+  }
+
   private getSonarCloudProjectKeyById(
     projectId: string,
     orgKey: string,
   ): ResultAsync<string | null | undefined, HttpClientError> {
+    return this.searchSonarCloudProjectKeysById(projectId, orgKey).map(
+      (keys) => keys?.[0] || undefined,
+    );
+  }
+
+  /** Keys of the organization's projects with this id; undefined when the request failed. */
+  private searchSonarCloudProjectKeysById(
+    projectId: string,
+    orgKey: string,
+  ): ResultAsync<string[] | undefined, HttpClientError> {
     return this.client
       .getSafe<{ components: Array<{ key: string }> }>('/api/components/search_projects', {
         projectIds: projectId,
@@ -122,11 +156,7 @@ export class ProjectBindingsClient {
           return undefined;
         }
         const components = result.value?.components;
-        if (!Array.isArray(components) || components.length === 0) {
-          return undefined;
-        }
-        const projectKey = components[0].key;
-        return projectKey || undefined;
+        return Array.isArray(components) ? components.map((component) => component.key) : [];
       });
   }
 

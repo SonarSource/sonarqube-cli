@@ -599,6 +599,7 @@ export class FakeSonarQubeServerBuilder {
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
   private readonly projectKeysByGitRemote: Map<string, string> = new Map();
+  private readonly otherOrgGitRemotes: Set<string> = new Set();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -734,6 +735,12 @@ export class FakeSonarQubeServerBuilder {
    */
   withGitRemoteBinding(remoteUrl: string, projectKey: string): this {
     this.projectKeysByGitRemote.set(remoteUrl, projectKey);
+    return this;
+  }
+
+  /** Bind a git remote to a Cloud project that the active organization does not contain. */
+  withGitRemoteBoundInOtherOrg(remoteUrl: string): this {
+    this.otherOrgGitRemotes.add(remoteUrl);
     return this;
   }
 
@@ -1093,6 +1100,7 @@ export class FakeSonarQubeServerBuilder {
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
       projectKeysByGitRemote,
+      otherOrgGitRemotes,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -1917,10 +1925,14 @@ export class FakeSonarQubeServerBuilder {
             return new Response('{}', { status: projectBindingsStatusCode });
           }
           const projectKey = projectKeysByGitRemote.get(query.url ?? '');
-          return new Response(
-            JSON.stringify({ bindings: projectKey ? [{ projectId: `id-${projectKey}` }] : [] }),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
+          const bindings = projectKey
+            ? [{ projectId: `id-${projectKey}` }]
+            : otherOrgGitRemotes.has(query.url ?? '')
+              ? [{ projectId: 'id-in-another-org' }]
+              : [];
+          return new Response(JSON.stringify({ bindings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/components/search_projects' && req.method === 'GET') {
