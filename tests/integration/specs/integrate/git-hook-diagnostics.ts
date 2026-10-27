@@ -407,11 +407,7 @@ function buildSyntheticPrePushStdin(context: GitHookDiagnosticContext): {
   stdinLine: string;
   section: string;
 } {
-  const branch = gitSpawn(context.repoCwd, context.hookEnv, [
-    'rev-parse',
-    '--abbrev-ref',
-    'HEAD',
-  ]);
+  const branch = gitSpawn(context.repoCwd, context.hookEnv, ['rev-parse', '--abbrev-ref', 'HEAD']);
   const head = gitRevParse(context.repoCwd, context.hookEnv, 'HEAD');
   const remoteRef = branch.output === 'HEAD' ? 'refs/heads/main' : `refs/heads/${branch.output}`;
   const localRef = remoteRef;
@@ -465,7 +461,7 @@ function probeSyntheticPrePushHook(
   const result = Bun.spawnSync([sonarBinPath, 'hook', 'git-pre-push'], {
     cwd: context.repoCwd,
     env,
-    stdin: stdinLine + '\n',
+    stdin: Buffer.from(`${stdinLine}\n`),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -473,9 +469,12 @@ function probeSyntheticPrePushHook(
   return {
     exitCode: result.exitCode,
     output: decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr),
-    section: [stdinSection, '', `sonar hook git-pre-push with synthetic stdin (exit=${result.exitCode ?? 'null'}):`, output].join(
-      '\n',
-    ),
+    section: [
+      stdinSection,
+      '',
+      `sonar hook git-pre-push with synthetic stdin (exit=${result.exitCode ?? 'null'}):`,
+      output,
+    ].join('\n'),
   };
 }
 
@@ -503,12 +502,12 @@ function probeDirectHookInvocation(
   if (!existsSync(hookScript)) {
     return `(hook script missing at ${hookScript})`;
   }
-  const stdin =
-    context.hook === 'pre-push' ? buildSyntheticPrePushStdin(context).stdinLine + '\n' : undefined;
+  const stdinLine =
+    context.hook === 'pre-push' ? buildSyntheticPrePushStdin(context).stdinLine : '';
   const result = Bun.spawnSync(['sh', hookScript], {
     cwd: context.repoCwd,
     env: context.hookEnv,
-    stdin,
+    ...(stdinLine ? { stdin: Buffer.from(`${stdinLine}\n`) } : {}),
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -545,7 +544,11 @@ export function buildGitHookDiagnostics(
     context.hookEnv,
     context.hook,
   );
-  const { stagedFiles, lastCommitFiles, section: stagedSection } = probeStagedAndLastCommit(context);
+  const {
+    stagedFiles,
+    lastCommitFiles,
+    section: stagedSection,
+  } = probeStagedAndLastCommit(context);
   const directSonarHook = probeDirectSonarHookHandler(context, sonarBinPath);
   const explicitFileScan = probeExplicitFileScan(context, sonarBinPath, lastCommitFiles);
   const syntheticPrePush = probeSyntheticPrePushHook(context, sonarBinPath);
