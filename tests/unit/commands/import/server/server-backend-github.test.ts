@@ -44,6 +44,7 @@ function backendWith(probes: PatProbe[]) {
     Promise.resolve({ repositories: [{ id: 1, key: 'acme/api', name: 'api' }], total: 1 }),
   );
   const api = {
+    requireSupportedVersion: () => Promise.resolve(),
     listDopSettings: () => Promise.resolve([GITHUB]),
     probeGithubPat,
     listGithubOrganizations,

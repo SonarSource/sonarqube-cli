@@ -30,6 +30,7 @@ const GITLAB = { id: 'gl-id', key: 'my gitlab', type: 'gitlab' as const };
 
 async function failingImport(putError: Error): Promise<unknown> {
   const api = {
+    requireSupportedVersion: () => Promise.resolve(),
     listDopSettings: () => Promise.resolve([GITLAB]),
     checkPat: () => Promise.resolve('valid' as const),
     searchGitlabRepos: () =>

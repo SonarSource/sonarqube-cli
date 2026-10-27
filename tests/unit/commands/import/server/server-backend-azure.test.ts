@@ -29,6 +29,7 @@ describe('ServerBackend importing from Azure DevOps', () => {
   it('sends the repository name and its Azure DevOps project name to the server', async () => {
     const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
     const api = {
+      requireSupportedVersion: () => Promise.resolve(),
       listDopSettings: () =>
         Promise.resolve([{ id: 'az-id', key: 'my-azure', type: 'azure' as const }]),
       checkPat: () => Promise.resolve('valid' as const),
