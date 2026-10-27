@@ -35,9 +35,6 @@ jobs:
             development/kv/data/jira token | JIRA_TOKEN;
 
       - uses: ./.github/actions/setup-bun
-        with:
-          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Get release version
         id: version
