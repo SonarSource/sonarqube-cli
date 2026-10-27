@@ -43,6 +43,7 @@ import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
 import { type CliResult, type FakeSonarQubeServerBuilder, TestHarness } from '../../harness';
 import { getCliBinaryPath } from '../../harness/cli-runner.js';
 import { buildHomeEnv, IS_WINDOWS } from '../../harness/platform';
+import { assertGitHookBlockedSecret } from './git-hook-diagnostics.js';
 import { chooseCustomize } from './integrate-test-helpers';
 
 const PATH_DELIM = IS_WINDOWS ? ';' : ':';
@@ -261,15 +262,20 @@ describe('integrate git (native hooks)', () => {
       expect(result.stdout).toContain('Setup complete!');
       expect(result.stdout).toContain('Verify the pre-commit hook works');
 
-      const { hookEnv } = setupSonarBinDir(harness);
+      const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
       harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
       Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
       setupGitUser(harness.cwd.path);
 
       const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
-      expect(commit.exitCode).not.toBe(0);
-      const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
-      expect(output).toContain('Secrets detected');
+      assertGitHookBlockedSecret(commit, {
+        harness,
+        hookEnv,
+        sonarBinDir,
+        repoCwd: harness.cwd.path,
+        hook: 'pre-commit',
+        operation: 'git commit',
+      });
     },
     { timeout: 30000 },
   );
@@ -286,7 +292,7 @@ describe('integrate git (native hooks)', () => {
       expect(result.stdout).toContain('Setup complete!');
       expect(result.stdout).toContain('Verify the pre-push hook works');
 
-      const { hookEnv } = setupSonarBinDir(harness);
+      const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
       setupGitUser(harness.cwd.path);
 
       // First commit + push: clean file, should succeed
@@ -303,9 +309,14 @@ describe('integrate git (native hooks)', () => {
       gitCommit(harness.cwd.path, hookEnv, 'wip');
       const secondPush = gitPush(harness.cwd.path, hookEnv, false);
 
-      expect(secondPush.exitCode).not.toBe(0);
-      const output = (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
-      expect(output).toContain('Secrets detected');
+      assertGitHookBlockedSecret(secondPush, {
+        harness,
+        hookEnv,
+        sonarBinDir,
+        repoCwd: harness.cwd.path,
+        hook: 'pre-push',
+        operation: 'git push',
+      });
     },
     { timeout: 30000 },
   );
@@ -795,16 +806,21 @@ describe('integrate git (native hooks)', () => {
           readFileSync(join(harness.cwd.path, '.git', 'hooks', 'pre-commit'), 'utf-8'),
         ).toContain('echo ran');
 
-        const { hookEnv } = setupSonarBinDir(harness);
+        const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
         setupGitUser(harness.cwd.path);
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
         Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
 
         const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
 
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
-        expect(output).toContain('Secrets detected');
+        assertGitHookBlockedSecret(commit, {
+          harness,
+          hookEnv,
+          sonarBinDir,
+          repoCwd: harness.cwd.path,
+          hook: 'pre-commit',
+          operation: 'git commit (chained local hook)',
+        });
         // Proves the old hook actually executed (chaining happened), not just that Sonar's ran.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(true);
       },
@@ -859,7 +875,7 @@ describe('integrate git (native hooks)', () => {
         const install = await harness.run('integrate git --non-interactive');
         expect(install.exitCode).toBe(0);
 
-        const { hookEnv } = setupSonarBinDir(harness);
+        const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
         setupGitUser(harness.cwd.path);
         harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
         Bun.spawnSync(['git', 'add', 'secret.js'], { cwd: harness.cwd.path });
@@ -867,9 +883,14 @@ describe('integrate git (native hooks)', () => {
         const commit = gitCommit(harness.cwd.path, hookEnv, 'wip');
 
         // The GLOBAL hook's own secrets check still ran and blocked the commit...
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
-        expect(output).toContain('Secrets detected');
+        assertGitHookBlockedSecret(commit, {
+          harness,
+          hookEnv,
+          sonarBinDir,
+          repoCwd: harness.cwd.path,
+          hook: 'pre-commit',
+          operation: 'git commit (no double-chain)',
+        });
         // ...but the old marked-as-Sonar hook was recognized and skipped, not executed again.
         expect(harness.cwd.exists(OLD_HOOK_MARKER_FILE)).toBe(false);
       },
@@ -898,7 +919,7 @@ describe('integrate git (native hooks)', () => {
         const install = await harness.run('integrate git --hook pre-push --non-interactive');
         expect(install.exitCode).toBe(0);
 
-        const { hookEnv } = setupSonarBinDir(harness);
+        const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
         setupGitUser(harness.cwd.path);
 
         // First commit + push: clean file, should succeed and still run the chained old hook.
@@ -920,10 +941,14 @@ describe('integrate git (native hooks)', () => {
         gitCommit(harness.cwd.path, hookEnv, 'wip');
         const secondPush = gitPush(harness.cwd.path, hookEnv, false);
 
-        expect(secondPush.exitCode).not.toBe(0);
-        const output =
-          (secondPush.stdout?.toString() ?? '') + (secondPush.stderr?.toString() ?? '');
-        expect(output).toContain('Secrets detected');
+        assertGitHookBlockedSecret(secondPush, {
+          harness,
+          hookEnv,
+          sonarBinDir,
+          repoCwd: harness.cwd.path,
+          hook: 'pre-push',
+          operation: 'git push (chained local hook)',
+        });
       },
       { timeout: 30000 },
     );
@@ -938,7 +963,7 @@ describe('integrate git (native hooks)', () => {
         const install = await harness.run('integrate git --non-interactive');
         expect(install.exitCode).toBe(0);
 
-        const { hookEnv } = setupSonarBinDir(harness);
+        const { hookEnv, sonarBinDir } = setupSonarBinDir(harness);
         setupGitUser(harness.cwd.path);
         // A worktree needs an existing commit to branch from.
         harness.cwd.writeFile('initial.js', 'const x = 1;\n');
@@ -957,9 +982,14 @@ describe('integrate git (native hooks)', () => {
 
         const commit = gitCommit(worktreePath, hookEnv, 'wip');
 
-        expect(commit.exitCode).not.toBe(0);
-        const output = (commit.stdout?.toString() ?? '') + (commit.stderr?.toString() ?? '');
-        expect(output).toContain('Secrets detected');
+        assertGitHookBlockedSecret(commit, {
+          harness,
+          hookEnv,
+          sonarBinDir,
+          repoCwd: worktreePath,
+          hook: 'pre-commit',
+          operation: 'git commit (linked worktree)',
+        });
         // The old hook's marker lands in the worktree (git hooks run with the invoking
         // worktree as cwd) — proves --git-common-dir found the shared hook from there.
         expect(existsSync(join(worktreePath, OLD_HOOK_MARKER_FILE))).toBe(true);
