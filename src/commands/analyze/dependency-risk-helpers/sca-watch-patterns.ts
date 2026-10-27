@@ -40,16 +40,14 @@ export class ScaWatchPatternsRunner {
       const binaryPath = await this.installer.install();
       const result = await this.spawner.spawn(binaryPath, ['watch-patterns']);
       if ((result.exitCode ?? 1) !== 0) {
-        logger.warn(
-          `watch-patterns exited with code ${String(result.exitCode)}: ${result.stderr.trim()}`,
-        );
+        logger.debug(`watch-patterns exited with code ${String(result.exitCode)}`);
         return [];
       }
       const parsed: WatchPatternsPayload = JSON.parse(result.stdout) as WatchPatternsPayload;
       if (!Array.isArray(parsed.patterns)) return [];
       return parsed.patterns.filter((p): p is string => typeof p === 'string');
     } catch (err) {
-      logger.warn(`watch-patterns failed: ${(err as Error).message}`);
+      logger.debug(`watch-patterns failed: ${(err as Error).message}`);
       return [];
     }
   }

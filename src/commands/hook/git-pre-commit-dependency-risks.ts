@@ -310,7 +310,7 @@ async function findChangedManifests(
     new DefaultScaScannerSpawner(),
   ).run();
   if (patterns.length === 0) {
-    logger.warn('Dependency-risks hook: no watch patterns returned, skipping.');
+    logger.debug('Dependency-risks hook: no watch patterns returned, skipping.');
     console.warn(
       'Dependency-risks scan skipped: could not read the manifest patterns from sca-scanner; commit not blocked.',
     );
