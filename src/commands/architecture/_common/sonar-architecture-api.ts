@@ -21,7 +21,9 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import { AccessDeniedError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 import {
@@ -34,6 +36,16 @@ import {
   type StructureGraph,
   type StructureNode,
 } from './architecture-api.ts';
+import {
+  directiveId,
+  type DirectiveInput,
+  directiveKey,
+  DirectiveNotFoundError,
+  type DirectivePage,
+  isDefiniteRejection,
+  parseProjectDirective,
+  type ProjectDirective,
+} from './directives.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -314,6 +326,137 @@ export class SonarArchitectureApi implements ArchitectureApi {
     await this.http.delete(this.modelPath()).orThrow();
   }
 
+  async getDirectivesPage(pageIndex: number, pageSize: number): Promise<DirectivePage> {
+    if (
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 1000
+    )
+      throw new CommandFailedError(
+        'Directive page must be >= 1 and page size must be between 1 and 1000.',
+      );
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .get<{
+        projectDirectives?: unknown[];
+        page?: { pageIndex: number; pageSize: number; total: number };
+      } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
+      .orThrow();
+    const page = result?.page;
+    if (
+      !Array.isArray(result?.projectDirectives) ||
+      page?.pageIndex !== pageIndex ||
+      page.pageSize !== pageSize ||
+      !Number.isSafeInteger(page.total) ||
+      page.total < 0 ||
+      result.projectDirectives.length !==
+        Math.min(pageSize, Math.max(0, page.total - (pageIndex - 1) * pageSize))
+    )
+      throw new CommandFailedError('Invalid public directives page; no complete page was read.');
+    const directives = result.projectDirectives.map(parseProjectDirective);
+    if (new Set(directives.map((item) => item.id.toLowerCase())).size !== directives.length)
+      throw new CommandFailedError('The public directives page returned duplicate ids.');
+    if (directives.some((item) => item.projectId !== projectId))
+      throw new CommandFailedError('The public directives page returned a different project.');
+    return { directives, page };
+  }
+
+  async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .post<unknown>(this.path('project-directives'), {
+        ...directive,
+        projectId,
+        origin: 'sonarqube-cli',
+      })
+      .orThrow();
+    const created = parseProjectDirective(result);
+    if (created.projectId !== projectId)
+      throw new CommandFailedError(
+        'The directive write returned a different project. Inspect the current list before retrying.',
+      );
+    if (
+      directiveKey(created) !== directiveKey(directive) ||
+      (directive.description !== undefined && directive.description !== created.description)
+    )
+      throw new CommandFailedError(
+        'The directive write response did not confirm the requested directive. Inspect the current list before retrying.',
+      );
+    return created;
+  }
+
+  async getDirective(id: string): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .get<unknown>(this.directivePath(id))
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
+          throw new DirectiveNotFoundError(
+            `Directive ${id} was not found or is not accessible in the selected project.`,
+            { cause: error },
+          );
+        throw error;
+      });
+    const directive = parseProjectDirective(result);
+    if (directive.id.toLowerCase() !== directiveId(id) || directive.projectId !== projectId)
+      throw new CommandFailedError(
+        'The public directive response returned a different id or project. Nothing was changed.',
+      );
+    return directive;
+  }
+
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.getDirective(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
+    const updated = parseProjectDirective(response);
+    const projectId = await this.projectId('Project directives');
+    if (
+      updated.id.toLowerCase() !== directiveId(id) ||
+      updated.projectId !== projectId ||
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
+    )
+      throw new CommandFailedError(
+        'The directive update response did not confirm the requested directive. Inspect it before retrying.',
+      );
+    return updated;
+  }
+
+  async deleteDirective(id: string): Promise<void> {
+    await this.getDirective(id);
+    let deleteAccepted = false;
+    try {
+      await this.http.delete(this.directivePath(id)).orThrow();
+      deleteAccepted = true;
+      const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
+        throw new CommandFailedError(
+          `Expected HTTP 404 after deletion, received ${response.status}.`,
+        );
+    } catch (error) {
+      if (!deleteAccepted && isDefiniteRejection(error)) throw error;
+      throw new CommandFailedError(
+        `Directive deletion could not be confirmed. Inspect directive ${id} before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+  }
+
+  private directivePath(id: string): string {
+    return `${this.path('project-directives')}/${directiveId(id)}`;
+  }
+
   private modelPath(): string {
     if (!this.intendedModelId) {
       throw new CommandFailedError(
@@ -391,10 +534,10 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return organizationId;
   }
 
-  private async projectId(): Promise<string> {
+  private async projectId(resource = 'Intended architecture'): Promise<string> {
     if (!this.http.isCloud) {
       throw new CommandFailedError(
-        'Intended architecture is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.',
+        `${resource} is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.`,
       );
     }
     return (await this.ids()).projectId;
