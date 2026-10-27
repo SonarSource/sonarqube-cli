@@ -87,16 +87,17 @@ describe('sonar import', () => {
   );
 
   it(
-    'exits with code 1 when connected to SonarQube Server (not Cloud)',
+    'routes a SonarQube Server connection to the Server backend instead of the Cloud one',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
       harness.withAuth(server.baseUrl(), 'test-token');
 
-      const result = await harness.run('import');
+      const result = await harness.run('import --all');
 
       expect(result.exitCode).toBe(1);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('only supported on SonarQube Cloud');
+      expect(output).toContain('No DevOps platform integration is configured');
+      expect(output).not.toContain('SonarQube Cloud');
     },
     { timeout: 15000 },
   );

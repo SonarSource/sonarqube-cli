@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -29,6 +29,8 @@ import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import { ImportProgress } from './import-progress.ts';
 import type { RepositoryCollection, SkippedRepo } from './repository-collection';
 import type { ResolvedRepo } from './resolve-options';
+import { ServerImportApiClient } from './server/server-import-api.ts';
+import { ServerBackend } from './server-backend.ts';
 import type { ImportOptions } from './types';
 
 export { type ImportOptions } from './types';
@@ -44,8 +46,8 @@ function createProvisionTask(
   return async (repo) => {
     progress.update(repo.slug, 'running');
     try {
-      await plan.importRepo(repo);
-      progress.update(repo.slug, 'done');
+      const outcome = await plan.importRepo(repo);
+      progress.update(repo.slug, 'done', outcome?.detail);
     } catch (err) {
       progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));
       throw err;
@@ -64,7 +66,7 @@ function createProvisionTask(
  * eligibility. A repo is imported only if `regex` is undefined (no filter — `--all`/"Recommended")
  * or matches its name.
  */
-async function runBulkImportJob(
+export async function runBulkImportJob(
   plan: ImportPlan,
   collection: RepositoryCollection,
   regex: RegExp | undefined,
@@ -117,6 +119,7 @@ async function runBulkImportJob(
       );
     }
     progress.recordSkipped(page.skipped.length);
+    progress.setTotal(collection.total);
     await importPage(page.eligible);
   }
 
@@ -165,15 +168,23 @@ function reportOutcome(
 }
 
 function createBackend(
-  client: ImportApiClient,
+  options: ImportOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): ImportBackend {
-  if (!client.isCloud) {
-    throw new CommandFailedError('The sonar import command is only supported on SonarQube Cloud.', {
-      remediationHint: "Run 'sonar auth login' and connect to SonarQube Cloud, then retry.",
-    });
+  const { httpClient } = ctx.connection;
+  if (!httpClient.isCloud) {
+    return new ServerBackend(
+      new ServerImportApiClient(httpClient, ctx.auth.serverUrl),
+      ctx.auth.serverUrl,
+    );
   }
-  return new CloudBackend(client, ctx.auth.orgKey, ctx.auth.serverUrl);
+  if (options.dopSetting !== undefined) {
+    throw new InvalidOptionError(
+      '--dop-setting is only supported on SonarQube Server.',
+      'Remove --dop-setting, or connect to a SonarQube Server with "sonar auth login".',
+    );
+  }
+  return new CloudBackend(new ImportApiClient(httpClient), ctx.auth.orgKey, ctx.auth.serverUrl);
 }
 
 export async function importHandler(
@@ -181,11 +192,9 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
-  const client = new ImportApiClient(ctx.connection.httpClient);
-
   console.intro('Import repositories', 'SonarQube');
 
-  const plan = await createBackend(client, ctx).plan(options, console);
+  const plan = await createBackend(options, ctx).plan(options, console);
   const { selection, projectListUrl } = plan;
 
   if (selection.kind === 'streaming') {
