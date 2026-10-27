@@ -49,9 +49,15 @@ const target = process.env.SONARQUBE_CLI_TARGET as BuildTarget | undefined;
 
 console.log(`Building CLI binary for distribution: ${distribution} (${target ?? 'host'})`);
 
-const compile: { target?: BuildTarget; outfile: string; executablePath?: string } = target
-  ? { target, outfile }
-  : { outfile };
+const compileNoAutoload = { autoloadDotenv: false, autoloadBunfig: false } as const;
+
+const compile: {
+  target?: BuildTarget;
+  outfile: string;
+  executablePath?: string;
+  autoloadDotenv: false;
+  autoloadBunfig: false;
+} = target ? { target, outfile, ...compileNoAutoload } : { outfile, ...compileNoAutoload };
 
 let cleanupCompileRuntime: (() => void) | undefined;
 const artifactoryToken = process.env.ARTIFACTORY_PRIVATE_READER_PASSWORD;
