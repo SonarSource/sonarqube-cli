@@ -53,6 +53,16 @@ export function organizationMembershipError(
   });
 }
 
+/** The token's account belongs to no SonarQube Cloud organization. */
+export class NoOrganizationMembershipError extends CommandFailedError {
+  constructor() {
+    super('You are not a member of any organization.', {
+      remediationHint: 'Join a SonarQube Cloud organization, then try again.',
+    });
+    this.name = 'NoOrganizationMembershipError';
+  }
+}
+
 /** Fail unless the token belongs to the organization. */
 export async function assertOrganizationMember(
   client: OrganizationsClient,
@@ -190,9 +200,7 @@ export async function getUserSelectedOrganization(
   }
 
   if (memberOrgs.length === 0) {
-    throw new CommandFailedError('You are not a member of any organization.', {
-      remediationHint: 'Join a SonarQube Cloud organization, then try again.',
-    });
+    throw new NoOrganizationMembershipError();
   }
 
   // Multiple orgs available — let user pick from a list or enter manually
