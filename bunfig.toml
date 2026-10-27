@@ -1,6 +1,6 @@
 [install]
 exact = true
-registry = { url = "https://repox.jfrog.io/artifactory/api/npm/npm/", token = "$ARTIFACTORY_PRIVATE_READER_PASSWORD" }
+registry = { url = "https://repox-internal.sonar.build/artifactory/api/npm/npm/", token = "$ARTIFACTORY_PRIVATE_READER_PASSWORD" }
 
 [test]
 preload = [
