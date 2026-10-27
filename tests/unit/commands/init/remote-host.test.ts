@@ -26,6 +26,7 @@ describe('isBindableRemote', () => {
   it.each([
     'https://github.com/example/repository.git',
     'git@github.com:example/repository.git',
+    'github.com:example/repository.git',
     'ssh://git@github.com/example/repository.git',
     'https://dev.azure.com/org/project/_git/repository',
     'git@ssh.dev.azure.com:v3/org/project/repository',
@@ -39,6 +40,7 @@ describe('isBindableRemote', () => {
     'https://gitlab.com/example/repository.git',
     'git@bitbucket.org:example/repository.git',
     'https://github.example.com/example/repository.git',
+    'gitlab.com:example/repository.git',
     'https://evilvisualstudio.com/project/_git/repository',
     '/local/path/to/repository',
     '',
