@@ -103,6 +103,12 @@ Each directive requires type (REMOVE_EDGE, RENAME_NODE or MOVE_NODE), ecosystem,
 description. Returned IDs are not sent in create requests. The CLI records sonarqube-cli as the
 origin of new directives instead of copying an exported origin.
 
+For MOVE_NODE, toNodeKey is the exact key of an existing destination container, not the moved
+node's future key. The backend appends the source node's name. For RENAME_NODE, toNodeKey is
+the full new key, not only the new label. REMOVE_EDGE uses two existing endpoint keys.
+If a MOVE_NODE destination is reported missing, re-read the current architecture and ask the
+user to choose an existing destination; do not treat it as a new location to create.
+
 Preview first, show what would be created and skipped, and apply only after the user confirms.
 When graphPerspective is omitted, creation uses default_perspective. Preview warns about keys missing
 from the current graph; review these warnings before confirming the write.

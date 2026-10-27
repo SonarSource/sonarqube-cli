@@ -242,6 +242,7 @@ describe('public project directives', () => {
       expect(result.stderr).toContain(`node '${key}' was not found`);
     expect(result.stderr).not.toContain("node 'app:valid.deep' was not found");
     expect(result.stderr).not.toContain("node 'new-label' was not found");
+    expect(result.stderr).toContain('The MOVE_NODE destination must be an existing container');
     expect(
       server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
     ).toHaveLength(1);
@@ -731,7 +732,7 @@ describe('public project directives', () => {
     ).toHaveLength(0);
   });
 
-  it('reads, previews, updates and deletes explicit ids without changing other directives', async () => {
+  it('reads, previews and updates explicit ids without changing other directives', async () => {
     const id = '00000000-0000-4000-8000-000000000001';
     const other = '00000000-0000-4000-8000-000000000002';
     const existing = [
@@ -763,14 +764,36 @@ describe('public project directives', () => {
     expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(0);
     const apply = await h.run('arch directives set -p shop --file updates.json');
     expect(apply.exitCode).toBe(0);
-    const updated = await h.run(`arch directives get -p shop --id ${id} --format json`);
-    expect(JSON.parse(updated.stdout).directive).toMatchObject({
+    const updated = await h.run('arch directives get -p shop --format json');
+    const records: ProjectDirective[] = JSON.parse(updated.stdout).directives;
+    expect(records.find((record) => record.id === id)).toMatchObject({
       ...existing[0],
       description: 'updated',
     });
+    expect(records.find((record) => record.id === other)).toMatchObject(existing[1]);
     const noop = await h.run('arch directives set -p shop --file updates.json');
     expect(noop.stdout).toMatch(/Skipped 1.*unchanged/);
     expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(1);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
+    ).toHaveLength(0);
+    const patch = server.getRecordedRequests().find((r) => r.method === 'PATCH')!;
+    expect(JSON.parse(patch.body!)).toEqual({
+      ...directive,
+      description: 'updated',
+      origin: 'SONAR_CLI',
+    });
+  });
+
+  it('previews and deletes an explicit id without changing other directives', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const other = '00000000-0000-4000-8000-000000000002';
+    const server = await configured((api) =>
+      api.withDirectives([
+        { ...directive, id, projectId: 'shop-branch-id' },
+        { ...directive, id: other, projectId: 'shop-branch-id', fromNodeKey: 'other' },
+      ]),
+    );
     const deletion = await h.run(deleteCommand(id) + ' --dry-run');
     expect(deletion.exitCode).toBe(0);
     expect(server.getRecordedRequests().filter((r) => r.method === 'DELETE')).toHaveLength(0);
@@ -782,12 +805,6 @@ describe('public project directives', () => {
     expect(
       server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
     ).toHaveLength(0);
-    const patch = server.getRecordedRequests().find((r) => r.method === 'PATCH')!;
-    expect(JSON.parse(patch.body!)).toEqual({
-      ...directive,
-      description: 'updated',
-      origin: 'SONAR_CLI',
-    });
   });
 
   it.each([
