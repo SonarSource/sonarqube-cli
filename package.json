@@ -118,7 +118,7 @@
     "js-yaml": "5.5.0",
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
-    "node-forge": "1.4.0",
+    "node-forge": "1.4.1",
     "openpgp": "6.3.2",
     "picocolors": "1.1.1",
     "picomatch": "4.0.7",
@@ -151,6 +151,7 @@
   "overrides": {
     "flatted": "3.4.4",
     "follow-redirects": "1.16.1",
+    "node-forge": "1.4.1",
     "picomatch": "4.0.7"
   },
   "lint-staged": {
