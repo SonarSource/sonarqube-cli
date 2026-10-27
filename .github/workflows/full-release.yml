@@ -78,18 +78,7 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
 
-      - name: Vault Secrets
-        id: secrets
-        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
-        with:
-          secrets: |
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
-            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-
       - uses: ./.github/actions/setup-bun
-        with:
-          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
 
       - name: Update install script compatibility version
         env:

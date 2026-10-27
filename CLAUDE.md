@@ -11,6 +11,8 @@ Use the package.json scripts for full test runs.
 
 Dependency installation runs Husky through its JavaScript entry point with Bun so hook setup does not depend on platform-specific `node_modules/.bin` command shims.
 
+`bunfig.toml` and `bun.lock` point to the production Repox Edge (`repox-internal.sonar.build`), and CI configures the same registry with the `config-bun` action. Bun uses the tarball URLs in `bun.lock` as written, so install dependencies through the Edge and do not commit `repox.jfrog.io` URLs.
+
 ```bash
 bun run lint              # ESLint (TypeScript-aware, includes import sort)
 bun run lint:fix          # Auto-fix safe issues
