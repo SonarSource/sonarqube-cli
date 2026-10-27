@@ -151,6 +151,7 @@
   "overrides": {
     "flatted": "3.4.4",
     "follow-redirects": "1.16.1",
+    "node-forge": "1.4.1",
     "picomatch": "4.0.7"
   },
   "lint-staged": {
