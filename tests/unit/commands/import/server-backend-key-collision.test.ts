@@ -42,6 +42,7 @@ function fakeApi(repositories: GitlabRepositoryResponse[]): {
 } {
   const bound: BoundProjectRequest[] = [];
   const api = {
+    requireSupportedVersion: () => Promise.resolve(),
     listDopSettings: () => Promise.resolve([{ id: 'id-1', key: 'gitlab-main', type: 'gitlab' }]),
     checkPat: () => Promise.resolve('valid'),
     searchGitlabRepos: () => Promise.resolve({ repositories, total: repositories.length }),
