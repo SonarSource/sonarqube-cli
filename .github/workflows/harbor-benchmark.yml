@@ -57,17 +57,18 @@ jobs:
         if: ${{ matrix.os == 'linux' }}
         run: |
           sudo mkdir -p /app /logs /tests /solution
-          sudo chown "${USER}" /app /logs /tests /solution
+          sudo chown "$(id -u):$(id -g)" /app /logs /tests /solution
 
       - name: Create Harbor directories (macos)
         if: ${{ matrix.os == 'macos' }}
         run: |
           sudo mkdir -p /etc/synthetic.d
-          printf 'app\nlogs\ntests\nsolution\n' | sudo tee /etc/synthetic.d/harbor
+          for name in app logs tests solution; do
+            mkdir -p "${RUNNER_TEMP}/harbor/${name}"
+            printf '%s\t%s\n' "${name}" "${RUNNER_TEMP}/harbor/${name}"
+          done | sudo tee /etc/synthetic.d/harbor
           sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs.util -t || echo "apfs.util exited with $?"
-          sw_vers
           ls -ld /app /logs /tests /solution
-          sudo chown "${USER}" /app /logs /tests /solution
 
       - name: Install sonar and Claude Code
         run: |
@@ -97,7 +98,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: harbor-jobs-${{ matrix.os }}
-          path: harbor-jobs/${{ matrix.os }}
+          path: harbor-jobs
 
   report:
     name: Report
@@ -126,11 +127,13 @@ jobs:
         with:
           pattern: harbor-jobs-*
           path: harbor-jobs
+          merge-multiple: true
 
       - name: Summarize
+        shell: bash
         run: |
           targets=()
-          for dir in harbor-jobs/harbor-jobs-*; do
-            targets+=("${dir#harbor-jobs/harbor-jobs-}=${dir}")
+          for dir in harbor-jobs/*/; do
+            targets+=("$(basename "${dir}")=${dir%/}")
           done
           bun benchmarks/harbor/report/summarize-job.ts "${targets[@]}" | tee -a "$GITHUB_STEP_SUMMARY"

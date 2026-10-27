@@ -127,7 +127,7 @@ function main(): void {
   });
   const rows = targets.flatMap(({ label, jobDir }) => rowsFor(label, jobDir));
   process.stdout.write(renderReport(rows));
-  if (rows.some((row) => row.status !== 'PASS')) process.exitCode = 1;
+  if (rows.length === 0 || rows.some((row) => row.status !== 'PASS')) process.exitCode = 1;
 }
 
 main();
