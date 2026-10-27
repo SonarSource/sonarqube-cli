@@ -11,7 +11,7 @@ Use the package.json scripts for full test runs.
 
 Dependency installation runs Husky through its JavaScript entry point with Bun so hook setup does not depend on platform-specific `node_modules/.bin` command shims.
 
-CI runs `bash build-scripts/normalize-bun-lock.sh` before each frozen install. Bun can write absolute Repox tarball URLs during dependency updates; normalization keeps package versions and integrity hashes while allowing the selected CI registry and matching reader to control downloads.
+CI configures the Bun registry with the `config-bun` action, which makes absolute Repox tarball URLs in `bun.lock` registry-relative before each frozen install. Bun can write absolute Repox tarball URLs during dependency updates; commit `bun.lock` with registry-relative entries so the selected CI registry and matching reader control downloads.
 
 ```bash
 bun run lint              # ESLint (TypeScript-aware, includes import sort)
