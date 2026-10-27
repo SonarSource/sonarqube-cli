@@ -23,12 +23,9 @@ import {
   CommandAuthenticatedInvocationContext,
   type CommandInvocationContext,
 } from '@/core/commands/invocation-context.ts';
+import { getActiveConnection, tryLoadState } from '@/core/state/state-manager.ts';
 import {
-  authMatchesConnection,
-  getActiveConnection,
-  tryLoadState,
-} from '@/core/state/state-manager.ts';
-import {
+  activeConnectionForIdentitySeed,
   EMPTY_IDENTITY,
   identityFromConnection,
   needsIdentityEnrichment,
@@ -40,6 +37,7 @@ import type { AuthConnection, ServerType, TelemetryConnectionType } from '../sta
 
 export type { TelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
 export {
+  activeConnectionForIdentitySeed,
   identityFromConnection,
   isIdentityCompleteForConnection,
 } from '@/core/telemetry/identity-fetch.ts';
@@ -72,7 +70,7 @@ export async function resolveCommandTelemetryIdentity(
   const connectionType = toTelemetryConnectionType(auth.connectionType);
   const state = tryLoadState();
   const active = state ? getActiveConnection(state) : undefined;
-  const seedConn = active && authMatchesConnection(auth, active) ? active : undefined;
+  const seedConn = activeConnectionForIdentitySeed(auth, active);
   const seed = identityFromConnection(seedConn);
 
   if (seedConn && !needsIdentityEnrichment(seed, auth.connectionType, seedConn)) {

@@ -77,6 +77,7 @@ function migrateState(raw: Record<string, unknown>): CliState {
     raw.auth = getDefaultState(VERSION).auth;
     return raw as unknown as CliState;
   }
+  migrateEnvOnlyConnections(raw);
   // Strip legacy fields that older state files may still contain
   const connections = (raw.auth as Record<string, unknown>).connections;
   if (Array.isArray(connections)) {
@@ -85,6 +86,33 @@ function migrateState(raw: Record<string, unknown>): CliState {
     }
   }
   return raw as unknown as CliState;
+}
+
+/** Env-var auth no longer writes connections; drop legacy environment-only entries. */
+function migrateEnvOnlyConnections(raw: Record<string, unknown>): void {
+  const auth = raw.auth as Record<string, unknown> | undefined;
+  if (!auth || !Array.isArray(auth.connections)) {
+    return;
+  }
+
+  const connections = auth.connections as Record<string, unknown>[];
+  const kept = connections.filter((connection) => connection.envOnly !== true);
+  for (const connection of connections) {
+    delete connection.envOnly;
+  }
+  if (kept.length === connections.length) {
+    return;
+  }
+
+  auth.connections = kept;
+  const activeId = auth.activeConnectionId;
+  if (typeof activeId === 'string' && !kept.some((connection) => connection.id === activeId)) {
+    auth.activeConnectionId = kept.length === 1 ? kept[0]?.id : undefined;
+  }
+  if (kept.length === 0) {
+    auth.isAuthenticated = false;
+    delete auth.activeConnectionId;
+  }
 }
 
 /**

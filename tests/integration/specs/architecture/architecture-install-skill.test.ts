@@ -27,7 +27,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { load } from 'js-yaml';
 
 import { ARCHITECTURE_SKILL } from '@/commands/architecture/skill-content.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { TestHarness } from '../../harness';
 
@@ -41,7 +40,6 @@ describe('sonar architecture install-skill', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
     const server = await harness.newFakeServer().asSonarCloud().withAuthToken('test-token').start();
     harness.withAuth(server.recordedAuthServerUrl(), 'test-token', 'my-org');
   });
@@ -50,10 +48,24 @@ describe('sonar architecture install-skill', () => {
     await harness.dispose();
   });
 
+  it('advertises only the installer as Open Beta without enabling Alpha', async () => {
+    const help = await harness.run('architecture --help');
+    expect(help.exitCode).toBe(0);
+    const installerHelp = await harness.run('architecture install-skill --help');
+    expect(installerHelp.exitCode).toBe(0);
+    expect(installerHelp.stdout).toContain('[BETA]');
+    expect(help.stdout).not.toContain('[ALPHA]');
+    const current = await harness.run('architecture current get --help');
+    expect(current.exitCode).toBe(0);
+    expect(current.stdout).not.toContain('[BETA]');
+    const intended = await harness.run('architecture intended set --help');
+    expect(intended.exitCode).toBe(0);
+    expect(intended.stdout).not.toContain('[BETA]');
+  });
+
   it('requires authentication before installing any files', async () => {
     await harness.dispose();
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
     const result = await harness.run('arch install-skill');
     expect(result.exitCode).not.toBe(0);
     expect(harness.cwd.exists(SKILL_PATHS[0])).toBe(false);
