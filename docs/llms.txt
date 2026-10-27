@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.10.0
+- Version: 1.11.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -11,7 +11,7 @@
 
 ## Quick Start
 sonar auth login
-sonar integrate claude -g
+sonar integrate claude
 
 ## For AI Agents
 Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
@@ -36,6 +36,10 @@ Options:
 Examples:
   sonar auth login
   sonar auth login -s https://sonarqube.my.com/sonarqube
+
+### sonar auth org *
+Switch the active SonarQube Cloud organization without logging in again
+Usage: sonar auth org [org]
 
 ### sonar auth logout
 Remove active connection token from keychain
@@ -154,8 +158,9 @@ Examples:
 Setup SonarQube integration for AI coding agents, git and others
 
 Examples:
-  sonar integrate claude -s https://sonarcloud.io -p my-project
-  sonar integrate claude -g
+  sonar integrate
+  sonar integrate claude
+  sonar integrate claude --non-interactive
 
 ### sonar integrate git *
 Install a Git pre-commit hook that scans staged files for secrets and dependency risks before each commit, or a Git pre-push hook that scans committed files for secrets before each push.
@@ -191,7 +196,7 @@ Options:
   --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate copilot' instead.
 
 ### sonar integrate codex *
-Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.
+Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.
 Usage: sonar integrate codex [--non-interactive] [--global]
 
 Options:
@@ -221,6 +226,22 @@ Usage: sonar integrate opencode [--non-interactive] [--global]
 Options:
   --non-interactive   Non-interactive mode (no prompts)
   --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate opencode' instead.
+
+### sonar integrate devin *
+Setup SonarQube integration for Devin. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.
+Usage: sonar integrate devin [--non-interactive] [--global]
+
+Options:
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate devin' instead.
+
+### sonar integrate pi *
+Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.
+Usage: sonar integrate pi [--non-interactive] [--global]
+
+Options:
+  --non-interactive   Non-interactive mode (no prompts)
+  --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate pi' instead.
 
 ### sonar context
 Augment AI agents with context from your codebase
@@ -289,10 +310,16 @@ Options:
 
 ### sonar link *
 Link a project to the active connection in .sonar-config.json
-Usage: sonar link [--path <value>] <projectKey>
+
+### sonar link list *
+List linked projects at, under or enclosing a path as JSON, nearest first
+Usage: sonar link list [--path <value>] [--pattern <value>] [--page <value>] [--page-size <value>]
 
 Options:
-  --path  <string>   Path to the project root, relative to the repository root
+  --path  <string>   File or directory to list projects for (default: current directory)
+  --pattern  <string>   Only list projects whose key or directory matches this regex
+  --page  <number>   Page number
+  --page-size  <number>   Page size (1-100)
 
 ### sonar config
 Configure CLI settings
@@ -319,6 +346,54 @@ Usage: sonar config set <key> [value]
 ### sonar config unset
 Remove a stored sonar config value
 Usage: sonar config unset <key>
+
+### sonar architecture|arch
+Read and set the architecture of a project
+
+### sonar architecture current
+Read the current architecture
+
+### sonar architecture current get *
+Current architecture, at most 150 nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth
+Usage: sonar architecture current get [-p <value>] [--component <value>] [--depth <value>] [--language <value>] [--format <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --component  <string>   Node key to start below, from a previous current get
+  --depth  <string>   Levels below the start node (default 1)
+  --language  <string>   Only this language (default: all)
+  --format  <string>   Output format (default: text on a terminal, toon otherwise)
+
+### sonar architecture intended
+Read and set the intended architecture
+
+### sonar architecture intended get *
+Intended architecture; full JSON can be saved with intended set, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set
+Usage: sonar architecture intended get [-p <value>] [--component <value>] [--depth <value>] [--language <value>] [--format <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --component  <string>   Group key to start below, e.g. Domain/Billing
+  --depth  <string>   Levels of groups below the start group (default: all)
+  --language  <string>   Only this language (default: all)
+  --format  <string>   Output format (default: text on a terminal, toon otherwise)
+
+### sonar architecture intended set *
+Replace the intended architecture with a file shaped like the output of intended get --format json
+Usage: sonar architecture intended set [--file <value>] [--dry-run] [-p <value>]
+
+Options:
+  --file  <string>   Intended architecture JSON file
+  --dry-run   Validate and show the changes, removals first, without writing
+  --project, -p  <string>   Project key
+
+### sonar architecture install-skill *
+Install the architecture skill for Claude Code and Cursor in this repository [BETA]
+Usage: sonar architecture install-skill [--global] [--force]
+
+Options:
+  --global   Install in the home directory instead of the repository
+  --force   Replace a SKILL.md that was not written by this command
 
 ### sonar system
 System diagnostics and maintenance commands for the SonarQube CLI installation
