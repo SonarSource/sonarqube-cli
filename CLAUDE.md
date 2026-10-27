@@ -80,6 +80,10 @@ Error subclasses extend the abstract `CliError` and carry their own `exitCode`, 
 
 When adding, removing, or changing commands, scripts, or project structure, update `CLAUDE.md`, and `AGENTS.md` to reflect the change before finishing. When the change belongs to one of the areas listed under "Where the detail lives", update that file instead of growing this root file back out.
 
+## Agent benchmark (`benchmarks/harbor/`)
+
+Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch`, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
+
 ## Docs site (`docs/`)
 
 The docs site is generated from the CLI source — do not edit `commands.json`, `llms.txt`, or `sitemap.xml` by hand. This is done by automation post-release. The docs generator also stamps the current package version into the nav badge in `index.html` and `commands.html`, plus the JSON-LD `softwareVersion` and `meta-version` in `index.html`.
