@@ -29,13 +29,13 @@ import {
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
 } from '@/core/project-discovery/shared-project-config.ts';
-import { discoverProjectKeyByGitRemote } from '@/core/server/discover-project-by-remote.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
+import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome } from '../init-outcome.ts';
@@ -106,31 +106,49 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   }
 
   // Only the server binding proves the project exists; a key in local config may name none.
-  const binding = await discoverProjectKeyByGitRemote(auth, remote);
-  if (binding) {
-    return { path: 'link-existing', projectRoot, projectKey: binding.projectKey };
-  }
-
-  // A definitive "no binding" needs no second lookup; anything else may hide another organization.
-  if (binding === undefined && (await isBoundToOtherOrg(auth, remote))) {
-    return {
-      path: 'stop-other-org',
-      organization: auth.orgKey,
-      boundOrganization: recordedOtherOrganization(onPath, auth),
-      remote,
-    };
+  const binding = await lookupRemoteBinding(auth, remote);
+  switch (binding.kind) {
+    case 'in-org':
+      return { path: 'link-existing', projectRoot, projectKey: binding.projectKey };
+    case 'other-org':
+      throw otherOrganizationError(auth, recordedOtherOrganization(onPath, auth));
+    case 'unknown':
+      deps.console.info(
+        'Could not check whether this repository is already bound; continuing without that check.',
+        'stderr',
+      );
+      break;
+    case 'unbound':
+      break;
   }
   return chooseNewProjectPath(projectRoot, remote, deps);
 }
 
-function isBoundToOtherOrg(auth: ResolvedAuth, remote: string): Promise<boolean> {
-  if (auth.connectionType !== 'cloud' || !auth.orgKey) {
-    return Promise.resolve(false);
-  }
+function lookupRemoteBinding(auth: ResolvedAuth, remote: string): Promise<GitRemoteBinding> {
   const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  return client.isGitRemoteBoundOutsideOrg(remote, auth.orgKey).match(
-    (outside) => outside === true,
-    () => false,
+  return client.resolveGitRemoteBinding(remote, auth.orgKey).match(
+    (binding) => binding,
+    (error): GitRemoteBinding => {
+      logger.debug(`Git remote project binding lookup failed: ${error.message}`);
+      return { kind: 'unknown' };
+    },
+  );
+}
+
+function otherOrganizationError(
+  auth: ResolvedAuth,
+  boundOrganization: string | undefined,
+): CommandFailedError {
+  const active = auth.orgKey ?? 'the active one';
+  if (boundOrganization) {
+    return new CommandFailedError(
+      `This repository is bound to a project in organization '${boundOrganization}', but you are connected to '${active}'.`,
+      { remediationHint: `Run 'sonar auth org ${boundOrganization}' to switch to it.` },
+    );
+  }
+  return new CommandFailedError(
+    `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
+    { remediationHint: "Run 'sonar auth org' to switch to the organization that owns it." },
   );
 }
 

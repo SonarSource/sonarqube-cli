@@ -45,23 +45,6 @@ function describe(outcome: InitOutcome): string[] {
       return ['Selected path: create a new project bound to the repository.', PATH_NOT_RUN_NOTE];
     case 'unbound-new':
       return ['Selected path: create a new project without repository binding.', PATH_NOT_RUN_NOTE];
-    case 'stop-no-org':
-      return [
-        'Your account is not a member of any SonarQube Cloud organization, so onboarding stops here.',
-      ];
-    case 'stop-other-org': {
-      const active = outcome.organization ?? 'the active one';
-      if (outcome.boundOrganization) {
-        return [
-          `This repository is bound to a project in organization '${outcome.boundOrganization}', but you are connected to '${active}'.`,
-          `Run 'sonar auth org ${outcome.boundOrganization}' to switch to it.`,
-        ];
-      }
-      return [
-        `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
-        "Run 'sonar auth org' to switch to the organization that owns it.",
-      ];
-    }
   }
 }
 
@@ -73,7 +56,7 @@ export function renderInitOutcome(
   for (const line of describe(outcome)) {
     console.print(line);
   }
-  if (suggestIntegrate && !outcome.path.startsWith('stop')) {
+  if (suggestIntegrate) {
     console.print(INTEGRATE_SUGGESTION);
   }
 }

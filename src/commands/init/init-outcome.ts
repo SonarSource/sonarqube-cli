@@ -18,13 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/** Where `sonar init` ended up: either a path the follow-up tickets will run, or a reason to stop. */
+/** The onboarding path `sonar init` selected for the follow-up tickets to run. */
 export type InitOutcome =
   | { path: 'complete'; projectRoot: string; projectKeys: string[] }
   | { path: 'link-existing'; projectRoot: string; projectKey: string }
   | { path: 'bound-new'; projectRoot: string; remote: string }
-  | { path: 'unbound-new'; projectRoot: string; remote?: string }
-  | { path: 'stop-no-org' }
-  | { path: 'stop-other-org'; organization?: string; boundOrganization?: string; remote: string };
-
-export type InitPath = InitOutcome['path'];
+  | { path: 'unbound-new'; projectRoot: string; remote?: string };
