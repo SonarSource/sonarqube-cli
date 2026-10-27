@@ -12,7 +12,7 @@
         "js-yaml": "5.5.0",
         "launchdarkly-node-client-sdk": "3.4.3",
         "neverthrow": "8.2.0",
-        "node-forge": "1.4.0",
+        "node-forge": "1.4.1",
         "openpgp": "6.3.2",
         "picocolors": "1.1.1",
         "picomatch": "4.0.7",
@@ -516,7 +516,7 @@
 
     "neverthrow": ["neverthrow@8.2.0", "https://repox.jfrog.io/artifactory/api/npm/npm/neverthrow/-/neverthrow-8.2.0.tgz", { "optionalDependencies": { "@rollup/rollup-linux-x64-gnu": "^4.24.0" } }, "sha512-kOCT/1MCPAxY5iUV3wytNFUMUolzuwd/VF/1KCx7kf6CutrOsTie+84zTGTpgQycjvfLdBBdvBvFLqFD2c0wkQ=="],
 
-    "node-forge": ["node-forge@1.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/node-forge/-/node-forge-1.4.0.tgz", {}, "sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ=="],
+    "node-forge": ["node-forge@1.4.1", "https://repox.jfrog.io/artifactory/api/npm/npm/node-forge/-/node-forge-1.4.1.tgz", {}, "sha512-w5/MfWaeMrpR/5ba6fZyAUTLSuE6aYz7H/3cYrqwZEmf5eQS3IaaLgJt4MBv7HglGFWmV22K8h4U18RJQmw/ow=="],
 
     "node-localstorage": ["node-localstorage@1.3.1", "https://repox.jfrog.io/artifactory/api/npm/npm/node-localstorage/-/node-localstorage-1.3.1.tgz", { "dependencies": { "write-file-atomic": "^1.1.4" } }, "sha512-NMWCSWWc6JbHT5PyWlNT2i8r7PgGYXVntmKawY83k/M0UJScZ5jirb61TLnqKwd815DfBQu+lR3sRw08SPzIaQ=="],
 
@@ -643,6 +643,8 @@
     "@eslint/config-array/minimatch": ["minimatch@10.2.4", "https://repox.jfrog.io/artifactory/api/npm/npm/minimatch/-/minimatch-10.2.4.tgz", { "dependencies": { "brace-expansion": "^5.0.2" } }, "sha512-oRjTw/97aTBN0RHbYCdtF1MQfvusSIBQM0IZEgzl6426+8jSC0nF1a/GmnVLpfB9yyr6g6FTqWqiZVbxrtaCIg=="],
 
     "@sentry/bundler-plugins/supports-color": ["supports-color@8.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/supports-color/-/supports-color-8.1.1.tgz", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-MpUEN2OodtUzxvKQl72cUF7RQ5EiHsGvSsVG0ia9c5RbWGL2CI4C7EpPS8UTBIplnlzZiNuV56w+FuNxy3ty2Q=="],
+
+    "@sonar/scan/node-forge": ["node-forge@1.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/node-forge/-/node-forge-1.4.0.tgz", {}, "sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ=="],
 
     "@sonar/scan/proxy-from-env": ["proxy-from-env@2.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/proxy-from-env/-/proxy-from-env-2.1.0.tgz", {}, "sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA=="],
 
