@@ -29,7 +29,6 @@ import {
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 import {
@@ -89,7 +88,6 @@ describe('sonar architecture reads on the public API', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
 
   afterEach(async () => {
@@ -212,6 +210,20 @@ describe('sonar architecture reads on the public API', () => {
           constraints,
         },
       ]);
+    });
+  }
+
+  for (const response of [{ id: null, intendedArchitectures: [] }, { intendedArchitectures: [] }]) {
+    it(`reads an unsaved intended model with an absent or null id: ${JSON.stringify(response)}`, async () => {
+      const server = await cloudServerWith((project) =>
+        project.withArchitecture((architecture) =>
+          architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+        ),
+      );
+      const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).models).toEqual([]);
+      expect(writes(server)).toEqual([]);
     });
   }
 
@@ -652,7 +664,6 @@ describe('sonar architecture intended set on the public API', () => {
   let harness: TestHarness;
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
   afterEach(async () => {
     await harness.dispose();
@@ -687,6 +698,18 @@ describe('sonar architecture intended set on the public API', () => {
     });
     return path!;
   }
+  it('previews and creates the first model from a nullable empty export', async () => {
+    const server = await startWith(() => {});
+    const empty = await readSaved();
+    expect(empty.models).toEqual([]);
+    const file = { ...empty, models: NEXT };
+    expect((await setFile(file, ' --dry-run')).exitCode).toBe(0);
+    expect(writes(server)).toEqual([]);
+    expect((await setFile(file)).exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
+    expect((await readSaved()).models).toEqual(publicModels(NEXT));
+  });
+
   const TS_MODEL: IntendedArchitecture = { ...NEXT[0], type: 'file', language: 'ts' };
   const JAVA_FILE: IntendedArchitecture = { ...NEXT[0], type: 'file' };
   it('isolates a scoped three-perspective PATCH from another project with its own model', async () => {
@@ -1257,6 +1280,8 @@ describe('sonar architecture intended set on the public API', () => {
   for (const body of [
     JSON.stringify({ intendedArchitectures: INTENDED }),
     JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'bad-id' }] }),
+    JSON.stringify({ id: null, intendedArchitectures: wireModels(INTENDED) }),
+    JSON.stringify({ id: 'bad-id', intendedArchitectures: wireModels(INTENDED) }),
   ]) {
     it(`rejects malformed public model identity before writing: ${body}`, async () => {
       const server = await startWith((fake) =>
@@ -1270,6 +1295,7 @@ describe('sonar architecture intended set on the public API', () => {
     JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
     JSON.stringify({ intendedArchitectures: [] }),
     JSON.stringify({ intendedArchitectures: [{ ...NEXT[0], id: 'invalid-id' }] }),
+    JSON.stringify({ id: null, intendedArchitectures: wireModels(NEXT) }),
   ]) {
     it(`rejects malformed POST response envelope: ${body}`, async () => {
       const server = await startWith((fake) =>
@@ -1294,6 +1320,25 @@ describe('sonar architecture intended set on the public API', () => {
       expect((await readSaved()).models).toEqual(publicModels(NEXT));
     });
   }
+  for (const missingId of ['null', 'omitted'] as const) {
+    it(`verifies a committed PATCH with ${missingId} response id without repeating it`, async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(INTENDED).withMissingPatchResponseId(missingId),
+      );
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(0);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      const requests = server.getRecordedRequests();
+      const writeIndex = requests.findIndex(({ method }) => method === 'PATCH');
+      expect(
+        requests
+          .slice(writeIndex + 1)
+          .some(({ method, path }) => method === 'GET' && path === PUBLIC_PATH),
+      ).toBe(true);
+      expect((await readSaved()).models).toEqual(publicModels(NEXT));
+    });
+  }
+
   it('recovers from a transient verification read failure without repeating PATCH', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED).failIntendedRead(3));
     expect((await setFile({ models: NEXT })).exitCode).toBe(0);

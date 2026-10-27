@@ -26,7 +26,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { IntendedArchitecture } from '@/commands/architecture/_common/architecture-api.ts';
 import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
@@ -81,7 +80,6 @@ describe('sonar architecture intended set', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
 
   afterEach(async () => {
