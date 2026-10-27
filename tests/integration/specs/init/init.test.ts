@@ -293,6 +293,23 @@ describe('sonar init', () => {
     TIMEOUT,
   );
 
+  describe('sonar integrate suggestion', () => {
+    it(
+      'is skipped once anything is integrated',
+      async () => {
+        await signInToCloud(() => {});
+        harness.state().withSqaaFeature(harness.cwd.path, 'integrated_project');
+
+        const result = await harness.run('init');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain("'sonar integrate'");
+      },
+      TIMEOUT,
+    );
+  });
+
   describe('interactive', () => {
     beforeEach(() => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });

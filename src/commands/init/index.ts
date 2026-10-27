@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import type { InitOutcome } from './init-outcome.ts';
@@ -42,7 +43,9 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const projectRoot = resolveScanRoot(options.path ?? '.');
 
   const outcome = await run(projectRoot, ctx, interactive);
-  renderInitOutcome(outcome, ctx.console);
+  renderInitOutcome(outcome, ctx.console, {
+    suggestIntegrate: findInstalledIntegrationIds().length === 0,
+  });
 }
 
 async function run(
