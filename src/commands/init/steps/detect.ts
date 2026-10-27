@@ -22,7 +22,10 @@ import { statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
+import {
+  authMatchesRecordedConnection,
+  authMatchesRecordedServer,
+} from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
@@ -60,18 +63,29 @@ export function resolveScanRoot(pathOption: string): string {
   return canonicalizePath(root);
 }
 
-/** Mappings for the active connection on the scan root's ancestry line, either direction, so a monorepo root counts too. */
-function mappingsCovering(
+/** Mappings on the scan root's ancestry line, either direction, so a monorepo root counts too. */
+function mappingsOnPath(
   mappings: SharedProjectConfigMapping[],
   projectRoot: string,
-  auth: ResolvedAuth,
 ): SharedProjectConfigMapping[] {
   return mappings.filter(
     (mapping) =>
-      (isAncestorOrSelf(mapping.projectRoot, projectRoot) ||
-        isAncestorOrSelf(projectRoot, mapping.projectRoot)) &&
-      authMatchesRecordedConnection(auth, mapping),
+      isAncestorOrSelf(mapping.projectRoot, projectRoot) ||
+      isAncestorOrSelf(projectRoot, mapping.projectRoot),
   );
+}
+
+/** Organization that a mapping on the same server records, when it differs from the active one. */
+function recordedOtherOrganization(
+  mappings: SharedProjectConfigMapping[],
+  auth: ResolvedAuth,
+): string | undefined {
+  return mappings.find(
+    (mapping) =>
+      authMatchesRecordedServer(auth, mapping.serverUrl) &&
+      mapping.organization !== undefined &&
+      mapping.organization !== auth.orgKey,
+  )?.organization;
 }
 
 /** Inspects the directory and its git remote, then picks the onboarding path without running it. */
@@ -80,7 +94,8 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   const { gitRoot, isGit } = findGitRoot(projectRoot);
 
   const mappings = await sharedProjectConfigRepository.load(isGit ? gitRoot : projectRoot);
-  const linked = mappingsCovering(mappings, projectRoot, auth);
+  const onPath = mappingsOnPath(mappings, projectRoot);
+  const linked = onPath.filter((mapping) => authMatchesRecordedConnection(auth, mapping));
   if (linked.length > 0) {
     return { path: 'complete', projectRoot, projectKeys: linked.map((p) => p.projectKey) };
   }
@@ -98,7 +113,12 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
 
   // A definitive "no binding" needs no second lookup; anything else may hide another organization.
   if (binding === undefined && (await isBoundToOtherOrg(auth, remote))) {
-    return { path: 'stop-other-org', organization: auth.orgKey, remote };
+    return {
+      path: 'stop-other-org',
+      organization: auth.orgKey,
+      boundOrganization: recordedOtherOrganization(onPath, auth),
+      remote,
+    };
   }
   return chooseNewProjectPath(projectRoot, remote, deps);
 }

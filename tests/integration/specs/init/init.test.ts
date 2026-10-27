@@ -234,12 +234,38 @@ describe('sonar init', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain(`another organization than ${ORG}`);
       expect(result.stdout).toContain("'sonar auth org'");
+      expect(result.stdout).not.toContain("'sonar init'");
     },
     TIMEOUT,
   );
 
   it(
-    'stops and suggests sonar integrate when the account belongs to no organization',
+    'names the bound organization when .sonar-config.json records another one',
+    async () => {
+      const serverUrl = await signInToCloud((server) =>
+        server.withGitRemoteBoundInOtherOrg(GITHUB_REMOTE),
+      );
+      withRemote(GITHUB_REMOTE);
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: { projectKey: 'mapped', serverUrl, organization: 'their-org', path: '.' },
+        }),
+      );
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `organization 'their-org', but you are connected to '${ORG}'`,
+      );
+      expect(result.stdout).toContain("'sonar auth org their-org'");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'stops without suggesting sonar integrate when the account belongs to no organization',
     async () => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
       const server = await newCloudServer().withOrganizations([]).start();
@@ -260,7 +286,7 @@ describe('sonar init', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('not a member of any SonarQube Cloud organization');
-      expect(result.stdout).toContain("Run 'sonar integrate'");
+      expect(result.stdout).not.toContain("'sonar integrate'");
     },
     TIMEOUT,
   );

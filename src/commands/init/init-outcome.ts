@@ -25,6 +25,6 @@ export type InitOutcome =
   | { path: 'bound-new'; projectRoot: string; remote: string }
   | { path: 'unbound-new'; projectRoot: string; remote?: string }
   | { path: 'stop-no-org' }
-  | { path: 'stop-other-org'; organization?: string; remote: string };
+  | { path: 'stop-other-org'; organization?: string; boundOrganization?: string; remote: string };
 
 export type InitPath = InitOutcome['path'];
