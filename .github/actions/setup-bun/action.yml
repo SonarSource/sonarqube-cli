@@ -1,13 +1,5 @@
 name: Setup Bun Environment
-description: Setup mise and install Bun dependencies
-
-inputs:
-  artifactory-username:
-    description: Artifactory private reader username
-    required: true
-  artifactory-password:
-    description: Artifactory private reader access token
-    required: true
+description: Setup mise, configure the Bun registry and install Bun dependencies
 
 runs:
   using: composite
@@ -16,11 +8,15 @@ runs:
       with:
         version: 2026.9.14
 
+    - name: Configure Bun registry
+      uses: SonarSource/ci-github-actions/config-bun@feat/hnasr/BUILD-13251-configBun
+
+    - name: Export reader for build scripts
+      shell: bash
+      run: |
+        echo "ARTIFACTORY_PRIVATE_READER_USERNAME=$ARTIFACTORY_USERNAME" >> "$GITHUB_ENV"
+        echo "ARTIFACTORY_PRIVATE_READER_PASSWORD=$ARTIFACTORY_ACCESS_TOKEN" >> "$GITHUB_ENV"
+
     - name: Install dependencies
       shell: bash
-      env:
-        ARTIFACTORY_PRIVATE_READER_USERNAME: ${{ inputs.artifactory-username }}
-        ARTIFACTORY_PRIVATE_READER_PASSWORD: ${{ inputs.artifactory-password }}
-        BUN_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
-        NPM_CONFIG_REGISTRY: https://repox.jfrog.io/artifactory/api/npm/npm/
-      run: bun ci
+      run: bun ci --network-concurrency 4
