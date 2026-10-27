@@ -1,13 +1,5 @@
 name: Setup Bun Environment
-description: Setup mise and install Bun dependencies
-
-inputs:
-  artifactory-username:
-    description: Artifactory private reader username
-    required: true
-  artifactory-password:
-    description: Artifactory private reader access token
-    required: true
+description: Setup mise, configure the Bun registry and install Bun dependencies
 
 runs:
   using: composite
@@ -16,45 +8,17 @@ runs:
       with:
         version: 2026.9.14
 
-    - name: Normalize locked registry URLs
-      shell: bash
-      run: bash build-scripts/normalize-bun-lock.sh
-
-    - name: Fetch production Edge reader
-      if: runner.os == 'Linux' && runner.environment == 'self-hosted'
-      id: edge
-      uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+    - name: Configure Bun registry
+      uses: SonarSource/ci-github-actions/config-bun@feat/hnasr/BUILD-13251-configBun
       with:
-        secrets: |
-          development/artifactory-edge-prod/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USERNAME;
-          development/artifactory-edge-prod/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+        # bun.lock pins tarballs to the prod Edge, so GitHub-hosted runners must use it too (macOS reaches it through WARP).
+        repox-url: https://repox-internal.sonar.build
 
-    - name: Configure dependency registry
+    - name: Export reader for build scripts
       shell: bash
-      env:
-        USE_EDGE: ${{ runner.os == 'Linux' && runner.environment == 'self-hosted' }}
-        READER_USERNAME: ${{ inputs.artifactory-username }}
-        EDGE_USERNAME: ${{ steps.edge.outputs.vault && fromJSON(steps.edge.outputs.vault).ARTIFACTORY_USERNAME || '' }}
-        READER_PASSWORD: ${{ inputs.artifactory-password }}
-        EDGE_PASSWORD: ${{ steps.edge.outputs.vault && fromJSON(steps.edge.outputs.vault).ARTIFACTORY_ACCESS_TOKEN || '' }}
       run: |
-        set -euo pipefail
-        registry="https://repox.jfrog.io/artifactory/api/npm/npm/"
-        if [[ "$USE_EDGE" == "true" ]]; then
-          registry="https://repox-internal.sonar.build/artifactory/api/npm/npm/"
-          READER_USERNAME="$EDGE_USERNAME"
-          READER_PASSWORD="$EDGE_PASSWORD"
-        fi
-        if [[ -z "$READER_USERNAME" || -z "$READER_PASSWORD" ]]; then
-          echo "::error::The selected dependency registry requires a reader credential"
-          exit 1
-        fi
-        echo "BUN_CONFIG_REGISTRY=$registry" >> "$GITHUB_ENV"
-        echo "NPM_CONFIG_REGISTRY=$registry" >> "$GITHUB_ENV"
-        echo "BUN_CONFIG_TOKEN=$READER_PASSWORD" >> "$GITHUB_ENV"
-        echo "ARTIFACTORY_PRIVATE_READER_USERNAME=$READER_USERNAME" >> "$GITHUB_ENV"
-        echo "ARTIFACTORY_PRIVATE_READER_PASSWORD=$READER_PASSWORD" >> "$GITHUB_ENV"
-        echo "Dependency registry: $registry"
+        echo "ARTIFACTORY_PRIVATE_READER_USERNAME=$ARTIFACTORY_USERNAME" >> "$GITHUB_ENV"
+        echo "ARTIFACTORY_PRIVATE_READER_PASSWORD=$ARTIFACTORY_ACCESS_TOKEN" >> "$GITHUB_ENV"
 
     - name: Install dependencies
       shell: bash
