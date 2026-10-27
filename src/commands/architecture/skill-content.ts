@@ -23,13 +23,13 @@ export const ARCHITECTURE_SKILL_MARKER = '<!-- sonar:architecture-skill -->';
 
 export const ARCHITECTURE_SKILL = `---
 name: sonar-architecture
-description: Read current or intended architecture and apply user-specified intended-model edits through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
+description: Read current or intended architecture and project directives; apply specified intended edits or create, update and delete specified directives through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
 ---
 ${ARCHITECTURE_SKILL_MARKER}
 
 # Architecture data operations
 
-Read requested architecture data or apply explicitly specified intended-model edits. Return the
+Read requested architecture data, apply explicitly specified intended-model edits, or create, update and delete explicitly specified project directives. Return the
 requested data, operation result and any reported limits or errors. Architectural diagnosis,
 model design, refactoring recommendations and code navigation belong outside this core skill.
 Do not infer groups or constraints, choose a dependency to remove, or orchestrate other analysis
@@ -92,9 +92,45 @@ save a local backup; MCP errors can include the previous export. Recovery export
 and omit its resolved children, which remain managed by the server. Preserve that export and the
 recovery instructions, inspect the current state, and obtain approval before restoring it.
 
+## Project directives
+
+Read directives a page at a time and retain the pagination metadata. Use exact keys for existing
+nodes from current reads; take the proposed destination or new name from the user. Do not infer
+a move, rename or dependency removal.
+
+Each directive requires type (REMOVE_EDGE, RENAME_NODE or MOVE_NODE), ecosystem, graphType
+(file_graph or namespace_graph), fromNodeKey and toNodeKey. Optional: graphPerspective and
+description. Returned IDs are not sent in create requests. The CLI records sonarqube-cli as the
+origin of new directives instead of copying an exported origin.
+
+For MOVE_NODE, toNodeKey is the exact key of an existing destination container, not the moved
+node's future key. The backend appends the source node's name. For RENAME_NODE, toNodeKey is
+the full new key, not only the new label. REMOVE_EDGE uses two existing endpoint keys.
+If a MOVE_NODE destination is reported missing, re-read the current architecture and ask the
+user to choose an existing destination; do not treat it as a new location to create.
+
+Preview first, show what would be created and skipped, and apply only after the user confirms.
+When graphPerspective is omitted, creation uses default_perspective. Preview warns about keys missing
+from the current graph; review these warnings before confirming the write.
+
+Creation is additive: existing directives remain unchanged, and existing or repeated directives
+are skipped. Duplicate checks can race concurrent creates.
+
+Use \`sonar architecture directives get --id <id>\` to read one directive. Apply explicit changes with
+\`sonar architecture directives set --file <file> [--dry-run]\`. The JSON object contains optional
+\`create\`, \`update\` and \`delete\` arrays. Create records contain directive fields; update records
+contain \`id\` and changed fields; delete records contain only \`id\`. Omitted fields on updates and
+unmentioned directives are retained. Do not turn a paginated read into an implicit replacement.
+MCP accepts the same JSON in \`architecture_set target=directives\` through its \`model\` parameter.
+Preview every batch and obtain user confirmation before applying it. Conflicting IDs are rejected
+and the whole batch is validated before the first write. Writes are individual, not atomic.
+The public API cannot clear optional fields with null and has no conditional writes. On a partial
+or uncertain failure, retain confirmed IDs and inspect the targeted directives before retrying;
+never repeat a write or roll back automatically.
+
 ## Availability
 
-Intended operations on SonarQube Server await public project UUID resolution. Deviations,
+Intended and directive operations on SonarQube Server await public project UUID resolution. Deviations,
 structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 `;
