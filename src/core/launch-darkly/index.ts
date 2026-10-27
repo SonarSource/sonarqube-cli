@@ -23,12 +23,9 @@ import { initialize } from 'launchdarkly-node-client-sdk';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import logger from '@/core/observability/logger.ts';
+import { getActiveConnection, tryLoadState } from '@/core/state/state-manager.ts';
 import {
-  authMatchesConnection,
-  getActiveConnection,
-  tryLoadState,
-} from '@/core/state/state-manager.ts';
-import {
+  activeConnectionForIdentitySeed,
   identityFromConnection,
   isIdentityCompleteForConnection,
   needsIdentityEnrichment,
@@ -153,7 +150,7 @@ export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) =
 async function resolveFeatureFlagIdentity(auth: ResolvedAuth): Promise<FeatureFlagIdentity | null> {
   const state = tryLoadState();
   const active = state ? getActiveConnection(state) : undefined;
-  const conn = active && authMatchesConnection(auth, active) ? active : undefined;
+  const conn = activeConnectionForIdentitySeed(auth, active);
 
   let identity = identityFromConnection(conn);
   if (needsIdentityEnrichment(identity, auth.connectionType, conn)) {

@@ -22,7 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authConnectionRecorder from '@/core/auth/auth-connection-recorder.ts';
 import {
   AuthResolver,
   cloudRegionFromUrl,
@@ -41,6 +40,7 @@ import {
 } from '@/core/server/server-url-validation.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe('AuthResolver', () => {
-  let recordConnectionSpy: ReturnType<typeof spyOn>;
+  let resolveIdentitySpy: ReturnType<typeof spyOn>;
 
   async function resolveViaInstance(
     options: ResolveAuthOptions = {},
@@ -72,13 +72,9 @@ describe('AuthResolver', () => {
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    // These tests exercise AuthResolver's env-vs-state priority, not the state-sync
-    // side effect (covered by auth-connection-recorder.test.ts) — stub it out so env-auth
-    // tests never touch the real state.json or make a real network call.
-    recordConnectionSpy = spyOn(
-      authConnectionRecorder,
-      'recordConnectionFromAuth',
-    ).mockResolvedValue(undefined as never);
+    resolveIdentitySpy = spyOn(identityFetch, 'resolveTelemetryIdentity').mockResolvedValue(
+      identityFetch.EMPTY_IDENTITY,
+    );
   });
 
   afterEach(() => {
@@ -86,7 +82,7 @@ describe('AuthResolver', () => {
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    recordConnectionSpy.mockRestore();
+    resolveIdentitySpy.mockRestore();
   });
 
   // ─── Env var: both set ──────────────────────────────────────────────────
@@ -133,28 +129,40 @@ describe('AuthResolver', () => {
       });
     });
 
-    it('passes its environment source to the connection recorder', async () => {
+    it('resolves telemetry identity for env-var auth', async () => {
       await new AuthResolver().resolveAuth();
 
-      expect(recordConnectionSpy).toHaveBeenCalledWith(
+      expect(resolveIdentitySpy).toHaveBeenCalledWith(
         expect.objectContaining({ token: FAKE_TOKEN_ENV, source: 'env' }),
       );
     });
 
-    it('only attempts recordConnectionFromAuth once across repeated calls on the same resolver', async () => {
+    it('only resolves telemetry identity once across repeated calls on the same resolver', async () => {
       const authResolver = new AuthResolver();
       await authResolver.resolveAuth();
       await authResolver.resolveAuth();
       await authResolver.resolveAuth({ silent: true });
 
-      expect(recordConnectionSpy).toHaveBeenCalledTimes(1);
+      expect(resolveIdentitySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('attempts recordConnectionFromAuth again on a fresh AuthResolver', async () => {
+    it('resolves telemetry identity again on a fresh AuthResolver', async () => {
       await new AuthResolver().resolveAuth();
       await new AuthResolver().resolveAuth();
 
-      expect(recordConnectionSpy).toHaveBeenCalledTimes(2);
+      expect(resolveIdentitySpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('still returns env auth when telemetry identity resolution fails', async () => {
+      resolveIdentitySpy.mockRejectedValue(new Error('identity cache unavailable'));
+
+      const result = await resolveViaInstance();
+
+      expect(result).toMatchObject({
+        token: FAKE_TOKEN_ENV,
+        serverUrl: SONARCLOUD_URL,
+        source: 'env' as const,
+      });
     });
   });
 
@@ -349,17 +357,16 @@ describe('isValidServerUrl', () => {
 });
 
 describe('AuthResolver cloud server URL validation', () => {
-  let recordConnectionSpy: ReturnType<typeof spyOn>;
+  let resolveIdentitySpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     handle.setup();
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    recordConnectionSpy = spyOn(
-      authConnectionRecorder,
-      'recordConnectionFromAuth',
-    ).mockResolvedValue(undefined as never);
+    resolveIdentitySpy = spyOn(identityFetch, 'resolveTelemetryIdentity').mockResolvedValue(
+      identityFetch.EMPTY_IDENTITY,
+    );
   });
 
   afterEach(() => {
@@ -367,7 +374,7 @@ describe('AuthResolver cloud server URL validation', () => {
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    recordConnectionSpy.mockRestore();
+    resolveIdentitySpy.mockRestore();
   });
 
   it('rejects a deceptive SonarQube Cloud URL in SONARQUBE_CLI_SERVER with token+org', async () => {

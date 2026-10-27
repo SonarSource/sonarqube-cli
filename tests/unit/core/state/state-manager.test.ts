@@ -436,6 +436,64 @@ describe('loadState: migration', () => {
     expect(state.stats).toBeUndefined();
   });
 
+  it('drops legacy envOnly connections and clears auth when none remain', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw.auth = {
+      isAuthenticated: true,
+      activeConnectionId: 'env-only-conn',
+      connections: [
+        {
+          id: 'env-only-conn',
+          type: 'on-premise',
+          serverUrl: 'https://env.example.com',
+          authenticatedAt: '2026-01-01T00:00:00.000Z',
+          envOnly: true,
+        },
+      ],
+    };
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.auth.isAuthenticated).toBe(false);
+    expect(state.auth.connections).toHaveLength(0);
+    expect(state.auth.activeConnectionId).toBeUndefined();
+  });
+
+  it('keeps keychain connections and repoints activeConnectionId away from legacy envOnly', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw.auth = {
+      isAuthenticated: true,
+      activeConnectionId: 'env-only-conn',
+      connections: [
+        {
+          id: 'env-only-conn',
+          type: 'on-premise',
+          serverUrl: 'https://env.example.com',
+          authenticatedAt: '2026-01-01T00:00:00.000Z',
+          envOnly: true,
+        },
+        {
+          id: 'login-conn',
+          type: 'on-premise',
+          serverUrl: 'https://login.example.com',
+          authenticatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    };
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.auth.connections).toHaveLength(1);
+    expect(state.auth.connections[0]?.id).toBe('login-conn');
+    expect(state.auth.activeConnectionId).toBe('login-conn');
+    expect(state.auth.isAuthenticated).toBe(true);
+    expect(state.auth.connections[0]).not.toHaveProperty('envOnly');
+  });
+
   it('adopts a legacy tools entry whose binary is still on disk', () => {
     mkdirSync(testCliDir, { recursive: true });
     const binaryPath = join(testCliDir, 'sonar-secrets-1.2.3.4-linux-x86-64');
