@@ -66,7 +66,7 @@ function createProvisionTask(
  * eligibility. A repo is imported only if `regex` is undefined (no filter — `--all`/"Recommended")
  * or matches its name.
  */
-async function runBulkImportJob(
+export async function runBulkImportJob(
   plan: ImportPlan,
   collection: RepositoryCollection,
   regex: RegExp | undefined,
@@ -119,6 +119,7 @@ async function runBulkImportJob(
       );
     }
     progress.recordSkipped(page.skipped.length);
+    progress.setTotal(collection.total);
     await importPage(page.eligible);
   }
 
