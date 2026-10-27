@@ -25,9 +25,9 @@ import {
   type DetectedAgentId,
   detectInstalledAgents,
 } from '@/core/host/environment/installed-agent-detector.ts';
-import { tryLoadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { findInstalledIntegrationIds } from './_common/installed-integrations.ts';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration.ts';
 import { integrateClaude } from './claude';
@@ -100,12 +100,9 @@ const CONFLICTING_AGENT_PAIRS: readonly (readonly [DetectedAgentId, DetectedAgen
 
 /** Tools already integrated (any recorded feature), for display alongside detected agents. */
 function findAlreadyIntegrated(): string[] {
-  const state = tryLoadState();
-  if (!state) return [];
   const labels = new Set<string>();
-  for (const integration of state.integrations.installed) {
-    if (integration.features.length === 0) continue;
-    const label = INTEGRATION_ID_LABELS[integration.integrationId];
+  for (const id of findInstalledIntegrationIds()) {
+    const label = INTEGRATION_ID_LABELS[id];
     if (label) labels.add(label);
   }
   return [...labels];
