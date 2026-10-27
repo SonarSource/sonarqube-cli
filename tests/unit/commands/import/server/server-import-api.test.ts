@@ -21,7 +21,13 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
-import { AccessDeniedError, BadRequestError, ServerError } from '@/core/server/errors.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import {
+  AccessDeniedError,
+  BadRequestError,
+  ServerError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import {
@@ -55,7 +61,7 @@ describe('ServerImportApiClient', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    api = new ServerImportApiClient(new SonarHttpClient(SERVER_URL, 'squ_token'));
+    api = new ServerImportApiClient(new SonarHttpClient(SERVER_URL, 'squ_token'), SERVER_URL);
   });
 
   afterEach(() => {
@@ -156,10 +162,11 @@ describe('ServerImportApiClient', () => {
       expect(await statusOf('s')).toBe('invalid');
     });
 
-    it('rejects with the original error on a 400 that is not about the token', async () => {
+    it('rejects with the server message on a 400 that is not about the token', async () => {
       fetchSpy = mockFetchSeq(badRequest('Unable to contact Bitbucket server'));
       const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(BadRequestError);
+      expect((error as BadRequestError).message).toBe('Unable to contact Bitbucket server');
     });
 
     it('rejects with the original error when the status is not about the token', async () => {
@@ -173,6 +180,575 @@ describe('ServerImportApiClient', () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
       const error = await statusOf('s').catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('query encoding', () => {
+    it.each([
+      ['checkPat', (c: ServerImportApiClient) => c.checkPat('My stuff here')],
+      ['probeGithubPat', (c: ServerImportApiClient) => c.probeGithubPat('My stuff here')],
+    ] as const)('%s sends a key with spaces as %%20, not +', async (_name, call) => {
+      fetchSpy = mockFetchSeq(noContentResponse());
+      await call(api);
+      const url = lastFetchUrl(fetchSpy);
+      expect(url).toContain('almSetting=My%20stuff%20here');
+      expect(url).not.toContain('+');
+    });
+
+    it('also escapes reserved characters in a key', async () => {
+      fetchSpy = mockFetchSeq(noContentResponse());
+      await api.checkPat('a&b=c/d');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.searchParams.get('almSetting')).toBe('a&b=c/d');
+      expect([...url.searchParams.keys()]).toEqual(['almSetting']);
+    });
+  });
+
+  describe('searchGitlabRepos', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
+      await api.searchGitlabRepos('my-gitlab', 2, 50);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_gitlab_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-gitlab',
+        p: '2',
+        ps: '50',
+      });
+    });
+
+    it('returns the repositories and the reported total', async () => {
+      fetchSpy = mockFetch({
+        repositories: [{ id: 1, name: 'a', slug: 'a', pathSlug: 'g', sqProjectKey: 'g_a' }],
+        paging: { pageIndex: 1, pageSize: 50, total: 9 },
+      });
+      expect(await api.searchGitlabRepos('s', 1, 50)).toEqual({
+        repositories: [{ id: 1, name: 'a', slug: 'a', pathSlug: 'g', sqProjectKey: 'g_a' }],
+        total: 9,
+      });
+    });
+
+    it('treats an empty result as no repositories and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchGitlabRepos('s', 1, 50)).toEqual({
+        repositories: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchGitlabRepos('s', 1, 50).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('searchAzureRepos', () => {
+    it('sends the setting key as almSetting, with no project filter', async () => {
+      fetchSpy = mockFetch({ repositories: [] });
+      await api.searchAzureRepos('my-azure');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_azure_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({ almSetting: 'my-azure' });
+    });
+
+    it('returns the repositories with their project and the SonarQube project they are bound to', async () => {
+      const repositories = [
+        { name: 'r1', projectName: 'p1', sqProjectKey: 'p1_r1', sqProjectName: 'r1' },
+        { name: 'r2', projectName: 'p1' },
+      ];
+      fetchSpy = mockFetch({ repositories });
+      expect(await api.searchAzureRepos('s')).toEqual(repositories);
+    });
+
+    it('treats a response without repositories as an empty list', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchAzureRepos('s')).toEqual([]);
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchAzureRepos('s').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('searchBitbucketCloudRepos', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      await api.searchBitbucketCloudRepos('my-bbc', 2, 50);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketcloud_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-bbc',
+        p: '2',
+        ps: '50',
+      });
+    });
+
+    it('returns the repositories as the server sends them', async () => {
+      const repository = {
+        slug: 'repo-a',
+        uuid: '{uuid-a}',
+        name: 'Repo A',
+        workspace: 'acme',
+        projectKey: 'PRJ',
+        sqProjectKey: 'acme_repo-a',
+      };
+      fetchSpy = mockFetch({
+        paging: { pageIndex: 1, pageSize: 50 },
+        isLastPage: false,
+        repositories: [repository],
+      });
+      expect(await api.searchBitbucketCloudRepos('s', 1, 50)).toEqual({
+        repositories: [repository],
+      });
+    });
+
+    it('treats an empty result as no repositories', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchBitbucketCloudRepos('s', 1, 50)).toEqual({ repositories: [] });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.searchBitbucketCloudRepos('s', 1, 50).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('searchBitbucketServerRepos', () => {
+    it('sends the setting key, start offset and page size, with no project filter', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      await api.searchBitbucketServerRepos('my-bbs', 50, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/search_bitbucketserver_repos');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-bbs',
+        start: '50',
+        pageSize: '100',
+      });
+    });
+
+    it('returns the repositories and where the next page starts', async () => {
+      const repositories = [
+        { id: 5, slug: 'repo', name: 'Repo', projectKey: 'PRJ', projectName: 'Project' },
+        { id: 6, slug: 'bound', name: 'Bound', projectKey: 'PRJ', sqProjectKey: 'PRJ_bound' },
+      ];
+      fetchSpy = mockFetch({ repositories, isLastPage: false, nextPageStart: 2 });
+      expect(await api.searchBitbucketServerRepos('s', 0, 100)).toEqual({
+        repositories,
+        nextStart: 2,
+      });
+    });
+
+    it('has no next page on the last one', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: true });
+      expect((await api.searchBitbucketServerRepos('s', 0, 100)).nextStart).toBeUndefined();
+    });
+
+    it('has no next page when the offset would not advance', async () => {
+      fetchSpy = mockFetch({ repositories: [], isLastPage: false, nextPageStart: 25 });
+      expect((await api.searchBitbucketServerRepos('s', 25, 100)).nextStart).toBeUndefined();
+    });
+
+    it('treats an empty result as no repositories', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.searchBitbucketServerRepos('s', 0, 100)).toEqual({
+        repositories: [],
+        nextStart: undefined,
+      });
+    });
+
+    it('rejects on a server error', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.searchBitbucketServerRepos('s', 0, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('listGithubOrganizations', () => {
+    it('sends the setting key and paging as almSetting, p and ps', async () => {
+      fetchSpy = mockFetch({ organizations: [], paging: { total: 0 } });
+      await api.listGithubOrganizations('my-github', 2, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_organizations');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-github',
+        p: '2',
+        ps: '100',
+      });
+      expect(lastFetchInit(fetchSpy).method).toBe('GET');
+    });
+
+    it('returns the organizations and the reported total', async () => {
+      fetchSpy = mockFetch({
+        organizations: [{ key: 'acme', name: 'acme' }],
+        paging: { pageIndex: 1, pageSize: 100, total: 4 },
+      });
+      expect(await api.listGithubOrganizations('s', 1, 100)).toEqual({
+        organizations: [{ key: 'acme', name: 'acme' }],
+        total: 4,
+      });
+    });
+
+    it('treats an empty result as no organizations and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listGithubOrganizations('s', 1, 100)).toEqual({
+        organizations: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a 400 such as a missing token', async () => {
+      fetchSpy = mockFetchSeq(badRequest('No personal access token found'));
+      const error = await api.listGithubOrganizations('s', 1, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+    });
+  });
+
+  describe('listGithubRepositories', () => {
+    it('sends the setting key, the organization and paging', async () => {
+      fetchSpy = mockFetch({ repositories: [], paging: { total: 0 } });
+      await api.listGithubRepositories('my-github', 'acme', 3, 100);
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/alm_integrations/list_github_repositories');
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        almSetting: 'my-github',
+        organization: 'acme',
+        p: '3',
+        ps: '100',
+      });
+      expect(lastFetchInit(fetchSpy).method).toBe('GET');
+    });
+
+    it('returns the repositories and the reported total', async () => {
+      const repositories = [
+        {
+          id: 1,
+          key: 'acme/a',
+          name: 'a',
+          url: 'https://github.com/acme/a',
+          sqProjectKey: 'acme_a',
+        },
+      ];
+      fetchSpy = mockFetch({ repositories, paging: { pageIndex: 1, pageSize: 100, total: 9 } });
+      expect(await api.listGithubRepositories('s', 'acme', 1, 100)).toEqual({
+        repositories,
+        total: 9,
+      });
+    });
+
+    it('treats an empty result as no repositories and no total', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.listGithubRepositories('s', 'acme', 1, 100)).toEqual({
+        repositories: [],
+        total: undefined,
+      });
+    });
+
+    it('rejects on a server error', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.listGithubRepositories('s', 'acme', 1, 100).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('putBoundProject', () => {
+    const request = {
+      projectKey: 'group_repo',
+      projectName: 'repo',
+      devOpsPlatformSettingId: 'gl-id',
+      repositoryIdentifier: '42',
+    };
+
+    it('PUTs the project as JSON with monorepo off', async () => {
+      fetchSpy = mockFetch({ projectId: 'p', bindingId: 'b', newProjectCreated: true });
+      await api.putBoundProject(request);
+      expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
+        '/api/v2/dop-translation/bound-projects',
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('PUT');
+      expect(JSON.parse(init.body as string)).toEqual({ ...request, monorepo: false });
+    });
+
+    it('passes projectIdentifier through when given', async () => {
+      fetchSpy = mockFetch({ newProjectCreated: true });
+      await api.putBoundProject({ ...request, projectIdentifier: 'proj' });
+      expect(JSON.parse(lastFetchInit(fetchSpy).body as string)).toMatchObject({
+        projectIdentifier: 'proj',
+      });
+    });
+
+    it('reports whether the project was new', async () => {
+      fetchSpy = mockFetch({ newProjectCreated: false });
+      expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: false });
+    });
+
+    it('rejects with the server message on a 400', async () => {
+      fetchSpy = mockFetchSeq(badRequest("personal access token for 's' is missing"));
+      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BadRequestError);
+      expect((error as BadRequestError).message).toContain('is missing');
+    });
+
+    it('rejects on a 500 from the platform', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+
+    describe('on a server without PUT', () => {
+      const BOUND_PROJECTS = '/api/v2/dop-translation/bound-projects';
+
+      /** Answers each call by method and path; `/api/system/status` reports `version`. */
+      function mockServer(answers: {
+        put: Response;
+        post?: Response;
+        version?: string | null;
+      }): ReturnType<typeof spyOn> {
+        return spyOn(globalThis, 'fetch').mockImplementation(((
+          url: string | URL,
+          init?: RequestInit,
+        ) => {
+          const { pathname } = new URL(url.toString());
+          if (pathname === '/api/system/status') {
+            const { version } = answers;
+            return Promise.resolve(
+              version === undefined || version === null
+                ? fakeResponse({}, { status: 500 })
+                : fakeResponse({ status: 'UP', version }),
+            );
+          }
+          const answer = init?.method === 'PUT' ? answers.put : answers.post;
+          return Promise.resolve(answer ?? fakeResponse({}, { status: 500 }));
+        }) as typeof fetch);
+      }
+
+      type FetchCall = [string | URL, RequestInit | undefined];
+
+      function fetchCalls(spy: ReturnType<typeof spyOn>): FetchCall[] {
+        return spy.mock.calls as FetchCall[];
+      }
+
+      function callsTo(spy: ReturnType<typeof spyOn>, method: string): number {
+        return fetchCalls(spy).filter(
+          ([url, init]) =>
+            new URL(url.toString()).pathname === BOUND_PROJECTS && init?.method === method,
+        ).length;
+      }
+
+      function versionCalls(spy: ReturnType<typeof spyOn>): number {
+        return fetchCalls(spy).filter(
+          ([url]) => new URL(url.toString()).pathname === '/api/system/status',
+        ).length;
+      }
+
+      const created = () =>
+        fakeResponse({ projectId: 'p', bindingId: 'b', newProjectCreated: true }, { status: 201 });
+
+      it('POSTs the same body when PUT answers 405, without asking for the version', async () => {
+        fetchSpy = mockServer({ put: fakeResponse({}, { status: 405 }), post: created() });
+        expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: true });
+        expect(callsTo(fetchSpy, 'POST')).toBe(1);
+        expect(versionCalls(fetchSpy)).toBe(0);
+        const post = fetchCalls(fetchSpy).find(([, init]) => init?.method === 'POST');
+        expect(JSON.parse(post?.[1]?.body as string)).toEqual({
+          ...request,
+          monorepo: false,
+        });
+      });
+
+      it('POSTs when PUT answers 404 on a server older than 2025.6', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 404 }),
+          post: created(),
+          version: '10.8',
+        });
+        expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: true });
+        expect(callsTo(fetchSpy, 'POST')).toBe(1);
+      });
+
+      it('keeps the original error on a 404 from a server that supports PUT', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 404 }),
+          post: created(),
+          version: '2025.6.0.12345',
+        });
+        const error = await api.putBoundProject(request).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(UnexpectedApiError);
+        expect((error as UnexpectedApiError).status).toBe(404);
+        expect(callsTo(fetchSpy, 'POST')).toBe(0);
+      });
+
+      it('keeps the original error on a 404 when the version cannot be read', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 404 }),
+          post: created(),
+          version: null,
+        });
+        const error = await api.putBoundProject(request).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(UnexpectedApiError);
+        expect(callsTo(fetchSpy, 'POST')).toBe(0);
+      });
+
+      it('decides once: later repositories go straight to POST and the version is read once', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 404 }),
+          post: created(),
+          version: '10.8',
+        });
+        await api.putBoundProject(request);
+        await api.putBoundProject({ ...request, projectKey: 'other' });
+        await api.putBoundProject({ ...request, projectKey: 'third' });
+        expect(callsTo(fetchSpy, 'PUT')).toBe(1);
+        expect(callsTo(fetchSpy, 'POST')).toBe(3);
+        expect(versionCalls(fetchSpy)).toBe(1);
+      });
+
+      it('reads the version once for concurrent repositories on a server with PUT', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 404 }),
+          version: '2026.1',
+        });
+        await Promise.all(
+          ['a', 'b', 'c'].map((projectKey) =>
+            api.putBoundProject({ ...request, projectKey }).catch(() => undefined),
+          ),
+        );
+        expect(versionCalls(fetchSpy)).toBe(1);
+        expect(callsTo(fetchSpy, 'POST')).toBe(0);
+      });
+
+      it('passes a 400 from POST through: an existing project is never rebound', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 405 }),
+          post: badRequest("Project 'group_repo' already exists"),
+        });
+        const error = await api.putBoundProject(request).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(BadRequestError);
+        expect((error as BadRequestError).message).toContain('already exists');
+      });
+
+      it('passes a 404 from POST through as the original error', async () => {
+        fetchSpy = mockServer({
+          put: fakeResponse({}, { status: 405 }),
+          post: fakeResponse({}, { status: 404 }),
+        });
+        const error = await api.putBoundProject(request).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(UnexpectedApiError);
+        expect((error as UnexpectedApiError).status).toBe(404);
+      });
+    });
+  });
+
+  describe('requireSupportedVersion', () => {
+    function mockVersion(version: string | null): ReturnType<typeof spyOn> {
+      return mockFetch(version === null ? {} : { status: 'UP', version }, {
+        status: version === null ? 500 : 200,
+      });
+    }
+
+    it('refuses a server older than 2025.1, with its version', async () => {
+      fetchSpy = mockVersion('10.8.1.101195');
+      const error = await api.requireSupportedVersion().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(CommandFailedError);
+      expect((error as CommandFailedError).message).toBe(
+        'SonarQube Server 10.8.1.101195 is not supported by sonar import; 2025.1 or later is required.',
+      );
+      expect((error as CommandFailedError).remediationHint).toContain('Upgrade');
+    });
+
+    it.each(['2025.1.0.102418', '2026.1', '25.1.0.102122'])('accepts %s', async (version) => {
+      fetchSpy = mockVersion(version);
+      expect(await api.requireSupportedVersion()).toBeUndefined();
+    });
+
+    it('lets the import go on when the version cannot be read', async () => {
+      fetchSpy = mockVersion(null);
+      expect(await api.requireSupportedVersion()).toBeUndefined();
+    });
+  });
+
+  describe('lookupProject', () => {
+    it('asks components/show for the key, percent-encoded', async () => {
+      fetchSpy = mockFetch({ component: { key: 'group_repo:x' } });
+      expect(await api.lookupProject('group_repo:x')).toBe('found');
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/components/show');
+      expect(lastFetchUrl(fetchSpy)).toContain('component=group_repo%3Ax');
+    });
+
+    it('is missing on a 404', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 404 }));
+      expect(await api.lookupProject('k')).toBe('missing');
+    });
+
+    it('is hidden on a 403', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 403 }));
+      expect(await api.lookupProject('k')).toBe('hidden');
+    });
+
+    it('rejects on a 500', async () => {
+      fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
+      const error = await api.lookupProject('k').catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ServerError);
+    });
+  });
+
+  describe('findProjectBinding', () => {
+    const page = (keys: string[], total: number) =>
+      fakeResponse({
+        projectBindings: keys.map((projectKey) => ({
+          projectKey,
+          devOpsPlatformSettingId: 'gl-id',
+          repository: '42',
+        })),
+        page: { pageIndex: 1, pageSize: keys.length, total },
+      });
+
+    it('filters the v2 project-bindings by setting and repository', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'k', devOpsPlatformSettingId: 'gl-id', repository: '42' }],
+      });
+      expect(await api.findProjectBinding('gl-id', 'my repo', () => true)).toEqual({
+        projectKey: 'k',
+        devOpsPlatformSettingId: 'gl-id',
+        repository: '42',
+      });
+      const url = new URL(lastFetchUrl(fetchSpy));
+      expect(url.pathname).toBe('/api/v2/dop-translation/project-bindings');
+      expect(lastFetchUrl(fetchSpy)).toContain('repository=my%20repo');
+      expect(url.searchParams.get('dopSettingId')).toBe('gl-id');
+      expect(url.searchParams.get('pageIndex')).toBe('1');
+    });
+
+    it('finds nothing when the response has no bindings', async () => {
+      fetchSpy = mockFetch({});
+      expect(await api.findProjectBinding('gl-id', '42', () => true)).toBeUndefined();
+    });
+
+    it('reads later pages until a binding matches', async () => {
+      fetchSpy = mockFetchSeq(page(['a', 'b'], 6), page(['c', 'd'], 6), page(['e', 'f'], 6));
+      const found = await api.findProjectBinding('gl-id', '42', (b) => b.projectKey === 'd');
+      expect(found?.projectKey).toBe('d');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(new URL(lastFetchUrl(fetchSpy)).searchParams.get('pageIndex')).toBe('2');
+    });
+
+    it('stops after the last page when nothing matches', async () => {
+      fetchSpy = mockFetchSeq(page(['a', 'b'], 4), page(['c', 'd'], 4));
+      expect(await api.findProjectBinding('gl-id', '42', () => false)).toBeUndefined();
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('stops on a short page when the response has no total', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectKey: 'a', devOpsPlatformSettingId: 'gl-id', repository: '42' }],
+      });
+      expect(await api.findProjectBinding('gl-id', '42', () => false)).toBeUndefined();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
 

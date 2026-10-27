@@ -31,21 +31,24 @@ export type PatStatus = 'valid' | 'missing' | 'invalid';
 /** Matches the server's "personal access token for '<key>' is missing" in any capitalisation. */
 const MISSING_PAT_MESSAGE = /personal access token .*is missing|no personal access token found/i;
 
-/** The messages the server raises when the platform rejects the stored token (Azure DevOps, Bitbucket, GitLab, Bitbucket Cloud's `[HTTP 401]`). */
-const INVALID_PAT_MESSAGE =
-  /invalid personal access token|gitlab token (?:was revoked|is expired|has insufficient scope)|\[HTTP 401\]/i;
+/**
+ * What the platform clients say when they reject the stored token: "Invalid personal access
+ * token" (GitLab, Azure, Bitbucket Server), "Your GitLab token was revoked / is expired",
+ * "insufficient scope", "Forbidden access to GitLab" and Bitbucket Cloud's "[HTTP 401]" / "[HTTP 403]".
+ */
+const REJECTED_PAT_MESSAGE =
+  /invalid personal access token|token (?:was revoked|is expired)|insufficient scope|forbidden access to gitlab|\[http 40[13]\]/i;
 
 /**
- * Classifies a failed PAT check. Only a 400 carrying a recognised missing or rejected-token
- * message answers the question; any other failure (network, 403, 404, 5xx, a 400 such as
- * "Unable to contact Bitbucket server", ...) says nothing about the token, so it returns
- * `undefined` and the caller must surface the error instead of guessing.
+ * Classifies a failed PAT check. Only a 400 whose message names the token answers the question.
+ * Every other failure (network, 403, 404, 5xx, or a 400 such as "Unable to contact Bitbucket
+ * server") says nothing about the token, so it returns `undefined` and the caller must surface
+ * the error instead of guessing.
  */
 export function patStatusFromError(error: HttpClientError): PatStatus | undefined {
   if (!(error instanceof BadRequestError)) {
     return undefined;
   }
   if (MISSING_PAT_MESSAGE.test(error.message)) return 'missing';
-  if (INVALID_PAT_MESSAGE.test(error.message)) return 'invalid';
-  return undefined;
+  return REJECTED_PAT_MESSAGE.test(error.message) ? 'invalid' : undefined;
 }
