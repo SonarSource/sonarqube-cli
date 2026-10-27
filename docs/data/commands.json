@@ -1,5 +1,5 @@
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "commands": [
     {
       "id": "sonar",
@@ -28,6 +28,7 @@
         "sonar-remediate",
         "sonar-link",
         "sonar-config",
+        "sonar-architecture",
         "sonar-system",
         "sonar-allowlist",
         "sonar-update"
@@ -50,6 +51,7 @@
       "examples": [],
       "children": [
         "sonar-auth-login",
+        "sonar-auth-org",
         "sonar-auth-logout",
         "sonar-auth-status"
       ]
@@ -102,6 +104,30 @@
           "description": "Interactive login for SonarQube Server with browser with a server specified"
         }
       ],
+      "children": []
+    },
+    {
+      "id": "sonar-auth-org",
+      "name": "org",
+      "fullName": "sonar auth org",
+      "aliases": [],
+      "description": "Switch the active SonarQube Cloud organization without logging in again",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-auth",
+      "arguments": [
+        {
+          "name": "org",
+          "description": "SonarQube Cloud organization key",
+          "required": false,
+          "variadic": false
+        }
+      ],
+      "options": [],
+      "examples": [],
       "children": []
     },
     {
@@ -653,12 +679,16 @@
       ],
       "examples": [
         {
-          "command": "sonar integrate claude -s https://sonarcloud.io -p my-project",
-          "description": "Integrate Claude Code with interactive setup"
+          "command": "sonar integrate",
+          "description": "Interactively choose a tool (Claude Code, Codex, Copilot, Cursor, …) to integrate with"
         },
         {
-          "command": "sonar integrate claude -g",
-          "description": "Integrate globally and install hooks to ~/.claude which will be available for all projects"
+          "command": "sonar integrate claude",
+          "description": "Integrate Claude Code with interactive setup (installed globally for all projects)"
+        },
+        {
+          "command": "sonar integrate claude --non-interactive",
+          "description": "Integrate Claude Code without prompts, for scripts and CI"
         }
       ],
       "children": [
@@ -668,7 +698,9 @@
         "sonar-integrate-codex",
         "sonar-integrate-antigravity",
         "sonar-integrate-cursor",
-        "sonar-integrate-opencode"
+        "sonar-integrate-opencode",
+        "sonar-integrate-devin",
+        "sonar-integrate-pi"
       ]
     },
     {
@@ -828,7 +860,7 @@
       "name": "codex",
       "fullName": "sonar integrate codex",
       "aliases": [],
-      "description": "Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.",
+      "description": "Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -969,6 +1001,82 @@
           "deprecation": {
             "sinceVersion": "1.9.0",
             "replacement": "sonar integrate opencode"
+          }
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-devin",
+      "name": "devin",
+      "fullName": "sonar integrate devin",
+      "aliases": [],
+      "description": "Setup SonarQube integration for Devin. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Backwards compatibility; integrations are installed globally by default",
+          "type": "boolean",
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate devin"
+          }
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-integrate-pi",
+      "name": "pi",
+      "fullName": "sonar integrate pi",
+      "aliases": [],
+      "description": "Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-integrate",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Non-interactive mode (no prompts)",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-g, --global",
+          "long": "--global",
+          "short": "-g",
+          "description": "Backwards compatibility; integrations are installed globally by default",
+          "type": "boolean",
+          "required": false,
+          "stage": "deprecated",
+          "deprecation": {
+            "sinceVersion": "1.9.0",
+            "replacement": "sonar integrate pi"
           }
         }
       ],
@@ -1308,7 +1416,7 @@
       "fullName": "sonar link",
       "aliases": [],
       "description": "Link a project to the active connection in .sonar-config.json",
-      "isGroup": false,
+      "isGroup": true,
       "isRoot": false,
       "stage": "stable",
       "requiresAuth": true,
@@ -1330,6 +1438,63 @@
           "type": "string",
           "required": false,
           "defaultValue": "."
+        },
+        {
+          "flags": "--monorepo",
+          "long": "--monorepo",
+          "description": "Add or update this directory in the projects array instead of replacing the single link",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": [
+        "sonar-link-list"
+      ]
+    },
+    {
+      "id": "sonar-link-list",
+      "name": "list",
+      "fullName": "sonar link list",
+      "aliases": [],
+      "description": "List linked projects at, under or enclosing a path as JSON, nearest first",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-link",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--path <path>",
+          "long": "--path",
+          "description": "File or directory to list projects for (default: current directory)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--pattern <regex>",
+          "long": "--pattern",
+          "description": "Only list projects whose key or directory matches this regex",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page <page>",
+          "long": "--page",
+          "description": "Page number",
+          "type": "number",
+          "required": false,
+          "defaultValue": 1
+        },
+        {
+          "flags": "--page-size <page-size>",
+          "long": "--page-size",
+          "description": "Page size (1-100)",
+          "type": "number",
+          "required": false,
+          "defaultValue": 20
         }
       ],
       "examples": [],
@@ -1483,6 +1648,272 @@
         }
       ],
       "options": [],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture",
+      "name": "architecture",
+      "fullName": "sonar architecture",
+      "aliases": [
+        "arch"
+      ],
+      "description": "Read and set the architecture of a project",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-architecture-current",
+        "sonar-architecture-intended",
+        "sonar-architecture-install-skill"
+      ]
+    },
+    {
+      "id": "sonar-architecture-current",
+      "name": "current",
+      "fullName": "sonar architecture current",
+      "aliases": [],
+      "description": "Read the current architecture",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-architecture",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-architecture-current-get"
+      ]
+    },
+    {
+      "id": "sonar-architecture-current-get",
+      "name": "get",
+      "fullName": "sonar architecture current get",
+      "aliases": [],
+      "description": "Current architecture, at most 150 nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-current",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--component <key>",
+          "long": "--component",
+          "description": "Node key to start below, from a previous current get",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--depth <n>",
+          "long": "--depth",
+          "description": "Levels below the start node (default 1)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--language <language>",
+          "long": "--language",
+          "description": "Only this language (default: all)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "java",
+            "cs",
+            "js",
+            "ts",
+            "py"
+          ]
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format (default: text on a terminal, toon otherwise)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "text",
+            "toon",
+            "json"
+          ]
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-intended",
+      "name": "intended",
+      "fullName": "sonar architecture intended",
+      "aliases": [],
+      "description": "Read and set the intended architecture",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-architecture",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-architecture-intended-get",
+        "sonar-architecture-intended-set"
+      ]
+    },
+    {
+      "id": "sonar-architecture-intended-get",
+      "name": "get",
+      "fullName": "sonar architecture intended get",
+      "aliases": [],
+      "description": "Intended architecture; full JSON can be saved with intended set, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-intended",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--component <key>",
+          "long": "--component",
+          "description": "Group key to start below, e.g. Domain/Billing",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--depth <n>",
+          "long": "--depth",
+          "description": "Levels of groups below the start group (default: all)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--language <language>",
+          "long": "--language",
+          "description": "Only this language (default: all)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "java",
+            "cs",
+            "js",
+            "ts",
+            "py"
+          ]
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format (default: text on a terminal, toon otherwise)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "text",
+            "toon",
+            "json"
+          ]
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-intended-set",
+      "name": "set",
+      "fullName": "sonar architecture intended set",
+      "aliases": [],
+      "description": "Replace the intended architecture with a file shaped like the output of intended get --format json",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-intended",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--file <file>",
+          "long": "--file",
+          "description": "Intended architecture JSON file",
+          "type": "string",
+          "required": true
+        },
+        {
+          "flags": "--dry-run",
+          "long": "--dry-run",
+          "description": "Validate and show the changes, removals first, without writing",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-install-skill",
+      "name": "install-skill",
+      "fullName": "sonar architecture install-skill",
+      "aliases": [],
+      "description": "Install the architecture skill for Claude Code and Cursor in this repository",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "beta",
+      "requiresAuth": true,
+      "depth": 2,
+      "parentId": "sonar-architecture",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--global",
+          "long": "--global",
+          "description": "Install in the home directory instead of the repository",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--force",
+          "long": "--force",
+          "description": "Replace a SKILL.md that was not written by this command",
+          "type": "boolean",
+          "required": false
+        }
+      ],
       "examples": [],
       "children": []
     },
