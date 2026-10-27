@@ -26,7 +26,6 @@ import type {
   DirectiveInput,
   ProjectDirective,
 } from '@/commands/architecture/_common/directives.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { TestHarness } from '../../harness';
 const directive: DirectiveInput = {
@@ -40,7 +39,6 @@ describe('public project directives', () => {
   let h: TestHarness;
   beforeEach(async () => {
     h = await TestHarness.create();
-    h.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
   afterEach(async () => {
     await h.dispose();
