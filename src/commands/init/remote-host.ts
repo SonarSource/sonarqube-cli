@@ -18,8 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// The DevOps platforms `sonar import` can bind today (GitHub and Azure DevOps), on their public hosts.
-const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com']);
+// The DevOps platforms `sonar import` can bind today (GitHub and Azure DevOps), on their public hosts (including Azure's SSH and legacy visualstudio.com hosts).
+const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com', 'ssh.dev.azure.com']);
+const AZURE_LEGACY_HOST_SUFFIX = '.visualstudio.com';
 const SCP_LIKE_REMOTE = /^[^@/\s]+@([^:/\s]+):/;
 
 function remoteHostname(remote: string): string | null {
@@ -37,5 +38,8 @@ function remoteHostname(remote: string): string | null {
 /** Whether the remote is on a platform `sonar import` can bind. Self-hosted instances are not recognized. */
 export function isBindableRemote(remote: string): boolean {
   const hostname = remoteHostname(remote);
-  return hostname !== null && BINDABLE_HOSTS.has(hostname);
+  return (
+    hostname !== null &&
+    (BINDABLE_HOSTS.has(hostname) || hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX))
+  );
 }
