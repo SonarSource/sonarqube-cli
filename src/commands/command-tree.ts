@@ -900,10 +900,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
 
-  // Agent-facing architecture commands. Alpha — not in public docs (see admin above).
+  // Agent-facing architecture commands.
   const architecture = COMMAND_TREE.command('architecture')
     .alias('arch')
-    .stage(Stage.Alpha)
     .description('Read and set the architecture of a project')
     .rootHelp({ category: 'data' });
 
@@ -961,6 +960,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   architecture
     .command('install-skill')
+    .stage(Stage.Beta())
     .description('Install the architecture skill for Claude Code and Cursor in this repository')
     .option('--global', 'Install in the home directory instead of the repository')
     .option('--force', 'Replace a SKILL.md that was not written by this command')

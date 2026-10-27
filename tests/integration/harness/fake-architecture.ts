@@ -79,9 +79,15 @@ export class FakeArchitecture {
   private intendedReads = 0;
   private readonly staleReads = new Map<
     number,
-    { id?: string; intendedArchitectures: unknown[] }
+    { id?: string | null; intendedArchitectures: unknown[] }
   >();
   private staleWriteResponse = false;
+  private missingPatchResponseId: 'null' | 'omitted' | undefined;
+
+  withMissingPatchResponseId(value: 'null' | 'omitted'): this {
+    this.missingPatchResponseId = value;
+    return this;
+  }
 
   withStaleWriteResponse(): this {
     this.staleWriteResponse = true;
@@ -243,7 +249,7 @@ export class FakeArchitecture {
     }
   }
 
-  private readIntended(): { id?: string; intendedArchitectures: unknown[] } {
+  private readIntended(): { id?: string | null; intendedArchitectures: unknown[] } {
     this.intendedReads++;
     const stale = this.staleReads.get(this.intendedReads);
     if (stale !== undefined) return stale;
@@ -260,11 +266,11 @@ export class FakeArchitecture {
     return this.exportEnvelope();
   }
 
-  private exportEnvelope(): { id?: string; intendedArchitectures: unknown[] } {
+  private exportEnvelope(): { id?: string | null; intendedArchitectures: unknown[] } {
     const model = this.models[0];
     return model
       ? { id: model.id, intendedArchitectures: this.exportModel(model) }
-      : { intendedArchitectures: [] };
+      : { id: null, intendedArchitectures: [] };
   }
 
   private deleteModel(modelId: string | undefined): Response {
@@ -306,9 +312,12 @@ export class FakeArchitecture {
         groups: this.saveGroups(groups),
         ...rest,
       }));
+    const response = this.staleWriteResponse ? previous : this.exportEnvelope();
+    if (this.missingPatchResponseId !== undefined)
+      response.id = this.missingPatchResponseId === 'null' ? null : undefined;
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json(this.staleWriteResponse ? previous : this.exportEnvelope());
+      : json(response);
   }
 
   private exportModel({ perspectives }: SavedModel): unknown[] {

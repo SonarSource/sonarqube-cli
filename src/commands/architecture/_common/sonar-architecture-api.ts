@@ -57,7 +57,7 @@ interface CurrentArchitecturesDto {
 }
 
 interface IntendedArchitecturesDto {
-  id?: string;
+  id?: string | null;
   intendedArchitectures: IntendedModelExportDto[];
 }
 
@@ -273,7 +273,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Invalid public intended architecture response: each model must be an object.',
       );
     }
-    const id = response.id;
+    const id = response.id ?? undefined;
     if (
       (id !== undefined && (typeof id !== 'string' || !MODEL_ID.test(id))) ||
       (response.intendedArchitectures.length > 0 && id === undefined)
@@ -332,7 +332,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Invalid public intended architecture write response: missing model envelope or server id.',
       );
     }
-    const id = response.id;
+    const id = response.id ?? undefined;
     if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
       throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
