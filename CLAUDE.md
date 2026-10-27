@@ -82,7 +82,7 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 
 ## Agent benchmark (`benchmarks/harbor/`)
 
-Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, tokens/cost/steps from the ATIF trajectory) and `environments/host_environment.py` (Harbor environment for macOS, which has no containers) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch`, never triggered by pushes or PRs; Linux in Docker, macOS on the runner). See `benchmarks/harbor/README.md`.
+Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch`, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
 
 ## Docs site (`docs/`)
 

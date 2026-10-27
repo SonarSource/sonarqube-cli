@@ -30,10 +30,8 @@ jobs:
         include:
           - os: linux
             runner: sonar-m
-            host-environment: false
           - os: macos
             runner: macos-latest-xlarge
-            host-environment: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -55,13 +53,24 @@ jobs:
           "${RUNNER_TEMP}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
           echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
 
-      - name: Prepare host environment
-        if: ${{ matrix.host-environment }}
+      - name: Create Harbor directories (linux)
+        if: ${{ matrix.os == 'linux' }}
+        run: |
+          sudo mkdir -p /app /logs /tests /solution
+          sudo chown "${USER}" /app /logs /tests /solution
+
+      - name: Create Harbor directories (macos)
+        if: ${{ matrix.os == 'macos' }}
         run: |
           sudo mkdir -p /etc/synthetic.d
           printf 'app\nlogs\ntests\nsolution\n' | sudo tee /etc/synthetic.d/harbor
-          sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs.util -t
+          sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs.util -t || echo "apfs.util exited with $?"
+          sw_vers
+          ls -ld /app /logs /tests /solution
           sudo chown "${USER}" /app /logs /tests /solution
+
+      - name: Install sonar and Claude Code
+        run: |
           curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
           curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
           echo "${HOME}/.local/share/sonarqube-cli/bin" >> "${GITHUB_PATH}"
@@ -70,14 +79,9 @@ jobs:
         env:
           MODEL: ${{ inputs.model || 'anthropic/claude-sonnet-5-5' }}
           MATRIX_OS: ${{ matrix.os }}
-          HOST_ENVIRONMENT: ${{ matrix.host-environment }}
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         run: |
-          args=()
-          if [[ "${HOST_ENVIRONMENT}" == "true" ]]; then
-            export PYTHONPATH="${GITHUB_WORKSPACE}/benchmarks/harbor/environments"
-            args+=(--env host_environment:HostEnvironment)
-          fi
+          export PYTHONPATH="${GITHUB_WORKSPACE}/benchmarks/harbor/environments"
           harbor run \
             --path benchmarks/harbor/tasks \
             --agent claude-code \
@@ -86,7 +90,7 @@ jobs:
             --job-name "${MATRIX_OS}" \
             --n-concurrent 1 \
             --agent-env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
-            "${args[@]}"
+            --env host_environment:HostEnvironment
 
       - name: Upload Harbor jobs
         if: ${{ !cancelled() }}
