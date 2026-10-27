@@ -105,7 +105,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     ]);
   });
 
-  it('pages through the projects and through the repositories of each project', async () => {
+  it('pages through the repositories of every project with one flat search', async () => {
     const server = await startServer((s) =>
       s.withBitbucketServerProjects(
         'my-bbs',
@@ -132,20 +132,15 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
         .sort(),
     ).toEqual(['ALPHA/a1', 'ALPHA/a2', 'ALPHA/a3', 'GAMMA/g1', 'GAMMA/g2']);
     const requests = server.getRecordedRequests();
-    const projectLists = requests.filter(
-      (r) => r.path === '/api/alm_integrations/list_bitbucketserver_projects',
-    );
-    expect(projectLists.map((r) => r.query.start)).toEqual(['0', '2']);
-    expect(projectLists.every((r) => r.query.almSetting === 'my-bbs')).toBe(true);
+    expect(
+      requests.some((r) => r.path === '/api/alm_integrations/list_bitbucketserver_projects'),
+    ).toBe(false);
     const searches = requests.filter(
       (r) => r.path === '/api/alm_integrations/search_bitbucketserver_repos',
     );
-    expect(searches.map((r) => [r.query.projectName, r.query.start])).toEqual([
-      ['Alpha', '0'],
-      ['Alpha', '2'],
-      ['Beta', '0'],
-      ['Gamma', '0'],
-    ]);
+    expect(searches.map((r) => r.query.start)).toEqual(['0', '2', '4']);
+    expect(searches.every((r) => r.query.almSetting === 'my-bbs')).toBe(true);
+    expect(searches.every((r) => r.query.projectName === undefined)).toBe(true);
   });
 
   it('serves more than one page of repositories to the picker', async () => {
@@ -234,7 +229,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     expect(
       server
         .getRecordedRequests()
-        .some((r) => r.path === '/api/alm_integrations/list_bitbucketserver_projects'),
+        .some((r) => r.path === '/api/alm_integrations/search_bitbucketserver_repos'),
     ).toBe(false);
   });
 });
