@@ -26,11 +26,11 @@
     "version:build_number": "bun build-scripts/set-build-number.ts",
     "fetch:signatures": "bun build-scripts/fetch-signatures.ts",
     "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --release=\"${PROJECT_VERSION}\" dist/*.map",
-    "prepare": "husky"
+    "prepare": "bun ./node_modules/husky/bin.js"
   },
   "externalBinaries": {
     "sonar-secrets": {
-      "version": "2.53.0.13730",
+      "version": "2.53.1.13823",
       "binaryPath": "CommercialDistribution/sonar-secrets",
       "platforms": [
         {
@@ -56,7 +56,7 @@
       ]
     },
     "sca-scanner-cli": {
-      "version": "2025.6.0.16668",
+      "version": "2025.6.0.26564",
       "binaryPath": "CommercialDistribution/sca-scanner-cli",
       "platforms": [
         {
@@ -82,7 +82,7 @@
       ]
     },
     "sonar-context-augmentation": {
-      "version": "0.23.0.5451",
+      "version": "0.24.0.6501",
       "binaryPath": "Distribution/sonar-context-augmentation",
       "archive": "tar.gz",
       "platformNaming": "x64",
@@ -146,11 +146,12 @@
     "lint-staged": "16.4.0",
     "prettier": "3.9.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.2"
+    "typescript-eslint": "8.72.0"
   },
   "overrides": {
     "flatted": "3.4.4",
-    "follow-redirects": "1.16.1"
+    "follow-redirects": "1.16.1",
+    "picomatch": "4.0.7"
   },
   "lint-staged": {
     "*.ts": [

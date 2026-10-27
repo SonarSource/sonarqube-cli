@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { resolveSqaaContext } from '@/commands/analyze/sqaa-context.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -49,6 +50,36 @@ describe('resolveSqaaContext', () => {
     expect(fake.findCall('warn', 'SonarQube Cloud organization is required')).toBeDefined();
   });
 
+  it('hands back the groups, ignored files and roots of a resolved run', () => {
+    const connection = {} as SonarConnection;
+    const groups = [{ projectKey: 'app-a', projectRoot: '/repo/a', files: ['/repo/a/x.ts'] }];
+
+    expect(
+      resolveSqaaContext(
+        {
+          kind: 'resolved',
+          connection,
+          groups,
+          ignored: [
+            { path: '/repo/y.ts', reason: 'outside-project' },
+            { path: '/repo/z.ts', reason: 'other-connection' },
+          ],
+          projectRoots: ['/repo/a'],
+        },
+        { requireProject: true },
+        fake,
+      ),
+    ).toEqual({
+      connection,
+      groups,
+      ignored: [
+        { path: '/repo/y.ts', reason: 'outside-project' },
+        { path: '/repo/z.ts', reason: 'other-connection' },
+      ],
+      projectRoots: ['/repo/a'],
+    });
+  });
+
   it('fails on a missing project when the command requires one', () => {
     expect(() =>
       resolveSqaaContext({ kind: 'no-project' }, { requireProject: true }, fake),
@@ -58,5 +89,13 @@ describe('resolveSqaaContext', () => {
   it('skips with a warning on a missing project when the command does not require one', () => {
     expect(resolveSqaaContext({ kind: 'no-project' }, { requireProject: false }, fake)).toBeNull();
     expect(fake.findCall('warn', 'no project configured')).toBeDefined();
+  });
+
+  it('skips without a warning on a missing project or organization when asked to skip silently', () => {
+    const policy = { requireProject: false, silentSkip: true };
+
+    expect(resolveSqaaContext({ kind: 'no-project' }, policy, fake)).toBeNull();
+    expect(resolveSqaaContext({ kind: 'no-org', explicitProject: false }, policy, fake)).toBeNull();
+    expect(fake.findCall('warn', 'Vortex analysis skipped')).toBeUndefined();
   });
 });

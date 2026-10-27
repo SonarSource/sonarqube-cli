@@ -29,7 +29,11 @@ import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-mess
 import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 
 import type { FileResult, FileSuccess, RunTally } from './sqaa-analysis.ts';
+import type { IgnoredFile } from './sqaa-changeset.ts';
+import { formatProjectHeader } from './sqaa-display-headers.ts';
+import { renderIgnoredLines } from './sqaa-display-ignored.ts';
 import { SQAA_FAILURE_HEADING } from './sqaa-errors.ts';
+import type { SqaaDisplayProject } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 /** When analyzed file count exceeds this, clean files collapse to one summary row. */
@@ -89,7 +93,11 @@ export interface SqaaRunSummaryStats {
 export interface PrintSqaaTextReportOptions {
   tally: RunTally;
   allPaths: string[];
-  ignoredPaths?: string[];
+  /** Report-relative paths, each with why it was left out. */
+  ignored?: Array<{ path: string; reason: IgnoredFile['reason'] }>;
+  /** When it names more than one project, findings are grouped under a header per project. */
+  projects?: SqaaDisplayProject[];
+  repoRootFromCwd?: string;
   analysisDepth: SqaaAnalysisDepth;
 }
 
@@ -206,7 +214,7 @@ function formatFailedFileRow(path: string, colored: boolean): string {
 
 function formatSkippedOrIgnoredRow(
   path: string,
-  label: '[SKIPPED]' | '[IGNORED]',
+  label: '[SKIPPED]' | `[IGNORED: ${string}]`,
   colored: boolean,
 ): string {
   const icon = colored ? dim('⊘') : '⊘';
@@ -343,7 +351,7 @@ export function formatPlainCleanCollapsedRow(count: number): string {
 /** Plain-text skipped or ignored file row. */
 export function formatPlainSkippedOrIgnoredRow(
   path: string,
-  label: '[SKIPPED]' | '[IGNORED]',
+  label: '[SKIPPED]' | `[IGNORED: ${string}]`,
 ): string {
   return formatSkippedOrIgnoredRow(path, label, false);
 }
@@ -436,32 +444,60 @@ function renderCollapsedChangeSetLines(
   return lines;
 }
 
-function renderChangeSetReportLines(
-  tally: RunTally,
-  allPaths: string[],
-  ignoredPaths: string[],
+function renderPathsLines(
+  paths: string[],
+  resultMap: Map<string, FileResult>,
   colored: boolean,
 ): string[] {
+  return paths.length > SQAA_COLLAPSE_CLEAN_THRESHOLD
+    ? renderCollapsedChangeSetLines(classifyChangeSetPaths(paths, resultMap), resultMap, colored)
+    : paths.flatMap((path) => renderFileEntryLines(path, resultMap.get(path), colored));
+}
+
+/** Each project under its own header, so the clean-file collapse threshold applies per project. */
+function renderProjectSectionLines(
+  projects: SqaaDisplayProject[],
+  resultMap: Map<string, FileResult>,
+  colored: boolean,
+): string[] {
+  return projects.flatMap(({ projectKey, paths }, index) => {
+    const issueCount = paths.reduce((sum, path) => {
+      const result = resultMap.get(path);
+      return sum + (result && !('failure' in result) ? result.issues.length : 0);
+    }, 0);
+    return [
+      ...(index > 0 ? [''] : []),
+      formatProjectHeader(projectKey, paths.length, issueCount, colored),
+      ...renderPathsLines(paths, resultMap, colored),
+    ];
+  });
+}
+
+function renderChangeSetReportLines(
+  options: PrintSqaaTextReportOptions,
+  colored: boolean,
+): string[] {
+  const { tally, allPaths, ignored = [], projects = [], repoRootFromCwd } = options;
   const resultMap = buildResultMap(tally.allResults);
-  const collapseClean = allPaths.length > SQAA_COLLAPSE_CLEAN_THRESHOLD;
+  const grouped = projects.length > 1;
+  const bodyLines = grouped
+    ? renderProjectSectionLines(projects, resultMap, colored)
+    : renderPathsLines(allPaths, resultMap, colored);
 
-  const bodyLines = collapseClean
-    ? renderCollapsedChangeSetLines(classifyChangeSetPaths(allPaths, resultMap), resultMap, colored)
-    : allPaths.flatMap((path) => renderFileEntryLines(path, resultMap.get(path), colored));
-
-  const ignoredLines = ignoredPaths.map((path) =>
-    formatSkippedOrIgnoredRow(path, '[IGNORED]', colored),
-  );
-
+  const ignoredLines = renderIgnoredLines(ignored, grouped, {
+    collapseThreshold: SQAA_COLLAPSE_CLEAN_THRESHOLD,
+    formatFileRow: (path, label) => formatSkippedOrIgnoredRow(path, label, colored),
+    colored,
+    repoRootFromCwd,
+  });
   return [...bodyLines, ...ignoredLines];
 }
 
 /** Unified change-set text report (file rows, inline issues, summary footer). */
 export function printSqaaTextReport(options: PrintSqaaTextReportOptions, console: Console): void {
-  const { tally, allPaths, ignoredPaths = [], analysisDepth } = options;
-  const stats = computeRunSummaryStats(tally, allPaths, analysisDepth);
+  const stats = computeRunSummaryStats(options.tally, options.allPaths, options.analysisDepth);
 
-  for (const line of renderChangeSetReportLines(tally, allPaths, ignoredPaths, true)) {
+  for (const line of renderChangeSetReportLines(options, true)) {
     console.text(line);
   }
 

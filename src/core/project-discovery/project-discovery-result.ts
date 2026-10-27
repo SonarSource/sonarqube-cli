@@ -74,6 +74,67 @@ function scopeByAncestry<T extends { projectRoot: string }>(
   });
 }
 
+/** Nearest-wins counterpart to `scopeByAncestry`: the deepest mapping root containing `path`; a tie keeps the first in file order. */
+function selectMappingForPath<T extends { projectRoot: string }>(
+  mappings: T[],
+  path: string,
+): T | undefined {
+  const target = canonicalizePath(path);
+  let selected: T | undefined;
+  for (const mapping of mappings) {
+    if (!isAncestorOrSelf(mapping.projectRoot, target)) continue;
+    // Roots that contain the same path are prefixes of it, so the longer one is the deeper one.
+    if (selected === undefined || mapping.projectRoot.length > selected.projectRoot.length) {
+      selected = mapping;
+    }
+  }
+  return selected;
+}
+
+/** What a run started in `path` covers: the closest mapping containing it, plus every mapping inside it. */
+function focusOnPath<T extends { projectRoot: string }>(mappings: T[], path: string): T[] {
+  const target = canonicalizePath(path);
+  const closest = selectMappingForPath(mappings, target);
+  return mappings.filter(
+    (mapping) => mapping === closest || isAncestorOrSelf(target, mapping.projectRoot),
+  );
+}
+
+/** Paths sharing one mapping, as given by the caller (not canonicalized). */
+export interface MappingGroup<T extends { projectRoot: string }> {
+  mapping: T;
+  paths: string[];
+}
+
+export interface MappingGroups<T extends { projectRoot: string }> {
+  /** In order of the first path that selected each mapping. */
+  groups: MappingGroup<T>[];
+  /** Paths under no mapping's root. */
+  unmapped: string[];
+}
+
+function groupPathsByMapping<T extends { projectRoot: string }>(
+  mappings: T[],
+  paths: string[],
+): MappingGroups<T> {
+  const byMapping = new Map<T, string[]>();
+  const unmapped: string[] = [];
+  for (const path of paths) {
+    const mapping = selectMappingForPath(mappings, path);
+    if (mapping === undefined) {
+      unmapped.push(path);
+      continue;
+    }
+    const grouped = byMapping.get(mapping);
+    if (grouped) grouped.push(path);
+    else byMapping.set(mapping, [path]);
+  }
+  return {
+    groups: [...byMapping].map(([mapping, grouped]) => ({ mapping, paths: grouped })),
+    unmapped,
+  };
+}
+
 /**
  * Internal accumulator `discoverProjectMappings()` builds up source by source — `PartialProjectMapping`
  * exists only to support `discoverProject()`'s single-valued fallback. External callers use the
@@ -81,6 +142,7 @@ function scopeByAncestry<T extends { projectRoot: string }>(
  */
 export class ProjectDiscoveryResult {
   repoRoot?: string;
+  fromSharedConfig = false;
   projects: ProjectMapping[] = [];
 
   scope(path: string): ScopedProjectMapping<ProjectMapping>[] {
@@ -93,9 +155,27 @@ export class DiscoveredProjects {
   constructor(
     public readonly repoRoot: string | undefined,
     public readonly projects: CompleteProjectMapping[],
+    /** Whether the projects came from `.sonar-config.json` rather than a single-project source. */
+    public readonly fromSharedConfig = false,
   ) {}
 
   scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {
     return scopeByAncestry(this.projects, path);
+  }
+
+  /**
+   * The mappings a run started in `path` covers: from inside a project, only the closest one
+   * (unlike `scope()`, which also keeps every outer project); from above projects, all of them.
+   */
+  focusedOn(path: string): DiscoveredProjects {
+    return new DiscoveredProjects(this.repoRoot, focusOnPath(this.projects, path));
+  }
+
+  /**
+   * Each path assigned to the single mapping owning it (nearest root wins, unlike `scope()`, which
+   * keeps every mapping on the same ancestry line), for callers that fan work out per project.
+   */
+  groupByMapping(paths: string[]): MappingGroups<CompleteProjectMapping> {
+    return groupPathsByMapping(this.projects, paths);
   }
 }

@@ -29,8 +29,6 @@ import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import { spawnProcess } from '@/core/process/process.ts';
 
-import { isInsideProjectRoot } from './sqaa-paths.ts';
-
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -44,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project';
+  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project' | 'other-connection';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -55,21 +53,17 @@ export interface ChangeSetResult {
   repoRoot: string;
 }
 
-/** SQAA paths are relative to the project root, so a file outside it cannot be analyzed. */
-export function excludeOutsideProject(
+/** SQAA paths are relative to a project root, so a file no project of the connection owns cannot be analyzed. */
+export function excludeIgnoredFiles(
   changeSet: ChangeSetResult,
-  projectRoot: string,
+  ignored: IgnoredFile[],
 ): ChangeSetResult {
-  const files: string[] = [];
-  const outsideProject: IgnoredFile[] = [];
-  for (const file of changeSet.files) {
-    if (isInsideProjectRoot(file, projectRoot)) {
-      files.push(file);
-    } else {
-      outsideProject.push({ path: file, reason: 'outside-project' });
-    }
-  }
-  return { ...changeSet, files, ignored: [...changeSet.ignored, ...outsideProject] };
+  const excluded = new Set(ignored.map(({ path }) => path));
+  return {
+    ...changeSet,
+    files: changeSet.files.filter((file) => !excluded.has(file)),
+    ignored: [...changeSet.ignored, ...ignored],
+  };
 }
 
 /**
