@@ -19,19 +19,18 @@
  */
 
 import { authLogin } from '@/commands/auth/login.ts';
-import { NoOrganizationMembershipError } from '@/commands/components/organization/select.ts';
 import { AuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 /**
  * Reuses the current login, or signs the user in through the browser. On SonarQube Cloud the
- * login also settles the organization. Resolves to null when the account belongs to none.
+ * login also settles the organization, and fails when the account belongs to none.
  */
 export async function resolveInitAuth(
   ctx: CommandInvocationContext,
   interactive: boolean,
-): Promise<ResolvedAuth | null> {
+): Promise<ResolvedAuth> {
   const current = await ctx.resolveAuth({ silent: true });
   if (current.isErr()) {
     throw current.error;
@@ -47,14 +46,7 @@ export async function resolveInitAuth(
     });
   }
 
-  try {
-    await authLogin({}, ctx);
-  } catch (error) {
-    if (error instanceof NoOrganizationMembershipError) {
-      return null;
-    }
-    throw error;
-  }
+  await authLogin({}, ctx);
   return resolveFreshAuth();
 }
 

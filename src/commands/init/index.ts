@@ -54,8 +54,5 @@ async function run(
   interactive: boolean,
 ): Promise<InitOutcome> {
   const auth = await resolveInitAuth(ctx, interactive);
-  if (auth === null) {
-    return { path: 'stop-no-org' };
-  }
   return detectInitPath(projectRoot, { auth, console: ctx.console, interactive });
 }

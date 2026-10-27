@@ -224,17 +224,17 @@ describe('sonar init', () => {
   );
 
   it(
-    'stops and suggests sonar auth org when the repository belongs to another organization',
+    'fails and suggests sonar auth org when the repository belongs to another organization',
     async () => {
       await signInToCloud((server) => server.withGitRemoteBoundInOtherOrg(GITHUB_REMOTE));
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(`another organization than ${ORG}`);
-      expect(result.stdout).toContain("'sonar auth org'");
-      expect(result.stdout).not.toContain("'sonar init'");
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(`another organization than ${ORG}`);
+      expect(result.stdout + result.stderr).toContain("'sonar auth org'");
+      expect(result.stdout).not.toContain('Selected path');
     },
     TIMEOUT,
   );
@@ -255,17 +255,17 @@ describe('sonar init', () => {
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
         `organization 'their-org', but you are connected to '${ORG}'`,
       );
-      expect(result.stdout).toContain("'sonar auth org their-org'");
+      expect(result.stdout + result.stderr).toContain("'sonar auth org their-org'");
     },
     TIMEOUT,
   );
 
   it(
-    'stops without suggesting sonar integrate when the account belongs to no organization',
+    'fails without suggesting sonar integrate when the account belongs to no organization',
     async () => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
       const server = await newCloudServer().withOrganizations([]).start();
@@ -284,8 +284,8 @@ describe('sonar init', () => {
       const session = harness.runInteractive('init', { browserToken: TOKEN });
       const result = await session.waitFinish();
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('not a member of any SonarQube Cloud organization');
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('not a member of any organization');
       expect(result.stdout).not.toContain("'sonar integrate'");
     },
     TIMEOUT,
