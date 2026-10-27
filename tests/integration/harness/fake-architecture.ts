@@ -79,7 +79,7 @@ export class FakeArchitecture {
   private intendedReads = 0;
   private readonly staleReads = new Map<
     number,
-    { id?: string; intendedArchitectures: unknown[] }
+    { id?: string | null; intendedArchitectures: unknown[] }
   >();
   private staleWriteResponse = false;
 
@@ -243,7 +243,7 @@ export class FakeArchitecture {
     }
   }
 
-  private readIntended(): { id?: string; intendedArchitectures: unknown[] } {
+  private readIntended(): { id?: string | null; intendedArchitectures: unknown[] } {
     this.intendedReads++;
     const stale = this.staleReads.get(this.intendedReads);
     if (stale !== undefined) return stale;
@@ -260,11 +260,11 @@ export class FakeArchitecture {
     return this.exportEnvelope();
   }
 
-  private exportEnvelope(): { id?: string; intendedArchitectures: unknown[] } {
+  private exportEnvelope(): { id?: string | null; intendedArchitectures: unknown[] } {
     const model = this.models[0];
     return model
       ? { id: model.id, intendedArchitectures: this.exportModel(model) }
-      : { intendedArchitectures: [] };
+      : { id: null, intendedArchitectures: [] };
   }
 
   private deleteModel(modelId: string | undefined): Response {
