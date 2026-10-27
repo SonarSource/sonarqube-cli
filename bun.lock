@@ -7,7 +7,7 @@
       "dependencies": {
         "@clack/core": "1.5.1",
         "@sentry/bun": "11.8.0",
-        "@toon-format/toon": "2.3.1",
+        "@toon-format/toon": "4.4.0",
         "commander": "15.0.0",
         "js-yaml": "5.5.0",
         "launchdarkly-node-client-sdk": "3.4.3",
@@ -208,7 +208,7 @@
 
     "@sonar/scan": ["@sonar/scan@5.0.2", "https://repox-internal.sonar.build/artifactory/api/npm/npm/@sonar/scan/-/scan-5.0.2.tgz", { "dependencies": { "adm-zip": "0.6.1", "axios": "1.20.0", "commander": "15.0.0", "hpagent": "1.2.0", "node-forge": "1.4.0", "properties-file": "5.0.7", "proxy-from-env": "2.1.0", "semver": "7.8.5", "slugify": "1.6.9", "tar-stream": "3.2.2" }, "bin": { "sonar-scanner-npm": "bin/sonar-scanner.js" } }, "sha512-tnNUdKY+Zt5iUIS0hcLJ8gCuRXInG1xNT1SiEnwZqRpgJMYOvsQxBoSo6hUVfIrSAcklWvdruGIAf4LzD6dr3Q=="],
 
-    "@toon-format/toon": ["@toon-format/toon@2.3.1", "https://repox-internal.sonar.build/artifactory/api/npm/npm/@toon-format/toon/-/toon-2.3.1.tgz", {}, "sha512-sWqEMeAJGMda9qRrfPKrX3C4c33CO9SJuvJzzrcBEn5sbDB+k6pSLkDsfN0rVnLQwR97MV3sDgVbcxQNsq8xVw=="],
+    "@toon-format/toon": ["@toon-format/toon@4.4.0", "https://repox-internal.sonar.build/artifactory/api/npm/npm/@toon-format/toon/-/toon-4.4.0.tgz", {}, "sha512-A6UcsVoWbNdhdLNhJbe6JpRlocmf/DZGG57fur3bd8oQtsjBaKWo2hHbOU2zTuy+byUmLIOyP1xJeitopCZzpQ=="],
 
     "@types/babel-generator": ["@types/babel-generator@6.25.8", "https://repox-internal.sonar.build/artifactory/api/npm/npm/@types/babel-generator/-/babel-generator-6.25.8.tgz", { "dependencies": { "@types/babel-types": "*" } }, "sha512-f5l89J0UpYhTE6TFCxy3X+8pJVru1eig1fcvF9qHmOk9h1VxZimd+++tu5GShntCOdhE/MoZZ0SlpGTyh4XrKg=="],
 
