@@ -495,16 +495,20 @@ export async function warnDirectiveKeys(
           ? [directive.fromNodeKey]
           : [directive.fromNodeKey, directive.toNodeKey];
       for (const key of new Set(checked)) {
-        if (!keys.has(key)) {
-          const guidance =
-            directive.type === 'MOVE_NODE' && key === directive.toNodeKey
-              ? 'The MOVE_NODE destination must be an existing container, not the moved node’s new key.'
-              : 'Review the key before applying.';
-          warn(
-            `Directive ${directive.type}: node '${key}' was not found in the current ${language} graph. ${guidance}`,
-          );
-        }
+        if (!keys.has(key)) warn(missingDirectiveKeyWarning(directive, key, language));
       }
     }
   });
+}
+
+function missingDirectiveKeyWarning(
+  directive: DirectiveInput,
+  key: string,
+  language: string,
+): string {
+  const guidance =
+    directive.type === 'MOVE_NODE' && key === directive.toNodeKey
+      ? 'The MOVE_NODE destination must be an existing container, not the moved node’s new key.'
+      : 'Review the key before applying.';
+  return `Directive ${directive.type}: node '${key}' was not found in the current ${language} graph. ${guidance}`;
 }
