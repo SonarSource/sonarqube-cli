@@ -24,7 +24,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import type { InitOutcome } from './init-outcome.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
-import { detectInitPath, resolveScanRoot } from './steps/detect.ts';
+import { detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 
 export interface InitOptions {
   path?: string;
@@ -40,7 +40,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
   const interactive = !options.nonInteractive && canPrompt;
 
-  const projectRoot = resolveScanRoot(options.path ?? '.');
+  const projectRoot = resolveProjectRoot(options.path ?? '.');
 
   const outcome = await run(projectRoot, ctx, interactive);
   renderInitOutcome(outcome, ctx.console, {

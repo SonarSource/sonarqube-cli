@@ -34,6 +34,7 @@ import {
   type SharedProjectConfigMapping,
   sharedProjectConfigRepository,
 } from '@/core/project-discovery/shared-project-config.ts';
+import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -47,7 +48,7 @@ export interface DetectDeps {
   interactive: boolean;
 }
 
-export function resolveScanRoot(pathOption: string): string {
+export function resolveProjectRoot(pathOption: string): string {
   const root = resolve(process.cwd(), pathOption);
   let isDirectory = false;
   try {
@@ -63,7 +64,7 @@ export function resolveScanRoot(pathOption: string): string {
   return canonicalizePath(root);
 }
 
-/** Mappings on the scan root's ancestry line, either direction, so a monorepo root counts too. */
+/** Mappings on the project root's ancestry line, either direction; used only to name a bound organization. */
 function mappingsOnPath(
   mappings: SharedProjectConfigMapping[],
   projectRoot: string,
@@ -95,15 +96,21 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
 
   const mappings = await sharedProjectConfigRepository.load(isGit ? gitRoot : projectRoot);
   const onPath = mappingsOnPath(mappings, projectRoot);
-  const linked = onPath.filter((mapping) => authMatchesRecordedConnection(auth, mapping));
+  // A project below the root leaves the rest of it unlinked, so only enclosing mappings count.
+  const linked = mappings.filter(
+    (mapping) =>
+      isAncestorOrSelf(mapping.projectRoot, projectRoot) &&
+      authMatchesRecordedConnection(auth, mapping),
+  );
   if (linked.length > 0) {
     return { path: 'complete', projectRoot, projectKeys: linked.map((p) => p.projectKey) };
   }
 
-  const remote = isGit ? await getGitRemote(gitRoot) : '';
-  if (!remote) {
+  const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
+  if (!rawRemote) {
     return { path: 'unbound-new', projectRoot };
   }
+  const remote = stripGitRemoteUrlUserinfo(rawRemote);
 
   // Only the server binding proves the project exists; a key in local config may name none.
   const binding = await lookupRemoteBinding(auth, remote);

@@ -147,6 +147,68 @@ describe('sonar init', () => {
   );
 
   it(
+    'does not report setup as complete when .sonar-config.json maps only a project below the root',
+    async () => {
+      const serverUrl = await signInToCloud(() => {});
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('backend/.keep', '');
+      writeSonarConfig(serverUrl, 'backend');
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Nothing left to set up');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'continues with a note when the binding lookup cannot tell',
+    async () => {
+      await signInToCloud((server) => server.withProjectBindingsStatus(500));
+      withRemote(GITHUB_REMOTE);
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Could not check whether this repository is already bound');
+      expect(result.stdout).toContain(UNBOUND);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'resolves the repository remote from a subdirectory given with --path',
+    async () => {
+      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      withRemote(GITHUB_REMOTE);
+      harness.cwd.writeFile('packages/app/.keep', '');
+
+      const result = await harness.run('init --path packages/app');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('bound_project');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'finds the bound project for a remote that embeds credentials, without printing them',
+    async () => {
+      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      withRemote('https://user:secret-token@github.com/example/repository.git');
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('bound_project');
+      expect(result.stdout + result.stderr).not.toContain('secret-token');
+    },
+    TIMEOUT,
+  );
+
+  it(
     'does not select link-existing from a project key in local scanner config alone',
     async () => {
       await signInToCloud(() => {});
