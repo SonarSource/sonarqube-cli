@@ -97,28 +97,8 @@ runs:
       env:
         INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
         INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
-      run: |
-        set -euo pipefail
-        run_once() {
-          if [ -n "${INTEGRATION_TEST_PATH}" ]; then
-            bun test --parallel=4 "${INTEGRATION_TEST_PATH}"
-          else
-            bun run test:integration
-          fi
-        }
-        if [ "${INTEGRATION_UNTIL_FAILURE}" = "true" ]; then
-          attempt=0
-          while true; do
-            attempt=$((attempt + 1))
-            if ! run_once; then
-              echo "Integration scope failed on attempt ${attempt} (flake reproduction)."
-              exit 1
-            fi
-            echo "Integration scope passed (attempt ${attempt}); re-running until failure..."
-          done
-        else
-          run_once
-        fi
+        USE_COVERAGE: '0'
+      run: bash .github/scripts/run-integration-scope.sh
 
     - name: Run integration tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
@@ -126,28 +106,8 @@ runs:
       env:
         INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
         INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
-      run: |
-        set -euo pipefail
-        run_once() {
-          if [ -n "${INTEGRATION_TEST_PATH}" ]; then
-            SONARQUBE_CLI_USE_COVERAGE=1 bun test --parallel=4 "${INTEGRATION_TEST_PATH}"
-          else
-            SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
-          fi
-        }
-        if [ "${INTEGRATION_UNTIL_FAILURE}" = "true" ]; then
-          attempt=0
-          while true; do
-            attempt=$((attempt + 1))
-            if ! run_once; then
-              echo "Integration scope failed on attempt ${attempt} (flake reproduction)."
-              exit 1
-            fi
-            echo "Integration scope passed (attempt ${attempt}); re-running until failure..."
-          done
-        else
-          run_once
-        fi
+        USE_COVERAGE: '1'
+      run: bash .github/scripts/run-integration-scope.sh
 
     # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
     # as api.localhost. GitHub-hosted Ubuntu resolves *.localhost per RFC 6761;
