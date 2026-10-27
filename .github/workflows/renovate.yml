@@ -1,0 +1,49 @@
+---
+name: Renovate
+
+on:
+  # Temporary: validates on this pull request that lockfile updates resolve from the production Edge.
+  pull_request:
+    paths:
+      - .github/workflows/renovate.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * 1-5"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  renovate:
+    # bun.lock pins tarballs to the production Edge, which only self-hosted runners reach.
+    runs-on: sonar-xs
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      # Used only by the pull_request test, which runs Renovate with GITHUB_TOKEN.
+      contents: write
+      issues: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Limit the run to this pull request
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "RENOVATE_FORCE={\"baseBranchPatterns\":[\"${HEAD_REF}\"],\"branchPrefix\":\"renovate-edge/\",\"enabledManagers\":[\"bun\"],\"schedule\":[\"at any time\"],\"prCreation\":\"immediate\",\"prConcurrentLimit\":2,\"dependencyDashboard\":false}" >> "$GITHUB_ENV"
+
+      - uses: SonarSource/ci-github-actions/renovate@9ba1a7351eea6c8a02e84bd03192de42646bb1b0 # feat/hnasr/BUILD-13269-renovateAction
+        with:
+          # PRs opened with GITHUB_TOKEN don't trigger CI; the Vault App token does.
+          github-token: ${{ github.event_name == 'pull_request' && github.token || '' }}
+        env:
+          RENOVATE_ALLOWED_COMMANDS: '["^bun install$"]'
+          LOG_LEVEL: debug
