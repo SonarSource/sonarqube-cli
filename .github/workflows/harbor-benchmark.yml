@@ -68,6 +68,7 @@ jobs:
           ls -ld /app /logs /tests /solution
 
       - name: Install sonar and Claude Code
+        shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
           curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
@@ -87,7 +88,6 @@ jobs:
             --jobs-dir harbor-jobs \
             --job-name "${MATRIX_OS}" \
             --n-concurrent 1 \
-            --agent-env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
             --env host_environment:HostEnvironment
 
       - name: Upload Harbor jobs

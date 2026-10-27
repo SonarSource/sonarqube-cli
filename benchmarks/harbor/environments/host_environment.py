@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 import os
 import shutil
+import signal
 from pathlib import Path
 
 from harbor.environments.base import BaseEnvironment, ExecResult
@@ -11,6 +13,7 @@ CI_ENV_VAR = "GITHUB_ACTIONS"
 SCRATCH_ROOTS = ("/app", "/tests", "/solution", "/logs")
 LOG_DIRS = ("/logs/agent", "/logs/verifier", "/logs/artifacts")
 DEFAULT_CWD = "/app"
+RUNNER_ENV_PREFIXES = ("ACTIONS_", "GITHUB_", "RUNNER_")
 
 
 class HostEnvironment(BaseEnvironment):
@@ -46,7 +49,12 @@ class HostEnvironment(BaseEnvironment):
         timeout_sec: int | None = None,
         user: str | int | None = None,
     ) -> ExecResult:
-        merged_env = {**os.environ, **(self._merge_env(env) or {})}
+        agent_visible_env = {
+            name: value
+            for name, value in os.environ.items()
+            if not name.startswith(RUNNER_ENV_PREFIXES)
+        }
+        merged_env = {**agent_visible_env, **(self._merge_env(env) or {})}
         self._resolve_user(user)
         process = await asyncio.create_subprocess_exec(
             "bash",
@@ -56,13 +64,15 @@ class HostEnvironment(BaseEnvironment):
             env=merged_env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(), timeout=timeout_sec
             )
         except asyncio.TimeoutError:
-            process.kill()
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
             await process.wait()
             raise
         return ExecResult(
