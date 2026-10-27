@@ -1,0 +1,80 @@
+---
+name: Renovate
+
+on:
+  # Temporary: validates on this pull request that lockfile updates resolve from the production Edge.
+  pull_request:
+    paths:
+      - .github/workflows/renovate.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * 1-5"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  renovate:
+    # bun.lock pins tarballs to the production Edge, which only self-hosted runners reach.
+    runs-on: sonar-xs
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      # Used only by the pull_request test, which runs Renovate with GITHUB_TOKEN.
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          version: 2026.9.14
+          tool_versions: node 24.11.0
+
+      - id: secrets
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        with:
+          secrets: |
+            ${{ github.event_name != 'pull_request' && 'development/github/token/{REPO_OWNER_NAME_DASH}-renovate token | renovate_token;' || '' }}
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | repox_token;
+            development/artifactory-edge-prod/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | edge_token;
+
+      - name: Install Renovate from the Edge
+        env:
+          EDGE_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).edge_token }}
+          RENOVATE_VERSION: 43.257.5
+        run: |
+          npm config set --location=user registry https://repox-internal.sonar.build/artifactory/api/npm/npm/
+          npm config set --location=user //repox-internal.sonar.build/artifactory/api/npm/npm/:_authToken "$EDGE_TOKEN"
+          npm install --prefix "$RUNNER_TEMP/renovate" --no-audit --no-fund "renovate@${RENOVATE_VERSION}"
+          echo "$RUNNER_TEMP/renovate/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Limit the run to this pull request
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "RENOVATE_FORCE={\"baseBranchPatterns\":[\"${HEAD_REF}\"],\"branchPrefix\":\"renovate-edge/\",\"enabledManagers\":[\"bun\"],\"schedule\":[\"at any time\"],\"prCreation\":\"immediate\",\"prConcurrentLimit\":2,\"dependencyDashboard\":false}" >> "$GITHUB_ENV"
+
+      - name: Renovate
+        env:
+          EDGE_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).edge_token }}
+          REPOX_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).repox_token }}
+          # PRs opened with GITHUB_TOKEN don't trigger CI; the Vault App token does.
+          RENOVATE_TOKEN: ${{ github.event_name == 'pull_request' && github.token || fromJSON(steps.secrets.outputs.vault).renovate_token }}
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_BINARY_SOURCE: global
+          RENOVATE_ALLOWED_COMMANDS: '["^bun install$"]'
+          LOG_LEVEL: debug
+        run: |
+          # Package lookups use the SaaS hostRules of the shared preset; bun install resolves from the Edge like CI.
+          export RENOVATE_SECRETS="{\"REPOX_TOKEN\":\"${REPOX_TOKEN}\"}"
+          export RENOVATE_CUSTOM_ENV_VARIABLES="{\"BUN_CONFIG_REGISTRY\":\"https://repox-internal.sonar.build/artifactory/api/npm/npm/\",\"BUN_CONFIG_TOKEN\":\"${EDGE_TOKEN}\",\"ARTIFACTORY_PRIVATE_READER_PASSWORD\":\"${EDGE_TOKEN}\"}"
+          renovate
