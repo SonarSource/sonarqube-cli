@@ -1320,6 +1320,25 @@ describe('sonar architecture intended set on the public API', () => {
       expect((await readSaved()).models).toEqual(publicModels(NEXT));
     });
   }
+  for (const missingId of ['null', 'omitted'] as const) {
+    it(`verifies a committed PATCH with ${missingId} response id without repeating it`, async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(INTENDED).withMissingPatchResponseId(missingId),
+      );
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(0);
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+      const requests = server.getRecordedRequests();
+      const writeIndex = requests.findIndex(({ method }) => method === 'PATCH');
+      expect(
+        requests
+          .slice(writeIndex + 1)
+          .some(({ method, path }) => method === 'GET' && path === PUBLIC_PATH),
+      ).toBe(true);
+      expect((await readSaved()).models).toEqual(publicModels(NEXT));
+    });
+  }
+
   it('recovers from a transient verification read failure without repeating PATCH', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED).failIntendedRead(3));
     expect((await setFile({ models: NEXT })).exitCode).toBe(0);

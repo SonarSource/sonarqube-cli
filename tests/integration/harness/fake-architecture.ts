@@ -82,6 +82,12 @@ export class FakeArchitecture {
     { id?: string | null; intendedArchitectures: unknown[] }
   >();
   private staleWriteResponse = false;
+  private missingPatchResponseId: 'null' | 'omitted' | undefined;
+
+  withMissingPatchResponseId(value: 'null' | 'omitted'): this {
+    this.missingPatchResponseId = value;
+    return this;
+  }
 
   withStaleWriteResponse(): this {
     this.staleWriteResponse = true;
@@ -306,9 +312,12 @@ export class FakeArchitecture {
         groups: this.saveGroups(groups),
         ...rest,
       }));
+    const response = this.staleWriteResponse ? previous : this.exportEnvelope();
+    if (this.missingPatchResponseId !== undefined)
+      response.id = this.missingPatchResponseId === 'null' ? null : undefined;
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json(this.staleWriteResponse ? previous : this.exportEnvelope());
+      : json(response);
   }
 
   private exportModel({ perspectives }: SavedModel): unknown[] {
