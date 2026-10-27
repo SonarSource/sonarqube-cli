@@ -1,9 +1,6 @@
 name: Harbor Benchmark
 
 on:
-  push:
-    branches:
-      - CLI-1362-harbor-benchmark-ci
   workflow_dispatch:
     inputs:
       model:
@@ -78,7 +75,7 @@ jobs:
 
       - name: Run Harbor
         env:
-          MODEL: ${{ inputs.model || 'anthropic/claude-sonnet-5-5' }}
+          MODEL: ${{ inputs.model }}
           MATRIX_OS: ${{ matrix.os }}
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         run: |
