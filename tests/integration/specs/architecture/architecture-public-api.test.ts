@@ -213,6 +213,20 @@ describe('sonar architecture reads on the public API', () => {
     });
   }
 
+  for (const response of [{ id: null, intendedArchitectures: [] }, { intendedArchitectures: [] }]) {
+    it(`reads an unsaved intended model with an absent or null id: ${JSON.stringify(response)}`, async () => {
+      const server = await cloudServerWith((project) =>
+        project.withArchitecture((architecture) =>
+          architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+        ),
+      );
+      const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).models).toEqual([]);
+      expect(writes(server)).toEqual([]);
+    });
+  }
+
   it('reads the public root id and qualifiers schema with all documented metadata', async () => {
     const response = {
       id: '00000000-0000-4000-8000-000000000001',
@@ -684,6 +698,18 @@ describe('sonar architecture intended set on the public API', () => {
     });
     return path!;
   }
+  it('previews and creates the first model from a nullable empty export', async () => {
+    const server = await startWith(() => {});
+    const empty = await readSaved();
+    expect(empty.models).toEqual([]);
+    const file = { ...empty, models: NEXT };
+    expect((await setFile(file, ' --dry-run')).exitCode).toBe(0);
+    expect(writes(server)).toEqual([]);
+    expect((await setFile(file)).exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
+    expect((await readSaved()).models).toEqual(publicModels(NEXT));
+  });
+
   const TS_MODEL: IntendedArchitecture = { ...NEXT[0], type: 'file', language: 'ts' };
   const JAVA_FILE: IntendedArchitecture = { ...NEXT[0], type: 'file' };
   it('isolates a scoped three-perspective PATCH from another project with its own model', async () => {
@@ -1254,6 +1280,8 @@ describe('sonar architecture intended set on the public API', () => {
   for (const body of [
     JSON.stringify({ intendedArchitectures: INTENDED }),
     JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'bad-id' }] }),
+    JSON.stringify({ id: null, intendedArchitectures: wireModels(INTENDED) }),
+    JSON.stringify({ id: 'bad-id', intendedArchitectures: wireModels(INTENDED) }),
   ]) {
     it(`rejects malformed public model identity before writing: ${body}`, async () => {
       const server = await startWith((fake) =>
@@ -1267,6 +1295,7 @@ describe('sonar architecture intended set on the public API', () => {
     JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
     JSON.stringify({ intendedArchitectures: [] }),
     JSON.stringify({ intendedArchitectures: [{ ...NEXT[0], id: 'invalid-id' }] }),
+    JSON.stringify({ id: null, intendedArchitectures: wireModels(NEXT) }),
   ]) {
     it(`rejects malformed POST response envelope: ${body}`, async () => {
       const server = await startWith((fake) =>
