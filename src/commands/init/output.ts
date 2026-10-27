@@ -49,11 +49,19 @@ function describe(outcome: InitOutcome): string[] {
       return [
         'Your account is not a member of any SonarQube Cloud organization, so onboarding stops here.',
       ];
-    case 'stop-other-org':
+    case 'stop-other-org': {
+      const active = outcome.organization ?? 'the active one';
+      if (outcome.boundOrganization) {
+        return [
+          `This repository is bound to a project in organization '${outcome.boundOrganization}', but you are connected to '${active}'.`,
+          `Run 'sonar auth org ${outcome.boundOrganization}' to switch to it.`,
+        ];
+      }
       return [
-        `This repository belongs to a project in another organization than ${outcome.organization ?? 'the active one'}, so it cannot be bound from here.`,
-        "Switch with 'sonar auth org' and run 'sonar init' again.",
+        `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
+        "Run 'sonar auth org' to switch to the organization that owns it.",
       ];
+    }
   }
 }
 
