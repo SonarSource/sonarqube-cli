@@ -23,7 +23,6 @@ import type { Console } from '@/core/ui/console.ts';
 import type { InitOutcome } from './init-outcome.ts';
 
 const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
-const NO_ORG_SUGGESTION = "Run 'sonar integrate' to set up your coding agents without a project.";
 const PATH_NOT_RUN_NOTE = 'This path is selected but not run yet.';
 
 function describe(outcome: InitOutcome): string[] {
@@ -58,9 +57,15 @@ function describe(outcome: InitOutcome): string[] {
   }
 }
 
-export function renderInitOutcome(outcome: InitOutcome, console: Console): void {
+export function renderInitOutcome(
+  outcome: InitOutcome,
+  console: Console,
+  { suggestIntegrate }: { suggestIntegrate: boolean },
+): void {
   for (const line of describe(outcome)) {
     console.print(line);
   }
-  console.print(outcome.path === 'stop-no-org' ? NO_ORG_SUGGESTION : INTEGRATE_SUGGESTION);
+  if (suggestIntegrate && !outcome.path.startsWith('stop')) {
+    console.print(INTEGRATE_SUGGESTION);
+  }
 }
