@@ -448,8 +448,6 @@ jobs:
           os: linux
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-linux-x86-64
-          integration-test-path: tests/integration/specs/integrate/git.test.ts
-          skip-e2e: 'true'
 
   integration-and-e2e-windows:
     name: Integration and E2E Tests - windows
@@ -477,9 +475,6 @@ jobs:
           os: windows
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-windows-x86-64
-          integration-test-path: tests/integration/specs/integrate/git.test.ts
-          integration-until-failure: 'true'
-          skip-e2e: 'true'
 
   scan:
     name: SonarQube Analysis
