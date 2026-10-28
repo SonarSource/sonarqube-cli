@@ -75,16 +75,9 @@ export class CloudBackend implements ImportBackend {
         slug: repo.slug,
         installationKey: computeInstallationKey(repo, almKey),
       }),
-      importRepo: async (repo) => {
-        const result = await client.provisionProject(resolvedOrgKey, repo.installationKey);
-        if (result.projects.length === 0) {
-          throw new Error(
-            'provision_projects returned no project: the repository may already be bound, or ' +
-              'the installation key was rejected by the server.',
-          );
-        }
-        await client.requestAutoscanEligibility(result.projects[0].projectKey);
-      },
+      importRepo: async (repo) => ({
+        projectKey: await client.importRepository(resolvedOrgKey, repo.installationKey),
+      }),
     };
   }
 }

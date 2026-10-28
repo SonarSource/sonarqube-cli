@@ -24,6 +24,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import type { InitOutcome } from './init-outcome.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
+import { runBoundNew } from './steps/bind.ts';
 import { detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 
 export interface InitOptions {
@@ -53,5 +54,7 @@ async function run(
   interactive: boolean,
 ): Promise<InitOutcome> {
   const auth = await resolveInitAuth(ctx, interactive);
-  return detectInitPath(projectRoot, { auth, console: ctx.console, interactive });
+  const deps = { auth, console: ctx.console, interactive };
+  const outcome = await detectInitPath(projectRoot, deps);
+  return outcome.path === 'bound-new' ? runBoundNew(projectRoot, outcome.remote, deps) : outcome;
 }

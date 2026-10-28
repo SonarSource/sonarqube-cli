@@ -32,7 +32,7 @@ export type InitOutcome =
   /** The server already binds the git remote to a project of the active organization. */
   | { path: 'link-existing'; projectRoot: string; projectKey: string }
   /** No project exists yet and the user agreed to bind the new one to the repository. */
-  | { path: 'bound-new'; projectRoot: string; remote: string }
+  | { path: 'bound-new'; projectRoot: string; remote: string; projectKey?: string }
   /**
    * No project exists yet and it will not be bound to the repository: there is no git remote
    * (`remote` absent), the platform cannot be bound, or the user declined or could not be asked.

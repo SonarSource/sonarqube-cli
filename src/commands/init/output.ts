@@ -42,6 +42,9 @@ function describe(outcome: InitOutcome): string[] {
         PATH_NOT_RUN_NOTE,
       ];
     case 'bound-new':
+      if (outcome.projectKey) {
+        return [`The repository is bound to the new Sonar project '${outcome.projectKey}'.`];
+      }
       return ['Selected path: create a new project bound to the repository.', PATH_NOT_RUN_NOTE];
     case 'unbound-new':
       return ['Selected path: create a new project without repository binding.', PATH_NOT_RUN_NOTE];
