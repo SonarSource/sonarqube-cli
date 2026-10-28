@@ -86,3 +86,8 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar update` detects the Homebrew cask when the canonical executable path contains `/Caskroom/sonarqube-cli/` under any prefix, including through a `bin/sonar` symlink. It exits with code 1 before checking or installing updates, including with `--force`. It recommends `brew upgrade --cask sonarqube-cli`. The remediation hint explains why the CLI does not run Homebrew. Read-only update status, system status recommendations, and post-command update notices also recommend `brew upgrade --cask sonarqube-cli` for this cask. Standalone updates keep their existing behavior.
 
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
+
+
+Project directives support paginated `architecture directives get` and explicit-ID reads.
+
+Architecture command registration lives in `architecture/register.ts`; `command-tree.ts` delegates to it. Keep Architecture-specific options, handlers and help in that module.
