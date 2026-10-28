@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { type CliState, getDefaultState, type InstalledIntegration } from '@/core/state/state.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console, PhaseItem } from '@/core/ui/console.ts';
 
@@ -28,12 +29,14 @@ import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
 import { purgeAuth } from './reset-auth.ts';
 import { removeBinaries } from './reset-binaries.ts';
+import { clearConfig } from './reset-config.ts';
 import { clearFilesystem } from './reset-filesystem.ts';
 import { removeAllIntegrations } from './reset-integrations.ts';
 import { clearStats } from './reset-stats.ts';
 
 export interface SystemResetOptions {
   force?: boolean;
+  all?: boolean;
 }
 
 interface CleanedFields {
@@ -66,7 +69,8 @@ function mergeCleanedFields(fields: CleanedFields[]): CleanedFields {
 
 /**
  * Reset the CLI to factory defaults: remove tokens, binaries, integrations,
- * cached files, and the local stats database. Telemetry settings are preserved.
+ * cached files, and the local stats database. With `all`, `sonar config` configuration
+ * is removed as well.
  */
 export async function systemReset(
   options: SystemResetOptions,
@@ -75,7 +79,7 @@ export async function systemReset(
   const { console } = ctx;
   if (!options.force) {
     printAgentNonInteractiveAlternativeHint(console, 'sonar system reset --force');
-    if (!(await confirmDestructiveAction(console))) {
+    if (!(await confirmDestructiveAction(console, options.all === true))) {
       return;
     }
   }
@@ -84,6 +88,7 @@ export async function systemReset(
 
   const state = loadState();
   const results: StepResult[] = [];
+  let cleanupFailure: { error: unknown } | undefined;
 
   try {
     const authResult = await purgeAuth(state, console);
@@ -111,19 +116,38 @@ export async function systemReset(
 
     const statsResult = clearStats();
     results.push({ item: statsResult.item, cleaned: emptyCleanedFields() });
-  } finally {
-    if (results.length > 0) {
-      console.phase(
-        'Reset',
-        results.map((r) => r.item),
-      );
 
-      applyCleanedState(state, mergeCleanedFields(results.map((r) => r.cleaned)));
-      clearLegacyState(state);
-      // Not tied to any step above — would otherwise survive reset indefinitely.
-      state.knownServerProjectMappings = [];
-      saveState(state);
+    if (options.all) {
+      const configResult = await clearConfig();
+      results.push({ item: configResult.item, cleaned: emptyCleanedFields() });
     }
+  } catch (error) {
+    cleanupFailure = { error };
+  }
+
+  if (results.length > 0) {
+    console.phase(
+      'Reset',
+      results.map((r) => r.item),
+    );
+
+    try {
+      updateState((latest) => {
+        applyCleanedState(latest, mergeCleanedFields(results.map((r) => r.cleaned)));
+        clearLegacyState(latest);
+        // Not tied to any step above — would otherwise survive reset indefinitely.
+        latest.knownServerProjectMappings = [];
+      });
+    } catch (error) {
+      throw new CommandFailedError(
+        `Reset removed files, but state could not be updated: ${String(error)}`,
+        { remediationHint: 'Run sonar system reset --force again to finish cleanup.' },
+      );
+    }
+  }
+
+  if (cleanupFailure) {
+    throw cleanupFailure.error;
   }
 
   const hasWarnings = results.some((r) => r.item.status === 'warn');
@@ -139,13 +163,15 @@ export async function systemReset(
   console.success('CLI has been successfully reset to factory settings.');
 }
 
-async function confirmDestructiveAction(console: Console): Promise<boolean> {
+async function confirmDestructiveAction(console: Console, all: boolean): Promise<boolean> {
   if (!process.stdin.isTTY) {
     console.print('Reset cancelled. Use --force to skip the prompt in non-interactive mode.');
     return false;
   }
   console.warn(
-    'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
+    all
+      ? 'This will remove all local credentials, `sonar config` settings, uninstall Sonar binaries, and break active tool integrations.'
+      : 'This will remove all local credentials, uninstall Sonar binaries, and break active tool integrations.',
   );
   const answer = await console.textPrompt('Please type RESET to continue');
   if (answer?.trim() !== 'RESET') {

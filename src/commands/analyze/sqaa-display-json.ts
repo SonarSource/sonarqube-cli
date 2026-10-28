@@ -28,6 +28,7 @@ import {
 import type { FileFailure, FileSuccess, RunTally } from './sqaa-analysis.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';
 import { type GlobalSqaaErrorKind, globalSqaaErrorKind } from './sqaa-errors.ts';
+import type { SqaaDisplayProject } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export interface SqaaJsonReport {
@@ -35,9 +36,11 @@ export interface SqaaJsonReport {
     path: string;
     issues: SqaaIssue[];
     errors?: Array<{ code: string; message: string }> | null;
+    /** Key of the project the file was analyzed against. */
+    project?: string;
   }>;
   ignored: Array<{ path: string; reason: IgnoredFile['reason'] }>;
-  failures: Array<{ path: string; message: string }>;
+  failures: Array<{ path: string; message: string; project?: string }>;
   /** Files in the change set that were never sent to the API (fail-fast skipped them). */
   skipped: string[];
   summary: { totalIssues: number; totalFailures: number; totalSkipped: number };
@@ -70,16 +73,23 @@ export function singleFileSuccessReport(
   issues: SqaaIssue[],
   errors?: Array<{ code: string; message: string }> | null,
   analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+  project?: string,
 ): SqaaJsonReport {
-  return makeReport([{ path: filePath, issues, errors }], [], [], analysisDepth);
+  return makeReport([{ path: filePath, issues, errors, project }], [], [], analysisDepth);
 }
 
 export function singleFileFailureReport(
   filePath: string,
   message: string,
   analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+  project?: string,
 ): SqaaJsonReport {
-  return makeReport([], [{ path: filePath, message }], [], analysisDepth);
+  return makeReport([], [{ path: filePath, message, project }], [], analysisDepth);
+}
+
+/** Relative to `base` (the repository root); a file outside it (`outside-repository`) keeps its absolute path. */
+export function ignoredReportPath(path: string, base?: string): string {
+  return toRelativePosixPathOrNull(path, base) ?? normalizePath(path);
 }
 
 export function buildJsonReport(
@@ -88,14 +98,29 @@ export function buildJsonReport(
   allPaths: string[],
   pathBase?: string,
   analysisDepth: SqaaAnalysisDepth = 'STANDARD',
+  projects: SqaaDisplayProject[] = [],
 ): SqaaJsonReport {
+  const projectByPath = new Map(
+    projects.flatMap(({ projectKey, paths }) => paths.map((p) => [p, projectKey] as const)),
+  );
+  // Spread only when known, so reports built without projects keep their exact previous shape.
+  const projectOf = (path: string) => {
+    const project = projectByPath.get(path);
+    return project === undefined ? {} : { project };
+  };
+
   const files = tally.allResults
     .filter((r): r is FileSuccess => !('failure' in r))
-    .map((r) => ({ path: r.filePath, issues: r.issues, errors: r.errors }));
+    .map((r) => ({
+      path: r.filePath,
+      issues: r.issues,
+      errors: r.errors,
+      ...projectOf(r.filePath),
+    }));
 
   const failures = tally.allResults
     .filter((r): r is FileFailure => 'failure' in r)
-    .map((r) => ({ path: r.filePath, message: r.failure.message }));
+    .map((r) => ({ path: r.filePath, message: r.failure.message, ...projectOf(r.filePath) }));
 
   const processedPaths = new Set<string>(tally.allResults.map((r) => r.filePath));
   const skipped = allPaths.filter((p) => !processedPaths.has(p));
@@ -103,7 +128,7 @@ export function buildJsonReport(
   const report: SqaaJsonReport = {
     files,
     ignored: ignored.map((f) => ({
-      path: toRelativePosixPathOrNull(f.path, pathBase) ?? normalizePath(f.path),
+      path: ignoredReportPath(f.path, pathBase),
       reason: f.reason,
     })),
     failures,

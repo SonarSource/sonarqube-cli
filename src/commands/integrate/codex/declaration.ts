@@ -26,19 +26,10 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import {
-  askUser,
-  install,
-  isFeatureInstalledGloballyForProject,
-  jsonPatch,
-  textSnippet,
-  wholeFile,
-} from '@/core/framework/features';
+import { jsonPatch, textSnippet, wholeFile } from '@/core/framework/features';
 
 import {
-  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import {
@@ -61,10 +52,13 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
-import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
+import {
+  SECRETS_ON_READ_BODY,
+  sonarBeginMarker,
+  sonarEndMarker,
+} from '../_common/instructions-templates.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
-import { SECRETS_ON_READ_BODY } from './instructions-templates.ts';
 
 const CODEX_CONFIG_DIR = '.codex';
 const HOOKS_FILE = 'hooks.json';
@@ -78,9 +72,7 @@ export const CODEX_INTEGRATION_ID = 'codex';
 export const CODEX_HOOKS_CONFIG_RESOURCE_ID = 'codex-hooks-config';
 const CODEX_DISPLAY_NAME = 'Codex';
 
-export interface CodexIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type CodexIntegrationOptions = IntegrateAgentOptions;
 
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
   id: CODEX_INTEGRATION_ID,
@@ -88,11 +80,9 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: CODEX_DISPLAY_NAME,
-      integrationId: CODEX_INTEGRATION_ID,
       configDir: CODEX_CONFIG_DIR,
       hooksConfigFileName: HOOKS_FILE,
       hooksPatchId: 'codex-hooks-secrets-hook',
-      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
       scripts: [
         {
@@ -130,19 +120,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
     {
       id: 'secrets-instructions',
       displayName: 'secrets-on-read instructions',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      shouldInstall: ({ scope, state }) =>
-        isFeatureInstalledGloballyForProject(
-          state,
-          scope,
-          CODEX_INTEGRATION_ID,
-          'secrets-instructions',
-        )
-          ? askUser(
-              'Global Codex instructions already exist. Do you also want to create a project-local copy for this repo?',
-            )
-          : askUser(),
       resources: [
         textSnippet({
           id: 'codex-secrets-instructions',
@@ -196,7 +174,7 @@ function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptio
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',
-    shouldInstall: () => install(),
+    required: true,
     resources: [
       wholeFile({
         id: 'posttool-sqaa-script',

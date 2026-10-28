@@ -30,15 +30,21 @@ import {
 import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
+import { isStandaloneInstallerLocation } from '@/core/update/installation-location.ts';
 
 import logger from '../observability/logger.ts';
 import type { CliState } from '../state/state.ts';
-import { loadState, saveStateKeepingInstalledDependencies } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import type { AgentIntegrationHandler, PostUpdateDependencies } from './post-update.ts';
 
 /** These read Claude's hooks too, so a global install beside Claude Code makes the two conflict. */
 const CLAUDE_ID = 'claude-code';
 const AGENTS_SUPERSEDED_BY_CLAUDE = new Set(['cursor', 'copilot-cli']);
+function migrationRetryNote(): string {
+  return isStandaloneInstallerLocation()
+    ? "Run 'sonar update' to retry."
+    : 'The migration will retry when this CLI is upgraded to a newer version.';
+}
 
 /**
  * One attempt per process: `sonar update` reruns the migration through its own hook, and the
@@ -83,7 +89,7 @@ export async function migrateAgentIntegrationsToGlobalScope(
   if (!auth) {
     deps.console.warn(
       `Could not migrate your agent integrations to global scope: you are not logged in. ` +
-        `Run 'sonar auth login', then 'sonar update', to retry.`,
+        `Run 'sonar auth login'. ${migrationRetryNote()}`,
     );
     return;
   }
@@ -102,7 +108,7 @@ export async function migrateAgentIntegrationsToGlobalScope(
   }
 
   if (anyFailed) {
-    deps.console.warn(`Some integrations were left at project scope. Run 'sonar update' to retry.`);
+    deps.console.warn(`Some integrations were left at project scope. ${migrationRetryNote()}`);
     return;
   }
   deps.console.info(
@@ -119,7 +125,7 @@ export async function migrateAgentIntegrationsToGlobalScopeSafely(
   } catch (error) {
     deps.console.warn(
       `Could not migrate agent integrations to global scope: ${(error as Error).message}. ` +
-        `Run 'sonar update' to retry.`,
+        migrationRetryNote(),
     );
   }
 }
@@ -256,18 +262,18 @@ function installIntegrationAtGlobalScope(
 
 /** Reloads state: the install saved its own copy, so anything held from before it is stale. */
 function pruneProjectScopedRecordsFromState(integrationId: string): void {
-  const state = loadState();
-  const integration = state.integrations.installed.find(
-    (entry) => entry.integrationId === integrationId,
-  );
-  if (!integration) {
-    return;
-  }
-  integration.features = integration.features.filter((feature) => feature.scope !== 'project');
-  if (integration.features.length === 0) {
-    state.integrations.installed = state.integrations.installed.filter(
-      (entry) => entry !== integration,
+  updateState((state) => {
+    const integration = state.integrations.installed.find(
+      (entry) => entry.integrationId === integrationId,
     );
-  }
-  saveStateKeepingInstalledDependencies(state);
+    if (!integration) {
+      return;
+    }
+    integration.features = integration.features.filter((feature) => feature.scope !== 'project');
+    if (integration.features.length === 0) {
+      state.integrations.installed = state.integrations.installed.filter(
+        (entry) => entry !== integration,
+      );
+    }
+  });
 }

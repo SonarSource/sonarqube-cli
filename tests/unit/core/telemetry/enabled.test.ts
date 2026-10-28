@@ -18,28 +18,35 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
-import { getDefaultState } from '@/core/state/state.ts';
-import {
-  describeTelemetryStatus,
-  isDoNotTrackRequested,
-  isTelemetryEnabled,
-} from '@/core/telemetry/enabled.ts';
+import { setConfigFileValue } from '@/core/config/config-file.ts';
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
+import { isDoNotTrackRequested, isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 
 // Each test runs from an unset baseline; restore the preload's DO_NOT_TRACK afterwards
 // so we don't leak a cleared value that would re-enable telemetry for later tests.
 const PRELOAD_DO_NOT_TRACK = process.env[ENV_DO_NOT_TRACK];
+let savedSonarUserHome: string | undefined;
+let testDir: string;
 
 beforeEach(() => {
   delete process.env[ENV_DO_NOT_TRACK];
+  savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+  testDir = mkdtempSync(join(tmpdir(), 'telemetry-enabled-test-'));
+  process.env[ENV_SONAR_USER_HOME] = testDir;
 });
 
 afterEach(() => {
   restoreEnv(ENV_DO_NOT_TRACK, PRELOAD_DO_NOT_TRACK);
+  restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+  rmSync(testDir, { recursive: true, force: true });
 });
 
 describe('isDoNotTrackRequested', () => {
@@ -64,44 +71,26 @@ describe('isDoNotTrackRequested', () => {
 });
 
 describe('isTelemetryEnabled', () => {
-  it('returns true when enabled in state and DO_NOT_TRACK is unset', () => {
-    const state = getDefaultState('1.0.0');
-    state.telemetry.enabled = true;
-
-    expect(isTelemetryEnabled(state)).toBe(true);
+  it('returns true when unset in config and DO_NOT_TRACK is unset', () => {
+    expect(isTelemetryEnabled()).toBe(true);
   });
 
-  it('returns false when disabled in state', () => {
-    const state = getDefaultState('1.0.0');
-    state.telemetry.enabled = false;
+  it('returns true when enabled in config', () => {
+    setConfigFileValue('telemetry.enabled', 'true');
 
-    expect(isTelemetryEnabled(state)).toBe(false);
+    expect(isTelemetryEnabled()).toBe(true);
   });
 
-  it('returns false when DO_NOT_TRACK is set even if enabled in state', () => {
-    const state = getDefaultState('1.0.0');
-    state.telemetry.enabled = true;
+  it('returns false when disabled in config', () => {
+    setConfigFileValue('telemetry.enabled', 'false');
+
+    expect(isTelemetryEnabled()).toBe(false);
+  });
+
+  it('returns false when DO_NOT_TRACK is set even if enabled in config', () => {
+    setConfigFileValue('telemetry.enabled', 'true');
     process.env[ENV_DO_NOT_TRACK] = '1';
 
-    expect(isTelemetryEnabled(state)).toBe(false);
-  });
-});
-
-describe('describeTelemetryStatus', () => {
-  it('mentions DO_NOT_TRACK when it disables telemetry', () => {
-    const state = getDefaultState('1.0.0');
-    state.telemetry.enabled = true;
-    process.env[ENV_DO_NOT_TRACK] = '1';
-
-    expect(describeTelemetryStatus(state)).toBe(
-      'Telemetry is currently disabled (DO_NOT_TRACK is set).',
-    );
-  });
-
-  it('reports persisted state when DO_NOT_TRACK is unset', () => {
-    const state = getDefaultState('1.0.0');
-    state.telemetry.enabled = false;
-
-    expect(describeTelemetryStatus(state)).toBe('Telemetry is currently disabled.');
+    expect(isTelemetryEnabled()).toBe(false);
   });
 });

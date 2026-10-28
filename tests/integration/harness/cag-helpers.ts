@@ -22,7 +22,7 @@
 // (resources/cag-stub.ts), and the on-disk shape of the session-start hook
 // the Vortex Context subfeature installs.
 
-import { basename, join } from 'node:path';
+import { basename, join, relative } from 'node:path';
 
 import { expect } from 'bun:test';
 
@@ -32,12 +32,13 @@ import {
   VORTEX_HOOK_MARKER,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { HOOKS_DIR } from '@/commands/integrate/_common/hooks.ts';
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 import type { IntegrationScope } from '@/core/state/state.ts';
 
 import type { Dir } from './dir';
 import type { File } from './file';
 import type { TestHarness } from './index';
-import { IS_WINDOWS, SCRIPT_EXT } from './platform';
+import { buildHomeEnv, IS_WINDOWS, SCRIPT_EXT } from './platform';
 
 // ---------------------------------------------------------------------------
 // CAG invocation log
@@ -80,7 +81,15 @@ interface VortexHookInstallShape {
   expectHookEntries: (config: any) => void;
 }
 
-const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallShape> = {
+const REFERENCE_HOME = join('reference', 'home');
+const DEVIN_CONFIG_DIR = relative(
+  REFERENCE_HOME,
+  resolveDevinConfigDir(REFERENCE_HOME, buildHomeEnv(REFERENCE_HOME)),
+);
+
+export type ScriptHookAgent = Exclude<SessionStartAgent, 'pi'>;
+
+const VORTEX_HOOK_INSTALL_SHAPES: Record<ScriptHookAgent, VortexHookInstallShape> = {
   claude: {
     configDir: '.claude',
     hookConfigPath: ['.claude', 'settings.json'],
@@ -134,11 +143,33 @@ const VORTEX_HOOK_INSTALL_SHAPES: Record<SessionStartAgent, VortexHookInstallSha
       expect(hooks.subagentStart).toBeUndefined();
     },
   },
+  devin: {
+    configDir: DEVIN_CONFIG_DIR,
+    hookConfigPath: [DEVIN_CONFIG_DIR, 'config.json'],
+    expectHookEntries: ({ hooks }) => {
+      expect(hooks.SessionStart).toHaveLength(1);
+      expect(hooks.SessionStart[0].matcher).toBe('');
+      expect(hooks.SessionStart[0].hooks[0].type).toBe('command');
+      expect(hooks.SessionStart[0].hooks[0].timeout).toBe(60);
+      expect(hooks.SessionStart[0].hooks[0].command).toContain(SESSION_START_SCRIPT_NAME);
+      expect(hooks.SubagentStart).toBeUndefined();
+      const subagentEntries = (
+        hooks.PreToolUse as Array<{
+          matcher: string;
+          hooks: Array<{ command: string; timeout: number }>;
+        }>
+      ).filter((entry) => entry.hooks[0].command.includes(VORTEX_HOOK_MARKER));
+      expect(subagentEntries).toHaveLength(1);
+      expect(subagentEntries[0].matcher).toBe('^run_subagent$');
+      expect(subagentEntries[0].hooks[0].timeout).toBe(60);
+      expect(subagentEntries[0].hooks[0].command).toContain('subagent-start-vortex');
+    },
+  },
 };
 
 export function sessionStartScript(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): File {
   const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
@@ -148,7 +179,7 @@ export function sessionStartScript(
 
 function hookConfigText(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): string {
   const shape = VORTEX_HOOK_INSTALL_SHAPES[agent];
@@ -158,7 +189,7 @@ function hookConfigText(
   return config.exists() ? config.asText() : '';
 }
 
-export function isVortexHookInstalled(root: Dir, agent: SessionStartAgent): boolean {
+export function isVortexHookInstalled(root: Dir, agent: ScriptHookAgent): boolean {
   return (
     sessionStartScript(root, agent).exists() &&
     hookConfigText(root, agent).includes(VORTEX_HOOK_MARKER)
@@ -167,7 +198,7 @@ export function isVortexHookInstalled(root: Dir, agent: SessionStartAgent): bool
 
 export function expectVortexHookInstalled(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): void {
   const script = sessionStartScript(root, agent, scope);
@@ -182,7 +213,7 @@ export function expectVortexHookInstalled(
 
 export function expectVortexHookAbsent(
   root: Dir,
-  agent: SessionStartAgent,
+  agent: ScriptHookAgent,
   scope: IntegrationScope = 'project',
 ): void {
   expect(sessionStartScript(root, agent, scope).exists()).toBe(false);

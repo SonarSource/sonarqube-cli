@@ -30,6 +30,7 @@ import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
   HTTP_STATUS_INTERNAL_SERVER_ERROR,
+  HTTP_STATUS_NO_CONTENT,
   HTTP_STATUS_NOT_FOUND,
   HTTP_STATUS_PAYLOAD_TOO_LARGE,
   HTTP_STATUS_SERVICE_UNAVAILABLE,
@@ -123,13 +124,14 @@ export class SonarHttpClient {
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       return new ServiceUnavailableError();
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_BAD_REQUEST) {
-      return await parseBadRequestError(response);
+    const sendsJson = method === 'POST' || method === 'PATCH' || method === 'PUT';
+    if (sendsJson && response.status === HTTP_STATUS_BAD_REQUEST) {
+      return await parseBadRequestError(response, this.isCloud);
     }
     if (method === 'POST' && response.status === HTTP_STATUS_PAYLOAD_TOO_LARGE) {
       return await parseRequestPayloadTooLargeError(response);
     }
-    if (method === 'POST' && response.status === HTTP_STATUS_FORBIDDEN) {
+    if ((sendsJson || method === 'DELETE') && response.status === HTTP_STATUS_FORBIDDEN) {
       return new ForbiddenApiError(await response.text());
     }
 
@@ -143,6 +145,9 @@ export class SonarHttpClient {
     if (method === 'GET') {
       if (response.status === HTTP_STATUS_FORBIDDEN || response.status === HTTP_STATUS_NOT_FOUND) {
         return new AccessDeniedError(response.status);
+      }
+      if (response.status === HTTP_STATUS_BAD_REQUEST) {
+        return await parseBadRequestError(response, this.isCloud);
       }
       const errorText = await response.text();
       logger.debug(`SonarQube GET ${response.url} failed: ${response.status} ${errorText}`);
@@ -207,12 +212,20 @@ export class SonarHttpClient {
         console.print(`response status: ${response.status}`, 'stderr');
         console.print(`response headers: ${JSON.stringify(response.headers)}`, 'stderr');
       }
-      return this.toStatusCheckedResult(response, method, () => response.text());
+      return ResultAsync.fromPromise(response.text(), (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return response.ok
+          ? new UnexpectedApiError(response.status, message)
+          : genericStatusError(response, message);
+      }).andThen((body) =>
+        response.ok ? okAsync(body) : errAsync(genericStatusError(response, body)),
+      );
     });
   }
 
   /**
-   * Make GET request to SonarQube API
+   * Make GET request to SonarQube API. A 204 or empty body resolves to `Ok(undefined)`; use
+   * `get<void>` when the endpoint carries no JSON payload.
    */
   get<T>(endpoint: string, params?: QueryParams): ResultAsync<T, HttpClientError> {
     return this.getSafe<T>(endpoint, params).andThen((result) => this.toGetResult(result));
@@ -243,15 +256,7 @@ export class SonarHttpClient {
         if (error) {
           return errAsync(error);
         }
-        if (result.value === undefined) {
-          return errAsync(
-            new UnexpectedApiError(
-              result.response.status,
-              'SonarQube API error: empty response body',
-            ),
-          );
-        }
-        return okAsync(result.value);
+        return okAsync(result.value as T);
       },
     );
   }
@@ -264,7 +269,7 @@ export class SonarHttpClient {
    * A transport failure (DNS/TLS, connection refused,
    * timeout) becomes `TransportError`; a body-parse failure on an otherwise-2xx response becomes
    * `UnexpectedApiError` instead, since the server did answer. Same split as
-   * `toStatusCheckedResult` below, so a malformed body classifies the same way regardless
+   * `genericRequest` and `toStatusCheckedResult`, so a malformed body classifies the same way regardless
    * of which method reads it.
    */
   getSafe<TValue>(
@@ -288,8 +293,7 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       ResultAsync.fromPromise(
-        (async (): Promise<TValue | undefined> =>
-          response.ok ? ((await response.json()) as TValue) : undefined)(),
+        response.ok ? readOkGetJsonBody<TValue>(response) : Promise.resolve(undefined),
         (err) =>
           new UnexpectedApiError(response.status, err instanceof Error ? err.message : String(err)),
       ).map((value) => ({ response, value })),
@@ -315,6 +319,59 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       this.toStatusCheckedResult(response, 'POST', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Replace a JSON resource through the authenticated proxy/TLS-aware transport. */
+  patch<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+    const headers = {
+      ...this.commonHeaders('json'),
+      'Content-Type': 'application/merge-patch+json',
+    };
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('PATCH', headers, POST_REQUEST_TIMEOUT_MS, JSON.stringify(body)),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'PATCH', () => response.json() as Promise<T>),
+    );
+  }
+
+  /** Make DELETE request to SonarQube API; the response body is discarded. */
+  delete(endpoint: string): ResultAsync<void, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest('DELETE', this.commonHeaders(), POST_REQUEST_TIMEOUT_MS, undefined),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'DELETE', () => Promise.resolve(undefined)),
+    );
+  }
+
+  /** Make PUT request to SonarQube API using Bearer token, sending and parsing JSON. */
+  put<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest(
+          'PUT',
+          this.commonHeaders('json'),
+          POST_REQUEST_TIMEOUT_MS,
+          JSON.stringify(body),
+        ),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'PUT', () => response.json() as Promise<T>),
     );
   }
 
@@ -404,12 +461,24 @@ export class SonarHttpClient {
   }
 }
 
+async function readOkGetJsonBody<T>(response: Response): Promise<T | undefined> {
+  if (response.status === HTTP_STATUS_NO_CONTENT) {
+    return undefined;
+  }
+  const text = await response.text();
+  if (text.trim().length === 0) {
+    return undefined;
+  }
+  return JSON.parse(text) as T;
+}
+
 /**
  * Wraps whatever escaped the request itself as a `TransportError`: a throw from
  * `fetchAuthenticated` (DNS/TLS/proxy failure, connection refused, timeout, abort), before
  * any response was received. A body-parse failure on a response that did arrive is a
- * separate case, classified as `UnexpectedApiError` instead; see `getSafe` and
- * `toStatusCheckedResult`, the only two places that read a body.
+ * separate case: `genericRequest` preserves non-2xx status classes, while successful
+ * responses with unreadable bodies become `UnexpectedApiError`; see also `getSafe`
+ * and `toStatusCheckedResult`.
  *
  * `NetworkConfigError` is passed through unwrapped: it already describes the failure
  * precisely and is matched by name elsewhere (e.g. `remediationHintFor`), so re-wrapping
@@ -434,6 +503,7 @@ function redactSensitiveHeaders(headers: Record<string, string>): Record<string,
 
 interface StructuredErrorBody {
   message?: string;
+  errors?: unknown;
   code?: string;
   meta?: RequestPayloadTooLargeMeta | Record<string, unknown>;
 }
@@ -450,19 +520,42 @@ async function readStructuredErrorBody(response: Response): Promise<{
   }
 }
 
-function badRequestFallbackMessage(response: Response, text: string): string {
-  const detail = text ? ' - ' + text : '';
-  return `SonarQube API error: ${response.status} ${response.statusText}${detail}`;
+function genericStatusError(response: Response, body: string): HttpClientError {
+  const message = apiErrorFallbackMessage(response, body);
+  if (response.status === HTTP_STATUS_TOO_MANY_REQUESTS) {
+    return new RateLimitError(message);
+  }
+  if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
+    return new ServiceUnavailableError(message);
+  }
+  return response.status >= HTTP_STATUS_INTERNAL_SERVER_ERROR
+    ? new ServerError(response.status, message)
+    : new UnexpectedApiError(response.status, message);
 }
 
-async function parseBadRequestError(response: Response): Promise<BadRequestError> {
+function apiErrorFallbackMessage(response: Response, text: string, emptyBodyHint?: string): string {
+  const detail = text || emptyBodyHint;
+  const suffix = detail ? ` - ${detail}` : '';
+  return `SonarQube API error: ${response.status} ${response.statusText}${suffix}`;
+}
+
+async function parseBadRequestError(
+  response: Response,
+  isCloud: boolean,
+): Promise<BadRequestError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const emptyBodyHint = isCloud
+    ? 'Check the request parameters and organization.'
+    : 'Check the request parameters.';
+  const fallback = apiErrorFallbackMessage(response, text, emptyBodyHint);
   if (!body) {
     return new BadRequestError(fallback);
   }
+  const message = typeof body.message === 'string' && body.message ? body.message : undefined;
+  const errors = Array.isArray(body.errors) ? (body.errors as Array<{ msg?: unknown } | null>) : [];
+  const detail = errors.find((error) => typeof error?.msg === 'string' && error.msg)?.msg;
   return new BadRequestError(
-    body.message ?? fallback,
+    message ?? (typeof detail === 'string' ? detail : fallback),
     body.code,
     body.meta as Record<string, unknown> | undefined,
   );
@@ -472,7 +565,7 @@ async function parseRequestPayloadTooLargeError(
   response: Response,
 ): Promise<RequestPayloadTooLargeError> {
   const { body, text } = await readStructuredErrorBody(response);
-  const fallback = badRequestFallbackMessage(response, text);
+  const fallback = apiErrorFallbackMessage(response, text);
   if (!body) {
     return new RequestPayloadTooLargeError(fallback);
   }

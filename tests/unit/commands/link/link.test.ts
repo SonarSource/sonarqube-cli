@@ -33,7 +33,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { sharedProjectConfigRepository } from '@/core/shared-project-config.ts';
+import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 
 import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -67,7 +67,7 @@ describe('link', () => {
     // process.cwd() always exists, so it doubles as a real target directory
     // without needing to create one on disk for these tests.
     gitRootSpy = spyOn(gitWorktree, 'resolveGitRepoRoot').mockResolvedValue(process.cwd());
-    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(undefined);
+    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -94,20 +94,6 @@ describe('link', () => {
       region: 'eu',
       organization: 'my-org',
     });
-  });
-
-  it('fails without writing when the Cloud connection has no resolvable region', async () => {
-    const auth = new ResolvedAuth({
-      token: cloudAuth.token,
-      serverUrl: 'https://custom-cloud.example.com',
-      orgKey: cloudAuth.orgKey,
-      connectionType: 'cloud',
-      source: 'state',
-    });
-
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(link('my_project', { path: '.' }, ctxFor(auth))).rejects.toThrow('region');
-    expect(setSpy).not.toHaveBeenCalled();
   });
 
   it('rejects a blank --path without resolving git or writing anything', async () => {
@@ -167,6 +153,34 @@ describe('link', () => {
     } finally {
       rmSync(symlinkDir, { recursive: true, force: true });
       rmSync(realDir, { recursive: true, force: true });
+    }
+  });
+
+  it('warns that the link is ignored when a projects array already exists', async () => {
+    setSpy.mockResolvedValue(true);
+
+    await link('my_project', { path: '.' }, ctxFor(onPremAuth));
+
+    expect(setSpy).toHaveBeenCalled();
+    const warnings = fake.calls.filter((c) => c.method === 'warn');
+    expect(warnings).toHaveLength(1);
+    expect(String(warnings[0].args[0])).toContain("'sonar link --monorepo'");
+    expect(fake.calls.filter((c) => c.method === 'success')).toHaveLength(0);
+  });
+
+  it('link with monorepo writes through addProject and never calls set', async () => {
+    const addSpy = spyOn(sharedProjectConfigRepository, 'addProject').mockResolvedValue(undefined);
+    try {
+      await link('my_project', { path: '.', monorepo: true }, ctxFor(onPremAuth));
+
+      expect(addSpy).toHaveBeenCalledWith(process.cwd(), {
+        projectKey: 'my_project',
+        path: '.',
+        serverUrl: onPremAuth.serverUrl,
+      });
+      expect(setSpy).not.toHaveBeenCalled();
+    } finally {
+      addSpy.mockRestore();
     }
   });
 });

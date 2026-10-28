@@ -29,11 +29,13 @@
 //                           Name kept for backwards compatibility with harness builder
 //                           callers; covers `tool integrate` and the legacy `init`
 //                           subcommand alike.
+//   CAG_STUB_PRINT_SKILL_EXIT — exit code returned for `tool print-skill` (default 0); a non-zero code also writes a line to stderr
+//   CAG_STUB_PRINT_SKILL_EMPTY — when "1", `tool print-skill` exits 0 with empty stdout
 //   CAG_STUB_SESSION_CONTEXT_EXIT — exit code returned for `tool print-session-start-context` (default 0)
 //   CAG_STUB_SESSION_CONTEXT_STDOUT — a line emitted to stdout by `tool print-session-start-context`
 //   CAG_STUB_STOP_ALL_EXIT — exit code returned for `tool stop --all` (default 0)
-//   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on non-`print-session-start-context` calls
-//   CAG_STUB_STDERR_LINE  — a line emitted to stderr on non-`print-session-start-context` calls
+//   CAG_STUB_STDOUT_LINE  — a line emitted to stdout on non-`print-session-start-context` and non-`print-skill` calls
+//   CAG_STUB_STDERR_LINE  — a line emitted to stderr on non-`print-session-start-context` and non-`print-skill` calls
 
 import { appendFileSync } from 'node:fs';
 
@@ -67,6 +69,16 @@ if (args[0] === 'tool' && args[1] === 'print-session-start-context') {
   const contextLine = process.env.CAG_STUB_SESSION_CONTEXT_STDOUT;
   if (contextLine) process.stdout.write(contextLine + '\n');
   process.exit(Number.parseInt(process.env.CAG_STUB_SESSION_CONTEXT_EXIT ?? '0', RADIX));
+}
+
+if (args[0] === 'tool' && args[1] === 'print-skill') {
+  const exitCode = Number.parseInt(process.env.CAG_STUB_PRINT_SKILL_EXIT ?? '0', RADIX);
+  if (exitCode === 0 && process.env.CAG_STUB_PRINT_SKILL_EMPTY !== '1') {
+    const scaEnabledArg = args.find((arg) => arg.startsWith('--sca-enabled='));
+    process.stdout.write(`# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n`);
+  }
+  if (exitCode !== 0) process.stderr.write('stub print-skill failure\n');
+  process.exit(exitCode);
 }
 
 const stdoutLine = process.env.CAG_STUB_STDOUT_LINE;

@@ -18,11 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Records a resolved auth into state.auth.connections like `sonar auth login` does, minus saveToken().
+// Persists keychain-backed login/org switches into state.auth.connections (not env-var auth).
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { getToken } from '@/core/host/keychain.ts';
-import logger from '@/core/observability/logger.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import type { AuthConnection } from '../state/state.ts';
@@ -31,7 +29,7 @@ import {
   authMatchesConnection,
   getActiveConnection,
 } from '../state/state-manager.ts';
-import { loadState, saveState } from '../state/state-repository.ts';
+import { loadState, updateState } from '../state/state-repository.ts';
 import {
   EMPTY_IDENTITY,
   identityFromConnection,
@@ -45,8 +43,6 @@ export interface RecordConnectionOptions {
   tokenName?: string;
   /** Bypasses the no-op check below to always refresh. */
   force?: boolean;
-  /** Marks the connection as having no keychain entry behind it. */
-  envOnly?: boolean;
   /** Ignores identity inherited from the active connection and resolves it for this token. */
   refreshIdentity?: boolean;
 }
@@ -56,6 +52,10 @@ export async function recordConnectionFromAuth(
   auth: ResolvedAuth,
   options: RecordConnectionOptions = {},
 ): Promise<AuthConnection> {
+  if (auth.comesFromEnv()) {
+    throw new Error('recordConnectionFromAuth must not be called for env-var auth');
+  }
+
   const state = loadState();
   const active = getActiveConnection(state);
   const seedConnection =
@@ -63,45 +63,32 @@ export async function recordConnectionFromAuth(
   const seedIdentity = options.refreshIdentity
     ? EMPTY_IDENTITY
     : identityFromConnection(seedConnection);
-  // Logout treats envOnly as already logged out, so never stamp it on a
-  // keychain-backed (login-created) connection — that would leave the stored
-  // token behind, unrevoked. A keychain we cannot read (headless CI, no
-  // libsecret) must not break env-var recording, so it degrades to "unknown".
-  const envOnly = options.envOnly === true && !(await hasStoredToken(auth));
 
   if (
     !options.force &&
     seedConnection &&
     !needsIdentityEnrichment(seedIdentity, auth.connectionType, seedConnection)
   ) {
-    if (envOnly && seedConnection.envOnly !== true) {
-      seedConnection.envOnly = true;
-      saveState(state);
-    }
     return seedConnection;
   }
 
-  const connection = addOrUpdateConnection(state, auth.serverUrl, auth.connectionType, {
-    orgKey: auth.orgKey,
-    region: cloudRegionFromUrl(auth.serverUrl),
-    tokenName: options.tokenName,
-    envOnly,
-  });
-
   const identity = await resolveTelemetryIdentity(auth, seedIdentity);
-  applyIdentityToConnection(connection, auth, identity);
-
-  saveState(state);
-  return connection;
+  return updateState((latest) => {
+    const connection = addOrUpdateConnection(latest, auth.serverUrl, auth.connectionType, {
+      orgKey: auth.orgKey,
+      region: cloudRegionFromUrl(auth.serverUrl),
+      tokenName: resolveRecordedTokenName(options),
+    });
+    applyIdentityToConnection(connection, auth, identity);
+    return connection;
+  });
 }
 
-async function hasStoredToken(auth: ResolvedAuth): Promise<boolean> {
-  try {
-    return (await getToken(auth.serverUrl, auth.orgKey)) !== null;
-  } catch (err) {
-    logger.debug(`Keychain unavailable while recording connection: ${(err as Error).message}`);
-    return true;
+function resolveRecordedTokenName(options: RecordConnectionOptions): string | undefined {
+  if ('tokenName' in options) {
+    return options.tokenName;
   }
+  return undefined;
 }
 
 /** Applies fetched identity fields to the connection, per connection type. */

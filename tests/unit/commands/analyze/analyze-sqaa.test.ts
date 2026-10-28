@@ -33,7 +33,8 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import { DiscoveredProjects } from '@/core/project-discovery/project-discovery-result.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -60,7 +61,7 @@ let fake: FakeConsole;
 let FAKE_AUTHENTICATED_CONTEXT: CommandAuthenticatedInvocationContext;
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let saveStateSpy: ReturnType<typeof spyOn>;
+let updateStateSpy: ReturnType<typeof spyOn>;
 let existsSpy: ReturnType<typeof spyOn>;
 let statSyncSpy: ReturnType<typeof spyOn>;
 let readFileSpy: ReturnType<typeof spyOn>;
@@ -77,14 +78,26 @@ function makeCloudState() {
   return state;
 }
 
-/** discoverProject result carrying just enough for resolveSqaaProjectKey to resolve `projectKey`. */
-function makeDiscoveredProject(projectKey: string | undefined) {
-  return {
-    repoRoot: process.cwd(),
-    projectRoot: process.cwd(),
-    projectKey,
-    configSources: [],
-  };
+/** discoverProjects result with one project rooted at cwd, or none when `projectKey` is undefined. */
+function makeDiscoveredProject(
+  projectKey: string | undefined,
+  recorded: { serverUrl: string; organization?: string } = {
+    serverUrl: SONARCLOUD_URL,
+    organization: TEST_ORG,
+  },
+) {
+  return new DiscoveredProjects(
+    process.cwd(),
+    projectKey
+      ? [
+          {
+            projectRoot: process.cwd(),
+            projectKey,
+            ...recorded,
+          },
+        ]
+      : [],
+  );
 }
 
 beforeEach(() => {
@@ -92,13 +105,15 @@ beforeEach(() => {
   FAKE_AUTHENTICATED_CONTEXT = new CommandAuthenticatedInvocationContext(FAKE_AUTH, fake);
 
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeCloudState());
-  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+  updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+    update(stateRepository.loadState()),
+  );
 
   existsSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
   statSyncSpy = spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as fs.Stats);
   readFileSpy = spyOn(fs, 'readFileSync').mockReturnValue(FILE_CONTENT);
 
-  discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue(
+  discoverProjectSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
     makeDiscoveredProject(TEST_PROJECT),
   );
 
@@ -125,7 +140,7 @@ beforeEach(() => {
 afterEach(() => {
   process.exitCode = 0;
   loadStateSpy.mockRestore();
-  saveStateSpy.mockRestore();
+  updateStateSpy.mockRestore();
   existsSpy.mockRestore();
   statSyncSpy.mockRestore();
   readFileSpy.mockRestore();
@@ -185,11 +200,32 @@ describe('analyzeSqaa: auth resolution', () => {
       "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
     );
   });
+
+  it('skips the git-remote lookup when --project is explicit, since only the root is needed', async () => {
+    await analyzeSqaa(
+      { file: ['src/index.ts'], project: TEST_PROJECT },
+      FAKE_AUTHENTICATED_CONTEXT,
+    );
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: false }),
+    );
+  });
+
+  it('keeps the git-remote lookup when no project is given', async () => {
+    await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+
+    expect(discoverProjectSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ useGitRemoteBinding: true }),
+    );
+  });
 });
 
 // Worktree-aware project-key resolution (targetRoot vs. repoRoot precedence) now
 // lives entirely inside discoverProject/selectFeatureForLookupPaths, which this
-// suite mocks away via discoverProjectSpy — see tests/unit/core/project-info.test.ts
+// suite mocks away via discoverProjectSpy — see tests/unit/core/project-discovery/project-info.test.ts
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
@@ -347,6 +383,10 @@ describe('buildSqaaJsonReport', () => {
       source: 'state',
     });
 
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, { serverUrl: 'https://mysonar.company.com' }),
+    );
+
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'] },
       new CommandAuthenticatedInvocationContext(onPremiseAuth, fake).connection,
@@ -355,6 +395,20 @@ describe('buildSqaaJsonReport', () => {
     expect(report).not.toBeNull();
     expect(createAnalysisSpy).toHaveBeenCalled();
     expect(createAnalysisSpy.mock.calls[0][0].organizationKey).toBeUndefined();
+  });
+
+  it('refuses explicit files owned by a project linked to another connection', async () => {
+    discoverProjectSpy.mockResolvedValue(
+      makeDiscoveredProject(TEST_PROJECT, { serverUrl: 'https://other.example.com' }),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      buildSqaaJsonReport({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT.connection, {
+        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+      }),
+    ).rejects.toThrow(/another server or organization/);
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
   });
 
   it('returns a failure entry when the API call fails', async () => {

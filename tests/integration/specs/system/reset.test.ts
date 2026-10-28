@@ -326,7 +326,7 @@ describe('system reset --force', () => {
         .state()
         .withRawState(JSON.stringify(raw))
         .withKeychainToken('https://sonar-a.example', 'tok-a')
-        .withKeychainToken('https://sonar-b.example', 'tok-b', 'org-b')
+        .withKeychainToken('https://sonar-b.example', 'tok-b')
         .withKeychainToken('https://sonar-c.example', 'tok-c');
 
       const result = await harness.run('system reset --force');
@@ -403,7 +403,6 @@ describe('system reset --force', () => {
           config: { cliVersion: '0.0.0' },
           dependencies: { installed: [] },
           telemetry: {
-            enabled: true,
             installationId: expectedInstallationId,
             firstUseDate: expectedFirstUseDate,
             events: [],
@@ -419,7 +418,6 @@ describe('system reset --force', () => {
       const after = readState(harness.stateJsonFile.path).telemetry;
       expect(after.installationId).toBe(expectedInstallationId);
       expect(after.firstUseDate).toBe(expectedFirstUseDate);
-      expect(after.enabled).toBe(true);
     },
     { timeout: 15000 },
   );
@@ -488,6 +486,80 @@ describe('system reset --force', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toMatch(/Stats:.*Nothing to clear/);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'keeps CLI configuration without --all',
+    async () => {
+      // Telemetry enabled so the harness leaves cli-config.properties as written here.
+      harness.state().withTelemetryEnabled();
+      harness.cliHome.writeFile('cli-config.properties', 'log.level=DEBUG\n');
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toMatch(/Config:/);
+      expect(harness.cliHome.file('cli-config.properties').asText()).toBe('log.level=DEBUG\n');
+      expect(readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https']).toBe(
+        'http://user:secret@proxy',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes the CLI configuration file with --all',
+    async () => {
+      harness.cliHome.writeFile(
+        'cli-config.properties',
+        'log.level=DEBUG\ntelemetry.enabled=false\nstats.enabled=false\n',
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
+      expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'removes sensitive CLI configuration from the keychain with --all',
+    async () => {
+      // Telemetry enabled so the harness does not create cli-config.properties.
+      harness.state().withTelemetryEnabled();
+      harness.cliHome.writeFile(
+        'keychain.json',
+        JSON.stringify({ tokens: { 'config/network.proxy.https': 'http://user:secret@proxy' } }),
+      );
+
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Removed CLI configuration/);
+      expect(
+        readKeychainTokens(harness.keychainJsonFile)['config/network.proxy.https'],
+      ).toBeUndefined();
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports nothing to clear when no CLI configuration exists with --all',
+    async () => {
+      // Telemetry enabled so the harness does not create cli-config.properties.
+      harness.state().withTelemetryEnabled();
+      const result = await harness.run('system reset --force --all');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/Config:.*Nothing to clear/);
     },
     { timeout: 15000 },
   );

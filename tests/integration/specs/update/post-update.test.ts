@@ -43,6 +43,7 @@ import type {
   InstalledIntegrationFeature,
   IntegrationScope,
 } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
@@ -269,78 +270,6 @@ describe('post-update migration', () => {
 
       expect(result.exitCode).toBe(0);
       expect(harness.stateJsonFile.asText()).toBe('not-valid-json');
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'removes sonar-a3s entries from state.json on CLI upgrade',
-    async () => {
-      const staleState = {
-        version: '1.0',
-        lastUpdated: new Date().toISOString(),
-        auth: { isAuthenticated: false, connections: [] },
-        agents: {
-          'claude-code': {
-            configured: true,
-            configuredByCliVersion: '0.5.0',
-            hooks: {
-              installed: [
-                { name: 'sonar-a3s', type: 'PostToolUse', installedAt: new Date().toISOString() },
-                {
-                  name: 'sonar-secrets',
-                  type: 'PreToolUse',
-                  installedAt: new Date().toISOString(),
-                },
-              ],
-            },
-            skills: { installed: [] },
-          },
-        },
-        config: { cliVersion: '0.5.0' },
-        telemetry: { enabled: false, firstUseDate: new Date().toISOString(), events: [] },
-        agentExtensions: [
-          {
-            id: randomUUID(),
-            agentId: 'claude-code',
-            projectRoot: harness.cwd.path,
-            global: false,
-            kind: 'hook',
-            name: 'sonar-a3s',
-            hookType: 'PostToolUse',
-            updatedByCliVersion: '0.5.0',
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: randomUUID(),
-            agentId: 'claude-code',
-            projectRoot: harness.cwd.path,
-            global: false,
-            kind: 'hook',
-            name: 'sonar-secrets',
-            hookType: 'PreToolUse',
-            updatedByCliVersion: '0.5.0',
-            updatedAt: new Date().toISOString(),
-          },
-        ],
-      };
-
-      harness.state().withRawState(JSON.stringify(staleState));
-
-      await harness.run(POST_UPDATE_TRIGGER_COMMAND);
-
-      const state = harness.stateJsonFile.asJson();
-      const extensions = state.agentExtensions as Array<{ name: string }>;
-      const hooks = (state.agents?.['claude-code']?.hooks?.installed ?? []) as Array<{
-        name: string;
-      }>;
-
-      expect(extensions.some((e) => e.name === 'sonar-a3s')).toBe(false);
-      expect(hooks.some((h) => h.name === 'sonar-a3s')).toBe(false);
-      // sonar-secrets survives
-      expect(extensions.some((e) => e.name === 'sonar-secrets')).toBe(true);
-      // cliVersion bumped
-      expect((state.config as { cliVersion: string }).cliVersion).toBe(CURRENT_VERSION);
     },
     { timeout: 15000 },
   );
@@ -988,6 +917,66 @@ describe('post-update migration', () => {
     { timeout: 15000 },
   );
 
+  describe('legacy telemetry and stats settings', () => {
+    function seedLegacyState(telemetryEnabled: boolean, statsEnabled: boolean): void {
+      const legacyState = getDefaultState('0.5.0');
+      legacyState.telemetry.enabled = telemetryEnabled;
+      legacyState.stats = { enabled: statsEnabled };
+      // Telemetry enabled so the harness leaves telemetry.enabled unset in the config.
+      harness.state().withTelemetryEnabled().withRawState(JSON.stringify(legacyState));
+    }
+
+    it(
+      'carries opt-outs from state into the config store',
+      async () => {
+        seedLegacyState(false, false);
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        const config = harness.cliHome.file('cli-config.properties').asText();
+        expect(config).toContain('telemetry.enabled=false');
+        expect(config).toContain('stats.enabled=false');
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.telemetry.enabled).toBeUndefined();
+        expect(state.stats).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'leaves the config store unset when state has telemetry and stats enabled',
+      async () => {
+        seedLegacyState(true, true);
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cliHome.exists('cli-config.properties')).toBe(false);
+        const state = harness.stateJsonFile.asJson() as CliState;
+        expect(state.telemetry.enabled).toBeUndefined();
+        expect(state.stats).toBeUndefined();
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'keeps a value already in the config store',
+      async () => {
+        seedLegacyState(false, false);
+        harness.cliHome.writeFile('cli-config.properties', 'telemetry.enabled=true\n');
+
+        const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+        expect(result.exitCode).toBe(0);
+        const config = harness.cliHome.file('cli-config.properties').asText();
+        expect(config).toContain('telemetry.enabled=true');
+        expect(config).not.toContain('telemetry.enabled=false');
+      },
+      { timeout: 15000 },
+    );
+  });
+
   describe('trigger', () => {
     const STALE_CLI_VERSION = '0.5.0';
 
@@ -1038,7 +1027,7 @@ describe('post-update migration', () => {
     const migratingInvocations = [
       { label: 'a bare invocation', command: '', exitCode: 0 },
       { label: 'an unknown command', command: 'not-a-real-command', exitCode: 1 },
-      { label: 'a nested subcommand', command: 'config telemetry', exitCode: 0 },
+      { label: 'a nested subcommand', command: 'system status', exitCode: 0 },
     ];
     for (const { label, command, exitCode } of migratingInvocations) {
       it(

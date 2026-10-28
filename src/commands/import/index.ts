@@ -18,27 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { type DopRepository, ImportApiClient, type ProvisionedProject } from './import-api.ts';
+import { CloudBackend } from './cloud-backend.ts';
+import { type DopRepository, ImportApiClient } from './import-api.ts';
+import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import { ImportProgress } from './import-progress.ts';
-import type {
-  OnlyPrivateProjects,
-  RepositoryCollection,
-  SkippedRepo,
-} from './repository-collection';
-import {
-  assertSupportedAlm,
-  computeInstallationKey,
-  type RepoResolution,
-  resolveAlmKey,
-  type ResolvedRepo,
-  resolveOrg,
-  resolveRepos,
-} from './resolve-options';
+import type { RepositoryCollection, SkippedRepo } from './repository-collection';
+import type { ResolvedRepo } from './resolve-options';
+import { ServerImportApiClient } from './server/server-import-api.ts';
+import { ServerBackend } from './server-backend.ts';
 import type { ImportOptions } from './types';
 
 export { type ImportOptions } from './types';
@@ -46,71 +38,16 @@ export { type ImportOptions } from './types';
 /** Max number of `provision_projects` calls run concurrently. */
 const IMPORT_PROVISION_CONCURRENCY_LIMIT = 10;
 
-/** Resolves the org tied to the active connection, then the repos to import into it. */
-async function resolveOrgAndRepos(
-  client: ImportApiClient,
-  orgKey: string | undefined,
-  options: ImportOptions,
-  console: Console,
-): Promise<{ orgKey: string; almKey: string | undefined } & RepoResolution> {
-  const {
-    key: resolvedOrgKey,
-    almKey: resolvedAlmKey,
-    onlyPrivateProjectsEnabled,
-  } = await resolveOrg(client, orgKey);
-
-  console.info(`Organization: ${resolvedOrgKey}`);
-
-  const [almKey, privateProjectsAvailable] = await Promise.all([
-    resolveAlmKey(client, resolvedOrgKey, resolvedAlmKey),
-    client.organizations.hasPrivateProjectsEntitlement(resolvedOrgKey).match(
-      (value) => value,
-      (error) => {
-        throw new CommandFailedError(
-          `Failed to check private-projects entitlement for organization '${resolvedOrgKey}': ${error.message}`,
-          { remediationHint: 'Check your network connection and authentication, then retry.' },
-        );
-      },
-    ),
-  ]);
-
-  // Before any repository is listed, so an unsupported org stops here rather than after a full
-  // paginated fetch.
-  assertSupportedAlm(resolvedOrgKey, almKey);
-
-  const onlyPrivateProjects: OnlyPrivateProjects = {
-    enabled: onlyPrivateProjectsEnabled ?? false,
-    available: privateProjectsAvailable,
-  };
-
-  const outcome = await resolveRepos(client, resolvedOrgKey, almKey, onlyPrivateProjects, {
-    ...options,
-    console,
-  });
-
-  return { orgKey: resolvedOrgKey, almKey, ...outcome };
-}
-
-/** Builds the `runWithConcurrencyLimit` task that provisions one repo and updates `progress`. */
+/** Builds the `runWithConcurrencyLimit` task that imports one repo and updates `progress`. */
 function createProvisionTask(
-  client: ImportApiClient,
-  orgKey: string,
+  plan: ImportPlan,
   progress: ImportProgress,
-): (repo: ResolvedRepo) => Promise<ProvisionedProject> {
+): (repo: ResolvedRepo) => Promise<void> {
   return async (repo) => {
     progress.update(repo.slug, 'running');
     try {
-      const result = await client.provisionProject(orgKey, repo.installationKey);
-      if (result.projects.length === 0) {
-        throw new Error(
-          'provision_projects returned no project — the repository may already be bound, or ' +
-            'the installation key was rejected by the server.',
-        );
-      }
-      const project = result.projects[0];
-      await client.requestAutoscanEligibility(project.projectKey);
-      progress.update(repo.slug, 'done');
-      return project;
+      const outcome = await plan.importRepo(repo);
+      progress.update(repo.slug, 'done', outcome?.detail);
     } catch (err) {
       progress.update(repo.slug, 'failed', err instanceof Error ? err.message : String(err));
       throw err;
@@ -129,10 +66,8 @@ function createProvisionTask(
  * eligibility. A repo is imported only if `regex` is undefined (no filter — `--all`/"Recommended")
  * or matches its name.
  */
-async function runBulkImportJob(
-  client: ImportApiClient,
-  orgKey: string,
-  almKey: string | undefined,
+export async function runBulkImportJob(
+  plan: ImportPlan,
   collection: RepositoryCollection,
   regex: RegExp | undefined,
   console: Console,
@@ -156,15 +91,12 @@ async function runBulkImportJob(
       progress.recordSkipped(eligible.length - toImport.length);
     }
     if (toImport.length === 0) return;
-    const repos: ResolvedRepo[] = toImport.map((repo) => ({
-      slug: repo.slug,
-      installationKey: computeInstallationKey(repo, almKey),
-    }));
+    const repos = toImport.map((repo) => plan.toResolvedRepo(repo));
     progress.addRepos(repos.map((repo) => repo.slug));
     await runWithConcurrencyLimit(
       repos,
       IMPORT_PROVISION_CONCURRENCY_LIMIT,
-      createProvisionTask(client, orgKey, progress),
+      createProvisionTask(plan, progress),
     );
   };
 
@@ -187,6 +119,7 @@ async function runBulkImportJob(
       );
     }
     progress.recordSkipped(page.skipped.length);
+    progress.setTotal(collection.total);
     await importPage(page.eligible);
   }
 
@@ -204,10 +137,6 @@ function reportSkipped(skipped: readonly SkippedRepo[], console: Console): void 
   for (const [reason, count] of countsByReason) {
     console.info(`  - ${reason}: ${count}`);
   }
-}
-
-function buildProjectListUrl(serverUrl: string, orgKey: string): string {
-  return `${serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/projects`;
 }
 
 function reportOutcome(
@@ -238,38 +167,49 @@ function reportOutcome(
   );
 }
 
+function createBackend(
+  options: ImportOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): ImportBackend {
+  const { httpClient } = ctx.connection;
+  if (!httpClient.isCloud) {
+    return new ServerBackend(
+      new ServerImportApiClient(httpClient, ctx.auth.serverUrl),
+      ctx.auth.serverUrl,
+    );
+  }
+  if (options.dopSetting !== undefined) {
+    throw new InvalidOptionError(
+      '--dop-setting is only supported on SonarQube Server.',
+      'Remove --dop-setting, or connect to a SonarQube Server with "sonar auth login".',
+    );
+  }
+  return new CloudBackend(new ImportApiClient(httpClient), ctx.auth.orgKey, ctx.auth.serverUrl);
+}
+
 export async function importHandler(
   options: ImportOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  const { auth, console } = ctx;
-  const client = new ImportApiClient(ctx.connection.httpClient);
-
+  const { console } = ctx;
   console.intro('Import repositories', 'SonarQube');
 
-  const resolution = await resolveOrgAndRepos(client, auth.orgKey, options, console);
+  const plan = await createBackend(options, ctx).plan(options, console);
+  const { selection, projectListUrl } = plan;
 
-  if (resolution.kind === 'streaming') {
+  if (selection.kind === 'streaming') {
     const { succeeded, failed, skipped } = await runBulkImportJob(
-      client,
-      resolution.orgKey,
-      resolution.almKey,
-      resolution.collection,
-      resolution.regex,
+      plan,
+      selection.collection,
+      selection.regex,
       console,
     );
     reportSkipped(skipped, console);
-    reportOutcome(
-      succeeded,
-      failed,
-      skipped.length,
-      buildProjectListUrl(auth.serverUrl, resolution.orgKey),
-      console,
-    );
+    reportOutcome(succeeded, failed, skipped.length, projectListUrl, console);
     return;
   }
 
-  const { repos, skipped } = resolution;
+  const { repos, skipped } = selection;
 
   console.info(`Repositories to import: ${repos.length}`);
   reportSkipped(skipped, console);
@@ -285,15 +225,9 @@ export async function importHandler(
   await runWithConcurrencyLimit(
     repos,
     IMPORT_PROVISION_CONCURRENCY_LIMIT,
-    createProvisionTask(client, resolution.orgKey, progress),
+    createProvisionTask(plan, progress),
   );
 
   const { succeeded, failed } = progress.finish();
-  reportOutcome(
-    succeeded,
-    failed,
-    skipped.length,
-    buildProjectListUrl(auth.serverUrl, resolution.orgKey),
-    console,
-  );
+  reportOutcome(succeeded, failed, skipped.length, projectListUrl, console);
 }

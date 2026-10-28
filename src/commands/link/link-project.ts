@@ -23,18 +23,23 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
+import {
+  SHARED_PROJECT_CONFIG_FILE_NAME,
+  SONARCLOUD_URL,
+  SONARCLOUD_US_URL,
+} from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
   resolveContainedPath,
   type SharedProjectConfigEntry,
   sharedProjectConfigRepository,
-} from '@/core/shared-project-config.ts';
+} from '@/core/project-discovery/shared-project-config.ts';
+import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 export interface LinkOptions {
   path: string;
+  monorepo?: boolean;
 }
 
 function deriveEntry(
@@ -46,21 +51,75 @@ function deriveEntry(
     return { projectKey, path, serverUrl: auth.serverUrl };
   }
 
-  const region = cloudRegionFromUrl(auth.serverUrl);
-  if (!region || !auth.orgKey) {
+  if (!auth.orgKey) {
     throw new CommandFailedError(
-      'Could not determine the SonarQube Cloud region or organization for the active connection.',
+      'Could not determine the SonarQube Cloud organization for the active connection.',
       { remediationHint: "Run 'sonar auth login' to re-authenticate." },
     );
   }
 
+  const region = cloudRegionFromUrl(auth.serverUrl);
+  const origin = region ? new URL(auth.serverUrl).origin : undefined;
+  if (!region || (origin !== SONARCLOUD_URL && origin !== SONARCLOUD_US_URL)) {
+    return { projectKey, path, serverUrl: auth.serverUrl, organization: auth.orgKey };
+  }
   return { projectKey, path, region, organization: auth.orgKey };
 }
 
-export async function linkProject(
+/** Resolves to whether the written link takes effect (a shadowed link does not). */
+type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<boolean>;
+
+export function linkProject(
   projectKey: string,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return options.monorepo
+    ? linkMonorepoProject(projectKey, options, ctx)
+    : linkSingleProject(projectKey, options, ctx);
+}
+
+/** Single-project link: replaces the legacy singular `project` binding. */
+function linkSingleProject(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return writeLink(projectKey, options, ctx, async (dir, entry) => {
+    const shadowed = await sharedProjectConfigRepository.set(dir, entry);
+    if (shadowed) {
+      ctx.console.warn(
+        `${join(dir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
+      );
+    }
+    return !shadowed;
+  });
+}
+
+/** Monorepo link: adds or updates a mapping in the `projects` array. */
+function linkMonorepoProject(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<void> {
+  return writeLink(
+    projectKey,
+    options,
+    ctx,
+    async (dir, entry) => {
+      await sharedProjectConfigRepository.addProject(dir, entry);
+      return true;
+    },
+    true,
+  );
+}
+
+async function writeLink(
+  projectKey: string,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+  write: WriteEntry,
+  monorepo = false,
 ): Promise<void> {
   const { auth, console } = ctx;
   const { path } = options;
@@ -94,11 +153,13 @@ export async function linkProject(
     console.warn('No git repository found. Writing to the current directory instead.');
   }
 
-  await sharedProjectConfigRepository.set(targetDir, entry);
+  if (!(await write(targetDir, entry))) {
+    return;
+  }
 
   const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
   const summaryLines = [
-    `Linked ${projectRoot} to project ${projectKey}`,
+    `Linked ${projectRoot} to project ${projectKey}${monorepo ? ' (monorepo mapping)' : ''}`,
     `Config saved to ${configPath}`,
   ];
   if (gitRoot) {

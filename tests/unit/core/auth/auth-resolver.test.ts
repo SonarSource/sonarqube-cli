@@ -22,7 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import * as authConnectionRecorder from '@/core/auth/auth-connection-recorder.ts';
 import {
   AuthResolver,
   cloudRegionFromUrl,
@@ -35,8 +34,13 @@ import {
   ResolvedAuth,
   resolveFromEndpoint,
 } from '@/core/auth/auth-resolver.ts';
+import {
+  INVALID_SERVER_URL_MESSAGE,
+  invalidCloudServerUrlMessage,
+} from '@/core/server/server-url-validation.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
+import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { createKeychainTestHandle } from '../host/keychain-test-handle.ts';
@@ -54,7 +58,7 @@ beforeEach(() => {
 });
 
 describe('AuthResolver', () => {
-  let recordConnectionSpy: ReturnType<typeof spyOn>;
+  let resolveIdentitySpy: ReturnType<typeof spyOn>;
 
   async function resolveViaInstance(
     options: ResolveAuthOptions = {},
@@ -68,13 +72,9 @@ describe('AuthResolver', () => {
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    // These tests exercise AuthResolver's env-vs-state priority, not the state-sync
-    // side effect (covered by auth-connection-recorder.test.ts) — stub it out so env-auth
-    // tests never touch the real state.json or make a real network call.
-    recordConnectionSpy = spyOn(
-      authConnectionRecorder,
-      'recordConnectionFromAuth',
-    ).mockResolvedValue(undefined as never);
+    resolveIdentitySpy = spyOn(identityFetch, 'resolveTelemetryIdentity').mockResolvedValue(
+      identityFetch.EMPTY_IDENTITY,
+    );
   });
 
   afterEach(() => {
@@ -82,7 +82,7 @@ describe('AuthResolver', () => {
     delete process.env[ENV_TOKEN];
     delete process.env[ENV_SERVER];
     delete process.env[ENV_ORG];
-    recordConnectionSpy.mockRestore();
+    resolveIdentitySpy.mockRestore();
   });
 
   // ─── Env var: both set ──────────────────────────────────────────────────
@@ -123,37 +123,46 @@ describe('AuthResolver', () => {
 
       const result = await new AuthResolver().resolveAuth();
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toBe(
-        'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-      );
+      expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
       expect(result._unsafeUnwrapErr()).toMatchObject({
         remediationHint: 'Set SONARQUBE_CLI_SERVER to an HTTP(S) URL with a host.',
       });
     });
 
-    it('records the connection as envOnly', async () => {
+    it('resolves telemetry identity for env-var auth', async () => {
       await new AuthResolver().resolveAuth();
 
-      expect(recordConnectionSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ token: FAKE_TOKEN_ENV }),
-        { envOnly: true },
+      expect(resolveIdentitySpy).toHaveBeenCalledWith(
+        expect.objectContaining({ token: FAKE_TOKEN_ENV, source: 'env' }),
       );
     });
 
-    it('only attempts recordConnectionFromAuth once across repeated calls on the same resolver', async () => {
+    it('only resolves telemetry identity once across repeated calls on the same resolver', async () => {
       const authResolver = new AuthResolver();
       await authResolver.resolveAuth();
       await authResolver.resolveAuth();
       await authResolver.resolveAuth({ silent: true });
 
-      expect(recordConnectionSpy).toHaveBeenCalledTimes(1);
+      expect(resolveIdentitySpy).toHaveBeenCalledTimes(1);
     });
 
-    it('attempts recordConnectionFromAuth again on a fresh AuthResolver', async () => {
+    it('resolves telemetry identity again on a fresh AuthResolver', async () => {
       await new AuthResolver().resolveAuth();
       await new AuthResolver().resolveAuth();
 
-      expect(recordConnectionSpy).toHaveBeenCalledTimes(2);
+      expect(resolveIdentitySpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('still returns env auth when telemetry identity resolution fails', async () => {
+      resolveIdentitySpy.mockRejectedValue(new Error('identity cache unavailable'));
+
+      const result = await resolveViaInstance();
+
+      expect(result).toMatchObject({
+        token: FAKE_TOKEN_ENV,
+        serverUrl: SONARCLOUD_URL,
+        source: 'env' as const,
+      });
     });
   });
 
@@ -176,7 +185,7 @@ describe('AuthResolver', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance({ console: fake });
@@ -208,7 +217,7 @@ describe('AuthResolver', () => {
       state.auth.isAuthenticated = true;
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance({ console: fake });
@@ -244,7 +253,7 @@ describe('AuthResolver', () => {
 
       const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
 
-      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN, 'my-org');
+      await handle.seedToken(SONARCLOUD_URL, FAKE_TOKEN);
 
       try {
         const result = await resolveViaInstance();
@@ -276,9 +285,7 @@ describe('AuthResolver', () => {
       try {
         const result = await new AuthResolver().resolveAuth();
         expect(result.isErr()).toBe(true);
-        expect(result._unsafeUnwrapErr().message).toBe(
-          'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-        );
+        expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
         expect(result._unsafeUnwrapErr()).toMatchObject({
           remediationHint: "Run 'sonar auth logout', then 'sonar auth login'.",
         });
@@ -339,6 +346,95 @@ describe('isValidServerUrl', () => {
       expect(isValidServerUrl(serverUrl)).toBe(true);
     },
   );
+
+  it.each([
+    'https://sonarcloud.io@evil.com/',
+    'https://user:pass@sonarqube.example.com',
+    'https://:password@sonarqube.example.com',
+  ])('rejects URLs with embedded credentials: %s', (serverUrl) => {
+    expect(isValidServerUrl(serverUrl)).toBe(false);
+  });
+});
+
+describe('AuthResolver cloud server URL validation', () => {
+  let resolveIdentitySpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    handle.setup();
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
+    resolveIdentitySpy = spyOn(identityFetch, 'resolveTelemetryIdentity').mockResolvedValue(
+      identityFetch.EMPTY_IDENTITY,
+    );
+  });
+
+  afterEach(() => {
+    handle.teardown();
+    delete process.env[ENV_TOKEN];
+    delete process.env[ENV_SERVER];
+    delete process.env[ENV_ORG];
+    resolveIdentitySpy.mockRestore();
+  });
+
+  it('rejects a deceptive SonarQube Cloud URL in SONARQUBE_CLI_SERVER with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://sonarcloud.io@evil.com/';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toBe(INVALID_SERVER_URL_MESSAGE);
+  });
+
+  it('rejects a non-canonical cloud host with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://not-sonarcloud.example.com';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().message).toBe(invalidCloudServerUrlMessage());
+  });
+
+  it('accepts SonarQube Cloud US with token+org', async () => {
+    process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+    process.env[ENV_ORG] = 'my-org';
+    process.env[ENV_SERVER] = 'https://sonarqube.us';
+
+    const result = await new AuthResolver().resolveAuth();
+    expect(result.isOk()).toBe(true);
+    expect(result._unsafeUnwrap()).toMatchObject({
+      serverUrl: 'https://sonarqube.us',
+      connectionType: 'cloud',
+    });
+  });
+
+  it('rejects a saved cloud connection with a non-canonical host', async () => {
+    const state = getDefaultState('test');
+    state.auth.connections = [
+      {
+        id: 'conn-1',
+        type: 'cloud',
+        serverUrl: 'https://evil.example.com',
+        orgKey: 'my-org',
+        authenticatedAt: new Date().toISOString(),
+      },
+    ];
+    state.auth.activeConnectionId = 'conn-1';
+    state.auth.isAuthenticated = true;
+
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(state);
+    await handle.seedToken('https://evil.example.com', FAKE_TOKEN);
+
+    try {
+      const result = await new AuthResolver().resolveAuth();
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().message).toBe(invalidCloudServerUrlMessage());
+    } finally {
+      loadStateSpy.mockRestore();
+    }
+  });
 });
 
 describe('resolveBaseUrl', () => {

@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
 
 import type { CallerAgent } from './agent-detector.ts';
+import { resolveDevinConfigDir } from './devin-config-dir.ts';
 
 /** Same id set as `CallerAgent` — reused, not redeclared, so adding a new agent can't let the two drift apart. */
 export type DetectedAgentId = CallerAgent;
@@ -40,6 +41,9 @@ const AGENT_LABELS: Record<CallerAgent, string> = {
   codex: 'Codex',
   copilot: 'Copilot',
   antigravity: 'Antigravity',
+  opencode: 'OpenCode',
+  devin: 'Devin',
+  pi: 'Pi',
 };
 
 export const SUPPORTED_AGENT_IDS = Object.keys(AGENT_LABELS) as CallerAgent[];
@@ -48,22 +52,41 @@ export function agentDisplayName(agentId: DetectedAgentId): string {
   return AGENT_LABELS[agentId];
 }
 
+interface MarkerLocation {
+  home: string;
+  env: NodeJS.ProcessEnv;
+  platform: NodeJS.Platform;
+}
+
+type MarkerResolver = (location: MarkerLocation) => string[];
+
+function underHome(...markers: string[]): MarkerResolver {
+  return ({ home }) => markers.map((marker) => join(home, marker));
+}
+
 /**
- * Marker paths under the user home that indicate an agent has run at least
- * once. Deliberately excludes shared cross-tool directories such as
- * `~/.agents`, which several agents write to and so identifies none of them.
+ * Marker paths that indicate an agent has run at least once. Deliberately
+ * excludes shared cross-tool directories such as `~/.agents`, which several
+ * agents write to and so identify none of them.
  */
-const AGENT_HOME_MARKERS: Record<DetectedAgentId, string[]> = {
-  cursor: [CURSOR_CONFIG_DIR],
-  claude: ['.claude', '.claude.json'],
-  codex: ['.codex'],
-  copilot: ['.copilot'],
-  antigravity: [join('.gemini', 'config')],
+const AGENT_MARKERS: Record<DetectedAgentId, MarkerResolver> = {
+  cursor: underHome(CURSOR_CONFIG_DIR),
+  claude: underHome('.claude', '.claude.json'),
+  codex: underHome('.codex'),
+  copilot: underHome('.copilot'),
+  antigravity: underHome(join('.gemini', 'config')),
+  opencode: underHome(join('.config', 'opencode')),
+  devin: ({ home, env, platform }) => [resolveDevinConfigDir(home, env, platform)],
+  pi: underHome(join('.pi', 'agent')),
 };
 
-export function detectInstalledAgents(home: string = homedir()): DetectedAgentId[] {
+export function detectInstalledAgents(
+  home: string = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): DetectedAgentId[] {
   return SUPPORTED_AGENT_IDS.filter((agentId) =>
-    AGENT_HOME_MARKERS[agentId].some((marker) => existsSync(join(home, marker))),
+    AGENT_MARKERS[agentId]({ home, env, platform }).some((marker) => existsSync(marker)),
   );
 }
 

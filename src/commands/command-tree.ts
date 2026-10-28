@@ -18,13 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { type Command, Help, InvalidArgumentError } from 'commander';
+import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
+import { ECOSYSTEMS } from '@/commands/architecture/_common/architecture-api.ts';
+import { DEFAULT_MAX_NODES } from '@/commands/architecture/_common/graph.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { parseInteger } from '@/core/commands/parsing.ts';
+import { parseInteger } from '@/core/commands/params.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
 import {
   isAlphaEnabledFromEnv,
@@ -32,12 +34,12 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import { CONFIG_KEY_NAMES, type ConfigKey } from '@/core/config/config-schema.ts';
 import { resolveGitlabToken } from '@/core/gitlab/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
-import { tryLoadState } from '@/core/state/state-repository.ts';
 import { commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
@@ -57,6 +59,13 @@ import {
   type OnboardCiGitlabOptions,
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
+import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
+import {
+  allowlistSecretsClear,
+  type AllowlistSecretsClearOptions,
+} from './allowlist/secrets/clear.ts';
+import { allowlistSecretsRemove } from './allowlist/secrets/remove.ts';
+import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
@@ -79,15 +88,38 @@ import {
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
+import { type ArchitectureReadOptions, TEXT_FORMATS } from './architecture/_common/read-options.ts';
+import { getCurrent as getCurrentArchitecture } from './architecture/current/get/index.ts';
+import {
+  installSkill as installArchitectureSkill,
+  type InstallSkillOptions,
+} from './architecture/install-skill.ts';
+import { getIntended as getIntendedArchitecture } from './architecture/intended/get/index.ts';
+import {
+  type SetFileOptions,
+  setIntended as setIntendedArchitecture,
+} from './architecture/intended/set/index.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
+import { authOrg } from './auth/org.ts';
 import {
   authStatus,
   type AuthStatusOptions,
   VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
 } from './auth/status.ts';
-import { configureStats, type ConfigureStatsOptions } from './config/stats.ts';
-import { configureTelemetry, type ConfigureTelemetryOptions } from './config/telemetry.ts';
+import {
+  type ConfigGetOptions,
+  getConfig,
+  VALID_FORMATS as CONFIG_GET_VALID_FORMATS,
+} from './config/get.ts';
+import {
+  configListExtraHelpText,
+  type ConfigListOptions,
+  listConfig,
+  VALID_FORMATS as CONFIG_LIST_VALID_FORMATS,
+} from './config/list.ts';
+import { setConfig } from './config/set.ts';
+import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
@@ -101,24 +133,43 @@ import { copilotPreToolUse } from './hook/copilot-pre-tool-use.ts';
 import { cursorPreFileRead } from './hook/cursor-pre-file-read.ts';
 import { cursorPreToolUse } from './hook/cursor-pre-tool-use.ts';
 import { cursorPromptSubmit } from './hook/cursor-prompt-submit.ts';
+import { devinPostToolUse } from './hook/devin-post-tool-use.ts';
+import { devinPreToolUse } from './hook/devin-pre-tool-use.ts';
+import { devinPromptSubmit } from './hook/devin-prompt-submit.ts';
+import { devinSubagentStart } from './hook/devin-subagent-start.ts';
 import { gitPreCommit, type GitPreCommitOptions } from './hook/git-pre-commit.ts';
 import type { GitPrePushOptions } from './hook/git-pre-push.ts';
 import { gitPrePush } from './hook/git-pre-push.ts';
 import type { HookCommandResult } from './hook/hook-command-result.ts';
+import { opencodeChatMessage } from './hook/opencode-chat-message.ts';
+import { opencodePostToolUse } from './hook/opencode-post-tool-use.ts';
+import { opencodePreToolUse } from './hook/opencode-pre-tool-use.ts';
+import { piChatMessage } from './hook/pi-chat-message.ts';
+import { piPostToolUse } from './hook/pi-post-tool-use.ts';
+import { piPreToolUse } from './hook/pi-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
 import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
 import { integrateClaude } from './integrate/claude';
-import { installHooks } from './integrate/claude/hooks.ts';
 import { integrateCodex } from './integrate/codex';
 import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
+import { integrateDevin } from './integrate/devin';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
 import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
-import { link, type LinkOptions } from './link';
+import { integrateOpenCode } from './integrate/opencode';
+import { integratePi } from './integrate/pi';
+import {
+  DEFAULT_LINK_LIST_PAGE_SIZE,
+  link,
+  type LinkListOptions,
+  type LinkOptions,
+  listLinks,
+  MAX_LINK_LIST_PAGE_SIZE,
+} from './link';
 import {
   DEFAULT_STATUSES,
   listIssues,
@@ -128,6 +179,11 @@ import {
   VALID_STANDARD_SEVERITIES,
   VALID_STATUSES,
 } from './list/issues.ts';
+import {
+  listOrganizations,
+  type ListOrgOptions,
+  VALID_FORMATS as ORG_VALID_FORMATS,
+} from './list/org.ts';
 import {
   listProjects,
   type ListProjectsOptions,
@@ -184,7 +240,16 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
-Supports one project per repository; monorepo support is coming soon.
+Supports one project per repository. Linking again replaces the existing link.
+'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
+
+For a monorepo, use --monorepo to link several directories:
+  sonar link --monorepo api_project --path services/api
+  sonar link --monorepo web_project --path services/web
+
+Paths are relative to the repository root (the current directory outside Git).
+Mappings are saved in the projects array in .sonar-config.json.
+Linking the same directory again updates its mapping and preserves other mappings.
 `;
 
 export interface CreateCommandTreeOptions {
@@ -204,7 +269,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   const postUpdateDeps: PostUpdateDependencies = {
     supportedIntegrations,
-    installHooks,
     console,
     runtime,
     agentIntegrationHandlers: AGENT_INTEGRATION_HANDLERS,
@@ -272,6 +336,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
 
   auth
+    .command('org')
+    .description('Switch the active SonarQube Cloud organization without logging in again')
+    .argument('[org]', 'SonarQube Cloud organization key')
+    .authenticatedAction((ctx, org: string | undefined) => authOrg(org, ctx));
+
+  auth
     .command('logout')
     .description('Remove active connection token from keychain')
     .anonymousAction((ctx) => authLogout(ctx));
@@ -284,7 +354,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
-    .description('List issues and projects from SonarQube Cloud or Server')
+    .description('List issues, projects and organizations from SonarQube Cloud or Server')
     .rootHelp({
       category: 'data',
     });
@@ -332,6 +402,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .addOption(pageSizeOption)
     .authenticatedAction((ctx, options: ListProjectsOptions) => listProjects(options, ctx));
 
+  const listOrgFormatOption = formatOption(ORG_VALID_FORMATS, 'table');
+  list
+    .command('orgs')
+    .alias('org')
+    .description('List organizations you have access to (SonarQube Cloud only)')
+    .showUpdateNotification(isTableFormatOption)
+    .addOption(listOrgFormatOption)
+    .addOption(pageOption)
+    .addOption(pageSizeOption)
+    .authenticatedAction((ctx, options: ListOrgOptions) => listOrganizations(options, ctx));
+
   const qualityGate = COMMAND_TREE.command('quality-gate')
     .alias('qg')
     .description('Fetch quality gate status from SonarQube Cloud or Server')
@@ -368,9 +449,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
 
   COMMAND_TREE.command('import')
-    .description(
-      'Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only)',
-    )
+    .description('Import repositories from a connected DevOps platform into SonarQube')
     .rootHelp({
       category: 'integrate',
     })
@@ -393,6 +472,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         '                   Examples:\n' +
         '                       --regex "^test-"\n' +
         '                       --regex "/^archived-/i"\n',
+    )
+    .option(
+      '--dop-setting <key>',
+      'SonarQube Server only: key of the DevOps platform setting to import from. Required when several are configured and prompts are off.',
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
@@ -519,7 +602,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('codex')
     .description(
-      'Setup SonarQube integration for Codex. This will install a UserPromptSubmit hook that scans prompts for secrets before they are sent.',
+      'Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
@@ -561,6 +644,48 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate cursor' })),
     )
     .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateCursor(options, ctx));
+
+  integrateCommand
+    .command('opencode')
+    .description(
+      'Setup SonarQube integration for OpenCode. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
+    )
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Backwards compatibility; integrations are installed globally by default',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate opencode' })),
+    )
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateOpenCode(options, ctx));
+
+  integrateCommand
+    .command('devin')
+    .description(
+      'Setup SonarQube integration for Devin. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
+    )
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Backwards compatibility; integrations are installed globally by default',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate devin' })),
+    )
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integrateDevin(options, ctx));
+
+  integrateCommand
+    .command('pi')
+    .description(
+      'Setup SonarQube integration for Pi. This will install secrets scanning hooks, configure Vortex analysis and the SonarQube MCP Server.',
+    )
+    .option('--non-interactive', 'Non-interactive mode (no prompts)')
+    .addOption(
+      new SonarOption(
+        '-g, --global',
+        'Backwards compatibility; integrations are installed globally by default',
+      ).stage(Stage.Deprecated({ sinceVersion: '1.9.0', replacement: 'sonar integrate pi' })),
+    )
+    .authenticatedAction((ctx, options: IntegrateAgentOptions) => integratePi(options, ctx));
 
   // Analyze code for quality and security issues
   const analyze = COMMAND_TREE.command('analyze')
@@ -695,18 +820,37 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
 
-  // Overwrites the single .sonar-config.json project binding (barebones; UX will change)
-  COMMAND_TREE.command('link')
+  // Overwrites the single .sonar-config.json project binding, or with --monorepo
+  // appends to (or updates) the `projects` array (barebones; UX will change)
+  const linkCommand = COMMAND_TREE.command('link')
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'core',
+      label: 'link',
     })
     .argument('<projectKey>', 'SonarQube project key')
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .option(
+      '--monorepo',
+      'Add or update this directory in the projects array instead of replacing the single link',
+    )
     .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
       link(projectKey, options, ctx),
     );
+
+  linkCommand
+    .command('list')
+    .description('List linked projects at, under or enclosing a path as JSON, nearest first')
+    .option('--path <path>', 'File or directory to list projects for (default: current directory)')
+    .option('--pattern <regex>', 'Only list projects whose key or directory matches this regex')
+    .addOption(pageOption)
+    .addOption(
+      new SonarOption('--page-size <page-size>', `Page size (1-${MAX_LINK_LIST_PAGE_SIZE})`)
+        .default(DEFAULT_LINK_LIST_PAGE_SIZE)
+        .argParser(parseInteger),
+    )
+    .authenticatedAction((ctx, options: LinkListOptions) => listLinks(options, ctx));
 
   // Configure things related to the CLI
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
@@ -715,18 +859,36 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   });
 
   configure
-    .command('telemetry')
-    .description('Configure telemetry settings')
-    .option('--enabled', 'Enable collection of anonymous usage statistics')
-    .option('--disabled', 'Disable collection of anonymous usage statistics')
-    .anonymousAction((ctx, options: ConfigureTelemetryOptions) => configureTelemetry(options, ctx));
+    .command('get')
+    .description('Print a stored sonar config value')
+    .addArgument(new Argument('<key>', 'Config key to read').choices(CONFIG_KEY_NAMES))
+    .addOption(formatOption(CONFIG_GET_VALID_FORMATS, 'text'))
+    .anonymousAction((ctx, key: ConfigKey, options: ConfigGetOptions) =>
+      getConfig(key, options, ctx),
+    );
 
   configure
-    .command('stats')
-    .description('Configure local stats collection settings')
-    .option('--enabled', 'Enable local stats collection')
-    .option('--disabled', 'Disable local stats collection')
-    .anonymousAction((ctx, options: ConfigureStatsOptions) => configureStats(options, ctx));
+    .command('list')
+    .description('Print every sonar config key with its current value')
+    .addOption(formatOption(CONFIG_LIST_VALID_FORMATS, 'text'))
+    .option('--only-set', 'Only show keys that currently have a value')
+    .addHelpText('after', configListExtraHelpText())
+    .anonymousAction((ctx, options: ConfigListOptions) => listConfig(options, ctx));
+
+  configure
+    .command('set')
+    .description('Store a sonar config value')
+    .addArgument(new Argument('<key>', 'Config key to set').choices(CONFIG_KEY_NAMES))
+    .argument('[value]', 'Value to store; omit to enter it interactively without echoing')
+    .anonymousAction((ctx, key: ConfigKey, value: string | undefined) =>
+      setConfig(key, value, ctx),
+    );
+
+  configure
+    .command('unset')
+    .description('Remove a stored sonar config value')
+    .addArgument(new Argument('<key>', 'Config key to unset').choices(CONFIG_KEY_NAMES))
+    .anonymousAction((ctx, key: ConfigKey) => unsetConfig(key, ctx));
 
   // CLI-848/CLI-1113: local usage/value ledger. Alpha — not in public docs (see admin above).
   COMMAND_TREE.command('stats')
@@ -739,6 +901,74 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
+
+  // Agent-facing architecture commands.
+  const architecture = COMMAND_TREE.command('architecture')
+    .alias('arch')
+    .description('Read and set the architecture of a project')
+    .rootHelp({ category: 'data' });
+
+  const currentArchitecture = architecture
+    .command('current')
+    .description('Read the current architecture');
+  const intendedArchitecture = architecture
+    .command('intended')
+    .description('Read and set the intended architecture');
+  const languageOption = (): SonarOption =>
+    new SonarOption('--language <language>', 'Only this language (default: all)').choices(
+      ECOSYSTEMS,
+    );
+  const textFormatOption = (): SonarOption =>
+    new SonarOption(
+      '--format <format>',
+      'Output format (default: text on a terminal, toon otherwise)',
+    ).choices(TEXT_FORMATS);
+  currentArchitecture
+    .command('get')
+    .description(
+      `Current architecture, at most ${DEFAULT_MAX_NODES} nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth`,
+    )
+    .option('-p, --project <project>', 'Project key')
+    .option('--component <key>', 'Node key to start below, from a previous current get')
+    .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
+    .addOption(languageOption())
+    .addOption(textFormatOption())
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
+      getCurrentArchitecture(options, ctx),
+    );
+  intendedArchitecture
+    .command('get')
+    .description(
+      'Intended architecture; full JSON can be saved with intended set, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set',
+    )
+    .option('-p, --project <project>', 'Project key')
+    .option('--component <key>', 'Group key to start below, e.g. Domain/Billing')
+    .option('--depth <n>', 'Levels of groups below the start group (default: all)', parseInteger)
+    .addOption(languageOption())
+    .addOption(textFormatOption())
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
+      getIntendedArchitecture(options, ctx),
+    );
+
+  intendedArchitecture
+    .command('set')
+    .description(
+      'Replace the intended architecture with a file shaped like the output of intended get --format json',
+    )
+    .requiredOption('--file <file>', 'Intended architecture JSON file')
+    .option('--dry-run', 'Validate and show the changes, removals first, without writing')
+    .option('-p, --project <project>', 'Project key')
+    .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
+
+  architecture
+    .command('install-skill')
+    .stage(Stage.Beta())
+    .description('Install the architecture skill for Claude Code and Cursor in this repository')
+    .option('--global', 'Install in the home directory instead of the repository')
+    .option('--force', 'Replace a SKILL.md that was not written by this command')
+    .authenticatedAction((ctx, options: InstallSkillOptions) =>
+      installArchitectureSkill(options, ctx),
+    );
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')
@@ -768,13 +998,59 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .command('reset')
     .description(
       'Reset the CLI to factory defaults: remove tokens, binaries, integrations, cached files, ' +
-        'and local stats data. Telemetry settings are preserved.',
+        'and local stats data. Pass --all to also remove CLI configuration (sonar config).',
     )
     .option(
       '--force',
       'Skip the interactive confirmation prompt (required for non-interactive use)',
     )
+    .option(
+      '--all',
+      'Also remove CLI configuration (sonar config), including network and telemetry configuration',
+    )
     .anonymousAction((ctx, options: SystemResetOptions) => systemReset(options, ctx));
+
+  // Local allowlists for SonarQube analyzers
+  const allowlist = COMMAND_TREE.command('allowlist')
+    .description('Manage local allowlists for SonarQube analyzers')
+    .rootHelp({
+      category: 'cli-management',
+    });
+
+  const allowlistSecretsCmd = allowlist
+    .command('secrets')
+    .description(
+      'Manage the local sonar-secrets allowlist for known-safe values (test fixtures, sample tokens)',
+    );
+
+  allowlistSecretsCmd
+    .command('show')
+    .description('List entries in the sonar-secrets allowlist')
+    .anonymousAction((ctx) => allowlistSecretsShow(ctx));
+
+  allowlistSecretsCmd
+    .command('add')
+    .description(
+      'Add a secret value to the sonar-secrets allowlist (interactive; requires a real terminal, not usable by agents or scripts)',
+    )
+    .anonymousAction((ctx) => allowlistSecretsAdd(ctx));
+
+  allowlistSecretsCmd
+    .command('remove')
+    .description('Remove an entry from the sonar-secrets allowlist by key')
+    .argument('<key>', 'Unique key of the allowlist entry to remove')
+    .anonymousAction((ctx, key: string) => allowlistSecretsRemove(key, ctx));
+
+  allowlistSecretsCmd
+    .command('clear')
+    .description('Remove all entries from the sonar-secrets allowlist')
+    .option(
+      '--force',
+      'Skip the interactive confirmation prompt (required for non-interactive use)',
+    )
+    .anonymousAction((ctx, options: AllowlistSecretsClearOptions) =>
+      allowlistSecretsClear(options, ctx),
+    );
 
   // Update the CLI to the latest version
   if (CURRENT_DISTRIBUTION.enableSelfUpdate) {
@@ -839,8 +1115,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated list of toolsets to enable (e.g. issues,quality-gates,duplications,dependency-risks,coverage,vortex,portfolios)',
     )
     .option('-p, --project <project>', 'Project key (overrides auto-discovery)')
-    .addHelpText(`after`, projectKeyExtraHelp)
-    .authenticatedAction(
+    .addHelpText(
+      `after`,
+      `${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
+    )
+    .anonymousAction(
       (
         ctx,
         options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
@@ -901,6 +1180,38 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .anonymousAction(handleHookInvocation(cursorPreToolUse));
 
   hookCommand
+    .command('opencode-pre-tool-use')
+    .description('OpenCode execute.before handler: scan files for secrets before agent reads them')
+    .anonymousAction(handleHookInvocation(opencodePreToolUse));
+
+  hookCommand
+    .command('opencode-chat-message')
+    .description('OpenCode prompt handler: mask secrets in a message before it is sent')
+    .anonymousAction(handleHookInvocation(opencodeChatMessage));
+
+  hookCommand
+    .command('opencode-post-tool-use')
+    .description(
+      'OpenCode execute.after handler: run Vortex analysis after agent edits or writes a file',
+    )
+    .anonymousAction(handleHookInvocation(opencodePostToolUse));
+
+  hookCommand
+    .command('pi-pre-tool-use')
+    .description('Pi tool_call handler: scan files for secrets before agent reads them')
+    .anonymousAction(handleHookInvocation(piPreToolUse));
+
+  hookCommand
+    .command('pi-chat-message')
+    .description('Pi message_end handler: mask secrets in a user message before it is sent')
+    .anonymousAction(handleHookInvocation(piChatMessage));
+
+  hookCommand
+    .command('pi-post-tool-use')
+    .description('Pi tool_result handler: run Vortex analysis after agent edits or writes a file')
+    .anonymousAction(handleHookInvocation(piPostToolUse));
+
+  hookCommand
     .command('claude-post-tool-use')
     .description('PostToolUse handler: run Vortex analysis after agent edits or writes a file')
     .option('--project <project>', 'Deprecated; the project key is resolved by discovery') // Accepted and ignored
@@ -918,7 +1229,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('SessionStart/SubagentStart handler: inject Vortex context at agent session start')
     .requiredOption(
       '--agent <agent>',
-      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor)',
+      'Agent whose hook output envelope to emit (claude|codex|copilot|cursor|devin|pi)',
     )
     .anonymousAction(
       handleHookInvocation((ctx, options: { agent: string }) =>
@@ -933,6 +1244,30 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--project <project>', 'Deprecated; the project key is resolved by discovery') // Accepted and ignored
     .anonymousAction(handleHookInvocation(codexPostToolUse));
+
+  hookCommand
+    .command('devin-post-tool-use')
+    .description(
+      'PostToolUse handler for Devin: run Vortex analysis after the agent edits or writes a file',
+    )
+    .anonymousAction(handleHookInvocation(devinPostToolUse));
+
+  hookCommand
+    .command('devin-pre-tool-use')
+    .description('PreToolUse handler for Devin: scan files for secrets before agent reads them')
+    .anonymousAction(handleHookInvocation(devinPreToolUse));
+
+  hookCommand
+    .command('devin-prompt-submit')
+    .description('UserPromptSubmit handler for Devin: scan prompts for secrets before sending')
+    .anonymousAction(handleHookInvocation(devinPromptSubmit));
+
+  hookCommand
+    .command('devin-subagent-start')
+    .description(
+      'PreToolUse handler for Devin: announce Vortex context at the start of a subagent task',
+    )
+    .anonymousAction(handleHookInvocation(devinSubagentStart));
 
   hookCommand
     .command('git-pre-commit')
@@ -1016,20 +1351,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
+  COMMAND_TREE.hook('preAction', async () => {
+    // Safely: a throw from a Commander hook would abort the user's command.
+    // Before Sentry init, which reads the telemetry opt-out this migrates.
+    await runPostUpdateActionsSafely(postUpdateDeps);
+  });
+
   // Defer Sentry initialization until a command action is about to run, so that
   // --help and --version don't pay for it (unknown commands do reach the root
-  // action). The guard avoids re-loading state and re-initializing on nested commands.
+  // action). The guard avoids re-initializing on nested commands.
   let sentryInitialized = false;
   COMMAND_TREE.hook('preAction', () => {
     if (sentryInitialized) return;
     sentryInitialized = true;
-    const state = tryLoadState();
-    if (state) initSentry(state);
-  });
-
-  COMMAND_TREE.hook('preAction', async () => {
-    // Safely: a throw from a Commander hook would abort the user's command.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    initSentry();
   });
 
   // Emit handler facts plus CliCommandExecuted in one commit.
@@ -1038,8 +1373,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
     await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
-      agentSessionId: resolveAgentSessionId(capturedAgentSessionId),
+      agentSessionId: resolveAgentSessionId(
+        command.invocationContext?.currentAgentSessionId() ?? capturedAgentSessionId,
+      ),
       auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
+      command: command.commandAndSubcommand().command,
     });
     await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
   });

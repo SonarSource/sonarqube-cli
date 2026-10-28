@@ -66,7 +66,10 @@ export abstract class ScaScannerRunnerBase<T> {
   async run(invocation: ScaScannerInvocation, console: Console): Promise<T> {
     const args = this.buildArgs(invocation);
     logger.debug(`sca-scanner args: ${JSON.stringify(args)}`);
-    const env = { ...buildSubprocessNetworkEnv(), [SONAR_TOKEN_ENV]: invocation.sonarToken };
+    const env = {
+      ...(await buildSubprocessNetworkEnv()),
+      [SONAR_TOKEN_ENV]: invocation.sonarToken,
+    };
     const binaryPath = await this.installer.install();
     try {
       const result = await console.withSpinner(

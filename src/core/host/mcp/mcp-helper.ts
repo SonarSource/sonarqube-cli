@@ -18,12 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { getNetworkConfig } from '@/core/host/connectivity/network-config.ts';
 import type {
   ClientCertConfig,
   ProxyGroup,
@@ -52,11 +60,15 @@ export interface McpContainerCommand {
   command: string;
   args: string[];
   env: Record<string, string>;
+  cachedCaCertPath?: string;
 }
 export interface McpServerOptions {
   debug?: boolean;
   readOnly?: boolean;
   toolsets?: string;
+  containerNetwork?: string;
+  containerAddHost?: string;
+  containerServerUrl?: string;
 }
 
 export type McpServerContext =
@@ -172,6 +184,78 @@ export function clientCertCachePath(clientCert: ClientCertConfig): string {
 const DOCKER_READABLE = 0o644;
 const NON_TRAVERSABLE = 0o700;
 
+export function caCertCachePath(contents: Buffer): string {
+  const certHash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+  return join(CLI_TMP_DIR, `mcp-ca-${certHash}-${process.pid}-${randomUUID()}.crt`);
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+// The container reads the CA copy only while it starts. A copy older than this window is
+// safe to remove even when the PID check is wrong, as when ~/.sonar is shared across
+// sandboxes that each have their own process list.
+const ORPHAN_MIN_AGE_MS = 900_000; // 15 minutes
+
+function isOlderThanOrphanWindow(path: string): boolean {
+  try {
+    return Date.now() - statSync(path).mtimeMs >= ORPHAN_MIN_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+// Best effort: a cleanup failure must never prevent the MCP server from starting.
+function removeOrphanedCaCertCopies(): void {
+  let names: string[];
+  try {
+    names = readdirSync(CLI_TMP_DIR);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    const match = /^mcp-ca-[0-9a-f]{16}-(\d+)-[0-9a-f-]{36}\.crt$/.exec(name);
+    if (!match) {
+      continue;
+    }
+    const pid = Number(match[1]);
+    if (!Number.isSafeInteger(pid) || pid === process.pid || isProcessRunning(pid)) {
+      continue;
+    }
+    const path = join(CLI_TMP_DIR, name);
+    if (!isOlderThanOrphanWindow(path)) {
+      continue;
+    }
+    try {
+      rmSync(path, { force: true });
+    } catch {
+      // A container runtime can still hold this file on Windows; retry on the next run.
+    }
+  }
+}
+
+function resolveCaCertMount(path: string): { hostPath: string; cachedPath?: string } {
+  let contents: Buffer;
+  try {
+    contents = readFileSync(path);
+  } catch {
+    return { hostPath: normalizePath(path) };
+  }
+
+  const cachedPath = caCertCachePath(contents);
+  mkdirSync(dirname(cachedPath), { recursive: true, mode: NON_TRAVERSABLE });
+  removeOrphanedCaCertCopies();
+  writeFileSync(cachedPath, contents, { flag: 'wx' });
+  chmodSync(cachedPath, DOCKER_READABLE);
+  return { hostPath: normalizePath(cachedPath), cachedPath };
+}
+
 function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
   if (clientCert.format === 'pkcs12') {
     return {
@@ -212,10 +296,10 @@ function buildDockerRunArgsAndEnv(
   auth: ResolvedAuth,
   context: McpServerContext,
   mountSource: string | undefined,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
-  certMountSources: { caCert?: string; clientCert?: string } = {},
-): { args: string[]; env: Record<string, string> } {
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
+  certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {},
+): { args: string[]; env: Record<string, string>; cachedCaCertPath?: string } {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -229,7 +313,17 @@ function buildDockerRunArgsAndEnv(
     '-e',
     'SONARQUBE_URL',
   ];
-  const env: Record<string, string> = { SONARQUBE_TOKEN: token, SONARQUBE_URL: serverUrl };
+  const env: Record<string, string> = {
+    SONARQUBE_TOKEN: token,
+    SONARQUBE_URL: options.containerServerUrl ?? serverUrl,
+  };
+
+  if (options.containerNetwork) {
+    args.push('--network', options.containerNetwork);
+  }
+  if (options.containerAddHost) {
+    args.push('--add-host', options.containerAddHost);
+  }
 
   if (auth.connectionType === 'cloud') {
     args.push('-e', 'SONARQUBE_ORG');
@@ -260,14 +354,10 @@ function buildDockerRunArgsAndEnv(
   env.SONARQUBE_TOOLSETS = toolsets;
 
   const javaOpts: string[] = [];
+  let cachedCaCertPath: string | undefined;
 
   if (network.proxy) {
     javaOpts.push(...collectProxyJavaOpts(network.proxy));
-  }
-
-  if (network.caCert) {
-    const hostPath = certMountSources.caCert ?? normalizePath(network.caCert.path);
-    args.push('-v', `${hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
   }
 
   if (network.clientCert) {
@@ -277,6 +367,14 @@ function buildDockerRunArgsAndEnv(
     javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
   }
 
+  if (network.caCert) {
+    const mount = certMountSources.caCert
+      ? { hostPath: certMountSources.caCert, cachedPath: certMountSources.cachedCaCertPath }
+      : resolveCaCertMount(network.caCert.path);
+    args.push('-v', `${mount.hostPath}:${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+    cachedCaCertPath = mount.cachedPath;
+  }
+
   if (javaOpts.length > 0) {
     args.push('-e', 'JAVA_OPTS');
     env.JAVA_OPTS = javaOpts.join(' ');
@@ -284,31 +382,33 @@ function buildDockerRunArgsAndEnv(
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
-  return { args, env };
+  return cachedCaCertPath ? { args, env, cachedCaCertPath } : { args, env };
 }
 
 export function getMcpContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const { args, env } = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
-  return { command: runtime, args, env };
+  const config = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
+  return { command: runtime, ...config };
 }
 
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
 const WSL_CA_PATH_ENV_VAR = 'SONARQUBE_MCP_CA_PATH';
 const WSL_CLIENT_CERT_PATH_ENV_VAR = 'SONARQUBE_MCP_CLIENT_CERT_PATH';
+const WSL_NETWORK_ENV_VAR = 'SONARQUBE_MCP_NETWORK';
+const WSL_ADD_HOST_ENV_VAR = 'SONARQUBE_MCP_ADD_HOST';
 
 function getMcpWslContainerCommand(
   auth: ResolvedAuth,
   runtime: ContainerRuntime,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
 
@@ -316,12 +416,11 @@ function getMcpWslContainerCommand(
   // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
   // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
   // it as "$VAR" (quoted to handle spaces) in the docker run args.
-  const certMountSources: { caCert?: string; clientCert?: string } = {};
+  const certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {};
   const wslPathEnv: Record<string, string> = {};
 
   if (network.caCert) {
     certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
-    wslPathEnv[WSL_CA_PATH_ENV_VAR] = normalizePath(network.caCert.path);
   }
 
   if (network.clientCert) {
@@ -333,20 +432,45 @@ function getMcpWslContainerCommand(
     wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
   }
 
-  const { args, env } = buildDockerRunArgsAndEnv(
+  const wslOptions = { ...options };
+  if (options.containerNetwork) {
+    wslOptions.containerNetwork = `"$${WSL_NETWORK_ENV_VAR}"`;
+  }
+  if (options.containerAddHost) {
+    wslOptions.containerAddHost = `"$${WSL_ADD_HOST_ENV_VAR}"`;
+  }
+
+  const config = buildDockerRunArgsAndEnv(
     auth,
     context,
     mountSource,
-    options,
+    wslOptions,
     network,
     certMountSources,
   );
+  const { args, env } = config;
+  let cachedCaCertPath: string | undefined;
+
+  if (network.caCert) {
+    const mount = resolveCaCertMount(network.caCert.path);
+    wslPathEnv[WSL_CA_PATH_ENV_VAR] = mount.hostPath;
+    cachedCaCertPath = mount.cachedPath;
+  }
 
   const wslenv = Object.keys(env).map((name) => `${name}/u`);
 
   if (context.withFsMount) {
     env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
     wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
+  }
+
+  if (options.containerNetwork) {
+    env[WSL_NETWORK_ENV_VAR] = options.containerNetwork;
+    wslenv.push(`${WSL_NETWORK_ENV_VAR}/u`);
+  }
+  if (options.containerAddHost) {
+    env[WSL_ADD_HOST_ENV_VAR] = options.containerAddHost;
+    wslenv.push(`${WSL_ADD_HOST_ENV_VAR}/u`);
   }
 
   for (const [key, value] of Object.entries(wslPathEnv)) {
@@ -356,15 +480,20 @@ function getMcpWslContainerCommand(
 
   env.WSLENV = wslenv.join(':');
 
-  return { command: 'wsl.exe', args: ['sh', '-c', [runtime, ...args].join(' ')], env };
+  return {
+    command: 'wsl.exe',
+    args: ['sh', '-c', [runtime, ...args].join(' ')],
+    env,
+    ...(cachedCaCertPath ? { cachedCaCertPath } : {}),
+  };
 }
 
 export function resolveMcpContainerCommand(
   auth: ResolvedAuth,
   detection: ContainerRuntimeDetection,
   context: McpServerContext,
-  options: McpServerOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfig(),
+  options: McpServerOptions,
+  network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   if (!detection.runtime) {
     throw new Error('resolveMcpContainerCommand requires a detected container runtime');

@@ -75,7 +75,6 @@ describe('update notification eligibility', () => {
     expect(updateNotifier.isEligible(resolveCommand(['api']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['context']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['hook', 'git-pre-commit']))).toBe(false);
-    expect(updateNotifier.isEligible(resolveCommand(['config', 'telemetry']))).toBe(false);
     expect(updateNotifier.isEligible(resolveCommand(['system', 'reset']))).toBe(false);
   });
 });
@@ -191,8 +190,29 @@ describe('updateNotifier.maybeNotify', () => {
     expect(output).toContain(
       `A new version of SonarQube CLI is available: ${major}.${minor}.${patch} → 99.0.0`,
     );
-    expect(output).toContain('Run `sonar update` to update to v99.0.0');
+    expect(output).toContain(
+      'Update it through your organization, package manager, or the method used to install it.',
+    );
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'recommends Homebrew for a cask installation',
+    async () => {
+      const originalExecPath = process.execPath;
+      process.execPath = '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0/cli.bin';
+      try {
+        await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
+        expect(notificationOutput()).toContain(
+          'Run `brew upgrade --cask sonarqube-cli` to update it.',
+        );
+        expect(notificationOutput()).not.toContain(
+          "`sonar update` doesn't run Homebrew automatically",
+        );
+      } finally {
+        process.execPath = originalExecPath;
+      }
+    },
+  );
 
   it('persists fetch metadata in state', async () => {
     await updateNotifier.maybeNotify(resolveCommand(['auth', 'status']));
@@ -221,7 +241,9 @@ describe('updateNotifier.maybeNotify', () => {
 
     const output = notificationOutput();
     expect(output).toContain('A new version of SonarQube CLI is available');
-    expect(output).toContain('Run `sonar update` to update to v99.0.0');
+    expect(output).toContain(
+      'Update it through your organization, package manager, or the method used to install it.',
+    );
   });
 
   it('does not re-fetch within 24h after a failed check', async () => {

@@ -28,23 +28,33 @@ import type {
   IntegrationScope,
   IntegrationStateAttribute,
 } from '@/core/state/state.ts';
-import { loadState, saveStateKeepingInstalledDependencies } from '@/core/state/state-repository.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { renderCompletionSummary } from './completion-summary.ts';
 import { buildApplications } from './feature-target.ts';
-import { renderInstallPreviewAndConfirm } from './install-preview.ts';
+import {
+  promptInstallConfirmation,
+  promptUseRecommended,
+  renderInstallPreview,
+} from './install-preview.ts';
 import { integrationInstaller } from './installer.ts';
+import { persistIntegrationChanges } from './integration-state-updates.ts';
 import type { IntegrationRegistry } from './registry.ts';
-import { selectFeaturesForInvocation } from './selection.ts';
+import {
+  customizeFeatureSelection,
+  hasCustomizableChoices,
+  reportFeatureAvailability,
+  resolveRecommendedFeatures,
+} from './selection.ts';
 import type {
+  FeatureSelectionResult,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationExecutionMode,
   IntegrationInvocation,
 } from './types.ts';
-import { isFeatureContainer } from './types.ts';
 
 /** Facts from a successful install; commands turn these into telemetry. */
 export interface InstallIntegrationSuccessFacts {
@@ -65,6 +75,7 @@ export interface InstallIntegrationOptions<TOptions> {
   force?: boolean;
   attrs?: Record<string, IntegrationStateAttribute>;
   nonInteractive?: boolean;
+  excludedFeatureIds?: string[];
   /** Called after state is saved; omitted when the save fails. Awaited so emit finishes before the command returns. */
   onSuccess?: (facts: InstallIntegrationSuccessFacts) => void | Promise<void>;
 }
@@ -80,10 +91,12 @@ export async function installIntegration<TOptions>({
   force,
   attrs,
   nonInteractive,
+  excludedFeatureIds,
   onSuccess,
 }: InstallIntegrationOptions<TOptions>): Promise<InstalledIntegrationFeature[]> {
   const integration = getIntegrationDeclaration<TOptions>(registry, integrationId);
   const state = loadState();
+  const stateBeforeInstall = structuredClone(state);
   const invocation: IntegrationInvocation<TOptions> = {
     options,
     targetRoot,
@@ -94,32 +107,32 @@ export async function installIntegration<TOptions>({
     nonInteractive,
     state,
   };
-  const applications = await buildApplications(invocation, integration.features);
-  const { toInstall, toRemove, declined } = await selectFeaturesForInvocation(
-    integration,
-    invocation,
-    applications,
+  const applications = await buildApplications(invocation, integration, excludedFeatureIds);
+  reportFeatureAvailability(applications, console);
+  const recommended = resolveRecommendedFeatures(applications);
+  assertFeaturesSelected(recommended, integration.displayName);
+
+  renderInstallPreview(recommended.toInstall, console);
+  console.text('');
+  const featureSelection = await confirmFeatureSelection(
+    recommended,
+    integration.displayName,
+    nonInteractive,
     console,
   );
-  if (toInstall.length === 0 && toRemove.length === 0) {
-    throw new CommandFailedError(`No feature selected for ${integration.displayName}`);
-  }
-
-  console.text('');
-  await renderInstallPreviewAndConfirm(toInstall, nonInteractive, console);
   console.text('');
 
   try {
     const installedFeatures = await integrationInstaller.applyAndRecordFeatures(
       state,
       integration,
-      toInstall,
+      featureSelection.toInstall,
       {
         callbacks: {
-          onFeatureApplyStart: (feature) => {
-            console.text(`     Installing ${feature.displayName}...`);
-            if (isFeatureContainer(feature)) {
-              for (const subfeature of feature.subfeatures) {
+          onFeatureApplyStart: (application) => {
+            console.text(`     Installing ${application.feature.displayName}...`);
+            for (const { subfeature, active } of application.subfeatureApplications) {
+              if (active) {
                 console.text(`       - ${subfeature.displayName}`);
               }
             }
@@ -139,7 +152,7 @@ export async function installIntegration<TOptions>({
     const removedFeatures = await integrationInstaller.removeAndRecordFeatures(
       state,
       integration,
-      toRemove,
+      featureSelection.toRemove,
       {
         callbacks: {
           onFeatureRemoveStart: (feature) => {
@@ -158,21 +171,54 @@ export async function installIntegration<TOptions>({
       noteProject(auth, projectKeyFromAttrs(attrs));
     }
 
-    const stateSaved = saveInstalledFeatures(state, console);
+    const stateSaved = saveInstalledFeatures(stateBeforeInstall, state, console);
     if (stateSaved) {
       await onSuccess?.({
         installedFeatures,
-        featuresDeclined: declined,
-        featuresUninstalled: toRemove.map((application) => application.feature.id),
+        featuresDeclined: featureSelection.declined,
+        featuresUninstalled: featureSelection.toRemove.map((application) => application.feature.id),
         repoRoot: resolveRepoRootForScope(scope, targetRoot),
       });
     }
 
     return stateSaved ? installedFeatures : [];
   } catch (error) {
-    saveInstalledFeatures(state, console);
+    saveInstalledFeatures(stateBeforeInstall, state, console);
     throw error;
   }
+}
+
+function assertFeaturesSelected<TOptions>(
+  selection: FeatureSelectionResult<TOptions>,
+  displayName: string,
+): void {
+  if (selection.toInstall.length === 0 && selection.toRemove.length === 0) {
+    throw new CommandFailedError(`No feature selected for ${displayName}`);
+  }
+}
+
+async function confirmFeatureSelection<TOptions>(
+  recommended: FeatureSelectionResult<TOptions>,
+  displayName: string,
+  nonInteractive: boolean | undefined,
+  console: Console,
+): Promise<FeatureSelectionResult<TOptions>> {
+  if (nonInteractive === true || recommended.toInstall.length === 0) {
+    return recommended;
+  }
+  if (!hasCustomizableChoices(recommended.toInstall)) {
+    await promptInstallConfirmation(console);
+    return recommended;
+  }
+  if (await promptUseRecommended(console)) {
+    return recommended;
+  }
+  console.text('');
+  const customized = await customizeFeatureSelection(recommended, console);
+  assertFeaturesSelected(customized, displayName);
+  console.text('');
+  await promptInstallConfirmation(console);
+  return customized;
 }
 
 export function makeContext(
@@ -221,9 +267,9 @@ function resolveRepoRootForScope(scope: IntegrationScope, targetRoot: string): s
   return isGit ? gitRoot : null;
 }
 
-function saveInstalledFeatures(state: CliState, console: Console): boolean {
+function saveInstalledFeatures(before: CliState, state: CliState, console: Console): boolean {
   try {
-    saveStateKeepingInstalledDependencies(state);
+    persistIntegrationChanges(before, state);
     return true;
   } catch (err) {
     const msg = (err as Error).message;

@@ -70,12 +70,12 @@ describe('global-integrations migration', () => {
     harness.state().withInstalledIntegrationFeature(integration, featureId, 'project', targetRoot);
   }
 
-  function runAsUpgrade(): Promise<CliResult> {
+  function runAsUpgrade(binaryPath?: string): Promise<CliResult> {
     const builder = harness.state();
     const state = builder.build(join(harness.cliHome.path, 'bin'));
     state.config.cliVersion = STALE_CLI_VERSION;
     builder.withRawState(JSON.stringify(state, null, 2));
-    return harness.run(POST_UPDATE_TRIGGER_COMMAND);
+    return harness.run(POST_UPDATE_TRIGGER_COMMAND, binaryPath ? { binaryPath } : undefined);
   }
 
   function recordedFeatures(integrationId: string): InstalledIntegrationFeature[] {
@@ -243,9 +243,11 @@ describe('global-integrations migration', () => {
       expect(recordedScopes('codex')).not.toContain('project');
       expect(recordedScopes('codex')).toContain('global');
       // The version gate has already been spent, so the user is told how to retry.
+      expect(result.stderr).toContain('Some integrations were left at project scope.');
       expect(result.stderr).toContain(
-        "Some integrations were left at project scope. Run 'sonar update' to retry.",
+        'The migration will retry when this CLI is upgraded to a newer version.',
       );
+      expect(result.stderr).not.toContain("Run 'sonar update'");
     },
     { timeout: TEST_TIMEOUT },
   );
@@ -332,8 +334,27 @@ describe('global-integrations migration', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).not.toContain('Removing your project-level agent integrations');
       expect(result.stderr).toContain('you are not logged in');
-      expect(result.stderr).toContain("Run 'sonar auth login', then 'sonar update'");
+      expect(result.stderr).toContain("Run 'sonar auth login'.");
+      expect(result.stderr).toContain(
+        'The migration will retry when this CLI is upgraded to a newer version.',
+      );
+      expect(result.stderr).not.toContain("Run 'sonar update'");
       expect(recordedScopes('claude-code')).toEqual(['project']);
+    },
+    { timeout: TEST_TIMEOUT },
+  );
+
+  it(
+    'recommends sonar update for a standalone installer when migration needs authentication',
+    async () => {
+      harness.state().clearAuth();
+      seedProjectScopedInstall(claudeIntegration, 'sonar-secrets-hooks', harness.cwd.path);
+
+      const result = await runAsUpgrade(harness.installerManagedBinaryPath());
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("Run 'sonar auth login'. Run 'sonar update' to retry.");
+      expect(result.stderr).not.toContain('The migration will retry when this CLI is upgraded');
     },
     { timeout: TEST_TIMEOUT },
   );
@@ -347,7 +368,9 @@ describe('global-integrations migration', () => {
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(claudeIntegration);
 
-      const result = await harness.run('update');
+      const result = await harness.run('update', {
+        binaryPath: harness.installerManagedBinaryPath(),
+      });
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Already up to date');

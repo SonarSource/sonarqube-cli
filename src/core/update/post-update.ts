@@ -27,23 +27,20 @@ import {
 import type { Console } from '@/core/ui/console.ts';
 
 import { version as CURRENT_VERSION } from '../../../package.json';
+import { persistIntegrationChanges } from '../framework/features/integration-state-updates.ts';
 import logger from '../observability/logger.ts';
 import {
   loadState,
-  saveState,
-  saveStateKeepingInstalledDependencies,
   stateFileExists,
   tryLoadState,
+  updateState,
 } from '../state/state-repository.ts';
 import { isNewerVersion } from '../version.ts';
 import { updateScaScannerBinaryIfNeeded, updateSecretsBinaryIfNeeded } from './binary-refresh.ts';
-import {
-  cleanObsoleteFromState,
-  type InstallHooksFn,
-  migrateClaudeCodeHooks,
-} from './claude-hooks-migration.ts';
 import { migrateAgentIntegrationsToGlobalScope } from './global-integrations-migration.ts';
 import { migrateKnownServerKeyMappingsForProjectLevelFeatures } from './known-project-mappings-migration.ts';
+import { migrateLegacyStateConfig } from './legacy-config-migration.ts';
+import { migrateLegacyKeychainTokens } from './legacy-keychain-migration.ts';
 import { migrateLegacyTelemetryEvents } from './telemetry-migration.ts';
 
 /**
@@ -65,8 +62,6 @@ export type AgentIntegrationHandlers = Readonly<Record<string, AgentIntegrationH
 export interface PostUpdateDependencies {
   /** Full registry of declarative integrations (`@/commands/integrate`). */
   supportedIntegrations: IntegrationRegistry;
-  /** Installs/refreshes Claude Code hook scripts (`@/commands/integrate/claude/hooks.ts`). */
-  installHooks: InstallHooksFn;
   /** Process console created at CLI startup. */
   console: Console;
   /** Credentials for migrations that need them, via `runtime.authResolver.resolveAuth()`. */
@@ -102,14 +97,12 @@ export async function runPostUpdateActions(deps: PostUpdateDependencies): Promis
 
   try {
     await runActions(deps);
-    // Reload state to pick up changes made by subroutines
-    // (migrateDeclarativeIntegrations, migrateClaudeCodeHooks,
-    // updateSecretsBinaryIfNeeded) that load and save their own state copies.
-    const state = loadState();
-    state.config.cliVersion = CURRENT_VERSION;
-    delete state.config.betaCommandWarnings;
-    cleanObsoleteFromState(state);
-    saveState(state);
+    updateState((state) => {
+      if (isNewerVersion(state.config.cliVersion, CURRENT_VERSION)) {
+        state.config.cliVersion = CURRENT_VERSION;
+        delete state.config.betaCommandWarnings;
+      }
+    });
   } catch (error) {
     deps.console.warn(`Post-update actions failed: ${(error as Error).message}`);
   }
@@ -124,14 +117,16 @@ export async function runPostUpdateActionsSafely(deps: PostUpdateDependencies): 
 }
 
 async function runActions(deps: PostUpdateDependencies): Promise<void> {
+  migrateLegacyStateConfig();
   migrateLegacyTelemetryEvents();
   // Must run before migrateDeclarativeIntegrations
   migrateKnownServerKeyMappingsForProjectLevelFeatures();
+  // Before migrateAgentIntegrationsToGlobalScope: it resolves auth, which reads the moved token.
+  await migrateLegacyKeychainTokens(deps.console);
   // After the mappings migration: it is the last read of project-scope attrs.
   // Before reconciliation: that would re-apply the artifacts this deletes.
   await migrateAgentIntegrationsToGlobalScope(deps);
   await migrateDeclarativeIntegrations(deps.supportedIntegrations, deps.console);
-  await migrateClaudeCodeHooks(deps.installHooks);
   await updateSecretsBinaryIfNeeded(deps.console);
   await updateScaScannerBinaryIfNeeded(deps.console);
 }
@@ -146,7 +141,8 @@ export async function migrateDeclarativeIntegrations(
   console: Console,
 ): Promise<void> {
   const state = loadState();
+  const before = structuredClone(state);
   if (await reconcileInstalledIntegrations(state, registry, console)) {
-    saveStateKeepingInstalledDependencies(state);
+    persistIntegrationChanges(before, state);
   }
 }

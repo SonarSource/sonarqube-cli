@@ -70,7 +70,7 @@ function makeLegacyCommandEvent(command: string): StoredCommandExecutedEvent {
 
 describe('migrateLegacyTelemetryEvents', () => {
   let loadStateSpy: Mock<typeof stateRepository.loadState>;
-  let saveStateSpy: Mock<typeof stateRepository.saveState>;
+  let updateStateSpy: Mock<typeof stateRepository.updateState>;
   let appendTelemetryEventSpy: Mock<typeof telemetryEvents.appendTelemetryEvent>;
   let getTelemetryDirSpy: Mock<typeof configConstants.getTelemetryDir>;
   let telemetryDir: string;
@@ -78,7 +78,9 @@ describe('migrateLegacyTelemetryEvents', () => {
   beforeEach(() => {
     telemetryDir = fs.mkdtempSync(join(tmpdir(), 'cli-post-update-telemetry-'));
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(makeState());
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => {});
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
     appendTelemetryEventSpy = spyOn(telemetryEvents, 'appendTelemetryEvent').mockImplementation(
       () => {},
     );
@@ -87,7 +89,7 @@ describe('migrateLegacyTelemetryEvents', () => {
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     appendTelemetryEventSpy.mockRestore();
     getTelemetryDirSpy.mockRestore();
     fs.rmSync(telemetryDir, { recursive: true, force: true });
@@ -98,7 +100,7 @@ describe('migrateLegacyTelemetryEvents', () => {
     migrateLegacyTelemetryEvents();
 
     expect(appendTelemetryEventSpy).not.toHaveBeenCalled();
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('migrates each legacy event to telemetry-events.ndjson and clears the queue', () => {
@@ -106,6 +108,9 @@ describe('migrateLegacyTelemetryEvents', () => {
     const events = [makeLegacyCommandEvent('auth'), makeLegacyCommandEvent('analyze')];
     state.telemetry.events = events;
     loadStateSpy.mockReturnValue(state);
+    appendTelemetryEventSpy.mockImplementation(() => {
+      expect(state.telemetry.events).toEqual([]);
+    });
 
     migrateLegacyTelemetryEvents();
 
@@ -113,8 +118,8 @@ describe('migrateLegacyTelemetryEvents', () => {
     expect(appendTelemetryEventSpy).toHaveBeenNthCalledWith(1, events[0]);
     expect(appendTelemetryEventSpy).toHaveBeenNthCalledWith(2, events[1]);
 
-    expect(saveStateSpy).toHaveBeenCalledTimes(1);
-    expect(saveStateSpy.mock.calls[0][0].telemetry.events).toBeUndefined();
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    expect(state.telemetry.events).toEqual([]);
   });
 
   it('renames the on-disk findings.ndjson sink to telemetry-events.ndjson', () => {

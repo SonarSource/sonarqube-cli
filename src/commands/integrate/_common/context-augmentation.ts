@@ -66,26 +66,19 @@ export function buildContextAugmentationAttrs(
   };
 }
 
-/** Assembles the attrs persisted on an agent integration's features, shared by every agent handler. `mainRepoRoot` should come from the caller's own `DiscoveredProject`; falls back to `projectRoot` when absent. */
+/** Assembles the attrs persisted on an agent integration's features, shared by every agent handler. */
 export function buildRecordedIntegrationAttrs(params: {
-  baseAttrs: Record<string, IntegrationStateAttribute>;
-  projectRoot: string;
-  mainRepoRoot?: string;
   serverUrl: string;
   orgKey: string | undefined;
   contextAugmentation: ResolvedVortexSetup | null;
 }): Record<string, IntegrationStateAttribute> {
-  return {
-    ...params.baseAttrs,
-    repoRoot: params.mainRepoRoot ?? params.projectRoot,
-    ...(params.contextAugmentation?.disposition === 'install'
-      ? buildContextAugmentationAttrs(
-          params.serverUrl,
-          params.orgKey,
-          params.contextAugmentation.scaEnabled === true,
-        )
-      : {}),
-  };
+  return params.contextAugmentation?.disposition.action === 'install'
+    ? buildContextAugmentationAttrs(
+        params.serverUrl,
+        params.orgKey,
+        params.contextAugmentation.scaEnabled === true,
+      )
+    : {};
 }
 
 export interface ApplyContextAugmentationToolIntegrationParams {
@@ -121,7 +114,7 @@ export async function runToolIntegrateCommand(
   const console = p.console;
   console.text('     Installing Vortex Context...');
 
-  const initEnv = buildContextAugmentationEnv({
+  const initEnv = await buildContextAugmentationEnv({
     organization: p.auth.orgKey,
     projectKey: p.projectKey,
     serverUrl: p.auth.serverUrl,
@@ -141,6 +134,55 @@ export async function runToolIntegrateCommand(
   console.discreetSuccess('Vortex Context configured');
 }
 
+export interface PrintContextAugmentationSkillParams {
+  binaryPath: string;
+  projectRoot: string;
+  scaEnabled: boolean;
+  console: Console;
+  orgKey?: string;
+}
+
+const PRINT_SKILL_FAILURE_MESSAGE = 'Vortex Context skill generation failed.';
+
+export async function printContextAugmentationSkill({
+  binaryPath,
+  projectRoot,
+  scaEnabled,
+  console,
+  orgKey,
+}: PrintContextAugmentationSkillParams): Promise<string> {
+  const result = await runCagSubprocess(
+    binaryPath,
+    [
+      'tool',
+      'print-skill',
+      '--invocation-prefix',
+      SONAR_CONTEXT_INVOCATION,
+      `--sca-enabled=${scaEnabled ? 'true' : 'false'}`,
+    ],
+    {
+      projectRoot,
+      env: await buildContextAugmentationEnv({ organization: orgKey }),
+    },
+  );
+  if (!result.ok) {
+    reportCagFailure(result, console);
+    throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
+  }
+  if (result.stdout.trim().length === 0) {
+    reportCagFailure(
+      {
+        ...result,
+        ok: false,
+        failureMessage: 'sonar-context-augmentation tool print-skill produced empty output',
+      },
+      console,
+    );
+    throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
+  }
+  return result.stdout;
+}
+
 export interface PrintSessionStartContextParams {
   binaryPath: string;
   scaEnabled: boolean;
@@ -154,7 +196,7 @@ export async function printSessionStartContext(
   return runCagSubprocess(
     p.binaryPath,
     ['tool', 'print-session-start-context', `--sca-enabled=${p.scaEnabled ? 'true' : 'false'}`],
-    { projectRoot: p.context.workspaceDir!, env: buildContextAugmentationEnv(p.context) },
+    { projectRoot: p.context.workspaceDir!, env: await buildContextAugmentationEnv(p.context) },
   );
 }
 
@@ -183,7 +225,7 @@ async function runCagStepOrThrow(
   args: string[],
   projectRoot: string,
   console: Console,
-  env: NodeJS.ProcessEnv = buildContextAugmentationEnv(),
+  env?: NodeJS.ProcessEnv,
 ): Promise<void> {
   if (process.stdout.isTTY) {
     try {
@@ -221,13 +263,14 @@ async function runCagSubprocess(
   args: string[],
   options: CagSubprocessOptions,
 ): Promise<CagSubprocessResult> {
+  const env = options.env ?? (await buildContextAugmentationEnv());
   return new Promise<CagSubprocessResult>((resolve) => {
     let child;
     try {
       child = spawn(binaryPath, args, {
         cwd: options.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'],
-        env: options.env ?? buildContextAugmentationEnv(),
+        env,
       });
     } catch (error) {
       resolve({

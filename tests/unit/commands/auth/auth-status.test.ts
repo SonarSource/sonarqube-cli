@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { authStatus } from '@/commands/auth/status.ts';
 import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -26,13 +26,263 @@ import * as token from '@/core/auth/token.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import * as keychain from '@/core/host/keychain.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { okAsync } from '@/core/result.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('authStatus with FakeConsole', () => {
+  const restorers: Array<() => void> = [];
+
+  beforeEach(() => {
+    const membershipSpy = spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue(
+      { status: 'member' },
+    );
+    restorers.push(() => membershipSpy.mockRestore());
+  });
+
+  afterEach(() => {
+    restorers.splice(0).forEach((restore) => restore());
+  });
+
+  function envAuth(): ResolvedAuth {
+    return new ResolvedAuth({
+      connectionType: 'cloud',
+      orgKey: 'sonarsource',
+      serverUrl: 'https://sonarcloud.io',
+      source: 'env',
+      token: 'a-token',
+    });
+  }
+
+  function rendered(fake: FakeConsole): string {
+    const parts: string[] = [];
+    for (const call of fake.calls) {
+      for (const arg of call.args) {
+        for (const value of Array.isArray(arg) ? (arg as unknown[]) : [arg]) {
+          if (typeof value === 'string') {
+            parts.push(value);
+          }
+        }
+      }
+    }
+    return parts.join('\n');
+  }
+
+  function contextFor(auth: ResolvedAuth): { ctx: CommandInvocationContext; fake: FakeConsole } {
+    const authResolver = new AuthResolver();
+    spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(auth));
+    const fake = new FakeConsole();
+    return {
+      ctx: new CommandInvocationContext(fake, undefined, createCliRuntime({ authResolver })),
+      fake,
+    };
+  }
+
+  // `sonar auth status` answers a global question while `sonar context` resolves credentials
+  // per project, so the two can disagree. When they do, saying only "Connected" tells the user
+  // their setup is fine moments before another command tells them it is not, which reads as a
+  // broken tool and sends people hunting in the wrong place.
+  it('warns when the project records a connection the current credentials do not match', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'another-org',
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://regional.sonarcloud.io',
+    });
+    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue(null);
+    restorers.push(
+      () => discoverProjectSpy.mockRestore(),
+      () => getTokenSpy.mockRestore(),
+    );
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    const output = rendered(fake);
+    expect(output).toContain('Connected');
+    expect(output).toContain('This project expects a different connection');
+    expect(output).toContain('https://regional.sonarcloud.io');
+    expect(output).toContain('another-org');
+  });
+
+  it('warns for another port on the same host even when the keychain has a token', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: undefined,
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://sq.example.com:9001',
+    });
+    const getTokenSpy = spyOn(keychain, 'getToken').mockResolvedValue('stored-token');
+    restorers.push(
+      () => discoverProjectSpy.mockRestore(),
+      () => getTokenSpy.mockRestore(),
+    );
+    const auth = new ResolvedAuth({
+      connectionType: 'on-premise',
+      serverUrl: 'https://sq.example.com:9000',
+      source: 'env',
+      token: 'environment-token',
+    });
+
+    const { ctx, fake } = contextFor(auth);
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).toContain('This project expects a different connection');
+    expect(getTokenSpy).not.toHaveBeenCalled();
+  });
+
+  it('accepts equivalent recorded server URLs without a warning', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'sonarsource',
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://SONARCLOUD.IO/',
+    });
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
+  });
+
+  it('says nothing extra when the project records the same connection', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'sonarsource',
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://sonarcloud.io',
+    });
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
+  });
+
+  it('uses the current organization when the project only records the current server', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: undefined,
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: 'https://sonarcloud.io',
+    });
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
+  });
+
+  it('does not warn when the project only records a different organization on the current server', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
+      organization: 'another-org',
+      projectKey: 'a-project',
+      projectRoot: process.cwd(),
+      serverUrl: undefined,
+    });
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    expect(rendered(fake)).not.toContain('This project expects a different connection');
+  });
+
+  // Reporting must not become a reason to fail. Discovery reads the filesystem and can throw
+  // for reasons that have nothing to do with authentication.
+  it('still reports the connection when project discovery throws', async () => {
+    const discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockRejectedValue(
+      new Error('discovery exploded'),
+    );
+    restorers.push(() => discoverProjectSpy.mockRestore());
+
+    const { ctx, fake } = contextFor(envAuth());
+    await authStatus({}, ctx);
+
+    const output = rendered(fake);
+    expect(output).toContain('Connected');
+    expect(output).not.toContain('This project expects a different connection');
+  });
+
+  describe.each(['env', 'state'] as const)(
+    'organization membership with %s credentials',
+    (source) => {
+      function membershipContext() {
+        return contextFor(
+          new ResolvedAuth({
+            connectionType: 'cloud',
+            orgKey: 'sonarsource',
+            serverUrl: 'https://sonarcloud.io',
+            source,
+            token: 'a-token',
+          }),
+        );
+      }
+
+      beforeEach(() => {
+        const tokenSpy = spyOn(token, 'checkTokenStatus').mockResolvedValue({ status: 'valid' });
+        restorers.push(() => tokenSpy.mockRestore());
+      });
+
+      it('reports factual membership guidance and fails in text mode', async () => {
+        spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue({
+          status: 'not_member',
+        });
+        const { ctx, fake } = membershipContext();
+        try {
+          await authStatus({}, ctx);
+          expect.unreachable('Missing membership must fail');
+        } catch (error) {
+          expect(error).toBeInstanceOf(CommandFailedError);
+          expect((error as CommandFailedError).exitCode).toBe(1);
+          expect((error as CommandFailedError).remediationHint).not.toMatch(/regenerat/i);
+        }
+        const output = rendered(fake);
+        expect(output).toContain('This token resolves no membership for that organization.');
+        expect(output).toContain('Ask an organization administrator to add your account');
+        expect(output).toContain('check which account');
+        expect(output).toContain('the token was created with.');
+        expect(output).not.toContain('created before you joined');
+        expect(output).not.toContain('stays invalid');
+        expect(output).not.toMatch(/regenerat/i);
+      });
+
+      it.each([
+        { membership: { status: 'not_member' as const }, expected: 'organization_inaccessible' },
+        {
+          membership: { status: 'check_failed' as const, reason: 'Membership lookup failed' },
+          expected: 'organization_membership_unverified',
+        },
+      ])('preserves JSON status $expected and exit code 1', async ({ membership, expected }) => {
+        spyOn(OrganizationsClient.prototype, 'checkMembership').mockResolvedValue(membership);
+        const { ctx, fake } = membershipContext();
+        const originalExitCode = process.exitCode;
+        try {
+          process.exitCode = 0;
+          await authStatus({ format: 'json' }, ctx);
+          expect(process.exitCode).toBe(1);
+        } finally {
+          process.exitCode = originalExitCode ?? 0;
+        }
+        expect(fake.calls).toHaveLength(1);
+        expect(fake.calls[0]?.method).toBe('print');
+        expect(JSON.parse(String(fake.calls[0]?.args[0]))).toMatchObject({
+          status: expected,
+          server: 'https://sonarcloud.io',
+          org: 'sonarsource',
+        });
+      });
+    },
+  );
+
   it('prints "No saved connection" through ctx.console when nothing is stored', async () => {
     const authResolver = new AuthResolver();
     spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(null));
@@ -115,7 +365,7 @@ describe('authStatus with FakeConsole', () => {
       await authStatus({ format: 'json' }, ctx);
       expect(process.exitCode).toBe(1);
     } finally {
-      process.exitCode = originalExitCode;
+      process.exitCode = originalExitCode ?? 0;
     }
     const printed = fake.calls.find((c) => c.method === 'print');
     expect(printed).toBeDefined();

@@ -25,11 +25,14 @@ import {
   isSonarQubeCloud,
   type ResolvedAuth,
 } from '@/core/auth/auth-resolver.ts';
+import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { checkTokenStatus } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
+import logger from '@/core/observability/logger.ts';
+import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { getActiveConnection } from '@/core/state/state-manager.ts';
@@ -45,7 +48,14 @@ export interface AuthStatusOptions {
 }
 
 interface AuthStatusJson {
-  status: 'not_authenticated' | 'token_missing' | 'connected' | 'token_invalid' | 'unreachable';
+  status:
+    | 'not_authenticated'
+    | 'token_missing'
+    | 'connected'
+    | 'token_invalid'
+    | 'unreachable'
+    | 'organization_inaccessible'
+    | 'organization_membership_unverified';
   server?: string;
   org?: string;
   source?: string;
@@ -122,16 +132,25 @@ function displayTokenStatus(
   }
 }
 
-async function hasMissingOrganizationMembership(
+type OrganizationMembershipResult =
+  { status: 'ok' } | { status: 'not_member' } | { status: 'check_failed'; reason: string };
+
+async function resolveOrganizationMembershipStatus(
   serverUrl: string,
   token: string,
   orgKey: string | undefined,
-): Promise<boolean> {
-  if (!orgKey || !isSonarQubeCloud(serverUrl)) return false;
+): Promise<OrganizationMembershipResult> {
+  if (!orgKey || !isSonarQubeCloud(serverUrl)) return { status: 'ok' };
   const membership = await new OrganizationsClient(
     new SonarHttpClient(serverUrl, token),
   ).checkMembership(orgKey);
-  return membership.status === 'not_member';
+  if (membership.status === 'member') {
+    return { status: 'ok' };
+  }
+  if (membership.status === 'not_member') {
+    return { status: 'not_member' };
+  }
+  return { status: 'check_failed', reason: membership.reason };
 }
 
 function displayOrganizationMembershipMismatch(
@@ -143,7 +162,7 @@ function displayOrganizationMembershipMismatch(
 ): void {
   if (format === 'json') {
     printJsonStatus(console, {
-      status: 'connected',
+      status: 'organization_inaccessible',
       server: serverUrl,
       org: orgKey,
       source,
@@ -155,13 +174,75 @@ function displayOrganizationMembershipMismatch(
     [
       ...connectionLines(serverUrl, orgKey),
       '',
-      'This token resolves no membership for that organization. Either regenerate it',
-      '(My Account > Access Tokens) — a token created before you joined the',
-      'organization stays invalid for it — or ask an organization administrator to add',
-      'your account.',
+      'This token resolves no membership for that organization.',
+      'Ask an organization administrator to add your account, or check which account',
+      'the token was created with.',
     ],
     `! Connected, but organization '${orgKey}' is not accessible with this token`,
     NOTE_STYLES.warn,
+  );
+}
+
+function displayOrganizationMembershipCheckFailed(
+  console: Console,
+  serverUrl: string,
+  orgKey: string,
+  source: string,
+  format: AuthStatusFormat,
+  reason: string,
+): void {
+  if (format === 'json') {
+    printJsonStatus(console, {
+      status: 'organization_membership_unverified',
+      server: serverUrl,
+      org: orgKey,
+      source,
+      message: reason,
+    });
+    return;
+  }
+
+  console.note(
+    [...connectionLines(serverUrl, orgKey), '', reason],
+    '! Could not verify organization membership',
+    NOTE_STYLES.warn,
+  );
+}
+
+function failOrganizationMembershipStatus(
+  console: Console,
+  serverUrl: string,
+  orgKey: string,
+  source: string,
+  format: AuthStatusFormat,
+  membershipResult: Exclude<OrganizationMembershipResult, { status: 'ok' }>,
+): void {
+  if (membershipResult.status === 'check_failed') {
+    displayOrganizationMembershipCheckFailed(
+      console,
+      serverUrl,
+      orgKey,
+      source,
+      format,
+      membershipResult.reason,
+    );
+    failAuthStatus(
+      format,
+      new CommandFailedError('Could not verify organization membership for this token.', {
+        remediationHint:
+          'Check network connectivity and SonarQube Cloud availability, then rerun sonar auth status.',
+      }),
+    );
+    return;
+  }
+
+  displayOrganizationMembershipMismatch(console, serverUrl, orgKey, source, format);
+  failAuthStatus(
+    format,
+    new CommandFailedError('Organization membership check failed for this token.', {
+      remediationHint:
+        "Verify your account and organization access, then rerun 'sonar auth status'.",
+    }),
   );
 }
 
@@ -187,6 +268,74 @@ function displayNotAuthenticated(console: Console, format: AuthStatusFormat): vo
   console.print('No saved connection');
 }
 
+/**
+ * The connection this project records, when it differs from the credentials in use.
+ *
+ * `sonar auth status` answers a global question, but `sonar context` resolves credentials
+ * per project and only accepts them when the server matches what the project recorded. Those
+ * two answers can disagree, and when they do the user is told "Connected" by the very command
+ * meant to check, then told "not authenticated" by the next one. That contradiction reads as a
+ * broken tool and sends people looking in the wrong place.
+ *
+ * Returns null whenever there is nothing useful to say: outside a project, when nothing was
+ * recorded, when it matches, or when discovery fails. Discovery must never make this command
+ * fail, since its own job is reporting.
+ */
+async function mismatchedProjectConnection(
+  auth: ResolvedAuth,
+  console: Console,
+): Promise<{ orgKey: string | undefined; serverUrl: string } | null> {
+  try {
+    const discovered = await discoverProject(process.cwd(), { auth, silent: true, console });
+    if (!discovered.projectKey) {
+      return null;
+    }
+    const serverUrl = discovered.serverUrl ?? auth.serverUrl;
+    const orgKey = discovered.organization ?? auth.orgKey;
+    if (authMatchesRecordedServer(auth, serverUrl)) {
+      return null;
+    }
+    return { orgKey, serverUrl };
+  } catch (err) {
+    logger.debug(
+      `Project discovery failed while checking the connection: ${(err as Error).message}`,
+    );
+    return null;
+  }
+}
+
+async function noteConnectionMismatch(
+  console: Console,
+  auth: ResolvedAuth,
+  format: AuthStatusFormat,
+): Promise<void> {
+  if (format === 'json') {
+    return;
+  }
+  const project = await mismatchedProjectConnection(auth, console);
+  if (project) {
+    displayProjectConnectionMismatch(console, project);
+  }
+}
+
+function displayProjectConnectionMismatch(
+  console: Console,
+  project: { orgKey: string | undefined; serverUrl: string },
+): void {
+  console.note(
+    [
+      ...connectionLines(project.serverUrl, project.orgKey),
+      '',
+      'This project records the connection above, which differs from the one your credentials',
+      'are for. Commands that resolve credentials per project, such as sonar context, will not',
+      'use your current credentials here. Either point your credentials at this connection, or',
+      're-run sonar integrate from this project to record the one you are authenticated with.',
+    ],
+    '! This project expects a different connection',
+    NOTE_STYLES.warn,
+  );
+}
+
 async function displayEnvironmentConnectionStatus(
   console: Console,
   auth: ResolvedAuth,
@@ -198,11 +347,24 @@ async function displayEnvironmentConnectionStatus(
       ? `env vars:  ${ENV_TOKEN}, ${ENV_ORG}, ${ENV_SERVER}`
       : `env vars:  ${ENV_TOKEN}, ${ENV_ORG}`;
   }
-  if (await hasMissingOrganizationMembership(auth.serverUrl, auth.token, auth.orgKey)) {
-    displayOrganizationMembershipMismatch(console, auth.serverUrl, auth.orgKey!, source, format);
+  const membershipResult = await resolveOrganizationMembershipStatus(
+    auth.serverUrl,
+    auth.token,
+    auth.orgKey,
+  );
+  if (membershipResult.status !== 'ok' && auth.orgKey) {
+    failOrganizationMembershipStatus(
+      console,
+      auth.serverUrl,
+      auth.orgKey,
+      source,
+      format,
+      membershipResult,
+    );
     return;
   }
   displayConnected(console, auth.serverUrl, source, auth.orgKey, format);
+  await noteConnectionMismatch(console, auth, format);
 }
 
 function displayConnected(
@@ -229,6 +391,89 @@ function displayConnected(
   );
 }
 
+function reportMissingSavedAuth(console: Console, format: AuthStatusFormat): void {
+  const state = loadState();
+  if (state.auth.connections.length === 0) {
+    displayNotAuthenticated(console, format);
+    failAuthStatus(
+      format,
+      new CommandFailedError('Authentication check failed.', {
+        remediationHint: "Run 'sonar auth login' to authenticate.",
+      }),
+    );
+    return;
+  }
+
+  const conn = getActiveConnection(state) ?? state.auth.connections[0];
+  displayTokenMissing(console, conn.serverUrl, conn.orgKey, format);
+  failAuthStatus(
+    format,
+    new CommandFailedError('Authentication check failed.', {
+      remediationHint: "Run 'sonar auth login' to restore the token.",
+    }),
+  );
+}
+
+async function reportSavedAuthStatus(
+  console: Console,
+  auth: ResolvedAuth,
+  format: AuthStatusFormat,
+): Promise<void> {
+  const status =
+    format === 'json'
+      ? await checkTokenStatus(auth.serverUrl, auth.token)
+      : await console.withSpinner('Verifying token...', () =>
+          checkTokenStatus(auth.serverUrl, auth.token),
+        );
+  if (format !== 'json') {
+    console.blank();
+  }
+
+  if (status.status === 'valid') {
+    const membershipResult = await resolveOrganizationMembershipStatus(
+      auth.serverUrl,
+      auth.token,
+      auth.orgKey,
+    );
+    if (membershipResult.status !== 'ok' && auth.orgKey) {
+      failOrganizationMembershipStatus(
+        console,
+        auth.serverUrl,
+        auth.orgKey,
+        'OS Keychain',
+        format,
+        membershipResult,
+      );
+      return;
+    }
+    displayConnected(console, auth.serverUrl, 'OS Keychain', auth.orgKey, format);
+    await noteConnectionMismatch(console, auth, format);
+  } else {
+    displayTokenStatus(console, auth.serverUrl, auth.orgKey, status, format);
+  }
+
+  if (status.status === 'unreachable') {
+    const message = status.errorMessage
+      ? `Connection check failed: ${status.errorMessage}`
+      : 'Connection check failed.';
+    failAuthStatus(
+      format,
+      new CommandFailedError(message, {
+        remediationHint: 'Check the server URL and network connectivity, then retry.',
+      }),
+    );
+    return;
+  }
+  if (status.status !== 'valid') {
+    failAuthStatus(
+      format,
+      new CommandFailedError('Authentication check failed.', {
+        remediationHint: "Run 'sonar auth login' to reauthenticate.",
+      }),
+    );
+  }
+}
+
 export async function authStatus(
   options: AuthStatusOptions,
   ctx: CommandInvocationContext,
@@ -248,72 +493,9 @@ export async function authStatus(
   }
 
   if (!auth) {
-    const state = loadState();
-    if (state.auth.connections.length === 0) {
-      displayNotAuthenticated(console, authStatusFormat);
-      failAuthStatus(
-        authStatusFormat,
-        new CommandFailedError('Authentication check failed.', {
-          remediationHint: "Run 'sonar auth login' to authenticate.",
-        }),
-      );
-      return;
-    }
-
-    const conn = getActiveConnection(state) ?? state.auth.connections[0];
-    displayTokenMissing(console, conn.serverUrl, conn.orgKey, authStatusFormat);
-    failAuthStatus(
-      authStatusFormat,
-      new CommandFailedError('Authentication check failed.', {
-        remediationHint: "Run 'sonar auth login' to restore the token.",
-      }),
-    );
+    reportMissingSavedAuth(console, authStatusFormat);
     return;
   }
 
-  const status =
-    authStatusFormat === 'json'
-      ? await checkTokenStatus(auth.serverUrl, auth.token)
-      : await console.withSpinner('Verifying token...', () =>
-          checkTokenStatus(auth.serverUrl, auth.token),
-        );
-  if (authStatusFormat !== 'json') {
-    console.blank();
-  }
-
-  if (
-    status.status === 'valid' &&
-    (await hasMissingOrganizationMembership(auth.serverUrl, auth.token, auth.orgKey))
-  ) {
-    displayOrganizationMembershipMismatch(
-      console,
-      auth.serverUrl,
-      auth.orgKey!,
-      'OS Keychain',
-      authStatusFormat,
-    );
-  } else {
-    displayTokenStatus(console, auth.serverUrl, auth.orgKey, status, authStatusFormat);
-  }
-
-  if (status.status === 'unreachable') {
-    const message = status.errorMessage
-      ? `Connection check failed: ${status.errorMessage}`
-      : 'Connection check failed.';
-    failAuthStatus(
-      authStatusFormat,
-      new CommandFailedError(message, {
-        remediationHint: 'Check the server URL and network connectivity, then retry.',
-      }),
-    );
-    return;
-  }
-  if (status.status !== 'valid') {
-    failAuthStatus(
-      authStatusFormat,
-      new CommandFailedError('Authentication check failed.', {
-        remediationHint: "Run 'sonar auth login' to reauthenticate.",
-      }),
-    );
-  }
+  await reportSavedAuthStatus(console, auth, authStatusFormat);
 }

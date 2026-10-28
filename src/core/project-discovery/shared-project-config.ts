@@ -1,0 +1,291 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { statSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, relative, sep } from 'node:path';
+
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
+import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
+import type { CloudRegion } from '@/core/state/state.ts';
+
+export interface SharedProjectConfigMapping {
+  projectRoot: string;
+  projectKey: string;
+  serverUrl: string;
+  organization?: string;
+}
+
+export type SonarCloudProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  region: CloudRegion;
+  organization: string;
+};
+
+export type SonarQubeServerProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  serverUrl: string;
+};
+
+export type CustomCloudProjectConfigEntry = {
+  projectKey: string;
+  path: string;
+  serverUrl: string;
+  organization: string;
+};
+
+export type SharedProjectConfigEntry =
+  SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry | CustomCloudProjectConfigEntry;
+
+export interface SharedProjectConfigRepository {
+  load(dir: string): Promise<SharedProjectConfigMapping[]>;
+  /** Resolves to whether a `projects` array already exists, which shadows the written `project`. */
+  set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean>;
+  /** Adds (or updates, by canonical directory) an entry in the `projects` array, leaving `project` untouched. */
+  addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
+}
+
+interface SharedProjectConfigFileDto {
+  project?: unknown;
+  /** Monorepo form: several mappings in one file. Takes precedence over `project` when present. */
+  projects?: unknown;
+}
+
+const VALID_CLOUD_REGIONS = new Set<CloudRegion>(['eu', 'us']);
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isCloudEntry(value: Record<string, unknown>): value is SonarCloudProjectConfigEntry {
+  return (
+    value.serverUrl === undefined &&
+    VALID_CLOUD_REGIONS.has(value.region as CloudRegion) &&
+    isNonEmptyString(value.organization)
+  );
+}
+
+function isServerEntry(value: Record<string, unknown>): value is SonarQubeServerProjectConfigEntry {
+  return (
+    value.region === undefined &&
+    value.organization === undefined &&
+    isNonEmptyString(value.serverUrl)
+  );
+}
+
+function isCustomCloudEntry(
+  value: Record<string, unknown>,
+): value is CustomCloudProjectConfigEntry {
+  return (
+    value.region === undefined &&
+    isNonEmptyString(value.organization) &&
+    isNonEmptyString(value.serverUrl)
+  );
+}
+
+function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (!isSingleLineString(record.projectKey) || !isSingleLineString(record.path)) {
+    return false;
+  }
+  return isCloudEntry(record) || isServerEntry(record) || isCustomCloudEntry(record);
+}
+
+/** A committed config is untrusted: a line break in a key or path would let it forge lines in hook and agent output. */
+function isSingleLineString(value: unknown): value is string {
+  return isNonEmptyString(value) && !/[\r\n]/.test(value);
+}
+
+/**
+ * A committed config must not steer writes/mounts outside the directory holding it.
+ * Requires the resolved path to actually exist: `canonicalizePath()` falls back to a
+ * purely lexical `resolve()` for a path that doesn't exist yet, which would leave an
+ * existing symlinked intermediate directory unresolved and able to escape `dir`
+ * undetected. Requiring existence sidesteps that gap entirely — a project root that
+ * isn't there is invalid regardless — and there is no legitimate case where the
+ * project root should point at a directory that doesn't exist.
+ */
+export function resolveContainedPath(dir: string, rawPath: string): string | null {
+  if (isAbsolute(rawPath)) {
+    return null;
+  }
+  const canonicalDir = canonicalizePath(dir);
+  const lexical = join(canonicalDir, rawPath);
+  if (!statSync(lexical, { throwIfNoEntry: false })?.isDirectory()) {
+    return null;
+  }
+  const resolved = canonicalizePath(lexical);
+  return isAncestorOrSelf(canonicalDir, resolved) ? resolved : null;
+}
+
+export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
+  async load(dir: string): Promise<SharedProjectConfigMapping[]> {
+    const root = await this.readRawRoot(dir);
+    if (root === null) {
+      return [];
+    }
+
+    let rawEntries: unknown[];
+    if (Array.isArray(root.projects)) {
+      rawEntries = root.projects;
+    } else if (root.project !== undefined) {
+      rawEntries = [root.project];
+    } else {
+      rawEntries = [];
+    }
+
+    const mappings: SharedProjectConfigMapping[] = [];
+    for (const rawEntry of rawEntries) {
+      const mapping = this.resolveEntry(dir, rawEntry);
+      if (mapping !== null) {
+        mappings.push(mapping);
+      }
+    }
+    return mappings;
+  }
+
+  async set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean> {
+    const existing = await this.readExistingRootForWrite(dir);
+    const file: SharedProjectConfigFileDto = { ...existing, project: entry };
+    await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
+    return Array.isArray(existing.projects);
+  }
+
+  async addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
+    const existing = await this.readExistingRootForWrite(dir);
+    if (existing.projects !== undefined && !Array.isArray(existing.projects)) {
+      throw new CommandFailedError(`${this.configPath(dir)} must contain a projects array`);
+    }
+    const canonicalDir = canonicalizePath(dir);
+    const projectRoot = canonicalizePath(join(dir, entry.path));
+    const normalizedEntry = {
+      ...entry,
+      path: relative(canonicalDir, projectRoot).split(sep).join('/') || '.',
+    };
+    const entries: unknown[] = existing.projects ?? [];
+    const index = entries.findIndex(
+      (value) => isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot,
+    );
+    const projects =
+      index === -1
+        ? [...entries, normalizedEntry]
+        : entries.map((value, position) => (position === index ? normalizedEntry : value));
+    const file: SharedProjectConfigFileDto = { ...existing, projects };
+    await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
+  }
+
+  private configPath(dir: string): string {
+    return join(dir, SHARED_PROJECT_CONFIG_FILE_NAME);
+  }
+
+  /**
+   * Unlike `readRawRoot()` (used by `load()`), a write must not silently clobber
+   * content it failed to read: only a genuinely absent file is treated as empty —
+   * any other read or parse failure aborts the write instead.
+   */
+  private async readExistingRootForWrite(dir: string): Promise<SharedProjectConfigFileDto> {
+    let content: string;
+    try {
+      content = await readFile(this.configPath(dir), 'utf-8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return {};
+      }
+      throw error;
+    }
+
+    const parsed: unknown = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`${this.configPath(dir)} does not contain a JSON object`);
+    }
+    return parsed;
+  }
+
+  private async readRawRoot(dir: string): Promise<SharedProjectConfigFileDto | null> {
+    let content: string;
+    try {
+      content = await readFile(this.configPath(dir), 'utf-8');
+    } catch {
+      return null;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(content);
+      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+        ? parsed
+        : null;
+    } catch (error) {
+      logger.debug(`Failed to parse ${this.configPath(dir)}: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  private resolveEntry(dir: string, raw: unknown): SharedProjectConfigMapping | null {
+    if (!isValidEntry(raw)) {
+      logger.debug(`Dropping invalid ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}`);
+      return null;
+    }
+
+    const projectRoot = resolveContainedPath(dir, raw.path);
+    if (projectRoot === null) {
+      logger.debug(
+        `Dropping ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}: "path" does not exist or escapes it`,
+      );
+      return null;
+    }
+
+    if (isServerEntry(raw)) {
+      return {
+        projectRoot,
+        projectKey: raw.projectKey,
+        serverUrl: raw.serverUrl,
+        organization: undefined,
+      };
+    }
+
+    if (isCustomCloudEntry(raw)) {
+      return {
+        projectRoot,
+        projectKey: raw.projectKey,
+        serverUrl: raw.serverUrl,
+        organization: raw.organization,
+      };
+    }
+
+    return {
+      projectRoot,
+      projectKey: raw.projectKey,
+      serverUrl: cloudRegionToUrl(raw.region),
+      organization: raw.organization,
+    };
+  }
+}
+
+/** Shared singleton so `project-info.ts` and `link/index.ts` mock the same instance in tests via `spyOn`. */
+export const sharedProjectConfigRepository: SharedProjectConfigRepository =
+  new SharedProjectConfigRepositoryImpl();

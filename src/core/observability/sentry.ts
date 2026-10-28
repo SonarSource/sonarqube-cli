@@ -29,22 +29,35 @@ import { isTelemetryEnabled } from '@/core/telemetry/enabled.ts';
 import { getOrCreateUserId } from '@/core/telemetry/user.ts';
 
 import { SENTRY_DSN, SENTRY_FLUSH_TIMEOUT_MS } from '../config-constants.ts';
-import type { CliState } from '../state/state.ts';
 
 /**
  * Initialize Sentry if the user has opted in and egress is production.
  *
- * Error reporting has no switch of its own: `sonar config telemetry` governs both.
+ * Error reporting has no switch of its own: `telemetry.enabled` governs both.
  */
-export function initSentry(state: CliState): void {
-  if (!isTelemetryEnabled(state) || resolveTelemetryEgress().kind !== 'production') return;
+export function initSentry(): void {
+  if (!isTelemetryEnabled() || resolveTelemetryEgress().kind !== 'production') return;
 
   const environment = process.env.SONARSOURCE_DOGFOODING === '1' ? 'dogfood' : 'production';
 
   Sentry.init({
     dsn: SENTRY_DSN,
     environment,
-    sendDefaultPii: false,
+    release: process.env.SONARQUBE_CLI_VERSION,
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: {
+        request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+        response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+      },
+      httpBodies: [],
+      urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      graphQL: { document: false, variables: false },
+    },
     beforeSend: scrubPii,
     transport: createSentryTransport,
   });

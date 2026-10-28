@@ -29,7 +29,11 @@ import {
   AI_REMEDIATION_DOCS_URL,
 } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
+import { assertProjectInOrganization } from '@/core/project-organization.ts';
 import { type IssuesClient } from '@/core/server/issues.ts';
 import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import type { SonarQubeIssue } from '@/core/server/types.ts';
@@ -78,6 +82,10 @@ export async function remediate(
   assertCloudConnection(auth);
   assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
 
+  const projectKey = await resolveProjectKey(options, auth, console);
+  noteProject(auth, projectKey);
+  await assertProjectInOrganization(ctx.connection, projectKey);
+
   const client = new RemediateApiClient(ctx.connection.httpClient);
   // resolveAuth guarantees orgKey is set for cloud connections (see auth-resolver.ts);
   // narrow once and reuse throughout this function.
@@ -86,8 +94,6 @@ export async function remediate(
 
   if (!(await confirmEntitlement(client, orgKey, console))) return;
 
-  const projectKey = await resolveProjectKey(options, auth, console);
-  noteProject(auth, projectKey);
   const selectedKeys =
     suppliedIssueKeys ?? (await selectIssuesInteractively(client, orgKey, projectKey, console));
   if (selectedKeys === null) return;
@@ -99,9 +105,12 @@ export async function remediate(
 
 function assertCloudConnection(auth: ResolvedAuth): void {
   if (auth.connectionType !== 'cloud') {
-    throw new CommandFailedError('sonar remediate requires a SonarQube Cloud connection.', {
-      remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
-    });
+    throw new CommandFailedError(
+      'The sonar remediate command requires a SonarQube Cloud connection.',
+      {
+        remediationHint: "Authenticate against SonarQube Cloud with 'sonar auth login' and retry.",
+      },
+    );
   }
 }
 
@@ -117,7 +126,7 @@ function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefin
 
 /**
  * Prints the applicable message and returns false when remediation is not
- * available for this organisation. Throws when entitlement could not be verified.
+ * available for this organization. Throws when entitlement could not be verified.
  */
 async function confirmEntitlement(
   client: RemediateApiClient,
@@ -128,14 +137,14 @@ async function confirmEntitlement(
   if (entitlement === 'not_eligible') {
     console.blank();
     console.info(
-      `The Remediation Agent is not available for your organisation. See ${AGENTIC_PACK_URL}`,
+      `The Remediation Agent is not available for your organization. See ${AGENTIC_PACK_URL}`,
     );
     return false;
   }
   if (entitlement === 'not_enabled') {
     console.blank();
     console.info(
-      `The Remediation Agent is not enabled for your organisation. Contact your admin to enable it.`,
+      `The Remediation Agent is not enabled for your organization. Contact your admin to enable it.`,
     );
     return false;
   }

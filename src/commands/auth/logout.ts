@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { deleteToken, getToken } from '@/core/host/keychain.ts';
 import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 
 import {
   reportRevokeServerTokenOutcome,
@@ -36,19 +37,21 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   const state = loadState();
   const active = getActiveConnection(state);
 
-  if (
-    !state.auth.isAuthenticated ||
-    active === undefined ||
-    state.auth.connections.length === 0 ||
-    active.envOnly
-  ) {
+  if (!state.auth.isAuthenticated || active === undefined || state.auth.connections.length === 0) {
     console.print('You are already logged out.');
     return;
   }
 
   const server = active.serverUrl;
   const org = active.orgKey;
-  const token = (await getToken(server, org)) ?? undefined;
+  let token: string | undefined;
+  try {
+    token = (await getToken(server)) ?? undefined;
+  } catch (err) {
+    console.warn(
+      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
 
   const revokeOutcome = await revokeServerTokenIfPossible(active, token);
   reportRevokeServerTokenOutcome(revokeOutcome, {
@@ -56,11 +59,37 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
     console,
   });
 
-  await deleteToken(server, org);
+  try {
+    await deleteToken(server);
+  } catch (err) {
+    console.warn(
+      `Could not delete the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
 
-  removeConnection(state, active.id);
+  let removed: boolean;
+  try {
+    removed = updateState((latest) => {
+      const current = latest.auth.connections.find((connection) => connection.id === active.id);
+      if (current === undefined) {
+        return true;
+      }
+      if (current.authenticatedAt === active.authenticatedAt) {
+        removeConnection(latest, active.id);
+        return true;
+      }
+      return false;
+    });
+  } catch (error) {
+    throw new CommandFailedError(
+      `Local token removed, but logout state could not be updated: ${String(error)}`,
+    );
+  }
 
-  saveState(state);
+  if (!removed) {
+    console.warn('Authentication changed during logout. The newer connection was kept in state.');
+    return;
+  }
 
   const displayServerLogout =
     active.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;

@@ -31,8 +31,9 @@ import type { ProjectPullRequest } from '@/core/server/types.ts';
 export async function autoResolvePullRequest(
   client: SonarHttpClient,
   projectKey: string,
+  currentBranch?: string,
 ): Promise<{ pullRequest: string; branch: string } | undefined> {
-  const branch = await resolveCurrentGitBranch(process.cwd());
+  const branch = currentBranch ?? (await resolveCurrentGitBranch(process.cwd()));
   if (!branch) {
     return undefined;
   }

@@ -42,7 +42,7 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized' | 'outside-repository';
+  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project' | 'other-connection';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
@@ -51,6 +51,19 @@ export interface ChangeSetResult {
   ignored: IgnoredFile[];
   /** Repository root used to resolve git output. Useful for computing relative paths. */
   repoRoot: string;
+}
+
+/** SQAA paths are relative to a project root, so a file no project of the connection owns cannot be analyzed. */
+export function excludeIgnoredFiles(
+  changeSet: ChangeSetResult,
+  ignored: IgnoredFile[],
+): ChangeSetResult {
+  const excluded = new Set(ignored.map(({ path }) => path));
+  return {
+    ...changeSet,
+    files: changeSet.files.filter((file) => !excluded.has(file)),
+    ignored: [...changeSet.ignored, ...ignored],
+  };
 }
 
 /**

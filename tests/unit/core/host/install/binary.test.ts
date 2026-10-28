@@ -31,6 +31,7 @@ const baseSpec: Omit<BinarySpec, 'name' | 'version'> = {
   distPrefix: 'CommercialDistribution/whatever',
   signatures: {},
   publicKey: '',
+  extensions: {},
 };
 
 describe('buildLocalBinaryName', () => {

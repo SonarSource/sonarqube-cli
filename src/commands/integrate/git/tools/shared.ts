@@ -22,15 +22,11 @@ import { platform } from 'node:os';
 
 import { REMOTE_NAME_ENV } from '@/commands/hook/git-pre-push.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type {
-  InstallDecision,
-  IntegrationContext,
-  PostInstallExample,
-} from '@/core/framework/features';
-import { askUser, install, isContainerIntegrationContext, skip } from '@/core/framework/features';
+import type { IntegrationContext, PostInstallExample } from '@/core/framework/features';
+import { isContainerIntegrationContext } from '@/core/framework/features';
 
 import { assertSafeSonarProjectKeyForHookScript, shellQuoteBash } from '../../_common/hooks.ts';
-import type { GitHookType, IntegrateGitOptions } from '../options.ts';
+import type { GitHookType } from '../options.ts';
 import { PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID } from './git-integration-subfeatures.ts';
 
 export const LEGACY_HOOK_MARKER = 'Sonar secrets scan - installed by sonar integrate git';
@@ -40,7 +36,9 @@ export function resolveDepRisksArgs(
   { shellQuote = true }: { shellQuote?: boolean } = {},
 ): string {
   if (!isContainerIntegrationContext(context)) {
-    throw new CommandFailedError('resolveDepRisksArgs requires a ContainerIntegrationContext');
+    throw new CommandFailedError(
+      'The resolveDepRisksArgs function requires a ContainerIntegrationContext.',
+    );
   }
   if (!context.activeSubfeatures.some((s) => s.id === PRE_COMMIT_DEP_RISKS_SUBFEATURE_ID)) {
     return '';
@@ -55,15 +53,6 @@ export function resolveDepRisksArgs(
   return ` --dependency-risks -p ${shellQuote ? shellQuoteBash(projectKey) : projectKey}`;
 }
 
-export function shouldInstallHook(
-  hook: GitHookType,
-  options: IntegrateGitOptions,
-): InstallDecision {
-  if (options.hook !== undefined) {
-    return options.hook === hook ? install() : skip();
-  }
-  return askUser();
-}
 export const SONAR_HOOK_SKIP_SECRETS_MESSAGE = 'sonarqube-cli not found, skipping secrets scan';
 
 export function resolveSonarHookCommand(hook: GitHookType): string {
@@ -120,12 +109,12 @@ function gitBothHooksExample(): PostInstallExample {
       `1. Create a file named ${VERIFY_FILE_NAME} containing:`,
       `     ${VERIFY_SECRET_CONTENT}`,
       '',
-      '2. Pre-commit — stage and commit:',
+      '2. Pre-commit - stage and commit:',
       `     git add ${VERIFY_FILE_NAME}`,
       '     git commit -m "verify"',
       '   → the pre-commit hook should block and report the secret.',
       '',
-      '3. Pre-push — bypass pre-commit, then push:',
+      '3. Pre-push - bypass pre-commit, then push:',
       '     git commit -m "verify" --no-verify',
       '     git push',
       '   → the pre-push hook should block and report the secret.',

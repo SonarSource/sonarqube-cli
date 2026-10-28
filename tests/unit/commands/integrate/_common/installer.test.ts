@@ -52,18 +52,20 @@ describe('generic integration installer', () => {
   let tempDir: string;
   let registry: IntegrationRegistry;
   let loadStateSpy: ReturnType<typeof spyOn>;
-  let saveStateSpy: ReturnType<typeof spyOn>;
+  let updateStateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'sonar-cli-installer-'));
     registry = new IntegrationRegistry();
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-    saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+    updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+      update(stateRepository.loadState()),
+    );
   });
 
   afterEach(() => {
     loadStateSpy.mockRestore();
-    saveStateSpy.mockRestore();
+    updateStateSpy.mockRestore();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -113,7 +115,7 @@ describe('generic integration installer', () => {
     });
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(hasUiCall('text', '     Installing Feature...')).toBe(true);
   });
 
@@ -130,7 +132,8 @@ describe('generic integration installer', () => {
       {
         id: 'main',
         displayName: 'Main feature',
-        shouldInstall: ({ options }) => options.installMain === true,
+        isAvailable: ({ options }) => ({ available: options.installMain === true }),
+        required: true,
         resources: [
           wholeFile({
             id: 'main-file',
@@ -143,7 +146,8 @@ describe('generic integration installer', () => {
       {
         id: 'project',
         displayName: 'Project feature',
-        shouldInstall: ({ options }) => options.installProject === true,
+        isAvailable: ({ options }) => ({ available: options.installProject === true }),
+        required: true,
         targetRoot: ({ options, targetRoot }) => options.projectRoot ?? targetRoot,
         scope: 'project',
         resources: [
@@ -442,7 +446,8 @@ describe('generic integration installer', () => {
         {
           id: 'feature',
           displayName: 'Feature',
-          shouldInstall: ({ options }) => options.enabled === true,
+          isAvailable: ({ options }) => ({ available: options.enabled === true }),
+          required: true,
         },
       ],
     );
@@ -460,6 +465,47 @@ describe('generic integration installer', () => {
 
     expect(noFeatureError).toBeInstanceOf(CommandFailedError);
     expect(noFeatureError?.message).toBe('No feature selected for Test Integration');
+  });
+
+  it('removes without prompting in an interactive run that has nothing to install', async () => {
+    const state = getDefaultState('test');
+    loadStateSpy.mockReturnValue(state);
+    const targetPath = join(tempDir, 'config.txt');
+    const integration = registerIntegration<{ enabled?: boolean }>(
+      registry,
+      'installer-removal-only',
+      [
+        {
+          id: 'feature',
+          displayName: 'Feature',
+          isAvailable: ({ options }) => ({ available: options.enabled === true }),
+          resources: [wholeFile({ id: 'file', targetPath, content: 'enabled=true\n' })],
+        },
+      ],
+    );
+    const run = (enabled: boolean, nonInteractive: boolean) =>
+      installIntegration({
+        registry,
+        integrationId: integration.id,
+        options: { enabled },
+        targetRoot: tempDir,
+        scope: 'project',
+        console: fake,
+        nonInteractive,
+      });
+
+    await run(true, true);
+    expect(await Bun.file(targetPath).exists()).toBe(true);
+    fake = new FakeConsole();
+
+    await run(false, false);
+
+    const methods = fake.calls.map((call) => call.method);
+    expect(methods).not.toContain('selectPrompt');
+    expect(methods).not.toContain('pressAnyKeyPrompt');
+    expect(methods).not.toContain('confirmPrompt');
+    expect(hasUiCall('text', '     Removing Feature...')).toBe(true);
+    expect(await Bun.file(targetPath).exists()).toBe(false);
   });
 
   it('passes force through the integration context for protected whole files', async () => {
@@ -566,7 +612,7 @@ describe('generic integration installer', () => {
     expect(thrown.message).toBe('boom');
 
     expect(await readFile(firstPath, 'utf-8')).toBe('first\n');
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(state.integrations.installed).toMatchObject([
       {
         integrationId: integration.id,
@@ -597,10 +643,11 @@ describe('generic integration installer', () => {
       console: fake,
     });
 
-    expect(saveStateSpy).toHaveBeenCalledWith(snapshot);
-    expect(snapshot.dependencies.installed).toMatchObject([
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
+    expect(disk.dependencies.installed).toMatchObject([
       { id: 'installer-binary', version: '2', path: '/opt/sonar/installer-binary-2' },
     ]);
+    expect(disk.integrations.installed[0].integrationId).toBe(integration.id);
   });
 
   it('prints container display name then each active subfeature on a separate indented line', async () => {
@@ -637,7 +684,7 @@ describe('generic integration installer', () => {
     expect(hasUiCall('text', '       - Subfeature Two')).toBe(true);
   });
 
-  it('only lists active subfeatures when some are filtered out by shouldInstall', async () => {
+  it('only lists active subfeatures when some are unavailable', async () => {
     const container: FeatureContainer<{ enableOptional?: boolean }> = {
       id: 'container',
       displayName: 'Container Feature',
@@ -647,7 +694,8 @@ describe('generic integration installer', () => {
         {
           id: 'subfeature-2',
           displayName: 'Subfeature Two',
-          shouldInstall: ({ options }) => options.enableOptional === true,
+          isAvailable: ({ options }) => ({ available: options.enableOptional === true }),
+          required: true,
         },
       ],
       resources: [
@@ -703,13 +751,13 @@ describe('generic integration installer', () => {
     );
 
     expect(error?.message).toContain('read failed');
-    expect(saveStateSpy).not.toHaveBeenCalled();
+    expect(updateStateSpy).not.toHaveBeenCalled();
   });
 
   it('warns and continues when writing state fails', async () => {
     const state = getDefaultState('test');
     loadStateSpy.mockReturnValue(state);
-    saveStateSpy.mockImplementation(() => {
+    updateStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
     const integration = registerIntegration(registry, 'installer-state-write-failure', [
@@ -779,13 +827,13 @@ describe('generic integration installer', () => {
     expect(installedCount).toBe(1);
     expect(await readFile(join(tempDir, 'config.txt'), 'utf-8')).toBe('enabled=true\n');
     expect(operationCalls).toEqual(['called']);
-    expect(saveStateSpy).toHaveBeenCalledWith(state);
+    expect(updateStateSpy).toHaveBeenCalledTimes(1);
     expect(fake.calls).toEqual([]);
     expect(stdout).toBe('');
   });
 
   it('warns through a quiet console when writing state fails', async () => {
-    saveStateSpy.mockImplementation(() => {
+    updateStateSpy.mockImplementation(() => {
       throw new Error('write failed');
     });
     const integration = registerIntegration(registry, 'installer-quiet-state-failure', [

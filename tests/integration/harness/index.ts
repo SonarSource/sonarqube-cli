@@ -25,11 +25,13 @@ import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
-import { getCliBinaryPath } from './cli-runner.js';
+import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
+import { applyLoopbackSonarCloudEnvOverrides, inferRecordedCloudRegion } from './cloud-auth-url.js';
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
@@ -139,6 +141,19 @@ export class TestHarness {
     return this;
   }
 
+  installerManagedBinaryPath(): string {
+    const installDir = IS_WINDOWS
+      ? this.userHome.dir('AppData', 'Local', 'sonarqube-cli', 'bin')
+      : this.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
+    mkdirSync(installDir.path, { recursive: true });
+    const binaryPath = installDir.file(IS_WINDOWS ? 'sonar.exe' : 'sonar').path;
+    copyFileSync(getCliBinaryPath(), binaryPath);
+    if (!IS_WINDOWS) {
+      chmodSync(binaryPath, 0o755);
+    }
+    return binaryPath;
+  }
+
   private pathWith(extraDirs: string[], basePath: string | undefined): string {
     const pathSeparator = IS_WINDOWS ? ';' : ':';
     return [...extraDirs, basePath].filter(Boolean).join(pathSeparator);
@@ -235,6 +250,18 @@ export class TestHarness {
     }
   }
 
+  /** Runs the CLI on a real pty so `process.stdin.isTTY` is true; guard with `it.skipIf(IS_WINDOWS)`. */
+  async runWithRealTty(
+    command: string,
+    options?: RunOptions & { responses?: TtyResponse[] },
+  ): Promise<CliResult> {
+    return runCliWithRealTty(command, this.env(options), {
+      cwd: options?.cwd ?? this.cwd.path,
+      timeoutMs: options?.timeoutMs,
+      responses: options?.responses,
+    });
+  }
+
   /**
    * Dump stdin on a session and wait for exit. Use `waitText` + keystrokes for prompts.
    */
@@ -288,7 +315,7 @@ export class TestHarness {
 
     const activeFakeServer = this.servers.at(-1);
     const fakeSonarcloudEnv: Record<string, string> = {};
-    if (activeFakeServer) {
+    if (activeFakeServer && !this._envBuilder?.usesLoopbackCloudAuth()) {
       fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_API_URL = activeFakeServer.baseUrl();
       if (activeFakeServer.impersonatesSonarCloud()) {
         fakeSonarcloudEnv.SONARQUBE_CLI_SONARCLOUD_URL = activeFakeServer.baseUrl();
@@ -326,6 +353,18 @@ export class TestHarness {
     if (this._envBuilder?.telemetryEnabled) {
       composed[ENV_DO_NOT_TRACK] = '0';
     }
+
+    const regionHint = inferRecordedCloudRegion(composed);
+    const loopbackCloudFromState =
+      activeFakeServer?.baseUrl() ?? this._envBuilder?.loopbackCloudAuthServerUrl();
+    if (loopbackCloudFromState && this._envBuilder?.usesLoopbackCloudAuth()) {
+      applyLoopbackSonarCloudEnvOverrides(composed, loopbackCloudFromState, regionHint);
+    }
+    const envServer = composed[ENV_SERVER];
+    if (composed[ENV_TOKEN] && composed[ENV_ORG] && envServer) {
+      applyLoopbackSonarCloudEnvOverrides(composed, envServer, regionHint);
+    }
+
     return applyIsolatedSpawnEnv(composed);
   }
 

@@ -3,11 +3,13 @@
 A CLI tool (`sonar`) that integrates SonarQube Server and Cloud into developer workflows.
 
 Release builds publish standalone executables for `linux-x86-64`, `linux-arm64`, `macos-arm64`, and `windows-x86-64`. binaries.sonarsource.com artifacts use the `.bin` suffix on Linux/macOS and `.exe` on Windows (e.g. `sonarqube-cli-{version}-linux-x86-64.bin`); versions published before that convention remain `.exe` on the CDN. Dependency binaries (sonar-secrets, sca-scanner-cli) still use `.exe` in download URLs. The stable installers (`user-scripts/install.sh`, `user-scripts/install.ps1`) resolve the real release version from `Distribution/sonarqube-cli/stable.version`; the shell installers select the Linux artifact using `uname -m` (`aarch64` / `arm64` → `linux-arm64`, `x86_64` / `amd64` → `linux-x86-64`) and try `.bin` then `.exe` when downloading. They also keep a literal compatibility version marker for older `sonar self-update` clients, and `full-release.yml` updates that marker to the latest released version during the post-release bump PR.
-Compiled binaries are produced via `build-scripts/build-binary.ts`, which injects `SONARQUBE_CLI_DISTRIBUTION` at compile time. The only supported value is `standalone`, and standalone-only flows such as `self-update` key off that distribution marker.
+Compiled binaries are produced via `build-scripts/build-binary.ts`, which injects `SONARQUBE_CLI_DISTRIBUTION` and `SONARQUBE_CLI_VERSION` at compile time and sets `autoloadDotenv: false` and `autoloadBunfig: false` so standalone executables do not load `.env` or `bunfig.toml` from the working directory (Bun’s default for `--compile` is to autoload both). The only supported distribution is `standalone`, and standalone-only flows such as `self-update` key off that distribution marker. The version comes from `PROJECT_VERSION` or, for local builds, `package.json`. Sentry uses this version as its release so it matches the source map upload release.
 
 # Running checks
 
 Use the package.json scripts for full test runs.
+
+Dependency installation runs Husky through its JavaScript entry point with Bun so hook setup does not depend on platform-specific `node_modules/.bin` command shims.
 
 ```bash
 bun run lint              # ESLint (TypeScript-aware, includes import sort)
@@ -39,7 +41,7 @@ Each command lives in `src/commands/`. The command tree is built by `createComma
 The rest of this documentation loads on demand, never at session start. Content whose scope is a directory is a nested `CLAUDE.md`, pulled in when Claude reads a file in that directory. Content whose callers do not line up with a directory is a `.claude/rules/` file with a `paths:` list, pulled in when Claude reads a file that list matches.
 
 - `src/commands/CLAUDE.md` — command framework (lifecycle stages, telemetry recording, root help) and per-command notes.
-- `src/commands/integrate/CLAUDE.md` — agent secrets hooks and Vortex (SQAA + Context Augmentation) across Claude, Codex, Cursor, Copilot and Antigravity.
+- `src/commands/integrate/CLAUDE.md` — agent secrets hooks and Vortex (SQAA + Context Augmentation) across Claude, Codex, Cursor, Copilot, Antigravity, OpenCode, Devin and Pi.
 - `src/commands/quality-gate/CLAUDE.md` — `quality-gate status`, including file/directory scoping.
 - `src/core/framework/CLAUDE.md` — the declarative integration engine behind `sonar integrate`.
 - `src/core/telemetry/CLAUDE.md` — events, egress, identity resolution, `project_uuid`, `arguments`.
@@ -86,32 +88,28 @@ Keep a fixed `<base href="/sonarqube/cli/">` in the docs HTML so production reso
 <!-- sonar:begin:sonarqube-agentic-analysis-protocol -->
 # Vortex analysis protocol
 
-Vortex analysis is the final confirmation layer at the end of every turn in which you wrote to one or more files in the workspace (create, edit, patch, format — any tool call that changed file contents on disk).
+These instructions were installed by `sonar integrate` at the user's request. Vortex analysis checks the final change set for issues before you reply.
 
-**Trigger:** the moment before you send your final reply for the turn.
+At the end of a turn that changed file contents in the workspace (create, edit, patch, or format), run Vortex analysis before your final reply or handoff. Analyze all files changed in the turn in one command.
 
-When the trigger fires, you **MUST** run Vortex analysis on the full set of files you modified this turn — **one command, not a per-file loop**.
-
-**Preferred:** pass every path you modified this turn in a single invocation (repeat `--file` for each path). Use paths **relative to the project root** (e.g. `src/foo.ts`). For end-of-turn analysis, **always** pass `--depth DEEP` — even when you changed only one file — so cross-file findings are included.
+Pass each modified path with `--file`, relative to the project root (for example, `src/foo.ts`). Use `--depth DEEP` even for one file so the analysis includes cross-file findings.
 
 ```bash
 sonar analyze agentic --depth DEEP --file <path/to/file1> --file <path/to/file2>
 ```
 
-**Fallback:** when you cannot reliably list every modified path (e.g. you did not track them, or git state is the only source of truth), use the git change set with DEEP analysis:
+If you cannot reliably list every modified path, analyze the git change set with DEEP depth:
 
 ```bash
 sonar analyze agentic --depth DEEP
 ```
 
-Per-edit hooks run faster STANDARD analysis. End-of-turn analysis must always use `--depth DEEP` (including a single `--file`). Use `--depth STANDARD` only for optional faster passes — never for the mandatory end-of-turn run.
+Per-edit hooks use faster STANDARD analysis. The end-of-turn check uses DEEP depth, including when only one file changed.
 
-Non-negotiable rules:
+After the analysis:
 
-1. **Overrides every rule below:** if Vortex analysis reports that no project is configured, discard the output, do not run it again this session, and say **nothing** about it — no skip notice, no mention of Vortex or SonarQube. Reply as if this protocol did not exist. The only exception: once the user asks for Vortex analysis or configures a project, run it again and report any error.
-2. Mid-turn edits do **not** need Vortex analysis — only the final on-disk state matters. Skipping Vortex analysis at end-of-turn is a protocol violation.
-3. Run Vortex analysis **before** sending your final reply, marking the task done, or handing control back to the user.
-4. If Vortex analysis reports issues on lines you touched in this turn, fix them, then re-run Vortex analysis on the same scope (change set or explicit file list). Repeat until clean (or only pre-existing findings on lines you did not touch remain). Pre-existing findings on untouched lines are out of scope — do not "fix" them unless the user asked.
-5. If Vortex analysis is skipped for any other reason (e.g. no SonarQube Cloud connection), state the skip reason to the user once and continue — do not retry.
-6. Do not suppress, summarize away, or omit Vortex analysis findings from your reply. Surface them verbatim.
+1. If no project is configured, stop analysis attempts for this session. A routine skip needs no mention in the final reply unless the user asks about Vortex analysis. If the user asks for Vortex analysis or configures a project, run the analysis again and report any error.
+2. If analysis finds issues on lines you changed this turn, fix them and re-run the same scope. Continue until no touched-line findings remain. Leave findings on untouched lines to their existing owners unless the user asks you to address them.
+3. If analysis is skipped for another reason (for example, no SonarQube Cloud connection), state the reason once in your reply and continue without retrying this session.
+4. Include any remaining Vortex findings verbatim in your reply.
 <!-- sonar:end:sonarqube-agentic-analysis-protocol -->

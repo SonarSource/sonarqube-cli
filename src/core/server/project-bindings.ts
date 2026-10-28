@@ -25,6 +25,7 @@ import { okAsync, type ResultAsync } from '../result.ts';
 import type { HttpClientError } from './errors.ts';
 import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
+import { hasNextPage, type Paging } from './paging.ts';
 
 export class ProjectBindingsClient {
   private readonly client: SonarHttpClient;
@@ -35,33 +36,34 @@ export class ProjectBindingsClient {
 
   /**
    * Resolve a project key from a git repository remote URL using server-side bindings.
+   * Null means a successful empty binding lookup; undefined means skipped, failed, or ambiguous.
    * SonarQube Server: GET /api/v2/dop-translation/project-bindings
    * SonarQube Cloud: GET /dop-translation/project-bindings, then search_projects by project id.
    */
   getProjectKeyByGitRemote(
     remoteUrl: string,
     orgKey?: string,
-  ): ResultAsync<string | null, HttpClientError> {
+  ): ResultAsync<string | null | undefined, HttpClientError> {
     const sanitizedRemoteUrl = stripGitRemoteUrlUserinfo(remoteUrl);
     if (this.client.isCloud) {
       if (!orgKey) {
-        return okAsync(null);
+        return okAsync(undefined);
       }
       return this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl).andThen((projectId) => {
         if (!projectId) {
-          return okAsync(null);
+          return okAsync(projectId);
         }
         return this.getSonarCloudProjectKeyById(projectId, orgKey);
       });
     }
-    return this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl).map(
-      (binding) => binding?.projectKey ?? null,
+    return this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl).map((binding) =>
+      binding === null ? null : binding?.projectKey,
     );
   }
 
   private getSqsProjectBindingByRemoteUrl(
     remoteUrl: string,
-  ): ResultAsync<{ projectKey: string } | null, HttpClientError> {
+  ): ResultAsync<{ projectKey: string } | null | undefined, HttpClientError> {
     const endpoint = `/api/v2/dop-translation/project-bindings?repositoryUrl=${encodeURIComponent(remoteUrl)}`;
     return this.client
       .getSafe<{
@@ -69,38 +71,47 @@ export class ProjectBindingsClient {
       }>(endpoint)
       .map((result) => {
         if (!result.response.ok) {
+          return undefined;
+        }
+        if (
+          Array.isArray(result.value?.projectBindings) &&
+          result.value.projectBindings.length === 0
+        ) {
           return null;
         }
         const binding = requireSingleBinding(
           result.value?.projectBindings,
           'git remote on SonarQube Server',
         );
-        return binding?.projectKey ? { projectKey: binding.projectKey } : null;
+        return binding?.projectKey ? { projectKey: binding.projectKey } : undefined;
       });
   }
 
   private getSqcProjectIdByRemoteUrl(
     remoteUrl: string,
-  ): ResultAsync<string | null, HttpClientError> {
+  ): ResultAsync<string | null | undefined, HttpClientError> {
     const endpoint = `/dop-translation/project-bindings?url=${encodeURIComponent(remoteUrl)}`;
     return this.client
       .getSafe<{ bindings: Array<{ projectId: string }> }>(endpoint)
       .map((result) => {
         if (!result.response.ok) {
+          return undefined;
+        }
+        if (Array.isArray(result.value?.bindings) && result.value.bindings.length === 0) {
           return null;
         }
         const binding = requireSingleBinding(
           result.value?.bindings,
           'git remote on SonarQube Cloud',
         );
-        return binding?.projectId ?? null;
+        return binding?.projectId;
       });
   }
 
   private getSonarCloudProjectKeyById(
     projectId: string,
     orgKey: string,
-  ): ResultAsync<string | null, HttpClientError> {
+  ): ResultAsync<string | null | undefined, HttpClientError> {
     return this.client
       .getSafe<{ components: Array<{ key: string }> }>('/api/components/search_projects', {
         projectIds: projectId,
@@ -108,14 +119,14 @@ export class ProjectBindingsClient {
       })
       .map((result) => {
         if (!result.response.ok) {
-          return null;
+          return undefined;
         }
         const components = result.value?.components;
         if (!Array.isArray(components) || components.length === 0) {
-          return null;
+          return undefined;
         }
         const projectKey = components[0].key;
-        return projectKey || null;
+        return projectKey || undefined;
       });
   }
 
@@ -161,7 +172,7 @@ export class ProjectBindingsClient {
 
 interface ProjectBindingsPageResponse {
   projectBindings: Array<{ projectKey: string; repository: string }>;
-  page: { total: number; pageSize: number; pageIndex: number };
+  page: Paging;
 }
 
 function mergeBindingsPage(
@@ -179,7 +190,10 @@ function isLastPage(
   pageSize: number,
 ): boolean {
   const effectivePageSize = result.page.pageSize || pageSize;
-  return result.projectBindings.length === 0 || pageIndex * effectivePageSize >= result.page.total;
+  return (
+    result.projectBindings.length === 0 ||
+    !hasNextPage({ pageIndex, pageSize: effectivePageSize, total: result.page.total })
+  );
 }
 
 /** Returns the sole binding, or null when there are none or more than one (ambiguous). */

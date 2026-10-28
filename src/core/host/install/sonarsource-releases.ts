@@ -22,6 +22,7 @@
 
 import { readFileSync } from 'node:fs';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { fetchAnonymous } from '@/core/server/fetch.ts';
 
 import { version as VERSION } from '../../../../package.json';
@@ -34,17 +35,23 @@ import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
 
 const DOWNLOAD_TIMEOUT_MS = 60000;
 
+/** CDN filename extension for a dependency binary's pinned version on a given platform. */
+export type DependencyExtension = 'bin' | 'exe' | 'tar.gz';
+
 /**
  * Build the CDN filename for dependency binaries installed via `buildDownloadUrl`
- * (e.g. sonar-secrets, sca-scanner-cli). Unlike the sonarqube-cli release artifact,
- * these always use a `.exe` suffix on binaries.sonarsource.com regardless of platform.
+ * (e.g. sonar-secrets, sca-scanner-cli). The extension is not a constant across
+ * binaries.sonarsource.com: some binaries/versions publish `.exe` on every
+ * platform, others follow the CLI's own convention (`.bin` on Linux/macOS, `.exe`
+ * on Windows only). `BinarySpec.extensions` records which, per platform.
  */
 function buildDownloadFilename(
   binaryName: string,
   version: string,
   platformInfo: PlatformInfo,
+  extension: DependencyExtension,
 ): string {
-  return `${binaryName}-${version}-${platformInfo.os}-${platformInfo.arch}.exe`;
+  return `${binaryName}-${version}-${platformInfo.os}-${platformInfo.arch}.${extension}`;
 }
 
 /**
@@ -57,8 +64,9 @@ export function buildDownloadUrl(
   version: string,
   distPrefix: string,
   platformInfo: PlatformInfo,
+  extension: DependencyExtension,
 ): string {
-  const filename = buildDownloadFilename(binaryName, version, platformInfo);
+  const filename = buildDownloadFilename(binaryName, version, platformInfo, extension);
   return `${SONARSOURCE_BINARIES_URL}/${distPrefix}/${filename}`;
 }
 
@@ -136,6 +144,7 @@ export async function verifyPgpSignature(
  * Throws if the platform signature is missing or does not match the binary.
  */
 export async function verifyBinarySignature(
+  binaryName: string,
   binaryPath: string,
   platformInfo: PlatformInfo,
   signatures: Record<string, string>,
@@ -144,7 +153,7 @@ export async function verifyBinarySignature(
   const platformKey = `${platformInfo.os}-${platformInfo.arch}`;
   const armoredSignature = signatures[platformKey];
   if (!armoredSignature) {
-    throw new Error(`Signature not found for '${platformKey}'. Run: npm run fetch:signatures`);
+    throw new CommandFailedError(`${binaryName} is not available for platform '${platformKey}'.`);
   }
 
   const binary = readFileSync(binaryPath);

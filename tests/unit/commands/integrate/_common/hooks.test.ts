@@ -19,15 +19,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,7 +40,6 @@ import {
   UNIX_SONAR_COMMAND_GUARD,
   upsertAgentHooks,
   WINDOWS_SONAR_COMMAND_GUARD,
-  writeHookScript,
 } from '../../../../../src/commands/integrate/_common/hooks.ts';
 
 const IS_WINDOWS = process.platform === 'win32';
@@ -87,49 +78,6 @@ describe('buildWindowsHookScript', () => {
     expect(body).not.toContain('sonar secret check');
     expect(body).not.toContain('--project');
     expect(body).not.toContain('permissionDecision');
-  });
-});
-
-describe('writeHookScript', () => {
-  let workDir: string;
-
-  beforeEach(() => {
-    workDir = mkdtempSync(join(tmpdir(), 'sonar-hooks-test-'));
-  });
-
-  afterEach(() => {
-    rmSync(workDir, { recursive: true, force: true });
-  });
-
-  it('writes the correct platform body, uses the platform extension, and returns an absolute path', async () => {
-    const scriptDir = join(workDir, 'scripts');
-
-    const written = await writeHookScript(scriptDir, 'pretool', 'UNIX_BODY', 'WINDOWS_BODY');
-
-    const expectedExt = IS_WINDOWS ? '.ps1' : '.sh';
-    expect(written.endsWith(`pretool${expectedExt}`)).toBe(true);
-    expect(written.startsWith(scriptDir)).toBe(true);
-    expect(statSync(written).isFile()).toBe(true);
-    expect(readFileSync(written, 'utf-8')).toBe(IS_WINDOWS ? 'WINDOWS_BODY' : 'UNIX_BODY');
-  });
-
-  it('creates the script directory recursively when missing', async () => {
-    const scriptDir = join(workDir, 'a', 'b', 'c');
-
-    const written = await writeHookScript(scriptDir, 'pretool', 'unix', 'windows');
-
-    expect(statSync(scriptDir).isDirectory()).toBe(true);
-    expect(statSync(written).isFile()).toBe(true);
-  });
-
-  it.skipIf(IS_WINDOWS)('writes the script with mode 0o755 on Unix', async () => {
-    const scriptDir = join(workDir, 'scripts');
-
-    const written = await writeHookScript(scriptDir, 'pretool', 'unix', 'windows');
-
-    // Mask out file-type bits; only the permission bits matter.
-    const mode = statSync(written).mode & 0o777;
-    expect(mode).toBe(0o755);
   });
 });
 

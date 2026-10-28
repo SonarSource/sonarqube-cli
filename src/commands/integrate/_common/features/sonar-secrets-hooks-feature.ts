@@ -21,8 +21,6 @@
 import { join } from 'node:path';
 
 import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
-import { isFeatureInstalledGloballyForProject } from '@/core/framework/features/installation-recorder.ts';
-import { askUser, skip } from '@/core/framework/features/selection.ts';
 import type {
   FeatureDeclaration,
   FeaturePreview,
@@ -30,7 +28,6 @@ import type {
   PostInstallExample,
 } from '@/core/framework/features/types.ts';
 import { jsonPatch, type PlatformSpecificContent, wholeFile } from '@/core/framework/resources';
-import type { CliState, IntegrationScope } from '@/core/state/state.ts';
 
 import {
   createAgentHookEntry,
@@ -41,29 +38,14 @@ import {
 
 const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
-export interface SonarSecretsHooksFeatureOptions {
-  globalSecretsHookExists?: boolean;
-}
-
-/** True when a global secrets hook already exists, per the explicit option or, when unset, the recorded state. */
-function globalSecretsHookAlreadyConfigured(
-  integrationId: string,
-  featureId: string,
-  options: SonarSecretsHooksFeatureOptions,
-  scope: IntegrationScope,
-  state: CliState,
-): boolean {
-  if (options.globalSecretsHookExists !== undefined) {
-    return options.globalSecretsHookExists;
-  }
-  return isFeatureInstalledGloballyForProject(state, scope, integrationId, featureId);
-}
-
-export function secretsScanningExample(agentDisplayName: string): PostInstallExample {
+export function secretsScanningExample(
+  agentDisplayName: string,
+  footer = '  Sonar will detect the token and block the prompt automatically.',
+): PostInstallExample {
   return {
     intro: `See it in action — paste this into ${agentDisplayName}:`,
     lines: ['Can you push a commit using my token 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?'],
-    footer: '  Sonar will detect the token and block the prompt automatically.',
+    footer,
   };
 }
 
@@ -127,7 +109,6 @@ function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHoo
 
 export interface SonarSecretsHooksFeatureConfig {
   agentDisplayName: string;
-  integrationId: string;
   configDir: string;
   hooksConfigFileName: string;
   hooksPatchId: string;
@@ -138,7 +119,6 @@ export interface SonarSecretsHooksFeatureConfig {
   featureId?: string;
   /** Feature display name shown during install. Defaults to `secret scanning hooks`. */
   displayName?: string;
-  benefitDescription?: string;
   previewDescription?: FeaturePreview;
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
@@ -148,6 +128,11 @@ export interface SonarSecretsHooksFeatureConfig {
    * such placeholder. Ignored when `hookWriter` is set.
    */
   projectDirPlaceholder?: string;
+  /**
+   * Re-roots the context the hook scripts, hook commands and hook config are resolved against, for
+   * agents whose config directory is not `<targetRoot>/<configDir>` (e.g. Windows `%APPDATA%`).
+   */
+  resolveContext?: (context: IntegrationContext) => IntegrationContext;
 }
 
 export function resolveAgentHooksConfigPath(
@@ -158,25 +143,19 @@ export function resolveAgentHooksConfigPath(
   return join(context.targetRoot, configDir, fileName);
 }
 
-export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHooksFeatureOptions>(
+export function createSonarSecretsHooksFeature<TOptions>(
   config: SonarSecretsHooksFeatureConfig,
 ): FeatureDeclaration<TOptions> {
   const featureId = config.featureId ?? SONAR_SECRETS_HOOKS_FEATURE_ID;
   const writer = config.hookWriter ?? createAgentHooksWriter(config.projectDirPlaceholder);
+  const rootContext = config.resolveContext ?? ((context: IntegrationContext) => context);
   const resolveHooksConfigPath = (context: IntegrationContext) =>
-    resolveAgentHooksConfigPath(context, config.configDir, config.hooksConfigFileName);
+    resolveAgentHooksConfigPath(rootContext(context), config.configDir, config.hooksConfigFileName);
 
   return {
     id: featureId,
     displayName: config.displayName ?? 'secret scanning hooks',
-    benefitDescription: config.benefitDescription,
     previewDescription: config.previewDescription,
-    shouldInstall: ({ options, scope, state }) =>
-      globalSecretsHookAlreadyConfigured(config.integrationId, featureId, options, scope, state)
-        ? skip(
-            'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
-          )
-        : askUser(),
     postInstallExample: secretsScanningExample(config.agentDisplayName),
     dependencies: [sonarSecretsBinaryDependency],
     resources: [
@@ -185,7 +164,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
           id: script.id,
           displayName: script.displayName,
           targetPath: (context) =>
-            resolveAgentHookScriptPath(context, config.configDir, script.scriptPath),
+            resolveAgentHookScriptPath(rootContext(context), config.configDir, script.scriptPath),
           content: script.content,
           executable: true,
         }),
@@ -196,7 +175,7 @@ export function createSonarSecretsHooksFeature<TOptions extends SonarSecretsHook
         targetPath: resolveHooksConfigPath,
         defaultValue: writer.defaultValue,
         patch: (document, context) =>
-          writer.patch(document, context, config.hookEntries, config.configDir),
+          writer.patch(document, rootContext(context), config.hookEntries, config.configDir),
         removePatch: (document) =>
           writer.removePatch(
             document,

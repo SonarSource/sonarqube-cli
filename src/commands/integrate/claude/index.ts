@@ -21,28 +21,12 @@
 // Integrate command - setup SonarQube integration for Claude Code
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { installIntegration } from '@/core/framework/features';
-import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
-import { removeObsoleteHookArtifacts } from '@/core/update/claude-hooks-migration.ts';
 
-import {
-  displayAgentIntegratePrelude,
-  resolveIntegrateInstallTarget,
-} from '../_common/agent-integrate-prelude.ts';
-import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
-import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
+import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { resolveVortexSetup } from '../_common/vortex.ts';
-import { supportedIntegrations } from '../index.ts';
 import { CLAUDE_INTEGRATION_ID, type ClaudeIntegrationOptions } from './declaration.ts';
-
-export interface ConfigurationData {
-  serverURL: string;
-  projectKey: string | undefined;
-  organization: string | undefined;
-  token: string;
-}
 
 /**
  * Integrate command handler
@@ -56,74 +40,12 @@ export async function integrateClaude(
     printAgentNonInteractiveAlternativeHint(console, 'sonar integrate claude --non-interactive');
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Claude Code', auth, console);
+  await displayAgentIntegratePrelude('Claude Code', auth, console);
 
-  const config = toConfigurationData(integrateCtx);
-  const vortex = await resolveVortexSetup(auth, console);
-  const featureAttrs = buildRecordedIntegrationAttrs({
-    baseAttrs: buildIntegrationAttrs(config),
-    projectRoot: integrateCtx.project.projectRoot,
-    mainRepoRoot: integrateCtx.project.mainRepoRoot,
-    serverUrl: config.serverURL,
-    orgKey: config.organization,
-    contextAugmentation: vortex,
+  await finalizeAgentInstall<ClaudeIntegrationOptions>({
+    integrationId: CLAUDE_INTEGRATION_ID,
+    options,
+    auth,
+    ctx,
   });
-  const { installRoot, installScope } = resolveIntegrateInstallTarget();
-  const integrationOptions = {
-    ...options,
-    projectRoot: integrateCtx.project.projectRoot,
-    vortexDisposition: vortex.disposition,
-  } satisfies ClaudeIntegrationOptions;
-  let installError: Error | undefined;
-  try {
-    await installIntegration({
-      registry: supportedIntegrations,
-      integrationId: CLAUDE_INTEGRATION_ID,
-      options: integrationOptions,
-      targetRoot: installRoot,
-      scope: installScope,
-      console: ctx.console,
-      auth,
-      attrs: featureAttrs,
-      nonInteractive: options.nonInteractive,
-      onSuccess: (facts) => {
-        recordIntegrationConfigured(ctx, {
-          auth,
-          integrationId: CLAUDE_INTEGRATION_ID,
-          scope: installScope,
-          nonInteractive: options.nonInteractive ?? false,
-          isFromRouter: options.isFromRouter ?? false,
-          ...facts,
-        });
-      },
-    });
-  } catch (error) {
-    installError = error instanceof Error ? error : new Error(String(error));
-  }
-  await removeObsoleteHookArtifacts(installRoot);
-  if (installError) {
-    throw installError;
-  }
-}
-
-function toConfigurationData(ctx: {
-  serverUrl: string;
-  organization: string | undefined;
-  projectKey: string | undefined;
-  token: string;
-}): ConfigurationData {
-  return {
-    serverURL: ctx.serverUrl,
-    organization: ctx.organization,
-    projectKey: ctx.projectKey,
-    token: ctx.token,
-  };
-}
-
-function buildIntegrationAttrs(
-  config: ConfigurationData,
-): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: config.projectKey ?? null,
-  };
 }

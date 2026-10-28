@@ -27,10 +27,15 @@ import * as fs from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { analyzeSecrets, runSecretsBinaryOnText } from '@/commands/analyze/secrets.ts';
+import {
+  analyzeSecrets,
+  runSecretsBinaryOnStream,
+  runSecretsBinaryOnText,
+} from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -63,7 +68,7 @@ function mockBinaryExists(fileAlsoExists = true) {
 }
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let saveStateSpy: ReturnType<typeof spyOn>;
+let updateStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
 
@@ -74,7 +79,9 @@ beforeEach(() => {
 
 beforeEach(() => {
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
-  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+  updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+    update(stateRepository.loadState()),
+  );
   spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
     exitCode: 0,
     stdout: '{}',
@@ -88,7 +95,7 @@ beforeEach(() => {
 
 afterEach(() => {
   loadStateSpy.mockRestore();
-  saveStateSpy.mockRestore();
+  updateStateSpy.mockRestore();
   spawnSpy.mockRestore();
   resolveSecretsBinarySpy.mockRestore();
 });
@@ -604,6 +611,36 @@ describe('runSecretsBinaryOnText', () => {
     await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'text', FAKE_AUTH);
     expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_AUTH_URL']).toBe(SONARCLOUD_URL);
     expect(spawnSpy.mock.calls[0][2].env['SONAR_SECRETS_TOKEN']).toBe(TEST_TOKEN);
+  });
+});
+
+async function* emptyBatch(): AsyncGenerator<Buffer> {
+  // Nothing to send; these tests only inspect how the process was started.
+}
+
+describe('runSecretsBinaryOnStream', () => {
+  it('states the size limit rather than relying on the analyzer default', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', emptyBatch(), FAKE_AUTH);
+
+    // A caller that drops oversize content before sending it has to filter on the same threshold.
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      String(MAX_SCANNED_FILE_SIZE),
+    ]);
+  });
+
+  it('hands the batch to the process as its stdin data', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+    const batch = emptyBatch();
+
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', batch, FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][2].stdinData).toBe(batch);
   });
 });
 

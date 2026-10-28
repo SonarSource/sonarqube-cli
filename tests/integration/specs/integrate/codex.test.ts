@@ -50,6 +50,7 @@ import {
   normalizePath,
   TestHarness,
 } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
@@ -92,6 +93,23 @@ describe('integrate codex', () => {
 
   afterEach(async () => {
     await harness.dispose();
+  });
+
+  it('lists installed components in help', async () => {
+    const result = await harness.run('integrate codex --help');
+    expect(result.exitCode).toBe(0);
+    const help = result.stdout.replace(/\s+/g, ' ');
+    for (const part of [
+      'UserPromptSubmit',
+      'secrets-on-read instructions',
+      'MCP server',
+      'When Vortex is available',
+      'startup context hooks',
+      'analysis hooks',
+      'end-of-turn analysis instructions',
+    ]) {
+      expect(help).toContain(part);
+    }
   });
 
   describe('install (default: global)', () => {
@@ -389,7 +407,17 @@ describe('integrate codex', () => {
         expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).toContain(SQAA_HEADING);
+        expect(body).toContain("installed by `sonar integrate` at the user's request");
+        expect(body).toContain('At the end of a turn that changed file contents');
         expect(body).toContain('sonar analyze agentic --depth DEEP');
+        expect(body).toContain('fix them and re-run the same scope');
+        expect(body).toContain('A routine skip needs no mention');
+        expect(body).toContain('If the user asks for Vortex analysis or configures a project');
+        expect(body).toContain('run the analysis again and report any error');
+        expect(body).toContain('continue without retrying this session');
+        expect(body).not.toContain('Non-negotiable rules');
+        expect(body).not.toContain('Overrides every rule below');
+        expect(body).not.toContain('say **nothing** about it');
         expect(
           findInstalledSubfeature(
             harness,
@@ -566,6 +594,7 @@ describe('integrate codex', () => {
         // is not_applicable. The three remaining features
         // (secrets hook, secrets instructions, MCP) each ask.
         const session = harness.runInteractive('integrate codex');
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -612,6 +641,7 @@ describe('integrate codex', () => {
         let result: CliResult;
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
+          await chooseCustomize(session);
           await session.accept('Install secret scanning hooks?');
           await session.accept('Install secrets-on-read instructions?');
           await session.accept('Install MCP server?');
@@ -634,6 +664,7 @@ describe('integrate codex', () => {
       'skips a feature when the user declines its prompt',
       async () => {
         const session = harness.runInteractive('integrate codex');
+        await chooseCustomize(session);
         await session.decline('Install secret scanning hooks?');
         await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
@@ -675,6 +706,7 @@ describe('integrate codex', () => {
             __SQCLI_DEV_SKIP_CAG: '1',
           },
         });
+        await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install Vortex?');
         await session.accept('Install secrets-on-read instructions?');

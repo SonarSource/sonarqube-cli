@@ -18,18 +18,28 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as scaInstall from '@/core/host/install/sca-scanner.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import {
+  type CompleteProjectMapping,
+  DiscoveredProjects,
+} from '@/core/project-discovery/project-discovery-result.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
 
-import { ScaScanOrchestrator } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
+import {
+  ScaScanOrchestrator,
+  type ScaScanTarget,
+} from '../../../../src/commands/analyze/dependency-risk-helpers/sca-scan-orchestrator.ts';
 import type {
   AnalyzeProjectResponse,
   Severity,
@@ -37,6 +47,17 @@ import type {
 import { ScaWatchPatternsRunner } from '../../../../src/commands/analyze/dependency-risk-helpers/sca-watch-patterns.ts';
 import { runDepRisksStage } from '../../../../src/commands/hook/git-pre-commit-dependency-risks.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+
+const REPO = canonicalizePath(process.cwd());
+
+function project(projectKey: string, path: string): CompleteProjectMapping {
+  return {
+    projectKey,
+    projectRoot: join(REPO, path),
+    serverUrl: 'https://sonarcloud.io',
+    organization: 'my-org',
+  };
+}
 
 let fake: FakeConsole;
 
@@ -191,15 +212,18 @@ describe('runDepRisksStage', () => {
   let resolveScaScannerBinaryPathSpy: ReturnType<typeof spyOn>;
   let watchPatternsSpy: ReturnType<typeof spyOn>;
   let orchestratorRunSpy: ReturnType<typeof spyOn>;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  let discoverProjectsSpy: ReturnType<typeof spyOn>;
+
+  function scannedTargets(): ScaScanTarget[] {
+    return (orchestratorRunSpy.mock.calls as [unknown, ScaScanTarget][]).map((call) => call[1]);
+  }
 
   beforeEach(() => {
     resetProjectUuidContextForTests();
     fake = new FakeConsole();
-    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      projectRoot: '/repo',
-      configSources: [],
-    });
+    discoverProjectsSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
+      new DiscoveredProjects(REPO, []),
+    );
     resolveScaScannerBinaryPathSpy = spyOn(
       scaInstall,
       'resolveScaScannerBinaryPath',
@@ -213,7 +237,7 @@ describe('runDepRisksStage', () => {
   });
 
   afterEach(() => {
-    discoverProjectSpy.mockRestore();
+    discoverProjectsSpy.mockRestore();
     resolveScaScannerBinaryPathSpy.mockRestore();
     watchPatternsSpy.mockRestore();
     orchestratorRunSpy.mockRestore();
@@ -324,12 +348,10 @@ describe('runDepRisksStage', () => {
     expect(skipCall).toBeDefined();
   });
 
-  it('scans under the discovered project key when no -p was baked', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      projectRoot: '/repo',
-      configSources: [],
-      projectKey: 'discovered-key',
-    });
+  it('scans under the discovered project key, from its root, when no -p was baked', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      new DiscoveredProjects(REPO, [project('discovered-key', 'app')]),
+    );
 
     let thrown: unknown;
     try {
@@ -343,18 +365,18 @@ describe('runDepRisksStage', () => {
       thrown = e;
     }
 
-    expect(orchestratorRunSpy.mock.calls[0][1]).toBe('discovered-key');
+    expect(scannedTargets()).toEqual([
+      { projectKey: 'discovered-key', baseDir: join(REPO, 'app') },
+    ]);
     expect((thrown as CommandFailedError).remediationHint).toContain(
       "sonar analyze dependency-risks -p discovered-key'",
     );
   });
 
-  it('rejects a multiline discovered project key before scanning', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      projectRoot: '/repo',
-      configSources: [],
-      projectKey: 'first\nsecond',
-    });
+  it('rejects a discovered project key spanning several lines', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      new DiscoveredProjects(REPO, [project('discovered\nkey', 'app')]),
+    );
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(
@@ -365,8 +387,178 @@ describe('runDepRisksStage', () => {
         ctx: makeCtx(),
       }),
     ).rejects.toThrow('The project key must be a single line.');
-
     expect(orchestratorRunSpy).not.toHaveBeenCalled();
+  });
+
+  it('scans a baked -p from the root of the linked project with that key', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      new DiscoveredProjects(REPO, [project('demo', 'services/demo')], true),
+    );
+    orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+    await runDepRisksStage({
+      project: 'demo',
+      changedFiles: ['package.json'],
+      connection: FAKE_CONNECTION,
+      ctx: makeCtx(),
+    });
+
+    expect(scannedTargets()).toEqual([
+      { projectKey: 'demo', baseDir: join(REPO, 'services', 'demo') },
+    ]);
+  });
+
+  it('scans a baked -p that is not linked from the current directory', async () => {
+    orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+    await runDepRisksStage({
+      project: 'demo',
+      changedFiles: ['package.json'],
+      connection: FAKE_CONNECTION,
+      ctx: makeCtx(),
+    });
+
+    expect(scannedTargets()).toEqual([{ projectKey: 'demo', baseDir: REPO }]);
+  });
+
+  describe('with several projects linked in .sonar-config.json', () => {
+    function linkProjects(...projects: CompleteProjectMapping[]) {
+      discoverProjectsSpy.mockResolvedValue(new DiscoveredProjects(REPO, projects, true));
+    }
+
+    it('scans each project with a changed manifest from its root, reporting progress', async () => {
+      linkProjects(project('api', 'services/api'), project('web', 'apps/web'));
+      orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['services/api/package.json', 'apps/web/package.json'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      });
+
+      expect(scannedTargets()).toEqual([
+        { projectKey: 'api', baseDir: join(REPO, 'services', 'api') },
+        { projectKey: 'web', baseDir: join(REPO, 'apps', 'web') },
+      ]);
+      expect(fake.findCall('info', 'Scanning dependency risks for api (1/2)')).toBeDefined();
+      expect(fake.findCall('info', 'Scanning dependency risks for web (2/2)')).toBeDefined();
+      expect(fake.findCall('discreetSuccess', 'No dependency risks found.')).toBeDefined();
+    });
+
+    it('scans only the projects whose manifests changed, without progress for a single one', async () => {
+      linkProjects(project('api', 'services/api'), project('web', 'apps/web'));
+      orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['apps/web/package.json', 'services/api/index.ts'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      });
+
+      expect(scannedTargets().map(({ projectKey }) => projectKey)).toEqual(['web']);
+      expect(fake.findCall('info', 'Scanning dependency risks')).toBeUndefined();
+    });
+
+    it('skips when the changed manifests are outside every linked project', async () => {
+      linkProjects(project('api', 'services/api'));
+
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['tools/package.json'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      });
+
+      expect(orchestratorRunSpy).not.toHaveBeenCalled();
+      expect(
+        fake.findCall('success', 'No dependency manifests changed in a linked project'),
+      ).toBeDefined();
+    });
+
+    it('skips nested projects with a warning', async () => {
+      linkProjects(
+        project('api', 'services/api'),
+        project('api-v2', 'services/api/v2'),
+        project('web', 'apps/web'),
+      );
+      orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['services/api/v2/package.json', 'apps/web/package.json'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      });
+
+      expect(scannedTargets().map(({ projectKey }) => projectKey)).toEqual(['web']);
+      expect(
+        fake.findCall('warn', 'Dependency-risks scan skipped for api: nested projects'),
+      ).toBeDefined();
+      expect(
+        fake.findCall('warn', 'Dependency-risks scan skipped for api-v2: nested projects'),
+      ).toBeDefined();
+    });
+
+    it('skips projects linked to a connection other than the active one', async () => {
+      linkProjects(project('api', 'services/api'), {
+        ...project('web', 'apps/web'),
+        organization: 'other-org',
+      });
+      orchestratorRunSpy.mockResolvedValue(asScan(SCAN_RESULT_EMPTY));
+
+      await runDepRisksStage({
+        project: undefined,
+        changedFiles: ['services/api/package.json', 'apps/web/package.json'],
+        connection: FAKE_CONNECTION,
+        ctx: makeCtx(),
+      });
+
+      expect(scannedTargets().map(({ projectKey }) => projectKey)).toEqual(['api']);
+      expect(
+        fake.findCall(
+          'warn',
+          'Dependency-risks scan skipped for web: it is linked to a connection',
+        ),
+      ).toBeDefined();
+    });
+
+    it('keeps scanning after a failed scan and blocks on the risks found in every project', async () => {
+      linkProjects(
+        project('api', 'services/api'),
+        project('lib', 'libs/lib'),
+        project('web', 'apps/web'),
+      );
+      orchestratorRunSpy
+        .mockResolvedValueOnce(asScan(SCAN_RESULT_WITH_RISK))
+        .mockRejectedValueOnce(new Error('scanner boom'))
+        .mockResolvedValueOnce(asScan(SCAN_RESULT_MULTI_SEVERITY));
+
+      let thrown: unknown;
+      try {
+        await runDepRisksStage({
+          project: undefined,
+          changedFiles: [
+            'services/api/package.json',
+            'libs/lib/package.json',
+            'apps/web/package.json',
+          ],
+          connection: FAKE_CONNECTION,
+          ctx: makeCtx(),
+        });
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(fake.findCall('warn', 'Dependency-risks scan failed for lib;')).toBeDefined();
+      expect(thrown).toBeInstanceOf(CommandFailedError);
+      const err = thrown as CommandFailedError;
+      expect(err.message).toBe('4 dependency risks found: api (1 HIGH), web (1 BLOCKER, 2 HIGH)');
+      expect(err.remediationHint).toBe(
+        "Run 'sonar analyze dependency-risks -p api', 'sonar analyze dependency-risks -p web' for details and fix recommendations. Bypass with 'git commit --no-verify' if risks are already reviewed.",
+      );
+    });
   });
 
   it('warns and skips when no project key resolved, but only after checking manifests changed', async () => {

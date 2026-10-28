@@ -19,6 +19,9 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -288,12 +291,22 @@ describe('updateStatus', () => {
 
 describe('updateVersion (no options)', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
 
   beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     fetchSpy = spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
     fetchSpy.mockRestore();
   });
 
@@ -312,8 +325,14 @@ describe('updateVersion (no options)', () => {
 
 describe('updateVersion --force', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
+  const originalLocalAppData = process.env.LOCALAPPDATA;
 
   beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.env.LOCALAPPDATA = String.raw`C:\Users\test\AppData\Local`;
+    process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
     spawnMock.mockClear();
     spawnMock.mockImplementation((() =>
       createSpawnChild()) as unknown as typeof childProcess.spawn);
@@ -323,6 +342,17 @@ describe('updateVersion --force', () => {
   });
 
   afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+    }
     fetchSpy.mockRestore();
   });
 
@@ -401,6 +431,7 @@ describe('updateVersion --force', () => {
 
   it('confirms update launched in new terminal on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
+    process.execPath = String.raw`C:\Users\test\AppData\Local\sonarqube-cli\bin\sonar.exe`;
     await runForce('2.0.0', 'Write-Host hi\n');
 
     const messages = fake.calls.map((c) => c.args.join(' '));
@@ -418,6 +449,7 @@ describe('updateVersion --force', () => {
 
   it('throws when the Windows updater terminal cannot be launched', async () => {
     isWindowsMock.mockImplementation(() => true);
+    process.execPath = String.raw`C:\Users\test\AppData\Local\sonarqube-cli\bin\sonar.exe`;
     spawnMock.mockImplementation((() =>
       createSpawnChild('error', 'spawn cmd.exe ENOENT')) as unknown as typeof childProcess.spawn);
 
@@ -435,4 +467,217 @@ describe('updateVersion --force', () => {
       false,
     );
   });
+});
+
+describe('updateVersion installation guard', () => {
+  const originalExecPath = process.execPath;
+  const originalHome = process.env.HOME;
+  const originalLocalAppData = process.env.LOCALAPPDATA;
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    process.env.HOME = '/tmp/sonar-home';
+    process.env.LOCALAPPDATA = String.raw`C:\Users\test\AppData\Local`;
+    isWindowsMock.mockImplementation(() => false);
+    fetchSpy = spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    process.execPath = originalExecPath;
+    if (originalHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+    }
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    { path: '/opt/company/sonar', windows: false, options: {} },
+    { path: String.raw`C:\Program Files\Company\sonar.exe`, windows: true, options: {} },
+    {
+      path: String.raw`C:\Program Files\Company\sonar.exe`,
+      windows: true,
+      options: { force: true },
+    },
+  ])('rejects an external installation at $path', async ({ path, windows, options }) => {
+    process.execPath = path;
+    isWindowsMock.mockImplementation(() => windows);
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion(options, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    ['/opt/homebrew', '/usr/local', '/home/linuxbrew/.linuxbrew', '/custom/brew'].flatMap(
+      (prefix) =>
+        [false, true].map((force) => ({
+          path: `${prefix}/Caskroom/sonarqube-cli/1.11.0/sonarqube-cli-1.11.0-macos-arm64.bin`,
+          force,
+        })),
+    ),
+  )('rejects Homebrew at $path with force=$force', async ({ path, force }) => {
+    process.execPath = path;
+    spawnMock.mockClear();
+    spawnSyncMock.mockClear();
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({ force }, updateCtx())).rejects.toThrow(
+      expect.objectContaining({
+        message: 'CLI was installed via Homebrew and cannot be updated by `sonar update`.',
+        remediationHint:
+          "Run `brew upgrade --cask sonarqube-cli` to update it. `sonar update` doesn't run Homebrew automatically so you stay in full control of your system updates.",
+      }),
+    );
+    expect(fake.calls.some((call) => call.method === 'success')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(spawnSyncMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/opt/homebrew/bin/sonar',
+    '/opt/homebrew/Cellar/sonarqube-cli/1.11.0/bin/sonar',
+    '/opt/homebrew/Caskroom/another-tool/1.11.0/sonar',
+  ])('keeps generic guidance for an unverified Homebrew path %s', async (path) => {
+    process.execPath = path;
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+      'This CLI installation cannot be updated by sonar update.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')('detects Homebrew through its bin symlink', async () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'sonar-homebrew-'));
+    try {
+      const binDir = join(tempRoot, 'Caskroom', 'sonarqube-cli', '1.11.0');
+      mkdirSync(binDir, { recursive: true });
+      const binaryPath = join(binDir, 'sonarqube-cli-1.11.0-macos-arm64.bin');
+      writeFileSync(binaryPath, '');
+      mkdirSync(join(tempRoot, 'bin'));
+      const linkPath = join(tempRoot, 'bin', 'sonar');
+      symlinkSync(binaryPath, linkPath);
+      process.execPath = linkPath;
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+        'CLI was installed via Homebrew and cannot be updated by `sonar update`.',
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['update status', 'system status'])('recommends Homebrew for %s', async (command) => {
+    process.execPath = '/opt/homebrew/Caskroom/sonarqube-cli/1.11.0/cli.bin';
+    fetchSpy.mockResolvedValue(stableVersionResponse('99.0.0'));
+    const ctx = updateCtx();
+    if (command === 'update status') {
+      await updateStatus({}, ctx);
+    } else {
+      const { systemStatus } = await import('@/commands/system/status.ts');
+      const connectionSpy = spyOn(ctx, 'resolveConnection').mockResolvedValue(null);
+      try {
+        await systemStatus({}, ctx);
+      } finally {
+        connectionSpy.mockRestore();
+      }
+    }
+    expect(fake.calls.map((call) => call.args.join(' ')).join('\n')).toContain(
+      'Run `brew upgrade --cask sonarqube-cli` to update it.',
+    );
+    expect(fake.calls.map((call) => call.args.join(' ')).join('\n')).not.toContain(
+      "`sonar update` doesn't run Homebrew automatically",
+    );
+  });
+
+  it.each([undefined, '/tmp/different-home'])(
+    'rejects an unknown installer destination when HOME is %s',
+    async (home) => {
+      process.execPath = '/tmp/sonar-home/.local/share/sonarqube-cli/bin/sonar';
+      if (home === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = home;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+        'This CLI installation cannot be updated by sonar update.',
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it('explains why a CLI running from source cannot update itself', async () => {
+    process.execPath = '/usr/local/bin/bun';
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(updateVersion({}, updateCtx())).rejects.toThrow(
+      'sonar update only updates an installed CLI; this one is running from source.',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'accepts an installer binary through a symlinked home directory',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'sonar-update-'));
+      try {
+        const realHome = join(tempRoot, 'real-home');
+        const linkedHome = join(tempRoot, 'linked-home');
+        const binDir = join(realHome, '.local', 'share', 'sonarqube-cli', 'bin');
+        mkdirSync(binDir, { recursive: true });
+        const binaryPath = join(binDir, 'sonar');
+        writeFileSync(binaryPath, '');
+        symlinkSync(realHome, linkedHome, 'dir');
+        process.env.HOME = linkedHome;
+        process.execPath = binaryPath;
+        fetchSpy.mockResolvedValue(
+          stableVersionResponse((await import('../../../../package.json')).version),
+        );
+
+        await updateVersion({}, updateCtx());
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'accepts a Windows installer binary with differently cased real paths',
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'sonar-update-'));
+      try {
+        const binDir = join(tempRoot, 'sonarqube-cli', 'bin');
+        mkdirSync(binDir, { recursive: true });
+        writeFileSync(join(binDir, 'sonar.exe'), '');
+        process.env.LOCALAPPDATA = tempRoot.toUpperCase();
+        process.execPath = join(binDir, 'SONAR.EXE');
+        isWindowsMock.mockImplementation(() => true);
+        fetchSpy.mockResolvedValue(
+          stableVersionResponse((await import('../../../../package.json')).version),
+        );
+
+        await updateVersion({}, updateCtx());
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+  );
 });

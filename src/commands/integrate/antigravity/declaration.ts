@@ -31,9 +31,7 @@ import {
 } from '@/core/config-constants.ts';
 import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
 import {
-  askUser,
   jsonPatch,
-  skip,
   sonarSecretsBinaryDependency,
   textSnippet,
   textSnippetRemover,
@@ -41,9 +39,7 @@ import {
 } from '@/core/framework/features';
 
 import {
-  SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
   SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_BENEFIT,
   SECRETS_PROMPT_FEATURE_PREVIEW,
 } from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
@@ -65,7 +61,6 @@ import {
 } from './hooks.ts';
 import {
   buildAntigravityAlwaysOnRule,
-  globalAntigravityPromptSecretsRuleExists,
   PROMPT_SECRETS_BODY,
   PROMPT_SECRETS_RULE_MARKER,
   resolveLegacyGlobalInstructionsPath,
@@ -75,9 +70,7 @@ import {
 export const ANTIGRAVITY_INTEGRATION_ID = 'antigravity';
 const ANTIGRAVITY_DISPLAY_NAME = 'Antigravity';
 
-export interface AntigravityIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type AntigravityIntegrationOptions = IntegrateAgentOptions;
 
 // Antigravity has no session start event, so it doesn't deliver Vortex Context atm.
 // It also has no global rules directory, so project scope gets an always-on rule file
@@ -104,14 +97,7 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_PRE_TOOL_USE_FEATURE_BENEFIT,
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      shouldInstall: ({ options }) =>
-        options.globalSecretsHookExists === true
-          ? skip(
-              'Skipping the project-level secrets scanning hooks because a global secrets scanning hook is already configured.',
-            )
-          : askUser(),
       postInstallExample: secretsScanningExample('Antigravity'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
@@ -154,18 +140,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-project-rules',
       displayName: 'prompt-secrets workspace rules',
-      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) => {
-        if (scope !== 'project') {
-          return skip();
-        }
-        return globalAntigravityPromptSecretsRuleExists()
-          ? askUser(
-              'Global Antigravity rules already exist. Do you also want to create a project-local copy for this repo?',
-            )
-          : askUser();
-      },
+      isAvailable: ({ scope }) => ({ available: scope === 'project' }),
       resources: [
         wholeFile({
           id: 'prompt-secrets-rule-file',
@@ -187,9 +163,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
     {
       id: 'prompt-secrets-global-rules',
       displayName: 'prompt-secrets global rules',
-      benefitDescription: SECRETS_PROMPT_FEATURE_BENEFIT,
       previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      shouldInstall: ({ scope }) => (scope === 'global' ? askUser() : skip()),
+      isAvailable: ({ scope }) => ({ available: scope === 'global' }),
       resources: [
         textSnippet({
           id: 'prompt-secrets-gemini-snippet',

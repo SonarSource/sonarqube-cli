@@ -55,12 +55,14 @@ import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { commitTelemetryFacts } from '@/core/telemetry';
 import { emitTelemetryEvent, flushTelemetryEvents } from '@/core/telemetry/telemetry-events.ts';
+import { TELEMETRY_API_KEY } from '@/core/telemetry/telemetry-ingest-key.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import { removeTestSonarUserHome } from '../../../_common/stats-helpers.ts';
 import {
+  disableTelemetryInConfigFile,
   makeTelemetryState,
   readAnalysisEvents,
   readCommandEvents,
@@ -260,7 +262,7 @@ describe('emitAnalysisCompleted()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitAnalysisCompleted(AUTH, makeAnalysisCompletedPayload());
 
@@ -437,7 +439,7 @@ describe('emitIntegrationConfigured()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitIntegrationConfigured(AUTH, makeIntegrationConfiguredPayload());
 
@@ -484,7 +486,7 @@ describe('emitCommandExecuted()', () => {
   });
 
   it('does not append when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
 
     await emitCommandExecuted({
       command: 'auth',
@@ -561,7 +563,7 @@ describe('flushTelemetryEvents()', () => {
       const init = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(init.method).toBe('POST');
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
-      expect((init.headers as Record<string, string>)['x-api-key']).toBeTruthy();
+      expect((init.headers as Record<string, string>)['x-api-key']).toBe(TELEMETRY_API_KEY);
     } finally {
       fetchSpy.mockRestore();
     }
@@ -802,7 +804,7 @@ describe('flushTelemetryEvents()', () => {
     it('sends through the resolved proxy and TLS options', async () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent());
 
-      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockResolvedValue({
         proxy: 'http://proxy.internal:3128',
       });
       const fetchSpy = mockFetch();
@@ -821,7 +823,7 @@ describe('flushTelemetryEvents()', () => {
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-a' }));
       writeTelemetryEvent(testSonarUserHome, makeStoredCompletedEvent({ analysis_id: 'run-b' }));
 
-      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockReturnValue({});
+      const networkSpy = spyOn(networkConfig, 'buildFetchNetworkOptions').mockResolvedValue({});
       const fetchSpy = mockFetch();
       try {
         await flushTelemetryEvents(Date.now() + 60_000);
@@ -868,7 +870,7 @@ function makeCtx() {
 
 describe('scanAndEmitSecrets() — emitted event fields', () => {
   it('does nothing when telemetry is disabled', async () => {
-    loadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
     const ctx = makeCtx();
     await scanAndEmitSecrets(
       SECRETS_CALLER_COMMANDS.analyzeSecrets,

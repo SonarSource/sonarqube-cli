@@ -18,9 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { basename } from 'node:path';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
+import {
+  EXTERNAL_UPDATE_GUIDANCE,
+  externalUpdateGuidance,
+  HOMEBREW_UPDATE_GUIDANCE,
+  isHomebrewInstallation,
+  isStandaloneInstallerLocation,
+} from '@/core/update/installation-location.ts';
 
 import { checkForUpdate } from './update-check.ts';
 
@@ -34,6 +43,21 @@ export interface UpdateVersionOptions {
 
 export interface UpdateStatusOptions {
   format?: string;
+}
+
+function assertStandaloneInstallerLocation(): void {
+  if (!isStandaloneInstallerLocation()) {
+    const executableName = basename(process.execPath).toLowerCase();
+    const runningFromSource = executableName === 'bun' || executableName === 'bun.exe';
+    if (runningFromSource) {
+      throw new CommandFailedError(
+        'sonar update only updates an installed CLI; this one is running from source.',
+      );
+    }
+    throw new CommandFailedError('This CLI installation cannot be updated by sonar update.', {
+      remediationHint: EXTERNAL_UPDATE_GUIDANCE,
+    });
+  }
 }
 
 /** `sonar update status` — reports the current and latest CLI version without installing. */
@@ -66,7 +90,9 @@ export async function updateStatus(
     console.success('Already up to date');
   } else {
     console.warn(`Update available: v${latestVersion}`);
-    console.text('  Run: sonar update');
+    console.text(
+      isStandaloneInstallerLocation() ? '  Run: sonar update' : `  ${externalUpdateGuidance()}`,
+    );
   }
 }
 
@@ -81,6 +107,16 @@ export async function updateVersion(
     return;
   }
 
+  // Do not run brew ourselves: an external package manager update can have side effects we cannot take responsibility for.
+  if (isHomebrewInstallation()) {
+    throw new CommandFailedError(
+      'CLI was installed via Homebrew and cannot be updated by `sonar update`.',
+      {
+        remediationHint: `${HOMEBREW_UPDATE_GUIDANCE} \`sonar update\` doesn't run Homebrew automatically so you stay in full control of your system updates.`,
+      },
+    );
+  }
+  assertStandaloneInstallerLocation();
   console.info('Checking for updates...');
 
   const { currentVersion, latest, upToDate } = await checkForUpdate();

@@ -1,0 +1,1936 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
+
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import * as gitDiscover from '@/core/host/git/discover.ts';
+import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
+import * as gitWorktree from '@/core/host/git/worktree.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
+import {
+  discoverOrganization,
+  discoverProject,
+  discoverProjects,
+  discoverServer,
+  resolveProjectKey,
+} from '@/core/project-discovery/project-info.ts';
+import {
+  type SharedProjectConfigMapping,
+  sharedProjectConfigRepository,
+} from '@/core/project-discovery/shared-project-config.ts';
+import * as discoverByRemote from '@/core/server/discover-project-by-remote.ts';
+import type { KnownServerProjectMapping } from '@/core/state/state.ts';
+import { getDefaultState } from '@/core/state/state.ts';
+import * as stateRepository from '@/core/state/state-repository.ts';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
+import { createFakeFsTestHandle } from './fake-fs-test-handle.ts';
+
+const fakeFs = createFakeFsTestHandle();
+
+const MOCK_AUTH = new ResolvedAuth({
+  token: 't',
+  serverUrl: 'https://sonarcloud.io',
+  connectionType: 'cloud',
+  source: 'state',
+});
+
+function withCwd<T>(
+  cwdSpy: Mock<typeof process.cwd>,
+  dir: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  cwdSpy.mockReturnValue(dir);
+  return fn();
+}
+
+/** Default `resolveLookupPaths` mock: bounded to the invocation dir itself, like the real non-git outcome — never falls through to a real `git` spawn. */
+function defaultLookupPaths(startDir: string): Promise<lookupPathResolver.LookupPath[]> {
+  const checkPath = canonicalizePath(startDir);
+  return Promise.resolve([{ checkPath, projectRoot: checkPath }]);
+}
+
+/** Points an already-spied `resolveLookupPaths` at the nearest-first climb `dirs` represents. */
+function mockClimb(
+  lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>,
+  ...dirs: string[]
+): void {
+  lookupPathsSpy.mockResolvedValue(
+    dirs.map((dir) => {
+      const checkPath = canonicalizePath(dir);
+      return { checkPath, projectRoot: checkPath };
+    }),
+  );
+}
+
+function makeKnownMapping(
+  overrides: Partial<KnownServerProjectMapping> = {},
+): KnownServerProjectMapping {
+  return {
+    targetRoot: '',
+    projectKey: 'known-project',
+    serverUrl: 'https://known.example.com',
+    ...overrides,
+  };
+}
+
+function mockKnownMappings(
+  loadStateSpy: Mock<typeof stateRepository.loadState>,
+  mappings: KnownServerProjectMapping[],
+): void {
+  loadStateSpy.mockReturnValue({
+    ...getDefaultState('1.0.0'),
+    knownServerProjectMappings: mappings,
+  });
+}
+
+async function expectProjectKeyFailure(promise: Promise<string>): Promise<void> {
+  try {
+    await promise;
+    expect.unreachable('Expected project key resolution to fail');
+  } catch (error) {
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('The project key must be a single line.');
+  }
+}
+
+describe('discoverProject', () => {
+  let testDir: string;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+  let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
+  let remoteSpy: Mock<typeof discoverByRemote.discoverProjectKeyByGitRemote>;
+  let getGitRemoteSpy: Mock<typeof gitDiscover.getGitRemote>;
+  let mainWorktreeSpy: Mock<typeof gitWorktree.resolveMainWorktreeRoot>;
+
+  beforeEach(() => {
+    fakeFs.setup();
+    testDir = join(tmpdir(), `sonarqube-cli-test-discover-project-${Date.now()}`);
+    fakeFs.mkdir(testDir);
+    // Isolate from the real ~/.sonar state.json — most tests here don't care about
+    // known-project-mapping lookups, only the dedicated tests below do.
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
+    lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
+      defaultLookupPaths,
+    );
+    remoteSpy = spyOn(discoverByRemote, 'discoverProjectKeyByGitRemote').mockResolvedValue(null);
+    getGitRemoteSpy = spyOn(gitDiscover, 'getGitRemote').mockResolvedValue('');
+    mainWorktreeSpy = spyOn(gitWorktree, 'resolveMainWorktreeRoot').mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    fakeFs.teardown();
+    loadStateSpy.mockRestore();
+    getGitRemoteSpy.mockRestore();
+    mainWorktreeSpy.mockRestore();
+    lookupPathsSpy.mockRestore();
+    remoteSpy.mockRestore();
+  });
+
+  it('logs each unsuccessful discovery source while keeping silent output empty', async () => {
+    const debug = spyOn(logger, 'debug');
+    const console = new FakeConsole();
+    try {
+      await discoverProject(testDir, { console, auth: MOCK_AUTH, silent: true });
+      const messages = debug.mock.calls.map(([message]) => message).join('\n');
+      expect(messages).toContain('Project discovery shared config: no usable .sonar-config.json');
+      expect(messages).toContain('Project discovery known mappings: no mapping matched');
+      expect(messages).toContain(
+        'Project discovery local config: no usable sonar-project.properties or .sonarlint config',
+      );
+      expect(messages).toContain('Project discovery git remote binding: no git remote found');
+      expect(console.calls).toEqual([]);
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('retains a partial-configuration signal without exposing an incomplete project', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonar.example.com\n',
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
+    expect(result.hasSonarConfig).toBe(true);
+    expect(result.projectKey).toBeUndefined();
+    expect(
+      (await discoverProjects(testDir, { console: new FakeConsole(), auth: null })).projects,
+    ).toEqual([]);
+  });
+
+  it.each([
+    { binding: null, expected: true },
+    { binding: undefined, expected: false },
+  ])(
+    'distinguishes empty remote bindings from failed lookups: $expected',
+    async ({ binding, expected }) => {
+      fakeFs.mkdir(join(testDir, '.git'));
+      getGitRemoteSpy.mockResolvedValue('https://github.com/example/repository.git');
+      remoteSpy.mockResolvedValue(binding);
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+      expect(result.gitRemoteBindingNotFound).toBe(expected);
+      expect(result.hasSonarConfig).toBe(false);
+      expect(result.projectKey).toBeUndefined();
+    },
+  );
+
+  it('resolves repoRoot from filesystem, undefined outside a git repository', async () => {
+    expect(
+      (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).repoRoot,
+    ).toBeUndefined();
+
+    fakeFs.mkdir(join(testDir, '.git'));
+    const withGit = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    expect(withGit.repoRoot).toBe(canonicalizePath(testDir));
+  });
+
+  it('defaults projectRoot to the invocation directory when nothing else resolves', async () => {
+    expect(
+      (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).projectRoot,
+    ).toBe(canonicalizePath(testDir));
+  });
+
+  it('rejects an explicit project key that contains a line break', async () => {
+    await expectProjectKeyFailure(resolveProjectKey('project\nkey', MOCK_AUTH, new FakeConsole()));
+  });
+
+  it('rejects a discovered project key that contains a line break', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/repository.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'project\nkey',
+      serverUrl: 'https://sonarcloud.io',
+    });
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      await expectProjectKeyFailure(resolveProjectKey(undefined, MOCK_AUTH, new FakeConsole()));
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
+  it('resolveProjectKey() succeeds from a key-and-organization-only sonar-project.properties (no --project, no host URL), regardless of the active connection', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    // A server unrelated to SonarCloud, to prove the key resolves from the organization's
+    // well-known URL, not by borrowing the caller's (here, mismatched) active connection.
+    const unrelatedAuth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarqube.internal',
+      connectionType: 'on-premise',
+      source: 'state',
+    });
+    const cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
+
+    try {
+      expect(await resolveProjectKey(undefined, unrelatedAuth, new FakeConsole())).toBe(
+        'my_project',
+      );
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
+  it("falls back to the caller's connection for a project key with neither an organization nor a host URL to identify its own", async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+    const auth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarcloud.io',
+      orgKey: 'active-org',
+      connectionType: 'cloud',
+      source: 'state',
+    });
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth });
+
+    expect(result.projectKey).toBe('my_project');
+    expect(result.serverUrl).toBe(auth.serverUrl);
+    expect(result.organization).toBe('active-org');
+  });
+
+  it('does not resolve a project key at all when there is no active connection to fall back on either', async () => {
+    fakeFs.writeFile(join(testDir, 'sonar-project.properties'), 'sonar.projectKey=my_project\n');
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.serverUrl).toBeUndefined();
+  });
+
+  it('defaults projectRoot to the invocation directory, not repoRoot, even inside a git repo', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    const subDir = join(testDir, 'packages', 'app');
+    fakeFs.mkdir(subDir);
+
+    const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.repoRoot).toBe(canonicalizePath(testDir));
+    expect(result.projectRoot).toBe(canonicalizePath(subDir));
+  });
+
+  it('no config: no server fields and no text UI', async () => {
+    const fake = new FakeConsole();
+    const result = await discoverProject(testDir, { console: fake, auth: MOCK_AUTH });
+    expect(result.serverUrl).toBeUndefined();
+    expect(result.projectKey).toBeUndefined();
+    expect(result.organization).toBeUndefined();
+    expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
+  });
+
+  it('ignores comments and blank lines in sonar-project.properties', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      '\n# comment\nsonar.host.url=https://sonarcloud.io\n\n# another\nsonar.projectKey=my_project\n',
+    );
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.serverUrl).toBe('https://sonarcloud.io');
+    expect(result.projectKey).toBe('my_project');
+  });
+
+  it('ignores a property line without an equals sign', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_key\nINVALID_LINE_NO_EQUALS\n',
+    );
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projectKey).toBe('my_key');
+  });
+
+  it('does not treat sonar-project.properties as a match when it has no hostURL or projectKey', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectName=My Project\nsonar.organization=my-org\n',
+    );
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.serverUrl).toBeUndefined();
+    expect(result.projectKey).toBeUndefined();
+  });
+
+  it('does not treat a .sonarlint dir with no usable binding file as a match', async () => {
+    fakeFs.writeFile(join(testDir, '.sonarlint', 'notes.txt'), 'not json');
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.serverUrl).toBeUndefined();
+    expect(result.projectKey).toBeUndefined();
+  });
+
+  it('derives the well-known SonarQube Cloud URL from organization alone (sonar.host.url conventionally omitted)', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    // A server unrelated to SonarCloud, to prove the URL is derived from the organization,
+    // not borrowed from whatever the caller happens to be connected to right now.
+    const unrelatedAuth = new ResolvedAuth({
+      token: 't',
+      serverUrl: 'https://sonarqube.internal',
+      connectionType: 'on-premise',
+      source: 'state',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: unrelatedAuth,
+    });
+
+    expect(result.projectKey).toBe('my_project');
+    expect(result.organization).toBe('my-org');
+    expect(result.serverUrl).toBe(SONARCLOUD_URL);
+  });
+
+  it('derives the US SonarQube Cloud URL when sonar.region=US is declared alongside the organization', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.projectKey=my_project\nsonar.organization=my-org\nsonar.region=US\n',
+    );
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.serverUrl).toBe(SONARCLOUD_US_URL);
+  });
+
+  it('maps sonar-project.properties to DiscoveredProject', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=my_project\nsonar.organization=my-org\n',
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    expect(result.serverUrl).toBe('https://sonarcloud.io');
+    expect(result.projectKey).toBe('my_project');
+    expect(result.organization).toBe('my-org');
+  });
+
+  it.each(['not-a-url', 'ftp://sonarqube.example.com', 'https://sonarqube.example.com\tinvalid'])(
+    "falls back to the caller's connection when sonar-project.properties has an invalid server URL and no organization to derive one from",
+    async (serverUrl) => {
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        `sonar.host.url=${serverUrl}\nsonar.projectKey=my_project\n`,
+      );
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.serverUrl).toBe(MOCK_AUTH.serverUrl);
+      expect(result.projectKey).toBe('my_project');
+    },
+  );
+
+  it('maps SonarQube Server connected mode to DiscoveredProject', async () => {
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({
+        sonarQubeUri: 'https://sonarqube.example.com',
+        projectKey: 'lint_project',
+        organization: 'must-be-ignored',
+      }),
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    expect(result.serverUrl).toBe('https://sonarqube.example.com');
+    expect(result.projectKey).toBe('lint_project');
+    expect(result.organization).toBeUndefined();
+  });
+
+  it('maps SonarQube Cloud connected mode to DiscoveredProject (region EU / US)', async () => {
+    for (const { region, url } of [
+      { region: 'EU', url: SONARCLOUD_URL },
+      { region: 'US', url: SONARCLOUD_US_URL },
+    ]) {
+      fakeFs.writeFile(
+        join(testDir, '.sonarlint', 'connectedMode.json'),
+        JSON.stringify({
+          sonarCloudOrganization: 'my-org',
+          projectKey: 'org_project',
+          region,
+        }),
+      );
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+      expect(result.serverUrl).toBe(url);
+      expect(result.projectKey).toBe('org_project');
+      expect(result.organization).toBe('my-org');
+      fakeFs.rm(join(testDir, '.sonarlint'));
+    }
+  });
+
+  it('sonar-project.properties wins over SonarLint for serverUrl and projectKey', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'lint_project' }),
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    expect(result.serverUrl).toBe('https://props-server.io');
+    expect(result.projectKey).toBe('props_project');
+  });
+
+  it('SonarLint fills projectKey or organization when properties omit them', async () => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\n',
+    );
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://sonarlint-server.com', projectKey: 'from_lint' }),
+    );
+    expect(
+      (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH })).projectKey,
+    ).toBe('from_lint');
+
+    fakeFs.rm(join(testDir, '.sonarlint'));
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+    );
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarCloudOrganization: 'lint-org', projectKey: 'lint_project' }),
+    );
+    expect(
+      (await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH }))
+        .organization,
+    ).toBe('lint-org');
+  });
+
+  it('resolves projectKey from git remote when authenticated and no local project key', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+      organization: 'my-org',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: new ResolvedAuth({
+        token: 'token',
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+        connectionType: 'cloud',
+        source: 'state',
+      }),
+    });
+    expect(result.projectKey).toBe('from-remote');
+    expect(result.organization).toBe('my-org');
+    expect(remoteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ orgKey: 'my-org' }),
+      'https://github.com/example/remote-bound.git',
+    );
+  });
+
+  it('anchors projectRoot at the repository root when the key comes from the git-remote binding', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    const subDir = join(testDir, 'packages', 'app');
+    fakeFs.mkdir(subDir);
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({ projectKey: 'from-remote', serverUrl: 'https://sonarcloud.io' });
+
+    const result = await discoverProject(subDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBe('from-remote');
+    expect(result.projectRoot).toBe(canonicalizePath(testDir));
+  });
+
+  it('keeps projectRoot at the invocation directory when the git-remote lookup finds no binding', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    const subDir = join(testDir, 'packages', 'app');
+    fakeFs.mkdir(subDir);
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/unbound.git');
+    remoteSpy.mockResolvedValue(null);
+
+    const result = await discoverProject(subDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.projectRoot).toBe(canonicalizePath(subDir));
+  });
+
+  it('does not call git remote lookup when projectKey is already in local config', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://sonarcloud.io\nsonar.projectKey=local_key\n',
+    );
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: new ResolvedAuth({
+        token: 't',
+        serverUrl: 'https://sonarcloud.io',
+        connectionType: 'cloud',
+        source: 'state',
+      }),
+    });
+    expect(result.projectKey).toBe('local_key');
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips git-remote binding entirely — no local git-remote read either — when auth is explicitly null', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: null,
+      silent: true,
+    });
+
+    expect(getGitRemoteSpy).not.toHaveBeenCalled();
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
+  it('skips only the git-remote binding when useGitRemoteBinding is false, keeping auth for local sources', async () => {
+    fakeFs.mkdir(join(testDir, '.git'));
+    getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+    remoteSpy.mockResolvedValue({
+      projectKey: 'from-remote',
+      serverUrl: 'https://sonarcloud.io',
+    });
+
+    const result = await discoverProject(testDir, {
+      console: new FakeConsole(),
+      auth: MOCK_AUTH,
+      useGitRemoteBinding: false,
+      silent: true,
+    });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(remoteSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns a partial result instead of throwing when lookup-path resolution fails', async () => {
+    lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
+
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projectKey).toBeUndefined();
+    expect(result.projectRoot).toBe(canonicalizePath(testDir));
+  });
+
+  describe('shared project config', () => {
+    // The repository's own load()/set() logic (parsing, region resolution, path
+    // containment) is covered by tests/unit/core/project-discovery/shared-project-config.test.ts;
+    // discoverProject() only needs to be tested against the interface it depends on.
+    let loadSpy: Mock<typeof sharedProjectConfigRepository.load>;
+
+    beforeEach(() => {
+      loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockResolvedValue([]);
+    });
+
+    afterEach(() => {
+      loadSpy.mockRestore();
+    });
+
+    function mockMappingAt(dir: string, mapping: SharedProjectConfigMapping): void {
+      const target = canonicalizePath(dir);
+      loadSpy.mockImplementation((checkPath) =>
+        Promise.resolve(checkPath === target ? [mapping] : []),
+      );
+    }
+
+    it('uses a Cloud entry the repository resolves when no other source provides one', async () => {
+      mockMappingAt(testDir, {
+        projectRoot: canonicalizePath(testDir),
+        projectKey: 'shared-project',
+        serverUrl: SONARCLOUD_URL,
+        organization: 'shared-org',
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('shared-project');
+      expect(result.serverUrl).toBe(SONARCLOUD_URL);
+      expect(result.organization).toBe('shared-org');
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+      expect(loadSpy).toHaveBeenCalledWith(canonicalizePath(testDir));
+    });
+
+    it('uses a Server entry the repository resolves', async () => {
+      mockMappingAt(testDir, {
+        projectRoot: canonicalizePath(testDir),
+        projectKey: 'onprem-project',
+        serverUrl: 'https://sonarqube.internal',
+        organization: undefined,
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('onprem-project');
+      expect(result.serverUrl).toBe('https://sonarqube.internal');
+      expect(result.organization).toBeUndefined();
+    });
+
+    it("resolves projectRoot from the mapping's own projectRoot, which can differ from the invocation directory", async () => {
+      const anchoredRoot = canonicalizePath(join(testDir, 'services/eu'));
+      mockMappingAt(testDir, {
+        projectRoot: anchoredRoot,
+        projectKey: 'shared-project',
+        serverUrl: 'https://shared.example.com',
+        organization: undefined,
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('shared-project');
+      expect(result.projectRoot).toBe(anchoredRoot);
+    });
+
+    it('finds a match while climbing from a nested directory with no match of its own', async () => {
+      const subDir = join(testDir, 'nested', 'sub');
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'nested'), testDir);
+      mockMappingAt(testDir, {
+        projectRoot: canonicalizePath(testDir),
+        projectKey: 'root-project',
+        serverUrl: SONARCLOUD_URL,
+        organization: 'shared-org',
+      });
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('root-project');
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+    });
+
+    it('wins over a known project mapping and sonar-project.properties', async () => {
+      mockMappingAt(testDir, {
+        projectRoot: canonicalizePath(testDir),
+        projectKey: 'shared-project',
+        serverUrl: 'https://shared.example.com',
+        organization: undefined,
+      });
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+      );
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('shared-project');
+    });
+
+    it('falls through to the next source when the repository has no match', async () => {
+      // loadSpy already defaults to resolving [] (set in beforeEach).
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+    });
+
+    it('falls through to the next source when the repository rejects', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+      loadSpy.mockRejectedValue(new Error('EACCES'));
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+    });
+
+    it('stops climbing once the repository resolves a match, never checking farther directories', async () => {
+      const subDir = join(testDir, 'nested', 'sub');
+      const nested = join(testDir, 'nested');
+      mockClimb(lookupPathsSpy, subDir, nested, testDir);
+      mockMappingAt(nested, {
+        projectRoot: canonicalizePath(nested),
+        projectKey: 'nearest-project',
+        serverUrl: 'https://shared.example.com',
+        organization: undefined,
+      });
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('nearest-project');
+      expect(loadSpy.mock.calls).toEqual([[canonicalizePath(subDir)], [canonicalizePath(nested)]]);
+    });
+
+    it('resolves multiple sibling projects from one "projects" array, none ambiguous for their own directory', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      fakeFs.mkdir(project1);
+      fakeFs.mkdir(project2);
+      loadSpy.mockImplementation((checkPath) =>
+        Promise.resolve(
+          checkPath === canonicalizePath(testDir)
+            ? [
+                {
+                  projectRoot: canonicalizePath(project1),
+                  projectKey: 'proj1',
+                  serverUrl: 'https://shared.example.com',
+                  organization: undefined,
+                },
+                {
+                  projectRoot: canonicalizePath(project2),
+                  projectKey: 'proj2',
+                  serverUrl: 'https://shared.example.com',
+                  organization: undefined,
+                },
+              ]
+            : [],
+        ),
+      );
+      mockClimb(lookupPathsSpy, project1, testDir);
+
+      const result = await discoverProject(project1, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('proj1');
+      expect(result.projectRoot).toBe(canonicalizePath(project1));
+    });
+
+    it('degrades to "nothing resolved" when invoked from above several sibling projects', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      loadSpy.mockResolvedValue([
+        {
+          projectRoot: canonicalizePath(project1),
+          projectKey: 'proj1',
+          serverUrl: 'https://shared.example.com',
+          organization: undefined,
+        },
+        {
+          projectRoot: canonicalizePath(project2),
+          projectKey: 'proj2',
+          serverUrl: 'https://shared.example.com',
+          organization: undefined,
+        },
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
+    });
+  });
+
+  describe('known server project mapping', () => {
+    it('uses a known project mapping when no local config provides one', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir), orgKey: 'known-org' }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.serverUrl).toBe('https://known.example.com');
+      expect(result.organization).toBe('known-org');
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+    });
+
+    it('anchors projectRoot at the invocation directory when matched via the repoRoot signal, even though the mapping was recorded at a different targetRoot', async () => {
+      const otherWorktreeInstallDir = join(testDir, '..', 'other-worktree-install-dir');
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(otherWorktreeInstallDir),
+          repoRoot: canonicalizePath(testDir),
+        }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.projectRoot).toBe(canonicalizePath(testDir));
+    });
+
+    it('matches from a subdirectory of the mapped folder', async () => {
+      const subDir = join(testDir, 'nested', 'sub');
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'nested'), testDir);
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('known-project');
+    });
+
+    it("passes every known mapping's targetRoot/repoRoot as the resolveLookupPaths bound, unfiltered", async () => {
+      // Deduplication/nesting is resolveLookupPaths()'s job, not discoverProject()'s.
+      const repoRoot = join(testDir, '..');
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          repoRoot: canonicalizePath(repoRoot),
+        }),
+      ]);
+
+      await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(lookupPathsSpy).toHaveBeenCalledWith(testDir, [
+        canonicalizePath(testDir),
+        canonicalizePath(repoRoot),
+      ]);
+    });
+
+    it('matches a known mapping recorded at a subdirectory below the git repo root (monorepo package)', async () => {
+      // Regression test: discoverProject() must pass the raw invocation directory
+      // (not the already-collapsed git repo root) into the known-mapping lookup, so a
+      // mapping recorded at a nested package folder still matches from inside it.
+      const packageDir = join(testDir, 'packages', 'api');
+      const invokeDir = join(packageDir, 'src');
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(packageDir),
+          projectKey: 'package-project',
+        }),
+      ]);
+      mockClimb(lookupPathsSpy, invokeDir, packageDir, testDir);
+
+      const result = await discoverProject(invokeDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('package-project');
+      expect(result.projectRoot).toBe(canonicalizePath(packageDir));
+    });
+
+    it('does not match an unrelated folder', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({
+          targetRoot: join(tmpdir(), 'some-other-project'),
+          projectKey: 'other-project',
+        }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
+    });
+
+    it('a known project mapping wins over sonar-project.properties and skips reading it', async () => {
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+      );
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.serverUrl).toBe('https://known.example.com');
+    });
+
+    it('is checked before, and short-circuits, the git-remote binding network lookup', async () => {
+      fakeFs.mkdir(join(testDir, '.git'));
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+      remoteSpy.mockResolvedValue({
+        projectKey: 'from-remote',
+        serverUrl: 'https://sonarcloud.io',
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
+      });
+
+      expect(result.projectKey).toBe('known-project');
+      expect(remoteSpy).not.toHaveBeenCalled();
+    });
+
+    it('falls through to git-remote binding when no known mapping matches', async () => {
+      fakeFs.mkdir(join(testDir, '.git'));
+      getGitRemoteSpy.mockResolvedValue('https://github.com/example/remote-bound.git');
+      remoteSpy.mockResolvedValue({
+        projectKey: 'from-remote',
+        serverUrl: 'https://sonarcloud.io',
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: new ResolvedAuth({
+          token: 't',
+          serverUrl: 'https://sonarcloud.io',
+          connectionType: 'cloud',
+          source: 'state',
+        }),
+      });
+
+      expect(result.projectKey).toBe('from-remote');
+    });
+
+    it('gracefully skips when loadState throws', async () => {
+      loadStateSpy.mockImplementation(() => {
+        throw new Error('state read failed');
+      });
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
+    });
+
+    it('falls back to a live-derived mapping from installed features when the persisted table has no match', async () => {
+      const state = getDefaultState('1.0.0');
+      state.integrations.installed = [
+        {
+          id: 'integration-1',
+          integrationId: 'claude-code',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          features: [
+            {
+              featureId: 'vortex',
+              scope: 'project',
+              targetRoot: canonicalizePath(testDir),
+              installedByCliVersion: '1.0.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '1.0.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              dependencies: [],
+              resources: [],
+              operations: [],
+              attrs: { projectKey: 'live-project', serverUrl: 'https://live.example.com' },
+            },
+          ],
+        },
+      ];
+      loadStateSpy.mockReturnValue(state);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('live-project');
+      expect(result.serverUrl).toBe('https://live.example.com');
+    });
+
+    it('prefers the live fallback over a stale persisted-table entry for the same targetRoot', async () => {
+      // Re-integration must not be shadowed by a stale persisted entry awaiting migration.
+      const state = getDefaultState('1.0.0');
+      state.knownServerProjectMappings = [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'persisted-project',
+        }),
+      ];
+      state.integrations.installed = [
+        {
+          id: 'integration-1',
+          integrationId: 'claude-code',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          features: [
+            {
+              featureId: 'vortex',
+              scope: 'project',
+              targetRoot: canonicalizePath(testDir),
+              installedByCliVersion: '1.0.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '1.0.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              dependencies: [],
+              resources: [],
+              operations: [],
+              attrs: { projectKey: 'live-project', serverUrl: 'https://live.example.com' },
+            },
+          ],
+        },
+      ];
+      loadStateSpy.mockReturnValue(state);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('live-project');
+    });
+
+    it('prefers a nearer live-derived mapping over a farther persisted-table one', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.mkdir(subDir);
+
+      const state = getDefaultState('1.0.0');
+      // Persisted table only knows about the repo root, from an earlier migration.
+      state.knownServerProjectMappings = [
+        makeKnownMapping({
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'root-persisted-project',
+        }),
+      ];
+      // A subpackage was integrated afterwards and hasn't been migrated into the
+      // persisted table yet — it's only visible via the live fallback.
+      state.integrations.installed = [
+        {
+          id: 'integration-1',
+          integrationId: 'claude-code',
+          installedByCliVersion: '1.0.0',
+          installedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          features: [
+            {
+              featureId: 'vortex',
+              scope: 'project',
+              targetRoot: canonicalizePath(subDir),
+              installedByCliVersion: '1.0.0',
+              installedAt: '2026-01-01T00:00:00.000Z',
+              updatedByCliVersion: '1.0.0',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+              dependencies: [],
+              resources: [],
+              operations: [],
+              attrs: { projectKey: 'live-sub-project', serverUrl: 'https://live-sub.example.com' },
+            },
+          ],
+        },
+      ];
+      loadStateSpy.mockReturnValue(state);
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('live-sub-project');
+    });
+
+    describe('connection resolution for mappings that recorded no serverUrl', () => {
+      function withActiveConnection(state: ReturnType<typeof getDefaultState>): void {
+        state.auth.connections = [
+          {
+            id: 'conn-1',
+            type: 'cloud',
+            serverUrl: 'https://active-connection.example.com',
+            orgKey: 'active-org',
+            authenticatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ];
+        state.auth.activeConnectionId = 'conn-1';
+      }
+
+      it('substitutes the currently active connection, resolved fresh, not baked in at derive time', async () => {
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
+          makeKnownMapping({
+            targetRoot: canonicalizePath(testDir),
+            serverUrl: undefined,
+            orgKey: undefined,
+          }),
+        ];
+        withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
+
+        const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
+
+        expect(result.projectKey).toBe('known-project');
+        expect(result.serverUrl).toBe('https://active-connection.example.com');
+        expect(result.organization).toBe('active-org');
+      });
+
+      it('falls through to the next discovery source when no connection can be resolved at all', async () => {
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
+          makeKnownMapping({
+            targetRoot: canonicalizePath(testDir),
+            serverUrl: undefined,
+            orgKey: undefined,
+          }),
+        ];
+        // No active connection set: the mapping matches by path, but there is nothing to
+        // resolve a serverUrl from, so it must not "succeed" with an undefined serverUrl.
+        loadStateSpy.mockReturnValue(state);
+        fakeFs.writeFile(
+          join(testDir, 'sonar-project.properties'),
+          'sonar.host.url=https://props-server.io\nsonar.projectKey=props_project\n',
+        );
+
+        const result = await discoverProject(testDir, { console: new FakeConsole(), auth: null });
+
+        expect(result.projectKey).toBe('props_project');
+      });
+
+      it("prefers the caller's own resolved auth over the active connection in state", async () => {
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
+          makeKnownMapping({
+            targetRoot: canonicalizePath(testDir),
+            serverUrl: undefined,
+            orgKey: undefined,
+          }),
+        ];
+        // Active connection in state disagrees with the auth the caller actually resolved
+        // and passed in — e.g. env-var auth that hasn't been persisted yet.
+        withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
+
+        const result = await discoverProject(testDir, {
+          console: new FakeConsole(),
+          auth: new ResolvedAuth({
+            token: 't',
+            serverUrl: 'https://env-auth.example.com',
+            orgKey: 'env-org',
+            connectionType: 'cloud',
+            source: 'state',
+          }),
+        });
+
+        expect(result.serverUrl).toBe('https://env-auth.example.com');
+        expect(result.organization).toBe('env-org');
+      });
+
+      it("never mixes a recorded serverUrl with the active connection's orgKey", async () => {
+        const state = getDefaultState('1.0.0');
+        state.knownServerProjectMappings = [
+          makeKnownMapping({
+            targetRoot: canonicalizePath(testDir),
+            serverUrl: 'https://recorded.example.com',
+            orgKey: undefined,
+          }),
+        ];
+        withActiveConnection(state);
+        loadStateSpy.mockReturnValue(state);
+
+        const result = await discoverProject(testDir, {
+          console: new FakeConsole(),
+          auth: MOCK_AUTH,
+        });
+
+        expect(result.serverUrl).toBe('https://recorded.example.com');
+        expect(result.organization).toBeUndefined();
+      });
+    });
+  });
+
+  describe('local config file precedence (climbing sonar-project.properties/.sonarlint)', () => {
+    it('finds sonar-project.properties at a nested subdirectory when invoked from within it', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.writeFile(
+        join(subDir, 'sonar-project.properties'),
+        'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
+      );
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('sub_project');
+      expect(result.serverUrl).toBe('https://sub.example.com');
+      expect(result.projectRoot).toBe(canonicalizePath(subDir));
+    });
+
+    it('finds .sonarlint connected mode at a nested subdirectory when invoked from within it', async () => {
+      const subDir = join(testDir, 'packages', 'app');
+      fakeFs.writeFile(
+        join(subDir, '.sonarlint', 'connectedMode.json'),
+        JSON.stringify({
+          sonarQubeUri: 'https://sub-lint.example.com',
+          projectKey: 'sub_lint_project',
+        }),
+      );
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('sub_lint_project');
+      expect(result.serverUrl).toBe('https://sub-lint.example.com');
+    });
+
+    it('prefers the nearer properties file over a farther ancestor one', async () => {
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://root.example.com\nsonar.projectKey=root_project\n',
+      );
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.writeFile(
+        join(subDir, 'sonar-project.properties'),
+        'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
+      );
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('sub_project');
+      expect(result.serverUrl).toBe('https://sub.example.com');
+    });
+
+    it('climbs past a directory with only partial local config to a farther directory with a full one, inside a git repo', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      // Partial: host URL only, no project key — must not stop the climb.
+      fakeFs.writeFile(
+        join(subDir, 'sonar-project.properties'),
+        'sonar.host.url=https://sub.example.com\n',
+      );
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://root.example.com\nsonar.projectKey=root_project\n',
+      );
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('root_project');
+      expect(result.serverUrl).toBe('https://root.example.com');
+    });
+
+    it('does not climb to an ancestor directory for local config outside a git repository', async () => {
+      // No .git anywhere in this tree: local-config discovery must stay pinned to the
+      // invocation dir, not silently adopt an unrelated ancestor's sonar-project.properties.
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.writeFile(
+        join(subDir, 'sonar-project.properties'),
+        'sonar.host.url=https://sub.example.com\n',
+      );
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        'sonar.host.url=https://root.example.com\nsonar.projectKey=root_project\n',
+      );
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBeUndefined();
+      expect(result.serverUrl).toBeUndefined();
+    });
+
+    it('a known-mapping match at a farther directory still wins over a nearer local properties file', async () => {
+      const subDir = join(testDir, 'packages', 'api');
+      fakeFs.writeFile(
+        join(subDir, 'sonar-project.properties'),
+        'sonar.host.url=https://sub.example.com\nsonar.projectKey=sub_project\n',
+      );
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir), projectKey: 'mapped-project' }),
+      ]);
+      mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
+
+      const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+      expect(result.projectKey).toBe('mapped-project');
+    });
+  });
+});
+
+describe('discoverProjects', () => {
+  let testDir: string;
+  let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
+  let loadSpy: Mock<typeof sharedProjectConfigRepository.load>;
+  let loadStateSpy: Mock<typeof stateRepository.loadState>;
+
+  beforeEach(() => {
+    fakeFs.setup();
+    testDir = join(tmpdir(), `sonarqube-cli-test-discover-projects-${Date.now()}`);
+    fakeFs.mkdir(testDir);
+    loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
+    lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
+      defaultLookupPaths,
+    );
+    loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    fakeFs.teardown();
+    loadStateSpy.mockRestore();
+    lookupPathsSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
+
+  function mockSiblingProjects(dir: string, project1: string, project2: string): void {
+    const target = canonicalizePath(dir);
+    loadSpy.mockImplementation((checkPath) =>
+      Promise.resolve(
+        checkPath === target
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+            ]
+          : [],
+      ),
+    );
+  }
+
+  it('resolves every project from one "projects" array into .projects', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.projects.map((p) => p.projectKey)).toEqual(['proj1', 'proj2']);
+  });
+
+  it('scope() broadens to every sibling when invoked from an ancestor directory', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(testDir).map((p) => p.projectKey)).toEqual(['proj1', 'proj2']);
+  });
+
+  it('scope() narrows to one project when invoked from deep inside its own subdirectory (bidirectional ancestry)', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    const deepInsideProject1 = join(project1, 'src', 'components');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(deepInsideProject1).map((p) => p.projectKey)).toEqual(['proj1']);
+  });
+
+  it('scope() tags each project with whether it contains the path', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(testDir).map((p) => p.contains)).toEqual([false, false]);
+    expect(result.scope(join(project1, 'src')).map((p) => p.contains)).toEqual([true]);
+    expect(result.scope(project1).map((p) => p.contains)).toEqual([true]);
+  });
+
+  it('scope() narrows to one project when invoked exactly at its own root', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(project1).map((p) => p.projectKey)).toEqual(['proj1']);
+  });
+
+  it('scope() narrows to one project for a file deep inside its own subdirectory', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    const fileInProject1 = join(project1, 'src', 'index.ts');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(fileInProject1).map((p) => p.projectKey)).toEqual(['proj1']);
+  });
+
+  it('scope() returns every matching project for a file nested under both a root aggregator and a subproject', async () => {
+    const subProject = join(testDir, 'sub');
+    const fileInSubProject = join(subProject, 'src', 'index.ts');
+    loadSpy.mockImplementation((checkPath) =>
+      Promise.resolve(
+        checkPath === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(testDir),
+                projectKey: 'root-project',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+              {
+                projectRoot: canonicalizePath(subProject),
+                projectKey: 'sub-project',
+                serverUrl: 'https://shared.example.com',
+                organization: undefined,
+              },
+            ]
+          : [],
+      ),
+    );
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(fileInSubProject).map((p) => p.projectKey)).toEqual([
+      'root-project',
+      'sub-project',
+    ]);
+  });
+
+  it('scope() resolves to nothing for a directory unrelated to any known project', async () => {
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    mockSiblingProjects(testDir, project1, project2);
+
+    const result = await discoverProjects(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+
+    expect(result.scope(join(tmpdir(), 'unrelated-directory'))).toEqual([]);
+  });
+
+  describe('discoverProject() ambiguity handling', () => {
+    it('degrades an ambiguous match (several sibling projects) to "nothing resolved"', async () => {
+      const project1 = join(testDir, 'project1');
+      const project2 = join(testDir, 'project2');
+      mockSiblingProjects(testDir, project1, project2);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBeUndefined();
+      expect(result.ambiguousProject).toBe(true);
+    });
+
+    it('resolves normally when there is no ambiguity', async () => {
+      mockKnownMappings(loadStateSpy, [
+        makeKnownMapping({ targetRoot: canonicalizePath(testDir) }),
+      ]);
+
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+
+      expect(result.projectKey).toBe('known-project');
+      expect(result.ambiguousProject).toBe(false);
+    });
+  });
+});
+
+describe('discoverOrganization', () => {
+  let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
+  let cwdSpy: Mock<typeof process.cwd>;
+
+  beforeEach(() => {
+    fakeFs.setup();
+    lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
+      defaultLookupPaths,
+    );
+    cwdSpy = spyOn(process, 'cwd');
+  });
+
+  afterEach(() => {
+    fakeFs.teardown();
+    lookupPathsSpy.mockRestore();
+    cwdSpy.mockRestore();
+  });
+
+  it('reads organization from sonar-project.properties under process.cwd()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-props-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.projectKey=p\nsonar.organization=from-props-org\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-props-org');
+    });
+  });
+
+  it('reads organization even without a project key, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-no-key-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.organization=from-props-org\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-props-org');
+    });
+  });
+
+  it('reads organization from .sonar-config.json before login, with no active connection', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-shared-config-' + Date.now());
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(testDir),
+                projectKey: 'shared-project',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBe('shared-org');
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('resolves organization from several sibling projects that share the same organization, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-siblings-same-' + Date.now());
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBe('shared-org');
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('degrades to null when several sibling projects disagree on organization', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-siblings-diff-' + Date.now());
+    const project1 = join(testDir, 'project1');
+    const project2 = join(testDir, 'project2');
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(project1),
+                projectKey: 'proj1',
+                serverUrl: 'https://shared.example.com',
+                organization: 'org-1',
+              },
+              {
+                projectRoot: canonicalizePath(project2),
+                projectKey: 'proj2',
+                serverUrl: 'https://shared.example.com',
+                organization: 'org-2',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBeNull();
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-known-mapping-' + Date.now());
+    fakeFs.mkdir(testDir);
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue({
+      ...getDefaultState('1.0.0'),
+      knownServerProjectMappings: [
+        {
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'known-project',
+          serverUrl: 'https://known.example.com',
+          orgKey: 'known-org',
+        },
+      ],
+    });
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverOrganization(new FakeConsole())).toBeNull();
+      });
+    } finally {
+      loadStateSpy.mockRestore();
+    }
+  });
+
+  it('reads organization from .sonarlint when properties omit sonar.organization', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-lint-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.projectKey=p\n',
+    );
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarCloudOrganization: 'from-lint-org', projectKey: 'k' }),
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBe('from-lint-org');
+    });
+  });
+
+  it('returns null when no organization is configured', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-empty-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.projectKey=p\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBeNull();
+    });
+  });
+
+  it('climbs from a nested monorepo package to find organization at an ancestor, inside a git repo', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-org-nested-' + Date.now());
+    const subDir = join(testDir, 'packages', 'api');
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://x.test\nsonar.projectKey=p\nsonar.organization=ancestor-org\n',
+    );
+    mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
+
+    await withCwd(cwdSpy, subDir, async () => {
+      expect(await discoverOrganization(new FakeConsole())).toBe('ancestor-org');
+    });
+  });
+
+  it('returns null when local config discovery throws', async () => {
+    lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
+
+    expect(await discoverOrganization(new FakeConsole())).toBeNull();
+  });
+});
+
+describe('discoverServer', () => {
+  let lookupPathsSpy: Mock<typeof lookupPathResolver.resolveLookupPaths>;
+  let cwdSpy: Mock<typeof process.cwd>;
+  let debugSpy: Mock<typeof logger.debug>;
+
+  beforeEach(() => {
+    fakeFs.setup();
+    lookupPathsSpy = spyOn(lookupPathResolver, 'resolveLookupPaths').mockImplementation(
+      defaultLookupPaths,
+    );
+    cwdSpy = spyOn(process, 'cwd');
+    debugSpy = spyOn(logger, 'debug').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    fakeFs.teardown();
+    lookupPathsSpy.mockRestore();
+    cwdSpy.mockRestore();
+    debugSpy.mockRestore();
+  });
+
+  it('reads server URL from sonar-project.properties under process.cwd()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-server-props-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://from-props.integration.test\nsonar.projectKey=p\n',
+    );
+    fakeFs.writeFile(
+      join(testDir, '.sonarlint', 'connectedMode.json'),
+      JSON.stringify({ sonarQubeUri: 'https://from-lint.should-not-win', projectKey: 'k' }),
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      const fake = new FakeConsole();
+      expect(await discoverServer(fake)).toBe('https://from-props.integration.test');
+      const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+      expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(true);
+    });
+  });
+
+  it('reads server URL even without a project key, unlike discoverProject()', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-server-no-key-' + Date.now());
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://from-props.integration.test\n',
+    );
+
+    await withCwd(cwdSpy, testDir, async () => {
+      expect(await discoverServer(new FakeConsole())).toBe('https://from-props.integration.test');
+    });
+  });
+
+  it('reads server URL from .sonar-config.json before login, with no active connection', async () => {
+    const testDir = join(
+      tmpdir(),
+      'sonarqube-cli-test-discover-server-shared-config-' + Date.now(),
+    );
+    fakeFs.mkdir(testDir);
+    const loadSpy = spyOn(sharedProjectConfigRepository, 'load').mockImplementation((dir) =>
+      Promise.resolve(
+        canonicalizePath(dir) === canonicalizePath(testDir)
+          ? [
+              {
+                projectRoot: canonicalizePath(testDir),
+                projectKey: 'shared-project',
+                serverUrl: 'https://shared.example.com',
+                organization: 'shared-org',
+              },
+            ]
+          : [],
+      ),
+    );
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverServer(new FakeConsole())).toBe('https://shared.example.com');
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('ignores known-server-project-mapping during pre-login discovery', async () => {
+    const testDir = join(
+      tmpdir(),
+      'sonarqube-cli-test-discover-server-known-mapping-' + Date.now(),
+    );
+    fakeFs.mkdir(testDir);
+    const loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue({
+      ...getDefaultState('1.0.0'),
+      knownServerProjectMappings: [
+        {
+          targetRoot: canonicalizePath(testDir),
+          projectKey: 'known-project',
+          serverUrl: 'https://known.example.com',
+        },
+      ],
+    });
+
+    try {
+      await withCwd(cwdSpy, testDir, async () => {
+        expect(await discoverServer(new FakeConsole())).toBeNull();
+      });
+    } finally {
+      loadStateSpy.mockRestore();
+    }
+  });
+
+  it('uses SonarLint when there is no sonar-project.properties (Server or Cloud binding)', async () => {
+    const cases: { json: Record<string, unknown>; expectedUrl: string }[] = [
+      {
+        json: { sonarQubeUri: 'https://lint-only.integration.test', projectKey: 'k' },
+        expectedUrl: 'https://lint-only.integration.test',
+      },
+      {
+        json: { sonarCloudOrganization: 'my-org', projectKey: 'cloud_lint_key' },
+        expectedUrl: SONARCLOUD_URL,
+      },
+    ];
+
+    for (let i = 0; i < cases.length; i++) {
+      const testDir = join(tmpdir(), `sonarqube-cli-discover-server-lintonly-${i}-` + Date.now());
+      fakeFs.writeFile(
+        join(testDir, '.sonarlint', 'connectedMode.json'),
+        JSON.stringify(cases[i].json),
+      );
+
+      await withCwd(cwdSpy, testDir, async () => {
+        const fake = new FakeConsole();
+        expect(await discoverServer(fake)).toBe(cases[i].expectedUrl);
+        const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+        expect(prints.some((m) => m.includes('.sonarlint'))).toBe(true);
+        expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(false);
+      });
+    }
+  });
+
+  it('returns null when cwd has no server hint', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-server-empty-' + Date.now());
+    fakeFs.mkdir(testDir);
+
+    await withCwd(cwdSpy, testDir, async () => {
+      const fake = new FakeConsole();
+      expect(await discoverServer(fake)).toBeNull();
+      expect(fake.calls.filter((c) => c.method === 'print')).toHaveLength(0);
+    });
+  });
+
+  it('climbs from a nested monorepo package to find the server URL at an ancestor, inside a git repo', async () => {
+    const testDir = join(tmpdir(), 'sonarqube-cli-test-discover-server-nested-' + Date.now());
+    const subDir = join(testDir, 'packages', 'api');
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      'sonar.host.url=https://ancestor.example.com\nsonar.projectKey=p\n',
+    );
+    mockClimb(lookupPathsSpy, subDir, join(testDir, 'packages'), testDir);
+
+    await withCwd(cwdSpy, subDir, async () => {
+      expect(await discoverServer(new FakeConsole())).toBe('https://ancestor.example.com');
+    });
+  });
+
+  it('returns null and logs when local config discovery throws', async () => {
+    lookupPathsSpy.mockRejectedValue(new Error('simulated failure'));
+
+    expect(await discoverServer(new FakeConsole())).toBeNull();
+    expect(debugSpy).toHaveBeenCalled();
+    expect(String(debugSpy.mock.calls[0]?.[0] ?? '')).toContain('simulated failure');
+  });
+});

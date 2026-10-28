@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { Argument } from 'commander';
 
 import {
   AuthResolver,
@@ -41,6 +42,7 @@ import { SonarCommand, SonarOption } from '@/core/commands/sonar-command.ts';
 import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { DISTRIBUTION } from '@/core/host/distribution.ts';
 import * as agentDetector from '@/core/host/environment/agent-detector.ts';
+import * as handleInheritance from '@/core/host/windows-handle-inheritance.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -54,6 +56,7 @@ import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers.ts';
 import {
+  disableTelemetryInConfigFile,
   readCommandEvents,
   readTelemetryEvents,
   writeTelemetryEvent,
@@ -116,7 +119,7 @@ function mockFetch(ok = true, status = 200): ReturnType<typeof spyOn> {
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 let loadStateSpy: ReturnType<typeof spyOn>;
-let saveStateSpy: ReturnType<typeof spyOn>;
+let updateStateSpy: ReturnType<typeof spyOn>;
 let getUserIdSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let testDir: string;
@@ -149,17 +152,19 @@ beforeEach(() => {
   delete process.env.CODEX_THREAD_ID;
   delete process.env.GEMINI_SESSION_ID;
   loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('1.0.0'));
-  saveStateSpy = spyOn(stateRepository, 'saveState').mockImplementation(() => undefined);
+  updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
+    update(stateRepository.loadState()),
+  );
   getUserIdSpy = spyOn(userModule, 'getOrCreateUserId').mockReturnValue('test-machine-id');
   spawnSpy = spyOn(Bun, 'spawn').mockReturnValue({ unref: () => {} } as ReturnType<
     typeof Bun.spawn
   >);
-  process.exitCode = undefined;
+  process.exitCode = 0;
 });
 
 afterEach(() => {
   loadStateSpy.mockRestore();
-  saveStateSpy.mockRestore();
+  updateStateSpy.mockRestore();
   getUserIdSpy.mockRestore();
   spawnSpy.mockRestore();
   restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
@@ -180,7 +185,7 @@ afterEach(() => {
   delete process.env[ENV_ORG];
   delete process.env[ENV_SERVER];
   delete process.env.SONARQUBE_CLI_SERVER;
-  process.exitCode = undefined;
+  process.exitCode = 0;
   rmSync(testDir, { recursive: true, force: true });
 });
 
@@ -196,10 +201,8 @@ describe('CliCommandExecuted', () => {
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
-    it('does nothing when telemetry is disabled in state', async () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
-      loadStateSpy.mockReturnValue(state);
+    it('does nothing when telemetry is disabled', async () => {
+      disableTelemetryInConfigFile();
 
       await commitCommandExecuted(makeCommand('auth login'));
 
@@ -412,7 +415,7 @@ describe('CliCommandExecuted', () => {
       expect(readCommandEvents(testDir)[0].event_payload.arguments).toBeNull();
     });
 
-    it('renders a positional argument by name, never its value', async () => {
+    it('renders a free-form positional argument by name only, never its value', async () => {
       const command = makeCommand('link');
       command.argument('<projectKey>', 'desc');
       command.args = ['super-secret-key'];
@@ -422,6 +425,16 @@ describe('CliCommandExecuted', () => {
       const args = readCommandEvents(testDir)[0].event_payload.arguments;
       expect(args).toBe('projectKey');
       expect(args).not.toContain('super-secret-key');
+    });
+
+    it('renders a choice-restricted positional argument with its value', async () => {
+      const command = makeCommand('config get');
+      command.addArgument(new Argument('<key>', 'desc').choices(['log.level', 'stats.enabled']));
+      command.args = ['log.level'];
+
+      await commitCommandExecuted(command);
+
+      expect(readCommandEvents(testDir)[0].event_payload.arguments).toBe('key=log.level');
     });
 
     it('excludes an optional positional argument that was not supplied', async () => {
@@ -765,6 +778,41 @@ describe('CliCommandExecuted', () => {
   });
 
   describe('flush worker', () => {
+    const originalPlatform = process.platform;
+    let disableSpy: ReturnType<typeof spyOn>;
+
+    function setPlatform(platform: NodeJS.Platform): void {
+      Object.defineProperty(process, 'platform', { value: platform });
+    }
+
+    async function commitAs(command: string): Promise<void> {
+      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand(command))], {
+        command: command.split(' ')[0],
+      });
+    }
+
+    beforeEach(() => {
+      disableSpy = spyOn(handleInheritance, 'disableHandleInheritance').mockImplementation(
+        () => undefined,
+      );
+    });
+
+    afterEach(() => {
+      disableSpy.mockRestore();
+      setPlatform(originalPlatform);
+    });
+
+    it('keeps a recorded event when the flush worker cannot start', async () => {
+      spawnSpy.mockImplementation(() => {
+        throw new Error('ENOENT');
+      });
+
+      await commitCommandExecuted(makeCommand('auth login'));
+
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+      expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
+
     it('spawns a flush worker process after storing the event', async () => {
       await commitCommandExecuted(makeCommand('auth login'));
       expect(spawnSpy).toHaveBeenCalledTimes(1);
@@ -786,6 +834,45 @@ describe('CliCommandExecuted', () => {
       expect(spawnSpy).not.toHaveBeenCalled();
       expect(readCommandEvents(testDir)).toHaveLength(1);
     });
+
+    it('disables handle inheritance before spawning the worker for a hook on Windows', async () => {
+      setPlatform('win32');
+      await commitAs('hook agent-session-start');
+
+      expect(disableSpy).toHaveBeenCalledTimes(1);
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+      const [disableOrder] = disableSpy.mock.invocationCallOrder as number[];
+      const [spawnOrder] = spawnSpy.mock.invocationCallOrder as number[];
+      expect(disableOrder).toBeLessThan(spawnOrder);
+    });
+
+    it('does not spawn the worker when disabling handle inheritance fails', async () => {
+      setPlatform('win32');
+      disableSpy.mockImplementation(() => {
+        throw new Error('dlopen failed');
+      });
+
+      await commitAs('hook agent-session-start');
+
+      expect(spawnSpy).not.toHaveBeenCalled();
+      expect(readCommandEvents(testDir)).toHaveLength(1);
+    });
+
+    it('leaves handle inheritance alone for a non-hook command on Windows', async () => {
+      setPlatform('win32');
+      await commitAs('auth login');
+
+      expect(disableSpy).not.toHaveBeenCalled();
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves handle inheritance alone for a hook outside Windows', async () => {
+      setPlatform('linux');
+      await commitAs('hook agent-session-start');
+
+      expect(disableSpy).not.toHaveBeenCalled();
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
@@ -794,9 +881,7 @@ describe('CliCommandExecuted', () => {
 describe('flushTelemetry', () => {
   describe('no-op conditions', () => {
     it('does nothing when telemetry is disabled', async () => {
-      const state = getDefaultState('1.0.0');
-      state.telemetry.enabled = false;
-      loadStateSpy.mockReturnValue(state);
+      disableTelemetryInConfigFile();
       writeTelemetryEvent(testDir, makeCompletedFinding());
 
       const fetchSpy = mockFetch();

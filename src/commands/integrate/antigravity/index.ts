@@ -19,16 +19,11 @@
  */
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { installIntegration } from '@/core/framework/features';
-import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 
+import { finalizeAgentInstall } from '../_common/agent-integrate-postlude.ts';
 import { displayAgentIntegratePrelude } from '../_common/agent-integrate-prelude.ts';
-import { buildRecordedIntegrationAttrs } from '../_common/context-augmentation.ts';
-import { recordIntegrationConfigured } from '../_common/integrate-telemetry.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
-import { resolveVortexSetup } from '../_common/vortex.ts';
-import { supportedIntegrations } from '../index.ts';
 import { ANTIGRAVITY_INTEGRATION_ID, type AntigravityIntegrationOptions } from './declaration.ts';
 import { resolveAntigravityInstallTarget } from './install-target.ts';
 
@@ -44,58 +39,13 @@ export async function integrateAntigravity(
     );
   }
 
-  const integrateCtx = await displayAgentIntegratePrelude('Antigravity', auth, console);
+  await displayAgentIntegratePrelude('Antigravity', auth, console);
 
-  const vortex = await resolveVortexSetup(auth, console);
-
-  const { installRoot: targetRoot, installScope: scope } = resolveAntigravityInstallTarget();
-
-  const integrationOptions: AntigravityIntegrationOptions = {
-    ...options,
-    projectRoot: integrateCtx.project.projectRoot,
-    vortexDisposition: vortex.disposition,
-  };
-
-  const attrs = buildRecordedIntegrationAttrs({
-    baseAttrs: buildIntegrationAttrs(integrateCtx),
-    projectRoot: integrateCtx.project.projectRoot,
-    mainRepoRoot: integrateCtx.project.mainRepoRoot,
-    serverUrl: integrateCtx.serverUrl,
-    orgKey: integrateCtx.organization,
-    contextAugmentation: vortex,
-  });
-
-  await installIntegration({
-    registry: supportedIntegrations,
+  await finalizeAgentInstall<AntigravityIntegrationOptions>({
     integrationId: ANTIGRAVITY_INTEGRATION_ID,
-    options: integrationOptions,
-    targetRoot,
-    scope,
-    console: ctx.console,
+    options,
     auth,
-    nonInteractive: options.nonInteractive,
-    attrs,
-    onSuccess: (facts) => {
-      recordIntegrationConfigured(ctx, {
-        auth,
-        integrationId: ANTIGRAVITY_INTEGRATION_ID,
-        scope,
-        nonInteractive: options.nonInteractive ?? false,
-        isFromRouter: options.isFromRouter ?? false,
-        ...facts,
-      });
-    },
+    ctx,
+    installTarget: resolveAntigravityInstallTarget(),
   });
-}
-
-function buildIntegrationAttrs(ctx: {
-  serverUrl: string;
-  organization: string | undefined;
-  projectKey: string | undefined;
-}): Record<string, IntegrationStateAttribute> {
-  return {
-    projectKey: ctx.projectKey ?? null,
-    serverUrl: ctx.serverUrl,
-    orgKey: ctx.organization ?? null,
-  };
 }

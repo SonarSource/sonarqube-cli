@@ -39,8 +39,13 @@ import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.ts';
 import type { IntegrationDeclaration } from '@/core/framework/features';
 import { recordInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
+import { isFeatureContainer } from '@/core/framework/features/types.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import { type BinarySpec, buildLocalBinaryName } from '@/core/host/install/binary.ts';
+import {
+  type BinarySpec,
+  buildLocalBinaryName,
+  resolveDownloadExtension,
+} from '@/core/host/install/binary.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.ts';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
@@ -49,6 +54,7 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatur
 import { buildDownloadUrl } from '@/core/host/install/sonarsource-releases.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { parseProperties, setProperty } from '@/core/io/properties.ts';
 import type {
   CliState,
   InstalledIntegration,
@@ -61,11 +67,19 @@ import { getDefaultState } from '@/core/state/state.ts';
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { FakeConsole } from '../../_common/fake-console.ts';
+import { isLoopbackTestServerUrl } from './cloud-auth-url.js';
 import { IS_WINDOWS } from './platform';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
-  const downloadUrl = buildDownloadUrl(fixture.name, fixture.version, fixture.distPrefix, platform);
+  const extension = resolveDownloadExtension(fixture, platform);
+  const downloadUrl = buildDownloadUrl(
+    fixture.name,
+    fixture.version,
+    fixture.distPrefix,
+    platform,
+    extension,
+  );
   const filename = downloadUrl.split('/').at(-1)!;
   return join(DEPENDENCY_ARTIFACTS_DIR, filename);
 }
@@ -186,6 +200,8 @@ export class EnvironmentBuilder {
   private _installSecretsBinary = false;
   private _installCagBinary = false;
   private _cagInitExitCode = 0;
+  private _cagPrintSkillExitCode = 0;
+  private _cagPrintSkillEmpty = false;
   private _cagSessionContextExitCode = 0;
   private _cagSessionContextStdout?: string;
   private _cagStopAllExitCode = 0;
@@ -194,11 +210,13 @@ export class EnvironmentBuilder {
   private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
   private _rawStateJson?: string;
+  private _cliVersion?: string;
   private _telemetryEnabled = false;
   private _statsDisabled = false;
   private _dockerMockRunning?: boolean;
+  private _dockerMockInfoExitCode = 0;
   private _dockerMockBinDir?: string;
-  private readonly keychainTokens: Array<{ serverURL: string; token: string; org?: string }> = [];
+  private readonly keychainTokens: Array<{ account: string; token: string }> = [];
   private readonly sqaaFeatures: SqaaFeatureConfig[] = [];
   private readonly contextAugmentationSkills: ContextAugmentationSkillConfig[] = [];
   private readonly installedFeatureSeeds: Array<(state: CliState) => void> = [];
@@ -240,7 +258,19 @@ export class EnvironmentBuilder {
       serverUrl,
       org ? 'cloud' : 'on-premise',
       org,
-    ).withKeychainToken(serverUrl, token, org);
+    ).withKeychainToken(serverUrl, token);
+  }
+
+  /** Seeded Cloud auth on a loopback fake (needs SONARQUBE_CLI_SONARCLOUD_* URL overrides). */
+  usesLoopbackCloudAuth(): boolean {
+    if (this.activeConnectionType !== 'cloud' || !this.activeConnectionUrl) {
+      return false;
+    }
+    return isLoopbackTestServerUrl(this.activeConnectionUrl);
+  }
+
+  loopbackCloudAuthServerUrl(): string | undefined {
+    return this.usesLoopbackCloudAuth() ? this.activeConnectionUrl : undefined;
   }
 
   /**
@@ -284,6 +314,8 @@ export class EnvironmentBuilder {
   withContextAugmentationBinaryInstalled(
     options: {
       initExitCode?: number;
+      printSkillExitCode?: number;
+      printSkillEmpty?: boolean;
       sessionContextExitCode?: number;
       sessionContextStdout?: string;
       stopAllExitCode?: number;
@@ -293,6 +325,8 @@ export class EnvironmentBuilder {
   ): this {
     this._installCagBinary = true;
     this._cagInitExitCode = options.initExitCode ?? 0;
+    this._cagPrintSkillExitCode = options.printSkillExitCode ?? 0;
+    this._cagPrintSkillEmpty = options.printSkillEmpty ?? false;
     this._cagSessionContextExitCode = options.sessionContextExitCode ?? 0;
     this._cagSessionContextStdout = options.sessionContextStdout;
     this._cagStopAllExitCode = options.stopAllExitCode ?? 0;
@@ -323,6 +357,7 @@ export class EnvironmentBuilder {
     if (this._installCagBinary && this._cagSentinelPath) {
       env.CAG_STUB_SENTINEL = this._cagSentinelPath;
       env.CAG_STUB_INIT_EXIT = String(this._cagInitExitCode);
+      env.CAG_STUB_PRINT_SKILL_EXIT = String(this._cagPrintSkillExitCode);
       env.CAG_STUB_SESSION_CONTEXT_EXIT = String(this._cagSessionContextExitCode);
       env.CAG_STUB_STOP_ALL_EXIT = String(this._cagStopAllExitCode);
       if (this._cagSessionContextStdout !== undefined) {
@@ -331,6 +366,8 @@ export class EnvironmentBuilder {
       if (this._cagStdoutLine !== undefined) env.CAG_STUB_STDOUT_LINE = this._cagStdoutLine;
       if (this._cagStderrLine !== undefined) env.CAG_STUB_STDERR_LINE = this._cagStderrLine;
     }
+
+    if (this._cagPrintSkillEmpty) env.CAG_STUB_PRINT_SKILL_EMPTY = '1';
 
     return env;
   }
@@ -347,8 +384,23 @@ export class EnvironmentBuilder {
   /**
    * Stores a token in the file-based keychain when writeTo() is called.
    */
-  withKeychainToken(serverURL: string, token: string, org?: string): this {
-    this.keychainTokens.push({ serverURL, token, org });
+  withKeychainToken(serverURL: string, token: string): this {
+    this.keychainTokens.push({ account: generateKeychainAccount(serverURL), token });
+    return this;
+  }
+
+  /**
+   * Stores a token under the `hostname:org` account an older CLI used, to exercise the
+   * post-update move to the server-only account.
+   */
+  withLegacyKeychainToken(serverURL: string, token: string, org: string): this {
+    this.keychainTokens.push({ account: `${new URL(serverURL).hostname}:${org}`, token });
+    return this;
+  }
+
+  /** Records an older CLI version in state, so the first run executes the post-update actions. */
+  withCliVersion(version: string): this {
+    this._cliVersion = version;
     return this;
   }
 
@@ -362,7 +414,7 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Enables telemetry in the generated state (off by default for integration tests).
+   * Enables telemetry in the generated config (off by default for integration tests).
    * Use when a test needs to assert telemetry side effects such as telemetry-events.ndjson.
    *
    * Safe on its own — no extra env needed. Every spawned CLI carries egress mode `off`, so
@@ -376,7 +428,7 @@ export class EnvironmentBuilder {
     return this;
   }
 
-  /** Opts out of local stats collection, equivalent to `sonar config stats --disabled`. */
+  /** Opts out of local stats collection, equivalent to `sonar config set stats.enabled false`. */
   withStatsDisabled(): this {
     this._statsDisabled = true;
     return this;
@@ -388,8 +440,9 @@ export class EnvironmentBuilder {
    * checks will work without a real Docker daemon.
    * `mcpRunning` controls whether `docker ps` reports the MCP container as active.
    */
-  withDockerMock(mcpRunning = false): this {
+  withDockerMock(mcpRunning = false, infoExitCode = 0): this {
     this._dockerMockRunning = mcpRunning;
+    this._dockerMockInfoExitCode = infoExitCode;
     return this;
   }
 
@@ -477,8 +530,7 @@ export class EnvironmentBuilder {
 
   /**
    * Seeds a previously-installed integration feature in the state file so
-   * `shouldInstall` state probes (e.g. `isFeatureInstalledGloballyForProject`) see it as
-   * already installed.
+   * availability and state probes see it as already installed.
    */
   withInstalledIntegrationFeature<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
@@ -503,6 +555,7 @@ export class EnvironmentBuilder {
         },
         integration,
         feature,
+        isFeatureContainer(feature) ? feature.subfeatures : [],
         { dependencies: [], resources: [], operations: [] },
       );
     });
@@ -512,15 +565,8 @@ export class EnvironmentBuilder {
   build(binDir?: string): CliState {
     // Default to the current CLI version so post-update is a no-op. Tests that
     // need to exercise the upgrade migration inject a stale version via
-    // withRawState().
-    const state = getDefaultState(CURRENT_CLI_VERSION);
-
-    // Telemetry is off by default for integration tests; opt in via withTelemetryEnabled().
-    state.telemetry.enabled = this._telemetryEnabled;
-
-    if (this._statsDisabled) {
-      state.stats = { enabled: false };
-    }
+    // withCliVersion() or withRawState().
+    const state = getDefaultState(this._cliVersion ?? CURRENT_CLI_VERSION);
 
     if (this.activeConnectionUrl) {
       const connectionId = 'test-connection-id';
@@ -622,7 +668,7 @@ export class EnvironmentBuilder {
   }
 
   /**
-   * Writes state.json and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
+   * Writes state.json, the default cli-config.properties, and the keychain JSON file, and if withSecretsBinaryInstalled() was called, copies the mock binary.
    * Leaves an existing read-only keychain in place when it already holds the
    * intended tokens, so a test can exercise delete failure.
    */
@@ -631,11 +677,12 @@ export class EnvironmentBuilder {
     const stateJson =
       this._rawStateJson ?? JSON.stringify(this.build(join(cliHome, 'bin')), null, 2);
     writeFileSync(join(cliHome, 'state.json'), stateJson, 'utf-8');
+    this.writeConfigFile(cliHome);
 
     if (this.keychainTokens.length > 0) {
       const tokens: Record<string, string> = {};
-      for (const { serverURL, token, org } of this.keychainTokens) {
-        tokens[generateKeychainAccount(serverURL, org)] = token;
+      for (const { account, token } of this.keychainTokens) {
+        tokens[account] = token;
       }
       const payload = JSON.stringify({ tokens }, null, 2);
       if (canWriteFile(keychainFile)) {
@@ -672,7 +719,7 @@ export class EnvironmentBuilder {
       const script = [
         '#!/bin/bash',
         'case "$1" in',
-        '  info) exit 0 ;;',
+        `  info) exit ${this._dockerMockInfoExitCode} ;;`,
         `  ps) echo "${psOutput}" ;;`,
         '  *) exit 0 ;;',
         'esac',
@@ -680,6 +727,23 @@ export class EnvironmentBuilder {
       writeFileSync(join(mockBinDir, 'docker'), script, { mode: EXECUTABLE_PERMS });
       this._dockerMockBinDir = mockBinDir;
     }
+  }
+
+  /** Keys a test already wrote to cli-config.properties win over these defaults. */
+  private writeConfigFile(cliHome: string): void {
+    const defaults: [string, string][] = [];
+    if (!this._telemetryEnabled) defaults.push(['telemetry.enabled', 'false']);
+    if (this._statsDisabled) defaults.push(['stats.enabled', 'false']);
+
+    const configFile = join(cliHome, 'cli-config.properties');
+    let content = existsSync(configFile) ? readFileSync(configFile, 'utf-8') : '';
+    const existing = parseProperties(content);
+    const missing = defaults.filter(([key]) => !existing.has(key));
+    if (missing.length === 0) return;
+    for (const [key, value] of missing) {
+      content = setProperty(content, key, value);
+    }
+    writeFileSync(configFile, content, 'utf-8');
   }
 
   /**

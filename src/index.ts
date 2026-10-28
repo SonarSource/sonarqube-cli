@@ -23,8 +23,13 @@
 // Main CLI entry point
 
 import { createCommandTree } from '@/commands/command-tree.ts';
+import { loadLoggerConfig } from '@/core/observability/logger-config.ts';
 import { flushSentry } from '@/core/observability/sentry.ts';
+import { ignoreBrokenPipe } from '@/core/process/stream-errors.ts';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
+
+process.stdout.on('error', ignoreBrokenPipe);
+process.stderr.on('error', ignoreBrokenPipe);
 
 function argvRequestsFormattedOutput(): boolean {
   return process.argv.some(
@@ -34,6 +39,8 @@ function argvRequestsFormattedOutput(): boolean {
       a === '--format=toon',
   );
 }
+
+await loadLoggerConfig();
 
 const console = new TerminalConsole();
 

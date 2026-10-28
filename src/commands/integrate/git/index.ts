@@ -35,7 +35,10 @@ import {
   resolveLocalGitHooksDir,
 } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 import { yellow } from '@/core/ui/colors.ts';
 import { printAgentNonInteractiveAlternativeHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import { type Console, phaseItem } from '@/core/ui/console.ts';
@@ -261,6 +264,10 @@ export async function resolveProjectKey(
   return options;
 }
 
+function otherHookFeatureId(hook: GitHookType): string {
+  return `${hook === 'pre-commit' ? 'pre-push' : 'pre-commit'}-hook`;
+}
+
 async function installGitFeatures(
   options: IntegrateGitOptions,
   targetRoot: string,
@@ -279,6 +286,7 @@ async function installGitFeatures(
     auth,
     force: options.force,
     nonInteractive: options.nonInteractive,
+    excludedFeatureIds: options.hook ? [otherHookFeatureId(options.hook)] : undefined,
     // Attrs are project-scope only; global hooks do not support a project key.
     attrs: scope === 'project' ? { projectKey: options.project ?? null } : undefined,
     onSuccess: (facts) => {

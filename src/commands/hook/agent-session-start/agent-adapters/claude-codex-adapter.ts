@@ -22,7 +22,7 @@ import type { SessionStartAgentAdapter } from '../types.ts';
 
 interface ClaudeCodexSessionStartPayload {
   session_id: string;
-  cwd: string;
+  cwd?: string;
   hook_event_name: string;
 }
 
@@ -34,4 +34,13 @@ export const claudeCodexAdapter: SessionStartAgentAdapter = {
   emit: ({ additionalContext }, input) => ({
     hookSpecificOutput: { hookEventName: input.eventName, additionalContext },
   }),
+};
+
+export const userVisibleClaudeCodexAdapter: SessionStartAgentAdapter = {
+  ...claudeCodexAdapter,
+  // Claude Code/Codex failures use only systemMessage (user-visible, model-hidden); omit "Tell the user" context to avoid duplicate output.
+  emit: (output, input) =>
+    output.userMessage
+      ? { systemMessage: output.userMessage }
+      : claudeCodexAdapter.emit(output, input),
 };

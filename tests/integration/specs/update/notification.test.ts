@@ -26,6 +26,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
+
 import { version as CURRENT_VERSION } from '../../../../package.json';
 import { TestHarness } from '../../harness';
 
@@ -54,8 +56,28 @@ describe('update notification', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain(NOTICE_TEXT);
-      expect(result.stderr).toContain('Run `sonar update` to update to v99.0.0');
+      expect(result.stderr).toContain(
+        'Update it through your organization, package manager, or the method used to install it.',
+      );
       expect(result.stdout).not.toContain(NOTICE_TEXT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'recommends sonar update in the notice for an installer binary',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      await harness.newFakeBinariesServer().withStableVersion('99.0.0').start();
+
+      const result = await harness.run('auth status', {
+        extraEnv: INTERACTIVE_ENV,
+        binaryPath: harness.installerManagedBinaryPath(),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('Run `sonar update` to update to v99.0.0');
     },
     { timeout: 15000 },
   );
@@ -80,8 +102,9 @@ describe('update notification', () => {
     async () => {
       await harness.newFakeBinariesServer().withStableVersion('99.0.0').start();
 
-      const result = await harness.run('config telemetry --disabled', {
-        extraEnv: INTERACTIVE_ENV,
+      // `stats` is an Alpha command, so it needs ALPHA_ENV_VAR to be available.
+      const result = await harness.run('stats', {
+        extraEnv: { ...INTERACTIVE_ENV, [ALPHA_ENV_VAR]: 'true' },
       });
 
       expect(result.exitCode).toBe(0);

@@ -24,6 +24,7 @@ import logger from '../observability/logger.ts';
 import { errAsync, okAsync, type ResultAsync } from '../result.ts';
 import { type HttpClientError, isCriticalFailure } from './errors.ts';
 import type { SonarHttpClient } from './http-client.ts';
+import { hasNextPage, type Paging } from './paging.ts';
 
 const MAX_ORGANIZATIONS_PER_PAGE = 500;
 
@@ -40,15 +41,6 @@ export interface OrganizationRecord {
   id: string;
   uuidV4: string;
 }
-
-/**
- * Result of an organization lookup: found, absent, or not checkable.
- *
- * Deliberately carries no organization record. Callers only need to know whether the key resolves;
- * the one caller that needs the record itself uses `fetchOrganizationByKey`.
- */
-export type OrganizationAccess =
-  { status: 'accessible' } | { status: 'not_found' } | { status: 'check_failed'; reason: string };
 
 /** Result of checking whether the current token has membership in an organization. */
 export type OrganizationMembership =
@@ -135,13 +127,11 @@ export class OrganizationsClient {
   listUserOrganizations(
     page = 1,
     ps = 10,
-  ): ResultAsync<{ organizations: Organization[]; total: number }, HttpClientError> {
-    return this.client
-      .get<{
-        organizations: Organization[];
-        paging: { total: number };
-      }>('/api/organizations/search', { member: true, ps, p: page })
-      .map((result) => ({ organizations: result.organizations, total: result.paging.total }));
+  ): ResultAsync<{ organizations: Organization[]; paging: Paging }, HttpClientError> {
+    return this.client.get<{ organizations: Organization[]; paging: Paging }>(
+      '/api/organizations/search',
+      { member: true, ps, p: page },
+    );
   }
 
   /**
@@ -156,49 +146,14 @@ export class OrganizationsClient {
       const result = await this.listUserOrganizations(page, MAX_ORGANIZATIONS_PER_PAGE);
       if (result.isErr()) return { status: 'check_failed', reason: result.error.message };
 
-      const { organizations, total } = result.value;
+      const { organizations, paging } = result.value;
       if (organizations.some((organization) => organization.key === organizationKey)) {
         return { status: 'member' };
       }
-      if (organizations.length === 0 || page * MAX_ORGANIZATIONS_PER_PAGE >= total) {
+      if (organizations.length === 0 || !hasNextPage(paging)) {
         return { status: 'not_member' };
       }
     }
-  }
-
-  /**
-   * Resolve an organization key.
-   *
-   * The public organizations API returns `404` for unknown or inaccessible organizations. This
-   * lets a hand-typed key be validated without using the internal organizations search endpoint.
-   *
-   * Every outcome (accessible, not_found, or check_failed) is folded into a plain value here,
-   * so this deliberately resolves to a `Promise`, not a `ResultAsync`: there is no error left to
-   * propagate past this point.
-   */
-  resolveOrganizationAccess(organizationKey: string): Promise<OrganizationAccess> {
-    const endpoint = '/organizations/organizations';
-    return this.client
-      .getOrNullIf404<OrganizationRecord[]>(endpoint, {
-        organizationKey,
-        excludeEligibility: 'true',
-      })
-      .match(
-        (organizations): OrganizationAccess =>
-          organizations?.[0] ? { status: 'accessible' } : { status: 'not_found' },
-        (error): OrganizationAccess => ({ status: 'check_failed', reason: error.message }),
-      );
-  }
-
-  /**
-   * Check if organization exists and is accessible.
-   *
-   * Use `resolveOrganizationAccess` to tell a missing organization from a failed lookup.
-   */
-  isOrganizationAccessible(organizationKey: string): Promise<boolean> {
-    return this.resolveOrganizationAccess(organizationKey).then(
-      (access) => access.status === 'accessible',
-    );
   }
 
   /**

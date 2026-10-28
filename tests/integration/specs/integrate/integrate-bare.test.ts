@@ -23,6 +23,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { hookScriptName, TestHarness } from '../../harness';
+import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature } from './state-helpers';
 
 describe('integrate (bare command)', () => {
@@ -98,6 +99,7 @@ describe('integrate (bare command)', () => {
       // There is no scope prompt anymore — every integration installs globally.
       const session = harness.runInteractive('integrate');
       await session.accept('Select the tool you want to integrate with');
+      await chooseCustomize(session);
       await session.accept('Install secret scanning hooks?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -122,6 +124,44 @@ describe('integrate (bare command)', () => {
       expect(harness.cwd.exists('.claude')).toBe(false);
     },
     { timeout: 30000 },
+  );
+
+  it(
+    'offers OpenCode in the selection prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      for (let i = 0; i < 5; i++) session.keyDown();
+      session.keyEnter();
+      await session.waitText('SonarQube Integration Setup for OpenCode');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).toContain('SonarQube Integration Setup for OpenCode');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'offers Pi in the selection prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+
+      const session = harness.runInteractive('integrate');
+      await session.waitText('Select the tool you want to integrate with');
+      for (let i = 0; i < 7; i++) session.keyDown();
+      session.keyEnter();
+      await session.waitText('SonarQube Integration Setup for Pi');
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.stdout + result.stderr).toContain('SonarQube Integration Setup for Pi');
+    },
+    { timeout: 15000 },
   );
 
   it(
@@ -162,42 +202,71 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
+  const CONFLICT_HINT =
+    "→ Run 'sonar integrate' again anytime to add, customize or remove an agent.";
+
+  async function runBareIntegrateWithAgents(markers: string[]) {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    for (const marker of markers) {
+      harness.userHome.writeFile(marker, '{}');
+    }
+
+    const session = harness.runInteractive('integrate');
+    await session.waitText('Select the tool you want to integrate with');
+    session.keyCtrlC();
+    return session.waitFinish();
+  }
+
   it(
-    'warns about hook-execution conflicts when Claude and Cursor are both detected',
+    'prints one conflict line listing all three agents when Claude, Cursor and Copilot are detected',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-      harness.userHome.writeFile('.claude.json', '{}');
-      harness.userHome.writeFile('.cursor/marker', '');
+      const result = await runBareIntegrateWithAgents([
+        '.claude.json',
+        '.cursor/marker',
+        '.copilot/marker',
+      ]);
 
-      const session = harness.runInteractive('integrate');
-      await session.waitText('Select the tool you want to integrate with');
-      session.keyCtrlC();
-      const result = await session.waitFinish();
-
-      expect(result.stderr).toContain(
-        "Both Claude Code and Cursor were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
+      expect(result.stdout).toContain(
+        'Cursor, Claude Code and Copilot may conflict at the hook level.',
       );
+      expect(result.stdout).toContain(CONFLICT_HINT);
+      expect(result.stdout.match(/may conflict at the hook level/g)).toHaveLength(1);
+      expect(result.stderr).not.toContain('conflict');
     },
     { timeout: 15000 },
   );
 
   it(
-    'warns about hook-execution conflicts when Claude and Copilot are both detected',
+    'prints the conflict line for two agents when Claude and Cursor are detected',
     async () => {
-      const server = await harness.newFakeServer().withAuthToken('test-token').start();
-      harness.withAuth(server.baseUrl(), 'test-token');
-      harness.userHome.writeFile('.claude.json', '{}');
-      harness.userHome.writeFile('.copilot/marker', '');
+      const result = await runBareIntegrateWithAgents(['.claude.json', '.cursor/marker']);
 
-      const session = harness.runInteractive('integrate');
-      await session.waitText('Select the tool you want to integrate with');
-      session.keyCtrlC();
-      const result = await session.waitFinish();
+      expect(result.stdout).toContain('Cursor and Claude Code may conflict at the hook level.');
+      expect(result.stdout).toContain(CONFLICT_HINT);
+    },
+    { timeout: 15000 },
+  );
 
-      expect(result.stderr).toContain(
-        "Both Claude Code and Copilot were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.",
-      );
+  it(
+    'prints the conflict line for two agents when Claude and Copilot are detected',
+    async () => {
+      const result = await runBareIntegrateWithAgents(['.claude.json', '.copilot/marker']);
+
+      expect(result.stdout).toContain('Claude Code and Copilot may conflict at the hook level.');
+      expect(result.stdout).toContain(CONFLICT_HINT);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prints no conflict line when only Cursor and Copilot are detected',
+    async () => {
+      const result = await runBareIntegrateWithAgents(['.cursor/marker', '.copilot/marker']);
+
+      expect(result.stdout).toContain('Detected agents on your machine:');
+      expect(result.stdout).not.toContain('may conflict at the hook level');
+      expect(result.stdout).not.toContain(CONFLICT_HINT);
     },
     { timeout: 15000 },
   );

@@ -25,13 +25,12 @@ import {
   SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { codexPostToolUse } from '@/commands/hook/codex-post-tool-use.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import * as projectInfo from '@/core/project-info.ts';
 import { okAsync } from '@/core/result.ts';
 
 import * as sqaaModule from '../../../../src/commands/analyze/sqaa.ts';
-import { codexPostToolUse } from '../../../../src/commands/hook/codex-post-tool-use.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -52,7 +51,6 @@ describe('codexPostToolUse', () => {
   let emitSqaaAnalysisTelemetrySpy: ReturnType<typeof spyOn>;
   let readStdinJsonSpy: ReturnType<typeof spyOn>;
   let ctx: CommandInvocationContext;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
   const originalStdinIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
@@ -76,12 +74,6 @@ describe('codexPostToolUse', () => {
       sqaaTelemetry,
       'recordSqaaAnalysisTelemetry',
     ).mockImplementation(() => {});
-    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      repoRoot: process.cwd(),
-      projectRoot: process.cwd(),
-      projectKey: 'my-project',
-      configSources: [],
-    });
   });
 
   afterEach(() => {
@@ -90,7 +82,6 @@ describe('codexPostToolUse', () => {
     buildSqaaJsonReportSpy.mockRestore();
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     readStdinJsonSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
     Object.defineProperty(process.stdin, 'isTTY', {
       configurable: true,
       value: originalStdinIsTTY,
@@ -119,12 +110,13 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
-      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      { force: true, format: 'json', forcedDepth: 'STANDARD' },
       expect.objectContaining({ auth: expect.objectContaining({ connectionType: 'cloud' }) }),
       {
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
         telemetryCtx: ctx,
+        silentSkip: true,
       },
     );
     expect(stdoutSpy).toHaveBeenCalledTimes(1);
@@ -186,18 +178,19 @@ describe('codexPostToolUse', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('src/a.ts');
   });
 
-  it('skips output when project key is missing', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      repoRoot: process.cwd(),
-      projectRoot: process.cwd(),
-      projectKey: undefined,
-      configSources: [],
-    });
+  it('skips output when no project is configured', async () => {
+    buildSqaaJsonReportSpy.mockResolvedValue(null);
 
     await codexPostToolUse(ctx);
 
-    expect(buildSqaaJsonReportSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('leaves project resolution to the analysis, so each file goes to the project that owns it', async () => {
+    await codexPostToolUse(ctx);
+
+    const [options] = buildSqaaJsonReportSpy.mock.calls[0];
+    expect(options).not.toHaveProperty('project');
   });
 
   it('runs analysis on a Server connection without an organization', async () => {
@@ -215,7 +208,7 @@ describe('codexPostToolUse', () => {
     await codexPostToolUse(ctx);
 
     expect(buildSqaaJsonReportSpy).toHaveBeenCalledWith(
-      { project: 'my-project', force: true, format: 'json', forcedDepth: 'STANDARD' },
+      { force: true, format: 'json', forcedDepth: 'STANDARD' },
       expect.objectContaining({ auth: expect.objectContaining({ connectionType: 'on-premise' }) }),
       expect.objectContaining({
         telemetryCallerCommand: SQAA_CODEX_POST_TOOL_USE_CALLER_COMMAND,

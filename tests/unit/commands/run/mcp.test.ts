@@ -22,17 +22,20 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
+import * as readline from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
+import { CLI_TMP_DIR, SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
+import * as networkConfig from '@/core/host/connectivity/network-config.ts';
 import type { ProxyGroup, ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
 import type { ClientCertConfig } from '@/core/host/connectivity/types.ts';
 import * as pkcs12Module from '@/core/host/crypto/pkcs12.ts';
@@ -46,7 +49,7 @@ import {
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -95,10 +98,28 @@ function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
   };
 }
 
-function makeFakeChild(exitCode = 0): childProcess.ChildProcess {
+function makeFakeChild(exitCode = 0, beforeExit?: () => void): childProcess.ChildProcess {
   const emitter = new EventEmitter();
-  setImmediate(() => emitter.emit('exit', exitCode));
+  setImmediate(() => {
+    beforeExit?.();
+    emitter.emit('exit', exitCode);
+  });
   return emitter as unknown as childProcess.ChildProcess;
+}
+
+function initializeRequest(): string {
+  return JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' });
+}
+
+function readlineInput(line?: string) {
+  return {
+    close: () => undefined,
+    *[Symbol.iterator]() {
+      if (line) {
+        yield line;
+      }
+    },
+  } as never;
 }
 
 describe('runMcp', () => {
@@ -107,13 +128,15 @@ describe('runMcp', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
   let homeDirSpy: ReturnType<typeof spyOn>;
   let cwdSpy: ReturnType<typeof spyOn>;
+  let createInterfaceSpy: ReturnType<typeof spyOn>;
+  let networkConfigSpy: ReturnType<typeof spyOn>;
+  let stdinIsTtyDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectKey: undefined,
       repoRoot: undefined,
       projectRoot: '/tmp/non-git-dir',
-      configSources: [],
     });
   });
 
@@ -123,16 +146,141 @@ describe('runMcp', () => {
     spawnSpy?.mockRestore();
     homeDirSpy?.mockRestore();
     cwdSpy?.mockRestore();
+    createInterfaceSpy?.mockRestore();
+    networkConfigSpy?.mockRestore();
+    if (stdinIsTtyDescriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', stdinIsTtyDescriptor);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
   });
 
-  it('throws CommandFailedError when no container runtime is available', async () => {
+  it('throws the standard error for no container runtime in a terminal', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: null,
       viaWsl: false,
     });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toBeInstanceOf(CommandFailedError);
+  });
+
+  it('reports the native runtime and its stderr when it is unreachable', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+      nativeFailure: { runtime: 'docker', exitCode: 1, stderr: 'Cannot reach daemon' },
+    });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toMatchObject({
+      message: 'Docker is installed but not reachable (exit 1): Cannot reach daemon',
+      remediationHint:
+        'Start docker and rerun this command, or set SONARQUBE_CLI_MCP_WSL=always if your container runtime runs in WSL.',
+    });
+  });
+
+  it('omits an unavailable exit code from the native runtime error', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+      nativeFailure: { runtime: 'docker', exitCode: null, stderr: 'spawn docker EACCES' },
+    });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toMatchObject({
+      message: 'Docker is installed but not reachable: spawn docker EACCES',
+    });
+  });
+
+  it('explains when only WSL runtimes were checked', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+      wslOnly: true,
+    });
+    stdinIsTtyDescriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    Object.defineProperty(process.stdin, 'isTTY', { configurable: true, value: true });
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+    await expect(runMcp(FAKE_CTX, {}, NO_NETWORK)).rejects.toMatchObject({
+      message: 'No container runtime (Docker/Podman/Nerdctl) is available in WSL.',
+      remediationHint: expect.stringContaining('SONARQUBE_CLI_MCP_WSL=always checks WSL only.'),
+    });
+  });
+
+  it('preserves the invalid-option exit code in an MCP startup error', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockRejectedValue(
+      new InvalidOptionError('SONARQUBE_CLI_MCP_WSL must be auto, always, or never.'),
+    );
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining('SONARQUBE_CLI_MCP_WSL must be'),
+      );
+      expect(process.exitCode).toBe(2);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  it('returns the no-runtime error through MCP for non-terminal input', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: null,
+      viaWsl: false,
+    });
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+        ),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  it('returns network configuration errors through MCP', async () => {
+    networkConfigSpy = spyOn(networkConfig, 'getNetworkConfigOrThrow').mockImplementation(() => {
+      throw new NetworkConfigError('Invalid proxy configuration.');
+    });
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(
+      readlineInput(initializeRequest()),
+    );
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX);
+
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining('You can also check current network configuration'),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = initialExitCode;
+      stdoutSpy.mockRestore();
+    }
   });
 
   it.each(['docker', 'podman', 'nerdctl'] as const)(
@@ -144,7 +292,7 @@ describe('runMcp', () => {
       });
       spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
 
-      await runMcp(FAKE_CTX);
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
 
       // Prefer the wsl.exe call: mock.module('node:child_process') in other
       // suites (e.g. update-version) can leave earlier spawn calls on the shared mock.
@@ -233,19 +381,23 @@ describe('runMcp', () => {
     expect(discoverProjectSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a multiline project key before launching the container', async () => {
+  it('returns an MCP error for a multiline project key before launching the container', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
       viaWsl: false,
     });
     spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(readlineInput());
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK)).rejects.toThrow(
-      'The project key must be a single line.',
-    );
+    const initialExitCode = process.exitCode;
+    try {
+      await runMcp(FAKE_CTX, { project: 'first\nsecond' }, NO_NETWORK);
 
-    expect(spawnSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(2);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = initialExitCode;
+    }
   });
 
   it('adds fs mount when --project is set and discovered root is a git repo', async () => {
@@ -253,7 +405,6 @@ describe('runMcp', () => {
       projectKey: undefined,
       repoRoot: '/tmp/git-repo',
       projectRoot: '/tmp/git-repo',
-      configSources: [],
     });
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
@@ -313,6 +464,44 @@ describe('runMcp', () => {
     } finally {
       pemToPkcs12Spy.mockRestore();
       rmSync(cachedPath, { force: true });
+    }
+  });
+
+  it('deletes the cached CA certificate after the MCP container exits', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    const sourceDir = mkdtempSync(join(os.tmpdir(), 'sonar-mcp-ca-cleanup-'));
+    const sourcePath = join(sourceDir, 'corp-ca.pem');
+    const contents = Buffer.from('cleanup-test-ca');
+    let cachedPath = '';
+    let cachedAtExit = false;
+    writeFileSync(sourcePath, contents);
+    spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(
+      makeFakeChild(0, () => {
+        const mountSuffix = `:${MCP_CONTAINER_CA_CERT_PATH}:ro`;
+        const args = spawnSpy.mock.calls[0][1] as string[];
+        const mount = args.find((arg) => arg.endsWith(mountSuffix)) ?? '';
+        cachedPath = mount.slice(0, -mountSuffix.length);
+        cachedAtExit = existsSync(cachedPath);
+        writeFileSync(sourcePath, 'changed during the run');
+      }),
+    );
+
+    try {
+      await runMcp(FAKE_CTX, {}, makeCaCertNetwork(sourcePath));
+
+      expect(cachedAtExit).toBe(true);
+      expect(spawnSpy.mock.calls[0][1]).toContain(
+        `${normalizePath(cachedPath)}:${MCP_CONTAINER_CA_CERT_PATH}:ro`,
+      );
+      expect(existsSync(cachedPath)).toBe(false);
+    } finally {
+      rmSync(sourceDir, { recursive: true, force: true });
+      if (cachedPath) {
+        rmSync(cachedPath, { force: true });
+      }
     }
   });
 });
@@ -558,20 +747,36 @@ describe('resolveMcpContainerCommand — WSL cert path forwarding', () => {
   const WSL_DETECTION = { runtime: 'docker', viaWsl: true } as const;
   const context = { withFsMount: false } as const;
 
-  it('forwards CA cert path via WSLENV /p translation instead of embedding it literally', () => {
-    const result = resolveMcpContainerCommand(
-      FAKE_AUTH,
-      WSL_DETECTION,
-      context,
-      {},
-      makeCaCertNetwork('/home/user/sonar-ca.pem'),
-    );
+  it('forwards the cached CA path via WSLENV /p translation', () => {
+    const sourceDir = mkdtempSync(join(os.tmpdir(), 'sonar-mcp-ca-wsl-'));
+    const sourcePath = join(sourceDir, 'corp-ca.pem');
+    const contents = Buffer.from('wsl-test-ca');
+    let cachedPath = '';
+    writeFileSync(sourcePath, contents);
 
-    expect(result.command).toBe('wsl.exe');
-    expect(result.env.SONARQUBE_MCP_CA_PATH).toBe('/home/user/sonar-ca.pem');
-    expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CA_PATH/p');
-    expect(result.args[2]).toContain(`"$SONARQUBE_MCP_CA_PATH":${MCP_CONTAINER_CA_CERT_PATH}:ro`);
-    expect(result.args[2]).not.toContain('/home/user/sonar-ca.pem');
+    try {
+      const result = resolveMcpContainerCommand(
+        FAKE_AUTH,
+        WSL_DETECTION,
+        context,
+        {},
+        makeCaCertNetwork(sourcePath),
+      );
+      cachedPath = result.env.SONARQUBE_MCP_CA_PATH;
+
+      expect(result.command).toBe('wsl.exe');
+      expect(cachedPath).not.toBe(normalizePath(sourcePath));
+      expect(cachedPath).toStartWith(normalizePath(join(CLI_TMP_DIR, 'mcp-ca-')));
+      expect(result.env.WSLENV).toContain('SONARQUBE_MCP_CA_PATH/p');
+      expect(result.args[2]).toContain(`"$SONARQUBE_MCP_CA_PATH":${MCP_CONTAINER_CA_CERT_PATH}:ro`);
+      expect(result.args[2]).not.toContain(sourcePath);
+      expect(readFileSync(cachedPath)).toEqual(contents);
+    } finally {
+      rmSync(sourceDir, { recursive: true, force: true });
+      if (cachedPath) {
+        rmSync(cachedPath, { force: true });
+      }
+    }
   });
 
   it('forwards PKCS12 client cert path via WSLENV /p translation instead of embedding it literally', () => {

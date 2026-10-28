@@ -33,6 +33,7 @@ import {
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
+import { type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
@@ -45,11 +46,8 @@ export type FileSuccess = {
 export type FileFailure = { file: string; filePath: string; failure: Error };
 export type FileResult = FileSuccess | FileFailure;
 
-type ChunkPath = { file: string; filePath: string };
-
 export interface RunContext {
-  files: string[];
-  allPaths: string[];
+  paths: SqaaPath[];
   connection: SonarConnection;
   projectKey: string;
   branch: string | undefined;
@@ -78,9 +76,9 @@ export interface RunTally {
  */
 export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
   const tally = emptyTally();
-  if (ctx.files.length === 0) return tally;
+  if (ctx.paths.length === 0) return tally;
 
-  const fileIndexByAbsolutePath = new Map(ctx.files.map((f, i) => [f, i]));
+  const fileIndexByAbsolutePath = new Map(ctx.paths.map((p, i) => [p.absolutePath, i]));
   const { chunks, chunkFileIndices } = prepareChunks(
     ctx,
     fileIndexByAbsolutePath,
@@ -104,12 +102,25 @@ export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
     }
   }
 
-  sortResultsByFileOrder(tally, ctx.files);
+  sortResultsByFileOrder(tally, ctx.paths);
   return tally;
 }
 
 function emptyTally(): RunTally {
   return { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 0 };
+}
+
+/** Combines per-project tallies into one run tally; results keep the order the tallies were given in. */
+export function mergeTallies(tallies: RunTally[]): RunTally {
+  const merged = emptyTally();
+  for (const tally of tallies) {
+    merged.allResults.push(...tally.allResults);
+    merged.totalIssues += tally.totalIssues;
+    merged.totalErrors += tally.totalErrors;
+    merged.totalFailures += tally.totalFailures;
+    merged.globalError ??= tally.globalError;
+  }
+  return merged;
 }
 
 function prepareChunks(
@@ -119,16 +130,16 @@ function prepareChunks(
   progress: SqaaProgress,
 ): { chunks: SqaaChunk[]; chunkFileIndices: number[][] } {
   const readableChunkFiles: SqaaChunkFile[] = [];
-  for (let idx = 0; idx < ctx.files.length; idx++) {
-    const file = ctx.files[idx];
+  for (let idx = 0; idx < ctx.paths.length; idx++) {
+    const path = ctx.paths[idx];
     try {
       readableChunkFiles.push({
-        absolutePath: file,
-        relativePath: ctx.allPaths[idx],
-        content: readSqaaFileContent(file),
+        absolutePath: path.absolutePath,
+        relativePath: path.serverPath,
+        content: readSqaaFileContent(path.absolutePath),
       });
     } catch (err) {
-      recordFileFailure(progress, tally, idx, { file, filePath: ctx.allPaths[idx] }, err as Error);
+      recordFileFailure(progress, tally, idx, path, err as Error);
     }
   }
 
@@ -153,25 +164,22 @@ function chunkPathsForFiles(
   ctx: RunContext,
   chunkFiles: SqaaChunkFile[],
   fileIndexByAbsolutePath: Map<string, number>,
-): { partPaths: ChunkPath[]; partIndices: number[] } {
-  const partPaths: ChunkPath[] = [];
+): { partPaths: SqaaPath[]; partIndices: number[] } {
+  const partPaths: SqaaPath[] = [];
   const partIndices: number[] = [];
   for (const chunkFile of chunkFiles) {
     const idx = fileIndexByAbsolutePath.get(chunkFile.absolutePath);
     if (idx === undefined) {
       continue;
     }
-    partPaths.push({ file: chunkFile.absolutePath, filePath: ctx.allPaths[idx] });
+    partPaths.push(ctx.paths[idx]);
     partIndices.push(idx);
   }
   return { partPaths, partIndices };
 }
 
-function chunkPathsForIndices(ctx: RunContext, fileIndices: number[]): ChunkPath[] {
-  return fileIndices.map((idx) => ({
-    file: ctx.files[idx],
-    filePath: ctx.allPaths[idx],
-  }));
+function chunkPathsForIndices(ctx: RunContext, fileIndices: number[]): SqaaPath[] {
+  return fileIndices.map((idx) => ctx.paths[idx]);
 }
 
 function recordSuccessfulParts(
@@ -203,13 +211,7 @@ function recordGroupFetchErrors(
       if (idx === undefined) {
         continue;
       }
-      recordFileFailure(
-        progress,
-        tally,
-        idx,
-        { file: failed.absolutePath, filePath: ctx.allPaths[idx] },
-        error,
-      );
+      recordFileFailure(progress, tally, idx, ctx.paths[idx], error);
     }
   }
 }
@@ -285,7 +287,7 @@ function recordChunkSuccess(
   progress: SqaaProgress,
   tally: RunTally,
   fileIndices: number[],
-  chunkPaths: ChunkPath[],
+  chunkPaths: SqaaPath[],
   response: SqaaChunkResponse,
 ): void {
   const results = distributeChunkResponse(response.issues, response.errors, chunkPaths);
@@ -300,13 +302,13 @@ function recordFileFailure(
   progress: SqaaProgress,
   tally: RunTally,
   fileIndex: number,
-  chunkPath: ChunkPath,
+  path: SqaaPath,
   error: Error,
 ): void {
   progress.update(fileIndex, 'failed');
   const failure: FileFailure = {
-    file: chunkPath.file,
-    filePath: chunkPath.filePath,
+    file: path.absolutePath,
+    filePath: path.displayPath,
     failure: error,
   };
   tally.allResults.push(failure);
@@ -328,7 +330,7 @@ function recordChunkFailure(
   tally: RunTally,
   chunkIndex: number,
   fileIndices: number[],
-  chunkPaths: ChunkPath[],
+  chunkPaths: SqaaPath[],
   error: Error,
 ): void {
   progress.updateChunk(chunkIndex, 'failed');
@@ -339,14 +341,14 @@ function recordChunkFailure(
 
 function skipUnprocessedAfterFailure(ctx: RunContext, tally: RunTally): void {
   const processedFiles = new Set(tally.allResults.map((r) => r.file));
-  const firstUnprocessed = ctx.files.findIndex((f) => !processedFiles.has(f));
+  const firstUnprocessed = ctx.paths.findIndex((p) => !processedFiles.has(p.absolutePath));
   if (firstUnprocessed >= 0) {
     ctx.progress.skipRemaining(firstUnprocessed);
   }
 }
 
-function sortResultsByFileOrder(tally: RunTally, files: string[]): void {
-  const fileIndexMap = new Map(files.map((f, i) => [f, i]));
+function sortResultsByFileOrder(tally: RunTally, paths: SqaaPath[]): void {
+  const fileIndexMap = new Map(paths.map((p, i) => [p.absolutePath, i]));
   tally.allResults.sort(
     (a, b) => (fileIndexMap.get(a.file) ?? 0) - (fileIndexMap.get(b.file) ?? 0),
   );
@@ -355,24 +357,25 @@ function sortResultsByFileOrder(tally: RunTally, files: string[]): void {
 export function distributeChunkResponse(
   issues: SqaaIssue[],
   errors: Array<{ code: string; message: string }> | null | undefined,
-  chunkPaths: ChunkPath[],
+  chunkPaths: SqaaPath[],
 ): FileSuccess[] {
-  const issuesByPath = new Map<string, SqaaIssue[]>();
-  const knownPaths = new Set(chunkPaths.map((p) => p.filePath));
-  const fallbackPath = chunkPaths[0]?.filePath;
+  const issuesByServerPath = new Map<string, SqaaIssue[]>();
+  const knownServerPaths = new Set(chunkPaths.map((p) => p.serverPath));
+  const fallbackServerPath = chunkPaths[0]?.serverPath;
 
   for (const issue of issues) {
-    const path = issue.filePath && knownPaths.has(issue.filePath) ? issue.filePath : fallbackPath;
-    if (!path) continue;
-    const list = issuesByPath.get(path) ?? [];
+    const serverPath =
+      issue.filePath && knownServerPaths.has(issue.filePath) ? issue.filePath : fallbackServerPath;
+    if (!serverPath) continue;
+    const list = issuesByServerPath.get(serverPath) ?? [];
     list.push(issue);
-    issuesByPath.set(path, list);
+    issuesByServerPath.set(serverPath, list);
   }
 
-  return chunkPaths.map(({ file, filePath }, index) => ({
-    file,
-    filePath,
-    issues: issuesByPath.get(filePath) ?? [],
+  return chunkPaths.map(({ absolutePath, displayPath, serverPath }, index) => ({
+    file: absolutePath,
+    filePath: displayPath,
+    issues: withDisplayFilePath(issuesByServerPath.get(serverPath) ?? [], displayPath),
     errors: index === 0 ? errors : null,
   }));
 }

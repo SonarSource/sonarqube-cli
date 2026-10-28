@@ -28,27 +28,25 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { installIntegration } from '@/core/framework/features';
 
 import { supportedIntegrations } from '../index.ts';
-import {
-  type AgentIntegrateContext,
-  resolveIntegrateInstallTarget,
-} from './agent-integrate-prelude.ts';
+import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import { recordIntegrationConfigured } from './integrate-telemetry.ts';
+import { warnIfMcpRuntimeUnavailable } from './mcp-runtime-warning.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
 export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptions> {
   integrationId: string;
-  context: AgentIntegrateContext;
   options: IntegrateAgentOptions;
   auth: ResolvedAuth;
   ctx: CommandInvocationContext;
   /**
    * Agent-specific feature flags merged into the integration options (e.g. the
-   * SQAA flag, whose name differs per agent). `projectRoot` and `vortexDisposition`
-   * are derived here and must not be passed in.
+   * SQAA flag, whose name differs per agent). `vortexDisposition` is derived
+   * here and must not be passed in.
    */
   featureOptions?: Partial<TOptions>;
+  installTarget?: ReturnType<typeof resolveIntegrateInstallTarget>;
 }
 
 /**
@@ -60,15 +58,12 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
 export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
-  const { context, options, auth } = params;
+  const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
-  const { installRoot, installScope } = resolveIntegrateInstallTarget();
+  const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
-    baseAttrs: { projectKey: context.projectKey ?? null },
-    projectRoot: context.project.projectRoot,
-    mainRepoRoot: context.project.mainRepoRoot,
-    serverUrl: context.serverUrl,
-    orgKey: context.organization,
+    serverUrl: auth.serverUrl,
+    orgKey: auth.orgKey,
     contextAugmentation: vortex,
   });
   await installIntegration({
@@ -77,7 +72,6 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     options: {
       ...options,
       ...params.featureOptions,
-      projectRoot: context.project.projectRoot,
       vortexDisposition: vortex.disposition,
     },
     targetRoot: installRoot,
@@ -97,4 +91,5 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       });
     },
   });
+  await warnIfMcpRuntimeUnavailable(params.ctx.console, params.integrationId, installRoot);
 }

@@ -126,6 +126,8 @@ describe('run mcp', () => {
       expect(result.stdout).toContain(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
       // env vars were injected into the docker process
       expect(result.stdout).toContain('ENV_TOKEN=test-token');
+      // mcp.container.autoNetwork defaults to off, so an existing user sees the
+      // saved URL unchanged (no host alias rewrite) on every platform.
       expect(result.stdout).toContain(`ENV_URL=${server.baseUrl()}`);
       expect(result.stdout).toContain('ENV_PROJECT_KEY=my-project');
     },
@@ -216,6 +218,107 @@ describe('run mcp', () => {
       });
 
       expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Check that its SonarQube URL is reachable');
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    [130, undefined],
+    [143, undefined],
+    [1, 'http://sonarqube:9000'],
+  ])(
+    'omits loopback advice for exit %s and container URL %s',
+    async (exitCode, serverUrl) => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker(exitCode);
+      if (serverUrl) {
+        expect(
+          (await harness.run(`config set mcp.container.serverUrl ${serverUrl}`)).exitCode,
+        ).toBe(0);
+      }
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(exitCode);
+      expect(result.stderr).not.toContain('The MCP container exited with an error');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses persistent container network settings on launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      expect((await harness.run('config set mcp.container.network sonar-net')).exitCode).toBe(0);
+      expect(
+        (await harness.run('config set mcp.container.addHost sonarqube.local:host-gateway'))
+          .exitCode,
+      ).toBe(0);
+      expect(
+        (await harness.run('config set mcp.container.serverUrl http://sonarqube:9000')).exitCode,
+      ).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--network sonar-net');
+      expect(result.stdout).toContain('--add-host sonarqube.local:host-gateway');
+      expect(result.stdout).toContain('ENV_URL=http://sonarqube:9000');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'routes a loopback URL automatically once mcp.container.autoNetwork is enabled',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker();
+
+      expect((await harness.run('config set mcp.container.autoNetwork true')).exitCode).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(0);
+      const expectedContainerUrl =
+        process.platform === 'linux'
+          ? server.baseUrl()
+          : `http://host.docker.internal:${new URL(server.baseUrl()).port}/`;
+      expect(result.stdout).toContain(`ENV_URL=${expectedContainerUrl}`);
+      if (process.platform === 'linux') {
+        expect(result.stdout).toContain('--network host');
+      }
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'checks configured networking after a failed loopback launch',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const fakeBinDir = setupFakeDocker(1);
+
+      expect((await harness.run('config set mcp.container.network host')).exitCode).toBe(0);
+
+      const result = await harness.run('run mcp', {
+        extraEnv: { PATH: `${fakeBinDir}${PATH_SEP}${process.env.PATH ?? ''}` },
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('uses host networking');
+      expect(result.stderr).not.toContain('For Nerdctl outside native Linux');
     },
     { timeout: 15000 },
   );
@@ -237,8 +340,39 @@ describe('run mcp', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    ['an initialize request', ''],
+    ['an initialize request after malformed input', 'not-json\n'],
+  ])(
+    'returns a JSON-RPC authentication error after %s',
+    async (_description, prefix) => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+
+      const result = await harness.runWithStdin(
+        'run mcp',
+        `${prefix}${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`,
+      );
+
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: {
+          code: -32000,
+          message: "Not authenticated. Run 'sonar auth login' to authenticate.",
+        },
+      });
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
   it(
-    'exits with code 1 when the saved connection is SonarQube Cloud but has no organization key',
+    'exits without a response when an unauthenticated session ends before initialize',
     async () => {
       const server = await harness.newFakeServer().start();
       harness
@@ -249,7 +383,28 @@ describe('run mcp', () => {
       const result = await harness.run('run mcp');
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('Not authenticated');
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toBe('');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'exits after the unauthenticated initialize response while stdin remains open',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl(), 'cloud')
+        .withKeychainToken(server.baseUrl(), 'test-token');
+      const session = harness.runInteractive('run mcp');
+
+      session.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize' })}\n`);
+      await session.waitText("Not authenticated. Run 'sonar auth login' to authenticate.");
+
+      const result = await session.waitForExit();
+
+      expect(result.exitCode).toBe(1);
     },
     { timeout: 15000 },
   );

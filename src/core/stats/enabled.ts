@@ -18,21 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { CliState } from '@/core/state/state.ts';
-import { tryLoadState } from '@/core/state/state-manager.ts';
+import { getBooleanConfigValue } from '@/core/config/config-repository.ts';
 
-/** Defaults to enabled: an absent `stats` field means the user hasn't opted out. */
-export function isStatsEnabled(state: CliState): boolean {
-  return state.stats?.enabled ?? true;
-}
-
-/** Whether local stats collection should run for this invocation. An unreadable state
- *  proves nothing about consent either way, so it fails closed (disabled). */
+/** Whether local stats collection should run for this invocation. */
 export function isStatsCollectionEnabled(): boolean {
-  const state = tryLoadState();
-  return state !== null && isStatsEnabled(state);
-}
-
-export function describeStatsStatus(state: CliState): string {
-  return `Stats collection is currently ${isStatsEnabled(state) ? 'enabled' : 'disabled'}.`;
+  try {
+    return getBooleanConfigValue('stats.enabled', true);
+  } catch {
+    return false;
+  }
 }

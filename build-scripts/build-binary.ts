@@ -19,8 +19,8 @@
  */
 
 /**
- * Builds the compiled CLI binary and injects the distribution channel as a
- * compile-time constant for downstream channel-specific behavior.
+ * Builds the compiled CLI binary and injects its distribution and version as
+ * compile-time constants.
  *
  * Run via: bun build-scripts/build-binary.ts
  */
@@ -29,6 +29,7 @@ import { join } from 'node:path';
 
 import { resolveDistribution } from '@/core/host/distribution.ts';
 
+import packageJson from '../package.json';
 import {
   compileTargetMatchesHost,
   downloadCompileTargetExecutable,
@@ -38,17 +39,25 @@ import {
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const DEFAULT_OUTFILE = join(PROJECT_ROOT, 'dist', 'sonarqube-cli');
 const DISTRIBUTION_DEFINE_KEY = 'process.env.SONARQUBE_CLI_DISTRIBUTION';
+const VERSION_DEFINE_KEY = 'process.env.SONARQUBE_CLI_VERSION';
 type BuildTarget = Bun.Build.CompileTarget;
 
 const distribution = resolveDistribution(process.env.SONARQUBE_CLI_DISTRIBUTION);
+const version = process.env.PROJECT_VERSION ?? packageJson.version;
 const outfile = process.env.SONARQUBE_CLI_OUTFILE ?? DEFAULT_OUTFILE;
 const target = process.env.SONARQUBE_CLI_TARGET as BuildTarget | undefined;
 
 console.log(`Building CLI binary for distribution: ${distribution} (${target ?? 'host'})`);
 
-const compile: { target?: BuildTarget; outfile: string; executablePath?: string } = target
-  ? { target, outfile }
-  : { outfile };
+const compileNoAutoload = { autoloadDotenv: false, autoloadBunfig: false } as const;
+
+const compile: {
+  target?: BuildTarget;
+  outfile: string;
+  executablePath?: string;
+  autoloadDotenv: false;
+  autoloadBunfig: false;
+} = target ? { target, outfile, ...compileNoAutoload } : { outfile, ...compileNoAutoload };
 
 let cleanupCompileRuntime: (() => void) | undefined;
 const artifactoryToken = process.env.ARTIFACTORY_PRIVATE_READER_PASSWORD;
@@ -70,6 +79,7 @@ try {
     compile,
     define: {
       [DISTRIBUTION_DEFINE_KEY]: JSON.stringify(distribution),
+      [VERSION_DEFINE_KEY]: JSON.stringify(version),
     },
   });
 

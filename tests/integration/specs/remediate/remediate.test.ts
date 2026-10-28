@@ -63,6 +63,99 @@ describe('sonar remediate', () => {
     await harness.dispose();
   });
 
+  describe.each(['interactive', '--issues'])('project membership in %s mode', (mode) => {
+    it.each([
+      {
+        name: 'wrong organization before ineligible entitlement',
+        organization: 'other-org',
+        exists: true,
+        status: undefined,
+        eligible: false,
+      },
+      {
+        name: 'wrong organization before disabled entitlement',
+        organization: 'other-org',
+        exists: true,
+        status: undefined,
+        eligible: true,
+      },
+      {
+        name: 'missing project',
+        organization: TEST_ORG,
+        exists: false,
+        status: undefined,
+        eligible: true,
+      },
+      {
+        name: 'forbidden project',
+        organization: TEST_ORG,
+        exists: true,
+        status: 403,
+        eligible: true,
+      },
+    ])(
+      'rejects $name before any remediation work',
+      async ({ organization, exists, status, eligible }) => {
+        const builder = harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withOrgEntitlement(eligible, false);
+        if (exists) {
+          builder.withProject(TEST_PROJECT, (p) => {
+            p.withOrganization(organization);
+            if (status) p.withComponentShowError(status);
+          });
+        }
+        const server = await builder.start();
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+        const command = `remediate --project ${TEST_PROJECT}${mode === '--issues' ? ' --issues k1' : ''}`;
+
+        const result =
+          mode === 'interactive'
+            ? await harness.runInteractive(command).waitFinish()
+            : await harness.run(command, { extraEnv: { SONARQUBE_CLI_MOCK_TTY: '' } });
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        if (organization === 'other-org') {
+          expect(output).toContain(
+            `Project '${TEST_PROJECT}' belongs to organization 'other-org', but the active organization is '${TEST_ORG}'.`,
+          );
+          expect(output).toContain(
+            "Run 'sonar auth org other-org' to switch to that organization.",
+          );
+        } else {
+          expect(output).toContain(
+            `Project '${TEST_PROJECT}' could not be found or is not accessible.`,
+          );
+          expect(output).toContain("Run 'sonar list org' to check your organization membership.");
+        }
+        expect(output).not.toContain('Submitted');
+        expect(output).not.toContain('Remediation Agent is not available');
+        expect(output).not.toContain('Remediation Agent is not enabled');
+        expect(output).not.toContain('eligible issues found');
+        expect(server.getRecordedRequests().map((r) => r.path)).toEqual(['/api/components/show']);
+      },
+    );
+  });
+
+  it('records a failed command when project membership is rejected', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withProject(TEST_PROJECT, (p) => p.withOrganization('other-org'))
+      .start();
+    harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+    harness.state().withTelemetryEnabled();
+
+    const result = await harness.run(`remediate --project ${TEST_PROJECT} --issues k1`);
+
+    expect(result.exitCode).toBe(1);
+    const [event] = readCommandEvents(harness.sonarUserHome.path);
+    expect(event.event_payload.command).toBe('remediate');
+    expect(event.event_payload.result).toBe('failure');
+  });
+
   it(
     'exits with code 1 and points at --issues when stdin is not a TTY and --issues is missing',
     async () => {
@@ -128,7 +221,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -152,7 +245,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not enabled for your organisation');
+      expect(output).toContain('Remediation Agent is not enabled for your organization');
       expect(output).toContain('Contact your admin to enable it');
       expect(output).not.toContain('Which issues');
     },
@@ -176,7 +269,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -226,7 +319,7 @@ describe('sonar remediate', () => {
 
       expect(result.exitCode).toBe(0);
       const output = result.stdout + result.stderr;
-      expect(output).toContain('Remediation Agent is not available for your organisation');
+      expect(output).toContain('Remediation Agent is not available for your organization');
       expect(output).toContain('sonarsource.com/products/agent-essentials');
       expect(output).not.toContain('Which issues');
     },
@@ -857,7 +950,7 @@ describe('sonar remediate', () => {
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
-        expect(output).toContain('Remediation Agent is not enabled for your organisation');
+        expect(output).toContain('Remediation Agent is not enabled for your organization');
         expect(output).toContain('Contact your admin to enable it');
 
         const agentJobCalls = server

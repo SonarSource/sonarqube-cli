@@ -144,68 +144,21 @@ describe('OrganizationsClient', () => {
     });
   });
 
-  describe('isOrganizationAccessible', () => {
-    it('returns true when the organization is in the results', async () => {
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-      expect(await client.isOrganizationAccessible('my-org')).toBe(true);
-    });
-
-    it('returns false when the organization is not in the results', async () => {
-      fetchSpy = mockFetch([], { ok: false, status: 404 });
-      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
-    });
-
-    it('returns false on error', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 500 });
-      expect(await client.isOrganizationAccessible('my-org')).toBe(false);
-    });
-  });
-
   describe('checkMembership', () => {
     it('checks later pages when the organization is not in the first page', async () => {
       fetchSpy = mockFetchSeq(
-        fakeResponse({ organizations: [{ key: 'other-org' }], paging: { total: 501 } }),
-        fakeResponse({ organizations: [{ key: 'my-org' }], paging: { total: 501 } }),
+        fakeResponse({
+          organizations: [{ key: 'other-org' }],
+          paging: { pageIndex: 1, pageSize: 500, total: 501 },
+        }),
+        fakeResponse({
+          organizations: [{ key: 'my-org' }],
+          paging: { pageIndex: 2, pageSize: 500, total: 501 },
+        }),
       );
 
       expect(await client.checkMembership('my-org')).toEqual({ status: 'member' });
       expect(new URL(nthFetchUrl(fetchSpy, 1)).searchParams.get('p')).toBe('2');
-    });
-  });
-
-  describe('resolveOrganizationAccess', () => {
-    it('reports an organization the server resolves as accessible', async () => {
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-
-      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'accessible' });
-    });
-
-    it('reports a 404 result as not_found', async () => {
-      fetchSpy = mockFetch([], { ok: false, status: 404 });
-
-      expect(await client.resolveOrganizationAccess('my-org')).toEqual({ status: 'not_found' });
-    });
-
-    it('uses the public organizations endpoint with the requested key', async () => {
-      const cloudClient = new OrganizationsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
-      fetchSpy = mockFetch([{ id: 'my-org', uuidV4: 'my-org-uuid-v4' }]);
-
-      await cloudClient.resolveOrganizationAccess('my-org');
-
-      const url = new URL(lastFetchUrl(fetchSpy));
-      expect(url.origin).toBe(SONARCLOUD_API_URL);
-      expect(url.pathname).toBe('/organizations/organizations');
-      expect(url.searchParams.get('organizationKey')).toBe('my-org');
-      // Login validation discards eligibility data, so it must not ask the API to compute it.
-      expect(url.searchParams.get('excludeEligibility')).toBe('true');
-    });
-
-    it('reports a server error as check_failed rather than as a missing organization', async () => {
-      fetchSpy = mockFetch({}, { ok: false, status: 500 });
-
-      const access = await client.resolveOrganizationAccess('my-org');
-
-      expect(access.status).toBe('check_failed');
     });
   });
 });

@@ -28,10 +28,21 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import {
+  type CompleteProjectMapping,
+  isSameConnection,
+} from '@/core/project-discovery/project-discovery-result.ts';
+import {
+  type DiscoveredProject,
+  discoverProject,
+  discoverProjects,
+} from '@/core/project-discovery/project-info.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
@@ -39,9 +50,15 @@ import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
 import { readStdinJson } from '../stdin.ts';
-import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
+import {
+  claudeCodexAdapter,
+  userVisibleClaudeCodexAdapter,
+} from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
+import { piAdapter } from './agent-adapters/pi-adapter.ts';
+import { buildMultiProjectContext } from './multi-project-context.ts';
+import { claimSessionWarning } from './session-warning.ts';
 import type {
   SessionStartAgent,
   SessionStartAgentAdapter,
@@ -70,8 +87,13 @@ export async function agentSessionStart(
     }
     sessionId = input.sessionId;
 
-    const output = await resolveSessionStartContext(ctx, input);
-    if (output !== null) {
+    // Suppress failure warnings on SubagentStart by passing reportFailures=false.
+    const output = await resolveSessionStartContext(
+      ctx,
+      input,
+      input.eventName !== 'SubagentStart',
+    );
+    if (output !== null && (!output.userMessage || claimSessionWarning(agent, sessionId))) {
       process.stdout.write(JSON.stringify(adapter.emit(output, input)) + '\n');
     }
   } catch (err) {
@@ -80,7 +102,26 @@ export async function agentSessionStart(
   return { agentSessionId: sessionId ?? null };
 }
 
-async function resolveSessionStartContext(
+export async function resolveSessionStartContext(
+  ctx: CommandInvocationContext,
+  input: SessionStartInput,
+  reportFailures = false,
+): Promise<SessionStartOutput | null> {
+  try {
+    const output = await loadSessionStartContext(ctx, input);
+    return output?.userMessage && !reportFailures ? null : output;
+  } catch (error) {
+    logSkip((error as Error).message);
+    if (!reportFailures) {
+      return null;
+    }
+    return contextWarning(
+      "An unexpected error occurred. Run 'sonar auth status' and check the CLI debug logs.",
+    );
+  }
+}
+
+async function loadSessionStartContext(
   ctx: CommandInvocationContext,
   input: SessionStartInput,
 ): Promise<SessionStartOutput | null> {
@@ -90,22 +131,35 @@ async function resolveSessionStartContext(
   }
 
   const connection = await ctx.resolveConnection();
-  if (!connection) {
-    logSkip('no usable credentials');
-    return null;
-  }
-  const { auth } = connection;
-
-  const discovered = await discoverProject(input.startDir ?? process.cwd(), {
-    auth,
+  const startDir = input.startDir ?? process.cwd();
+  const discovered = await discoverProject(startDir, {
+    auth: connection?.auth ?? null,
     silent: true,
     console: ctx.console,
   });
-  if (!discovered.projectKey) {
-    logSkip('no project key resolved');
+  const hasSonarConfig = discovered.hasSonarConfig === true;
+  if (!connection) {
+    return hasSonarConfig
+      ? contextWarning(
+          "No usable credentials. Run 'sonar auth status', then 'sonar auth login' if needed.",
+        )
+      : null;
+  }
+  const { auth } = connection;
+
+  if (!discovered.projectKey && !discovered.ambiguousProject) {
+    if (!hasSonarConfig && !discovered.gitRemoteBindingNotFound) {
+      logSkip('no project key or Sonar configuration resolved');
+      return null;
+    }
+    return contextWarning(
+      "No project was found. Run 'sonar link <projectKey>' from the project directory.",
+    );
+  }
+  const target = await resolveSessionStartTarget(discovered, startDir, auth, ctx);
+  if (!target) {
     return null;
   }
-  noteProject(auth, discovered.projectKey);
 
   const [vortexEntitlement, scaEnabled] = await Promise.all([
     resolveVortexEntitlement(connection),
@@ -113,21 +167,24 @@ async function resolveSessionStartContext(
   ]);
   if (vortexEntitlement.status !== 'enabled') {
     logSkip(`Vortex entitlement is '${vortexEntitlement.status}'`);
-    return null;
+    return contextWarning(
+      "Vortex is unavailable for this connection. Run 'sonar auth status' and 'sonar system status'.",
+    );
   }
 
   const binaryPath = resolveContextAugmentationBinaryPath();
   if (!binaryPath) {
-    logSkip('sonar-context-augmentation is not installed');
-    return null;
+    return contextWarning(
+      "The context binary is not installed. Run 'sonar integrate' for your agent.",
+    );
   }
 
   const result = await printSessionStartContext({
     binaryPath,
     scaEnabled,
     context: {
-      workspaceDir: discovered.projectRoot,
-      projectKey: discovered.projectKey,
+      workspaceDir: target.workspaceDir,
+      projectKey: target.projectKey,
       serverUrl: auth.serverUrl,
       token: auth.token,
       organization: auth.orgKey,
@@ -135,14 +192,72 @@ async function resolveSessionStartContext(
   });
   if (!result.ok) {
     logSkip(result.failureMessage ?? 'sonar-context-augmentation failed');
-    return null;
+    return contextWarning(
+      "The context command failed. Run 'sonar auth status' and 'sonar system status'.",
+    );
   }
   if (result.stdout.trim().length === 0) {
-    logSkip('sonar-context-augmentation produced no context');
-    return null;
+    return contextWarning(
+      "The context command returned no context. Run 'sonar system status' and check the CLI debug logs.",
+    );
   }
 
-  return { additionalContext: result.stdout };
+  return {
+    additionalContext: target.projects
+      ? `${result.stdout.trimEnd()}\n\n${buildMultiProjectContext(target.repoRoot, target.projects)}`
+      : result.stdout,
+  };
+}
+
+/** A multi-project workspace has no `projectKey`: CAG renders the session-start context from the organization alone. */
+type SessionStartTarget =
+  | { workspaceDir: string; projectKey: string; projects?: undefined }
+  | {
+      workspaceDir: string;
+      projectKey?: undefined;
+      projects: CompleteProjectMapping[];
+      repoRoot: string;
+    };
+
+async function resolveSessionStartTarget(
+  discovered: DiscoveredProject,
+  startDir: string,
+  auth: ResolvedAuth,
+  ctx: CommandInvocationContext,
+): Promise<SessionStartTarget | null> {
+  if (discovered.projectKey) {
+    noteProject(auth, discovered.projectKey);
+    return { workspaceDir: discovered.projectRoot, projectKey: discovered.projectKey };
+  }
+  // Only `.sonar-config.json` yields several projects, so listing them needs no server lookup.
+  const invocationDir = canonicalizePath(startDir);
+  const workspace = await discoverProjects(invocationDir, {
+    auth,
+    silent: true,
+    console: ctx.console,
+  });
+  const scoped = workspace.scope(invocationDir);
+  if (!isSameConnection(scoped)) {
+    logSkip('projects in this workspace use different connections');
+    return null;
+  }
+  // CAG gets the active connection below, so it must be the projects' connection too.
+  const [{ serverUrl, organization }] = scoped;
+  if (!authMatchesRecordedServer(auth, serverUrl) || auth.orgKey !== organization) {
+    logSkip('projects in this workspace use another connection than the active one');
+    return null;
+  }
+  return {
+    workspaceDir: invocationDir,
+    projects: scoped,
+    repoRoot: workspace.repoRoot ?? invocationDir,
+  };
+}
+
+function contextWarning(reason: string): SessionStartOutput {
+  logSkip(reason);
+  const userMessage = `Vortex context was not loaded. ${reason}`;
+  return { userMessage, additionalContext: `Tell the user: ${userMessage}` };
 }
 
 function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
@@ -155,10 +270,12 @@ function logSkip(reason: string): void {
 }
 
 const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
-  claude: claudeCodexAdapter,
-  codex: claudeCodexAdapter,
+  claude: userVisibleClaudeCodexAdapter,
+  codex: userVisibleClaudeCodexAdapter,
   copilot: copilotAdapter,
   cursor: cursorAdapter,
+  devin: claudeCodexAdapter,
+  pi: piAdapter,
 };
 
 function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {

@@ -20,7 +20,7 @@
 
 // One-time historical backfill of `state.knownServerProjectMappings`, consumed by the
 // post-update mechanism that runs automatically after CLI upgrades. The actual attrs-parsing
-// derivation (buildKnownServerProjectMappings) lives in core/known-server-project-mappings.ts,
+// derivation (buildKnownServerProjectMappings) lives in core/project-discovery/known-server-project-mappings.ts,
 // shared with discoverProject()'s live fallback. Must run before `migrateDeclarativeIntegrations`
 // (see post-update.ts): once integrations move to global scope they stop carrying per-folder
 // `projectKey`/`repoRoot` attrs, so this is the last point where that data is still readable
@@ -29,24 +29,25 @@
 import {
   buildKnownServerProjectMappings,
   mergeKnownServerProjectMappings,
-} from '@/core/known-server-project-mappings.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+} from '@/core/project-discovery/known-server-project-mappings.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 
 import logger from '../observability/logger.ts';
 
 export function migrateKnownServerKeyMappingsForProjectLevelFeatures(): void {
   try {
-    const state = loadState();
-    const discovered = buildKnownServerProjectMappings(state);
-    if (discovered.length === 0) {
+    if (buildKnownServerProjectMappings(loadState()).length === 0) {
       return;
     }
-
-    state.knownServerProjectMappings = mergeKnownServerProjectMappings(
-      state.knownServerProjectMappings ?? [],
-      discovered,
-    );
-    saveState(state);
+    updateState((state) => {
+      const discovered = buildKnownServerProjectMappings(state);
+      if (discovered.length > 0) {
+        state.knownServerProjectMappings = mergeKnownServerProjectMappings(
+          state.knownServerProjectMappings ?? [],
+          discovered,
+        );
+      }
+    });
   } catch (error) {
     logger.warn(`Known-server-project-mappings migration failed: ${(error as Error).message}`);
   }

@@ -62,7 +62,6 @@ export {
 export {
   findInstalledFeature,
   findInstalledIntegration,
-  isFeatureInstalledGloballyForProject,
   recordedFeatureOperations,
   recordedFeatureResources,
 } from './installation-recorder.ts';
@@ -78,12 +77,9 @@ export {
   registerIntegrations,
 } from './registry.ts';
 export {
-  askUser,
-  install,
-  type InstallDecision,
-  selectFeaturesForInvocation,
-  skip,
-  uninstall,
+  customizeFeatureSelection,
+  reportFeatureAvailability,
+  resolveRecommendedFeatures,
 } from './selection.ts';
 export type {
   AppliedFeature,
@@ -92,6 +88,7 @@ export type {
   ContainerIntegrationContext,
   DependencyInstallContext,
   FeatureApplication,
+  FeatureAvailability,
   FeatureContainer,
   FeatureDeclaration,
   FeatureOperation,
@@ -104,6 +101,7 @@ export type {
   LegacyFeatureDeclaration,
   MaybePromise,
   PostInstallExample,
+  SubfeatureApplication,
   SubfeatureDeclaration,
 } from './types.ts';
 export { isContainerIntegrationContext, isFeatureContainer } from './types.ts';

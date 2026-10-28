@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 
 import { TestHarness } from '../../harness';
 import { initGitRepo } from '../hook/git-test-helpers.ts';
@@ -134,6 +134,21 @@ describe('sonar link', () => {
       });
     });
 
+    it.each([
+      [`${SONARCLOUD_URL}/`, 'eu'],
+      [`${SONARCLOUD_US_URL}/`, 'us'],
+      [`${SONARCLOUD_URL.toUpperCase()}/`, 'eu'],
+    ] as const)('keeps a region entry for production Cloud URL %s', async (serverUrl, region) => {
+      harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+      const result = await harness.run('link my_project --path .');
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: { region, organization: 'my-org', projectKey: 'my_project', path: '.' },
+      });
+    });
+
     it('overwrites an existing entry rather than merging with it', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile(
@@ -156,15 +171,27 @@ describe('sonar link', () => {
       expect(file.project.projectKey).toBe('my_project');
     });
 
-    it('fails when the Cloud connection URL does not resolve to a known region', async () => {
-      // A 'cloud' connection type (inferred from the org) whose serverUrl isn't
-      // a recognized SonarCloud host — cloudRegionFromUrl() can't derive a region.
+    it.each(['https://sc-staging.io', `${SONARCLOUD_URL}:8443`])(
+      'retains the Cloud URL %s in the shared configuration',
+      async (serverUrl) => {
+        harness.withAuth(serverUrl, 'test-token', 'my-org');
+
+        const result = await harness.run('link my_project --path .');
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, organization: 'my-org', projectKey: 'my_project', path: '.' },
+        });
+      },
+    );
+
+    it('fails when the Cloud connection URL host is not a known Cloud host', async () => {
       harness.withAuth('https://custom-cloud.example.com', 'test-token', 'my-org');
 
       const result = await harness.run('link my_project --path .');
 
       expect(result.exitCode).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain('region');
+      expect(result.stdout + result.stderr).toContain('SonarQube Cloud server URL host');
     });
 
     it('fails with a helpful message when --path escapes the repository root', async () => {
@@ -175,6 +202,63 @@ describe('sonar link', () => {
       expect(result.exitCode).not.toBe(0);
       expect(result.stdout + result.stderr).toContain('must point to an existing directory inside');
       expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+    });
+  });
+
+  it('warns when an existing projects array makes the link ineffective', async () => {
+    harness.withAuth(SERVER_URL, 'test-token');
+    harness.cwd.writeFile(
+      '.sonar-config.json',
+      JSON.stringify({ projects: [{ serverUrl: SERVER_URL, projectKey: 'a', path: '.' }] }),
+    );
+
+    const result = await harness.run('link my_project --path .');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout + result.stderr).toContain("'sonar link --monorepo'");
+    expect(result.stdout).not.toContain('Linked ');
+    expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
+  });
+
+  describe('monorepo', () => {
+    it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      harness.cwd.writeFile('services/api/.keep', '');
+      harness.cwd.writeFile('services/web/.keep', '');
+      expect((await harness.run('link legacy --path .')).exitCode).toBe(0);
+      expect((await harness.run('link api --monorepo --path services/api')).exitCode).toBe(0);
+      expect((await harness.run('link web --monorepo --path services/web')).exitCode).toBe(0);
+
+      const result = await harness.run('link api2 --monorepo --path ./services/api/');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('(monorepo mapping)');
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
+        projects: [
+          { serverUrl: SERVER_URL, projectKey: 'api2', path: 'services/api' },
+          { serverUrl: SERVER_URL, projectKey: 'web', path: 'services/web' },
+        ],
+      });
+    });
+
+    it('does not overwrite a malformed configuration', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ projects: {} }));
+
+      const result = await harness.run('link api --monorepo');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asText()).toBe(
+        JSON.stringify({ projects: {} }),
+      );
+    });
+
+    it('is documented in link --help', async () => {
+      const result = await harness.run('link --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--monorepo');
     });
   });
 });

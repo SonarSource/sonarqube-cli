@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for env-var auth's state.auth.connections sync (see auth-connection-recorder.ts).
+// Integration tests for env-var auth: must not overwrite saved login state.
 
 import { readFileSync } from 'node:fs';
 
@@ -34,7 +34,6 @@ interface StoredAuthConnection {
   orgKey?: string;
   type: string;
   authenticatedAt: string;
-  envOnly?: boolean;
 }
 
 interface StoredState {
@@ -55,6 +54,8 @@ function readKeychainTokens(keychainFile: string): Record<string, string> {
   }
 }
 
+const noAuthEnv = { [ENV_TOKEN]: '', [ENV_SERVER]: '', [ENV_ORG]: '' };
+
 describe('env-var auth — state sync', () => {
   let harness: TestHarness;
 
@@ -67,7 +68,7 @@ describe('env-var auth — state sync', () => {
   });
 
   it(
-    'records a connection in state.auth.connections without ever writing to the keychain',
+    'does not write a connection or mark state authenticated on a clean machine',
     async () => {
       const server = await harness.newFakeServer().start();
 
@@ -78,13 +79,8 @@ describe('env-var auth — state sync', () => {
       expect(result.exitCode).toBe(0);
 
       const state = harness.stateJsonFile.asJson() as StoredState;
-      expect(state.auth.isAuthenticated).toBe(true);
-      expect(state.auth.connections).toHaveLength(1);
-      expect(state.auth.connections[0]).toMatchObject({
-        serverUrl: server.baseUrl(),
-        type: 'on-premise',
-        envOnly: true,
-      });
+      expect(state.auth.isAuthenticated).toBe(false);
+      expect(state.auth.connections).toHaveLength(0);
 
       expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({});
     },
@@ -92,20 +88,63 @@ describe('env-var auth — state sync', () => {
   );
 
   it(
-    'auth logout reports already logged out after the env vars are unset',
+    'keeps the saved login after an env-var run against another server',
     async () => {
-      const server = await harness.newFakeServer().start();
+      const loginServer = await harness.newFakeServer().withAuthToken('login-token').start();
+      const loginSession = harness.runInteractive(`auth login --server ${loginServer.baseUrl()}`, {
+        browserToken: 'login-token',
+      });
+      await loginSession.accept('Connect to:');
+      expect((await loginSession.waitFinish()).exitCode).toBe(0);
+      const loginAccount = generateKeychainAccount(loginServer.baseUrl());
 
+      const envServer = await harness.newFakeServer().withAuthToken('env-token').start();
       const envResult = await harness.run('system status', {
-        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
+        extraEnv: { [ENV_TOKEN]: 'env-token', [ENV_SERVER]: envServer.baseUrl() },
       });
       expect(envResult.exitCode).toBe(0);
-      expect(harness.stateJsonFile.asJson().auth.isAuthenticated).toBe(true);
 
-      const logoutResult = await harness.run('auth logout');
+      const stateAfterEnv = harness.stateJsonFile.asJson() as StoredState;
+      expect(stateAfterEnv.auth.connections).toHaveLength(1);
+      expect(stateAfterEnv.auth.connections[0].serverUrl).toBe(loginServer.baseUrl());
+
+      const statusResult = await harness.run('auth status --format json', {
+        extraEnv: noAuthEnv,
+      });
+      expect(statusResult.exitCode).toBe(0);
+      expect(JSON.parse(statusResult.stdout)).toMatchObject({
+        status: 'connected',
+        server: loginServer.baseUrl(),
+      });
+
+      expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({
+        [loginAccount]: 'login-token',
+      });
+    },
+    { timeout: 20000 },
+  );
+
+  it(
+    'auth logout clears a saved login after env vars are unset',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('login-token').start();
+      const loginSession = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        browserToken: 'login-token',
+      });
+      await loginSession.accept('Connect to:');
+      expect((await loginSession.waitFinish()).exitCode).toBe(0);
+
+      const envServer = await harness.newFakeServer().withAuthToken('env-token').start();
+      const envResult = await harness.run('system status', {
+        extraEnv: { [ENV_TOKEN]: 'env-token', [ENV_SERVER]: envServer.baseUrl() },
+      });
+      expect(envResult.exitCode).toBe(0);
+
+      const logoutResult = await harness.run('auth logout', { extraEnv: noAuthEnv });
 
       expect(logoutResult.exitCode).toBe(0);
-      expect(logoutResult.stdout).toContain('You are already logged out.');
+      expect(logoutResult.stdout).toContain('Logged out from:');
+      expect(logoutResult.stdout).not.toContain('You are already logged out.');
 
       const revokeRequest = server
         .getRecordedRequests()
@@ -113,38 +152,8 @@ describe('env-var auth — state sync', () => {
       expect(revokeRequest).toBeUndefined();
 
       const state = harness.stateJsonFile.asJson() as StoredState;
-      expect(state.auth.connections).toHaveLength(1);
-    },
-    { timeout: 20000 },
-  );
-
-  it(
-    'does not mark a keychain-backed connection envOnly when env vars match the same server',
-    async () => {
-      const server = await harness.newFakeServer().withAuthToken('login-token').start();
-      harness
-        .state()
-        .withActiveConnection(server.baseUrl())
-        .withTokenName('cli-login-token')
-        .withKeychainToken(server.baseUrl(), 'login-token');
-
-      const envResult = await harness.run('system status', {
-        extraEnv: { [ENV_TOKEN]: 'env-auth-token', [ENV_SERVER]: server.baseUrl() },
-      });
-      expect(envResult.exitCode).toBe(0);
-      expect(
-        (harness.stateJsonFile.asJson() as StoredState).auth.connections[0].envOnly,
-      ).toBeUndefined();
-
-      const logoutResult = await harness.run('auth logout');
-      expect(logoutResult.exitCode).toBe(0);
-      expect(logoutResult.stdout).toContain('Logged out from:');
-      expect(logoutResult.stdout).not.toContain('You are already logged out.');
-
-      const state = harness.stateJsonFile.asJson() as StoredState;
       expect(state.auth.isAuthenticated).toBe(false);
       expect(state.auth.connections).toHaveLength(0);
-      expect(readKeychainTokens(harness.keychainJsonFile)).toEqual({});
     },
     { timeout: 20000 },
   );
@@ -173,10 +182,7 @@ describe('env-var auth — state sync', () => {
 
       const state = harness.stateJsonFile.asJson() as StoredState;
       expect(state.auth.connections).toHaveLength(1);
-      expect(state.auth.connections[0]).toMatchObject({
-        serverUrl: envServer.baseUrl(),
-        orgKey: 'other-org',
-      });
+      expect(state.auth.connections[0].serverUrl).toBe(loginServer.baseUrl());
 
       const tokensAfter = readKeychainTokens(harness.keychainJsonFile);
       expect(tokensAfter).toEqual({ [loginAccount]: 'login-token' });

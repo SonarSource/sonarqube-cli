@@ -18,6 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import {
+  assertOrganizationMember,
+  validateOrSelectOrganization,
+} from '@/commands/components/organization/select.ts';
 import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import {
   assertValidServerUrl,
@@ -40,19 +44,17 @@ import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import {
   deleteStaleTokens,
   getToken as getKeystoreToken,
+  normalizeServerUrl,
   saveToken,
 } from '@/core/host/keychain.ts';
-import { discoverOrganization, discoverServer } from '@/core/project-info.ts';
-import type { HttpClientError } from '@/core/server/errors.ts';
+import { discoverServer } from '@/core/project-discovery/project-info.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import {
-  type Organization,
-  type OrganizationAccess,
-  OrganizationsClient,
-} from '@/core/server/organizations.ts';
+import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
-import { loadState, saveState } from '@/core/state/state-repository.ts';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -81,26 +83,41 @@ export async function authLogin(
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options, console);
-  await confirmServerTrust(server, console);
-
   const isCloud = isSonarQubeCloud(server);
+  if (!isCloud) {
+    await confirmServerTrust(server, console);
+  }
+
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here
-  // keeps the keychain account, the recorded connection and the resolved organization consistent.
+  // keeps the recorded connection and the resolved organization consistent.
   const orgOption = isCloud ? options.org?.trim() : undefined;
 
   try {
-    const auth = await getOrGenerateToken(server, orgOption, console);
+    const auth = await getOrGenerateToken(server, console);
     const { token, tokenName, reusedExistingToken } = auth;
 
-    const org = await resolveOrganization(server, isCloud, orgOption, auth, console);
+    const org = await resolveOrganization(
+      server,
+      isCloud,
+      orgOption,
+      auth,
+      console,
+      invocationAuth?.orgKey,
+    );
 
     await persistLoginCredentials(server, isCloud, org, token, {
       tokenName,
       reusedExistingToken,
+      console,
     });
 
     const displayServer = isCloud ? `${server} (${org})` : server;
     console.success(`Authentication successful for: ${displayServer}`);
+    if (reusedExistingToken && orgOption) {
+      console.info(
+        `The stored token was reused. Next time, run 'sonar auth org <org>' to switch organization without logging in again.`,
+      );
+    }
     if (invocationAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
@@ -151,14 +168,14 @@ async function authLoginWithToken(options: AuthLoginOptions, console: Console): 
   }
 
   if (org) {
-    await assertOrganizationAccessible(
+    await assertOrganizationMember(
       new OrganizationsClient(new SonarHttpClient(server, token)),
       org,
     );
     console.print(`Using organization: ${org}`);
   }
 
-  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true });
+  await persistLoginCredentials(server, isCloud, org, token, { refreshIdentity: true, console });
 
   const displayServer = isCloud ? `${server} (${org})` : server;
   console.success(`Authentication successful for: ${displayServer}`);
@@ -168,6 +185,7 @@ interface PersistLoginOptions {
   tokenName?: string;
   reusedExistingToken?: boolean;
   refreshIdentity?: boolean;
+  console?: Console;
 }
 
 async function persistLoginCredentials(
@@ -179,42 +197,88 @@ async function persistLoginCredentials(
 ): Promise<void> {
   const state = loadState();
   const existingConnection = getActiveConnection(state);
+  const sameServerAsExisting = isSameServer(existingConnection, server);
 
-  await deleteStaleTokens(state.auth.connections, server, org);
-  await saveToken(server, token, org);
+  await revokePreviousLoginToken(existingConnection, server, token, options);
+
+  await deleteStaleTokens(state.auth.connections, server);
+  await saveToken(server, token);
 
   const connectionTokenName =
-    options.reusedExistingToken &&
-    existingConnection?.serverUrl === server &&
-    existingConnection.orgKey === org
+    options.reusedExistingToken && existingConnection && sameServerAsExisting
       ? existingConnection.tokenName
       : options.tokenName;
-  const actualToken = token || (await getKeystoreToken(server, org));
+  const actualToken = token || (await getKeystoreToken(server));
 
   if (actualToken) {
-    await recordConnectionFromAuth(
-      new ResolvedAuth({
-        token: actualToken,
-        serverUrl: server,
-        orgKey: org,
-        connectionType: isCloud ? 'cloud' : 'on-premise',
-        source: 'state',
-      }),
-      {
-        tokenName: connectionTokenName,
-        force: true,
-        refreshIdentity: options.refreshIdentity,
-      },
-    );
+    try {
+      await recordConnectionFromAuth(
+        new ResolvedAuth({
+          token: actualToken,
+          serverUrl: server,
+          orgKey: org,
+          connectionType: isCloud ? 'cloud' : 'on-premise',
+          source: 'state',
+        }),
+        {
+          tokenName: connectionTokenName,
+          force: true,
+          refreshIdentity: options.refreshIdentity,
+        },
+      );
+    } catch (error) {
+      throw new CommandFailedError(
+        `Token saved, but login state could not be updated: ${String(error)}`,
+      );
+    }
     return;
   }
 
-  addOrUpdateConnection(state, server, isCloud ? 'cloud' : 'on-premise', {
-    orgKey: org,
-    region: cloudRegionFromUrl(server),
-    tokenName: connectionTokenName,
-  });
-  saveState(state);
+  try {
+    updateState((latest) => {
+      addOrUpdateConnection(latest, server, isCloud ? 'cloud' : 'on-premise', {
+        orgKey: org,
+        region: cloudRegionFromUrl(server),
+        tokenName: connectionTokenName,
+      });
+    });
+  } catch (error) {
+    throw new CommandFailedError(
+      `Token saved, but login state could not be updated: ${String(error)}`,
+    );
+  }
+}
+
+async function revokePreviousLoginToken(
+  connection: AuthConnection | undefined,
+  server: string,
+  token: string,
+  options: PersistLoginOptions,
+): Promise<void> {
+  if (options.reusedExistingToken || !connection?.tokenName || !isSameServer(connection, server)) {
+    return;
+  }
+  const previousToken = await getKeystoreToken(server);
+  if (!previousToken || previousToken === token) {
+    return;
+  }
+  const outcome = await revokeServerTokenIfPossible(
+    { serverUrl: server, tokenName: connection.tokenName },
+    previousToken,
+  );
+  if (options.console) {
+    reportRevokeServerTokenOutcome(outcome, {
+      continuingMessage: 'Continuing with login.',
+      console: options.console,
+    });
+  }
+}
+
+function isSameServer(connection: AuthConnection | undefined, server: string): boolean {
+  return (
+    connection !== undefined &&
+    normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server)
+  );
 }
 
 function assertNoEnvironmentAuthentication(): void {
@@ -271,6 +335,7 @@ async function resolveOrganization(
   orgOption: string | undefined,
   auth: BrowserAuthResult & { reusedExistingToken: boolean },
   console: Console,
+  activeOrgKey: string | undefined,
 ): Promise<string | undefined> {
   if (!isCloud) {
     return undefined;
@@ -281,6 +346,7 @@ async function resolveOrganization(
       new OrganizationsClient(new SonarHttpClient(server, auth.token)),
       orgOption,
       console,
+      activeOrgKey,
     );
   } catch (error) {
     if (!auth.reusedExistingToken) {
@@ -314,13 +380,14 @@ async function discardGeneratedToken(
  */
 async function getOrGenerateToken(
   server: string,
-  org: string | undefined,
   console: Console,
 ): Promise<BrowserAuthResult & { reusedExistingToken: boolean }> {
-  const existingToken = await getKeystoreToken(server, org);
+  const recordedConnection = loadState().auth.connections.some(
+    (connection) => normalizeServerUrl(connection.serverUrl) === normalizeServerUrl(server),
+  );
+  const existingToken = recordedConnection ? await getKeystoreToken(server) : null;
   if (existingToken) {
-    const displayServer = isSonarQubeCloud(server) ? `${server} (${org})` : server;
-    console.print(`Token already exists for: ${displayServer}`);
+    console.print(`Token already exists for: ${server}`);
     console.print('You are already authenticated');
     return { token: existingToken, reusedExistingToken: true };
   }
@@ -329,187 +396,6 @@ async function getOrGenerateToken(
   const authResult = await generateTokenViaBrowser(server, console);
   console.discreetSuccess('Token received');
   return { ...authResult, reusedExistingToken: false };
-}
-
-/**
- * Turn a rejected lookup into an error.
- *
- * A failed lookup gets its own message, so a network or server problem is never reported as a
- * missing organization.
- */
-function organizationAccessError(
-  org: string,
-  access: Extract<OrganizationAccess, { status: 'not_found' | 'check_failed' }>,
-): CommandFailedError {
-  if (access.status === 'not_found') {
-    return new CommandFailedError(`Organization '${org}' not found or not accessible.`, {
-      remediationHint: "Check the organization key and your access, then rerun 'sonar auth login'.",
-    });
-  }
-
-  return new CommandFailedError(`Could not verify organization '${org}': ${access.reason}`, {
-    remediationHint:
-      "Check your network connection and the server status, then rerun 'sonar auth login'.",
-  });
-}
-
-/** Fail unless the server can resolve the key. */
-async function assertOrganizationAccessible(
-  client: OrganizationsClient,
-  org: string,
-): Promise<void> {
-  const access = await client.resolveOrganizationAccess(org);
-  if (access.status !== 'accessible') {
-    throw organizationAccessError(org, access);
-  }
-}
-
-function organizationRequiredError(): CommandFailedError {
-  return new CommandFailedError('Organization key is required.', {
-    remediationHint: 'Provide an organization key with -o/--org or enter one when prompted.',
-  });
-}
-
-/**
- * How many keys the user may try before the login gives up.
- *
- * A prompt that never yields a usable answer would otherwise loop forever, which turns a stuck
- * terminal — or a test that runs out of queued answers — into a hang instead of an error.
- */
-const MAX_ORGANIZATION_ATTEMPTS = 5;
-
-/**
- * Prompt for an organization key until the server resolves one.
- *
- * Nothing typed here should cost the browser flow that just ran, so a typo — or an accidental
- * Enter — is reported and asked again rather than ending the login. Asking again cannot fix an
- * outage, and piped input has nobody to ask, so those still abort on the first rejection.
- */
-async function promptForOrganizationKey(
-  client: OrganizationsClient,
-  console: Console,
-): Promise<string> {
-  let lastError = organizationRequiredError();
-
-  for (let attempt = 0; attempt < MAX_ORGANIZATION_ATTEMPTS; attempt++) {
-    const manualOrg = await console.textPrompt('Enter organization key');
-    if (manualOrg === null) {
-      throw new CommandFailedError('Organization selection cancelled');
-    }
-    const org = manualOrg.trim();
-    if (!org) {
-      lastError = organizationRequiredError();
-      if (!process.stdin.isTTY) {
-        throw lastError;
-      }
-      console.warn(lastError.message);
-      continue;
-    }
-
-    const access = await client.resolveOrganizationAccess(org);
-    if (access.status === 'accessible') {
-      return org;
-    }
-    lastError = organizationAccessError(org, access);
-    if (access.status !== 'not_found' || !process.stdin.isTTY) {
-      throw lastError;
-    }
-    console.warn(lastError.message);
-  }
-
-  throw lastError;
-}
-
-function listMemberOrganizations(
-  client: OrganizationsClient,
-): Promise<{ organizations: Organization[]; total: number }> {
-  return client.listUserOrganizations().match(
-    (result: { organizations: Organization[]; total: number }) => result,
-    (error: HttpClientError) => {
-      throw new CommandFailedError(`Could not list your organizations: ${error.message}`, {
-        remediationHint:
-          "Check your network connection and the server status, then rerun 'sonar auth login', or pass -o/--org to select an organization directly.",
-      });
-    },
-  );
-}
-
-async function getUserSelectedOrganization(
-  client: OrganizationsClient,
-  console: Console,
-): Promise<string> {
-  // Deduce organization from API: if user is member of exactly one org, use it
-  const { organizations: memberOrgs, total: orgTotal } = await listMemberOrganizations(client);
-  if (memberOrgs.length === 1 && orgTotal === 1) {
-    const singleOrg = memberOrgs[0].key;
-    console.print(`Using organization (only member): ${singleOrg}`);
-    return singleOrg;
-  }
-
-  // No org memberships — prompt for manual entry
-  if (memberOrgs.length === 0) {
-    return promptForOrganizationKey(client, console);
-  }
-
-  // Multiple orgs available — let user pick from a list or enter manually
-  if (orgTotal > memberOrgs.length) {
-    console.print(
-      `Showing first ${memberOrgs.length} of ${orgTotal} organizations. Use manual entry to select a different organization.`,
-    );
-  }
-  const MANUAL_ENTRY = '__manual__';
-  const orgOptions = [
-    ...memberOrgs.map((org: { key: string; name: string }) => ({
-      value: org.key,
-      label: `${org.name} (${org.key})`,
-    })),
-    { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
-  ];
-
-  const choice = await console.selectPrompt<string>('Select an organization', orgOptions);
-  if (choice === null) {
-    throw new CommandFailedError('Organization selection cancelled');
-  }
-
-  if (choice === MANUAL_ENTRY) {
-    return promptForOrganizationKey(client, console);
-  }
-
-  return choice;
-}
-
-/**
- * Validate organization or get from list
- */
-async function validateOrSelectOrganization(
-  client: OrganizationsClient,
-  org: string | undefined,
-  console: Console,
-): Promise<string> {
-  if (org) {
-    await assertOrganizationAccessible(client, org);
-    console.print(`Using organization: ${org}`);
-    return org;
-  }
-
-  // Try to find organization in project configs first (skip the org listing)
-  const configOrg = await discoverOrganization(console);
-  if (configOrg) {
-    const access = await client.resolveOrganizationAccess(configOrg);
-    if (access.status === 'accessible') {
-      console.print(`Using organization from config: ${configOrg}`);
-      return configOrg;
-    }
-    // A stale key in a checked-in file cannot be corrected from here, so fall through to the
-    // user's memberships rather than ending a login they can still complete. That lookup resolves
-    // a single membership without asking anything, so it is worth trying on piped input too.
-    if (access.status === 'check_failed') {
-      throw organizationAccessError(configOrg, access);
-    }
-    console.warn(`Organization '${configOrg}' from project config is not accessible.`);
-  }
-
-  return await getUserSelectedOrganization(client, console);
 }
 
 export async function confirmServerTrust(server: string, console: Console): Promise<void> {
@@ -591,7 +477,7 @@ function validateLoginOptions(options: AuthLoginOptions): void {
 
   if (options.server !== undefined && !isValidServerUrl(options.server)) {
     throw new InvalidOptionError(
-      'Invalid server URL. It must be an absolute HTTP(S) URL with a host and no control characters.',
+      `Invalid server URL. ${INVALID_SERVER_URL_MESSAGE}`,
       'Use --server <url> (for example https://sonarcloud.io), or run sonar auth login without --server.',
     );
   }

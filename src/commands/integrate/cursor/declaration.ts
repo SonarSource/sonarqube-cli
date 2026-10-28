@@ -26,19 +26,9 @@ import type {
   IntegrationDeclaration,
   ResourceDeclaration,
 } from '@/core/framework/features';
-import {
-  askUser,
-  isFeatureInstalledGloballyForProject,
-  jsonPatch,
-  skip,
-  sonarSecretsBinaryDependency,
-  wholeFile,
-} from '@/core/framework/features';
+import { jsonPatch, sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
 
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -80,9 +70,7 @@ const SQAA_RULE_FILE = 'sonar-agentic-analysis.mdc';
 const AGENTS_SKILLS_DIR = join('.agents', 'skills');
 const CAG_SKILL_NAME = 'sonar-context-augmentation';
 
-export interface CursorIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type CursorIntegrationOptions = IntegrateAgentOptions;
 
 function resolveCursorMcpConfigPath(context: IntegrationContext): string {
   return join(context.targetRoot, CURSOR_CONFIG_DIR, MCP_JSON);
@@ -129,23 +117,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     {
       id: 'sonar-secrets-hooks',
       displayName: 'secret scanning hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      shouldInstall: ({ options, scope, state }) => {
-        const globalHookExists =
-          options.globalSecretsHookExists ??
-          isFeatureInstalledGloballyForProject(
-            state,
-            scope,
-            CURSOR_INTEGRATION_ID,
-            'sonar-secrets-hooks',
-          );
-        return globalHookExists
-          ? skip(
-              'A global secrets scanning hook is already configured. Skipping project-level secrets hooks to avoid duplicate execution.',
-            )
-          : askUser();
-      },
       postInstallExample: secretsScanningExample('Cursor'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [

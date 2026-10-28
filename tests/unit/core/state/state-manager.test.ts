@@ -31,7 +31,8 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import type { AuthConnection } from '@/core/state/state.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import {
   addOrUpdateConnection,
@@ -41,15 +42,21 @@ import {
 } from '@/core/state/state-manager.ts';
 import {
   loadState,
-  saveState,
   STATE_READ_MAX_ATTEMPTS,
   stateFileExists,
   tryLoadState,
+  updateState,
 } from '@/core/state/state-repository.ts';
 
 const testSonarUserHome = join(tmpdir(), `sonar-cli-state-test-${Date.now()}`);
 const testCliDir = join(testSonarUserHome, 'sonarqube-cli');
 const testStateFile = join(testCliDir, 'state.json');
+
+function writeStateFixture(state: CliState): void {
+  updateState((latest) => {
+    Object.assign(latest, state);
+  });
+}
 
 process.env.SONAR_USER_HOME = testSonarUserHome;
 
@@ -419,8 +426,6 @@ describe('loadState: migration', () => {
   });
 
   it('does not backfill stats when absent in state file', () => {
-    // Unlike telemetry, stats consent is not imposed on existing users who never touch it:
-    // isStatsEnabled() treats absence as enabled, so migration deliberately leaves it unset.
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     delete raw['stats'];
     mkdirSync(testCliDir, { recursive: true });
@@ -429,6 +434,64 @@ describe('loadState: migration', () => {
     const state = loadState('0.1.0');
 
     expect(state.stats).toBeUndefined();
+  });
+
+  it('drops legacy envOnly connections and clears auth when none remain', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw.auth = {
+      isAuthenticated: true,
+      activeConnectionId: 'env-only-conn',
+      connections: [
+        {
+          id: 'env-only-conn',
+          type: 'on-premise',
+          serverUrl: 'https://env.example.com',
+          authenticatedAt: '2026-01-01T00:00:00.000Z',
+          envOnly: true,
+        },
+      ],
+    };
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.auth.isAuthenticated).toBe(false);
+    expect(state.auth.connections).toHaveLength(0);
+    expect(state.auth.activeConnectionId).toBeUndefined();
+  });
+
+  it('keeps keychain connections and repoints activeConnectionId away from legacy envOnly', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    raw.auth = {
+      isAuthenticated: true,
+      activeConnectionId: 'env-only-conn',
+      connections: [
+        {
+          id: 'env-only-conn',
+          type: 'on-premise',
+          serverUrl: 'https://env.example.com',
+          authenticatedAt: '2026-01-01T00:00:00.000Z',
+          envOnly: true,
+        },
+        {
+          id: 'login-conn',
+          type: 'on-premise',
+          serverUrl: 'https://login.example.com',
+          authenticatedAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
+    };
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.auth.connections).toHaveLength(1);
+    expect(state.auth.connections[0]?.id).toBe('login-conn');
+    expect(state.auth.activeConnectionId).toBe('login-conn');
+    expect(state.auth.isAuthenticated).toBe(true);
+    expect(state.auth.connections[0]).not.toHaveProperty('envOnly');
   });
 
   it('adopts a legacy tools entry whose binary is still on disk', () => {
@@ -538,6 +601,17 @@ describe('loadState: migration', () => {
     expect(state.integrations.installed[1].features).toEqual([]);
   });
 
+  it('preserves missing legacy agent state', () => {
+    const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
+    delete raw['agents'];
+    mkdirSync(testCliDir, { recursive: true });
+    writeFileSync(testStateFile, JSON.stringify(raw), 'utf-8');
+
+    const state = loadState('0.1.0');
+
+    expect(state.agents).toBeUndefined();
+  });
+
   it('removes legacy keystoreKey field from connections', () => {
     const raw = getDefaultState('0.1.0') as unknown as Record<string, unknown>;
     (raw['auth'] as Record<string, unknown>)['connections'] = [
@@ -580,10 +654,10 @@ describe('stateFileExists', () => {
 });
 
 // =============================================================================
-// saveState — filesystem I/O
+// updateState — filesystem I/O
 // =============================================================================
 
-describe('saveState', () => {
+describe('updateState', () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
@@ -592,19 +666,258 @@ describe('saveState', () => {
     const state = getDefaultState('1.0.0');
     state.auth.isAuthenticated = true;
 
-    saveState(state);
+    writeStateFixture(state);
 
     const loaded = loadState('1.0.0');
     expect(loaded.auth.isAuthenticated).toBe(true);
     expect(loaded.lastUpdated >= before).toBe(true);
   });
 
-  it('throws when the state file path is not writable', () => {
-    // Place a directory at the state file path so writeFileSync throws EISDIR
-    mkdirSync(testStateFile, { recursive: true });
-
-    expect(() => saveState(getDefaultState('1.0.0'))).toThrow('Failed to save state');
+  it('throws when the state file cannot be replaced', () => {
+    const renameSpy = spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('replacement denied');
+    });
+    try {
+      expect(() => writeStateFixture(getDefaultState('1.0.0'))).toThrow('replacement denied');
+    } finally {
+      renameSpy.mockRestore();
+    }
+    expect(existsSync(testStateFile)).toBe(false);
   });
+
+  it('retries a transient state replacement failure', () => {
+    const rename = fs.renameSync.bind(fs);
+    let attempts = 0;
+    const renameSpy = spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      attempts++;
+      if (attempts <= 2) {
+        throw Object.assign(new Error('file is busy'), { code: 'EPERM' });
+      }
+      rename(from, to);
+    });
+
+    try {
+      writeStateFixture(getDefaultState('1.0.0'));
+      expect(renameSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      renameSpy.mockRestore();
+    }
+    expect(loadState().config.cliVersion).toBe('1.0.0');
+  });
+
+  it('preserves state and the corrupt lock until processes are stopped for repair', () => {
+    writeStateFixture(getDefaultState('1.0.0'));
+    const lockFile = `${testStateFile}.lock.sqlite`;
+    writeFileSync(lockFile, 'not a database');
+    let updateRan = false;
+    let failure: unknown;
+    try {
+      updateState((state) => {
+        updateRan = true;
+        state.config.cliVersion = '2.0.0';
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(CommandFailedError);
+    expect((failure as CommandFailedError).message).toContain(lockFile);
+    expect((failure as CommandFailedError).message).toContain(
+      'Stop all sonar CLI processes. Remove the corrupt lock file, then retry.',
+    );
+    expect(updateRan).toBe(false);
+    expect(readFileSync(lockFile, 'utf-8')).toBe('not a database');
+    expect(loadState().config.cliVersion).toBe('1.0.0');
+
+    rmSync(lockFile);
+    updateState((state) => {
+      state.config.cliVersion = '2.0.0';
+    });
+    expect(loadState().config.cliVersion).toBe('2.0.0');
+  });
+
+  it('applies each update to the latest state', () => {
+    updateState((state) => {
+      addOrUpdateConnection(state, 'https://sonarcloud.io', 'cloud', { orgKey: 'my-org' });
+    });
+    updateState((state) => {
+      state.dependencies.installed.push({
+        id: 'sonar-secrets',
+        version: '1.0.0',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '1.0.0',
+      });
+    });
+
+    const loaded = loadState();
+    expect(loaded.auth.isAuthenticated).toBe(true);
+    expect(loaded.dependencies.installed.map((dependency) => dependency.id)).toEqual([
+      'sonar-secrets',
+    ]);
+  });
+
+  it('preserves independent entries in the same registry', () => {
+    for (const id of ['sonar-secrets', 'sca-scanner-cli']) {
+      updateState((state) => {
+        state.dependencies.installed.push({
+          id,
+          updatedAt: '2026-01-01',
+          updatedByCliVersion: '1.0.0',
+        });
+      });
+    }
+
+    expect(loadState().dependencies.installed.map((dependency) => dependency.id)).toEqual([
+      'sonar-secrets',
+      'sca-scanner-cli',
+    ]);
+  });
+
+  it('leaves the file intact when an update callback fails', () => {
+    writeStateFixture(getDefaultState('1.0.0'));
+    expect(() =>
+      updateState((state) => {
+        state.config.cliVersion = '2.0.0';
+        throw new Error('update failed');
+      }),
+    ).toThrow('update failed');
+    expect(loadState().config.cliVersion).toBe('1.0.0');
+  });
+
+  it('keeps the old file readable if replacement is interrupted', () => {
+    writeStateFixture(getDefaultState('1.0.0'));
+    const changed = loadState();
+    changed.config.cliVersion = '2.0.0';
+    const renameSpy = spyOn(fs, 'renameSync').mockImplementation(() => {
+      expect(loadState().config.cliVersion).toBe('1.0.0');
+      throw new Error('interrupted');
+    });
+
+    try {
+      expect(() => writeStateFixture(changed)).toThrow('interrupted');
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    expect(loadState().config.cliVersion).toBe('1.0.0');
+    expect(fs.readdirSync(testCliDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+  });
+
+  it('releases an uncommitted state lock when its owner exits', async () => {
+    writeStateFixture(getDefaultState('1.0.0'));
+    const lockFile = `${testStateFile}.lock.sqlite`;
+    const readyFile = join(testCliDir, 'lock-ready');
+    const exitFile = join(testCliDir, 'lock-owner-exit-time');
+    const owner = Bun.spawn([
+      process.execPath,
+      '-e',
+      `
+        import fs from 'node:fs';
+        import { Database } from 'bun:sqlite';
+        const db = new Database(${JSON.stringify(lockFile)}, { create: true });
+        db.run('BEGIN IMMEDIATE');
+        fs.writeFileSync(${JSON.stringify(readyFile)}, 'ready');
+        Bun.sleepSync(750);
+        fs.writeFileSync(${JSON.stringify(exitFile)}, String(Date.now()));
+        process.exit(0);
+      `,
+    ]);
+    const deadline = Date.now() + 5_000;
+    while (!existsSync(readyFile)) {
+      if (Date.now() > deadline) throw new Error('Lock owner did not start');
+      Bun.sleepSync(5);
+    }
+
+    const state = loadState();
+    state.config.cliVersion = '2.0.0';
+    writeStateFixture(state);
+    const saveEnd = Date.now();
+
+    expect(await owner.exited).toBe(0);
+    expect(saveEnd).toBeGreaterThan(Number(readFileSync(exitFile, 'utf-8')));
+    expect(loadState().config.cliVersion).toBe('2.0.0');
+  });
+
+  it('preserves both changes from processes that load the same version', async () => {
+    writeStateFixture(getDefaultState('1.0.0'));
+    const repositoryModule = join(
+      import.meta.dir,
+      '../../../../src/core/state/state-repository.ts',
+    );
+    const readyDir = join(testCliDir, 'ready');
+    mkdirSync(readyDir);
+
+    const startWorker = (name: string, other: string) => {
+      const code = `
+        import fs from 'node:fs';
+        import { join } from 'node:path';
+        import { updateState } from ${JSON.stringify(repositoryModule)};
+        fs.writeFileSync(join(${JSON.stringify(readyDir)}, ${JSON.stringify(name)}), 'ready');
+        const deadline = Date.now() + 5000;
+        while (!fs.existsSync(join(${JSON.stringify(readyDir)}, ${JSON.stringify(other)}))) {
+          if (Date.now() > deadline) throw new Error('Other writer did not start');
+          Bun.sleepSync(5);
+        }
+        updateState((state) => {
+          state.config.betaCommandWarnings = { ...state.config.betaCommandWarnings, [${JSON.stringify(name)}]: '1.0.0' };
+        });
+      `;
+      return Bun.spawn([process.execPath, '-e', code], {
+        env: { ...process.env, SONAR_USER_HOME: testSonarUserHome },
+      });
+    };
+
+    const first = startWorker('first', 'second');
+    const second = startWorker('second', 'first');
+    expect(await Promise.all([first.exited, second.exited])).toEqual([0, 0]);
+    expect(loadState().config.betaCommandWarnings).toEqual({ first: '1.0.0', second: '1.0.0' });
+  });
+
+  it('preserves every key from repeated concurrent process writes', async () => {
+    const processCount = 6;
+    const writesPerProcess = 30;
+    writeStateFixture(getDefaultState('1.0.0'));
+    const repositoryModule = join(
+      import.meta.dir,
+      '../../../../src/core/state/state-repository.ts',
+    );
+    const readyDir = join(testCliDir, 'stress-ready');
+    const startFile = join(testCliDir, 'stress-start');
+    mkdirSync(readyDir);
+
+    const workers = Array.from({ length: processCount }, (_, worker) => {
+      const code = `
+        import fs from 'node:fs';
+        import { join } from 'node:path';
+        import { updateState } from ${JSON.stringify(repositoryModule)};
+        fs.writeFileSync(join(${JSON.stringify(readyDir)}, ${JSON.stringify(String(worker))}), 'ready');
+        while (!fs.existsSync(${JSON.stringify(startFile)})) Bun.sleepSync(5);
+        for (let iteration = 0; iteration < ${writesPerProcess}; iteration++) {
+          updateState((state) => {
+            state.config.betaCommandWarnings = {
+              ...state.config.betaCommandWarnings,
+              [String(${worker}) + '-' + String(iteration)]: '1.0.0',
+            };
+          });
+        }
+      `;
+      return Bun.spawn([process.execPath, '-e', code], {
+        env: { ...process.env, SONAR_USER_HOME: testSonarUserHome },
+      });
+    });
+    const deadline = Date.now() + 10_000;
+    while (fs.readdirSync(readyDir).length < processCount) {
+      if (Date.now() > deadline) throw new Error('Stress writers did not start');
+      Bun.sleepSync(5);
+    }
+    writeFileSync(startFile, 'start');
+
+    expect(await Promise.all(workers.map((worker) => worker.exited))).toEqual(
+      Array.from({ length: processCount }, () => 0),
+    );
+    const keys = Object.keys(loadState().config.betaCommandWarnings ?? {});
+    expect(keys).toHaveLength(processCount * writesPerProcess);
+  }, 30_000);
 });
 
 // =============================================================================

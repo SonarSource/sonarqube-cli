@@ -38,12 +38,18 @@ import { integrateCopilot } from './copilot';
 import { copilotIntegration } from './copilot/declaration.ts';
 import { integrateCursor } from './cursor';
 import { cursorIntegration } from './cursor/declaration.ts';
+import { integrateDevin } from './devin';
+import { devinIntegration } from './devin/declaration.ts';
 import { integrateGit } from './git';
 import {
   HUSKY_INTEGRATION_ID,
   NATIVE_GIT_INTEGRATION_ID,
   PRE_COMMIT_INTEGRATION_ID,
 } from './git/tools';
+import { integrateOpenCode } from './opencode';
+import { openCodeIntegration } from './opencode/declaration.ts';
+import { integratePi } from './pi';
+import { piIntegration } from './pi/declaration.ts';
 
 export interface IntegrateBareOptions {
   nonInteractive?: boolean;
@@ -62,6 +68,9 @@ const TOOLS: { label: string; handler: Handler }[] = [
   { label: codexIntegration.displayName, handler: integrateCodex },
   { label: cursorIntegration.displayName, handler: integrateCursor },
   { label: antigravityIntegration.displayName, handler: integrateAntigravity },
+  { label: openCodeIntegration.displayName, handler: integrateOpenCode },
+  { label: devinIntegration.displayName, handler: integrateDevin },
+  { label: piIntegration.displayName, handler: integratePi },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
   { label: 'Git', handler: integrateGit },
@@ -74,6 +83,9 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
   [codexIntegration.id]: codexIntegration.displayName,
   [cursorIntegration.id]: cursorIntegration.displayName,
   [antigravityIntegration.id]: antigravityIntegration.displayName,
+  [openCodeIntegration.id]: openCodeIntegration.displayName,
+  [devinIntegration.id]: devinIntegration.displayName,
+  [piIntegration.id]: piIntegration.displayName,
   [NATIVE_GIT_INTEGRATION_ID]: 'Git',
   [HUSKY_INTEGRATION_ID]: 'Git',
   [PRE_COMMIT_INTEGRATION_ID]: 'Git',
@@ -83,6 +95,7 @@ const INTEGRATION_ID_LABELS: Record<string, string> = {
 const CONFLICTING_AGENT_PAIRS: readonly (readonly [DetectedAgentId, DetectedAgentId])[] = [
   ['claude', 'cursor'],
   ['claude', 'copilot'],
+  ['claude', 'devin'],
 ];
 
 /** Tools already integrated (any recorded feature), for display alongside detected agents. */
@@ -98,14 +111,23 @@ function findAlreadyIntegrated(): string[] {
   return [...labels];
 }
 
-function warnAboutConflictingAgents(detected: DetectedAgentId[], console: Console): void {
-  for (const [first, second] of CONFLICTING_AGENT_PAIRS) {
-    if (detected.includes(first) && detected.includes(second)) {
-      console.warn(
-        `Both ${agentDisplayName(first)} and ${agentDisplayName(second)} were detected on this machine — integrating both can conflict at the hook level. Run 'sonar integrate' again anytime to add or remove one.`,
-      );
-    }
-  }
+function joinNaturally(names: string[]): string {
+  if (names.length < 2) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+function noteConflictingAgents(detected: DetectedAgentId[], console: Console): void {
+  const conflicting = detected.filter((agent) =>
+    CONFLICTING_AGENT_PAIRS.some(
+      (pair) => pair.includes(agent) && pair.every((member) => detected.includes(member)),
+    ),
+  );
+  if (conflicting.length === 0) return;
+
+  console.info(
+    `${joinNaturally(conflicting.map((agent) => agentDisplayName(agent)))} may conflict at the hook level.`,
+  );
+  console.print("   → Run 'sonar integrate' again anytime to add, customize or remove an agent.");
 }
 
 export async function integrateBare(
@@ -131,7 +153,7 @@ export async function integrateBare(
     console.info(`Already integrated: ${alreadyIntegrated.join(', ')}`);
   }
 
-  warnAboutConflictingAgents(detected, console);
+  noteConflictingAgents(detected, console);
 
   const selected = await console.selectPrompt(
     'Select the tool you want to integrate with',

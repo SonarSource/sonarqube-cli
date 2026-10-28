@@ -25,7 +25,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { discoverOrganization, discoverProject, discoverServer } from '@/core/project-info.ts';
+import {
+  discoverOrganization,
+  discoverProject,
+  discoverServer,
+} from '@/core/project-discovery/project-info.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { TestHarness } from '../../harness';
@@ -87,7 +91,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       expect(discovered.serverUrl).toBe('https://sonarqube.example.com');
       expect(discovered.projectKey).toBe('my_server_project');
       expect(discovered.organization).toBeUndefined();
-      expect(discovered.configSources).toEqual([join('.sonarlint', 'connectedMode.json')]);
     },
     { timeout: 15000 },
   );
@@ -128,7 +131,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       );
 
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
-      expect(discovered.configSources).toEqual([join('.sonarlint', 'MySolution.json')]);
       expect(discovered.projectKey).toBe('acme_solution');
       expect(discovered.organization).toBe('acme');
     },
@@ -144,7 +146,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
-      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );
@@ -159,7 +160,6 @@ describe('Project workspace + SonarLint (harness)', () => {
       const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
       expect(discovered.serverUrl).toBeUndefined();
       expect(discovered.projectKey).toBeUndefined();
-      expect(discovered.configSources).toEqual([]);
     },
     { timeout: 15000 },
   );

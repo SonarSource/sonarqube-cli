@@ -22,6 +22,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { AnalysisCompletedPayload } from '@/commands/analyze/analysis-completed.ts';
+import { setConfigFileValue } from '@/core/config/config-file.ts';
 import type {
   CliState,
   StoredTelemetryEvent,
@@ -35,11 +36,15 @@ export type StoredAnalysisCompletedEvent = StoredTelemetryEvent & {
 export type StoredCommandExecutedEvent = StoredTelemetryEvent;
 export type StoredIntegrationConfiguredEvent = StoredTelemetryEvent;
 
-export function makeTelemetryState(enabled = true): CliState {
+export function makeTelemetryState(): CliState {
   const state = getDefaultState('1.0.0');
-  state.telemetry.enabled = enabled;
   state.telemetry.installationId = 'install-id';
   return state;
+}
+
+/** Stores the telemetry opt-out in the config store; SONAR_USER_HOME must point at a temp dir. */
+export function disableTelemetryInConfigFile(): void {
+  setConfigFileValue('telemetry.enabled', 'false');
 }
 
 export function telemetryEventsPath(sonarUserHome: string): string {

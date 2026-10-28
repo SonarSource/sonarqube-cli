@@ -27,17 +27,17 @@ import {
   recordSqaaAnalysisTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
+  type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
-import { discoverProject } from '@/core/project-info.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
+import { resolveSqaaPath } from '../analyze/sqaa-paths.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import type {
   ClaudePostToolUsePayload,
@@ -48,12 +48,14 @@ import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
 import { createContextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
 import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
+import { resolveHookProject } from './sqaa-hook-project.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
-async function handleSqaaPostToolUse(
+export async function handleSqaaPostToolUse(
   payload: ClaudePostToolUsePayload,
   ctx: CommandInvocationContext,
+  callerCommand: SqaaTelemetryCallerCommand,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) {
@@ -71,23 +73,19 @@ async function handleSqaaPostToolUse(
     return { decision: 'none' };
   }
 
-  const { projectKey } = await discoverProject(process.cwd(), {
-    auth,
-    silent: true,
-    console: ctx.console,
-  });
-  if (!projectKey) {
-    return { decision: 'none' };
-  }
-
-  noteProject(auth, projectKey);
-
   const canonicalPath = canonicalizePath(filePath);
   const normalizedPath = toRelativePosixPath(canonicalPath);
   if (normalizedPath == null) {
     logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
     return { decision: 'none' };
   }
+
+  const project = await resolveHookProject(auth, ctx.console, canonicalPath);
+  if (!project) {
+    logger.debug(`PostToolUse SQAA skipped: no project owns ${filePath}`);
+    return { decision: 'none' };
+  }
+  const { projectKey, projectRoot } = project;
 
   const runStart = performance.now();
   let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
@@ -99,7 +97,7 @@ async function handleSqaaPostToolUse(
       fetchSingleFileReport(
         connection,
         projectKey,
-        canonicalPath,
+        resolveSqaaPath(canonicalPath, projectRoot),
         fileContent,
         branch,
         undefined,
@@ -111,7 +109,7 @@ async function handleSqaaPostToolUse(
     finishSqaaTelemetryFromReport(
       fetchResult.report,
       {
-        telemetryCallerCommand: SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+        telemetryCallerCommand: callerCommand,
         telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
         telemetryCtx: ctx,
         auth,
@@ -122,7 +120,7 @@ async function handleSqaaPostToolUse(
     recordSqaaAnalysisTelemetry(
       ctx,
       auth,
-      SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+      callerCommand,
       { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
       Math.round(performance.now() - runStart),
       SQAA_HOOK_TELEMETRY_EXIT_CODE,
@@ -156,7 +154,8 @@ function createSqaaPostToolUseSubscriber(
   return {
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
-    handle: (payload) => handleSqaaPostToolUse(payload, ctx),
+    handle: (payload) =>
+      handleSqaaPostToolUse(payload, ctx, SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND),
   };
 }
 

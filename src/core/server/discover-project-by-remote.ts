@@ -19,7 +19,14 @@
  */
 
 import type { ResolvedAuth } from '../auth/auth-resolver.ts';
+import { getGitRemote } from '../host/git/discover.ts';
 import logger from '../observability/logger.ts';
+import {
+  formatConfigFields,
+  selectValidServerUrl,
+} from '../project-discovery/project-discovery-format.ts';
+import type { PartialProjectMapping } from '../project-discovery/project-discovery-result.ts';
+import type { DiscoverProjectOptions } from '../project-discovery/project-info.ts';
 import { SonarHttpClient } from './http-client.ts';
 import { ProjectBindingsClient } from './project-bindings.ts';
 
@@ -37,20 +44,78 @@ export interface GitRemoteBindingDiscovery {
 export function discoverProjectKeyByGitRemote(
   auth: ResolvedAuth,
   gitRemote: string,
-): Promise<GitRemoteBindingDiscovery | null> {
+): Promise<GitRemoteBindingDiscovery | null | undefined> {
   const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
   return client.getProjectKeyByGitRemote(gitRemote, auth.orgKey).match(
-    (projectKey) =>
-      projectKey
-        ? {
-            projectKey,
-            serverUrl: auth.serverUrl,
-            organization: auth.orgKey,
-          }
-        : null,
+    (projectKey) => {
+      if (!projectKey) {
+        return projectKey === null ? null : undefined;
+      }
+      return {
+        projectKey,
+        serverUrl: auth.serverUrl,
+        organization: auth.orgKey,
+      };
+    },
     (error) => {
       logger.debug(`Git remote project binding lookup failed: ${error.message}`);
-      return null;
+      return undefined;
     },
   );
+}
+
+/** A single repo-level last resort for discoverProjects(): never climbs, only ever consults the repo root's own origin remote. */
+export async function applyGitRemoteBinding(
+  config: PartialProjectMapping,
+  repoRoot: string | undefined,
+  options: DiscoverProjectOptions,
+): Promise<void> {
+  if (options.auth === null) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because authentication was disabled',
+    );
+    return;
+  }
+
+  if (!repoRoot) {
+    logger.debug('Project discovery git remote binding: no git remote found');
+    return;
+  }
+
+  const gitRemote = await getGitRemote(repoRoot);
+  if (!gitRemote) {
+    logger.debug('Project discovery git remote binding: no git remote found');
+    return;
+  }
+
+  const auth = options.auth ?? null;
+  if (!auth) {
+    logger.debug(
+      'Project discovery git remote binding: skipped because no credentials were supplied',
+    );
+    return;
+  }
+
+  const remoteBinding = await discoverProjectKeyByGitRemote(auth, gitRemote);
+  config.gitRemoteBindingNotFound = remoteBinding === null;
+  if (!remoteBinding) {
+    logger.debug('Project discovery git remote binding: no project binding resolved');
+    return;
+  }
+
+  logger.debug('Project discovery git remote binding: project resolved');
+  config.serverUrl = selectValidServerUrl(config.serverUrl, remoteBinding.serverUrl);
+  config.projectKey = remoteBinding.projectKey;
+  config.organization = config.organization || remoteBinding.organization;
+  // The binding is repository-wide, so the project is anchored at the repository root, not at wherever we were invoked.
+  config.projectRoot = repoRoot;
+
+  if (options.silent) {
+    return;
+  }
+
+  const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
+  if (fields) {
+    options.console.print(`Found ${GIT_REMOTE_BINDING_SOURCE}: ${fields}`);
+  }
 }

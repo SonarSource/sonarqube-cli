@@ -35,16 +35,16 @@ export class TransportError extends Error {
 
 /** Thrown by the API client on HTTP 429 (Too Many Requests). */
 export class RateLimitError extends Error {
-  constructor() {
-    super('Rate limit reached (429). Wait a moment and try again.');
+  constructor(message = 'Rate limit reached (429). Wait a moment and try again.') {
+    super(message);
     this.name = 'RateLimitError';
   }
 }
 
 /** Thrown by the API client on HTTP 503 (Service Unavailable). */
 export class ServiceUnavailableError extends Error {
-  constructor() {
-    super('Server busy (503). The service is temporarily unavailable.');
+  constructor(message = 'Server busy (503). The service is temporarily unavailable.') {
+    super(message);
     this.name = 'ServiceUnavailableError';
   }
 }
@@ -104,7 +104,7 @@ export interface RequestPayloadTooLargeMeta {
   maxFiles?: number;
 }
 
-/** Thrown by the API client on any HTTP 403 (Forbidden) POST response. */
+/** Thrown by the API client on any HTTP 403 (Forbidden) POST, PATCH or DELETE response. */
 export class ForbiddenApiError extends Error {
   constructor(body: string) {
     super(body);

@@ -21,13 +21,15 @@
 import { spawn } from 'node:child_process';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import { buildContextAugmentationEnv } from '@/core/host/context-augmentation-env.ts';
 import { resolveContextAugmentationBinaryPath } from '@/core/host/install/context-augmentation.ts';
-import { getToken } from '@/core/host/keychain.ts';
-import { discoverProject } from '@/core/project-info.ts';
+import logger from '@/core/observability/logger.ts';
+import { discoverProjects } from '@/core/project-discovery/project-info.ts';
+import { unresolvedProjectError } from '@/core/project-discovery/unresolved-project.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 // Commander may assign --help/-h to the optional [action] positional on some platforms.
@@ -81,54 +83,71 @@ interface RecordedContextAugmentationConfig {
 }
 
 /**
- * Resolve org/project/server via the shared project-discovery pipeline (`discoverProject`),
- * the same one SQAA's project-key lookup uses (see resolveSqaaProjectKey). `workspaceDir` is
- * `discovered.projectRoot` directly — `discoverProject()` itself always anchors it to the
- * current worktree (never a different one a matched mapping happens to point at), so no
- * extra resolution is needed here.
+ * Resolve org/project/server via the shared project-discovery pipeline (`discoverProjects`, the
+ * same one SQAA's lookup uses), scoped to `cwd`. `workspaceDir` is the project's `projectRoot`
+ * directly — discovery always anchors it to the current worktree (never a different one a matched
+ * mapping happens to point at), so no extra resolution is needed here. When `requiresSingleProject`
+ * is set, several projects covering `cwd`, or linked projects none of which covers it, throw.
  */
 async function resolveRecordedContextAugmentationConfig(
   cwd: string,
   auth: ResolvedAuth,
   console: Console,
+  requiresSingleProject: boolean,
 ): Promise<RecordedContextAugmentationConfig> {
-  const discovered = await discoverProject(cwd, {
+  const discovered = await discoverProjects(cwd, {
     auth,
     silent: true,
     console,
   });
-  if (!discovered.projectKey) {
-    return {};
+  const scoped = discovered.scope(cwd);
+  if (scoped.length === 1) {
+    const [project] = scoped;
+    return {
+      organization: project.organization,
+      projectKey: project.projectKey,
+      serverUrl: project.serverUrl,
+      workspaceDir: project.projectRoot,
+    };
   }
-  return {
-    organization: discovered.organization,
-    projectKey: discovered.projectKey,
-    serverUrl: discovered.serverUrl,
-    workspaceDir: discovered.projectRoot,
-  };
+  // Only `.sonar-config.json` yields several projects; without it, CAG's own "integration context missing" error already says what to do.
+  if (requiresSingleProject && discovered.fromSharedConfig) {
+    throw unresolvedProjectError(discovered, cwd);
+  }
+  return {};
 }
 
-async function resolveContextToken(
+const PROJECTLESS_FLAGS = new Set(['--help', '-h', '--version', '-V']);
+
+/** Management (`tool`), hook (`__hook`), help and version requests run without a project, so they never fail on an ambiguous one. */
+function requiresSingleProject(forwarded: string[]): boolean {
+  const [action] = forwarded;
+  if (forwarded.some((arg) => PROJECTLESS_FLAGS.has(arg))) {
+    return false;
+  }
+  return action !== 'tool' && !action.startsWith('__');
+}
+
+function resolveContextToken(
   auth: ResolvedAuth,
   serverUrl: string,
   organization: string | undefined,
-): Promise<string> {
-  if (auth.serverUrl === serverUrl && auth.orgKey === organization) {
+): string {
+  if (authMatchesRecordedServer(auth, serverUrl)) {
     return auth.token;
   }
 
-  const token = await getToken(serverUrl, organization);
-  if (token) {
-    return token;
-  }
-
   const connection = organization ? `${serverUrl} (${organization})` : serverUrl;
+  const organizationHint = organization ? ` plus SONARQUBE_CLI_ORG=${organization}` : '';
+  const remediationHint = auth.comesFromEnv()
+    ? `Environment credentials point at ${auth.serverUrl}. Set SONARQUBE_CLI_SERVER=${serverUrl}` +
+      organizationHint +
+      ' with a matching SONARQUBE_CLI_TOKEN, or unset SONARQUBE_CLI_TOKEN, SONARQUBE_CLI_SERVER, and SONARQUBE_CLI_ORG, then ' +
+      `run sonar auth login --server ${serverUrl}.`
+    : `Run sonar auth login --server ${serverUrl} first.`;
   throw new CommandFailedError(
     `Not authenticated for the recorded Vortex Context connection: ${connection}.`,
-    {
-      remediationHint:
-        'Run: sonar auth login, then re-run sonar integrate claude or sonar integrate copilot from this project.',
-    },
+    { remediationHint },
   );
 }
 
@@ -147,7 +166,7 @@ export async function runContextPassthrough(
 
   let env: NodeJS.ProcessEnv;
   if (isHelp) {
-    env = buildContextAugmentationEnv();
+    env = await buildContextAugmentationEnv();
   } else {
     const authResult = await options.ctx.resolveAuth();
     if (authResult.isErr()) {
@@ -163,14 +182,15 @@ export async function runContextPassthrough(
       process.cwd(),
       auth,
       options.ctx.console,
+      requiresSingleProject(forwarded),
     );
     const serverUrl = recordedConfig.serverUrl ?? auth.serverUrl;
     const organization = recordedConfig.organization ?? auth.orgKey;
-    env = buildContextAugmentationEnv({
+    env = await buildContextAugmentationEnv({
       organization,
       projectKey: recordedConfig.projectKey,
       serverUrl,
-      token: await resolveContextToken(auth, serverUrl, organization),
+      token: resolveContextToken(auth, serverUrl, organization),
       workspaceDir: recordedConfig.workspaceDir,
     });
   }
@@ -202,6 +222,12 @@ export async function runContextPassthrough(
     });
 
     if (stdinPayload !== undefined) {
+      // Rejecting here would let the child's later exit overwrite the failure, so its exit code reports the outcome.
+      child.stdin?.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code !== 'EPIPE') {
+          logger.warn(`Could not deliver input to Vortex Context: ${err.message}`);
+        }
+      });
       child.stdin?.end(stdinPayload);
     }
   });

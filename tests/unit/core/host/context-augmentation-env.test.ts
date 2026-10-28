@@ -52,16 +52,16 @@ describe('buildContextAugmentationEnv', () => {
     }
   });
 
-  it('passes the parent SONAR_CONTEXT_* env through unchanged when called with no argument', () => {
-    const env = buildContextAugmentationEnv();
+  it('passes the parent SONAR_CONTEXT_* env through unchanged when called with no argument', async () => {
+    const env = await buildContextAugmentationEnv();
 
     for (const key of KEYS) {
       expect(env[key]).toBe(`inherited-${key}`);
     }
   });
 
-  it('sets every SONAR_CONTEXT_* key when a fully-populated context is provided', () => {
-    const env = buildContextAugmentationEnv({
+  it('sets every SONAR_CONTEXT_* key when a fully-populated context is provided', async () => {
+    const env = await buildContextAugmentationEnv({
       organization: 'my-org',
       projectKey: 'my-project',
       serverUrl: 'https://sonar.example',
@@ -76,16 +76,16 @@ describe('buildContextAugmentationEnv', () => {
     expect(env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe('/repo/main');
   });
 
-  it('deletes each SONAR_CONTEXT_* key when its context field is undefined', () => {
-    const env = buildContextAugmentationEnv({});
+  it('deletes each SONAR_CONTEXT_* key when its context field is undefined', async () => {
+    const env = await buildContextAugmentationEnv({});
 
     for (const key of KEYS) {
       expect(env[key]).toBeUndefined();
     }
   });
 
-  it('deletes each SONAR_CONTEXT_* key when its context field is the empty string', () => {
-    const env = buildContextAugmentationEnv({
+  it('deletes each SONAR_CONTEXT_* key when its context field is the empty string', async () => {
+    const env = await buildContextAugmentationEnv({
       organization: '',
       projectKey: '',
       serverUrl: '',
@@ -98,8 +98,8 @@ describe('buildContextAugmentationEnv', () => {
     }
   });
 
-  it('mixes set and delete branches per-key without leaking inherited values for unset fields', () => {
-    const env = buildContextAugmentationEnv({
+  it('mixes set and delete branches per-key without leaking inherited values for unset fields', async () => {
+    const env = await buildContextAugmentationEnv({
       organization: 'my-org',
       // projectKey omitted → deleted
       serverUrl: '',
@@ -112,21 +112,21 @@ describe('buildContextAugmentationEnv', () => {
     expect(env.SONAR_CONTEXT_TOKEN).toBeUndefined();
   });
 
-  it('returns a copy — mutating the result does not affect process.env', () => {
-    const env = buildContextAugmentationEnv({ organization: 'my-org' });
+  it('returns a copy — mutating the result does not affect process.env', async () => {
+    const env = await buildContextAugmentationEnv({ organization: 'my-org' });
     env.SONAR_CONTEXT_ORGANIZATION = 'mutated';
 
     expect(process.env.SONAR_CONTEXT_ORGANIZATION).toBe('inherited-SONAR_CONTEXT_ORGANIZATION');
   });
 
-  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with no argument', () => {
-    const env = buildContextAugmentationEnv();
+  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with no argument', async () => {
+    const env = await buildContextAugmentationEnv();
 
     expect(env.SONAR_CONTEXT_INVOCATION_ID).toBe(INVOCATION_ID);
   });
 
-  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with a context', () => {
-    const env = buildContextAugmentationEnv({
+  it('sets SONAR_CONTEXT_INVOCATION_ID to the shared INVOCATION_ID when called with a context', async () => {
+    const env = await buildContextAugmentationEnv({
       organization: 'my-org',
       projectKey: 'my-project',
       serverUrl: 'https://sonar.example',
@@ -136,9 +136,9 @@ describe('buildContextAugmentationEnv', () => {
     expect(env.SONAR_CONTEXT_INVOCATION_ID).toBe(INVOCATION_ID);
   });
 
-  it('returns the same SONAR_CONTEXT_INVOCATION_ID on successive calls within the same process', () => {
-    const first = buildContextAugmentationEnv();
-    const second = buildContextAugmentationEnv({ organization: 'my-org' });
+  it('returns the same SONAR_CONTEXT_INVOCATION_ID on successive calls within the same process', async () => {
+    const first = await buildContextAugmentationEnv();
+    const second = await buildContextAugmentationEnv({ organization: 'my-org' });
 
     expect(first.SONAR_CONTEXT_INVOCATION_ID).toBe(second.SONAR_CONTEXT_INVOCATION_ID);
   });
@@ -160,8 +160,8 @@ describe('buildContextAugmentationEnv — network env propagation', () => {
     clearNetworkConfigCache();
   });
 
-  it('injects all cert and proxy env vars into the returned env', () => {
-    const env = buildContextAugmentationEnv();
+  it('injects all cert and proxy env vars into the returned env', async () => {
+    const env = await buildContextAugmentationEnv();
 
     expect(env.SONAR_CA_CERT).toBe(CERT_PATH);
     expect(env.SONAR_HTTPS_PROXY_URL).toBe(PROXY_URL);

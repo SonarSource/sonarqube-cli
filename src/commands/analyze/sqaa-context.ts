@@ -29,7 +29,7 @@ import {
 } from './sqaa-depth.ts';
 import type { SqaaResolution } from './sqaa-resolution.ts';
 import { confirmLargeChangeset } from './sqaa-resolution.ts';
-import type { OutputFormat, SqaaResolvedContext } from './sqaa-types.ts';
+import type { OutputFormat, SqaaResolvedRun } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
@@ -53,21 +53,28 @@ interface SqaaDepthResolution {
  */
 export function resolveSqaaContext(
   resolution: SqaaResolution,
-  policy: { requireProject: boolean },
+  policy: { requireProject: boolean; silentSkip?: boolean },
   console: Console,
-): SqaaResolvedContext | null {
+): SqaaResolvedRun | null {
   switch (resolution.kind) {
     case 'resolved':
-      return { connection: resolution.connection, projectKey: resolution.projectKey };
+      return {
+        connection: resolution.connection,
+        groups: resolution.groups,
+        ignored: resolution.ignored,
+        projectRoots: resolution.projectRoots,
+      };
     case 'no-org':
       if (resolution.explicitProject) {
         throw new CommandFailedError('Vortex analysis requires a SonarQube Cloud organization.', {
           remediationHint: "Run 'sonar auth login' and select an organization, then retry.",
         });
       }
-      console.warn(
-        'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
-      );
+      if (!policy.silentSkip) {
+        console.warn(
+          'Vortex analysis skipped: a SonarQube Cloud organization is required. Run: sonar auth login',
+        );
+      }
       return null;
     case 'no-project':
       if (policy.requireProject) {
@@ -79,9 +86,11 @@ export function resolveSqaaContext(
           },
         );
       }
-      console.warn(
-        "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
-      );
+      if (!policy.silentSkip) {
+        console.warn(
+          "Vortex analysis skipped: no project configured. Specify one with --project, or run 'sonar link <projectKey>' to link one to this repository.",
+        );
+      }
       return null;
   }
 }

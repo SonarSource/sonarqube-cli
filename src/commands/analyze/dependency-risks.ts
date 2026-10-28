@@ -24,10 +24,10 @@ import {
 } from '@/commands/analyze/sca-analysis-telemetry.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { resolveFormatOption } from '@/core/commands/parsing.ts';
+import { resolveFormatOption } from '@/core/commands/params.ts';
 import { DefaultScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import { DefaultSecretsInstaller } from '@/core/host/install/secrets.ts';
-import { resolveProjectKey } from '@/core/project-info.ts';
+import { assertProjectInOrganization } from '@/core/project-organization.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -39,6 +39,7 @@ import { pluralize } from './dependency-risk-helpers/pluralize.ts';
 import { buildRiskFilter } from './dependency-risk-helpers/risk-filter.ts';
 import { createScaScanApi } from './dependency-risk-helpers/sca-api.ts';
 import { ScaScanOrchestrator } from './dependency-risk-helpers/sca-scan-orchestrator.ts';
+import { resolveScaScanTarget } from './dependency-risk-helpers/sca-scan-target.ts';
 import type { Severity } from './dependency-risk-helpers/sca-scanner.ts';
 import { formatDependencyRisksTable } from './dependency-risk-helpers/table';
 import type { DependencyRisksViewModel } from './dependency-risk-helpers/view-model';
@@ -71,8 +72,10 @@ export async function analyzeDependencyRisks(
     );
   }
 
-  const projectKey = await resolveProjectKey(options.project, auth, ctx.console);
+  const target = await resolveScaScanTarget(options.project, auth, ctx.console);
+  const { projectKey } = target;
   noteProject(auth, projectKey);
+  await assertProjectInOrganization(ctx.connection, projectKey);
 
   const client = createScaScanApi(ctx.connection.httpClient);
   const orchestrator = new ScaScanOrchestrator(
@@ -86,7 +89,7 @@ export async function analyzeDependencyRisks(
   // secrets pre-scan abort never counts as an SCA failure); any throw here just propagates.
   const scan = await orchestrator.run(
     auth,
-    projectKey,
+    target,
     SCA_CALLER_COMMANDS.analyzeDependencyRisks,
     ctx,
   );

@@ -24,12 +24,13 @@ import { buildCagDownloadUrl, buildDownloadUrl } from '@/core/host/install/sonar
 
 describe('sonarsource-releases', () => {
   describe('buildDownloadUrl (sonar-secrets convention)', () => {
-    it('builds <prefix>/<name>-<ver>-<plat>.exe', () => {
+    it('builds <prefix>/<name>-<ver>-<plat>.<extension>', () => {
       const url = buildDownloadUrl(
         'sonar-secrets',
         '2.41.0.10709',
         'CommercialDistribution/sonar-secrets',
         { os: 'macos', arch: 'arm64', extension: '' },
+        'exe',
       );
       expect(url).toContain('CommercialDistribution/sonar-secrets/');
       expect(url.endsWith('sonar-secrets-2.41.0.10709-macos-arm64.exe')).toBe(true);

@@ -53,9 +53,12 @@ export class ScaWatchPatternsRunner {
   }
 }
 
-export function anyFileMatches(files: readonly string[], patterns: readonly string[]): boolean {
-  if (patterns.length === 0 || files.length === 0) return false;
+export function selectMatchingFiles(
+  files: readonly string[],
+  patterns: readonly string[],
+): string[] {
+  if (patterns.length === 0 || files.length === 0) return [];
   const normalizedPatterns = patterns.map((p) => (p.includes('/') ? p : `**/${p}`));
   const match = picomatch(normalizedPatterns, { dot: true, nocase: process.platform === 'win32' });
-  return files.some((file) => match(file));
+  return files.filter((file) => match(file));
 }

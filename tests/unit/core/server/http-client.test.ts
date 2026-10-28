@@ -20,8 +20,16 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { remediationHintFor } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { isCriticalFailure } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import {
+  SONARCLOUD_STAGING_API_URL,
+  SONARCLOUD_STAGING_URL,
+  SONARCLOUD_US_STAGING_API_URL,
+  SONARCLOUD_US_STAGING_URL,
+} from '@/core/server/sonarcloud-region.ts';
 
 import { version as VERSION } from '../../../../package.json';
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -44,6 +52,24 @@ describe('SonarHttpClient', () => {
     fetchSpy?.mockRestore();
   });
 
+  it.each(['POST', 'DELETE'] as const)(
+    'identifies the CLI on architecture %s requests',
+    async (method) => {
+      fetchSpy = mockFetch({});
+      const endpoint = '/api/v2/architecture/intended-architectures';
+      const result =
+        method === 'POST'
+          ? await client.post(endpoint, { models: [] })
+          : await client.delete(`${endpoint}/model-id`);
+
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchInit(fetchSpy).method).toBe(method);
+      expect(lastFetchInit(fetchSpy).headers).toMatchObject({
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    },
+  );
+
   describe('get', () => {
     it('uses serverURL as base by default', async () => {
       fetchSpy = mockFetch({ valid: true });
@@ -56,6 +82,21 @@ describe('SonarHttpClient', () => {
       fetchSpy = mockFetch({ organizations: [] });
       await cloudClient.get('/organizations');
       expect(lastFetchUrl(fetchSpy)).toBe(`${SONARCLOUD_API_URL}/organizations`);
+    });
+
+    it.each([
+      [SONARCLOUD_STAGING_URL, SONARCLOUD_STAGING_API_URL],
+      [SONARCLOUD_US_STAGING_URL, SONARCLOUD_US_STAGING_API_URL],
+      [`${SONARCLOUD_STAGING_URL}/`, SONARCLOUD_STAGING_API_URL],
+    ])('routes staging Cloud endpoints for %s', async (serverUrl, apiUrl) => {
+      const cloudClient = new SonarHttpClient(serverUrl, TOKEN);
+      fetchSpy = mockFetch({ organizations: [] });
+      await cloudClient.get('/organizations');
+      expect(cloudClient.isCloud).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(`${apiUrl}/organizations`);
+      await cloudClient.get('/api/projects/search');
+      const webUrl = serverUrl.replace(/\/$/, '');
+      expect(lastFetchUrl(fetchSpy)).toBe(`${webUrl}/api/projects/search`);
     });
 
     it('strips trailing slash from serverURL', async () => {
@@ -121,6 +162,20 @@ describe('SonarHttpClient', () => {
       } as unknown as Response);
       const result = await client.get('/api/authentication/validate');
       expect(result.isErr()).toBe(true);
+    });
+
+    it('succeeds on 204 with no response body', async () => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+        text: () => Promise.resolve(''),
+      } as unknown as Response);
+      const result = await client.get<void>('/api/alm_integration/check_pat');
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toBeUndefined();
     });
   });
 
@@ -237,6 +292,21 @@ describe('SonarHttpClient', () => {
       expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
     });
 
+    it('returns undefined value on 204 without calling json()', async () => {
+      const json = () => Promise.reject(new Error('json must not be called'));
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: new Headers(),
+        json,
+        text: () => Promise.resolve(''),
+      } as unknown as Response);
+      const result = await client.getSafe('/api/alm_integration/check_pat').orThrow();
+      expect(result.response.status).toBe(204);
+      expect(result.value).toBeUndefined();
+    });
+
     it('resolves to an error result instead of throwing on an unusable server URL', async () => {
       const badClient = new SonarHttpClient('not a url', 'test-token');
       const result = await badClient.getSafe('/api/system/status');
@@ -280,6 +350,68 @@ describe('SonarHttpClient', () => {
       const result = await client.post('/api/some/endpoint', {});
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
+    });
+  });
+
+  describe('patch', () => {
+    it('sends merge-patch JSON to the endpoint host through authenticated transport', async () => {
+      fetchSpy = mockFetch({ intendedArchitectures: [] });
+      const body = { intendedArchitectures: [] };
+      const result = await client.patch(
+        '/api/v2/architecture/intended-architectures/model-id',
+        body,
+      );
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/model-id`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('PATCH');
+      expect(init.body).toBe(JSON.stringify(body));
+      expect(init.headers).toMatchObject({
+        'Content-Type': 'application/merge-patch+json',
+        Authorization: `Bearer ${TOKEN}`,
+        'User-Agent': `sonarqube-cli/${VERSION}`,
+      });
+    });
+    it.each([
+      [403, 'ForbiddenApiError'],
+      [400, 'BadRequestError'],
+    ] as const)('maps PATCH %s to %s', async (status, name) => {
+      fetchSpy = mockFetch({ message: 'Rejected' }, { ok: false, status });
+      const result = await client.patch('/api/v2/architecture/intended-architectures/model-id', {});
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe(name);
+    });
+  });
+
+  describe('delete', () => {
+    it('sends DELETE without a body to the endpoint host', async () => {
+      fetchSpy = mockFetch(null, { status: 204 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isOk()).toBe(true);
+      expect(lastFetchUrl(fetchSpy)).toBe(
+        `${SERVER_URL}/api/v2/architecture/intended-architectures/m-1`,
+      );
+      const init = lastFetchInit(fetchSpy);
+      expect(init.method).toBe('DELETE');
+      expect(init.body).toBeUndefined();
+    });
+
+    it('retains status information for other DELETE failures', async () => {
+      fetchSpy = mockFetch({ message: 'Not found' }, { ok: false, status: 404 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('UnexpectedApiError');
+      expect(result._unsafeUnwrapErr().message).toContain('404');
+    });
+
+    it('returns a typed permission error with the backend body on DELETE 403', async () => {
+      fetchSpy = mockFetch({ message: 'Forbidden' }, { ok: false, status: 403 });
+      const result = await client.delete('/api/v2/architecture/intended-architectures/m-1');
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr().name).toBe('ForbiddenApiError');
+      expect(result._unsafeUnwrapErr().message).toBe(JSON.stringify({ message: 'Forbidden' }));
     });
   });
 
@@ -418,7 +550,7 @@ describe('SonarHttpClient', () => {
       expect(messages.some((m) => m.includes('request method:'))).toBe(false);
     });
 
-    it('returns a BadRequestError result on non-ok POST response', async () => {
+    it('returns the raw response body on non-ok POST response', async () => {
       fetchSpy = mockFetch({ message: 'Bad request' }, { ok: false, status: 400 });
       const result = await client.genericRequest(
         'POST',
@@ -429,8 +561,8 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
-        message: 'Bad request',
+        name: 'UnexpectedApiError',
+        message: expect.stringContaining('{"message":"Bad request"}'),
       });
     });
 
@@ -445,16 +577,18 @@ describe('SonarHttpClient', () => {
       );
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr()).toMatchObject({
-        name: 'BadRequestError',
+        name: 'UnexpectedApiError',
         message: expect.stringContaining('Transition failed'),
       });
     });
 
-    it('returns an access-denied error result on GET 403', async () => {
+    it('returns the status and raw body on GET 403', async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 403 });
       const result = await client.genericRequest('GET', '/api/system/status', fake);
       expect(result.isErr()).toBe(true);
-      expect(result._unsafeUnwrapErr().message).toContain('Access denied');
+      expect(result._unsafeUnwrapErr().message).toContain(
+        'SonarQube API error: 403 Internal Server Error - {}',
+      );
     });
 
     it('returns an error result instead of throwing on a transport failure', async () => {
@@ -463,6 +597,77 @@ describe('SonarHttpClient', () => {
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().message).toBe('ECONNREFUSED');
     });
+
+    it.each([
+      [429, 'RateLimitError'],
+      [503, 'ServiceUnavailableError'],
+      [500, 'ServerError'],
+      [502, 'ServerError'],
+    ])('preserves critical error classification for HTTP %i', async (status, name) => {
+      fetchSpy = mockFetch({ message: 'Request failed' }, { ok: false, status });
+
+      const result = await client.genericRequest('GET', '/api/projects/search', fake);
+
+      expect(result.isErr()).toBe(true);
+      const error = result._unsafeUnwrapErr();
+      expect(error.name).toBe(name);
+      expect(error.message).toContain('{"message":"Request failed"}');
+      expect(isCriticalFailure(error)).toBe(true);
+    });
+
+    it.each([new Error('Body stream failed'), 'Body stream failed'])(
+      'reports a body-read failure as an API error: %s',
+      async (reason) => {
+        const response = new Response(null, { status: 200 });
+        spyOn(response, 'text').mockRejectedValue(reason);
+        fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+        const result = await client.genericRequest('GET', '/api/projects/search', fake);
+
+        expect(result.isErr()).toBe(true);
+        expect(result._unsafeUnwrapErr()).toMatchObject({
+          name: 'UnexpectedApiError',
+          status: 200,
+          message: 'Body stream failed',
+        });
+      },
+    );
+
+    it.each(
+      [
+        { status: 429, name: 'RateLimitError', hint: 'Wait a moment and try again.' },
+        {
+          status: 503,
+          name: 'ServiceUnavailableError',
+          hint: 'Check your network connection and try again later.',
+        },
+        { status: 500, name: 'ServerError', hint: undefined },
+        { status: 403, name: 'UnexpectedApiError', hint: undefined },
+      ].flatMap((testCase) =>
+        [new Error('Body stream failed'), 'Body stream failed'].map((reason) => ({
+          ...testCase,
+          reason,
+        })),
+      ),
+    )(
+      'preserves $name when HTTP $status body reading fails: $reason',
+      async ({ status, name, hint, reason }) => {
+        const response = new Response(null, { status, statusText: 'Request failed' });
+        spyOn(response, 'text').mockRejectedValue(reason);
+        fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+        const result = await client.genericRequest('GET', '/api/projects/search', fake);
+
+        expect(result.isErr()).toBe(true);
+        const error = result._unsafeUnwrapErr();
+        expect(error.name).toBe(name);
+        expect(error.message).toBe(
+          `SonarQube API error: ${status} Request failed - Body stream failed`,
+        );
+        expect(remediationHintFor(error)).toBe(hint);
+        expect(isCriticalFailure(error)).toBe(status !== 403);
+      },
+    );
 
     it('resolves a plain SonarCloud /api endpoint correctly', async () => {
       const cloudClient = new SonarHttpClient(SONARCLOUD_URL, TOKEN);

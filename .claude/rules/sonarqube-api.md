@@ -16,11 +16,19 @@ becomes an `HttpClientError` on the error side of a `ResultAsync` (CLI-844 — t
 `fetchAuthenticated`, since they all carry the bearer token. It also exposes `apiHostFor(endpoint)`,
 which resolves the region-specific Cloud API host for an endpoint family — call sites pass its
 result as `baseUrl` instead of reaching for `resolveFromEndpoint` themselves.
+A successful GET with no body (204 or empty text) resolves to `Ok(undefined)` at runtime; type
+endpoints that omit a body as `get<void>` (or handle optional fields when the wire shape allows it).
 
 Everything above transport is a small per-domain wrapper taking a `SonarHttpClient`, living next to
 whoever uses it. Shared domains stay in `src/core/server/`, one file per client named for its
 domain — e.g. `OrganizationsClient` (`organizations.ts`, also home to `Organization` /
-`OrganizationRecord` / `OrganizationAccess`). Command-specific surfaces sit with their command: `ImportApiClient`
+`OrganizationRecord` / `OrganizationMembership`). A type or function derived from a client's data but
+issuing no request of its own — no `SonarHttpClient` involved at all — does not belong in this
+layer even when it lives right next to the client conceptually: `OrganizationSummary` /
+`toOrganizationSummary()` sit one level up, in `src/core/domain/organization.ts`, since deriving a
+display view from already-fetched data isn't an API concern, and more than one command needs the
+same derived `isAdmin`/`isActive` view. Command-specific surfaces
+sit with their command: `SonarArchitectureApi` (`src/commands/architecture/_common/sonar-architecture-api.ts`, public architecture endpoints), `ImportApiClient`
 (`src/commands/import/import-api.ts`, owning `DopRepository` / `ProvisionedProject`),
 `RemediateApiClient` (`src/commands/remediate/remediate-api.ts`, owning the agent-job types),
 `OnboardCiSqsClient` (`src/commands/admin/onboard-ci/gitlab/sqs-api.ts`), `SqaaAnalysisClient`

@@ -191,6 +191,13 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     antigravityPreToolUse: true,
     cursorPreFileRead: true,
     cursorPreToolUse: true,
+    devinPreToolUse: true,
+    opencodePreToolUse: true,
+    // Unlike the other stop-point commands above, the prompt hook masks the secret and lets the
+    // message through — it never stops the user, so it is not a stop point.
+    opencodeChatMessage: false,
+    piPreToolUse: true,
+    piChatMessage: false,
   };
 
   it.each(

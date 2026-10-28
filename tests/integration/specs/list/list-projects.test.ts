@@ -91,6 +91,61 @@ describe('list projects', () => {
     { timeout: 15000 },
   );
 
+  it('shows the API message for a 400 response from project search', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('valid-token')
+      .withProjectsSearchError(
+        400,
+        JSON.stringify({ errors: [{ msg: 'The organization parameter is required' }] }),
+      )
+      .start();
+    harness.withAuth(server.baseUrl(), 'valid-token');
+
+    const result = await harness.run('list projects');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('The organization parameter is required');
+  });
+
+  it('gives a Server-specific hint for an empty 400 response', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('valid-token')
+      .withProjectsSearchError(400)
+      .start();
+    harness.withAuth(server.baseUrl(), 'valid-token');
+
+    const result = await harness.run('list projects');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('Check the request parameters.');
+    expect(result.stdout + result.stderr).not.toContain(
+      'Check the request parameters and organization.',
+    );
+  });
+
+  it('gives a Cloud-specific hint for an empty 400 response', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('valid-token')
+      .withProjectsSearchError(400)
+      .start();
+    harness.withAuth(server.baseUrl(), 'valid-token', 'my-org');
+
+    const result = await harness.run('list projects', {
+      extraEnv: {
+        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Check the request parameters and organization.',
+    );
+  });
+
   it(
     'exits with code 1 when keychain token is invalid (401)',
     async () => {

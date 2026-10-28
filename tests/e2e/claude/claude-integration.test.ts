@@ -28,7 +28,7 @@
 import { chmodSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, isAbsolute, join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from 'bun:test';
 
@@ -219,13 +219,11 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
                 .asText(),
             ).toContain('sonar hook claude-post-tool-use');
 
-            // The compressed output invites the agent to run `sonar context distillate restore`.
-            // Asking for the "complete" stdout used to send it there, where the allowlist denies it
-            // and the run dies on max-turns. Ask for what the tool actually returned instead.
+            // Keep Claude from reading the raw-output file so it reports the compressed response.
             const result = await claude.run(
               'Run ./gradlew build exactly once, then stop calling tools. In your final response, ' +
                 'copy the Bash tool output you observed verbatim, exactly as it was returned to ' +
-                'you. Do not summarize it, and do not run any other command to expand or restore it.',
+                'you. Do not summarize it, and do not read the original output file or call any other tools.',
               {
                 args: [
                   '--tools',
@@ -245,7 +243,10 @@ describe.skipIf(!isClaudeCodeEnvSetup())(
             expect(result.output.result).toContain('BUILD SUCCESSFUL');
             expect(result.output.result).toContain('10 actionable tasks: 10 up-to-date');
             expect(result.output.result).toContain('output reduced to essential parts');
-            expect(result.output.result).toContain('sonar context distillate restore');
+            const rawOutputPath =
+              result.output.result.match(/read the original output file at `([^`]+)`/)?.[1] ?? '';
+            expect(isAbsolute(rawOutputPath)).toBe(true);
+            expect(basename(rawOutputPath)).toMatch(/^sonar-distillate-raw-[A-Za-z0-9]{6}\.txt$/);
             expect(result.output.result).not.toContain(':module0:compileJava');
             expect(result.diagnostic).not.toContain('unrecognized subcommand');
           },

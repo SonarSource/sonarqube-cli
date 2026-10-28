@@ -65,6 +65,15 @@ export const CLI_DIR = getCliDir();
 export const STATE_FILE = join(CLI_DIR, 'state.json');
 
 // ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+export const CLI_CONFIG_FILE_NAME = 'cli-config.properties';
+export function getConfigFile(): string {
+  return join(getCliDir(), CLI_CONFIG_FILE_NAME);
+}
+
+// ---------------------------------------------------------------------------
 // Logs
 // ---------------------------------------------------------------------------
 
@@ -175,7 +184,7 @@ export const UPDATE_SCRIPT_BASE_URL =
   'https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts';
 
 // ---------------------------------------------------------------------------
-// SonarCloud
+// SonarQube Cloud
 // ---------------------------------------------------------------------------
 
 export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
@@ -230,6 +239,9 @@ export const SONAR_CONTEXT_INVOCATION = 'sonar context';
 
 export const SHARED_PROJECT_CONFIG_FILE_NAME = '.sonar-config.json';
 
+/** Most projects the session-start context lists up front before pointing at `sonar link list`. */
+export const SESSION_START_PROJECT_LIST_LIMIT = 50;
+
 // ---------------------------------------------------------------------------
 // MCP Server
 // ---------------------------------------------------------------------------
@@ -252,9 +264,6 @@ export function getTelemetryDir(): string {
 /** Telemetry ingest endpoint shared by all event types. */
 export const TELEMETRY_ENDPOINT = 'https://events.sonardata.io/cli';
 
-/** Write-only ingest API key — intentionally embedded in the binary. */
-export const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';
-
 export function getStatsDir(): string {
   return join(getCliDir(), 'db', 'stats');
 }
@@ -271,6 +280,8 @@ export const STATS_RETENTION_DAYS = 365;
 // their own copy in sync by hand.
 
 export const EXIT_CODE_SECRETS_FOUND = 51;
+
+export const MAX_SCANNED_FILE_SIZE = 1024 * 1024; // 1 MB
 
 /**
  * The `caller_command` value recorded on every sonar-secrets analysis event, one per
@@ -290,6 +301,11 @@ export const SECRETS_CALLER_COMMANDS = {
   antigravityPreToolUse: 'antigravity-pre-tool-use',
   cursorPreFileRead: 'cursor-pre-file-read',
   cursorPreToolUse: 'cursor-pre-tool-use',
+  devinPreToolUse: 'devin-pre-tool-use',
+  opencodePreToolUse: 'opencode-pre-tool-use',
+  opencodeChatMessage: 'opencode-chat-message',
+  piPreToolUse: 'pi-pre-tool-use',
+  piChatMessage: 'pi-chat-message',
 } as const;
 
 /** Union of the valid sonar-secrets `caller_command` values. */
@@ -311,6 +327,9 @@ export const SECRETS_STOP_POINT_BY_CALLER_COMMAND: Readonly<Record<string, strin
   [SECRETS_CALLER_COMMANDS.antigravityPreToolUse]: 'file-read',
   [SECRETS_CALLER_COMMANDS.cursorPreFileRead]: 'file-read',
   [SECRETS_CALLER_COMMANDS.cursorPreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.devinPreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.opencodePreToolUse]: 'file-read',
+  [SECRETS_CALLER_COMMANDS.piPreToolUse]: 'file-read',
 };
 
 // ---------------------------------------------------------------------------
@@ -327,7 +346,7 @@ export const SENTRY_FLUSH_TIMEOUT_MS = 500;
 // ---------------------------------------------------------------------------
 // Auth loopback server
 //
-// Port range used by the SonarLint protocol. SonarQube/SonarCloud validates
+// Port range used by the SonarLint protocol. SonarQube Server and SonarQube Cloud validate
 // that the callback port falls within this range before POSTing the token.
 // Must match the range defined in SonarLint Core (EmbeddedServer.java: 64120-64130).
 // ---------------------------------------------------------------------------
@@ -358,4 +377,29 @@ export function getSqaaRetry503BaseDelayMs(): number {
     return DEFAULT_SQAA_RETRY_503_BASE_DELAY_MS;
   }
   return parsed;
+}
+
+/** Env var to shorten the `sonar import` PAT poll interval (ms). Used by the integration harness only. */
+export const ENV_IMPORT_PAT_POLL_INTERVAL_MS = 'SONARQUBE_CLI_IMPORT_PAT_POLL_INTERVAL_MS';
+
+/** Env var to shorten the `sonar import` PAT wait timeout (ms). Used by the integration harness only. */
+export const ENV_IMPORT_PAT_WAIT_TIMEOUT_MS = 'SONARQUBE_CLI_IMPORT_PAT_WAIT_TIMEOUT_MS';
+
+function readNonNegativeIntEnv(name: string): number | undefined {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') {
+    return undefined;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** Poll interval override via {@link ENV_IMPORT_PAT_POLL_INTERVAL_MS}; `undefined` keeps the default. */
+export function getImportPatPollIntervalMs(): number | undefined {
+  return readNonNegativeIntEnv(ENV_IMPORT_PAT_POLL_INTERVAL_MS);
+}
+
+/** Wait timeout override via {@link ENV_IMPORT_PAT_WAIT_TIMEOUT_MS}; `undefined` keeps the default. */
+export function getImportPatWaitTimeoutMs(): number | undefined {
+  return readNonNegativeIntEnv(ENV_IMPORT_PAT_WAIT_TIMEOUT_MS);
 }

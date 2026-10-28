@@ -28,25 +28,35 @@ import {
 
 import { writePostToolUseHookOutput } from './format-sqaa-hook-context.ts';
 
-/** Returns whether a message was written, so dispatcher-based callers can report `handled` accurately. */
-export async function emitVortexUnavailableHookNotice(
+export async function resolveVortexUnavailableHookNotice(
   connection: SonarConnection,
-): Promise<boolean> {
+): Promise<string | undefined> {
   // The timestamp is written only for `not_entitled`, which in a hook means the org's
   // trial ended — a sticky state that will not become `over_consumption` within the
   // cooldown. So a fresh timestamp lets us skip the re-check network calls entirely
   // rather than spend them to stay silent.
   if (!isVortexEntitlementLossNoticeDue()) {
-    return false;
+    return undefined;
   }
   const status = await recheckVortexEntitlement(connection);
   const message = vortexUnavailableHookMessage(status);
   if (!message) {
-    return false;
+    return undefined;
   }
-  writePostToolUseHookOutput(message);
   if (status === 'not_entitled') {
     recordVortexEntitlementLossWarned();
   }
+  return message;
+}
+
+/** Returns whether a message was written, so dispatcher-based callers can report `handled` accurately. */
+export async function emitVortexUnavailableHookNotice(
+  connection: SonarConnection,
+): Promise<boolean> {
+  const message = await resolveVortexUnavailableHookNotice(connection);
+  if (!message) {
+    return false;
+  }
+  writePostToolUseHookOutput(message);
   return true;
 }

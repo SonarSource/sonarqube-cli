@@ -24,11 +24,13 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildPlatformSuffix, type PlatformInfo } from '@/core/host/install/install-types.ts';
 import {
   buildDownloadUrl,
+  type DependencyExtension,
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
@@ -48,6 +50,18 @@ export interface BinarySpec {
   distPrefix: string;
   signatures: Record<string, string>;
   publicKey: string;
+  extensions: Record<string, DependencyExtension>;
+}
+
+export function resolveDownloadExtension(
+  spec: BinarySpec,
+  platform: PlatformInfo,
+): DependencyExtension {
+  const platformKey = `${platform.os}-${platform.arch}`;
+  if (!(platformKey in spec.extensions)) {
+    throw new CommandFailedError(`${spec.name} is not available for platform '${platformKey}'.`);
+  }
+  return spec.extensions[platformKey];
 }
 
 export interface InstallOptions {
@@ -119,7 +133,14 @@ async function downloadAndInstall(
 
   console.text(`     Installing ${spec.name} ${spec.version}`, undefined, channel);
 
-  const downloadUrl = buildDownloadUrl(spec.name, spec.version, spec.distPrefix, platform);
+  const downloadExtension = resolveDownloadExtension(spec, platform);
+  const downloadUrl = buildDownloadUrl(
+    spec.name,
+    spec.version,
+    spec.distPrefix,
+    platform,
+    downloadExtension,
+  );
   await console.withSpinner(
     `Downloading ${spec.name} ${spec.version}`,
     () => downloadBinary(downloadUrl, binaryPath),
@@ -129,7 +150,7 @@ async function downloadAndInstall(
   try {
     await console.withSpinner(
       'Verifying signature',
-      () => verifyBinarySignature(binaryPath, platform, spec.signatures, spec.publicKey),
+      () => verifyBinarySignature(spec.name, binaryPath, platform, spec.signatures, spec.publicKey),
       channel,
     );
   } catch (err) {

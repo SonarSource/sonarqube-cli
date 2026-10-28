@@ -215,7 +215,6 @@ uxDescribe('Help, Version, and Structural Commands', () => {
   uxIt('analyze --help', () => harness.run('analyze --help'));
   uxIt('integrate --help', () => harness.run('integrate --help'));
   uxIt('list --help', () => harness.run('list --help'));
-  uxIt('config telemetry — show current value', () => harness.run('config telemetry'));
 });
 
 // ── 2. Unauthenticated State ───────────────────────────────────────────────
@@ -231,8 +230,6 @@ uxDescribe('Unauthenticated State', () => {
 
   uxIt('auth status — no saved connection', () => harness.run('auth status'));
   uxIt('auth logout — not logged in', () => harness.run('auth logout'));
-  uxIt('config telemetry --enabled', () => harness.run('config telemetry --enabled'));
-  uxIt('config telemetry --disabled', () => harness.run('config telemetry --disabled'));
   uxIt('api GET — not authenticated', () => harness.run('api GET /api/system/status'));
   uxIt('list projects — not authenticated', () => harness.run('list projects'));
   uxIt(`list issues — not authenticated`, () => harness.run(`list issues -p ${PROJECT}`));
@@ -283,9 +280,6 @@ uxDescribe('Option Validation Errors', () => {
     harness.run('analyze agentic --file nonexistent.ts'),
   );
   uxIt('analyze secrets: no paths and no --stdin', () => harness.run('analyze secrets'));
-  uxIt('config telemetry: --enabled and --disabled conflict', () =>
-    harness.run('config telemetry --enabled --disabled'),
-  );
   uxIt('auth login: invalid server URL', () => harness.run('auth login --server not-a-url'));
 });
 

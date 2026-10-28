@@ -73,7 +73,7 @@ console.log('Building coverage-instrumented binary...');
 const result = await Bun.build({
   entrypoints: [join(PROJECT_ROOT, 'tests/coverage/index-coverage.ts')],
   target: 'bun',
-  compile: { outfile },
+  compile: { outfile, autoloadDotenv: false, autoloadBunfig: false },
   plugins: [istanbulPlugin],
 });
 

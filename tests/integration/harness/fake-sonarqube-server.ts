@@ -30,6 +30,12 @@ import type {
   SonarQubeIssue,
 } from '@/core/server/types.ts';
 
+import { recordedCloudAuthServerUrl } from './cloud-auth-url.js';
+import {
+  FakeArchitecture,
+  fakeMainBranchId,
+  routeArchitectureRequest,
+} from './fake-architecture.js';
 import type { RecordedRequest } from './types.js';
 
 const HTTP_BAD_REQUEST = 400;
@@ -81,6 +87,11 @@ export interface ComponentsTreeItemConfig {
 export interface PullRequestConfig {
   key: string;
   branch: string;
+}
+
+export interface PatResponse {
+  status: number;
+  message?: string;
 }
 
 interface ComponentTreeErrorConfig {
@@ -159,12 +170,15 @@ function resolveIssuesSearchScope(
 }
 
 interface ProjectData {
+  organization?: string;
+  componentShowStatusCode?: number;
   key: string;
   name: string;
   issues: Required<IssueConfig>[];
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
+  branchNames: string[];
   unanalyzedBranch?: string;
   componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]>;
   componentTreeStatusCode?: number;
@@ -180,6 +194,7 @@ interface ProjectData {
   dependencyRisks: DependencyRiskConfig[];
   componentsTreeItems: ComponentsTreeItemConfig[];
   componentMeasuresByPath: Map<string, ComponentMeasureConfig[]>;
+  architecture?: FakeArchitecture;
 }
 
 export interface DopRepositoryConfig {
@@ -194,10 +209,13 @@ export interface DopRepositoryConfig {
 
 export class ProjectBuilder {
   private readonly projectKey: string;
+  private organization: string | undefined = 'my-org';
+  private componentShowStatusCode?: number;
   private readonly issues: Required<IssueConfig>[] = [];
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
+  private readonly branchNames: string[] = [];
   private unanalyzedBranch?: string;
   private readonly componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]> = new Map();
   private componentTreeStatusCode?: number;
@@ -213,9 +231,20 @@ export class ProjectBuilder {
   private dependencyRisks: DependencyRiskConfig[] = [];
   private readonly componentsTreeItems: ComponentsTreeItemConfig[] = [];
   private readonly componentMeasuresByPath: Map<string, ComponentMeasureConfig[]> = new Map();
+  private architecture?: FakeArchitecture;
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
+  }
+
+  withOrganization(organization: string | undefined): this {
+    this.organization = organization;
+    return this;
+  }
+
+  withComponentShowError(statusCode: number): this {
+    this.componentShowStatusCode = statusCode;
+    return this;
   }
 
   withIssue(issue: Partial<IssueConfig>): this {
@@ -263,6 +292,12 @@ export class ProjectBuilder {
   /** No branch flagged `isMain: true` — `GET /api/project_branches/list` returns an empty array. */
   withNoDefaultBranch(): this {
     this.defaultBranchName = null;
+    return this;
+  }
+
+  /** Additional branches `GET /api/project_branches/list` returns for this project. */
+  withBranches(branchNames: string[]): this {
+    this.branchNames.push(...branchNames);
     return this;
   }
 
@@ -379,14 +414,24 @@ export class ProjectBuilder {
     return this;
   }
 
+  /** Serve the architecture endpoints (`/architecture/*`, `/api/v2/architecture/*`) for this project. */
+  withArchitecture(fn: (architecture: FakeArchitecture) => void): this {
+    this.architecture ??= new FakeArchitecture();
+    fn(this.architecture);
+    return this;
+  }
+
   getData(): ProjectData {
     return {
+      organization: this.organization,
+      componentShowStatusCode: this.componentShowStatusCode,
       key: this.projectKey,
       name: this.projectKey,
       issues: this.issues,
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
+      branchNames: this.branchNames,
       unanalyzedBranch: this.unanalyzedBranch,
       componentTreeFilesByMetric: this.componentTreeFilesByMetric,
       componentTreeStatusCode: this.componentTreeStatusCode,
@@ -402,6 +447,7 @@ export class ProjectBuilder {
       dependencyRisks: this.dependencyRisks,
       componentsTreeItems: this.componentsTreeItems,
       componentMeasuresByPath: this.componentMeasuresByPath,
+      architecture: this.architecture,
     };
   }
 }
@@ -444,6 +490,17 @@ export class FakeSonarQubeServer {
     return `http://localhost:${this.server.port}`;
   }
 
+  /**
+   * SonarQube Cloud URL stored in auth state / passed to `--server` for Cloud fakes.
+   * HTTP still targets {@link baseUrl} via SONARQUBE_CLI_SONARCLOUD_* env overrides.
+   */
+  recordedAuthServerUrl(region: 'eu' | 'us' = 'eu'): string {
+    if (!this.treatAsCloud) {
+      return this.baseUrl();
+    }
+    return recordedCloudAuthServerUrl(region);
+  }
+
   getRecordedRequests(): RecordedRequest[] {
     return [...this.requests];
   }
@@ -451,6 +508,59 @@ export class FakeSonarQubeServer {
   async stop(): Promise<void> {
     await this.server.stop(true);
   }
+}
+
+export interface FakeGitlabRepo {
+  id: number | string;
+  name: string;
+  pathName: string;
+  slug: string;
+  pathSlug: string;
+  url?: string;
+  sqProjectKey?: string;
+  sqProjectName?: string;
+}
+
+export interface FakeAzureRepo {
+  name: string;
+  projectName: string;
+  sqProjectKey?: string;
+  sqProjectName?: string;
+}
+
+export interface FakeBitbucketCloudRepo {
+  slug: string;
+  uuid: string;
+  name: string;
+  workspace: string;
+  projectKey?: string;
+  sqProjectKey?: string;
+}
+
+export interface FakeBitbucketServerRepo {
+  id: number;
+  slug: string;
+  name: string;
+  sqProjectKey?: string;
+}
+
+export interface FakeBitbucketServerProject {
+  key: string;
+  name: string;
+  repos: FakeBitbucketServerRepo[];
+}
+
+export interface FakeGithubRepo {
+  id: number | string;
+  key: string;
+  name: string;
+  url?: string;
+  sqProjectKey?: string;
+}
+
+export interface FakeGithubOrganization {
+  key: string;
+  repos: FakeGithubRepo[];
 }
 
 export class FakeSonarQubeServerBuilder {
@@ -488,6 +598,7 @@ export class FakeSonarQubeServerBuilder {
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
+  private readonly projectKeysByGitRemote: Map<string, string> = new Map();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -506,6 +617,8 @@ export class FakeSonarQubeServerBuilder {
   private orgsLookupReturnsNotFound = false;
   private orgsLookupErrorCode?: number;
   private organizationsSearchErrorCode?: number;
+  private projectsSearchErrorStatusCode?: number;
+  private projectsSearchErrorBody?: string;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -519,6 +632,19 @@ export class FakeSonarQubeServerBuilder {
     [];
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
+  private projectBindingsStatusCode = 200;
+  private boundProjectsPutStatusCode?: number;
+  private dopSettingsStatusCode?: number;
+  private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
+  private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
+  private readonly bitbucketCloudRepos = new Map<string, FakeBitbucketCloudRepo[]>();
+  private readonly bitbucketServerProjects = new Map<
+    string,
+    { projects: FakeBitbucketServerProject[]; pageLimit: number }
+  >();
+  private readonly githubOrganizations = new Map<string, FakeGithubOrganization[]>();
+  private readonly boundProjectFailures = new Map<string, { status: number; message: string }>();
+  private readonly patResponses = new Map<string, PatResponse[]>();
   private readonly analyzedProjectKeys = new Set<string>();
 
   private metrics: Metric[] = [];
@@ -602,6 +728,15 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /**
+   * Bind a git remote URL to a project for the Cloud lookup: `GET /dop-translation/project-bindings`
+   * resolves the URL to a project id, then `GET /api/components/search_projects` resolves the id to a key.
+   */
+  withGitRemoteBinding(remoteUrl: string, projectKey: string): this {
+    this.projectKeysByGitRemote.set(remoteUrl, projectKey);
+    return this;
+  }
+
   withTokenRevocationFailure(statusCode = 500, responseBody = 'Token revocation failed'): this {
     this.revokeTokenStatusCode = statusCode;
     this.revokeTokenResponseBody = responseBody;
@@ -654,9 +789,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withProjectsSearchError(statusCode: number, body = ''): this {
+    this.projectsSearchErrorStatusCode = statusCode;
+    this.projectsSearchErrorBody = body;
+    return this;
+  }
+
   /**
    * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
    * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
+   * An empty string body produces a response with no body at all.
    */
   withSqaaStatusCode(status: number, body?: string): this {
     this.sqaaStatusCode = status;
@@ -827,6 +969,11 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  withProjectBindingsStatus(statusCode: number): this {
+    this.projectBindingsStatusCode = statusCode;
+    return this;
+  }
+
   withProjectBindings(
     bindings: Array<{ projectKey: string; repository: string; dopSettingId: string }>,
   ): this {
@@ -839,8 +986,85 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Repositories `search_gitlab_repos` returns for a GitLab setting key (`id` as the server sends it). */
+  withGitlabRepos(settingKey: string, repos: FakeGitlabRepo[]): this {
+    this.gitlabRepos.set(settingKey, repos);
+    return this;
+  }
+
+  /** Repositories of every project of an Azure DevOps setting key, which `search_azure_repos` returns unless `projectName` filters them. */
+  withAzureRepos(settingKey: string, repos: FakeAzureRepo[]): this {
+    this.azureRepos.set(settingKey, repos);
+    return this;
+  }
+
+  /** Repositories `search_bitbucketcloud_repos` returns for a Bitbucket Cloud setting key. */
+  withBitbucketCloudRepos(settingKey: string, repos: FakeBitbucketCloudRepo[]): this {
+    this.bitbucketCloudRepos.set(settingKey, repos);
+    return this;
+  }
+
+  /**
+   * Projects and repositories `search_bitbucketserver_repos` returns for a setting key, flattened
+   * across projects. It pages with `start` / `isLastPage` / `nextPageStart` and never returns more
+   * than `pageLimit` items per request, like Bitbucket Server capping `limit`.
+   */
+  withBitbucketServerProjects(
+    settingKey: string,
+    projects: FakeBitbucketServerProject[],
+    pageLimit = 100,
+  ): this {
+    this.bitbucketServerProjects.set(settingKey, { projects, pageLimit });
+    return this;
+  }
+
+  /**
+   * Organizations (each with its repositories) that `list_github_organizations` and
+   * `list_github_repositories` return for a GitHub setting key, in the order given.
+   */
+  withGithubOrganizations(settingKey: string, organizations: FakeGithubOrganization[]): this {
+    this.githubOrganizations.set(settingKey, organizations);
+    return this;
+  }
+
+  /** Makes the bound-projects endpoint fail for one `repositoryIdentifier`. */
+  withBoundProjectFailure(repositoryIdentifier: string, status: number, message: string): this {
+    this.boundProjectFailures.set(repositoryIdentifier, { status, message });
+    return this;
+  }
+
+  /** Makes `GET /api/v2/dop-translation/dop-settings` answer with this status (e.g. 404 on an older server). */
+  withDopSettingsError(statusCode: number): this {
+    this.dopSettingsStatusCode = statusCode;
+    return this;
+  }
+
+  /**
+   * How `check_pat` and `list_github_organizations` answer for one DevOps platform setting key.
+   * A `status` of 204 (200 for the GitHub probe) is a valid token; 400 carries `message` as the
+   * server's error; any other status is returned as-is. Settings never configured here are valid.
+   */
+  withPatResponse(settingKey: string, response: PatResponse): this {
+    return this.withPatResponses(settingKey, [response]);
+  }
+
+  /**
+   * Like {@link withPatResponse}, but answers successive calls for the key in order; the last
+   * response repeats once the sequence is exhausted.
+   */
+  withPatResponses(settingKey: string, responses: PatResponse[]): this {
+    this.patResponses.set(settingKey, responses);
+    return this;
+  }
+
   withBoundProjectsError(statusCode: number): this {
     this.boundProjectsStatusCode = statusCode;
+    return this;
+  }
+
+  /** Makes `PUT` on bound-projects answer with this status (405 on a server older than 2025.6); `POST` keeps working. */
+  withoutBoundProjectsPut(statusCode = 405): this {
+    this.boundProjectsPutStatusCode = statusCode;
     return this;
   }
 
@@ -853,6 +1077,9 @@ export class FakeSonarQubeServerBuilder {
 
   start(): Promise<FakeSonarQubeServer> {
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
+    [...projects.values()].forEach(({ architecture }, index) =>
+      architecture?.assignProjectIndex(index),
+    );
     const {
       validToken,
       systemStatus,
@@ -865,6 +1092,7 @@ export class FakeSonarQubeServerBuilder {
       currentUserId,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
+      projectKeysByGitRemote,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -887,6 +1115,8 @@ export class FakeSonarQubeServerBuilder {
       orgsLookupReturnsNotFound,
       orgsLookupErrorCode,
       organizationsSearchErrorCode,
+      projectsSearchErrorStatusCode,
+      projectsSearchErrorBody,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -899,6 +1129,16 @@ export class FakeSonarQubeServerBuilder {
       projectBindings,
       hasProvisionProjects,
       boundProjectsStatusCode,
+      projectBindingsStatusCode,
+      boundProjectsPutStatusCode,
+      dopSettingsStatusCode,
+      patResponses,
+      gitlabRepos,
+      azureRepos,
+      bitbucketCloudRepos,
+      bitbucketServerProjects,
+      githubOrganizations,
+      boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
     } = this;
@@ -910,6 +1150,7 @@ export class FakeSonarQubeServerBuilder {
       }));
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
+    const patCallCounts = new Map<string, number>();
     const provisionConcurrency = { current: 0, peak: 0 };
 
     const server = Bun.serve({
@@ -929,7 +1170,7 @@ export class FakeSonarQubeServerBuilder {
         req.headers.forEach((v, k) => {
           headers[k] = v;
         });
-        const body = req.method === 'POST' ? await req.text() : undefined;
+        const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.text();
 
         requests.push({
           method: req.method,
@@ -1008,7 +1249,10 @@ export class FakeSonarQubeServerBuilder {
           // only the spelling the current mode actually uses, so a client sending the wrong one
           // fails the lookup instead of being silently tolerated. The same param carries either
           // the bare project key, or a `project:path` component key when --file scopes the search.
-          const scopeValue = treatAsCloud ? query.componentKeys : query.components;
+          const scopeValue =
+            query.componentKeys !== undefined && String(query.componentKeys).length > 0
+              ? query.componentKeys
+              : query.components;
           const { projectKey, componentFilterKey } = resolveIssuesSearchScope(scopeValue, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;
 
@@ -1307,6 +1551,21 @@ export class FakeSonarQubeServerBuilder {
         // confirm the project exists in the org during daemon startup. Return
         // a one-branch payload for registered projects; otherwise CAG aborts
         // with "Project '<key>' not found in organization '<org>'".
+        const architectureResponse = routeArchitectureRequest(
+          {
+            method: req.method,
+            path,
+            query,
+            body,
+            contentType: req.headers.get('content-type') ?? undefined,
+          },
+          [...projects.values()],
+          treatAsCloud,
+        );
+        if (architectureResponse) {
+          return architectureResponse;
+        }
+
         if (path === '/api/project_branches/list') {
           const projectKey = query.project;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
@@ -1318,16 +1577,27 @@ export class FakeSonarQubeServerBuilder {
           }
           return new Response(
             JSON.stringify({
-              branches: projectData.defaultBranchName
-                ? [
-                    {
-                      name: projectData.defaultBranchName,
-                      isMain: true,
-                      type: 'LONG',
-                      status: { qualityGateStatus: 'OK' },
-                    },
-                  ]
-                : [],
+              branches: [
+                ...(projectData.defaultBranchName
+                  ? [
+                      {
+                        name: projectData.defaultBranchName,
+                        branchId: fakeMainBranchId(projectData.key),
+                        isMain: true,
+                        type: 'LONG',
+                        status: { qualityGateStatus: 'OK' },
+                      },
+                    ]
+                  : []),
+                ...projectData.branchNames
+                  .filter((branchName) => branchName !== projectData.defaultBranchName)
+                  .map((name) => ({
+                    name,
+                    isMain: false,
+                    type: 'LONG',
+                    status: { qualityGateStatus: 'OK' },
+                  })),
+              ],
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
@@ -1374,12 +1644,32 @@ export class FakeSonarQubeServerBuilder {
             );
 
           if (!projectData) {
-            return notFound();
+            const boundOnly = projectBindings.find((b) => b.projectKey === componentKey);
+            return boundOnly
+              ? new Response(
+                  JSON.stringify({
+                    component: { key: boundOnly.projectKey, name: boundOnly.projectKey },
+                  }),
+                  { headers: { 'Content-Type': 'application/json' } },
+                )
+              : notFound();
           }
 
+          if (projectData.componentShowStatusCode !== undefined) {
+            return new Response(JSON.stringify({ errors: [{ msg: 'Component lookup failed' }] }), {
+              status: projectData.componentShowStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
           if (subPath === undefined) {
             return new Response(
-              JSON.stringify({ component: { key: projectData.key, name: projectData.name } }),
+              JSON.stringify({
+                component: {
+                  key: projectData.key,
+                  name: projectData.name,
+                  organization: projectData.organization,
+                },
+              }),
               { headers: { 'Content-Type': 'application/json' } },
             );
           }
@@ -1453,6 +1743,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/components/search' || path === '/api/projects/search') {
+          if (projectsSearchErrorStatusCode !== undefined) {
+            return new Response(projectsSearchErrorBody, { status: projectsSearchErrorStatusCode });
+          }
           const allProjects = [...projects.values()].map((p) => ({
             key: p.key,
             name: p.name,
@@ -1483,14 +1776,12 @@ export class FakeSonarQubeServerBuilder {
           }
           // member=true → list orgs the user belongs to
           if (query.member === 'true') {
+            const pageIndex = Number.parseInt(query.p ?? '1', 10);
+            const pageSize = Number.parseInt(query.ps ?? '10', 10);
             return new Response(
               JSON.stringify({
                 organizations: memberOrganizations,
-                paging: {
-                  pageIndex: 1,
-                  pageSize: memberOrganizations.length,
-                  total: memberOrganizationsTotal,
-                },
+                paging: { pageIndex, pageSize, total: memberOrganizationsTotal },
               }),
               { headers: { 'Content-Type': 'application/json' } },
             );
@@ -1619,6 +1910,27 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/dop-translation/project-bindings' && req.method === 'GET') {
+          if (projectBindingsStatusCode !== 200) {
+            return new Response('{}', { status: projectBindingsStatusCode });
+          }
+          const projectKey = projectKeysByGitRemote.get(query.url ?? '');
+          return new Response(
+            JSON.stringify({ bindings: projectKey ? [{ projectId: `id-${projectKey}` }] : [] }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/components/search_projects' && req.method === 'GET') {
+          const projectIds = (query.projectIds ?? '').split(',');
+          const components = [...projectKeysByGitRemote.values()]
+            .filter((key) => projectIds.includes(`id-${key}`))
+            .map((key) => ({ key }));
+          return new Response(JSON.stringify({ components }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/dop-translation/organization-bindings') {
@@ -1837,6 +2149,9 @@ export class FakeSonarQubeServerBuilder {
           req.method === 'POST'
         ) {
           if (sqaaStatusCode !== undefined) {
+            if (sqaaStatusBody === '') {
+              return new Response('', { status: sqaaStatusCode });
+            }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
               status: sqaaStatusCode,
               headers: { 'Content-Type': 'application/json' },
@@ -1932,25 +2247,161 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/v2/dop-translation/dop-settings') {
+          if (dopSettingsStatusCode !== undefined) {
+            return new Response('{}', {
+              status: dopSettingsStatusCode,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
           return new Response(JSON.stringify({ dopSettings }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
 
+        if (path === '/api/alm_integrations/search_gitlab_repos') {
+          const repos = (gitlabRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.projectName || r.name.includes(query.projectName),
+          );
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '20', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize, total: repos.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/alm_integrations/search_bitbucketcloud_repos') {
+          const repos = (bitbucketCloudRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.repositoryName || r.name.includes(query.repositoryName),
+          );
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '20', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize },
+              isLastPage: start + pageSize >= repos.length,
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/alm_integrations/search_azure_repos') {
+          const repositories = (azureRepos.get(query.almSetting ?? '') ?? []).filter(
+            (r) => !query.projectName || r.projectName === query.projectName,
+          );
+          return new Response(JSON.stringify({ repositories }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/api/alm_integrations/search_bitbucketserver_repos') {
+          const configured = bitbucketServerProjects.get(query.almSetting ?? '');
+          const items = (configured?.projects ?? [])
+            .filter((p) => p.name.toLowerCase().includes((query.projectName ?? '').toLowerCase()))
+            .flatMap((p) => p.repos.map((r) => ({ ...r, projectKey: p.key, projectName: p.name })));
+          const start = Number.parseInt(query.start ?? '0', 10);
+          const limit = Math.min(
+            Number.parseInt(query.pageSize ?? '25', 10),
+            configured?.pageLimit ?? 100,
+          );
+          const end = start + limit;
+          const isLastPage = end >= items.length;
+          return new Response(
+            JSON.stringify({
+              isLastPage,
+              ...(isLastPage ? {} : { nextPageStart: end }),
+              paging: { pageSize: items.slice(start, end).length },
+              repositories: items.slice(start, end),
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (
+          path === '/api/alm_integrations/check_pat' ||
+          path === '/api/alm_integrations/list_github_organizations'
+        ) {
+          const isProbe = path === '/api/alm_integrations/list_github_organizations';
+          const settingKey = query.almSetting ?? '';
+          const sequence = patResponses.get(settingKey);
+          const calls = patCallCounts.get(settingKey) ?? 0;
+          patCallCounts.set(settingKey, calls + 1);
+          const configured = sequence?.[Math.min(calls, sequence.length - 1)];
+          const status = configured?.status ?? (isProbe ? 200 : 204);
+          if (status === 204) return new Response(null, { status });
+          if (status === 400) {
+            return new Response(JSON.stringify({ errors: [{ msg: configured?.message ?? '' }] }), {
+              status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (isProbe && status === 200) {
+            const organizations = githubOrganizations.get(query.almSetting ?? '') ?? [];
+            const pageIndex = Number.parseInt(query.p ?? '1', 10);
+            const pageSize = Number.parseInt(query.ps ?? '100', 10);
+            const start = (pageIndex - 1) * pageSize;
+            return new Response(
+              JSON.stringify({
+                organizations: organizations
+                  .slice(start, start + pageSize)
+                  .map(({ key }) => ({ key, name: key })),
+                paging: { pageIndex, pageSize, total: organizations.length },
+              }),
+              { headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response('{}', {
+            status,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (path === '/api/alm_integrations/list_github_repositories') {
+          const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
+            (o) => o.key === query.organization,
+          );
+          const repos = organization?.repos ?? [];
+          const pageIndex = Number.parseInt(query.p ?? '1', 10);
+          const pageSize = Number.parseInt(query.ps ?? '100', 10);
+          const start = (pageIndex - 1) * pageSize;
+          return new Response(
+            JSON.stringify({
+              repositories: repos.slice(start, start + pageSize),
+              paging: { pageIndex, pageSize, total: repos.length },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
         if (path === '/api/v2/dop-translation/project-bindings' && req.method === 'GET') {
-          const { dopSettingId, pageSize: pageSizeStr, pageIndex: pageIndexStr } = query;
+          if (projectBindingsStatusCode !== 200) {
+            return new Response('{}', { status: projectBindingsStatusCode });
+          }
+          const {
+            dopSettingId,
+            repository,
+            pageSize: pageSizeStr,
+            pageIndex: pageIndexStr,
+          } = query;
           const pageSize = Number.parseInt(pageSizeStr ?? '500', 10);
           const pageIndex = Number.parseInt(pageIndexStr ?? '1', 10);
-          const filtered = dopSettingId
-            ? projectBindings.filter((b) => b.dopSettingId === dopSettingId)
-            : projectBindings;
+          const filtered = projectBindings
+            .filter((b) => !dopSettingId || b.dopSettingId === dopSettingId)
+            .filter((b) => !repository || b.repository.toLowerCase() === repository.toLowerCase());
           const start = (pageIndex - 1) * pageSize;
           const page = filtered.slice(start, start + pageSize);
           return new Response(
             JSON.stringify({
-              projectBindings: page.map(({ projectKey, repository }) => ({
+              projectBindings: page.map(({ projectKey, repository, dopSettingId }) => ({
                 projectKey,
                 repository,
+                devOpsPlatformSettingId: dopSettingId,
               })),
               page: { total: filtered.length, pageSize, pageIndex },
             }),
@@ -1971,23 +2422,49 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
+        if (
+          path === '/api/v2/dop-translation/bound-projects' &&
+          (req.method === 'POST' || req.method === 'PUT')
+        ) {
           if (boundProjectsStatusCode !== undefined) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
               status: boundProjectsStatusCode,
               headers: { 'Content-Type': 'application/json' },
             });
           }
+          if (req.method === 'PUT' && boundProjectsPutStatusCode !== undefined) {
+            return new Response('', { status: boundProjectsPutStatusCode });
+          }
           const payload = JSON.parse(body ?? '{}') as {
             projectKey: string;
             repositoryIdentifier: string;
             devOpsPlatformSettingId: string;
           };
-          projectBindings.push({
-            projectKey: payload.projectKey,
-            repository: payload.repositoryIdentifier,
-            dopSettingId: payload.devOpsPlatformSettingId,
-          });
+          const failure = boundProjectFailures.get(payload.repositoryIdentifier);
+          if (failure) {
+            return new Response(JSON.stringify({ message: failure.message }), {
+              status: failure.status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const existed = projectBindings.some((b) => b.projectKey === payload.projectKey);
+          if (!existed || req.method === 'POST') {
+            projectBindings.push({
+              projectKey: payload.projectKey,
+              repository: payload.repositoryIdentifier,
+              dopSettingId: payload.devOpsPlatformSettingId,
+            });
+          }
+          if (req.method === 'PUT') {
+            return new Response(
+              JSON.stringify({
+                projectId: `project-${payload.projectKey}`,
+                bindingId: `binding-${payload.projectKey}`,
+                newProjectCreated: !existed,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
           return new Response(JSON.stringify({}), {
             status: 201,
             headers: { 'Content-Type': 'application/json' },

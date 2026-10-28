@@ -18,9 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { ENV_DO_NOT_TRACK } from '@/core/config-constants.ts';
+import { ENV_DO_NOT_TRACK, ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import {
   resolveAgentSessionId,
@@ -29,7 +33,10 @@ import {
 } from '@/core/telemetry/agent-session.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
-import { makeTelemetryState } from '../../../_common/telemetry-helpers.ts';
+import {
+  disableTelemetryInConfigFile,
+  makeTelemetryState,
+} from '../../../_common/telemetry-helpers.ts';
 
 describe('resolveAgentSessionIdFromEnv', () => {
   it('returns null when no agent-native env source is present', () => {
@@ -91,20 +98,27 @@ describe('resolveAgentSessionIdFromEnv', () => {
 describe('resolveAgentSessionId', () => {
   let tryLoadStateSpy: ReturnType<typeof spyOn>;
   let savedDoNotTrack: string | undefined;
+  let savedSonarUserHome: string | undefined;
+  let testDir: string;
 
   beforeEach(() => {
     savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
     delete process.env[ENV_DO_NOT_TRACK];
+    savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+    testDir = mkdtempSync(join(tmpdir(), 'agent-session-test-'));
+    process.env[ENV_SONAR_USER_HOME] = testDir;
     tryLoadStateSpy = spyOn(stateManager, 'tryLoadState').mockReturnValue(makeTelemetryState());
   });
 
   afterEach(() => {
     tryLoadStateSpy.mockRestore();
     restoreEnv(ENV_DO_NOT_TRACK, savedDoNotTrack);
+    restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+    rmSync(testDir, { recursive: true, force: true });
   });
 
   it('does not identify when telemetry is disabled', () => {
-    tryLoadStateSpy.mockReturnValue(makeTelemetryState(false));
+    disableTelemetryInConfigFile();
     expect(resolveAgentSessionId('hook-id', { CLAUDE_CODE_SESSION_ID: 'env-id' })).toBeNull();
   });
 

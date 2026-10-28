@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// SonarCloud region/URL helpers - pure, dependency-free (avoids a cycle between auth-resolver.ts and identity-fetch.ts).
+// SonarQube Cloud region/URL helpers - pure, dependency-free (avoids a cycle between auth-resolver.ts and identity-fetch.ts).
 
 import {
   SONARCLOUD_API_URL,
@@ -30,11 +30,50 @@ import {
 } from '../config-constants.ts';
 import type { CloudRegion } from '../state/state.ts';
 
+const CANONICAL_SONARCLOUD_EU_HOST = 'sonarcloud.io';
+const CANONICAL_SONARCLOUD_US_HOST = 'sonarqube.us';
+
+export const SONARCLOUD_STAGING_URL = 'https://sc-staging.io';
+export const SONARCLOUD_STAGING_API_URL = 'https://api.sc-staging.io';
+export const SONARCLOUD_US_STAGING_URL = 'https://us-sc-staging.io';
+export const SONARCLOUD_US_STAGING_API_URL = 'https://api.us-sc-staging.io';
+
+const STAGING_HOSTNAME = new URL(SONARCLOUD_STAGING_URL).hostname;
+const US_STAGING_HOSTNAME = new URL(SONARCLOUD_US_STAGING_URL).hostname;
+
+function stagingHost(
+  serverUrl: string,
+): { region: CloudRegion; webUrl: string; apiUrl: string } | undefined {
+  try {
+    const { hostname, protocol } = new URL(serverUrl);
+    if (protocol !== 'https:') return undefined;
+    if (hostname === STAGING_HOSTNAME) {
+      return { region: 'eu', webUrl: SONARCLOUD_STAGING_URL, apiUrl: SONARCLOUD_STAGING_API_URL };
+    }
+    if (hostname === US_STAGING_HOSTNAME) {
+      return {
+        region: 'us',
+        webUrl: SONARCLOUD_US_STAGING_URL,
+        apiUrl: SONARCLOUD_US_STAGING_API_URL,
+      };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
+  const staging = stagingHost(serverUrl);
+  if (staging) return staging.region;
   try {
     const { hostname } = new URL(serverUrl);
-    if (hostname === SONARCLOUD_US_HOSTNAME) return 'us';
-    if (hostname === SONARCLOUD_HOSTNAME) return 'eu';
+    if (hostname === CANONICAL_SONARCLOUD_US_HOST || hostname === SONARCLOUD_US_HOSTNAME) {
+      return 'us';
+    }
+    if (hostname === CANONICAL_SONARCLOUD_EU_HOST || hostname === SONARCLOUD_HOSTNAME) {
+      return 'eu';
+    }
     return undefined;
   } catch {
     return undefined;
@@ -51,12 +90,14 @@ export function isSonarQubeCloud(serverUrl: string): boolean {
 
 /**
  * Determine the base URL for a request based on its endpoint.
- * SonarCloud uses separate hosts:
+ * SonarQube Cloud uses separate hosts:
  * - sonarcloud.io for /api/... endpoints
  * - api.sonarcloud.io for all other endpoints
  */
 export function resolveFromEndpoint(serverUrl: string, endpoint: string): string {
   const normalized = serverUrl.replace(/\/$/, '');
+  const staging = stagingHost(serverUrl);
+  if (staging) return endpoint.startsWith('/api') ? staging.webUrl : staging.apiUrl;
   const region = cloudRegionFromUrl(serverUrl);
   if (region !== undefined) {
     const isUS = region === 'us';
@@ -74,9 +115,9 @@ const SERVER_V2_PREFIX = '/api/v2';
 
 /**
  * SonarQube Server's V2 API paths (`/api/v2/...`) have no equivalent under that
- * prefix on SonarCloud: the same functionality lives at the API host without it
- * (e.g. Server's `/api/v2/sca/issues-releases` is SonarCloud's `/sca/issues-releases`).
- * A request with that prefix 404s or 403s on SonarCloud regardless of host, so
+ * prefix on SonarQube Cloud: the same functionality lives at the API host without it
+ * (e.g. Server's `/api/v2/sca/issues-releases` is SonarQube Cloud's `/sca/issues-releases`).
+ * A request with that prefix 404s or 403s on SonarQube Cloud regardless of host, so
  * stripping it is always correct there. Only relevant for `sonar api`'s free-form
  * endpoint — every other caller already picks the right path per connection type.
  */

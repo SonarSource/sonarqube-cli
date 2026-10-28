@@ -40,6 +40,7 @@ import { readStatsEvents, readStatsRuleDescriptions } from '../../../_common/sta
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { type CliResult, TestHarness } from '../../harness';
+import type { SqaaIssueConfig } from '../../harness/fake-sonarqube-server';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
 import {
   allSqaaRequestsUseDeep,
@@ -1988,7 +1989,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       // Binary file shown as IGNORED — no files to analyze
-      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
+      expect(result.stdout + result.stderr).toContain('All change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
@@ -2019,7 +2020,7 @@ describe('analyze agentic — change-set mode (no --file)', () => {
 
       expect(result.exitCode).toBe(0);
       // Oversized file shown as IGNORED — no files to analyze
-      expect(result.stdout + result.stderr).toContain('all change set files were excluded');
+      expect(result.stdout + result.stderr).toContain('All change set files were excluded');
       const sqaaCalls = server
         .getRecordedRequests()
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
@@ -2715,6 +2716,31 @@ describe('analyze agentic — --format json', () => {
   );
 
   it(
+    'does not attach the request-parameters hint to an empty 413 response',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(413, '')
+        .start();
+
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+
+      const result = await harness.run('analyze agentic --file src/index.ts');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('413 Payload Too Large');
+      expect(result.stdout + result.stderr).not.toContain('Check the request parameters');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled',
     async () => {
       const server = await harness
@@ -2924,6 +2950,488 @@ describe('analyze agentic — running from a subdirectory', () => {
         .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
       expect(sqaaCalls).toHaveLength(1);
       expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('with space.ts');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('analyze agentic — project root below the repository root', () => {
+  const OTHER_PROJECT = 'other-project';
+  let harness: TestHarness;
+  let projectRoot: string;
+  let projectSubdir: string;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    commitFile(harness.cwd.path, 'README.md', 'hello');
+    projectRoot = join(harness.cwd.path, 'pkg');
+    projectSubdir = join(projectRoot, 'src');
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  async function startServer(issues: SqaaIssueConfig[] = []) {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaResponse({ issues })
+      .start();
+    harness
+      .state()
+      .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+      .withSqaaFeature(projectRoot, TEST_PROJECT, TEST_ORG, server.baseUrl());
+    return server;
+  }
+
+  function sqaaCallsOf(server: Awaited<ReturnType<typeof startServer>>) {
+    return server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+  }
+
+  it(
+    'sends a single --file relative to the project root and reports it relative to cwd',
+    async () => {
+      const server = await startServer([{ rule: 'ts:S1135', message: 'Fix this TODO' }]);
+      harness.cwd.writeFile('pkg/src/a.ts', '// TODO\n');
+
+      const result = await harness.run('analyze agentic --file a.ts --format json', {
+        cwd: projectSubdir,
+      });
+
+      const sqaaCalls = sqaaCallsOf(server);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/a.ts');
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string; issues: { filePath: string }[] }[];
+      };
+      expect(report.files[0].path).toBe('a.ts');
+      expect(report.files[0].issues[0].filePath).toBe('a.ts');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends multiple --file paths relative to the project root',
+    async () => {
+      const server = await startServer();
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+      harness.cwd.writeFile('pkg/src/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('analyze agentic --file a.ts --file b.ts', {
+        cwd: projectSubdir,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const sqaaCalls = sqaaCallsOf(server);
+      expect(sqaaCalls).toHaveLength(1);
+      const sentPaths = (parseSqaaRequestBody(sqaaCalls[0].body).files ?? []).map((f) => f.path);
+      expect(sentPaths.sort()).toEqual(['src/a.ts', 'src/b.ts']);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects explicit --file paths outside the project root, naming all of them',
+    async () => {
+      const server = await startServer();
+      // A repo-root config whose `path` points at the project, so running from the repo root
+      // resolves `pkg` as the project root while sibling files are still inside cwd.
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: TEST_PROJECT,
+            path: 'pkg',
+          },
+        }),
+      );
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+      harness.cwd.writeFile('c.ts', 'export const c = 3;');
+
+      const result = await harness.run(
+        'analyze agentic --file other/b.ts --file pkg/src/a.ts --file c.ts',
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`Files must be inside the project root`);
+      expect(result.stderr).toContain('other/b.ts');
+      expect(result.stderr).toContain('c.ts');
+      expect(result.stderr).not.toContain('pkg/src/a.ts');
+      expect(sqaaCallsOf(server)).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'sends change-set paths relative to the project root and ignores files outside it',
+    async () => {
+      const server = await startServer([{ rule: 'ts:S1135', message: 'Fix this TODO' }]);
+      harness.cwd.writeFile('pkg/src/a.ts', '// TODO\n');
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('analyze agentic --format json', { cwd: projectSubdir });
+
+      const sqaaCalls = sqaaCallsOf(server);
+      expect(sqaaCalls).toHaveLength(1);
+      const sentPaths = (parseSqaaRequestBody(sqaaCalls[0].body).files ?? []).map((f) => f.path);
+      expect(sentPaths).toEqual(['src/a.ts']);
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string; issues: { filePath: string }[] }[];
+        ignored: { path: string; reason: string }[];
+      };
+      expect(report.files.map((f) => f.path)).toEqual(['pkg/src/a.ts']);
+      expect(report.files[0].issues[0].filePath).toBe('pkg/src/a.ts');
+      expect(report.ignored).toEqual([{ path: 'other/b.ts', reason: 'outside-project' }]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'skips the run when every change-set file is outside the project root',
+    async () => {
+      const server = await startServer();
+      harness.cwd.writeFile('pkg/src/.keep', '');
+      git(['add', 'pkg/src/.keep'], harness.cwd.path);
+      git(['commit', '-m', 'keep'], harness.cwd.path);
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('analyze agentic', { cwd: projectSubdir });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'All change set files were excluded (binary, oversized, or outside the repository or project)',
+      );
+      expect(sqaaCallsOf(server)).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'uses the discovered project root when --project names the discovered key',
+    async () => {
+      const server = await startServer();
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+
+      await harness.run(`analyze agentic --project ${TEST_PROJECT} --file a.ts`, {
+        cwd: projectSubdir,
+      });
+
+      const sqaaCalls = sqaaCallsOf(server);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('src/a.ts');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'falls back to the repository root when --project names a different key',
+    async () => {
+      const server = await startServer();
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+
+      await harness.run(`analyze agentic --project ${OTHER_PROJECT} --file a.ts`, {
+        cwd: projectSubdir,
+      });
+
+      const sqaaCalls = sqaaCallsOf(server);
+      expect(sqaaCalls).toHaveLength(1);
+      expect(parseSqaaRequestBody(sqaaCalls[0].body).projectKey).toBe(OTHER_PROJECT);
+      expect(sqaaRequestFirstFilePath(sqaaCalls[0].body)).toBe('pkg/src/a.ts');
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('analyze agentic — monorepo with several mapped projects', () => {
+  const PROJECT_A = 'app-a';
+  const PROJECT_B = 'app-b';
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    commitFile(harness.cwd.path, 'README.md', 'hello');
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  async function startMonorepoServer() {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaResponse({ issues: [] })
+      .start();
+    harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+    commitFile(
+      harness.cwd.path,
+      '.sonar-config.json',
+      JSON.stringify({
+        projects: [
+          {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: PROJECT_A,
+            path: 'packages/a',
+          },
+          {
+            serverUrl: server.baseUrl(),
+            organization: TEST_ORG,
+            projectKey: PROJECT_B,
+            path: 'packages/b',
+          },
+        ],
+      }),
+    );
+    harness.cwd.writeFile('packages/a/src/x.ts', 'export const x = 1;');
+    harness.cwd.writeFile('packages/b/lib/y.ts', 'export const y = 2;');
+    return server;
+  }
+
+  /** Paths sent to SQAA, keyed by the project they were sent for. */
+  function sentPathsByProject(server: Awaited<ReturnType<typeof startMonorepoServer>>) {
+    const sent: Record<string, string[]> = {};
+    for (const call of server
+      .getRecordedRequests()
+      .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses')) {
+      const body = parseSqaaRequestBody(call.body);
+      sent[body.projectKey ?? ''] = (body.files ?? []).map((f) => f.path);
+    }
+    return sent;
+  }
+
+  it(
+    'sends each --file to its own project, relative to that project, from the repository root',
+    async () => {
+      const server = await startMonorepoServer();
+
+      const result = await harness.run(
+        'analyze agentic --file packages/b/lib/y.ts --file packages/a/src/x.ts --format json',
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(sentPathsByProject(server)).toEqual({
+        [PROJECT_B]: ['lib/y.ts'],
+        [PROJECT_A]: ['src/x.ts'],
+      });
+      const report = JSON.parse(result.stdout) as { files: { path: string }[] };
+      expect(report.files.map((f) => f.path)).toEqual([
+        'packages/b/lib/y.ts',
+        'packages/a/src/x.ts',
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'splits the change set per project and ignores files owned by none',
+    async () => {
+      const server = await startMonorepoServer();
+      harness.cwd.writeFile('docs/readme.md', '# docs');
+
+      const result = await harness.run('analyze agentic --format json');
+
+      expect(result.exitCode).toBe(0);
+      expect(sentPathsByProject(server)).toEqual({
+        [PROJECT_A]: ['src/x.ts'],
+        [PROJECT_B]: ['lib/y.ts'],
+      });
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string }[];
+        ignored: { path: string; reason: string }[];
+      };
+      expect(report.files.map((f) => f.path)).toEqual([
+        'packages/a/src/x.ts',
+        'packages/b/lib/y.ts',
+      ]);
+      expect(report.ignored).toEqual([{ path: 'docs/readme.md', reason: 'outside-project' }]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'groups the text report under a header per project when run from the repository root',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic');
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout;
+      const headerA = output.indexOf('app-a · 1 file · 0 issues');
+      const headerB = output.indexOf('app-b · 1 file · 0 issues');
+      expect(headerA).toBeGreaterThanOrEqual(0);
+      expect(headerB).toBeGreaterThan(headerA);
+      expect(output.indexOf('packages/a/src/x.ts')).toBeGreaterThan(headerA);
+      expect(output.indexOf('packages/a/src/x.ts')).toBeLessThan(headerB);
+      expect(output.indexOf('packages/b/lib/y.ts')).toBeGreaterThan(headerB);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'lists files owned by no project under their own Not analyzed section, after the last project',
+    async () => {
+      await startMonorepoServer();
+      harness.cwd.writeFile('docs/readme.md', '# docs');
+
+      const result = await harness.run('analyze agentic');
+
+      expect(result.exitCode).toBe(0);
+      const output = result.stdout;
+      const ignoredHeader = output.indexOf('Not analyzed · 1 file');
+      expect(ignoredHeader).toBeGreaterThan(output.indexOf('packages/b/lib/y.ts'));
+      expect(output.indexOf('docs/readme.md')).toBeGreaterThan(ignoredHeader);
+      expect(output).toContain('[IGNORED: not in a mapped project]');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'shows no project header when only one project is analyzed',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic', {
+        cwd: join(harness.cwd.path, 'packages/a'),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('packages/a/src/x.ts');
+      expect(result.stdout).not.toContain('app-a ·');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'tags each JSON file entry with the project it was analyzed against',
+    async () => {
+      await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic --format json');
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout) as { files: { path: string; project?: string }[] };
+      expect(report.files.map((f) => [f.path, f.project])).toEqual([
+        ['packages/a/src/x.ts', PROJECT_A],
+        ['packages/b/lib/y.ts', PROJECT_B],
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'pins every file to --project and still relativizes to that project’s own root',
+    async () => {
+      const server = await startMonorepoServer();
+
+      const result = await harness.run(
+        `analyze agentic --project ${PROJECT_A} --file packages/a/src/x.ts`,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(sentPathsByProject(server)).toEqual({ [PROJECT_A]: ['src/x.ts'] });
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    ['its root', 'packages/a'],
+    ['a subdirectory of it', 'packages/a/src'],
+  ])(
+    'analyzes only the closest project when run from %s, ignoring the others',
+    async (_where, cwdSubpath) => {
+      const server = await startMonorepoServer();
+
+      const result = await harness.run('analyze agentic --format json', {
+        cwd: join(harness.cwd.path, cwdSubpath),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(sentPathsByProject(server)).toEqual({ [PROJECT_A]: ['src/x.ts'] });
+      const report = JSON.parse(result.stdout) as {
+        files: { path: string }[];
+        ignored: { path: string; reason: string }[];
+      };
+      expect(report.files.map((f) => f.path)).toEqual(['packages/a/src/x.ts']);
+      expect(report.ignored).toEqual([{ path: 'packages/b/lib/y.ts', reason: 'outside-project' }]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'rejects an explicit --file owned by no project, naming the roots it was matched against',
+    async () => {
+      const server = await startMonorepoServer();
+      harness.cwd.writeFile('docs/readme.md', '# docs');
+
+      const result = await harness.run(
+        'analyze agentic --file docs/readme.md --file packages/a/src/x.ts',
+      );
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain('Files must be inside one of the project roots');
+      expect(result.stderr).toContain('docs/readme.md');
+      expect(result.stderr).not.toContain('packages/a/src/x.ts');
+      expect(sentPathsByProject(server)).toEqual({});
+    },
+    { timeout: 15000 },
+  );
+});
+
+const REMOTE_URL = 'https://github.com/example/remote-bound.git';
+
+describe('analyze agentic — project bound only through the git remote', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    commitFile(harness.cwd.path, 'README.md', 'hello');
+    git(['remote', 'add', 'origin', REMOTE_URL], harness.cwd.path);
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it(
+    'anchors the project at the repository root, so a subdirectory run keeps the whole change set',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withGitRemoteBinding(REMOTE_URL, TEST_PROJECT)
+        .start();
+      harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/src/a.ts', 'export const a = 1;');
+      harness.cwd.writeFile('other/b.ts', 'export const b = 2;');
+
+      const result = await harness.run('analyze agentic --format json', {
+        cwd: join(harness.cwd.path, 'pkg/src'),
+      });
+
+      const sqaaCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(sqaaCalls).toHaveLength(1);
+      const body = parseSqaaRequestBody(sqaaCalls[0].body);
+      expect(body.projectKey).toBe(TEST_PROJECT);
+      expect((body.files ?? []).map((f) => f.path).sort()).toEqual(['other/b.ts', 'pkg/src/a.ts']);
+      const report = JSON.parse(result.stdout) as { ignored: unknown[] };
+      expect(report.ignored).toEqual([]);
     },
     { timeout: 15000 },
   );

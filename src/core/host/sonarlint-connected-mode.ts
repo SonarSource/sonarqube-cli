@@ -24,12 +24,12 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '../config-constants.ts';
+import { cloudRegionToUrl } from '../server/sonarcloud-region.ts';
 
 export interface SonarLintConfig {
   serverURL: string;
   projectKey: string;
-  /** Present for SonarCloud bindings only. */
+  /** Present for SonarQube Cloud bindings only. */
   organization?: string;
 }
 
@@ -46,11 +46,9 @@ function isSonarLintConnectedModeFileName(fileName: string): boolean {
   return fileName.toLowerCase() === CONNECTED_MODE_FILE_LOWER;
 }
 
-function sonarCloudBaseUrlFromRegion(region: unknown): string {
-  if (typeof region === 'string' && region.trim().toUpperCase() === 'US') {
-    return SONARCLOUD_US_URL;
-  }
-  return SONARCLOUD_URL;
+export function sonarCloudBaseUrlFromRegion(region: unknown): string {
+  const isUs = typeof region === 'string' && region.trim().toUpperCase() === 'US';
+  return cloudRegionToUrl(isUs ? 'us' : 'eu');
 }
 
 function parseStringValue(value: unknown): string {

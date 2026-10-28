@@ -1,6 +1,6 @@
 /*
  * SonarQube CLI
- * Copyright (C) 2026 SonarSource Sàrl
+ * Copyright (C) SonarSource Sàrl
  * mailto:info AT sonarsource DOT com
  *
  * This program is free software; you can redistribute it and/or
@@ -30,13 +30,13 @@ const handle = createKeychainTestHandle();
 beforeEach(() => handle.setup());
 afterEach(() => handle.teardown());
 
-it('keychain: save and get token for SonarCloud with org', async () => {
-  await saveToken('https://sonarcloud.io', 'squ_abc123', 'my-org');
-  expect(await getToken('https://sonarcloud.io', 'my-org')).toBe('squ_abc123');
+it('keychain: save and get token for SonarCloud', async () => {
+  await saveToken('https://sonarcloud.io', 'squ_abc123');
+  expect(await getToken('https://sonarcloud.io')).toBe('squ_abc123');
 });
 
 it('keychain: get non-existent token returns null', async () => {
-  expect(await getToken('https://nonexistent.io', 'no-org')).toBeNull();
+  expect(await getToken('https://nonexistent.io')).toBeNull();
 });
 
 it('keychain: normalize server URLs with trailing slashes', async () => {
@@ -44,36 +44,22 @@ it('keychain: normalize server URLs with trailing slashes', async () => {
   expect(await getToken('https://sonarqube.io')).toBe('test-token');
 });
 
-it('keychain: handle special characters in org names', async () => {
-  await saveToken('https://sonarcloud.io', 'token-special', 'my-org_with.special-chars');
-  expect(await getToken('https://sonarcloud.io', 'my-org_with.special-chars')).toBe(
-    'token-special',
-  );
+it('keychain: deleting one server token does not affect others', async () => {
+  await saveToken('https://sonarcloud.io', 'token-cloud');
+  await saveToken('https://sonarqube.us', 'token-us');
+
+  await deleteToken('https://sonarcloud.io');
+
+  expect(await getToken('https://sonarcloud.io')).toBeNull();
+  expect(await getToken('https://sonarqube.us')).toBe('token-us');
 });
 
-it('keychain: org parameter is optional for SonarQube (undefined treated as absent)', async () => {
-  await saveToken('https://sonarqube.io', 'sq-token');
-  expect(await getToken('https://sonarqube.io', undefined)).toBe('sq-token');
-});
-
-it('keychain: deleting one org token does not affect others', async () => {
-  await saveToken('https://sonarcloud.io', 'token-org1', 'org1');
-  await saveToken('https://sonarcloud.io', 'token-org2', 'org2');
-
-  await deleteToken('https://sonarcloud.io', 'org1');
-
-  expect(await getToken('https://sonarcloud.io', 'org1')).toBeNull();
-  expect(await getToken('https://sonarcloud.io', 'org2')).toBe('token-org2');
-});
-
-it('keychain: mixed SonarCloud orgs and SonarQube servers', async () => {
-  await saveToken('https://sonarcloud.io', 'sc-token-org1', 'org1');
-  await saveToken('https://sonarcloud.io', 'sc-token-org2', 'org2');
+it('keychain: separate servers keep separate tokens', async () => {
+  await saveToken('https://sonarcloud.io', 'sc-token');
   await saveToken('https://sq1.io', 'sq-token-1');
   await saveToken('https://sq2.io', 'sq-token-2');
 
-  expect(await getToken('https://sonarcloud.io', 'org1')).toBe('sc-token-org1');
-  expect(await getToken('https://sonarcloud.io', 'org2')).toBe('sc-token-org2');
+  expect(await getToken('https://sonarcloud.io')).toBe('sc-token');
   expect(await getToken('https://sq1.io')).toBe('sq-token-1');
   expect(await getToken('https://sq2.io')).toBe('sq-token-2');
 });

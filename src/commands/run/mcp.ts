@@ -23,20 +23,33 @@
 import { spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import type { ResolvedNetworkConfig } from '@/core/host/connectivity/types.ts';
-import { detectContainerRuntime } from '@/core/host/environment/tool-detector.ts';
+import {
+  type ContainerRuntimeDetection,
+  detectContainerRuntime,
+} from '@/core/host/environment/tool-detector.ts';
 import {
   clientCertCachePath,
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import {
+  isLoopbackServerUrl,
+  mcpLoopbackAdvice,
+  readMcpContainerSettings,
+  resolveMcpContainerNetworking,
+} from '@/core/host/mcp/mcp-network.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { assertSingleLineProjectKey, discoverProject } from '@/core/project-info.ts';
+import {
+  assertSingleLineProjectKey,
+  discoverProject,
+} from '@/core/project-discovery/project-info.ts';
 
 export interface McpRunOptions {
   debug?: boolean;
@@ -45,60 +58,93 @@ export interface McpRunOptions {
   project?: string;
 }
 
+const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
+const INTERNAL_ERROR_CODE = -32000;
+const INTERRUPTED_EXIT_CODE = 130;
+const TERMINATED_EXIT_CODE = 143;
+const CONTAINER_SHUTDOWN_EXIT_CODES = new Set([INTERRUPTED_EXIT_CODE, TERMINATED_EXIT_CODE]);
+
 function debugLog(message: string): void {
   logger.debug(message);
   process.stderr.write(`[sonarqube-cli] DEBUG ${message}\n`);
 }
 
 export async function runMcp(
-  ctx: CommandAuthenticatedInvocationContext,
+  ctx: CommandInvocationContext,
   options: McpRunOptions = {},
-  network: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
+  network?: ResolvedNetworkConfig,
 ): Promise<void> {
-  const { auth, console } = ctx;
-  const detection = await detectContainerRuntime();
-  if (!detection.runtime) {
-    throw new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
-      remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
-    });
-  }
-
-  const cwd = process.cwd();
-  const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
-  const discovered = cwdIsHomeDir
-    ? undefined
-    : await discoverProject(cwd, { auth, silent: true, console });
-  // Deliberately does NOT call `noteProject` (telemetry/project-uuid.ts), unlike the other
-  // commands that resolve a project key: this starts a long-running server, and
-  // CliCommandExecuted is only emitted from the postAction hook once it exits — or never, if
-  // the process is killed. Attaching project_uuid to an event that unreliable buys nothing.
-  const projectKey = options.project || discovered?.projectKey;
-  if (projectKey) {
-    assertSingleLineProjectKey(projectKey);
-  }
-  if (!projectKey) {
-    console.warn(
-      'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',
-    );
-  }
-  const discoveredRootIsHomeDir =
-    discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
-  const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
-
-  const context: McpServerContext = projectRoot
-    ? { withFsMount: true, projectRoot, projectKey }
-    : { withFsMount: false, projectKey };
-
-  const config = resolveMcpContainerCommand(auth, detection, context, options, network);
-
-  if (options.debug) {
-    debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
-    debugLog(`projectRoot: ${projectRoot ?? '(none)'}`);
-    debugLog(`projectKey: ${projectKey ?? '(none)'}`);
-    debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
-  }
-
+  let resolvedNetwork: ResolvedNetworkConfig | undefined;
+  let cachedCaCertPath: string | undefined;
   try {
+    resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
+    const authResult = await ctx.resolveAuth();
+    if (authResult.isErr()) {
+      await failStartup(authResult.error);
+      return;
+    }
+    if (!authResult.value) {
+      await failStartup(new CommandFailedError(AUTHENTICATION_ERROR_MESSAGE));
+      return;
+    }
+
+    const auth = authResult.value;
+    const { console } = ctx;
+    const detection = await detectContainerRuntime();
+    if (!detection.runtime) {
+      await failStartup(runtimeDetectionError(detection));
+      return;
+    }
+
+    const cwd = process.cwd();
+    const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
+    const discovered = cwdIsHomeDir
+      ? undefined
+      : await discoverProject(cwd, { auth, silent: true, console });
+    // Deliberately does NOT call `noteProject` (telemetry/project-uuid.ts), unlike the other
+    // commands that resolve a project key: this starts a long-running server, and
+    // CliCommandExecuted is only emitted from the postAction hook once it exits — or never, if
+    // the process is killed. Attaching project_uuid to an event that unreliable buys nothing.
+    const projectKey = options.project || discovered?.projectKey;
+    if (projectKey) {
+      assertSingleLineProjectKey(projectKey);
+    }
+    if (!projectKey) {
+      console.warn(
+        'No project key found - project-scoped tools will be unavailable. Run sonar run mcp --help for ways to define a project.',
+      );
+    }
+    const discoveredRootIsHomeDir =
+      discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
+    const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
+
+    const context: McpServerContext = projectRoot
+      ? { withFsMount: true, projectRoot, projectKey }
+      : { withFsMount: false, projectKey };
+
+    const settings = await readMcpContainerSettings();
+    const container = resolveMcpContainerNetworking(auth, detection, settings);
+    const config = resolveMcpContainerCommand(
+      auth,
+      detection,
+      context,
+      {
+        ...options,
+        containerNetwork: container.network,
+        containerAddHost: container.addHost,
+        containerServerUrl: container.serverUrl,
+      },
+      resolvedNetwork,
+    );
+    cachedCaCertPath = config.cachedCaCertPath;
+
+    if (options.debug) {
+      debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
+      debugLog(`projectRoot: ${projectRoot ?? '(none)'}`);
+      debugLog(`projectKey: ${projectKey ?? '(none)'}`);
+      debugLog(`launching: ${config.command} ${config.args.join(' ')}`);
+    }
+
     await new Promise<void>((resolve, reject) => {
       const child = spawn(config.command, config.args, {
         stdio: 'inherit',
@@ -108,14 +154,48 @@ export async function runMcp(
       child.on('error', reject);
       child.on('exit', (code) => {
         process.exitCode = code ?? 1;
+        const networkHint = mcpLoopbackAdvice(auth, settings);
+        if (
+          code !== null &&
+          code !== 0 &&
+          !CONTAINER_SHUTDOWN_EXIT_CODES.has(code) &&
+          isLoopbackServerUrl(container.serverUrl) &&
+          networkHint
+        ) {
+          process.stderr.write(
+            `[sonarqube-cli] The MCP container exited with an error. Check that its SonarQube URL is reachable from the container. ${networkHint}\n`,
+          );
+        }
         resolve();
       });
     });
+  } catch (error) {
+    await failStartup(error);
   } finally {
-    cleanup(network);
+    if (resolvedNetwork) {
+      cleanup(resolvedNetwork);
+    }
+  }
+
+  async function failStartup(error: unknown): Promise<void> {
+    const startupError = asStartupError(error);
+    if (process.stdin.isTTY) {
+      throw startupError;
+    }
+    const message = startupError.remediationHint
+      ? `${startupError.message} ${startupError.remediationHint}`
+      : startupError.message;
+    await respondToInitializeWithError(message, startupError.exitCode);
   }
 
   function cleanup(network: ResolvedNetworkConfig) {
+    if (cachedCaCertPath) {
+      try {
+        rmSync(cachedCaCertPath, { force: true });
+      } catch (err) {
+        logger.warn(`Could not remove cached CA certificate: ${String(err)}`);
+      }
+    }
     if (network.clientCert?.format === 'pem') {
       try {
         rmSync(clientCertCachePath(network.clientCert), { force: true });
@@ -125,4 +205,76 @@ export async function runMcp(
       }
     }
   }
+}
+
+function runtimeDetectionError(detection: ContainerRuntimeDetection): CommandFailedError {
+  const failure = detection.nativeFailure;
+  if (failure) {
+    const exit = failure.exitCode === null ? '' : ` (exit ${failure.exitCode})`;
+    return new CommandFailedError(
+      `${failure.runtime[0].toUpperCase()}${failure.runtime.slice(1)} is installed but not reachable${exit}: ${failure.stderr || 'No error output.'}`,
+      {
+        remediationHint: `Start ${failure.runtime} and rerun this command, or set SONARQUBE_CLI_MCP_WSL=always if your container runtime runs in WSL.`,
+      },
+    );
+  }
+  if (detection.wslOnly) {
+    return new CommandFailedError(
+      'No container runtime (Docker/Podman/Nerdctl) is available in WSL.',
+      {
+        remediationHint:
+          'SONARQUBE_CLI_MCP_WSL=always checks WSL only. Start your runtime in WSL, or set SONARQUBE_CLI_MCP_WSL=auto to check native runtimes.',
+      },
+    );
+  }
+  return new CommandFailedError('A container runtime (Docker/Podman/Nerdctl) is required.', {
+    remediationHint: 'Install and start Docker, Podman, or Nerdctl, then rerun this command.',
+  });
+}
+
+function asStartupError(error: unknown): CliError {
+  if (error instanceof CliError) {
+    return error;
+  }
+  return new CommandFailedError(
+    error instanceof Error ? error.message : 'An unexpected error occurred.',
+    { cause: error },
+  );
+}
+
+async function respondToInitializeWithError(message: string, exitCode: number): Promise<void> {
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of input) {
+    const request = parseInitializeRequest(line);
+    if (request === undefined) {
+      continue;
+    }
+
+    process.stdout.write(
+      `${JSON.stringify({
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: INTERNAL_ERROR_CODE, message },
+      })}\n`,
+    );
+    input.close();
+    process.exitCode = exitCode;
+    return;
+  }
+  process.exitCode = exitCode;
+}
+
+function parseInitializeRequest(line: string): { id: unknown } | undefined {
+  try {
+    const request: unknown = JSON.parse(line);
+    if (typeof request === 'object' && request !== null) {
+      const requestRecord = request as Record<string, unknown>;
+      if ('id' in requestRecord && requestRecord.method === 'initialize') {
+        return { id: requestRecord.id };
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }

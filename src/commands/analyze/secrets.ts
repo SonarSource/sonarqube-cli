@@ -25,6 +25,7 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,
+  MAX_SCANNED_FILE_SIZE,
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
 } from '@/core/config-constants.ts';
@@ -49,6 +50,8 @@ export interface AnalyzeSecretsOptions {
 export interface SecretsJsonIssue {
   ruleKey: string;
   description: string;
+  /** Identifies the `--input-batch` scan this came from. Absent for input sent without a `scan` boundary. */
+  scanId?: string;
   file?: string;
   location?: {
     startLine: number;
@@ -133,7 +136,7 @@ export async function runSecretsBinary(
       stdin,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: buildAuthEnv(auth),
+      env: await buildAuthEnv(auth),
     },
     SCAN_TIMEOUT_MS,
     `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
@@ -156,16 +159,43 @@ export async function runSecretsBinaryOnText(
       stdinData: text,
       stdout: 'pipe',
       stderr: 'pipe',
-      env: buildAuthEnv(auth),
+      env: await buildAuthEnv(auth),
     },
     SCAN_TIMEOUT_MS,
     `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
   );
 }
 
-function buildAuthEnv(auth: ResolvedAuth): Record<string, string> {
+/** Scans a batch of files handed over on stdin, each carrying its own path. */
+export async function runSecretsBinaryOnStream(
+  binaryPath: string,
+  batch: AsyncIterable<Buffer>,
+  auth: ResolvedAuth,
+): Promise<SpawnResult> {
+  return spawnProcessWithTimeout(
+    binaryPath,
+    [
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      String(MAX_SCANNED_FILE_SIZE),
+    ],
+    {
+      stdin: 'pipe',
+      stdinData: batch,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: await buildAuthEnv(auth),
+    },
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+  );
+}
+
+async function buildAuthEnv(auth: ResolvedAuth): Promise<Record<string, string>> {
   return {
-    ...buildSubprocessNetworkEnv(),
+    ...(await buildSubprocessNetworkEnv()),
     [BINARY_AUTH_URL_ENV]: auth.serverUrl,
     [BINARY_AUTH_TOKEN_ENV]: auth.token,
   };

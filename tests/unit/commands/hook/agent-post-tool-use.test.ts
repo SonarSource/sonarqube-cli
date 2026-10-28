@@ -29,16 +29,17 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { agentPostToolUse } from '@/commands/hook/agent-post-tool-use.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import * as processLib from '@/core/process/process.ts';
-import * as projectInfo from '@/core/project-info.ts';
+import * as projectInfo from '@/core/project-discovery/project-info.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 
-import { agentPostToolUse } from '../../../../src/commands/hook/agent-post-tool-use.ts';
 import * as cagSubscriber from '../../../../src/commands/hook/context-augmentation-hook-subscriber.ts';
 import * as hookOutput from '../../../../src/commands/hook/format-sqaa-hook-context.ts';
 import * as stdinModule from '../../../../src/commands/hook/stdin.ts';
+import { discoveredProjects, projectMapping } from '../../../_common/discovered-projects.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { mockAuthResolver } from '../../../_common/mock-auth-resolver.ts';
 // Real path inside cwd so realpathSync resolves consistently for file and cwd.
@@ -63,7 +64,7 @@ describe('agentPostToolUse', () => {
   let spawnProcessSpy: ReturnType<typeof spyOn>;
   let cagMatchesSpy: ReturnType<typeof spyOn>;
   let ctx: CommandInvocationContext;
-  let discoverProjectSpy: ReturnType<typeof spyOn>;
+  let discoverProjectsSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     // Deterministic git branch auto-detection (hook resolves branch from the edited file).
@@ -96,12 +97,9 @@ describe('agentPostToolUse', () => {
     });
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('const x = 1;');
-    discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
-      repoRoot: process.cwd(),
-      projectRoot: process.cwd(),
-      projectKey: 'my-project',
-      configSources: [],
-    });
+    discoverProjectsSpy = spyOn(projectInfo, 'discoverProjects').mockResolvedValue(
+      discoveredProjects(projectMapping('my-project')),
+    );
     createAnalysisSpy = spyOn(
       clientModule.SqaaAnalysisClient.prototype,
       'createAnalysis',
@@ -122,7 +120,7 @@ describe('agentPostToolUse', () => {
     emitSqaaAnalysisTelemetrySpy.mockRestore();
     spawnProcessSpy.mockRestore();
     cagMatchesSpy.mockRestore();
-    discoverProjectSpy.mockRestore();
+    discoverProjectsSpy.mockRestore();
   });
 
   it('emits SQAA analysis telemetry after a successful PostToolUse analysis', async () => {
@@ -259,6 +257,14 @@ describe('agentPostToolUse', () => {
       ),
     );
 
+    discoverProjectsSpy.mockResolvedValue(
+      discoveredProjects({
+        ...projectMapping('my-project'),
+        serverUrl: 'https://sonar.example.com',
+        organization: undefined,
+      }),
+    );
+
     await agentPostToolUse(ctx);
 
     expect(createAnalysisSpy).toHaveBeenCalledWith({
@@ -269,12 +275,51 @@ describe('agentPostToolUse', () => {
   });
 
   it('returns without output when no project key can be discovered', async () => {
-    discoverProjectSpy.mockResolvedValue({
-      repoRoot: process.cwd(),
-      projectRoot: process.cwd(),
-      projectKey: undefined,
-      configSources: [],
+    discoverProjectsSpy.mockResolvedValue(discoveredProjects());
+
+    await agentPostToolUse(ctx);
+
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('analyzes an edit under the nested project that owns it, with paths relative to that project', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      discoveredProjects(
+        projectMapping('root-project'),
+        projectMapping('nested-project', join(process.cwd(), 'src')),
+      ),
+    );
+
+    await agentPostToolUse(ctx);
+
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(createAnalysisSpy).toHaveBeenCalledWith({
+      organizationKey: 'myorg',
+      projectKey: 'nested-project',
+      files: [{ path: 'index.ts', content: 'const x = 1;' }],
+      branchName: 'feature/hook-branch',
     });
+  });
+
+  it('returns without output when the owning project is recorded against another organization', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      discoveredProjects(projectMapping('root-project'), {
+        ...projectMapping('nested-project', join(process.cwd(), 'src')),
+        organization: 'other-org',
+      }),
+    );
+
+    await agentPostToolUse(ctx);
+
+    expect(createAnalysisSpy).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns without output when the edited file is outside every project root', async () => {
+    discoverProjectsSpy.mockResolvedValue(
+      discoveredProjects(projectMapping('docs-project', join(process.cwd(), 'docs'))),
+    );
 
     await agentPostToolUse(ctx);
 

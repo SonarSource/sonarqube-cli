@@ -184,7 +184,7 @@ export async function startLoopbackServer(
   options?: LoopbackServerOptions,
 ): Promise<LoopbackServerResult> {
   // Try each port in the SonarLint protocol range (64120-64130).
-  // SonarQube/SonarCloud validates that the callback port is within this range
+  // SonarQube Server and SonarQube Cloud validate that the callback port is within this range
   // before sending the token — a random OS-assigned port is rejected.
   let bound: {
     serverV4: ReturnType<typeof createServer>;
@@ -226,7 +226,7 @@ export async function startLoopbackServer(
       // Handle OPTIONS preflight requests
       if (req.method === 'OPTIONS') {
         const preflightHeaders: Record<string, string> = { ...getSecurityHeaders() };
-        // Add CORS headers for allowed external origins (e.g. SonarCloud OAuth callback)
+        // Add CORS headers for allowed external origins (e.g. SonarQube Cloud OAuth callback)
         if (origin && (isValidLoopbackOrigin(origin) || allowedOrigins.includes(origin))) {
           preflightHeaders['Access-Control-Allow-Origin'] = origin;
           preflightHeaders['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
@@ -267,7 +267,7 @@ export async function startLoopbackServer(
         headers?: Record<string, string> | string | string[],
       ): typeof res {
         const mergedHeaders = mergeSecurityHeadersWithUserHeaders(headers);
-        // Inject CORS header for external allowed origins (e.g. SonarCloud OAuth callback)
+        // Inject CORS header for external allowed origins (e.g. SonarQube Cloud OAuth callback)
         if (isExternalAllowedOrigin && origin) {
           mergedHeaders['Access-Control-Allow-Origin'] = origin;
         }

@@ -21,6 +21,7 @@
 // Resolves which branch or pull request `quality-gate status` reports on
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import { resolveCurrentGitBranch } from '@/core/host/git/branch.ts';
 import { autoResolvePullRequest } from '@/core/pull-request-auto-resolve.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -30,9 +31,11 @@ export interface QualityGateStatusScopeOptions {
   pullRequest?: string;
 }
 
-// `default`/`pullRequestAuto` mark values resolved automatically rather than given explicitly,
-// for display ("Branch main (default)" / "Pull Request 42 (auto-detected...)").
-export type QualityGateScopeKind = 'branch' | 'pullRequest' | 'pullRequestAuto' | 'default';
+// `default`/`branchAuto`/`pullRequestAuto` mark values resolved automatically rather than given
+// explicitly, for display ("Branch main (default)" / "Branch feature-x (auto-detected...)" / "Pull
+// Request 42 (auto-detected...)").
+export type QualityGateScopeKind =
+  'branch' | 'branchAuto' | 'pullRequest' | 'pullRequestAuto' | 'default';
 
 export interface QualityGateScope {
   kind: QualityGateScopeKind;
@@ -68,10 +71,11 @@ export async function resolveQualityGateScope(
   }
 
   const branchesClient = new BranchesClient(client);
-  const [autoDetected, branches] = await Promise.all([
-    autoResolvePullRequest(client, projectKey),
+  const [currentBranch, branches] = await Promise.all([
+    resolveCurrentGitBranch(process.cwd()),
     branchesClient.listBranches(projectKey).orThrow(),
   ]);
+  const autoDetected = await autoResolvePullRequest(client, projectKey, currentBranch);
   if (autoDetected) {
     return {
       queryParams: { pullRequest: autoDetected.pullRequest },
@@ -80,6 +84,13 @@ export async function resolveQualityGateScope(
         value: autoDetected.pullRequest,
         detectedFromBranch: autoDetected.branch,
       },
+    };
+  }
+
+  if (currentBranch && branches.some((branch) => branch.name === currentBranch && !branch.isMain)) {
+    return {
+      queryParams: { branch: currentBranch },
+      scope: { kind: 'branchAuto', value: currentBranch },
     };
   }
 

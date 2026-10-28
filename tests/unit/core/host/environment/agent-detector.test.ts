@@ -27,6 +27,9 @@ import {
   isCodexAgentEnv,
   isCopilotCliAgentEnv,
   isCursorAgentEnv,
+  isDevinAgentEnv,
+  isOpenCodeAgentEnv,
+  isPiAgentEnv,
 } from '@/core/host/environment/agent-detector.ts';
 
 function env(overrides: Record<string, string | undefined>): NodeJS.ProcessEnv {
@@ -169,9 +172,112 @@ describe('agent-detector', () => {
     });
   });
 
+  describe('isDevinAgentEnv', () => {
+    it('is true when DEVIN_PROJECT_DIR is non-empty', () => {
+      expect(isDevinAgentEnv(env({ DEVIN_PROJECT_DIR: '/x' }))).toBe(true);
+    });
+
+    it('is false when DEVIN_PROJECT_DIR is absent or empty', () => {
+      expect(isDevinAgentEnv(env({}))).toBe(false);
+      expect(isDevinAgentEnv(env({ DEVIN_PROJECT_DIR: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('DEVIN_PROJECT_DIR', '/x', () => {
+        expect(isDevinAgentEnv()).toBe(true);
+      });
+    });
+  });
+
+  describe('isOpenCodeAgentEnv', () => {
+    it('is true when OPENCODE is set, regardless of value', () => {
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: '1' }))).toBe(true);
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: 'true' }))).toBe(true);
+    });
+
+    it('is false when OPENCODE is absent or empty', () => {
+      expect(isOpenCodeAgentEnv(env({}))).toBe(false);
+      expect(isOpenCodeAgentEnv(env({ OPENCODE: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('OPENCODE', '1', () => {
+        expect(isOpenCodeAgentEnv()).toBe(true);
+      });
+    });
+  });
+
+  describe('isPiAgentEnv', () => {
+    it('is true when PI_CODING_AGENT is set, regardless of value', () => {
+      expect(isPiAgentEnv(env({ PI_CODING_AGENT: 'true' }))).toBe(true);
+      expect(isPiAgentEnv(env({ PI_CODING_AGENT: '1' }))).toBe(true);
+    });
+
+    it('is false when PI_CODING_AGENT is absent or empty', () => {
+      expect(isPiAgentEnv(env({}))).toBe(false);
+      expect(isPiAgentEnv(env({ PI_CODING_AGENT: '' }))).toBe(false);
+    });
+
+    it('reads process.env when no arg is passed', () => {
+      withProcessEnv('PI_CODING_AGENT', 'true', () => {
+        expect(isPiAgentEnv()).toBe(true);
+      });
+    });
+  });
+
   describe('detectCallerAgent', () => {
     it('returns null when no markers', () => {
       expect(detectCallerAgent(env({}))).toBeNull();
+    });
+
+    it('detects devin when only its marker is set', () => {
+      expect(detectCallerAgent(env({ DEVIN_PROJECT_DIR: '/x' }))).toBe('devin');
+    });
+
+    it('prefers devin over claude when both markers are set (Devin loads Claude hook files)', () => {
+      expect(
+        detectCallerAgent(
+          env({ DEVIN_PROJECT_DIR: '/x', CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/x' }),
+        ),
+      ).toBe('devin');
+    });
+
+    it('detects pi when only its marker is set', () => {
+      expect(detectCallerAgent(env({ PI_CODING_AGENT: 'true' }))).toBe('pi');
+    });
+
+    it('prefers pi over cursor when both markers are set (pi launched from a Cursor terminal)', () => {
+      expect(detectCallerAgent(env({ PI_CODING_AGENT: 'true', CURSOR_TRACE_ID: 't' }))).toBe('pi');
+    });
+
+    it('prefers pi over claude when both markers are set (pi launched from a Claude Code terminal)', () => {
+      expect(detectCallerAgent(env({ PI_CODING_AGENT: 'true', CLAUDECODE: '1' }))).toBe('pi');
+    });
+
+    it('prefers opencode over pi when both markers are set', () => {
+      expect(detectCallerAgent(env({ PI_CODING_AGENT: 'true', OPENCODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers antigravity over pi when both markers are set', () => {
+      expect(detectCallerAgent(env({ PI_CODING_AGENT: 'true', ANTIGRAVITY_AGENT: '1' }))).toBe(
+        'antigravity',
+      );
+    });
+
+    it('detects opencode when only its marker is set', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers opencode over cursor when both markers are set (opencode launched from a Cursor terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CURSOR_TRACE_ID: 't' }))).toBe('opencode');
+    });
+
+    it('prefers opencode over claude when both markers are set (opencode launched from a Claude Code terminal)', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', CLAUDECODE: '1' }))).toBe('opencode');
+    });
+
+    it('prefers antigravity over opencode when both markers are set', () => {
+      expect(detectCallerAgent(env({ OPENCODE: '1', ANTIGRAVITY_AGENT: '1' }))).toBe('antigravity');
     });
 
     it('prefers antigravity over claude and cursor when Antigravity and Claude markers are set', () => {

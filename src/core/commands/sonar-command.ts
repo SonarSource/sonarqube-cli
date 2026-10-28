@@ -40,7 +40,7 @@ import {
 } from '@/core/commands/stage.ts';
 import logger from '@/core/observability/logger.ts';
 import { isResult, type ResultAsync } from '@/core/result.ts';
-import { loadState, saveState } from '@/core/state/state-manager.ts';
+import { loadState, updateState } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
@@ -353,9 +353,10 @@ export class SonarCommand extends Command {
    * `arguments` telemetry field. Only this command's own declared options and
    * arguments are considered — never a parent's or a child's.
    *
-   * Never records a free-form value: a `.choices()`-restricted option is
-   * rendered as `--flag=value`, everything else (boolean flags, free-valued
-   * options, positional arguments) by name only. `null` when nothing was used.
+   * Never records a free-form value: a `.choices()`-restricted option or
+   * positional argument is rendered as `--flag=value` / `name=value`, everything
+   * else (boolean flags, free-valued options and positionals) by name only.
+   * `null` when nothing was used.
    */
   describeInvocationArguments(): string | null {
     const tokens: string[] = [];
@@ -372,7 +373,9 @@ export class SonarCommand extends Command {
 
     this.registeredArguments.forEach((argument, index) => {
       if (index < this.args.length) {
-        tokens.push(argument.name());
+        tokens.push(
+          argument.argChoices ? `${argument.name()}=${this.args[index]}` : argument.name(),
+        );
       }
     });
 
@@ -742,13 +745,13 @@ export class SonarCommand extends Command {
     }
 
     this._console.info(message, 'stderr');
-    state.config.betaCommandWarnings = {
-      ...state.config.betaCommandWarnings,
-      [warningKey]: VERSION,
-    };
-
     try {
-      saveState(state);
+      updateState((latest) => {
+        latest.config.betaCommandWarnings = {
+          ...latest.config.betaCommandWarnings,
+          [warningKey]: VERSION,
+        };
+      });
     } catch (err) {
       logger.debug(`Failed to persist Beta command warning: ${(err as Error).message}`);
     }

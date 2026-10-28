@@ -22,23 +22,20 @@ import { join } from 'node:path';
 
 import { CONTEXT_AUGMENTATION_TOOL_MATCHER } from '@/commands/hook/context-augmentation-hook-subscriber.ts';
 import type {
+  FeatureAvailability,
   FeatureContainer,
-  InstallDecision,
   IntegrationContext,
   IntegrationDeclaration,
   IntegrationInvocation,
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { install, jsonPatch, skip, wholeFile } from '@/core/framework/features';
+import { jsonPatch, wholeFile } from '@/core/framework/features';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
-import {
-  SECRETS_COMBINED_FEATURE_BENEFIT,
-  SECRETS_COMBINED_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -66,8 +63,10 @@ import {
   VORTEX_FEATURE_ID,
 } from '../_common/vortex.ts';
 import type { ClaudeHookSubfeature } from './hook-container-feature.ts';
-import { createPostToolUseDispatchResources } from './hook-container-feature.ts';
-import { CLAUDE_PROJECT_DIR_PLACEHOLDER } from './hooks.ts';
+import {
+  CLAUDE_PROJECT_DIR_PLACEHOLDER,
+  createPostToolUseDispatchResources,
+} from './hook-container-feature.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
@@ -81,15 +80,13 @@ export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
 export const CLAUDE_HOOKS_CONFIG_RESOURCE_ID = 'claude-hooks-config';
 const CLAUDE_DISPLAY_NAME = 'Claude Code';
 
-export interface ClaudeIntegrationOptions extends IntegrateAgentOptions {
-  globalSecretsHookExists?: boolean;
-}
+export type ClaudeIntegrationOptions = IntegrateAgentOptions;
 
 const sqaaPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
   id: 'sqaa-posttooluse',
   displayName: 'Vortex analysis',
   matcher: 'Edit|Write',
-  shouldInstall: () => install(),
+  required: true,
 };
 
 const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> = {
@@ -97,7 +94,8 @@ const cagPostToolUseSubfeature: ClaudeHookSubfeature<ClaudeIntegrationOptions> =
   displayName: 'Vortex context augmentation hook',
   matcher: CONTEXT_AUGMENTATION_TOOL_MATCHER,
   dependencies: [contextAugmentationBinaryDependency],
-  shouldInstall: (invocation) => shouldInstallCagHook(invocation),
+  required: true,
+  isAvailable: (invocation) => isCagHookAvailable(invocation),
   migrationEligible: isCagHookAllowedForAttrs,
 };
 
@@ -152,11 +150,9 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   features: [
     createSonarSecretsHooksFeature({
       agentDisplayName: 'Claude',
-      integrationId: CLAUDE_INTEGRATION_ID,
       configDir: CLAUDE_CONFIG_DIR,
       hooksConfigFileName: SETTINGS_FILE,
       hooksPatchId: 'claude-settings-secrets-hooks',
-      benefitDescription: SECRETS_COMBINED_FEATURE_BENEFIT,
       previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
       projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
       scripts: [
@@ -208,17 +204,10 @@ function isCagHookAllowedForAttrs(
   return isCagHookOrgAllowed(orgKey);
 }
 
-function shouldInstallCagHook(
+function isCagHookAvailable(
   invocation: IntegrationInvocation<ClaudeIntegrationOptions>,
-): InstallDecision {
-  // The allowlist only withholds a new install; it never tears an existing hook down.
-  if (
-    invocation.options.vortexDisposition === 'install' &&
-    !isCagHookAllowedForAttrs(invocation.attrs)
-  ) {
-    return skip();
-  }
-  return install();
+): FeatureAvailability {
+  return { available: isCagHookAllowedForAttrs(invocation.attrs) };
 }
 
 function createCagHookConfigResource(): ResourceDeclaration {
@@ -255,8 +244,9 @@ function createSessionStartHookEntry(
 function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
   return {
     id: CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
-    displayName: 'Vortex context augmentation hook',
-    shouldInstall: (invocation) => shouldInstallCagHook(invocation),
+    displayName: 'Vortex context augmentation failure hook',
+    required: true,
+    isAvailable: (invocation) => isCagHookAvailable(invocation),
     migrationEligible: isCagHookAllowedForAttrs,
     dependencies: [contextAugmentationBinaryDependency],
     resources: [

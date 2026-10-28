@@ -20,7 +20,6 @@
 
 // Centralized auth resolver - resolves token + serverUrl from env vars, state, or keychain
 
-import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getToken } from '@/core/host/keychain.ts';
 import { okAsync, ResultAsync } from '@/core/result.ts';
@@ -28,8 +27,17 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { SONARCLOUD_URL } from '../config-constants.ts';
 import logger from '../observability/logger.ts';
+import {
+  INVALID_SERVER_URL_MESSAGE,
+  invalidCloudServerUrlMessage,
+  isValidCloudServerUrl,
+  isValidServerUrl,
+} from '../server/server-url-validation.ts';
 import { getActiveConnection } from '../state/state-manager.ts';
 import { loadState } from '../state/state-repository.ts';
+import { resolveTelemetryIdentity } from '../telemetry/identity-fetch.ts';
+
+export { isValidServerUrl } from '../server/server-url-validation.ts';
 
 // Re-exported for backward compatibility (lives in server/sonarcloud-region.ts to avoid an import cycle).
 export {
@@ -43,30 +51,25 @@ export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';
 export const ENV_ORG = 'SONARQUBE_CLI_ORG';
 
-export function isValidServerUrl(serverUrl: string): boolean {
-  if (/[\u0000-\u001F\u007F]/.test(serverUrl)) {
-    return false;
-  }
-
-  try {
-    const url = new URL(serverUrl);
-    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export function assertValidServerUrl(serverUrl: string, remediationHint: string): void {
   if (isValidServerUrl(serverUrl)) {
     return;
   }
-  throw new CommandFailedError(
-    'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters.',
-    {
-      exitCode: 2,
-      remediationHint,
-    },
-  );
+  throw new CommandFailedError(INVALID_SERVER_URL_MESSAGE, {
+    exitCode: 2,
+    remediationHint,
+  });
+}
+
+export function assertValidCloudServerUrl(serverUrl: string, remediationHint: string): void {
+  assertValidServerUrl(serverUrl, remediationHint);
+  if (isValidCloudServerUrl(serverUrl)) {
+    return;
+  }
+  throw new CommandFailedError(invalidCloudServerUrlMessage(), {
+    exitCode: 2,
+    remediationHint,
+  });
 }
 
 export type ResolvedAuthSource = 'env' | 'state';
@@ -135,8 +138,8 @@ export class AuthResolver {
   private async resolveOnce(options: ResolveAuthOptions): Promise<ResolvedAuth | null> {
     const envAuth = this.resolveFromEnv(options);
     if (envAuth) {
-      await recordConnectionFromAuth(envAuth, { envOnly: true }).catch((err: unknown) => {
-        logger.debug(`Failed to record env-var connection in state: ${(err as Error).message}`);
+      await resolveTelemetryIdentity(envAuth).catch((err: unknown) => {
+        logger.debug(`Failed to resolve env-var telemetry identity: ${(err as Error).message}`);
       });
       return envAuth;
     }
@@ -152,7 +155,10 @@ export class AuthResolver {
     if (envToken && envOrg) {
       logger.debug('Using environment variable authentication (SQC)');
       if (envServer) {
-        assertValidServerUrl(envServer, `Set ${ENV_SERVER} to an HTTP(S) URL with a host.`);
+        assertValidCloudServerUrl(
+          envServer,
+          `Set ${ENV_SERVER} to the SonarQube Cloud URL for your region.`,
+        );
       }
       return new ResolvedAuth({
         token: envToken,
@@ -210,12 +216,19 @@ export class AuthResolver {
     const orgKey = connection.orgKey;
     const connectionType = connection.type;
 
+    if (connectionType === 'cloud') {
+      assertValidCloudServerUrl(
+        serverUrl,
+        "Run 'sonar auth logout', then 'sonar auth login' with a SonarQube Cloud URL.",
+      );
+    }
+
     if (connectionType === 'cloud' && orgKey === undefined) {
       return null;
     }
 
     // Look up token in keychain
-    const token = await getToken(serverUrl, orgKey);
+    const token = await getToken(serverUrl);
     if (token) {
       return new ResolvedAuth({ token, serverUrl, orgKey, connectionType, source: 'state' });
     }

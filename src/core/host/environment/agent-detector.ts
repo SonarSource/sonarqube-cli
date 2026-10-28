@@ -23,7 +23,8 @@
  * Best-effort: hook subprocesses often omit variables present in the agent's integrated terminal.
  */
 
-export type CallerAgent = 'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity';
+export type CallerAgent =
+  'cursor' | 'claude' | 'copilot' | 'codex' | 'antigravity' | 'opencode' | 'devin' | 'pi';
 
 /** Cursor IDE / agent terminal markers. */
 export function isCursorAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -61,15 +62,43 @@ export function isCodexAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 /**
- * Precedence: Codex > Copilot CLI > Antigravity > Claude Code > Cursor.
- * Antigravity sets Claude-compat env vars, so it must be checked before Claude.
+ * OpenCode marker. The CLI sets `OPENCODE` in the process env for its entire lifetime (its own
+ * middleware sets it, alongside a generic `AGENT` flag too easily set by unrelated tools to be a
+ * reliable marker on its own).
+ */
+export function isOpenCodeAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.OPENCODE);
+}
+
+export function isPiAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.PI_CODING_AGENT);
+}
+
+/**
+ * Devin CLI marker, documented as set in the environment of every hook Devin runs. Devin also runs
+ * Claude's hook files, so those hooks execute with this variable set.
+ */
+export function isDevinAgentEnv(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.DEVIN_PROJECT_DIR);
+}
+
+/**
+ * Precedence: Codex > Copilot CLI > Devin > Antigravity > OpenCode > Pi > Claude Code > Cursor.
+ * Antigravity sets Claude-compat env vars, and Devin runs Claude's hook files, so both must be
+ * checked before Claude. OpenCode's `OPENCODE` and Pi's `PI_CODING_AGENT` markers are checked
+ * before Claude's and Cursor's generic integrated-terminal markers (`CLAUDE_PROJECT_DIR`,
+ * `CURSOR_TRACE_ID`, ...), which those agents inherit when launched from inside a Claude Code or
+ * Cursor terminal and would otherwise misattribute the caller.
  *
  * @param env - Defaults to `process.env`; inject a custom object for tests.
  */
 export function detectCallerAgent(env: NodeJS.ProcessEnv = process.env): CallerAgent | null {
   if (isCodexAgentEnv(env)) return 'codex';
   if (isCopilotCliAgentEnv(env)) return 'copilot';
+  if (isDevinAgentEnv(env)) return 'devin';
   if (isAntigravityAgentEnv(env)) return 'antigravity';
+  if (isOpenCodeAgentEnv(env)) return 'opencode';
+  if (isPiAgentEnv(env)) return 'pi';
   if (isClaudeCodeAgentEnv(env)) return 'claude';
   if (isCursorAgentEnv(env)) return 'cursor';
   return null;

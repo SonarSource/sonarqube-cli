@@ -37,7 +37,7 @@ import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-arti
 import type { RecordedRequest } from './types.js';
 
 const ARTIFACT_FILENAME_PATTERN = new RegExp(
-  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.exe|` +
+  String.raw`^((${SECRETS_BINARY_NAME}|${SCA_SCANNER_BINARY_NAME})-.*\.(exe|bin)|` +
     String.raw`${CONTEXT_AUGMENTATION_BINARY_NAME}-.*\.tar\.gz)(\.asc)?$`,
 );
 

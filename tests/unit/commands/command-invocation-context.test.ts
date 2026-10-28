@@ -127,6 +127,18 @@ describe('CommandInvocationContext stage accessors', () => {
   });
 });
 
+describe('CommandInvocationContext command metadata', () => {
+  it('stores the agent session id', () => {
+    const context = ctx();
+
+    expect(context.currentAgentSessionId()).toBeNull();
+
+    context.setAgentSessionId('cursor-session');
+
+    expect(context.currentAgentSessionId()).toBe('cursor-session');
+  });
+});
+
 type AuthResolverInternals = AuthResolver & {
   resolveFromState: () => Promise<ResolvedAuth | null>;
 };

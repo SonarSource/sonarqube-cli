@@ -19,7 +19,7 @@
  */
 
 // Currently not supported in Antigravity or Cursor subagents
-export type SessionStartAgent = 'claude' | 'codex' | 'copilot' | 'cursor';
+export type SessionStartAgent = 'claude' | 'codex' | 'copilot' | 'cursor' | 'devin' | 'pi';
 
 /** Normalized payload (what the pipeline needs) */
 export interface SessionStartInput {
@@ -31,6 +31,7 @@ export interface SessionStartInput {
 /** Normalized output (what the pipeline resolved) */
 export interface SessionStartOutput {
   additionalContext: string;
+  userMessage?: string;
 }
 
 export interface SessionStartAgentAdapter {

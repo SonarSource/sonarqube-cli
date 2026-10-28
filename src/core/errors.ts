@@ -32,6 +32,21 @@ export class NetworkConfigError extends Error {
   }
 }
 
+export class ProjectOrganizationError extends Error {
+  constructor(
+    readonly projectKey: string,
+    readonly expectedOrganization: string,
+    readonly actualOrganization?: string,
+  ) {
+    super(
+      actualOrganization
+        ? `Project '${projectKey}' belongs to organization '${actualOrganization}', but the active organization is '${expectedOrganization}'.`
+        : `Project '${projectKey}' could not be found or is not accessible.`,
+    );
+    this.name = 'ProjectOrganizationError';
+  }
+}
+
 export class CryptographicError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);

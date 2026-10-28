@@ -150,7 +150,7 @@ const PLACEHOLDER_CTA_INDENT = '  ';
 const PLACEHOLDER_CTA_ACTION = 'Learn more:';
 
 function formatPlaceholderLines(row: StatsPlaceholderRow, labelWidth: number): string[] {
-  const base = `${row.label.padEnd(labelWidth)}  ${dim('—')}  ${dim(row.message)}`;
+  const base = `${row.label.padEnd(labelWidth)}  ${dim('-')}  ${dim(row.message)}`;
   if (!row.ctaUrl) return [base];
   const ctaLabel = dim(`→ ${PLACEHOLDER_CTA_ACTION}`);
   return [base, `${PLACEHOLDER_CTA_INDENT}${ctaLabel} ${softBlue(row.ctaUrl)}`];

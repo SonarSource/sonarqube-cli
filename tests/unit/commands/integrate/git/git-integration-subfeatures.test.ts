@@ -62,78 +62,49 @@ const CLOUD_AUTH = new ResolvedAuth({
 });
 
 describe('createSecretsSubfeature', () => {
-  it('always installs with an explanatory message', () => {
-    const sub = createSecretsSubfeature();
-    expect(sub.shouldInstall!(makeInvocation())).toMatchObject({
-      action: 'install',
-      message: 'Secrets scan is required for other hook types and is enabled by default',
-    });
+  it('is required, so it is never prompted', () => {
+    expect(createSecretsSubfeature().required).toBe(true);
   });
 });
 
 describe('createDepRisksSubfeature', () => {
   describe('with auth', () => {
-    let checkScaEnabledSpy: ReturnType<typeof spyOn>;
+    let getScaEnablementSpy: ReturnType<typeof spyOn>;
 
     beforeEach(() => {
-      checkScaEnabledSpy = spyOn(ScaClient.prototype, 'checkScaEnabled');
+      getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement');
     });
 
     afterEach(() => {
-      checkScaEnabledSpy.mockRestore();
+      getScaEnablementSpy.mockRestore();
     });
 
-    it('skips with SCA unavailability message when SCA is not enabled on the connection', async () => {
-      checkScaEnabledSpy.mockReturnValue(okAsync(false));
+    it('is unavailable with the SCA unavailability reason when SCA is not enabled on the connection', async () => {
+      getScaEnablementSpy.mockReturnValue(okAsync('not_enabled'));
+      const sub = createDepRisksSubfeature();
+      const availability = await sub.isAvailable!(
+        makeInvocation({ options: { project: 'my-project' }, auth: CLOUD_AUTH }),
+      );
+      expect(availability.available).toBe(false);
+      expect(availability.unavailableReason).toContain(
+        'Software Composition Analysis is not available for the current connection.',
+      );
+    });
+
+    it('is available when SCA is enabled, with or without a project key', async () => {
+      getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
       const sub = createDepRisksSubfeature();
       expect(
-        await sub.shouldInstall!(
+        await sub.isAvailable!(
           makeInvocation({ options: { project: 'my-project' }, auth: CLOUD_AUTH }),
         ),
-      ).toMatchObject({
-        action: 'skip',
-        message: 'Software Composition Analysis is not available for the current connection.',
+      ).toEqual({ available: true });
+      expect(await sub.isAvailable!(makeInvocation({ auth: CLOUD_AUTH }))).toEqual({
+        available: true,
       });
-    });
-
-    it('asks when a project key is set', async () => {
-      checkScaEnabledSpy.mockReturnValue(okAsync(true));
-      const sub = createDepRisksSubfeature();
-      expect(
-        await sub.shouldInstall!(
-          makeInvocation({ options: { project: 'my-project' }, auth: CLOUD_AUTH }),
-        ),
-      ).toMatchObject({ action: 'ask' });
-    });
-
-    it('asks for project scope without a project key (project-agnostic)', async () => {
-      checkScaEnabledSpy.mockReturnValue(okAsync(true));
-      const sub = createDepRisksSubfeature();
-      expect(await sub.shouldInstall!(makeInvocation({ auth: CLOUD_AUTH }))).toMatchObject({
-        action: 'ask',
-      });
-    });
-
-    it('asks for global scope without a project key (project-agnostic)', async () => {
-      checkScaEnabledSpy.mockReturnValue(okAsync(true));
-      const sub = createDepRisksSubfeature();
-      expect(
-        await sub.shouldInstall!(makeInvocation({ scope: 'global', auth: CLOUD_AUTH })),
-      ).toMatchObject({ action: 'ask' });
-    });
-
-    it('still asks when invoked non-interactively — resolveAskDecision() applies the auto-install default', async () => {
-      checkScaEnabledSpy.mockReturnValue(okAsync(true));
-      const sub = createDepRisksSubfeature();
-      expect(
-        await sub.shouldInstall!(
-          makeInvocation({
-            options: { project: 'my-project' },
-            nonInteractive: true,
-            auth: CLOUD_AUTH,
-          }),
-        ),
-      ).toMatchObject({ action: 'ask' });
+      expect(await sub.isAvailable!(makeInvocation({ scope: 'global', auth: CLOUD_AUTH }))).toEqual(
+        { available: true },
+      );
     });
   });
 });

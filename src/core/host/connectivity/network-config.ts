@@ -21,9 +21,12 @@
 import { readFileSync } from 'node:fs';
 import { rootCertificates } from 'node:tls';
 
+import { getConfigValue } from '@/core/config/config-repository.ts';
+import type { ConfigKey } from '@/core/config/config-schema.ts';
 import { isPkcs12Path, pkcs12ToPem } from '@/core/host/crypto/pkcs12.ts';
 
 import { NetworkConfigError } from '../../errors.ts';
+import logger from '../../observability/logger.ts';
 import { createRedactedUrl } from '../redacted-url.ts';
 import type {
   CaCertConfig,
@@ -36,12 +39,27 @@ import type {
   TlsConfig,
 } from './types.ts';
 
+// --- Stored config ---
+
+// Stored settings are optional, so an unreadable store (e.g. no keychain) must not break networking.
+async function fromStored(key: ConfigKey): Promise<SourcedValue<string> | null> {
+  try {
+    const val = await getConfigValue(key);
+    return val ? { value: val, source: 'stored-config', explicit: true } : null;
+  } catch (err) {
+    logger.debug(
+      `Ignoring stored config '${key}': ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+}
+
 // --- Proxy group ---
 // proxyHttps, proxyHttp, and noProxy are resolved as a unit: the highest-priority
 // entry in PROXY_CONFIGS that has at least one proxy value wins, and all three
 // fields come from it. A standalone noProxy entry cannot elevate an entry on its own.
 
-type EnvLookup = (env: NodeJS.ProcessEnv, varName: string) => string | undefined;
+type EnvLookup = (env: NodeJS.ProcessEnv, varName: string) => Promise<string | undefined>;
 
 interface ProxyEnvVars {
   httpsVar: string;
@@ -61,32 +79,40 @@ const PROXY_CONFIGS: Array<SourcedValue<ProxyEnvVars>> = [
       httpsVar: 'SONAR_HTTPS_PROXY_URL',
       httpVar: 'SONAR_HTTP_PROXY_URL',
       noProxyVar: 'SONAR_NO_PROXY',
-      lookup: (env, name) => env[name],
+      lookup: (env, name) => Promise.resolve(env[name]),
     },
     source: 'sonar-env',
     explicit: true,
   },
-  // stored-config slot added here when sonar config is wired
+  {
+    value: {
+      httpsVar: 'network.proxy.https',
+      httpVar: 'network.proxy.http',
+      noProxyVar: 'network.proxy.noProxy',
+      lookup: async (_env, key) => (await fromStored(key as ConfigKey))?.value,
+    },
+    source: 'stored-config',
+    explicit: true,
+  },
   {
     value: {
       httpsVar: 'HTTPS_PROXY',
       httpVar: 'HTTP_PROXY',
       noProxyVar: 'NO_PROXY',
-      lookup: getCaseVariantEnv,
+      lookup: (env, name) => Promise.resolve(getCaseVariantEnv(env, name)),
     },
     source: 'generic-env',
     explicit: false,
   },
 ];
 
-function resolveProxyGroup(env: NodeJS.ProcessEnv): ProxyGroup | null {
+async function resolveProxyGroup(env: NodeJS.ProcessEnv): Promise<ProxyGroup | null> {
   for (const {
     value: { httpsVar, httpVar, noProxyVar, lookup },
     source,
     explicit,
   } of PROXY_CONFIGS) {
-    const httpsVal = lookup(env, httpsVar);
-    const httpVal = lookup(env, httpVar);
+    const [httpsVal, httpVal] = await Promise.all([lookup(env, httpsVar), lookup(env, httpVar)]);
     if (!httpsVal && !httpVal) {
       continue;
     }
@@ -96,7 +122,7 @@ function resolveProxyGroup(env: NodeJS.ProcessEnv): ProxyGroup | null {
       explicit,
       proxyHttps: httpsVal ? createRedactedUrl(httpsVal) : null,
       proxyHttp: httpVal ? createRedactedUrl(httpVal) : null,
-      noProxy: lookup(env, noProxyVar) ?? null,
+      noProxy: (await lookup(env, noProxyVar)) ?? null, // NOSONAR: sequential by design, stops at the highest-priority source to avoid needless keychain reads
     };
   }
   return null;
@@ -104,10 +130,10 @@ function resolveProxyGroup(env: NodeJS.ProcessEnv): ProxyGroup | null {
 
 // --- CA cert (resolves independently) ---
 
-function resolveCaCert(env: NodeJS.ProcessEnv): CaCertConfig | null {
+async function resolveCaCert(env: NodeJS.ProcessEnv): Promise<CaCertConfig | null> {
   const resolved =
     fromEnv(env, 'SONAR_CA_CERT', 'sonar-env') ??
-    // stored-config slot added here when sonar config is wired
+    (await fromStored('network.tls.caCert')) ??
     fromEnv(env, 'NODE_EXTRA_CA_CERTS', 'generic-env');
   if (!resolved) {
     return null;
@@ -128,7 +154,7 @@ function fromEnv(
   return val ? { value: val, source, explicit: source !== 'generic-env' } : null;
 }
 
-// --- Client cert (sonar-env only, no generic-env fallback) ---
+// --- Client cert (no generic-env fallback) ---
 
 function readClientCertFile(filePath: string, label: string): Buffer;
 function readClientCertFile(filePath: string, label: string, encoding: BufferEncoding): string;
@@ -147,20 +173,26 @@ function readClientCertFile(
   }
 }
 
-function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
-  const certPath = env.SONAR_TLS_CLIENT_CERT;
-  if (!certPath) {
+async function resolveClientCert(env: NodeJS.ProcessEnv): Promise<ClientCertConfig | null> {
+  const cert =
+    fromEnv(env, 'SONAR_TLS_CLIENT_CERT', 'sonar-env') ??
+    (await fromStored('network.tls.clientCert'));
+  if (!cert) {
     return null;
   }
 
-  const passphrase = env.SONAR_TLS_CLIENT_PASSPHRASE;
+  const { value: certPath, source, explicit } = cert;
+  const passphrase = (
+    fromEnv(env, 'SONAR_TLS_CLIENT_PASSPHRASE', 'sonar-env') ??
+    (await fromStored('network.tls.clientPassphrase'))
+  )?.value;
 
   if (isPkcs12Path(certPath)) {
     const p12Buffer = readClientCertFile(certPath, 'client certificate');
     const { cert: resolvedCertPem, key: resolvedKeyPem } = pkcs12ToPem(p12Buffer, passphrase);
     return {
-      source: 'sonar-env',
-      explicit: true,
+      source,
+      explicit,
       format: 'pkcs12',
       certPath,
       keyPath: null,
@@ -170,16 +202,19 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
     };
   }
 
-  const keyPath = env.SONAR_TLS_CLIENT_KEY_FILE;
+  const keyPath = (
+    fromEnv(env, 'SONAR_TLS_CLIENT_KEY_FILE', 'sonar-env') ??
+    (await fromStored('network.tls.clientKey'))
+  )?.value;
   if (!keyPath) {
     throw new NetworkConfigError(
-      'SONAR_TLS_CLIENT_KEY_FILE is required when SONAR_TLS_CLIENT_CERT is not a .p12 or .pfx file',
+      'A client key file (SONAR_TLS_CLIENT_KEY_FILE or network.tls.clientKey) is required when the client certificate is not a .p12 or .pfx file',
     );
   }
 
   return {
-    source: 'sonar-env',
-    explicit: true,
+    source,
+    explicit,
     format: 'pem',
     certPath,
     keyPath,
@@ -191,30 +226,33 @@ function resolveClientCert(env: NodeJS.ProcessEnv): ClientCertConfig | null {
 
 // --- Resolver ---
 
-export function resolveNetworkConfig(env: NodeJS.ProcessEnv = process.env): ResolvedNetworkConfig {
-  const proxy = resolveProxyGroup(env);
-  const caCert = resolveCaCert(env);
-  let clientCert: ClientCertConfig | null = null;
+export async function resolveNetworkConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ResolvedNetworkConfig> {
   let error: string | undefined;
-  try {
-    clientCert = resolveClientCert(env);
-  } catch (err) {
-    error = err instanceof Error ? err.message : String(err);
-  }
+  const [proxy, caCert, clientCert] = await Promise.all([
+    resolveProxyGroup(env),
+    resolveCaCert(env),
+    resolveClientCert(env).catch((err: unknown) => {
+      error = err instanceof Error ? err.message : `Unknown error: ${JSON.stringify(err)}`;
+      return null;
+    }),
+  ]);
   return { proxy, caCert, clientCert, error };
 }
 
 // --- Singleton ---
 
-let cachedConfig: ResolvedNetworkConfig | undefined;
+// Caches the promise so concurrent callers share one resolution.
+let cachedConfig: Promise<ResolvedNetworkConfig> | undefined;
 
-export function getNetworkConfig(): ResolvedNetworkConfig {
+export function getNetworkConfig(): Promise<ResolvedNetworkConfig> {
   cachedConfig ??= resolveNetworkConfig();
   return cachedConfig;
 }
 
-export function getNetworkConfigOrThrow(): ResolvedNetworkConfig {
-  const config = getNetworkConfig();
+export async function getNetworkConfigOrThrow(): Promise<ResolvedNetworkConfig> {
+  const config = await getNetworkConfig();
   if (config.error !== undefined) {
     throw new NetworkConfigError(config.error);
   }
@@ -236,9 +274,10 @@ const DEFAULT_PORT_HTTP = 80;
  * Translates the resolved network config into all known env var names each binary may read,
  * regardless of which source (sonar-env, stored-config, generic-env) the config came from.
  */
-export function buildSubprocessNetworkEnv(
-  config: ResolvedNetworkConfig = getNetworkConfig(),
-): Record<string, string> {
+export async function buildSubprocessNetworkEnv(
+  resolvedConfig?: ResolvedNetworkConfig,
+): Promise<Record<string, string>> {
+  const config = resolvedConfig ?? (await getNetworkConfig());
   const env: Record<string, string> = {};
 
   if (config.proxy?.proxyHttps) {
@@ -270,10 +309,11 @@ export function buildSubprocessNetworkEnv(
 
 // --- Fetch options builder ---
 
-export function buildFetchNetworkOptions(
+export async function buildFetchNetworkOptions(
   url: string,
-  config: ResolvedNetworkConfig = getNetworkConfigOrThrow(),
-): FetchNetworkOptions {
+  resolvedConfig?: ResolvedNetworkConfig,
+): Promise<FetchNetworkOptions> {
+  const config = resolvedConfig ?? (await getNetworkConfigOrThrow());
   return {
     ...buildProxyOption(url, config),
     ...buildTlsOption(config),

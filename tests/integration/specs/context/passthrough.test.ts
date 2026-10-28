@@ -63,6 +63,21 @@ describe('sonar context passthrough', () => {
     await harness.dispose();
   });
 
+  it('keeps the context child exit code when it exits before reading its input', async () => {
+    const server = await harness.newFakeServer().start();
+    harness.withAuth(server.baseUrl(), 'expected-token', ORG_KEY);
+    harness.state().withContextAugmentationBinaryInstalled();
+
+    const result = await harness.runWithStdin(
+      'hook claude-post-tool-use-failure',
+      'input'.repeat(1_000_000),
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain('EPIPE');
+    expect(readInvocations(harness)).toHaveLength(1);
+  });
+
   it.each([
     [
       'forwards args verbatim and injects Sonar context env from auth',
@@ -100,14 +115,13 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'prefers the recorded project CAG connection over the active org',
+    'passes the active token with the recorded organization when it differs from the active org',
     async () => {
       const server = await harness.newFakeServer().start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'active-token', 'active-org');
       harness
         .state()
-        .withKeychainToken(serverUrl, 'project-token', ORG_KEY)
         .withContextAugmentationBinaryInstalled()
         .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
 
@@ -115,10 +129,35 @@ describe('sonar context passthrough', () => {
 
       expect(result.exitCode).toBe(0);
       const invocation = findInvocation(readInvocations(harness), ['status']);
-      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('project-token');
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('active-token');
       expect(invocation.env.SONAR_CONTEXT_URL).toBe(serverUrl);
       expect(invocation.env.SONAR_CONTEXT_ORGANIZATION).toBe(ORG_KEY);
       expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe(PROJECT_KEY);
+    },
+    { timeout: 30000 },
+  );
+
+  it.each([
+    ['the recorded org', ORG_KEY],
+    ['another org', 'active-org'],
+  ])(
+    'passes the active token for an equivalent recorded server URL when the active org is %s',
+    async (_source, activeOrg) => {
+      const server = await harness.newFakeServer().start();
+      const serverUrl = server.baseUrl();
+      const recordedUrl = `${serverUrl}/`;
+      harness.withAuth(serverUrl, 'active-token', activeOrg);
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedUrl);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['status']);
+      expect(invocation.env.SONAR_CONTEXT_TOKEN).toBe('active-token');
+      expect(invocation.env.SONAR_CONTEXT_URL).toBe(recordedUrl);
     },
     { timeout: 30000 },
   );
@@ -295,31 +334,10 @@ describe('sonar context passthrough', () => {
   );
 
   it(
-    'fails when the recorded project CAG connection has no token',
-    async () => {
-      const server = await harness.newFakeServer().start();
-      const serverUrl = server.baseUrl();
-      harness.withAuth(serverUrl, 'active-token', 'active-org');
-      harness
-        .state()
-        .withContextAugmentationBinaryInstalled()
-        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, serverUrl);
-
-      const result = await harness.run('context status');
-
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain('recorded Vortex Context connection');
-      expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
-    },
-    { timeout: 30000 },
-  );
-
-  it(
     'does not fall back to the active token when the recorded CAG URL has no token',
     async () => {
       const activeServer = await harness.newFakeServer().start();
-      const recordedServer = await harness.newFakeServer().start();
-      const recordedServerUrl = recordedServer.baseUrl();
+      const recordedServerUrl = 'http://recorded-sonar.example.test:9000';
       harness.withAuth(activeServer.baseUrl(), 'active-token', 'active-org');
       harness
         .state()
@@ -332,8 +350,69 @@ describe('sonar context passthrough', () => {
       expect(result.stderr).toContain(
         `Not authenticated for the recorded Vortex Context connection: ${recordedServerUrl} (${ORG_KEY}).`,
       );
-      expect(result.stderr).toContain('sonar auth login');
+      expect(result.stderr).toContain(`sonar auth login --server ${recordedServerUrl}`);
       expect(readInvocations(harness).some((i) => i.argv[0] === 'status')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'directs environment-authenticated users to match the recorded server before logging in',
+    async () => {
+      const activeServer = await harness.newFakeServer().start();
+      const recordedServer = await harness.newFakeServer().start();
+      const recordedServerUrl = recordedServer.baseUrl();
+      harness
+        .state()
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
+
+      const result = await harness.run('context status', {
+        extraEnv: {
+          SONARQUBE_CLI_TOKEN: 'environment-token',
+          SONARQUBE_CLI_SERVER: activeServer.baseUrl(),
+          SONARQUBE_CLI_ORG: 'active-org',
+        },
+      });
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`SONARQUBE_CLI_SERVER=${recordedServerUrl}`);
+      expect(result.stderr).toContain(`SONARQUBE_CLI_ORG=${ORG_KEY}`);
+      expect(result.stderr).toContain('with a matching SONARQUBE_CLI_TOKEN');
+      expect(result.stderr).toContain('unset SONARQUBE_CLI_TOKEN');
+      expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
+        false,
+      );
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'does not read a stored token for a recorded URL that differs from the active connection',
+    async () => {
+      const activeServer = await harness.newFakeServer().start();
+      const recordedServerUrl = 'http://recorded-sonar.example.test:9000';
+      harness.withAuth(activeServer.baseUrl(), 'active-token', ORG_KEY);
+      harness
+        .state()
+        .withKeychainToken(recordedServerUrl, 'stored-token')
+        .withContextAugmentationBinaryInstalled()
+        .withContextAugmentationSkill(harness.cwd.path, PROJECT_KEY, ORG_KEY, recordedServerUrl);
+
+      const result = await harness.run('context status');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(
+        'Not authenticated for the recorded Vortex Context connection',
+      );
+      expect(readInvocations(harness).some((invocation) => invocation.argv[0] === 'status')).toBe(
+        false,
+      );
+      expect(
+        readInvocations(harness).some(
+          (invocation) => invocation.env.SONAR_CONTEXT_TOKEN === 'stored-token',
+        ),
+      ).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -428,6 +507,95 @@ describe('sonar context passthrough', () => {
     },
     { timeout: 30000 },
   );
+
+  describe('in a multi-project workspace', () => {
+    let serverUrl: string;
+
+    beforeEach(async () => {
+      serverUrl = (await harness.newFakeServer().start()).baseUrl();
+      harness.withAuth(serverUrl, 'expected-token', ORG_KEY);
+      initGitRepo(harness.cwd.path);
+      harness.state().withContextAugmentationBinaryInstalled();
+      for (const path of ['services/api', 'services/api/v2', 'apps/web']) {
+        harness.cwd.writeFile(`${path}/.keep`, '');
+      }
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api', path: 'services/api', serverUrl },
+            { projectKey: 'api-v2', path: 'services/api/v2', serverUrl },
+            { projectKey: 'web', path: 'apps/web', serverUrl },
+          ],
+        }),
+      );
+    });
+
+    it('fails without invoking CAG and points at sonar link list', async () => {
+      const result = await harness.run('context compass get');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Could not determine a single SonarQube project for ${harness.cwd.path}.`,
+      );
+      expect(result.stderr).toContain(`3 projects are linked at or under ${harness.cwd.path}.`);
+      expect(result.stderr).toContain('sonar link list --path <path>');
+      expect(readInvocations(harness)).toEqual([]);
+    });
+
+    it('explains that nested project directories are not supported', async () => {
+      const result = await harness.run('context compass get', {
+        cwd: join(harness.cwd.path, 'services', 'api', 'v2'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('is inside 2 nested projects, which are not supported yet.');
+    });
+
+    it('fails without invoking CAG outside every linked project', async () => {
+      harness.cwd.writeFile('scripts/.keep', '');
+
+      const result = await harness.run('context compass get', {
+        cwd: join(harness.cwd.path, 'scripts'),
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('is not inside any project linked in .sonar-config.json.');
+      expect(result.stderr).toContain(
+        `Run 'sonar link list' from the repository root (${harness.cwd.path})`,
+      );
+      expect(readInvocations(harness)).toEqual([]);
+    });
+
+    it('forwards a command run from inside one project with that project', async () => {
+      const webRoot = join(harness.cwd.path, 'apps', 'web');
+
+      const result = await harness.run('context compass get', { cwd: webRoot });
+
+      expect(result.exitCode).toBe(0);
+      const invocation = findInvocation(readInvocations(harness), ['compass', 'get']);
+      expect(invocation.env.SONAR_CONTEXT_PROJECT).toBe('web');
+      expect(invocation.env.SONAR_CONTEXT_WORKSPACE_ROOT).toBe(webRoot);
+    });
+
+    it.each([['tool status'], ['__hook Claude'], ['compass --help'], ['compass get -h'], ['-V']])(
+      'still forwards "%s", which needs no project',
+      async (command) => {
+        const result = await harness.run(`context ${command}`);
+
+        expect(result.exitCode).toBe(0);
+        const invocation = findInvocation(readInvocations(harness), command.split(' '));
+        expect(invocation.env.SONAR_CONTEXT_PROJECT).toBeUndefined();
+      },
+    );
+
+    it('still forwards --version, which needs no project', async () => {
+      const result = await harness.run('context --version');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('sonar-context-augmentation 0.0.0-test');
+    });
+  });
 
   it(
     'fails with a helpful message when CAG is not installed and --help is requested',
