@@ -170,8 +170,9 @@ async function resolveOrganizationStep(
 }
 
 async function confirmSignInWithDifferentAccount(console: Console): Promise<boolean | null> {
-  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
-  return canPrompt && (await console.confirmPrompt('Sign in with a different account?', false));
+  return (
+    console.canPrompt() && (await console.confirmPrompt('Sign in with a different account?', false))
+  );
 }
 
 async function executeLoginStep(
