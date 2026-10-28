@@ -485,10 +485,108 @@ describe('sonar init', () => {
     );
 
     it(
-      'does not offer binding for a remote whose repository cannot be derived',
+      'creates a bound project for an Azure DevOps SSH remote',
       async () => {
         await signInToCloud(withImportableRepo('azure', 'project/repository'));
-        withRemote('https://org.visualstudio.com/project/_git/repository');
+        withRemote('git@ssh.dev.azure.com:v3/example/project/repository');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Created project');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'creates a bound project for a legacy visualstudio.com remote',
+      async () => {
+        await signInToCloud(withImportableRepo('azure', 'project/repository'));
+        withRemote('https://example.visualstudio.com/project/_git/repository');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Created project');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not offer binding on SonarQube Server and says why',
+      async () => {
+        const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN);
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Bind this repository');
+        expect(result.stderr).toContain('only available on SonarQube Cloud');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'waits for the DevOps platform authorization, then creates the bound project',
+      async () => {
+        await signInToCloud((server) =>
+          server
+            .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }])
+            .withDopRepositories(ORG, [
+              { id: 'repo-1', name: 'repository', slug: 'example/repository' },
+            ])
+            .withOrganizationBindingAppearingAfter(ORG, 'github', 1),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        await session.accept('Authorize it in the browser');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(`/organizations/${ORG}/edit?category=binding`);
+        expect(result.stdout).toContain('Created project');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'fails when the repository is not among those the DevOps platform lists',
+      async () => {
+        await signInToCloud((server) =>
+          server
+            .withOrganizations([
+              { key: ORG, name: ORG, alm: { key: 'github' }, actions: { admin: true } },
+            ])
+            .withDopRepositories(ORG, []),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('example/repository');
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not offer binding for a remote whose repository cannot be derived',
+      async () => {
+        await signInToCloud(withImportableRepo('github', 'example/repository'));
+        withRemote('https://github.com/example');
 
         const session = harness.runInteractive('init');
         const result = await session.waitFinish();

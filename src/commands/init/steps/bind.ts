@@ -36,8 +36,7 @@ import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
-import type { InitOutcome } from '../init-outcome.ts';
-import { remoteRepositorySlug } from '../remote-host.ts';
+import type { BoundNewOutcome, InitOutcome } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
@@ -77,19 +76,28 @@ async function authorizeOrganization(
   console.print(`Link the organization to your DevOps platform: ${url}`);
   await openBrowserWithFallback(url, console);
 
-  return console.withSpinner('Waiting for the authorization', async () => {
-    const deadline = Date.now() + AUTHORIZATION_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      const almKey = await resolveAlmKey(api, orgKey, undefined);
-      if (almKey) {
-        return almKey;
-      }
-      await pause(AUTHORIZATION_POLL_INTERVAL_MS);
-    }
+  return console.withSpinner('Waiting for the authorization', () =>
+    waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
+  );
+}
+
+/** Each check starts only after the previous one answered and the interval has passed. */
+async function waitForAlmKey(
+  api: ImportApiClient,
+  orgKey: string,
+  deadline: number,
+): Promise<string> {
+  const almKey = await resolveAlmKey(api, orgKey, undefined);
+  if (almKey) {
+    return almKey;
+  }
+  if (Date.now() >= deadline) {
     throw new CommandFailedError('Timed out waiting for the DevOps platform authorization.', {
       remediationHint: "Finish the authorization in the browser, then run 'sonar init' again.",
     });
-  });
+  }
+  await pause(AUTHORIZATION_POLL_INTERVAL_MS);
+  return waitForAlmKey(api, orgKey, deadline);
 }
 
 function shellArgument(value: string): string {
@@ -196,15 +204,9 @@ async function importRepository(
  * platform authorization.
  */
 export async function runBoundNew(
-  projectRoot: string,
-  remote: string,
+  { projectRoot, remote, repositorySlug }: BoundNewOutcome,
   { auth, console }: DetectDeps,
 ): Promise<InitOutcome> {
-  const slug = remoteRepositorySlug(remote);
-  if (slug === null) {
-    throw new CommandFailedError(`Cannot derive the repository name from the remote '${remote}'.`);
-  }
-
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
@@ -217,11 +219,11 @@ export async function runBoundNew(
 
   console.info(`Organization: ${org.key}`);
   const projectKey = await console.withSpinner('Creating the project', () =>
-    importRepository(api, auth, slug, { ...org, almKey }, new QuietConsole(console)),
+    importRepository(api, auth, repositorySlug, { ...org, almKey }, new QuietConsole(console)),
   );
 
   await writeMapping(auth, projectKey, projectRoot, console);
   console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
   await showAnalysisResults(http, projectKey, projectDashboardUrl(auth, projectKey), console);
-  return { path: 'bound-new', projectRoot, remote, projectKey };
+  return { path: 'bound-new', projectRoot, remote, repositorySlug, projectKey };
 }

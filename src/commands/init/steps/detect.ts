@@ -166,10 +166,18 @@ function otherOrganizationError(
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { console, interactive }: DetectDeps,
+  { auth, console, interactive }: DetectDeps,
 ): Promise<InitOutcome> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
-  if (remoteRepositorySlug(remote) === null) {
+  const repositorySlug = remoteRepositorySlug(remote);
+  if (repositorySlug === null) {
+    return { path: 'unbound-new', projectRoot, remote };
+  }
+  if (auth.connectionType !== 'cloud') {
+    console.info(
+      'Creating a bound project is only available on SonarQube Cloud for now.',
+      'stderr',
+    );
     return { path: 'unbound-new', projectRoot, remote };
   }
   if (!interactive) {
@@ -188,6 +196,6 @@ async function chooseNewProjectPath(
     throw new CommandFailedError('Onboarding cancelled.');
   }
   return bind
-    ? { path: 'bound-new', projectRoot, remote }
+    ? { path: 'bound-new', projectRoot, remote, repositorySlug }
     : { path: 'unbound-new', projectRoot, remote };
 }

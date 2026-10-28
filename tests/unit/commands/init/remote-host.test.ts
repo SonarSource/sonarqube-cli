@@ -55,6 +55,17 @@ describe('remoteRepositorySlug', () => {
     ['git@github.com:example/repository.git', 'example/repository'],
     ['github.com:example/repository.git', 'example/repository'],
     ['https://dev.azure.com/org/project/_git/repository', 'project/repository'],
+    ['https://org@dev.azure.com/org/project/_git/repository', 'project/repository'],
+    ['git@ssh.dev.azure.com:v3/org/project/repository', 'project/repository'],
+    ['ssh://git@ssh.dev.azure.com/v3/org/project/repository', 'project/repository'],
+    ['https://org.visualstudio.com/project/_git/repository', 'project/repository'],
+    [
+      'https://org.visualstudio.com/DefaultCollection/project/_git/repository',
+      'project/repository',
+    ],
+    ['org@vs-ssh.visualstudio.com:v3/org/project/repository', 'project/repository'],
+    ['https://dev.azure.com/org/project', null],
+    ['https://github.com/example', null],
     ['https://gitlab.com/example/repository.git', null],
     ['', null],
   ])('maps %s to %s', (remote, slug) => {

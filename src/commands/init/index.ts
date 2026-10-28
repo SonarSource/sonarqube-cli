@@ -33,9 +33,9 @@ export interface InitOptions {
 }
 
 /**
- * Signs in, resolves the organization, detects the project and reports the onboarding path.
- * It never runs the path, and keeps everything it completed: running it again resumes from
- * whatever is already in place.
+ * Signs in, resolves the organization, detects the project and selects the onboarding path.
+ * It runs `bound-new` and only reports the other paths. It keeps everything it completed:
+ * running it again resumes from whatever is already in place.
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
@@ -56,5 +56,5 @@ async function run(
   const auth = await resolveInitAuth(ctx, interactive);
   const deps = { auth, console: ctx.console, interactive };
   const outcome = await detectInitPath(projectRoot, deps);
-  return outcome.path === 'bound-new' ? runBoundNew(projectRoot, outcome.remote, deps) : outcome;
+  return outcome.path === 'bound-new' ? runBoundNew(outcome, deps) : outcome;
 }
