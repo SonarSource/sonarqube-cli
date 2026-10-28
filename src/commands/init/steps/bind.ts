@@ -34,6 +34,7 @@ import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-p
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import type { InitOutcome } from '../init-outcome.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
@@ -107,9 +108,14 @@ async function writeMapping(
   }
 }
 
+function projectDashboardUrl(auth: ResolvedAuth, projectKey: string): string {
+  return `${auth.serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
+}
+
 async function showAnalysisResults(
   api: SonarHttpClient,
   projectKey: string,
+  dashboardUrl: string,
   console: Console,
 ): Promise<void> {
   const status = await new QualityGatesClient(api).getProjectStatus({ projectKey }).match(
@@ -118,11 +124,37 @@ async function showAnalysisResults(
   );
   if (status === 'NONE') {
     console.print('No analysis results yet: the first analysis of the new project is pending.');
-    return;
+  } else {
+    console.print(
+      `Quality gate: ${status === 'OK' ? 'passed' : 'failed'}. See: sonar quality-gate status -p ${projectKey}`,
+    );
   }
-  console.print(
-    `Quality gate: ${status === 'OK' ? 'passed' : 'failed'}. See: sonar quality-gate status -p ${projectKey}`,
+  console.print(`Project dashboard: ${dashboardUrl}`);
+}
+
+/** Provisions the project for one repository through `sonar import`'s plan, and returns its key. */
+async function importRepository(
+  api: ImportApiClient,
+  auth: ResolvedAuth,
+  slug: string,
+  console: Console,
+): Promise<string> {
+  const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl).plan(
+    { repo: [slug], nonInteractive: true },
+    console,
   );
+  if (plan.selection.kind !== 'batch' || plan.selection.repos.length !== 1) {
+    const reason = plan.selection.kind === 'batch' ? plan.selection.skipped[0]?.reason : undefined;
+    const detail = reason ? `: ${reason}` : '.';
+    throw new CommandFailedError(`Repository '${slug}' cannot be imported${detail}`);
+  }
+  const projectKey = (await plan.importRepo(plan.selection.repos[0]))?.projectKey;
+  if (!projectKey) {
+    throw new CommandFailedError(
+      `Repository '${slug}' was imported, but no project key came back.`,
+    );
+  }
+  return projectKey;
 }
 
 /**
@@ -148,24 +180,13 @@ export async function runBoundNew(
     return { path: 'unbound-new', projectRoot, remote };
   }
 
-  const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl).plan(
-    { repo: [slug], nonInteractive: true },
-    console,
+  console.info(`Organization: ${org.key}`);
+  const projectKey = await console.withSpinner('Creating the project', () =>
+    importRepository(api, auth, slug, new QuietConsole(console)),
   );
-  if (plan.selection.kind !== 'batch' || plan.selection.repos.length !== 1) {
-    const reason = plan.selection.kind === 'batch' ? plan.selection.skipped[0]?.reason : undefined;
-    const detail = reason ? `: ${reason}` : '.';
-    throw new CommandFailedError(`Repository '${slug}' cannot be imported${detail}`);
-  }
-  const projectKey = (await plan.importRepo(plan.selection.repos[0]))?.projectKey;
-  if (!projectKey) {
-    throw new CommandFailedError(
-      `Repository '${slug}' was imported, but no project key came back.`,
-    );
-  }
 
   await writeMapping(auth, projectKey, projectRoot);
   console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
-  await showAnalysisResults(http, projectKey, console);
+  await showAnalysisResults(http, projectKey, projectDashboardUrl(auth, projectKey), console);
   return { path: 'bound-new', projectRoot, remote, projectKey };
 }

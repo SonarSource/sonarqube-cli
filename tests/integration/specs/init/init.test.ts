@@ -450,6 +450,9 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('bound to the new Sonar project');
+        expect(result.stdout).toContain(
+          'Project dashboard: https://sonarcloud.io/project/overview?id=',
+        );
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey"');
         expect(config).not.toContain(TOKEN);
