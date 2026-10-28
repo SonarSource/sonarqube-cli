@@ -26,13 +26,18 @@ import type {
   IntendedGroup,
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import type { ProjectDirective } from '@/commands/architecture/_common/directives.ts';
 
 export const FAKE_SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 
 const MODEL_NAMESPACE_RADIX = 16;
 const MODEL_SEQUENCE_LENGTH = 12;
 
-const RESOURCES = ['current-architectures', 'intended-architectures'] as const;
+const RESOURCES = [
+  'current-architectures',
+  'intended-architectures',
+  'project-directives',
+] as const;
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
 
@@ -73,6 +78,12 @@ interface ArchitectureRequest {
 export class FakeArchitecture {
   private readonly structure = new Map<Ecosystem, StructureGraph[]>();
   private models: SavedModel[] = [];
+  private directives: ProjectDirective[] = [];
+
+  withDirectives(directives: ProjectDirective[]): this {
+    this.directives = structuredClone(directives);
+    return this;
+  }
   private readonly patternGroups = new Map<string, SavedGroup[]>();
   private nextModelId = 1;
   private modelNamespace = '00000000';
@@ -209,8 +220,29 @@ export class FakeArchitecture {
     return this;
   }
 
+  private readonly deletedDirectiveIds = new Set<string>();
+
+  private directiveReads = 0;
+  private readonly directiveReadFailures = new Map<number, number>();
+
+  withDirectiveReadFailure(readNumber: number, status: number): this {
+    this.directiveReadFailures.set(readNumber, status);
+    return this;
+  }
+
+  private directiveDeleteReadResponse?: { status: number; body: string };
+
+  withDirectiveDeleteReadResponse(status: number, body: string): this {
+    this.directiveDeleteReadResponse = { status, body };
+    return this;
+  }
+
   hasModel(id: string): boolean {
-    return this.models.some((model) => model.id === id);
+    return (
+      this.models.some((model) => model.id === id) ||
+      this.directives.some((item) => item.id === id) ||
+      this.deletedDirectiveIds.has(id)
+    );
   }
 
   handle(resource: ArchitectureResource, request: ArchitectureRequest): Response {
@@ -220,6 +252,69 @@ export class FakeArchitecture {
     if (override) return json(override.body, override.status, false);
 
     switch (`${resource}:${request.method}`) {
+      case 'project-directives:GET': {
+        if (request.modelId) {
+          const failure = this.directiveReadFailures.get(++this.directiveReads);
+          if (failure !== undefined) return json({ message: 'Directive read failed' }, failure);
+          const directive = this.directives.find((item) => item.id === request.modelId);
+          return directive
+            ? json(exportDirective(directive))
+            : json({ message: 'Directive not found' }, 404);
+        }
+        const pageIndex = Number(request.query.pageIndex ?? 1);
+        const pageSize = Number(request.query.pageSize ?? 50);
+        return json({
+          projectDirectives: this.directives
+            .slice((pageIndex - 1) * pageSize, pageIndex * pageSize)
+            .map(exportDirective),
+          page: { pageIndex, pageSize, total: this.directives.length },
+        });
+      }
+      case 'project-directives:POST': {
+        if (request.contentType !== 'application/json')
+          return json({ message: 'POST requires application/json' }, 415);
+        let id: string;
+        do {
+          id = this.allocateModelId();
+        } while (this.directives.some((item) => item.id === id));
+        const directive = {
+          ...JSON.parse(request.body ?? '{}'),
+          id,
+        } as ProjectDirective;
+        this.directives.push(directive);
+        return json(exportDirective(directive), 201);
+      }
+
+      case 'project-directives:PATCH': {
+        if (request.contentType !== 'application/merge-patch+json')
+          return json({ message: 'Wrong content type' }, 415);
+        const index = this.directives.findIndex((item) => item.id === request.modelId);
+        if (index < 0) return json({ message: 'Directive not found' }, 404);
+        const body = JSON.parse(request.body ?? '{}');
+        if (
+          ['type', 'ecosystem', 'graphType', 'fromNodeKey', 'toNodeKey'].some(
+            (key) => typeof body[key] !== 'string',
+          )
+        )
+          return json({ message: 'Required structural fields are missing' }, 400);
+        this.directives[index] = { ...this.directives[index], ...body };
+        return json(exportDirective(this.directives[index]));
+      }
+      case 'project-directives:DELETE': {
+        const index = this.directives.findIndex((item) => item.id === request.modelId);
+        if (index < 0) return json({ message: 'Directive not found' }, 404);
+        this.deletedDirectiveIds.add(this.directives[index].id);
+        this.directives.splice(index, 1);
+        if (this.directiveDeleteReadResponse)
+          this.withStatus(
+            'project-directives',
+            this.directiveDeleteReadResponse.status,
+            this.directiveDeleteReadResponse.body,
+            'GET',
+          );
+        return new Response(null, { status: 204 });
+      }
+
       case 'current-architectures:GET': {
         const graphs = this.structure.get(request.query.language as Ecosystem) ?? [];
         return json({ currentArchitectures: graphs.map(({ id: _id, ...graph }) => graph) });
@@ -359,6 +454,15 @@ export class FakeArchitecture {
   }
 }
 
+function exportDirective(directive: ProjectDirective) {
+  return {
+    ...directive,
+    graphPerspective: directive.graphPerspective ?? null,
+    description: directive.description ?? null,
+    origin: directive.origin ?? null,
+  };
+}
+
 /** The export leaves out what only the models API knows. */
 function exportGroup({ groups, ...rest }: SavedGroup): IntendedGroup {
   return {
@@ -420,14 +524,15 @@ export function routeArchitectureRequest(
       : undefined;
     project = projects.find(({ key }) => projectId(key) === (query.projectId ?? bodyProjectId));
   }
-  if (!project) return json({ message: 'Unknown project, branch or model id' }, 400);
+  if (!project)
+    return json({ message: 'Unknown project, branch or model id' }, modelId ? 404 : 400);
   project.architecture ??= new FakeArchitecture().assignProjectIndex(projects.indexOf(project));
   return project.architecture.handle(resource, {
     method: request.method,
     query,
     body: request.body,
     modelId: modelId === undefined ? undefined : decodeURIComponent(modelId),
-    contentType: request.contentType,
+    contentType: request.contentType?.split(';')[0]?.trim().toLowerCase(),
   });
 }
 

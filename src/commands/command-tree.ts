@@ -22,6 +22,10 @@ import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import { ECOSYSTEMS } from '@/commands/architecture/_common/architecture-api.ts';
 import { DEFAULT_MAX_NODES } from '@/commands/architecture/_common/graph.ts';
+import {
+  type DirectivesReadOptions,
+  getDirectives as getArchitectureDirectives,
+} from '@/commands/architecture/directives/get/index.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -959,6 +963,19 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
+
+  const directives = architecture.command('directives').description('Read project directives');
+  directives
+    .command('get')
+    .description('Read a directive by id or list a page of visible project directives')
+    .option('--id <id>', 'Directive UUID; cannot be combined with pagination')
+    .option('-p, --project <project>', 'Project key')
+    .addOption(textFormatOption())
+    .option('--page <n>', 'Page number (default 1)', parseInteger)
+    .option('--page-size <n>', 'Items per page (default 50, maximum 1000)', parseInteger)
+    .authenticatedAction((ctx, options: DirectivesReadOptions) =>
+      getArchitectureDirectives(options, ctx),
+    );
 
   architecture
     .command('install-skill')
