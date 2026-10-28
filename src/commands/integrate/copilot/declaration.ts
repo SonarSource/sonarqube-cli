@@ -116,7 +116,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       dependencies: [sonarSecretsBinaryDependency],
       postInstallExample: secretsScanningExample(
         'Copilot',
-        '  Sonar will mask the token before the prompt reaches the agent.',
+        '  SonarQube will mask the token before the prompt reaches the agent.',
       ),
       resources: [
         wholeFile({
