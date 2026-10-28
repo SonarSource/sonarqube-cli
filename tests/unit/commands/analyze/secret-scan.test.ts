@@ -38,6 +38,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as secretsScanSettings from '@/core/secrets/scan-settings.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -71,6 +72,9 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let updateStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
+let loadScanSettingsSpy: ReturnType<typeof spyOn>;
+
+const DEFAULT_SCAN_ARGS = ['--max-file-size', String(MAX_SCANNED_FILE_SIZE)];
 
 beforeEach(() => {
   fake = new FakeConsole();
@@ -91,6 +95,10 @@ beforeEach(() => {
     binaryPath: '/fake/bin/sonar-secrets',
     freshlyInstalled: false,
   });
+  // Keeps the developer's own `secrets.*` config out of the asserted arguments.
+  loadScanSettingsSpy = spyOn(secretsScanSettings, 'loadSecretsScanSettings').mockResolvedValue(
+    secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+  );
 });
 
 afterEach(() => {
@@ -98,6 +106,7 @@ afterEach(() => {
   updateStateSpy.mockRestore();
   spawnSpy.mockRestore();
   resolveSecretsBinarySpy.mockRestore();
+  loadScanSettingsSpy.mockRestore();
 });
 
 // ─── Auth forwarding paths ────────────────────────────────────────────────────
@@ -175,8 +184,70 @@ describe('secretCheckCommand: auth forwarding', () => {
     expect(spawnCall[1]).toEqual([
       '--non-interactive',
       '--json',
+      ...DEFAULT_SCAN_ARGS,
       'src/index.ts',
       'src/lib/auth.ts',
+    ]);
+  });
+
+  it('passes the configured settings, with --exclude replacing the configured exclusions, ahead of the scanned paths', async () => {
+    loadScanSettingsSpy.mockResolvedValue({
+      ...secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+      maxFileSize: 0,
+      exclusions: ['/repo/fixtures'],
+      demoMode: true,
+    });
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets(
+        { paths: ['src'], exclude: ['src/vendor', '-odd-name'] },
+        FAKE_AUTHENTICATED_CONTEXT,
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      '--max-file-size',
+      '0',
+      '--exclude=src/vendor',
+      '--exclude=-odd-name',
+      '--demo-mode',
+      'src',
+    ]);
+  });
+
+  it('passes the configured exclusions when --exclude is not given', async () => {
+    loadScanSettingsSpy.mockResolvedValue({
+      ...secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+      exclusions: ['/repo/fixtures', '/repo/vendor'],
+    });
+    spawnSpy.mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ issues: [] }),
+      stderr: '',
+    });
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src'] }, FAKE_AUTHENTICATED_CONTEXT);
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--exclude=/repo/fixtures',
+      '--exclude=/repo/vendor',
+      'src',
     ]);
   });
 });
@@ -295,6 +366,17 @@ describe('secretCheckCommand: input validation', () => {
         'Either provide file/directory paths or --stdin',
       );
     }
+  });
+
+  it('throws InvalidOptionError when --exclude is combined with --stdin', async () => {
+    try {
+      await analyzeSecrets({ stdin: true, exclude: ['vendor'] }, FAKE_AUTHENTICATED_CONTEXT);
+      expect.unreachable('expected analyzeSecrets to throw');
+    } catch (e) {
+      expect(e).toBeInstanceOf(InvalidOptionError);
+      expect((e as InvalidOptionError).message).toBe('Cannot use --exclude with --stdin');
+    }
+    expect(spawnSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -566,7 +648,12 @@ describe('secretCheckCommand: stdin scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(spawnSpy.mock.calls[0][1]).toEqual(['--non-interactive', '--json', '--input']);
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--input',
+    ]);
 
     const successes = fake.calls
       .filter((c) => c.method === 'success')
@@ -597,7 +684,26 @@ describe('runSecretsBinaryOnText', () => {
   it('calls spawnProcess with --input and --json args', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'prompt text', FAKE_AUTH);
-    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input', '--json']);
+    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input', '--json', ...DEFAULT_SCAN_ARGS]);
+  });
+
+  it('passes the configured filter settings', async () => {
+    loadScanSettingsSpy.mockResolvedValue({
+      ...secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+      disableEntropyFilter: true,
+      disableKnownFakeSecretFilter: true,
+    });
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'prompt text', FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--input',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--disable-entropy-filter',
+      '--disable-known-fake-secret-filter',
+    ]);
   });
 
   it('passes text as stdinData', async () => {
@@ -631,6 +737,26 @@ describe('runSecretsBinaryOnStream', () => {
       '--input-batch',
       '--max-file-size',
       String(MAX_SCANNED_FILE_SIZE),
+    ]);
+  });
+
+  it('passes the configured size limit and test-file setting', async () => {
+    loadScanSettingsSpy.mockResolvedValue({
+      ...secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+      maxFileSize: 2048,
+      disableTestFileDetection: true,
+    });
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinaryOnStream('/fake/bin/sonar-secrets', emptyBatch(), FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      '--input-batch',
+      '--max-file-size',
+      '2048',
+      '--disable-test-file-detection',
     ]);
   });
 
