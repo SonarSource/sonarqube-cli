@@ -407,6 +407,31 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return directive;
   }
 
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.getDirective(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
+    const updated = parseProjectDirective(response);
+    const projectId = await this.projectId('Project directives');
+    if (
+      updated.id.toLowerCase() !== directiveId(id) ||
+      updated.projectId !== projectId ||
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
+    )
+      throw new CommandFailedError(
+        'The directive update response did not confirm the requested directive. Inspect it before retrying.',
+      );
+    return updated;
+  }
+
   private directivePath(id: string): string {
     return `${this.path('project-directives')}/${directiveId(id)}`;
   }
