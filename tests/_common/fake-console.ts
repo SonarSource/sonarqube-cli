@@ -47,6 +47,15 @@ function findUiCall(
 export class FakeConsole implements Console {
   readonly calls: UiCall[] = [];
   private readonly responses: unknown[] = [];
+  private promptable = true;
+
+  setCanPrompt(value: boolean): void {
+    this.promptable = value;
+  }
+
+  canPrompt(): boolean {
+    return this.promptable;
+  }
 
   /** Record a call under an arbitrary method name (progress widgets, etc.). */
   record(method: string, ...args: unknown[]): void {
