@@ -221,7 +221,7 @@ export async function confirmLargeChangeset(fileCount: number, console: Console)
     `You are about to analyze a large number of files (${fileCount}). This may take longer to process.\n${LARGE_CHANGESET_HINT}`,
   );
 
-  if (!process.stdin.isTTY && !process.env.SONARQUBE_CLI_MOCK_TTY) {
+  if (!console.canPrompt()) {
     return true;
   }
 
