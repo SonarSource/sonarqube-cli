@@ -94,6 +94,7 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './architecture/_common/read-options.ts';
 import { getCurrent as getCurrentArchitecture } from './architecture/current/get/index.ts';
+import { setProjectDirectives } from './architecture/directives/set/index.ts';
 import {
   installSkill as installArchitectureSkill,
   type InstallSkillOptions,
@@ -964,7 +965,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
 
-  const directives = architecture.command('directives').description('Read project directives');
+  const directives = architecture
+    .command('directives')
+    .description('Read and create project directives');
   directives
     .command('get')
     .description('Read a directive by id or list a page of visible project directives')
@@ -976,6 +979,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction((ctx, options: DirectivesReadOptions) =>
       getArchitectureDirectives(options, ctx),
     );
+  directives
+    .command('set')
+    .description('Create explicit project directives')
+    .requiredOption('--file <file>', 'JSON object with a create array')
+    .option('--dry-run', 'Preview changes without writing')
+    .option('-p, --project <project>', 'Project key')
+    .addHelpText(
+      'after',
+      '\nCreation skips existing directives and retains unmentioned directives.',
+    )
+    .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
 
   architecture
     .command('install-skill')
