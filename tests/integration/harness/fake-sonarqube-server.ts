@@ -969,6 +969,13 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  private projectsLookupResponse?: { status: number; body: unknown };
+
+  withProjectsLookupResponse(status: number, body: unknown): this {
+    this.projectsLookupResponse = { status, body };
+    return this;
+  }
+
   withProjectBindingsStatus(statusCode: number): this {
     this.projectBindingsStatusCode = statusCode;
     return this;
@@ -1076,6 +1083,7 @@ export class FakeSonarQubeServerBuilder {
   }
 
   start(): Promise<FakeSonarQubeServer> {
+    const projectsLookupResponse = this.projectsLookupResponse;
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     [...projects.values()].forEach(({ architecture }, index) =>
       architecture?.assignProjectIndex(index),
@@ -1564,6 +1572,19 @@ export class FakeSonarQubeServerBuilder {
         );
         if (architectureResponse) {
           return architectureResponse;
+        }
+
+        if (path === '/api/v2/components/projects') {
+          const matches = [...projects.values()]
+            .filter(({ key }) => key === query.keys)
+            .map(({ key }) => ({ id: `${key}-project-id`, key }));
+          return Response.json(
+            projectsLookupResponse?.body ?? {
+              projects: matches,
+              page: { pageIndex: 1, pageSize: 1, total: matches.length },
+            },
+            { status: projectsLookupResponse?.status ?? 200 },
+          );
         }
 
         if (path === '/api/project_branches/list') {
