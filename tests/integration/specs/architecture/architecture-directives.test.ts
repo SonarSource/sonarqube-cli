@@ -78,7 +78,7 @@ describe('public project directives', () => {
   });
 
   it.each([false, true])(
-    'rejects a full project before writing even with duplicate identities or pending deletions (dryRun=%s)',
+    'rejects a full project before writing even with duplicate identities (dryRun=%s)',
     async (dryRun) => {
       const rows = Array.from({ length: 1000 }, (_, i) => ({
         ...directive,
@@ -700,7 +700,7 @@ describe('public project directives', () => {
       );
       const result = await h.run('arch directives set -p shop --file directives.json');
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).not.toContain('may already exist');
+      expect(result.stderr).not.toContain('may already have been applied');
       expect(
         server
           .getRecordedRequests()
@@ -902,6 +902,61 @@ describe('public project directives', () => {
       server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
     ).toHaveLength(0);
   });
+  it.each([
+    { type: 'UNKNOWN' },
+    { ecosystem: 'unknown' },
+    { graphType: 'unknown' },
+    { id: 'invalid' },
+    { origin: 42 },
+    { description: 42 },
+    { graphPerspective: 42 },
+    { projectId: '' },
+    { fromNodeKey: '' },
+  ])('rejects malformed stored fields without writing: %j', async (invalid) => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const saved = { ...directive, id, projectId: 'shop-branch-id', ...invalid };
+    const server = await configured((api) =>
+      api
+        .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+        .withStatus('project-directives', 200, JSON.stringify(saved), 'GET'),
+    );
+    const result = await h.run(`arch directives get -p shop --id ${id}`);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain('was not found');
+    expect(
+      server.getRecordedRequests().some((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+    ).toBe(false);
+  });
+
+  it('shows stored optional fields in JSON and both text read modes', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    await configured((api) =>
+      api.withDirectives([
+        {
+          ...directive,
+          id,
+          projectId: 'shop-branch-id',
+          graphPerspective: 'custom',
+          description: 'Saved description',
+          origin: 'web',
+        },
+      ]),
+    );
+    const json = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(json.exitCode).toBe(0);
+    expect(JSON.parse(json.stdout).directive).toMatchObject({
+      graphPerspective: 'custom',
+      description: 'Saved description',
+      origin: 'web',
+    });
+    const single = await h.run(`arch directives get -p shop --id ${id} --format text`);
+    expect(single.exitCode).toBe(0);
+    expect(single.stdout).toContain(`${id}: REMOVE_EDGE app:a -> app:b`);
+    const page = await h.run('arch directives get -p shop --format text');
+    expect(page.exitCode).toBe(0);
+    expect(page.stdout).toContain('[custom] app:a -> app:b');
+  });
+
   it('reads populated pages and preserves pagination metadata', async () => {
     const rows = [1, 2].map((n) => ({
       ...directive,
@@ -934,9 +989,15 @@ describe('public project directives', () => {
         ...(kind === 'missing-key' ? { fromNodeKey: null } : {}),
       };
       const server = await configured((api) =>
-        api.withStatus('project-directives', 200, JSON.stringify(saved), 'GET'),
+        api
+          .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+          .withStatus('project-directives', 200, JSON.stringify(saved), 'GET'),
       );
-      expect((await h.run(`arch directives get -p shop --id ${id}`)).exitCode).not.toBe(0);
+      const result = await h.run(`arch directives get -p shop --id ${id}`);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        kind === 'missing-key' ? 'fromNodeKey' : 'different id or project',
+      );
       expect(
         server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
       ).toHaveLength(0);

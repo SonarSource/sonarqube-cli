@@ -366,7 +366,7 @@ export async function applyDirectiveChanges(
     existing.count + creations.toCreate.length > MAX_PROJECT_DIRECTIVES
   )
     throw new CommandFailedError(
-      'The changes would exceed the limit of 1000 directives per project before deletions run. Nothing was changed.',
+      'The changes would exceed the limit of 1000 directives per project. Nothing was changed.',
     );
   const touchedKeys = new Set([
     ...updates.changes.flatMap((change) => [
