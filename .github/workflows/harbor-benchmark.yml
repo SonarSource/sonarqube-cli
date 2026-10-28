@@ -31,6 +31,8 @@ jobs:
             runner: macos-latest-xlarge
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Cloudflare WARP
         if: ${{ matrix.os == 'macos' }}
@@ -88,6 +90,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         run: |
           export PYTHONPATH="${GITHUB_WORKSPACE}/benchmarks/harbor/environments"
+          unset ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN
           harbor run \
             --path benchmarks/harbor/tasks \
             --agent claude-code \
@@ -136,8 +139,15 @@ jobs:
       - name: Summarize
         shell: bash
         run: |
+          shopt -s nullglob
           targets=()
           for dir in harbor-jobs/*/; do
             targets+=("$(basename "${dir}")=${dir%/}")
           done
           bun benchmarks/harbor/report/summarize-job.ts "${targets[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when a benchmark job did not succeed
+        if: ${{ needs.benchmark.result != 'success' }}
+        run: |
+          echo "A benchmark job finished with: ${{ needs.benchmark.result }}"
+          exit 1

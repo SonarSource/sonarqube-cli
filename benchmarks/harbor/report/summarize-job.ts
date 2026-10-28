@@ -50,9 +50,23 @@ function statusOf(trial: TrialResult): Status {
   return reward >= 1 ? 'PASS' : 'FAIL';
 }
 
-function rowFor(label: string, trialDir: string): Row | null {
+function errorRow(label: string, task: string): Row {
+  return {
+    label,
+    task,
+    status: 'ERROR',
+    agentSeconds: null,
+    steps: null,
+    promptTokens: null,
+    completionTokens: null,
+    cachedTokens: null,
+    costUsd: null,
+  };
+}
+
+function rowFor(label: string, trialDir: string, trialName: string): Row {
   const trial = readJson<TrialResult>(join(trialDir, 'result.json'));
-  if (!trial?.task_name) return null;
+  if (!trial?.task_name) return errorRow(label, trialName);
   const trajectory = readJson<{ final_metrics?: FinalMetrics }>(
     join(trialDir, 'agent', 'trajectory.json'),
   );
@@ -74,10 +88,10 @@ function rowFor(label: string, trialDir: string): Row | null {
 }
 
 function rowsFor(label: string, jobDir: string): Row[] {
-  return readdirSync(jobDir, { withFileTypes: true })
+  const rows = readdirSync(jobDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => rowFor(label, join(jobDir, entry.name)))
-    .filter((row): row is Row => row !== null);
+    .map((entry) => rowFor(label, join(jobDir, entry.name), entry.name));
+  return rows.length > 0 ? rows : [errorRow(label, 'no trials')];
 }
 
 function cell(value: number | null, format: (n: number) => string = String): string {
@@ -123,6 +137,7 @@ function renderReport(rows: Row[]): string {
 function main(): void {
   const targets = process.argv.slice(2).map((arg) => {
     const separator = arg.indexOf('=');
+    if (separator <= 0) throw new Error(`Expected <label>=<jobDir>, got '${arg}'`);
     return { label: arg.slice(0, separator), jobDir: arg.slice(separator + 1) };
   });
   const rows = targets.flatMap(({ label, jobDir }) => rowsFor(label, jobDir));
