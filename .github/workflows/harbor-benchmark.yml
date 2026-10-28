@@ -42,9 +42,16 @@ jobs:
         with:
           secrets: |
             development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
       - name: Install Harbor
+        env:
+          ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
         run: |
+          export PIP_INDEX_URL="https://${ARTIFACTORY_USER}:${ARTIFACTORY_ACCESS_TOKEN}@repox.jfrog.io/artifactory/api/pypi/sonarsource-pypi/simple"
+          export UV_DEFAULT_INDEX="${PIP_INDEX_URL}"
           python3 -m venv "${RUNNER_TEMP}/uv-venv"
           "${RUNNER_TEMP}/uv-venv/bin/pip" install "uv==${UV_VERSION}"
           "${RUNNER_TEMP}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
