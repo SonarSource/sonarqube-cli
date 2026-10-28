@@ -379,6 +379,112 @@ describe('analyze secrets', () => {
     { timeout: 30000 },
   );
 
+  describe('scan settings', () => {
+    const SECRET_CONTENT = `const token = "${GITHUB_TEST_TOKEN}";`;
+
+    beforeEach(() => {
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+    });
+
+    it(
+      'skips a path given with --exclude',
+      async () => {
+        harness.cwd.writeFile('src/app.js', CLEAN_CONTENT);
+        harness.cwd.writeFile('generated/keys.js', SECRET_CONTENT);
+        expect((await harness.run('analyze secrets .')).exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+
+        const result = await harness.run('analyze secrets . --exclude generated');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips a path listed in the secrets.exclude config key',
+      async () => {
+        harness.cwd.writeFile('src/app.js', CLEAN_CONTENT);
+        harness.cwd.writeFile('generated/keys.js', SECRET_CONTENT);
+        harness.cwd.writeFile('vendor/lib.js', SECRET_CONTENT);
+        expect((await harness.run('analyze secrets .')).exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect((await harness.run('config set secrets.exclude generated,vendor')).exitCode).toBe(0);
+
+        const result = await harness.run('analyze secrets .');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'uses --exclude instead of the secrets.exclude config key, not in addition to it',
+      async () => {
+        harness.cwd.writeFile('generated/keys.js', SECRET_CONTENT);
+        harness.cwd.writeFile('vendor/lib.js', SECRET_CONTENT);
+        expect((await harness.run('config set secrets.exclude generated')).exitCode).toBe(0);
+
+        const result = await harness.run('analyze secrets . --exclude vendor');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('generated/keys.js');
+        expect(output).not.toContain('vendor/lib.js');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips a file larger than secrets.maxFileSize',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+        expect((await harness.run('config set secrets.maxFileSize 16')).exitCode).toBe(0);
+
+        const result = await harness.run('analyze secrets secrets.js');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'scans detected test files, and blocks on their findings, when secrets.disableTestFileDetection is set',
+      async () => {
+        harness.cwd.writeFile('tests/fixture.js', SECRET_CONTENT);
+
+        // Scanning `.`, not `tests`: sonar-secrets matches test directories relative to the scan root.
+        const skipped = await harness.run('analyze secrets .');
+        expect(skipped.exitCode).toBe(0);
+
+        expect(
+          (await harness.run('config set secrets.disableTestFileDetection true')).exitCode,
+        ).toBe(0);
+        const scanned = await harness.run('analyze secrets .');
+
+        expect(scanned.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(scanned.stdout + scanned.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits with code 2 when --exclude is combined with --stdin',
+      async () => {
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --exclude vendor',
+          CLEAN_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stdout + result.stderr).toContain('Cannot use --exclude with --stdin');
+      },
+      { timeout: 15000 },
+    );
+  });
+
   it(
     'reports an unknown subcommand with a "Did you mean?" suggestion',
     async () => {

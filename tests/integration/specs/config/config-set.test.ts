@@ -97,6 +97,20 @@ describe('config set', () => {
   );
 
   it(
+    'exits with code 2 and writes nothing for a value that does not match the key format',
+    async () => {
+      const result = await harness.run('config set secrets.maxFileSize 2MB');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        "Invalid value '2MB' for config key 'secrets.maxFileSize'. Expected a non-negative integer.",
+      );
+      expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'prompts for the value interactively, without echoing it, when omitted',
     async () => {
       const session = harness.runInteractive('config set network.tls.clientPassphrase', {
