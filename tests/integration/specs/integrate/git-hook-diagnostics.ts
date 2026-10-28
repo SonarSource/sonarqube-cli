@@ -40,6 +40,8 @@ type GitHookOutcomePath =
   | 'silent-no-staged-scan'
   | 'commit-succeeded-no-hook-signal'
   | 'pre-push-no-refs-fail-open'
+  | 'pre-push-no-commits-in-range'
+  | 'pre-push-stdin-replay-lost'
   | 'last-commit-would-scan'
   | 'unknown';
 
@@ -149,6 +151,11 @@ function classifyHookOutput(
     lastCommitExplicitScanExit: number | null;
     syntheticPrePushOutput: string;
     syntheticPrePushExit: number | null;
+    syntheticPrePushLocalSha: string;
+    syntheticPrePushRemoteSha: string;
+    shellCachedStdinReplayExit: number | null;
+    shellCachedStdinReplayOutput: string;
+    chainedHookMarker: string;
   },
 ): GitHookOutcomePath {
   if (output.includes('Secrets detected')) {
@@ -166,10 +173,44 @@ function classifyHookOutput(
   if (output.includes('secret scanning is inactive: analyzer not installed')) {
     return 'inactive-secrets-binary-missing';
   }
+  const chainedHookSawStdin =
+    /ran-saw-\s*[1-9]\d*-lines/.test(postMortem.chainedHookMarker) ||
+    postMortem.chainedHookMarker.includes('ran-saw-1-lines');
+  const syntheticHasPushRange =
+    postMortem.syntheticPrePushLocalSha.length > 0 &&
+    postMortem.syntheticPrePushRemoteSha.length > 0 &&
+    postMortem.syntheticPrePushLocalSha !== postMortem.syntheticPrePushRemoteSha;
+  const syntheticWouldBlock =
+    postMortem.syntheticPrePushOutput.includes('Secrets detected') ||
+    (postMortem.syntheticPrePushExit ?? 0) !== 0;
+  const shellReplayWouldBlock =
+    postMortem.shellCachedStdinReplayOutput.includes('Secrets detected') ||
+    (postMortem.shellCachedStdinReplayExit ?? 0) !== 0;
+
+  if (
+    postMortem.hook === 'pre-push' &&
+    (exitCode ?? 1) === 0 &&
+    chainedHookSawStdin &&
+    syntheticHasPushRange &&
+    (syntheticWouldBlock || shellReplayWouldBlock)
+  ) {
+    return 'pre-push-stdin-replay-lost';
+  }
+  if (
+    postMortem.hook === 'pre-push' &&
+    (exitCode ?? 1) === 0 &&
+    !syntheticHasPushRange &&
+    (postMortem.syntheticPrePushExit ?? 1) === 0 &&
+    postMortem.syntheticPrePushOutput.trim() === ''
+  ) {
+    return 'pre-push-no-commits-in-range';
+  }
   if (
     postMortem.hook === 'pre-push' &&
     (postMortem.syntheticPrePushExit ?? 1) === 0 &&
     postMortem.syntheticPrePushOutput.trim() === '' &&
+    (postMortem.directSonarHookExit ?? 1) === 0 &&
+    postMortem.directSonarHookOutput.trim() === '' &&
     (exitCode ?? 1) === 0
   ) {
     return 'pre-push-no-refs-fail-open';
@@ -224,7 +265,11 @@ function describeOutcomePath(path: GitHookOutcomePath): string {
     case 'commit-succeeded-no-hook-signal':
       return 'Commit succeeded with normal git output only; no skip markers or secrets output — hook may not have run during commit, or Sonar scan no-op’d.';
     case 'pre-push-no-refs-fail-open':
-      return 'Push succeeded and synthetic `sonar hook git-pre-push` with reconstructed stdin also exited 0 with no output — matches readGitPushRefs() returning [] (stdin empty/timeout), which skips scanning.';
+      return 'Push succeeded; post-mortem `sonar hook git-pre-push` with empty stdin exited 0 — matches readGitPushRefs() returning [] (stdin empty/timeout), which skips scanning.';
+    case 'pre-push-no-commits-in-range':
+      return 'Push succeeded; reconstructed pre-push stdin has localSha === remoteSha (nothing to scan). Often a post-push diagnostic artifact — see corrected stdin using ls-remote / HEAD~1 below.';
+    case 'pre-push-stdin-replay-lost':
+      return 'Chained local hook consumed a non-empty stdin cache, but Sonar still allowed the push — corrected stdin replay WOULD block. Likely stdin cache replay or readGitPushRefs() failing while the shell hook saw ref lines (Windows timing / Node stdin read).';
     case 'last-commit-would-scan':
       return 'The commit already contains files, and an explicit `sonar hook git-pre-commit <files…>` post-mortem WOULD block — the failure is before/during hook invocation, not the analyzer.';
     case 'unknown':
@@ -403,45 +448,108 @@ function probeExplicitFileScan(
   };
 }
 
+function resolveBranchName(cwd: string, env: Record<string, string>): string {
+  const branch = gitSpawn(cwd, env, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  if (branch.exitCode !== 0 || branch.output === 'HEAD' || !branch.output) {
+    return 'main';
+  }
+  return branch.output;
+}
+
+function resolveRemoteTipShaForPrePush(
+  cwd: string,
+  env: Record<string, string>,
+  branch: string,
+  headSha: string,
+): { remoteSha: string; source: string } {
+  const tracking = gitSpawn(cwd, env, ['rev-parse', `refs/remotes/origin/${branch}`]);
+  if (tracking.exitCode === 0 && tracking.output && tracking.output !== headSha) {
+    return { remoteSha: tracking.output, source: `refs/remotes/origin/${branch}` };
+  }
+
+  const upstream = gitSpawn(cwd, env, ['rev-parse', '@{u}']);
+  if (upstream.exitCode === 0 && upstream.output && upstream.output !== headSha) {
+    return { remoteSha: upstream.output, source: '@{u}' };
+  }
+
+  const remoteUrl = gitSpawn(cwd, env, ['remote', 'get-url', 'origin']);
+  if (remoteUrl.exitCode === 0 && remoteUrl.output.trim()) {
+    const ls = gitSpawn(cwd, env, ['ls-remote', remoteUrl.output.trim(), `refs/heads/${branch}`]);
+    if (ls.exitCode === 0 && ls.output.trim()) {
+      const remoteSha = ls.output.trim().split(/\s+/)[0] ?? '';
+      if (remoteSha && remoteSha !== headSha) {
+        return { remoteSha, source: 'git ls-remote origin' };
+      }
+      if (remoteSha === headSha) {
+        const parent = gitSpawn(cwd, env, ['rev-parse', 'HEAD~1']);
+        if (parent.exitCode === 0 && parent.output) {
+          return {
+            remoteSha: parent.output,
+            source: 'HEAD~1 (server tip already at HEAD; hook-time remote was likely parent)',
+          };
+        }
+      }
+    }
+  }
+
+  if (headSha.length >= 40 && !headSha.startsWith('(')) {
+    return { remoteSha: '0'.repeat(headSha.length), source: 'zero OID (no remote tip resolved)' };
+  }
+  return { remoteSha: '', source: 'unresolved' };
+}
+
 function buildSyntheticPrePushStdin(context: GitHookDiagnosticContext): {
   stdinLine: string;
+  localSha: string;
+  remoteSha: string;
   section: string;
 } {
-  const branch = gitSpawn(context.repoCwd, context.hookEnv, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  const branch = resolveBranchName(context.repoCwd, context.hookEnv);
   const head = gitRevParse(context.repoCwd, context.hookEnv, 'HEAD');
-  const remoteRef = branch.output === 'HEAD' ? 'refs/heads/main' : `refs/heads/${branch.output}`;
+  const remoteRef = `refs/heads/${branch}`;
   const localRef = remoteRef;
-  let remoteSha = gitSpawn(context.repoCwd, context.hookEnv, [
-    'rev-parse',
-    `refs/remotes/origin/${branch.output === 'HEAD' ? 'main' : branch.output}`,
-  ]);
-  if (remoteSha.exitCode !== 0) {
-    remoteSha = gitSpawn(context.repoCwd, context.hookEnv, ['rev-parse', 'origin/main']);
-  }
-  if (head.startsWith('(') || remoteSha.output.startsWith('(')) {
+  if (head.startsWith('(')) {
     return {
       stdinLine: '',
-      section: 'synthetic pre-push stdin: (could not resolve HEAD and/or origin tip)',
+      localSha: '',
+      remoteSha: '',
+      section: 'synthetic pre-push stdin: (could not resolve HEAD)',
     };
   }
-  const zeros = remoteSha.exitCode !== 0 ? '0'.repeat(head.length) : remoteSha.output;
-  const stdinLine = `${localRef} ${head} ${remoteRef} ${zeros}`;
+  const { remoteSha, source } = resolveRemoteTipShaForPrePush(
+    context.repoCwd,
+    context.hookEnv,
+    branch,
+    head,
+  );
+  if (!remoteSha) {
+    return {
+      stdinLine: '',
+      localSha: head,
+      remoteSha: '',
+      section: 'synthetic pre-push stdin: (could not resolve remote tip)',
+    };
+  }
+  const stdinLine = `${localRef} ${head} ${remoteRef} ${remoteSha}`;
   return {
     stdinLine,
+    localSha: head,
+    remoteSha,
     section: [
       'synthetic pre-push stdin (localRef localSha remoteRef remoteSha):',
       stdinLine,
-      `  branch=${branch.output || '(empty)'}, head=${head}, remoteTip=${remoteSha.output || zeros}`,
+      `  branch=${branch}, head=${head}, remoteTip=${remoteSha} (${source})`,
     ].join('\n'),
   };
 }
 
-function probeSyntheticPrePushHook(
+function probeShellCachedStdinReplay(
   context: GitHookDiagnosticContext,
   sonarBinPath: string,
+  stdinLine: string,
 ): { exitCode: number | null; output: string; section: string } {
-  if (context.hook !== 'pre-push') {
-    return { exitCode: null, output: '', section: '(skipped — not a pre-push assertion)' };
+  if (context.hook !== 'pre-push' || !stdinLine) {
+    return { exitCode: null, output: '', section: '(skipped — no pre-push stdin line to replay)' };
   }
   if (!existsSync(sonarBinPath)) {
     return {
@@ -450,9 +558,82 @@ function probeSyntheticPrePushHook(
       section: `(skipped — sonar binary missing at ${sonarBinPath})`,
     };
   }
-  const { stdinLine, section: stdinSection } = buildSyntheticPrePushStdin(context);
+  const result = Bun.spawnSync(
+    [
+      'sh',
+      '-c',
+      'line="$SONAR_DIAG_STDIN_LINE"; cache=$(mktemp 2>/dev/null || echo "${TMPDIR:-/tmp}/sonar-diag-$$"); printf "%s\\n" "$line" > "$cache"; SONAR_PRE_PUSH_REMOTE_NAME=origin "$1" hook git-pre-push < "$cache"; ec=$?; rm -f "$cache"; exit $ec',
+      'sh',
+      sonarBinPath,
+    ],
+    {
+      cwd: context.repoCwd,
+      env: {
+        ...context.hookEnv,
+        SONAR_DIAG_STDIN_LINE: stdinLine,
+      },
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  const output = formatSpawnOutput(result);
+  return {
+    exitCode: result.exitCode,
+    output: decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr),
+    section: [
+      'sonar hook git-pre-push via shell temp-file redirect (matches hook script replay path):',
+      `  exit=${result.exitCode ?? 'null'}`,
+      output,
+    ].join('\n'),
+  };
+}
+
+function probeSyntheticPrePushHook(
+  context: GitHookDiagnosticContext,
+  sonarBinPath: string,
+): {
+  exitCode: number | null;
+  output: string;
+  stdinLine: string;
+  localSha: string;
+  remoteSha: string;
+  section: string;
+} {
+  if (context.hook !== 'pre-push') {
+    return {
+      exitCode: null,
+      output: '',
+      stdinLine: '',
+      localSha: '',
+      remoteSha: '',
+      section: '(skipped — not a pre-push assertion)',
+    };
+  }
+  if (!existsSync(sonarBinPath)) {
+    return {
+      exitCode: null,
+      output: '',
+      stdinLine: '',
+      localSha: '',
+      remoteSha: '',
+      section: `(skipped — sonar binary missing at ${sonarBinPath})`,
+    };
+  }
+  const {
+    stdinLine,
+    localSha,
+    remoteSha,
+    section: stdinSection,
+  } = buildSyntheticPrePushStdin(context);
   if (!stdinLine) {
-    return { exitCode: null, output: '', section: stdinSection };
+    return {
+      exitCode: null,
+      output: '',
+      stdinLine: '',
+      localSha,
+      remoteSha,
+      section: stdinSection,
+    };
   }
   const env = {
     ...context.hookEnv,
@@ -469,6 +650,9 @@ function probeSyntheticPrePushHook(
   return {
     exitCode: result.exitCode,
     output: decodeSpawnOutput(result.stdout) + decodeSpawnOutput(result.stderr),
+    stdinLine,
+    localSha,
+    remoteSha,
     section: [
       stdinSection,
       '',
@@ -552,6 +736,15 @@ export function buildGitHookDiagnostics(
   const directSonarHook = probeDirectSonarHookHandler(context, sonarBinPath);
   const explicitFileScan = probeExplicitFileScan(context, sonarBinPath, lastCommitFiles);
   const syntheticPrePush = probeSyntheticPrePushHook(context, sonarBinPath);
+  const shellCachedStdinReplay = probeShellCachedStdinReplay(
+    context,
+    sonarBinPath,
+    syntheticPrePush.stdinLine,
+  );
+  const chainedHookMarkerRaw = probeChainedHookMarker(context.repoCwd);
+  const chainedHookMarker = chainedHookMarkerRaw.startsWith('present, content=')
+    ? chainedHookMarkerRaw.slice('present, content='.length)
+    : chainedHookMarkerRaw;
   const outcome = classifyHookOutput(combined, result.exitCode, {
     hook: context.hook,
     stagedFiles,
@@ -562,6 +755,11 @@ export function buildGitHookDiagnostics(
     lastCommitExplicitScanExit: explicitFileScan.exitCode,
     syntheticPrePushOutput: syntheticPrePush.output,
     syntheticPrePushExit: syntheticPrePush.exitCode,
+    syntheticPrePushLocalSha: syntheticPrePush.localSha,
+    syntheticPrePushRemoteSha: syntheticPrePush.remoteSha,
+    shellCachedStdinReplayExit: shellCachedStdinReplay.exitCode,
+    shellCachedStdinReplayOutput: shellCachedStdinReplay.output,
+    chainedHookMarker,
   });
 
   const hookScriptHead = existsSync(globalHookScript)
@@ -617,6 +815,8 @@ export function buildGitHookDiagnostics(
     explicitFileScan.section,
     '',
     syntheticPrePush.section,
+    '',
+    shellCachedStdinReplay.section,
     '',
     `${context.operation} combined output:`,
     output,
