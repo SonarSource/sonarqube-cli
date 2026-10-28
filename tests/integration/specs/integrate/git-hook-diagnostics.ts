@@ -42,6 +42,8 @@ type GitHookOutcomePath =
   | 'pre-push-no-refs-fail-open'
   | 'pre-push-no-commits-in-range'
   | 'pre-push-stdin-replay-lost'
+  | 'pre-push-empty-commit-list'
+  | 'pre-push-scan-no-op'
   | 'last-commit-would-scan'
   | 'unknown';
 
@@ -156,6 +158,8 @@ function classifyHookOutput(
     shellCachedStdinReplayExit: number | null;
     shellCachedStdinReplayOutput: string;
     chainedHookMarker: string;
+    prePushGitLogCommitCount: number;
+    prePushParsedRefCount: number;
   },
 ): GitHookOutcomePath {
   if (output.includes('Secrets detected')) {
@@ -187,6 +191,11 @@ function classifyHookOutput(
     postMortem.shellCachedStdinReplayOutput.includes('Secrets detected') ||
     (postMortem.shellCachedStdinReplayExit ?? 0) !== 0;
 
+  const lastCommitWouldBlock =
+    postMortem.lastCommitFiles.length > 0 &&
+    (postMortem.lastCommitExplicitScanExit ?? 1) !== 0 &&
+    postMortem.lastCommitExplicitScanOutput.includes('Secrets detected');
+
   if (
     postMortem.hook === 'pre-push' &&
     (exitCode ?? 1) === 0 &&
@@ -211,15 +220,12 @@ function classifyHookOutput(
     postMortem.syntheticPrePushOutput.trim() === '' &&
     (postMortem.directSonarHookExit ?? 1) === 0 &&
     postMortem.directSonarHookOutput.trim() === '' &&
-    (exitCode ?? 1) === 0
+    (exitCode ?? 1) === 0 &&
+    postMortem.prePushParsedRefCount === 0
   ) {
     return 'pre-push-no-refs-fail-open';
   }
-  if (
-    postMortem.lastCommitFiles.length > 0 &&
-    (postMortem.lastCommitExplicitScanExit ?? 1) !== 0 &&
-    postMortem.lastCommitExplicitScanOutput.includes('Secrets detected')
-  ) {
+  if (lastCommitWouldBlock) {
     return 'last-commit-would-scan';
   }
   if ((exitCode ?? 1) === 0 && output.trim() === '') {
@@ -270,6 +276,10 @@ function describeOutcomePath(path: GitHookOutcomePath): string {
       return 'Push succeeded; reconstructed pre-push stdin has localSha === remoteSha (nothing to scan). Often a post-push diagnostic artifact — see corrected stdin using ls-remote / HEAD~1 below.';
     case 'pre-push-stdin-replay-lost':
       return 'Chained local hook consumed a non-empty stdin cache, but Sonar still allowed the push — corrected stdin replay WOULD block. Likely stdin cache replay or readGitPushRefs() failing while the shell hook saw ref lines (Windows timing / Node stdin read).';
+    case 'pre-push-empty-commit-list':
+      return 'Corrected pre-push stdin parses and auth+file scan would block, but `git log` for the push range listed zero commits — matches getPushedCommitBlobs() returning [] (Git listing flake or ref mismatch on Windows).';
+    case 'pre-push-scan-no-op':
+      return 'Corrected pre-push stdin and `git log` show commits to scan, and explicit file scan would block, but `sonar hook git-pre-push` exited 0 — scan pipeline no-op (stream scan fail-soft, empty batch, or readGitPushRefs() missing refs at runtime).';
     case 'last-commit-would-scan':
       return 'The commit already contains files, and an explicit `sonar hook git-pre-commit <files…>` post-mortem WOULD block — the failure is before/during hook invocation, not the analyzer.';
     case 'unknown':
@@ -543,6 +553,79 @@ function buildSyntheticPrePushStdin(context: GitHookDiagnosticContext): {
   };
 }
 
+const PRE_PUSH_COMMIT_LINE_PATTERN = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+function countParsedPrePushRefs(stdinLine: string): number {
+  if (!stdinLine.trim()) {
+    return 0;
+  }
+  let count = 0;
+  for (const line of stdinLine.trim().split('\n')) {
+    if (!line) continue;
+    const [localRef, localSha, remoteRef, remoteSha] = line.split(' ');
+    if (localRef && localSha && remoteRef && remoteSha) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function probePrePushGitLog(
+  cwd: string,
+  env: Record<string, string>,
+  stdinLine: string,
+): { commitCount: number; section: string } {
+  if (!stdinLine.trim()) {
+    return { commitCount: 0, section: '(skipped — no pre-push stdin line for git log probe)' };
+  }
+  const parts = stdinLine.trim().split(/\s+/);
+  if (parts.length < 4) {
+    return {
+      commitCount: 0,
+      section: `pre-push git log probe: invalid stdin (${parts.length} fields)`,
+    };
+  }
+  const localSha = parts[1];
+  const remoteSha = parts[3];
+  const nullOid = /^0+$/;
+  const remotes = gitSpawn(cwd, env, ['remote']);
+  const remotesExclusion =
+    remotes.exitCode === 0 && remotes.output.includes('origin') ? '--remotes=origin' : '--remotes';
+  const remoteKnown = gitSpawn(cwd, env, ['cat-file', '-e', `${remoteSha}^{commit}`]);
+  const exclusions: string[] = [];
+  if (remoteKnown.exitCode === 0 && !nullOid.test(remoteSha)) {
+    exclusions.push(remoteSha);
+  }
+  const logArgs = [
+    'log',
+    '--format=%H',
+    '--raw',
+    '--no-abbrev',
+    '--diff-filter=ACMR',
+    '-c',
+    '--root',
+    localSha,
+    '--not',
+    ...exclusions,
+    remotesExclusion,
+  ];
+  const log = gitSpawn(cwd, env, logArgs);
+  const lines = log.output.split(/\r?\n/).filter(Boolean);
+  const commitLines = lines.filter((line) => PRE_PUSH_COMMIT_LINE_PATTERN.test(line));
+  const rawLines = lines.filter((line) => line.startsWith(':'));
+  const section = [
+    'pre-push git log probe (mirrors getPushedCommitBlobs):',
+    `  command: git ${logArgs.join(' ')}`,
+    `  exit=${log.exitCode ?? 'null'}, remoteShaKnown=${remoteKnown.exitCode === 0}, remotesExclusion=${remotesExclusion}`,
+    `  commit lines=${commitLines.length}, raw blob lines=${rawLines.length}`,
+    commitLines.length > 0 ? `  commits: ${commitLines.join(', ')}` : '  commits: (none)',
+    rawLines.length > 0 ? `  sample raw: ${rawLines.slice(0, 3).join(' | ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { commitCount: commitLines.length, section };
+}
+
 function probeShellCachedStdinReplay(
   context: GitHookDiagnosticContext,
   sonarBinPath: string,
@@ -741,6 +824,12 @@ export function buildGitHookDiagnostics(
     sonarBinPath,
     syntheticPrePush.stdinLine,
   );
+  const prePushGitLog =
+    context.hook === 'pre-push'
+      ? probePrePushGitLog(context.repoCwd, context.hookEnv, syntheticPrePush.stdinLine)
+      : { commitCount: 0, section: '(skipped — not pre-push)' };
+  const prePushParsedRefCount =
+    context.hook === 'pre-push' ? countParsedPrePushRefs(syntheticPrePush.stdinLine) : 0;
   const chainedHookMarkerRaw = probeChainedHookMarker(context.repoCwd);
   const chainedHookMarker = chainedHookMarkerRaw.startsWith('present, content=')
     ? chainedHookMarkerRaw.slice('present, content='.length)
@@ -760,6 +849,8 @@ export function buildGitHookDiagnostics(
     shellCachedStdinReplayExit: shellCachedStdinReplay.exitCode,
     shellCachedStdinReplayOutput: shellCachedStdinReplay.output,
     chainedHookMarker,
+    prePushGitLogCommitCount: prePushGitLog.commitCount,
+    prePushParsedRefCount,
   });
 
   const hookScriptHead = existsSync(globalHookScript)
@@ -817,6 +908,8 @@ export function buildGitHookDiagnostics(
     syntheticPrePush.section,
     '',
     shellCachedStdinReplay.section,
+    '',
+    prePushGitLog.section,
     '',
     `${context.operation} combined output:`,
     output,
