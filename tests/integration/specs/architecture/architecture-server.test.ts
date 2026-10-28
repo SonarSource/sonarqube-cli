@@ -176,16 +176,25 @@ describe('Server public architecture project lookup', () => {
   });
 
   it('deletes only the explicit directive on Server', async () => {
+    const sibling = {
+      ...storedDirective,
+      id: '00000000-0000-4000-8000-000000000002',
+      toNodeKey: 'app:c',
+    };
     const server = await h
       .newFakeServer()
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
-        p.withNoDefaultBranch().withArchitecture((a) => a.withDirectives([storedDirective])),
+        p
+          .withNoDefaultBranch()
+          .withArchitecture((a) => a.withDirectives([storedDirective, sibling])),
       )
       .start();
     h.withAuth(server.baseUrl(), 'test-token');
     await applyDirectives({ delete: [{ id: storedDirective.id }] });
-    expect(await readDirectives()).toHaveLength(0);
+    const remaining = await readDirectives();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]).toMatchObject(sibling);
     expect(server.getRecordedRequests().some((r) => r.path.includes('project_branches'))).toBe(
       false,
     );
