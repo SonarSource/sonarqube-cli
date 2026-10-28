@@ -229,7 +229,6 @@ describe('public project directives', () => {
           JSON.stringify({
             create,
             update,
-            ...(kind === 'pending-delete' ? { delete: [{ id: second }] } : {}),
           }),
         );
         for (const flag of ['', ' --dry-run']) {
@@ -477,11 +476,26 @@ describe('public project directives', () => {
       .newFakeServer()
       .asSonarCloud()
       .withAuthToken('token')
-      .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives([])))
+      .withProject('shop', (p) =>
+        p.withArchitecture((a) =>
+          a.withDirectives([
+            {
+              ...directive,
+              id: '00000000-0000-4000-8000-000000000001',
+              projectId: 'shop-branch-id',
+            },
+          ]),
+        ),
+      )
       .start();
     h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
     h.cwd.writeFile('updates.json', JSON.stringify({ update: items }));
-    expect((await h.run('arch directives set -p shop --file updates.json')).exitCode).not.toBe(0);
+    const result = await h.run('arch directives set -p shop --file updates.json');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain('was not found');
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project-directives/')),
+    ).toHaveLength(0);
     expect(
       server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
     ).toHaveLength(0);

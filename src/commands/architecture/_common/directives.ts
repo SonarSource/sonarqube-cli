@@ -368,12 +368,9 @@ export async function applyDirectiveChanges(
     throw new CommandFailedError(
       'The changes would exceed the limit of 1000 directives per project. Nothing was changed.',
     );
-  const touchedKeys = new Set([
-    ...updates.changes.flatMap((change) => [
-      directiveKey(change.before),
-      directiveKey(change.after),
-    ]),
-  ]);
+  const touchedKeys = new Set(
+    updates.changes.flatMap((change) => [directiveKey(change.before), directiveKey(change.after)]),
+  );
   if (changes.create.some((item) => touchedKeys.has(directiveKey(item))))
     throw new CommandFailedError(
       'Create conflicts with an update or deletion of the same directive operation. Nothing was changed.',
