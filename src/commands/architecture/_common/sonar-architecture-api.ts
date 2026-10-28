@@ -38,6 +38,8 @@ import {
 } from './architecture-api.ts';
 import {
   directiveId,
+  type DirectiveInput,
+  directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
   parseProjectDirective,
@@ -358,6 +360,30 @@ export class SonarArchitectureApi implements ArchitectureApi {
     if (directives.some((item) => item.projectId !== projectId))
       throw new CommandFailedError('The public directives page returned a different project.');
     return { directives, page };
+  }
+
+  async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .post<unknown>(this.path('project-directives'), {
+        ...directive,
+        projectId,
+        origin: 'sonarqube-cli',
+      })
+      .orThrow();
+    const created = parseProjectDirective(result);
+    if (created.projectId !== projectId)
+      throw new CommandFailedError(
+        'The directive write returned a different project. Inspect the current list before retrying.',
+      );
+    if (
+      directiveKey(created) !== directiveKey(directive) ||
+      (directive.description !== undefined && directive.description !== created.description)
+    )
+      throw new CommandFailedError(
+        'The directive write response did not confirm the requested directive. Inspect the current list before retrying.',
+      );
+    return created;
   }
 
   async getDirective(id: string): Promise<ProjectDirective> {
