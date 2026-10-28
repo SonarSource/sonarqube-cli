@@ -70,7 +70,7 @@ class HostEnvironment(BaseEnvironment):
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(), timeout=timeout_sec
             )
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, asyncio.CancelledError):
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
             await process.wait()
