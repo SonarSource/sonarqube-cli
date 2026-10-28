@@ -80,7 +80,7 @@ export async function remediate(
   }
 
   assertCloudConnection(auth);
-  assertInteractiveOrIssuesSupplied(suppliedIssueKeys);
+  assertInteractiveOrIssuesSupplied(suppliedIssueKeys, console);
 
   const projectKey = await resolveProjectKey(options, auth, console);
   noteProject(auth, projectKey);
@@ -114,9 +114,11 @@ function assertCloudConnection(auth: ResolvedAuth): void {
   }
 }
 
-function assertInteractiveOrIssuesSupplied(suppliedIssueKeys: string[] | undefined): void {
-  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
-  if (!canPrompt && suppliedIssueKeys === undefined) {
+function assertInteractiveOrIssuesSupplied(
+  suppliedIssueKeys: string[] | undefined,
+  console: Console,
+): void {
+  if (!console.canPrompt() && suppliedIssueKeys === undefined) {
     throw new CommandFailedError('Non-interactive mode requires --issues <issueIds>.', {
       remediationHint:
         "Run 'sonar list issues --project <key>' to find issue keys, then pass them with --issues.",
