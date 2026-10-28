@@ -37,9 +37,10 @@ export interface ConfigKeyDefinition {
 
 const BOOLEAN_ALLOWED_VALUES = ['true', 'false'] as const;
 
+// At most 15 digits keeps the value a safe JS integer that prints back as plain digits, never as `1e+21`.
 const NON_NEGATIVE_INTEGER_FORMAT = {
-  pattern: /^\d+$/,
-  description: 'a non-negative integer',
+  pattern: /^\d{1,15}$/,
+  description: 'a non-negative integer of at most 15 digits',
 };
 
 export const CONFIG_KEY_DEFINITIONS = [

@@ -95,7 +95,50 @@ describe('loadSecretsScanSettings', () => {
     try {
       expect((await loadSecretsScanSettings(workDir)).maxFileSize).toBe(MAX_SCANNED_FILE_SIZE);
       expect(debug).toHaveBeenCalledWith(
-        "Ignoring stored config 'secrets.maxFileSize': '2MB' is not a non-negative integer",
+        "Ignoring stored config 'secrets.maxFileSize': '2MB' is invalid. Expected a non-negative integer of at most 15 digits.",
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('falls back to the default size limit for a hand-edited value too large to pass on as plain digits', async () => {
+    // Number('1000000000000000000000') prints as '1e+21', which sonar-secrets would reject on every scan.
+    writeConfig(['secrets.maxFileSize=1000000000000000000000']);
+    const debug = spyOn(logger, 'debug');
+
+    try {
+      expect((await loadSecretsScanSettings(workDir)).maxFileSize).toBe(MAX_SCANNED_FILE_SIZE);
+      expect(debug).toHaveBeenCalledWith(
+        "Ignoring stored config 'secrets.maxFileSize': '1000000000000000000000' is invalid. Expected a non-negative integer of at most 15 digits.",
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('keeps the largest accepted size limit as plain digits', async () => {
+    writeConfig(['secrets.maxFileSize=999999999999999']);
+
+    const { maxFileSize } = await loadSecretsScanSettings(workDir);
+
+    expect(String(maxFileSize)).toBe('999999999999999');
+  });
+
+  it('falls back to false, logging it, for a hand-edited boolean that is not true or false', async () => {
+    writeConfig(['secrets.demoMode=yes', 'secrets.disableEntropyFilter=TRUE']);
+    const debug = spyOn(logger, 'debug');
+
+    try {
+      const settings = await loadSecretsScanSettings(workDir);
+
+      expect(settings.demoMode).toBe(false);
+      expect(settings.disableEntropyFilter).toBe(false);
+      expect(debug).toHaveBeenCalledWith(
+        "Ignoring stored config 'secrets.demoMode': 'yes' is invalid. Allowed values: true, false.",
+      );
+      expect(debug).toHaveBeenCalledWith(
+        "Ignoring stored config 'secrets.disableEntropyFilter': 'TRUE' is invalid. Allowed values: true, false.",
       );
     } finally {
       debug.mockRestore();

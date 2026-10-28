@@ -118,6 +118,16 @@ describe('config-schema', () => {
       expect(isValidConfigValue(integer, '1.5')).toBe(false);
       expect(isValidConfigValue(integer, '2MB')).toBe(false);
     });
+
+    it('caps secrets.maxFileSize at 15 digits, so every accepted value stays a safe integer', () => {
+      const integer = CONFIG_KEY_BY_NAME.get('secrets.maxFileSize')!;
+      const largest = '9'.repeat(15);
+
+      expect(isValidConfigValue(integer, largest)).toBe(true);
+      expect(Number.isSafeInteger(Number(largest))).toBe(true);
+      expect(isValidConfigValue(integer, '1'.repeat(16))).toBe(false);
+      expect(isValidConfigValue(integer, '1000000000000000000000')).toBe(false);
+    });
   });
 
   describe('describeAcceptedValues', () => {
@@ -126,7 +136,9 @@ describe('config-schema', () => {
       const formatted = CONFIG_KEY_BY_NAME.get('secrets.maxFileSize')!;
 
       expect(describeAcceptedValues(restricted)).toBe('Allowed values: true, false.');
-      expect(describeAcceptedValues(formatted)).toBe('Expected a non-negative integer.');
+      expect(describeAcceptedValues(formatted)).toBe(
+        'Expected a non-negative integer of at most 15 digits.',
+      );
     });
   });
 });
