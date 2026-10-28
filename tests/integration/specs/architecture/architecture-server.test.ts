@@ -49,34 +49,47 @@ describe('Server public architecture project lookup', () => {
     await h.dispose();
   });
 
-  it('creates, previews, updates and clears intended architecture without an analyzed branch', async () => {
+  const readIntended = async () => {
+    const result = await h.run('arch intended get -p shop --format json');
+    expect(result.exitCode).toBe(0);
+    return JSON.parse(result.stdout) as { revision: string; models: IntendedArchitecture[] };
+  };
+  const readDirectives = async () => {
+    const result = await h.run('arch directives get -p shop --format json');
+    expect(result.exitCode).toBe(0);
+    return (JSON.parse(result.stdout) as { directives: ProjectDirective[] }).directives;
+  };
+  const applyDirectives = async (changes: unknown, dry = false) => {
+    h.cwd.writeFile('changes.json', JSON.stringify(changes));
+    const result = await h.run(
+      'arch directives set -p shop --file changes.json' + (dry ? ' --dry-run' : ''),
+    );
+    expect(result.exitCode).toBe(0);
+  };
+  const storedDirective = {
+    ...input,
+    id: '00000000-0000-4000-8000-000000000001',
+    projectId: 'shop-project-id',
+    graphPerspective: 'default_perspective',
+    origin: 'sonarqube-cli',
+  } as ProjectDirective;
+
+  it('previews and creates intended architecture without an analyzed branch', async () => {
     const server = await h
       .newFakeServer()
       .withAuthToken('test-token')
       .withProject('shop', (p) => p.withNoDefaultBranch().withArchitecture(() => undefined))
       .start();
     h.withAuth(server.baseUrl(), 'test-token');
-    const read = async () => {
-      const result = await h.run('arch intended get -p shop --format json');
-      expect(result.exitCode).toBe(0);
-      return JSON.parse(result.stdout) as { revision: string; models: IntendedArchitecture[] };
-    };
-    const original = await read();
+    const original = await readIntended();
     expect(original.models).toEqual([]);
     h.cwd.writeFile('model.json', JSON.stringify({ ...original, models: [model] }));
     expect((await h.run('arch intended set -p shop --file model.json --dry-run')).exitCode).toBe(0);
     expect(server.getRecordedRequests().filter((r) => r.method === 'POST')).toHaveLength(0);
     expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
-    const saved = await read();
-    h.cwd.writeFile(
-      'model.json',
-      JSON.stringify({ ...saved, models: [{ ...model, description: 'Changed' }] }),
-    );
-    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
-    expect((await read()).models[0].description).toBe('Changed');
-    h.cwd.writeFile('model.json', JSON.stringify({ ...(await read()), models: [] }));
-    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
-    expect((await read()).models).toEqual([]);
+    const saved = await readIntended();
+    expect(saved.models).toHaveLength(1);
+    expect(saved.models[0]).toMatchObject(model);
     const requests = server.getRecordedRequests();
     expect(requests.some((r) => r.path.includes('project_branches'))).toBe(false);
     const post = requests.find(
@@ -86,40 +99,70 @@ describe('Server public architecture project lookup', () => {
     expect(requests.some((r) => r.path === '/api/v2/components/projects')).toBe(true);
   });
 
-  it('runs directive CRUD and retains unspecified fields on Server', async () => {
+  it('updates and clears intended architecture without an analyzed branch', async () => {
+    const server = await h
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('shop', (p) =>
+        p
+          .withNoDefaultBranch()
+          .withArchitecture((a) => a.withIntended([model as IntendedArchitecture])),
+      )
+      .start();
+    h.withAuth(server.baseUrl(), 'test-token');
+    const saved = await readIntended();
+    h.cwd.writeFile(
+      'model.json',
+      JSON.stringify({ ...saved, models: [{ ...model, description: 'Changed' }] }),
+    );
+    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
+    const changed = await readIntended();
+    expect(changed.models[0].description).toBe('Changed');
+    h.cwd.writeFile('model.json', JSON.stringify({ ...changed, models: [] }));
+    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
+    expect((await readIntended()).models).toEqual([]);
+    expect(server.getRecordedRequests().some((r) => r.path.includes('project_branches'))).toBe(
+      false,
+    );
+  });
+
+  it('previews and creates directives once on Server', async () => {
     const server = await h
       .newFakeServer()
       .withAuthToken('test-token')
       .withProject('shop', (p) => p.withNoDefaultBranch().withArchitecture(() => undefined))
       .start();
     h.withAuth(server.baseUrl(), 'test-token');
-    const apply = async (changes: unknown, dry = false) => {
-      h.cwd.writeFile('changes.json', JSON.stringify(changes));
-      const result = await h.run(
-        'arch directives set -p shop --file changes.json' + (dry ? ' --dry-run' : ''),
-      );
-      expect(result.exitCode).toBe(0);
-    };
-    const read = async () => {
-      const result = await h.run('arch directives get -p shop --format json');
-      expect(result.exitCode).toBe(0);
-      return (JSON.parse(result.stdout) as { directives: ProjectDirective[] }).directives;
-    };
-    await apply({ create: [input] }, true);
-    expect(await read()).toHaveLength(0);
-    await apply({ create: [{ ...input, origin: 'exported-client' }] });
-    const id = (await read())[0].id;
-    expect((await read())[0]).toMatchObject({
+    await applyDirectives({ create: [input] }, true);
+    expect(await readDirectives()).toHaveLength(0);
+    await applyDirectives({ create: [{ ...input, origin: 'exported-client' }] });
+    const saved = await readDirectives();
+    expect(saved[0]).toMatchObject({
       graphPerspective: 'default_perspective',
       origin: 'sonarqube-cli',
     });
     const graphLookupCount = server
       .getRecordedRequests()
       .filter((r) => r.path.includes('project_branches')).length;
-    await apply({ create: [{ ...input, graphPerspective: 'default_perspective' }] });
-    expect(await read()).toHaveLength(1);
-    await apply({ update: [{ id, description: 'Changed' }] });
-    expect((await read())[0]).toMatchObject({
+    await applyDirectives({ create: [{ ...input, graphPerspective: 'default_perspective' }] });
+    expect(await readDirectives()).toHaveLength(1);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(graphLookupCount);
+  });
+
+  it('updates explicit directives and retains unspecified fields on Server', async () => {
+    const server = await h
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('shop', (p) =>
+        p.withNoDefaultBranch().withArchitecture((a) => a.withDirectives([storedDirective])),
+      )
+      .start();
+    h.withAuth(server.baseUrl(), 'test-token');
+    const id = storedDirective.id;
+    await applyDirectives({ update: [{ id, description: 'Changed' }] });
+    expect((await readDirectives())[0]).toMatchObject({
       ...input,
       description: 'Changed',
       origin: 'sonarqube-cli',
@@ -127,11 +170,25 @@ describe('Server public architecture project lookup', () => {
     const patch = server.getRecordedRequests().find((r) => r.method === 'PATCH');
     expect(JSON.parse(patch!.body!)).not.toHaveProperty('graphPerspective');
     expect((await h.run(`arch directives get -p shop --id ${id} --format json`)).exitCode).toBe(0);
-    await apply({ delete: [{ id }] });
-    expect(await read()).toHaveLength(0);
-    expect(
-      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
-    ).toHaveLength(graphLookupCount);
+    expect(server.getRecordedRequests().some((r) => r.path.includes('project_branches'))).toBe(
+      false,
+    );
+  });
+
+  it('deletes only the explicit directive on Server', async () => {
+    const server = await h
+      .newFakeServer()
+      .withAuthToken('test-token')
+      .withProject('shop', (p) =>
+        p.withNoDefaultBranch().withArchitecture((a) => a.withDirectives([storedDirective])),
+      )
+      .start();
+    h.withAuth(server.baseUrl(), 'test-token');
+    await applyDirectives({ delete: [{ id: storedDirective.id }] });
+    expect(await readDirectives()).toHaveLength(0);
+    expect(server.getRecordedRequests().some((r) => r.path.includes('project_branches'))).toBe(
+      false,
+    );
   });
 
   it.each(['intended-architectures', 'project-directives'] as const)(
