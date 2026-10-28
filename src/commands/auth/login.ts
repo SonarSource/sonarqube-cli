@@ -57,6 +57,12 @@ import {
 } from './revoke-server-token.ts';
 import { confirmServerTrust, resolveServer } from './select-server.ts';
 
+type LoginStep =
+  | { kind: 'new_login'; tokenSaved: true }
+  | { kind: 'stored_login'; auth: BrowserAuthResult; tokenSaved: true }
+  | { kind: 'switch_organization'; org: string; auth: BrowserAuthResult; tokenSaved: false }
+  | { kind: 'keep_organization'; org: string; tokenSaved: false };
+
 /**
  * Login command - authenticate and save token with organization
  */
@@ -92,23 +98,10 @@ export async function authLogin(
       console.info(`Already authenticated on ${server}.`);
     }
 
-    let tokenSaved = true;
-    if (storedLogin && orgOption) {
-      tokenSaved = await switchReusedLoginOrganization(
-        server,
-        isCloud,
-        orgOption,
-        storedLogin,
-        console,
-        invocationAuth?.orgKey,
-      );
-    } else if (storedLogin) {
-      await loginWithStoredToken(server, isCloud, storedLogin, console, invocationAuth?.orgKey);
-    } else {
-      await loginWithNewToken(server, isCloud, orgOption, console, invocationAuth?.orgKey);
-    }
+    const step = await resolveLoginStep(server, storedLogin, orgOption, console);
+    await executeLoginStep(step, server, isCloud, orgOption, console, invocationAuth?.orgKey);
 
-    if (tokenSaved && invocationAuth?.comesFromEnv()) {
+    if (step.tokenSaved && invocationAuth?.comesFromEnv()) {
       console.warn(
         ` Token saved, but environment variables take precedence and will be used instead.\n   → Unset ${ENV_TOKEN} to use the saved token`,
       );
@@ -123,14 +116,27 @@ export async function authLogin(
   }
 }
 
-async function switchReusedLoginOrganization(
+async function resolveLoginStep(
   server: string,
-  isCloud: boolean,
+  storedLogin: BrowserAuthResult | undefined,
+  orgOption: string | undefined,
+  console: Console,
+): Promise<LoginStep> {
+  if (!storedLogin) {
+    return { kind: 'new_login', tokenSaved: true };
+  }
+  if (!orgOption) {
+    return { kind: 'stored_login', auth: storedLogin, tokenSaved: true };
+  }
+  return resolveOrganizationStep(server, orgOption, storedLogin, console);
+}
+
+async function resolveOrganizationStep(
+  server: string,
   org: string,
   auth: BrowserAuthResult,
   console: Console,
-  invocationOrgKey: string | undefined,
-): Promise<boolean> {
+): Promise<LoginStep> {
   const activeConnection = getActiveConnection(loadState());
   const activeOrgKey = isSameServer(activeConnection, server)
     ? activeConnection?.orgKey
@@ -146,8 +152,7 @@ async function switchReusedLoginOrganization(
   if (membership.status === 'not_member') {
     console.info(`Your account isn't a member of '${org}'.`);
     if (await confirmSignInWithDifferentAccount(console)) {
-      await loginWithNewToken(server, isCloud, org, console, invocationOrgKey);
-      return true;
+      return { kind: 'new_login', tokenSaved: true };
     }
     if (activeOrgKey) {
       console.print(`Active organization unchanged: ${activeOrgKey}`);
@@ -158,10 +163,47 @@ async function switchReusedLoginOrganization(
   }
 
   if (activeOrgKey === org) {
-    console.print(`Already using organization: ${org}`);
-    return false;
+    return { kind: 'keep_organization', org, tokenSaved: false };
   }
 
+  return { kind: 'switch_organization', org, auth, tokenSaved: false };
+}
+
+async function confirmSignInWithDifferentAccount(console: Console): Promise<boolean | null> {
+  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
+  return canPrompt && (await console.confirmPrompt('Sign in with a different account?', false));
+}
+
+async function executeLoginStep(
+  step: LoginStep,
+  server: string,
+  isCloud: boolean,
+  orgOption: string | undefined,
+  console: Console,
+  invocationOrgKey: string | undefined,
+): Promise<void> {
+  switch (step.kind) {
+    case 'new_login':
+      await loginWithNewToken(server, isCloud, orgOption, console, invocationOrgKey);
+      break;
+    case 'stored_login':
+      await loginWithStoredToken(server, isCloud, step.auth, console, invocationOrgKey);
+      break;
+    case 'switch_organization':
+      await switchStoredLoginOrganization(server, step.org, step.auth, console);
+      break;
+    case 'keep_organization':
+      console.print(`Already using organization: ${step.org}`);
+      break;
+  }
+}
+
+async function switchStoredLoginOrganization(
+  server: string,
+  org: string,
+  auth: BrowserAuthResult,
+  console: Console,
+): Promise<void> {
   await switchOrganization(
     new ResolvedAuth({
       token: auth.token,
@@ -174,12 +216,6 @@ async function switchReusedLoginOrganization(
   );
   console.print('→ Next time, switch directly: sonar auth org <org>');
   console.success(`Switched to '${org}'`);
-  return false;
-}
-
-async function confirmSignInWithDifferentAccount(console: Console): Promise<boolean | null> {
-  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
-  return canPrompt && (await console.confirmPrompt('Sign in with a different account?', false));
 }
 
 async function loginWithStoredToken(
