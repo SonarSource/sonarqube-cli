@@ -23,8 +23,8 @@ import {
   assertOrganizationMember,
   getUserSelectedOrganization,
 } from '@/commands/components/organization/select.ts';
-import { recordConnectionFromAuth } from '@/core/auth/auth-connection-recorder.ts';
-import { ENV_ORG, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { switchOrganization } from '@/core/auth/auth-connection-recorder.ts';
+import { ENV_ORG, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -44,7 +44,8 @@ export async function authOrg(
     return;
   }
 
-  await switchOrganization(ctx.auth, targetOrg);
+  const activeConnection = getActiveConnection(loadState());
+  await switchOrganization(ctx.auth, targetOrg, activeConnection?.tokenName);
   ctx.console.print(`Switched to organization: ${targetOrg}`);
 }
 
@@ -59,20 +60,6 @@ async function resolveTargetOrganization(
 
   await assertOrganizationMember(client, org);
   return org;
-}
-
-async function switchOrganization(auth: ResolvedAuth, org: string): Promise<void> {
-  const activeConnection = getActiveConnection(loadState());
-  await recordConnectionFromAuth(
-    new ResolvedAuth({
-      token: auth.token,
-      serverUrl: auth.serverUrl,
-      orgKey: org,
-      connectionType: auth.connectionType,
-      source: auth.source,
-    }),
-    { force: true, tokenName: activeConnection?.tokenName },
-  );
 }
 
 function assertNoEnvironmentAuthentication(auth: ResolvedAuth): void {
