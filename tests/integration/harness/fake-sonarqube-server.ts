@@ -1587,10 +1587,12 @@ export class FakeSonarQubeServerBuilder {
             .filter(({ key }) => key === query.keys)
             .map(({ key }) => ({ id: `${key}-project-id`, key }));
           return Response.json(
-            projectsLookupResponse?.body ?? {
-              projects: matches,
-              page: { pageIndex: 1, pageSize: 1, total: matches.length },
-            },
+            projectsLookupResponse
+              ? projectsLookupResponse.body
+              : {
+                  projects: matches,
+                  page: { pageIndex: 1, pageSize: 1, total: matches.length },
+                },
             { status: projectsLookupResponse?.status ?? 200 },
           );
         }
