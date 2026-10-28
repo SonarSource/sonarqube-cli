@@ -967,7 +967,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   const directives = architecture
     .command('directives')
-    .description('Read and create project directives');
+    .description('Read, create and update project directives');
   directives
     .command('get')
     .description('Read a directive by id or list a page of visible project directives')
@@ -981,13 +981,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   directives
     .command('set')
-    .description('Create explicit project directives')
-    .requiredOption('--file <file>', 'JSON object with a create array')
+    .description('Create or update explicit project directives')
+    .requiredOption('--file <file>', 'JSON object with create and update arrays')
     .option('--dry-run', 'Preview changes without writing')
     .option('-p, --project <project>', 'Project key')
     .addHelpText(
       'after',
-      '\nCreation skips existing directives and retains unmentioned directives.',
+      '\nCreation skips existing directives. Updates retain unspecified fields.',
     )
     .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
 
