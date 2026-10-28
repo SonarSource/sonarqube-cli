@@ -42,8 +42,7 @@ jobs:
         with:
           secrets: |
             development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
-            development/kv/data/devex-harbor-benchmark SONAR_TOKEN | HB_SONAR_TOKEN;
-            development/kv/data/devex-harbor-benchmark SONAR_ORG | HB_SONAR_ORG;
+            development/team/sonarlint/kv/data/sonarcloud-it token | HB_SONAR_TOKEN;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
@@ -53,7 +52,9 @@ jobs:
           JOB_NAME: ${{ matrix.os }}
           TASK: ${{ matrix.task }}
           HB_SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_TOKEN }}
-          HB_SONAR_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ORG }}
+          HB_SONAR_ORG: sonarlint-it
+          HB_SONAR_SERVER: https://sc-staging.io
+          HB_SONAR_API_URL: https://api.sc-staging.io
           ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
