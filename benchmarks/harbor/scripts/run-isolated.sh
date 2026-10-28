@@ -15,7 +15,7 @@ ROOT_DIR_NAMES=(app logs tests solution)
 as_agent() {
   local preserved_env="$1"
   shift
-  sudo --preserve-env="${preserved_env}" -u "${AGENT_USER}" -H env HOME="${AGENT_HOME}" PATH="${AGENT_PATH}" "$@"
+  (cd "${AGENT_HOME}" && sudo --preserve-env="${preserved_env}" -u "${AGENT_USER}" -H env HOME="${AGENT_HOME}" PATH="${AGENT_PATH}" "$@")
 }
 
 create_root_dirs() {
