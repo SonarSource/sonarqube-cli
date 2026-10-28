@@ -42,6 +42,10 @@ import type {
 export class QuietConsole implements Console {
   constructor(private readonly delegate: Console) {}
 
+  canPrompt(): boolean {
+    return this.delegate.canPrompt();
+  }
+
   private suppress(method: string, ...args: unknown[]): void {
     logger.debug(`[quiet] ${method}`, ...args.filter((arg) => arg != null && arg !== ''));
   }

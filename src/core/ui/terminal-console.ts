@@ -651,6 +651,10 @@ export class TerminalConsole implements Console {
     });
   }
 
+  canPrompt(): boolean {
+    return process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
+  }
+
   setFormattedOutputMode(active: boolean): void {
     this.formattedOutputMode = active;
     if (!active) {

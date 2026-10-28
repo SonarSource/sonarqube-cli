@@ -107,15 +107,13 @@ describe('runSqaaGroups', () => {
       chunks.push(String(chunk));
       return true;
     });
-    const isTTY = process.stdout.isTTY;
-    process.stdout.isTTY = true;
     try {
       await runSqaaGroups([groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')], CONNECTION, {
         ...RUN,
         silent: false,
+        isTTY: true,
       });
     } finally {
-      process.stdout.isTTY = isTTY;
       writeSpy.mockRestore();
     }
 
@@ -132,12 +130,13 @@ describe('runSqaaGroups', () => {
       chunks.push(String(chunk));
       return true;
     });
-    const isTTY = process.stdout.isTTY;
-    process.stdout.isTTY = true;
     try {
-      await runSqaaGroups([groupOf('app-a', 'x.ts')], CONNECTION, { ...RUN, silent: false });
+      await runSqaaGroups([groupOf('app-a', 'x.ts')], CONNECTION, {
+        ...RUN,
+        silent: false,
+        isTTY: true,
+      });
     } finally {
-      process.stdout.isTTY = isTTY;
       writeSpy.mockRestore();
     }
 
