@@ -38,7 +38,7 @@ import { formatOrganizationRows, type OrganizationRow } from './rows.ts';
  * A failed lookup gets its own message, so a network or server problem is never reported as
  * absent membership.
  */
-function organizationMembershipError(
+export function organizationMembershipError(
   org: string,
   membership: Extract<OrganizationMembership, { status: 'not_member' | 'check_failed' }>,
 ): CommandFailedError {
