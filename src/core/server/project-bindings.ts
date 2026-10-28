@@ -27,6 +27,17 @@ import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import { hasNextPage, type Paging } from './paging.ts';
 
+/** `unknown` covers every lookup that failed or answered unusably, so callers never read it as `unbound`. */
+export type GitRemoteBinding =
+  | { kind: 'unbound' }
+  | { kind: 'in-org'; projectKey: string }
+  | { kind: 'other-org' }
+  | { kind: 'unknown' };
+
+const UNBOUND: GitRemoteBinding = { kind: 'unbound' };
+const OTHER_ORG: GitRemoteBinding = { kind: 'other-org' };
+const UNKNOWN: GitRemoteBinding = { kind: 'unknown' };
+
 export class ProjectBindingsClient {
   private readonly client: SonarHttpClient;
 
@@ -44,21 +55,57 @@ export class ProjectBindingsClient {
     remoteUrl: string,
     orgKey?: string,
   ): ResultAsync<string | null | undefined, HttpClientError> {
-    const sanitizedRemoteUrl = stripGitRemoteUrlUserinfo(remoteUrl);
-    if (this.client.isCloud) {
-      if (!orgKey) {
-        return okAsync(undefined);
+    return this.resolveGitRemoteBinding(remoteUrl, orgKey).map((binding) => {
+      switch (binding.kind) {
+        case 'unbound':
+          return null;
+        case 'in-org':
+          return binding.projectKey;
+        case 'other-org':
+        case 'unknown':
+          return undefined;
       }
-      return this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl).andThen((projectId) => {
-        if (!projectId) {
-          return okAsync(projectId);
-        }
-        return this.getSonarCloudProjectKeyById(projectId, orgKey);
-      });
+    });
+  }
+
+  /**
+   * Classifies what the server binds the git remote to, in one pass over the lookups.
+   * `other-org` is SonarQube Cloud only: the remote is bound to a project the organization lacks.
+   */
+  resolveGitRemoteBinding(
+    remoteUrl: string,
+    orgKey?: string,
+  ): ResultAsync<GitRemoteBinding, HttpClientError> {
+    const sanitizedRemoteUrl = stripGitRemoteUrlUserinfo(remoteUrl);
+    if (!this.client.isCloud) {
+      return this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl).map(
+        (binding): GitRemoteBinding => {
+          if (binding === null) {
+            return UNBOUND;
+          }
+          return binding ? { kind: 'in-org', projectKey: binding.projectKey } : UNKNOWN;
+        },
+      );
     }
-    return this.getSqsProjectBindingByRemoteUrl(sanitizedRemoteUrl).map((binding) =>
-      binding === null ? null : binding?.projectKey,
-    );
+    if (!orgKey) {
+      return okAsync(UNKNOWN);
+    }
+    return this.getSqcProjectIdByRemoteUrl(sanitizedRemoteUrl).andThen((projectId) => {
+      if (!projectId) {
+        return okAsync<GitRemoteBinding, HttpClientError>(projectId === null ? UNBOUND : UNKNOWN);
+      }
+      return this.searchSonarCloudProjectKeysById(projectId, orgKey).map(
+        (keys): GitRemoteBinding => {
+          if (keys === undefined) {
+            return UNKNOWN;
+          }
+          if (keys.length === 0) {
+            return OTHER_ORG;
+          }
+          return keys[0] ? { kind: 'in-org', projectKey: keys[0] } : UNKNOWN;
+        },
+      );
+    });
   }
 
   private getSqsProjectBindingByRemoteUrl(
@@ -108,10 +155,11 @@ export class ProjectBindingsClient {
       });
   }
 
-  private getSonarCloudProjectKeyById(
+  /** Keys of the organization's projects with this id; undefined when the response was unusable. */
+  private searchSonarCloudProjectKeysById(
     projectId: string,
     orgKey: string,
-  ): ResultAsync<string | null | undefined, HttpClientError> {
+  ): ResultAsync<string[] | undefined, HttpClientError> {
     return this.client
       .getSafe<{ components: Array<{ key: string }> }>('/api/components/search_projects', {
         projectIds: projectId,
@@ -122,11 +170,7 @@ export class ProjectBindingsClient {
           return undefined;
         }
         const components = result.value?.components;
-        if (!Array.isArray(components) || components.length === 0) {
-          return undefined;
-        }
-        const projectKey = components[0].key;
-        return projectKey || undefined;
+        return Array.isArray(components) ? components.map((component) => component.key) : undefined;
       });
   }
 
