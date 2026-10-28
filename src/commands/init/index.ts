@@ -37,8 +37,7 @@ export interface InitOptions {
  * whatever is already in place.
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
-  const canPrompt = process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
-  const interactive = !options.nonInteractive && canPrompt;
+  const interactive = !options.nonInteractive && ctx.console.canPrompt();
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
 

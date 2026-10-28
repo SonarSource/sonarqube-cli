@@ -327,6 +327,35 @@ describe('sonar init', () => {
   );
 
   it(
+    'does not echo a recorded organization that is not a plain key into the sonar auth org hint',
+    async () => {
+      const serverUrl = await signInToCloud((server) =>
+        server.withGitRemoteBoundInOtherOrg(GITHUB_REMOTE),
+      );
+      withRemote(GITHUB_REMOTE);
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: {
+            projectKey: 'mapped',
+            serverUrl,
+            organization: 'x; sh ./payload.sh #',
+            path: '.',
+          },
+        }),
+      );
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(`another organization than ${ORG}`);
+      expect(result.stdout + result.stderr).toContain("'sonar auth org'");
+      expect(result.stdout + result.stderr).not.toContain('payload.sh');
+    },
+    TIMEOUT,
+  );
+
+  it(
     'fails without suggesting sonar integrate when the account belongs to no organization',
     async () => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });

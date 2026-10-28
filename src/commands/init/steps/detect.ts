@@ -76,6 +76,9 @@ function mappingsOnPath(
   );
 }
 
+// A committed config is untrusted and the name ends up in a command the user is told to run.
+const ORGANIZATION_KEY = /^[A-Za-z0-9_.-]+$/;
+
 /** Organization that a mapping on the same server records, when it differs from the active one. */
 function recordedOtherOrganization(
   mappings: SharedProjectConfigMapping[],
@@ -85,6 +88,7 @@ function recordedOtherOrganization(
     (mapping) =>
       authMatchesRecordedServer(auth, mapping.serverUrl) &&
       mapping.organization !== undefined &&
+      ORGANIZATION_KEY.test(mapping.organization) &&
       mapping.organization !== auth.orgKey,
   )?.organization;
 }
