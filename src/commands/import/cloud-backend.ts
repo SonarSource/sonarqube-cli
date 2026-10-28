@@ -24,7 +24,13 @@ import type { Console } from '@/core/ui/console.ts';
 import type { ImportApiClient } from './import-api.ts';
 import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
-import { computeInstallationKey, resolveAlmKey, resolveOrg, resolveRepos } from './resolve-options';
+import {
+  computeInstallationKey,
+  resolveAlmKey,
+  type ResolvedOrg,
+  resolveOrg,
+  resolveRepos,
+} from './resolve-options';
 import type { ImportOptions } from './types';
 
 /** SonarQube Cloud: the org is the one tied to the active connection. */
@@ -33,6 +39,8 @@ export class CloudBackend implements ImportBackend {
     private readonly client: ImportApiClient,
     private readonly orgKey: string | undefined,
     private readonly serverUrl: string,
+    /** The organization when the caller already resolved it, so `plan()` does not look it up again. */
+    private readonly resolvedOrg?: ResolvedOrg,
   ) {}
 
   async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
@@ -40,7 +48,7 @@ export class CloudBackend implements ImportBackend {
       key: resolvedOrgKey,
       almKey: resolvedAlmKey,
       onlyPrivateProjectsEnabled,
-    } = await resolveOrg(this.client, this.orgKey);
+    } = this.resolvedOrg ?? (await resolveOrg(this.client, this.orgKey));
 
     console.info(`Organization: ${resolvedOrgKey}`);
 

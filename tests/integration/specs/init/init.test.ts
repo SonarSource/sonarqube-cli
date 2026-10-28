@@ -449,13 +449,94 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('bound to the new Sonar project');
+        expect(result.stdout).toContain('Created project');
+        expect(result.stdout).not.toContain('The repository is bound');
         expect(result.stdout).toContain(
           'Project dashboard: https://sonarcloud.io/project/overview?id=',
         );
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey"');
         expect(config).not.toContain(TOKEN);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'looks the organization up once for the whole bind',
+      async () => {
+        const server = await withImportableRepo(
+          'github',
+          'example/repository',
+        )(newCloudServer()).start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const lookups = server
+          .getRecordedRequests()
+          .filter((r) => r.path === '/api/organizations/search' && r.query.organizations === ORG);
+        expect(lookups).toHaveLength(1);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not offer binding for a remote whose repository cannot be derived',
+      async () => {
+        await signInToCloud(withImportableRepo('azure', 'project/repository'));
+        withRemote('https://org.visualstudio.com/project/_git/repository');
+
+        const session = harness.runInteractive('init');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Bind this repository');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns when the new project replaces the mapping of the same directory',
+      async () => {
+        await signInToCloud(withImportableRepo('github', 'example/repository'));
+        withRemote(GITHUB_REMOTE);
+        writeSonarConfig('https://sq.example.com');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(
+          "Replacing the mapping of this directory to 'mapped'",
+        );
+        const config = JSON.parse(harness.cwd.file('.sonar-config.json').asText());
+        expect(config.project.projectKey).not.toBe('mapped');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'says the project was created and how to link it when the mapping cannot be saved',
+      async () => {
+        await signInToCloud(withImportableRepo('github', 'example/repository'));
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('.sonar-config.json', '{ not json');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Bind this repository');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Created project');
+        expect(output).toContain('could not save .sonar-config.json');
+        expect(output).toContain("'sonar link ");
       },
       TIMEOUT,
     );
@@ -471,7 +552,7 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('bound to the new Sonar project');
+        expect(result.stdout).toContain('Created project');
       },
       TIMEOUT,
     );

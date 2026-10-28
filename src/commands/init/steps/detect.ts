@@ -40,7 +40,7 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome } from '../init-outcome.ts';
-import { isBindableRemote } from '../remote-host.ts';
+import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
   auth: ResolvedAuth;
@@ -168,7 +168,8 @@ async function chooseNewProjectPath(
   remote: string,
   { console, interactive }: DetectDeps,
 ): Promise<InitOutcome> {
-  if (!isBindableRemote(remote)) {
+  // The import needs the repository slug, so a remote without one is never offered for binding.
+  if (remoteRepositorySlug(remote) === null) {
     return { path: 'unbound-new', projectRoot, remote };
   }
   if (!interactive) {

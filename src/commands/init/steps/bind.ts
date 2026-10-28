@@ -22,7 +22,7 @@ import { relative, sep } from 'node:path';
 
 import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
-import { resolveAlmKey, resolveOrg } from '@/commands/import/resolve-options.ts';
+import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
 import { deriveEntry } from '@/commands/link/link-project.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
@@ -92,19 +92,51 @@ async function authorizeOrganization(
   });
 }
 
+function shellArgument(value: string): string {
+  return /^[\w./-]+$/.test(value) ? value : JSON.stringify(value);
+}
+
+function linkCommand(projectKey: string, path: string): string {
+  return path === '.'
+    ? `sonar link ${shellArgument(projectKey)}`
+    : `sonar link --monorepo ${shellArgument(projectKey)} --path ${shellArgument(path)}`;
+}
+
+/** The project already exists on the server by now, so a failure here has to say how to finish. */
 async function writeMapping(
   auth: ResolvedAuth,
   projectKey: string,
   projectRoot: string,
+  console: Console,
 ): Promise<void> {
   const { gitRoot, isGit } = findGitRoot(projectRoot);
   const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
   const path = relative(configDir, projectRoot).split(sep).join('/') || '.';
   const entry = deriveEntry(auth, projectKey, path);
 
-  const shadowed = path === '.' ? await sharedProjectConfigRepository.set(configDir, entry) : true;
-  if (shadowed) {
-    await sharedProjectConfigRepository.addProject(configDir, entry);
+  try {
+    const mapped = await sharedProjectConfigRepository.load(configDir);
+    const replaced = mapped.find(
+      (mapping) => canonicalizePath(mapping.projectRoot) === canonicalizePath(projectRoot),
+    );
+    if (replaced) {
+      console.warn(
+        `Replacing the mapping of this directory to '${replaced.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+      );
+    }
+    const shadowed =
+      path === '.' ? await sharedProjectConfigRepository.set(configDir, entry) : true;
+    if (shadowed) {
+      await sharedProjectConfigRepository.addProject(configDir, entry);
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new CommandFailedError(
+      `Created project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
+      {
+        remediationHint: `Fix the file, then run '${linkCommand(projectKey, path)}' to map the project.`,
+      },
+    );
   }
 }
 
@@ -137,9 +169,10 @@ async function importRepository(
   api: ImportApiClient,
   auth: ResolvedAuth,
   slug: string,
+  org: ResolvedOrg,
   console: Console,
 ): Promise<string> {
-  const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl).plan(
+  const plan = await new CloudBackend(api, auth.orgKey, auth.serverUrl, org).plan(
     { repo: [slug], nonInteractive: true },
     console,
   );
@@ -175,17 +208,19 @@ export async function runBoundNew(
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
-  const almKey = await resolveAlmKey(api, org.key, org.almKey);
-  if (!almKey && (await authorizeOrganization(api, auth, org.key, console)) === undefined) {
+  const almKey =
+    (await resolveAlmKey(api, org.key, org.almKey)) ??
+    (await authorizeOrganization(api, auth, org.key, console));
+  if (!almKey) {
     return { path: 'unbound-new', projectRoot, remote };
   }
 
   console.info(`Organization: ${org.key}`);
   const projectKey = await console.withSpinner('Creating the project', () =>
-    importRepository(api, auth, slug, new QuietConsole(console)),
+    importRepository(api, auth, slug, { ...org, almKey }, new QuietConsole(console)),
   );
 
-  await writeMapping(auth, projectKey, projectRoot);
+  await writeMapping(auth, projectKey, projectRoot, console);
   console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
   await showAnalysisResults(http, projectKey, projectDashboardUrl(auth, projectKey), console);
   return { path: 'bound-new', projectRoot, remote, projectKey };
