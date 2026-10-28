@@ -420,8 +420,6 @@ export class IntegrationInstaller {
     );
     const featureContext = this.buildFeatureContext(context, application, resolvedDependencies);
 
-    await this.cleanupRecordedLegacyInstallations(feature, featureContext);
-
     for (const resource of resolveAllResources(feature, subfeatures)) {
       if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
         callbacks.onResourceSkipped?.(resource);
@@ -439,6 +437,8 @@ export class IntegrationInstaller {
       operations.push({ id: operation.id, version: operation.version });
       callbacks.onOperationApplied?.(operation);
     }
+
+    await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
     return { dependencies, resources, operations };
   }

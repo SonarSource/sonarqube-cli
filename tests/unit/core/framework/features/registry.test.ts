@@ -1130,6 +1130,42 @@ describe('declarative integration framework', () => {
     expect(fake.calls.filter((call) => call.method === 'confirmPrompt')).toHaveLength(1);
   });
 
+  it('preserves legacy assets when resource installation fails', async () => {
+    const state = getDefaultState('test');
+    const targetPath = join(tempDir, 'legacy-file');
+    const legacyContent = '# legacy:begin\nold content\n# legacy:end\n';
+    await writeFile(targetPath, legacyContent);
+    const feature: FeatureDeclaration = {
+      id: 'feature',
+      displayName: 'Feature',
+      resources: [
+        wholeFile({
+          id: 'resource',
+          targetPath: join(tempDir, 'new-file'),
+          content: () => {
+            throw new Error('Resource installation failed');
+          },
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'legacy-resource',
+          targetPath,
+          startMarker: '# legacy:begin',
+          endMarker: '# legacy:end',
+        }),
+      ],
+    };
+    const integration = makeIntegration({ features: [feature] });
+
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(
+      applyAndRecord(installer, makeContext(state, tempDir), integration, feature),
+    ).rejects.toThrow('Resource installation failed');
+    expect(await readFile(targetPath, 'utf-8')).toBe(legacyContent);
+    expect(state.integrations.installed).toEqual([]);
+  });
+
   it('runs legacy cleanups unconditionally even when state records resource at a higher version', async () => {
     const state = getDefaultState('test');
     const targetPath = join(tempDir, 'managed-file');
