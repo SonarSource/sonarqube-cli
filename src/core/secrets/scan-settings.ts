@@ -20,8 +20,12 @@
 
 import { isAbsolute, resolve } from 'node:path';
 
-import { getBooleanConfigValue, getConfigValue } from '@/core/config/config-repository.ts';
-import type { ConfigKey } from '@/core/config/config-schema.ts';
+import { getConfigValue, getKeyDefinition } from '@/core/config/config-repository.ts';
+import {
+  type ConfigKey,
+  describeAcceptedValues,
+  isValidConfigValue,
+} from '@/core/config/config-schema.ts';
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import logger from '@/core/observability/logger.ts';
@@ -50,51 +54,55 @@ export const DEFAULT_SECRETS_SCAN_SETTINGS: SecretsScanSettings = {
 export async function loadSecretsScanSettings(
   cwd: string = process.cwd(),
 ): Promise<SecretsScanSettings> {
-  const [maxFileSize, exclude] = await Promise.all([
+  const [
+    maxFileSize,
+    exclude,
+    disableTestFileDetection,
+    disableEntropyFilter,
+    disableKnownFakeSecretFilter,
+    demoMode,
+  ] = await Promise.all([
     fromStored('secrets.maxFileSize'),
     fromStored('secrets.exclude'),
+    fromStored('secrets.disableTestFileDetection'),
+    fromStored('secrets.disableEntropyFilter'),
+    fromStored('secrets.disableKnownFakeSecretFilter'),
+    fromStored('secrets.demoMode'),
   ]);
   return {
-    maxFileSize: parseMaxFileSize(maxFileSize),
+    maxFileSize: maxFileSize === undefined ? MAX_SCANNED_FILE_SIZE : Number(maxFileSize),
     exclusions: await resolveConfiguredExclusions(exclude, cwd),
-    disableTestFileDetection: fromStoredBoolean('secrets.disableTestFileDetection'),
-    disableEntropyFilter: fromStoredBoolean('secrets.disableEntropyFilter'),
-    disableKnownFakeSecretFilter: fromStoredBoolean('secrets.disableKnownFakeSecretFilter'),
-    demoMode: fromStoredBoolean('secrets.demoMode'),
+    disableTestFileDetection: disableTestFileDetection === 'true',
+    disableEntropyFilter: disableEntropyFilter === 'true',
+    disableKnownFakeSecretFilter: disableKnownFakeSecretFilter === 'true',
+    demoMode: demoMode === 'true',
   };
 }
 
-// Stored settings are optional, so an unreadable store must not stop a scan; unset falls back to the defaults,
-// which scan the most.
+/**
+ * The stored value, held to the same rule `config set` applies, so a hand-edited value is never passed on. Stored
+ * settings are optional: an unreadable or invalid value counts as unset, whose default scans the most.
+ */
 async function fromStored(key: ConfigKey): Promise<string | undefined> {
+  let raw: string | undefined;
   try {
-    return await getConfigValue(key);
+    raw = await getConfigValue(key);
   } catch (err) {
     logIgnoredConfig(key, err instanceof Error ? err.message : String(err));
     return undefined;
   }
-}
+  if (raw === undefined) return undefined;
 
-function fromStoredBoolean(key: ConfigKey): boolean {
-  try {
-    return getBooleanConfigValue(key, false);
-  } catch (err) {
-    logIgnoredConfig(key, err instanceof Error ? err.message : String(err));
-    return false;
+  const definition = getKeyDefinition(key);
+  if (!isValidConfigValue(definition, raw)) {
+    logIgnoredConfig(key, `'${raw}' is invalid. ${describeAcceptedValues(definition)}`);
+    return undefined;
   }
+  return raw;
 }
 
 function logIgnoredConfig(key: ConfigKey, reason: string): void {
   logger.debug(`Ignoring stored config '${key}': ${reason}`);
-}
-
-function parseMaxFileSize(raw: string | undefined): number {
-  if (raw === undefined) return MAX_SCANNED_FILE_SIZE;
-  if (!/^\d+$/.test(raw)) {
-    logIgnoredConfig('secrets.maxFileSize', `'${raw}' is not a non-negative integer`);
-    return MAX_SCANNED_FILE_SIZE;
-  }
-  return Number(raw);
 }
 
 /** The config is shared by every repository, so a relative entry means a path inside the one being scanned. */
