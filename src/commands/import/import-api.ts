@@ -99,6 +99,23 @@ export class ImportApiClient {
   }
 
   /**
+   * Provision the project for one repository and request its Autoscan eligibility. Resolves to
+   * the new project key; rejects when the server created no project.
+   */
+  async importRepository(organization: string, installationKey: string): Promise<string> {
+    const result = await this.provisionProject(organization, installationKey);
+    if (result.projects.length === 0) {
+      throw new Error(
+        'provision_projects returned no project: the repository may already be bound, or ' +
+          'the installation key was rejected by the server.',
+      );
+    }
+    const { projectKey } = result.projects[0];
+    await this.requestAutoscanEligibility(projectKey);
+    return projectKey;
+  }
+
+  /**
    * Request SonarQube Cloud Autoscan eligibility/auto-enable for a newly provisioned project.
    * Best-effort: swallows failures so a hiccup here never fails the enclosing `sonar import` run.
    */
