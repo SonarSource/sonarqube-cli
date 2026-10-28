@@ -111,7 +111,10 @@ export class ServerBackend implements ImportBackend {
 
     return {
       selection,
-      projectListUrl: `${this.serverUrl.replace(/\/$/, '')}/projects`,
+      outroLink: {
+        label: 'Dashboard',
+        url: `${this.serverUrl.replace(/\/$/, '')}/admin/project-coverage`,
+      },
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
       importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
     };

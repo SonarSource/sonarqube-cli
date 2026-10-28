@@ -32,7 +32,8 @@ export interface ImportRepoOutcome {
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
 export interface ImportPlan {
   selection: RepoResolution;
-  projectListUrl: string;
+  /** Where to send the user once the import has finished. */
+  outroLink: { label: string; url: string };
   /** Maps a listed repository to the shape `importRepo` expects. */
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */
