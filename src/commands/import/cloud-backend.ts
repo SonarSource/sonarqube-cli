@@ -70,7 +70,10 @@ export class CloudBackend implements ImportBackend {
     const client = this.client;
     return {
       selection,
-      projectListUrl: `${this.serverUrl.replace(/\/$/, '')}/organizations/${resolvedOrgKey}/projects`,
+      outroLink: {
+        label: 'Dashboard',
+        url: `${this.serverUrl.replace(/\/$/, '')}/organizations/${resolvedOrgKey}/onboarding-dashboard`,
+      },
       toResolvedRepo: (repo) => ({
         slug: repo.slug,
         installationKey: computeInstallationKey(repo, almKey),
