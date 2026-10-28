@@ -88,6 +88,6 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
 
 
-Project directives support paginated `architecture directives get` and explicit-ID reads. `directives set --file` previews and creates missing directives without replacement.
+Project directives support paginated `architecture directives get` and explicit-ID reads. `directives set --file` previews and creates missing directives without replacement. Updates preserve omitted fields and stored origin.
 
 Architecture command registration lives in `architecture/register.ts`; `command-tree.ts` delegates to it. Keep Architecture-specific options, handlers and help in that module.
