@@ -21,7 +21,19 @@
 // Public hosts of the platforms `sonar import` binds today: GitHub and Azure DevOps.
 const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com', 'ssh.dev.azure.com']);
 const AZURE_LEGACY_HOST_SUFFIX = '.visualstudio.com';
-const SCP_LIKE_REMOTE = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)/;
+const SCP_LIKE_REMOTE = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)(.*)$/;
+// `[<org>/][<collection>/]<project>/_git/<repo>` over HTTPS, `v3/<org>/<project>/<repo>` over SSH.
+const AZURE_HTTPS_PATH = /([^/]+)\/_git\/([^/]+)$/;
+const AZURE_SSH_PATH = /^\/v3\/[^/]+\/([^/]+)\/([^/]+)$/;
+const GIT_SUFFIX = /\.git$/;
+
+function isAzureHost(hostname: string): boolean {
+  return (
+    hostname === 'dev.azure.com' ||
+    hostname === 'ssh.dev.azure.com' ||
+    hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX)
+  );
+}
 
 function remoteHostname(remote: string): string | null {
   const scpLike = SCP_LIKE_REMOTE.exec(remote);
@@ -42,4 +54,29 @@ export function isBindableRemote(remote: string): boolean {
     hostname !== null &&
     (BINDABLE_HOSTS.has(hostname) || hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX))
   );
+}
+
+/**
+ * The repository slug `sonar import --repo` expects: `owner/repo` on GitHub, `project/repo` on
+ * Azure DevOps. Null when the remote is not a recognized bindable one.
+ */
+export function remoteRepositorySlug(remote: string): string | null {
+  if (!isBindableRemote(remote)) {
+    return null;
+  }
+  const scpLike = SCP_LIKE_REMOTE.exec(remote);
+  let path: string;
+  try {
+    path = scpLike ? `/${scpLike[2]}` : new URL(remote).pathname;
+  } catch {
+    return null;
+  }
+  path = path.replace(GIT_SUFFIX, '');
+  const hostname = remoteHostname(remote);
+  if (hostname !== null && isAzureHost(hostname)) {
+    const match = AZURE_HTTPS_PATH.exec(path) ?? AZURE_SSH_PATH.exec(path);
+    return match ? `${match[1]}/${match[2]}` : null;
+  }
+  const parts = path.split('/').filter(Boolean);
+  return parts.length === 2 ? parts.join('/') : null;
 }

@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { isBindableRemote } from '@/commands/init/remote-host.ts';
+import { isBindableRemote, remoteRepositorySlug } from '@/commands/init/remote-host.ts';
 
 describe('isBindableRemote', () => {
   it.each([
@@ -46,5 +46,29 @@ describe('isBindableRemote', () => {
     '',
   ])('rejects %s', (remote) => {
     expect(isBindableRemote(remote)).toBe(false);
+  });
+});
+
+describe('remoteRepositorySlug', () => {
+  it.each([
+    ['https://github.com/example/repository.git', 'example/repository'],
+    ['git@github.com:example/repository.git', 'example/repository'],
+    ['github.com:example/repository.git', 'example/repository'],
+    ['https://dev.azure.com/org/project/_git/repository', 'project/repository'],
+    ['https://org@dev.azure.com/org/project/_git/repository', 'project/repository'],
+    ['git@ssh.dev.azure.com:v3/org/project/repository', 'project/repository'],
+    ['ssh://git@ssh.dev.azure.com/v3/org/project/repository', 'project/repository'],
+    ['https://org.visualstudio.com/project/_git/repository', 'project/repository'],
+    [
+      'https://org.visualstudio.com/DefaultCollection/project/_git/repository',
+      'project/repository',
+    ],
+    ['org@vs-ssh.visualstudio.com:v3/org/project/repository', 'project/repository'],
+    ['https://dev.azure.com/org/project', null],
+    ['https://github.com/example', null],
+    ['https://gitlab.com/example/repository.git', null],
+    ['', null],
+  ])('maps %s to %s', (remote, slug) => {
+    expect(remoteRepositorySlug(remote)).toBe(slug);
   });
 });

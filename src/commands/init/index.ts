@@ -24,6 +24,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import type { InitOutcome } from './init-outcome.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
+import { runBoundNew } from './steps/bind.ts';
 import { detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 
 export interface InitOptions {
@@ -32,9 +33,9 @@ export interface InitOptions {
 }
 
 /**
- * Signs in, resolves the organization, detects the project and reports the onboarding path.
- * It never runs the path, and keeps everything it completed: running it again resumes from
- * whatever is already in place.
+ * Signs in, resolves the organization, detects the project and selects the onboarding path.
+ * It runs `bound-new` and only reports the other paths. It keeps everything it completed:
+ * running it again resumes from whatever is already in place.
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
@@ -53,5 +54,7 @@ async function run(
   interactive: boolean,
 ): Promise<InitOutcome> {
   const auth = await resolveInitAuth(ctx, interactive);
-  return detectInitPath(projectRoot, { auth, console: ctx.console, interactive });
+  const deps = { auth, console: ctx.console, interactive };
+  const outcome = await detectInitPath(projectRoot, deps);
+  return outcome.path === 'bound-new' ? runBoundNew(outcome, deps) : outcome;
 }
