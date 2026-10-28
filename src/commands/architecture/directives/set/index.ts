@@ -23,8 +23,12 @@ import { readFile } from 'node:fs/promises';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 
-import { createDirectivesApi } from '../../_common/architecture-api.ts';
-import { applyDirectiveChanges, parseDirectiveChanges } from '../../_common/directives.ts';
+import { createArchitectureApi, createDirectivesApi } from '../../_common/architecture-api.ts';
+import {
+  applyDirectiveChanges,
+  parseDirectiveChanges,
+  warnDirectiveKeys,
+} from '../../_common/directives.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
 import { recordSet, type SetFileOptions } from '../../_common/write-options.ts';
@@ -47,6 +51,14 @@ export async function setProjectDirectives(
     createDirectivesApi(ctx.connection, projectKey),
     changes,
     options.dryRun === true,
+    (directives) =>
+      warnDirectiveKeys(
+        createArchitectureApi(ctx.connection, projectKey),
+        directives,
+        (message) => {
+          ctx.console.warn(message);
+        },
+      ),
   ).catch((error: unknown) => {
     throw toArchitectureError(error, projectKey);
   });
@@ -54,7 +66,7 @@ export async function setProjectDirectives(
     target: 'directives',
     mode: result.mode,
     dry_run: options.dryRun === true,
-    removed: 0,
+    removed: result.toDelete.length,
     added: result.toCreate.length,
     changed: result.changes.length,
     created: result.created.length,
@@ -70,11 +82,15 @@ export async function setProjectDirectives(
       ctx.console.info(`  description: ${JSON.stringify(item.description)}`);
   }
   for (const change of result.changes) printUpdate(ctx, prefix, change);
+  for (const item of result.toDelete)
+    ctx.console.info(
+      `${prefix} delete: ${item.id} ${item.type} ${item.fromNodeKey} -> ${item.toNodeKey}`,
+    );
   ctx.console.info(`Skipped ${result.skipped} existing, repeated or unchanged directives.`);
   ctx.console.info(
     options.dryRun
       ? 'Dry run: nothing was written.'
-      : `Created ${result.created.length} directives. Updated ${result.updated.length} directives. Unmentioned directives were retained.`,
+      : `Created ${result.created.length} directives. Updated ${result.updated.length} directives. Deleted ${result.deleted.length} directives. Unmentioned directives were retained.`,
   );
   ctx.console.warn(
     'Concurrent edits can race the reads; the public API has no conditional writes. Changes are applied individually without automatic retry or rollback.',
