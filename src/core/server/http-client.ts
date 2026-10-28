@@ -386,7 +386,7 @@ export class SonarHttpClient {
     params: Record<string, string>,
     timeoutMs: number = POST_REQUEST_TIMEOUT_MS,
   ): ResultAsync<void, HttpClientError> {
-    const url = `${this.serverURL}${endpoint}`;
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
 
     return ResultAsync.fromPromise(
       fetchAuthenticated(
@@ -413,7 +413,7 @@ export class SonarHttpClient {
     endpoint: string,
     params: Record<string, string>,
   ): ResultAsync<T, HttpClientError> {
-    const url = `${this.serverURL}${endpoint}`;
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
 
     return ResultAsync.fromPromise(
       fetchAuthenticated(
