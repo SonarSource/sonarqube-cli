@@ -47,58 +47,14 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
-      - name: Install Harbor
-        env:
-          ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
-          ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-        run: |
-          export PIP_INDEX_URL="https://${ARTIFACTORY_USER}:${ARTIFACTORY_ACCESS_TOKEN}@repox.jfrog.io/artifactory/api/pypi/sonarsource-pypi/simple"
-          export UV_DEFAULT_INDEX="${PIP_INDEX_URL}"
-          python3 -m venv "${RUNNER_TEMP}/uv-venv"
-          "${RUNNER_TEMP}/uv-venv/bin/pip" install "uv==${UV_VERSION}"
-          "${RUNNER_TEMP}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
-          echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
-
-      - name: Create Harbor directories (linux)
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo mkdir -p /app /logs /tests /solution
-          sudo chown "$(id -u):$(id -g)" /app /logs /tests /solution
-
-      - name: Create Harbor directories (macos)
-        if: ${{ matrix.os == 'macos' }}
-        run: |
-          sudo mkdir -p /etc/synthetic.d
-          for name in app logs tests solution; do
-            mkdir -p "${RUNNER_TEMP}/harbor/${name}"
-            printf '%s\t%s\n' "${name}" "${RUNNER_TEMP}/harbor/${name}"
-          done | sudo tee /etc/synthetic.d/harbor
-          sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs.util -t || echo "apfs.util exited with $?"
-          ls -ld /app /logs /tests /solution
-
-      - name: Install sonar and Claude Code
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
-          curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
-          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "${GITHUB_PATH}"
-
-      - name: Run Harbor
+      - name: Run benchmark as an unprivileged user
         env:
           MODEL: ${{ inputs.model }}
-          MATRIX_OS: ${{ matrix.os }}
+          JOB_NAME: ${{ matrix.os }}
+          ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
-        run: |
-          export PYTHONPATH="${GITHUB_WORKSPACE}/benchmarks/harbor/environments"
-          unset ACTIONS_ID_TOKEN_REQUEST_URL ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_RUNTIME_TOKEN
-          harbor run \
-            --path benchmarks/harbor/tasks \
-            --agent claude-code \
-            --model "${MODEL}" \
-            --jobs-dir harbor-jobs \
-            --job-name "${MATRIX_OS}" \
-            --n-concurrent 1 \
-            --env host_environment:HostEnvironment
+        run: bash benchmarks/harbor/scripts/run-isolated.sh
 
       - name: Upload Harbor jobs
         if: ${{ !cancelled() }}
