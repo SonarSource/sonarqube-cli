@@ -30,6 +30,7 @@ import { TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { stubIsTTY } from '../../../_common/tty.ts';
 
 const originalEnvForNotify = { ...process.env };
 const tempHome = mkdtempSync(join(tmpdir(), 'sonar-update-notify-'));
@@ -80,28 +81,19 @@ describe('update notification eligibility', () => {
 });
 
 describe('update notification suppression', () => {
-  const originalStdoutIsTTY = process.stdout.isTTY;
-  const originalStderrIsTTY = process.stderr.isTTY;
+  let restoreIsTTY: () => void;
 
   beforeEach(() => {
     process.env = { ...originalEnvForNotify, SONAR_USER_HOME: tempHome };
     delete process.env.CI;
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
-    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
-    Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
+    restoreIsTTY = stubIsTTY(true, process.stdout, process.stderr);
     console.setFormattedOutputMode(false);
   });
 
   afterEach(() => {
     process.env = { ...originalEnvForNotify, SONAR_USER_HOME: tempHome };
-    Object.defineProperty(process.stdout, 'isTTY', {
-      configurable: true,
-      value: originalStdoutIsTTY,
-    });
-    Object.defineProperty(process.stderr, 'isTTY', {
-      configurable: true,
-      value: originalStderrIsTTY,
-    });
+    restoreIsTTY();
     console.setFormattedOutputMode(false);
   });
 
@@ -145,13 +137,13 @@ describe('updateNotifier.maybeNotify', () => {
   let stdoutSpy: ReturnType<typeof spyOn>;
   let stderrSpy: ReturnType<typeof spyOn>;
   let fetchSpy: ReturnType<typeof spyOn>;
+  let restoreIsTTY: () => void;
 
   beforeEach(() => {
     process.env = { ...originalEnvForNotify, SONAR_USER_HOME: tempHome };
     delete process.env.CI;
     delete process.env[TELEMETRY_FLUSH_MODE_ENV];
-    Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
-    Object.defineProperty(process.stderr, 'isTTY', { configurable: true, value: true });
+    restoreIsTTY = stubIsTTY(true, process.stdout, process.stderr);
     console.setFormattedOutputMode(false);
     process.exitCode = 0;
     fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL | Request) => {
@@ -173,6 +165,7 @@ describe('updateNotifier.maybeNotify', () => {
     fetchSpy.mockRestore();
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();
+    restoreIsTTY();
     console.setFormattedOutputMode(false);
   });
 

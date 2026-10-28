@@ -20,12 +20,6 @@
 
 import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
-import { ECOSYSTEMS } from '@/commands/architecture/_common/architecture-api.ts';
-import { DEFAULT_MAX_NODES } from '@/commands/architecture/_common/graph.ts';
-import {
-  type DirectivesReadOptions,
-  getDirectives as getArchitectureDirectives,
-} from '@/commands/architecture/directives/get/index.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -92,18 +86,7 @@ import {
 import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
-import { type ArchitectureReadOptions, TEXT_FORMATS } from './architecture/_common/read-options.ts';
-import { getCurrent as getCurrentArchitecture } from './architecture/current/get/index.ts';
-import { setProjectDirectives } from './architecture/directives/set/index.ts';
-import {
-  installSkill as installArchitectureSkill,
-  type InstallSkillOptions,
-} from './architecture/install-skill.ts';
-import { getIntended as getIntendedArchitecture } from './architecture/intended/get/index.ts';
-import {
-  type SetFileOptions,
-  setIntended as setIntendedArchitecture,
-} from './architecture/intended/set/index.ts';
+import { registerArchitectureCommands } from './architecture/register.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
 import { authLogout } from './auth/logout.ts';
 import { authOrg } from './auth/org.ts';
@@ -907,99 +890,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--json', 'Output as JSON for machine consumption')
     .anonymousAction((ctx, options: StatsOptions) => stats(options, ctx));
 
-  // Agent-facing architecture commands.
-  const architecture = COMMAND_TREE.command('architecture')
-    .alias('arch')
-    .description('Read and set the architecture of a project')
-    .rootHelp({ category: 'data' });
-
-  const currentArchitecture = architecture
-    .command('current')
-    .description('Read the current architecture');
-  const intendedArchitecture = architecture
-    .command('intended')
-    .description('Read and set the intended architecture');
-  const languageOption = (): SonarOption =>
-    new SonarOption('--language <language>', 'Only this language (default: all)').choices(
-      ECOSYSTEMS,
-    );
-  const textFormatOption = (): SonarOption =>
-    new SonarOption(
-      '--format <format>',
-      'Output format (default: text on a terminal, toon otherwise)',
-    ).choices(TEXT_FORMATS);
-  currentArchitecture
-    .command('get')
-    .description(
-      `Current architecture, at most ${DEFAULT_MAX_NODES} nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth`,
-    )
-    .option('-p, --project <project>', 'Project key')
-    .option('--component <key>', 'Node key to start below, from a previous current get')
-    .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
-    .addOption(languageOption())
-    .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
-      getCurrentArchitecture(options, ctx),
-    );
-  intendedArchitecture
-    .command('get')
-    .description(
-      'Intended architecture; full JSON can be saved with intended set, --component/--depth give partial views, --language exports are CLI-only and cannot be passed to MCP architecture_set',
-    )
-    .option('-p, --project <project>', 'Project key')
-    .option('--component <key>', 'Group key to start below, e.g. Domain/Billing')
-    .option('--depth <n>', 'Levels of groups below the start group (default: all)', parseInteger)
-    .addOption(languageOption())
-    .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
-      getIntendedArchitecture(options, ctx),
-    );
-
-  intendedArchitecture
-    .command('set')
-    .description(
-      'Replace the intended architecture with a file shaped like the output of intended get --format json',
-    )
-    .requiredOption('--file <file>', 'Intended architecture JSON file')
-    .option('--dry-run', 'Validate and show the changes, removals first, without writing')
-    .option('-p, --project <project>', 'Project key')
-    .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
-
-  const directives = architecture
-    .command('directives')
-    .description('Read, create, update and delete project directives');
-  directives
-    .command('get')
-    .description('Read a directive by id or list a page of visible project directives')
-    .option('--id <id>', 'Directive UUID; cannot be combined with pagination')
-    .option('-p, --project <project>', 'Project key')
-    .addOption(textFormatOption())
-    .option('--page <n>', 'Page number (default 1)', parseInteger)
-    .option('--page-size <n>', 'Items per page (default 50, maximum 1000)', parseInteger)
-    .authenticatedAction((ctx, options: DirectivesReadOptions) =>
-      getArchitectureDirectives(options, ctx),
-    );
-  directives
-    .command('set')
-    .description('Create, update or delete explicit project directives')
-    .requiredOption('--file <file>', 'JSON object with create, update and delete arrays')
-    .option('--dry-run', 'Preview changes without writing')
-    .option('-p, --project <project>', 'Project key')
-    .addHelpText(
-      'after',
-      '\nCreation skips existing directives. Updates retain unspecified fields. Deletion requires an explicit ID; omissions never delete entries.',
-    )
-    .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
-
-  architecture
-    .command('install-skill')
-    .stage(Stage.Beta())
-    .description('Install the architecture skill for Claude Code and Cursor in this repository')
-    .option('--global', 'Install in the home directory instead of the repository')
-    .option('--force', 'Replace a SKILL.md that was not written by this command')
-    .authenticatedAction((ctx, options: InstallSkillOptions) =>
-      installArchitectureSkill(options, ctx),
-    );
+  registerArchitectureCommands(COMMAND_TREE);
 
   // System diagnostics and maintenance
   const system = COMMAND_TREE.command('system')

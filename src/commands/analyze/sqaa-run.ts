@@ -177,6 +177,7 @@ export async function runSqaaGroups(
     displayDepth: SqaaAnalysisDepth;
     console: Console;
     silent: boolean;
+    isTTY?: boolean;
   },
 ): Promise<RunTally> {
   const tallies: RunTally[] = [];
@@ -184,6 +185,7 @@ export async function runSqaaGroups(
     const progress = new SqaaProgress({
       files: files.map((file) => file.displayPath),
       project: { key: projectKey, index: index + 1, total: projects.length },
+      isTTY: run.isTTY,
       silent: run.silent,
       console: run.console,
     });
