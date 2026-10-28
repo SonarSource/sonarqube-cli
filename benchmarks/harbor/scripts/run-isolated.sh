@@ -51,10 +51,15 @@ assert_agent_cannot_sudo() {
 }
 
 collect_results() {
-  if sudo test -d "${WORKDIR}/harbor-jobs"; then
-    mkdir -p harbor-jobs
-    sudo cp -R "${WORKDIR}/harbor-jobs/." harbor-jobs/
-    sudo chown -R "$(id -u):$(id -g)" harbor-jobs
+  local source_dir="${WORKDIR}/harbor-jobs"
+  sudo pkill -KILL -u "${AGENT_USER}" || true
+  if sudo test -L "${source_dir}"; then
+    echo "${source_dir} is a symlink, refusing to collect" >&2
+    return 1
+  fi
+  if sudo test -d "${source_dir}"; then
+    sudo -u "${AGENT_USER}" tar -C "${WORKDIR}" -cf - harbor-jobs | tar -xf -
+    find harbor-jobs ! -type f ! -type d -exec rm -f {} +
   fi
 }
 
@@ -94,6 +99,7 @@ main() {
 
 case "${1:-}" in
   install) install_tools ;;
+  collect) collect_results ;;
   run) run_benchmark ;;
   "") main ;;
   *)
