@@ -90,6 +90,13 @@ export interface MultiSelectPromptOptions<T> {
  */
 export interface Console {
   /**
+   * True when a prompt can be answered: stdin is a terminal, or `SONARQUBE_CLI_MOCK_TTY` is set.
+   * The prompts wait forever on piped or closed stdin, so callers must check this first.
+   * Does not gate any prompt itself.
+   */
+  canPrompt(): boolean;
+
+  /**
    * Informational line with a cyan `ℹ` prefix.
    * Defaults to stdout. On stdout, participates in formatted-output buffering
    * (`setFormattedOutputMode`); stderr always writes through.

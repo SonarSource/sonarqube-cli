@@ -25,13 +25,9 @@ import { setConfigValue } from '@/core/config/config-repository.ts';
 import type { ConfigKey } from '@/core/config/config-schema.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-function canPrompt(): boolean {
-  return process.stdin.isTTY || Boolean(process.env.SONARQUBE_CLI_MOCK_TTY);
-}
-
 /** Prompts for the value with a masked, non-echoing input when the terminal is interactive. */
 async function promptForValue(console: Console, key: ConfigKey): Promise<string> {
-  if (!canPrompt()) {
+  if (!console.canPrompt()) {
     throw new CommandFailedError(`Non-interactive mode requires a value.`, {
       remediationHint: `Run 'sonar config set ${key} <value>'.`,
     });
