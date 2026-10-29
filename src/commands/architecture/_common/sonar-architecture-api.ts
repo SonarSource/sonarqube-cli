@@ -352,7 +352,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         Math.min(pageSize, Math.max(0, page.total - (pageIndex - 1) * pageSize))
     )
       throw new CommandFailedError('Invalid public directives page; no complete page was read.');
-    const directives = result.projectDirectives.map(parseProjectDirective);
+    const directives = result.projectDirectives.map((item) => parseProjectDirective(item));
     if (new Set(directives.map((item) => item.id.toLowerCase())).size !== directives.length)
       throw new CommandFailedError('The public directives page returned duplicate ids.');
     if (directives.some((item) => item.projectId !== projectId))
