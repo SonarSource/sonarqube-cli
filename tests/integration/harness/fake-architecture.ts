@@ -525,7 +525,7 @@ export function routeArchitectureRequest(
   if (!isResource(resource) || rest.length > 0) return undefined;
 
   const { query } = request;
-  const projectId = fakeMainBranchId;
+  const projectId = isCloud ? fakeMainBranchId : (key: string) => `${key}-project-id`;
   let project: ArchitectureProject | undefined;
   if (resource === 'current-architectures') {
     const expectedOrganization = isCloud ? query.organizationId : FAKE_SERVER_ORGANIZATION_ID;

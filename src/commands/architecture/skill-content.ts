@@ -94,7 +94,8 @@ recovery instructions, inspect the current state, and obtain approval before res
 
 ## Availability
 
-Intended operations and findings on SonarQube Server await public project UUID resolution.
+Intended operations on SonarQube Server await public project UUID resolution. Findings work on
+SonarQube Server once the public project lookup (/api/v2/components/projects) resolves the project.
 Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 

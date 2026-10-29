@@ -25,6 +25,7 @@ import { AccessDeniedError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
 
 import {
   type ArchitectureApi,
@@ -244,6 +245,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   private readonly http: SonarHttpClient;
   private idsPromise?: Promise<ArchitectureIds>;
   private intendedModelId?: string;
+  private serverProjectIdPromise?: Promise<string>;
 
   constructor(
     private readonly connection: SonarConnection,
@@ -404,7 +406,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       throw new CommandFailedError(
         'Finding page must be >= 1 and page size must be between 1 and 1000.',
       );
-    const projectId = await this.projectId('Architecture findings');
+    const projectId = await this.findingsProjectId();
     const result = await this.http
       .get<{
         projectFindings?: unknown[];
@@ -435,7 +437,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async getFinding(id: string): Promise<ProjectFinding> {
-    const projectId = await this.projectId('Architecture findings');
+    const projectId = await this.findingsProjectId();
     const result = await this.http
       .get<unknown>(`${this.path('project-findings')}/${encodeURIComponent(findingId(id))}`)
       .orThrow()
@@ -543,5 +545,44 @@ export class SonarArchitectureApi implements ArchitectureApi {
       );
     }
     return (await this.ids()).projectId;
+  }
+
+  private findingsProjectId(): Promise<string> {
+    if (this.http.isCloud) return this.projectId('Architecture findings');
+    this.serverProjectIdPromise ??= this.resolveServerProjectId();
+    return this.serverProjectIdPromise;
+  }
+
+  private async resolveServerProjectId(): Promise<string> {
+    const response = await new ProjectsClient(this.http)
+      .getProjectsByKey(this.projectKey)
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+          throw new CommandFailedError(
+            'This Server does not expose the public project lookup required for architecture findings.',
+            {
+              cause: error,
+              remediationHint:
+                'Use a Server build with GET /api/v2/components/projects and the public Architecture APIs.',
+            },
+          );
+        }
+        throw error;
+      });
+    const project = response?.projects?.[0];
+    if (
+      !Array.isArray(response?.projects) ||
+      response.projects.length !== 1 ||
+      response.page?.total !== 1 ||
+      project?.key !== this.projectKey ||
+      typeof project.id !== 'string' ||
+      project.id.trim().length === 0
+    ) {
+      throw new CommandFailedError(
+        `Could not resolve project '${this.projectKey}'. Check the key and Browse permission.`,
+      );
+    }
+    return project.id;
   }
 }

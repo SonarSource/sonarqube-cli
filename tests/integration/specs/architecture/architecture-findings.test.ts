@@ -236,18 +236,70 @@ describe('public architecture findings', () => {
     expect(result.stderr).toContain(message);
   });
 
-  it('explains that findings are not available on SonarQube Server yet', async () => {
-    const server = await h
-      .newFakeServer()
-      .withAuthToken('findings-token')
-      .withProject('shop', (project) => project.withArchitecture(() => {}))
-      .start();
-    h.withAuth(server.recordedAuthServerUrl(), 'findings-token');
-    const result = await h.run('arch findings get -p shop');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain(
-      'Architecture findings is not available yet on SonarQube Server',
-    );
-    expect(findingRequests(server)).toHaveLength(0);
+  describe('on SonarQube Server', () => {
+    const serverFindings = findings.map((item) => ({ ...item, projectId: 'shop-project-id' }));
+
+    async function onServer(
+      configure: (
+        builder: ReturnType<TestHarness['newFakeServer']>,
+      ) => ReturnType<TestHarness['newFakeServer']> = (builder) => builder,
+    ) {
+      const server = await configure(
+        h
+          .newFakeServer()
+          .withAuthToken('findings-token')
+          .withProject('shop', (project) =>
+            project.withArchitecture((api) => api.withFindings(serverFindings)),
+          ),
+      ).start();
+      h.withAuth(server.recordedAuthServerUrl(), 'findings-token');
+      return server;
+    }
+    const lookups = (server: Awaited<ReturnType<typeof onServer>>) =>
+      server.getRecordedRequests().filter((r) => r.path === '/api/v2/components/projects');
+
+    it('lists findings with the project id from the public project lookup', async () => {
+      const server = await onServer();
+      const read = await h.run('arch findings get -p shop --category FLAW --format json');
+      expect(read.exitCode).toBe(0);
+      expect(JSON.parse(read.stdout).findings).toEqual([serverFindings[1]]);
+      expect(lookups(server)[0].query).toMatchObject({ keys: 'shop', pageSize: '1' });
+      const [request] = findingRequests(server);
+      expect(request.path).toBe('/api/v2/architecture/project-findings');
+      expect(request.query).toMatchObject({ projectId: 'shop-project-id', category: 'FLAW' });
+    });
+
+    it('reads one finding and checks it belongs to the resolved project', async () => {
+      const server = await onServer();
+      const read = await h.run('arch findings get -p shop --id finding-1 --format json');
+      expect(read.exitCode).toBe(0);
+      expect(JSON.parse(read.stdout).finding).toEqual(serverFindings[0]);
+      expect(findingRequests(server)[0].path).toBe(
+        '/api/v2/architecture/project-findings/finding-1',
+      );
+    });
+
+    it.each([
+      ['no match', { projects: [], page: { total: 0 } }],
+      ['another key', { projects: [{ id: 'x', key: 'other' }], page: { total: 1 } }],
+      ['a blank id', { projects: [{ id: ' ', key: 'shop' }], page: { total: 1 } }],
+      ['a null body', null],
+    ])('stops before reading findings when the lookup returns %s', async (_, body) => {
+      const server = await onServer((builder) => builder.withProjectsLookupResponse(200, body));
+      const result = await h.run('arch findings get -p shop');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Could not resolve project 'shop'");
+      expect(findingRequests(server)).toHaveLength(0);
+    });
+
+    it('explains a Server without the public project lookup', async () => {
+      const server = await onServer((builder) =>
+        builder.withProjectsLookupResponse(404, { message: 'Not found' }),
+      );
+      const result = await h.run('arch findings get -p shop --id finding-1');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('does not expose the public project lookup');
+      expect(findingRequests(server)).toHaveLength(0);
+    });
   });
 });
