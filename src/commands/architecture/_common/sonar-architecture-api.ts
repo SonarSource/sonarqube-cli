@@ -426,7 +426,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       result.projectFindings.length > pageSize
     )
       throw new CommandFailedError('Invalid public findings page; no complete page was read.');
-    const findings = result.projectFindings.map(parseProjectFinding);
+    const findings = result.projectFindings.map((item) => parseProjectFinding(item));
     if (new Set(findings.map((item) => item.id)).size !== findings.length)
       throw new CommandFailedError('The public findings page returned duplicate ids.');
     if (findings.some((item) => item.projectId !== projectId))

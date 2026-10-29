@@ -61,12 +61,8 @@ export async function getFindings(
     const finding = await api.getFinding(options.id).catch((error: unknown) => {
       throw toArchitectureError(error, projectKey);
     });
-    if (format === 'text') {
-      ctx.console.info(summary(finding));
-      for (const [name, value] of Object.entries(finding))
-        if (!['id', 'projectId', 'category', 'message'].includes(name))
-          ctx.console.info(`  ${name}: ${JSON.stringify(value)}`);
-    } else printPayload(ctx, format, { project: projectKey, finding });
+    if (format === 'text') printFindingDetails(ctx, finding);
+    else printPayload(ctx, format, { project: projectKey, finding });
     return;
   }
   const { findings, page } = await api
@@ -86,12 +82,20 @@ export async function getFindings(
     ctx.console.info(
       'No findings are visible. Check project access and whether the project has been analyzed.',
     );
-  ctx.console.info(
-    `Page ${page.pageIndex}: ${findings.length} of ${page.total} findings.${page.pageIndex * page.pageSize < page.total ? ' Use --page to continue.' : ''}`,
-  );
+  const more = page.pageIndex * page.pageSize < page.total ? ' Use --page to continue.' : '';
+  ctx.console.info(`Page ${page.pageIndex}: ${findings.length} of ${page.total} findings.${more}`);
   for (const finding of findings) ctx.console.info(summary(finding));
 }
 
+const SUMMARY_FIELDS = new Set(['id', 'projectId', 'category', 'message']);
+
+function printFindingDetails(ctx: CommandAuthenticatedInvocationContext, finding: ProjectFinding) {
+  ctx.console.info(summary(finding));
+  for (const [name, value] of Object.entries(finding).filter(([key]) => !SUMMARY_FIELDS.has(key)))
+    ctx.console.info(`  ${name}: ${JSON.stringify(value)}`);
+}
+
 function summary(finding: ProjectFinding): string {
-  return `${finding.id}: ${finding.category}${finding.message ? ` ${finding.message}` : ''}`;
+  const message = finding.message ? ` ${finding.message}` : '';
+  return `${finding.id}: ${finding.category}${message}`;
 }
