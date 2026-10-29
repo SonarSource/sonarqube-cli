@@ -34,7 +34,7 @@ type HookCall = { subcommand: string; payload: Record<string, unknown> };
 const SESSION_ID = 'ses_1';
 const SECRET_VALUE = 'ghp_FAKE_TOKEN_VALUE';
 const FAKE_EXEC_FILE_KEY = '__piTestExecFile';
-const BLOCKED_PLACEHOLDER = '[Sonar] Message blocked';
+const BLOCKED_PLACEHOLDER = '[SonarQube] Message blocked';
 
 function createFakeSonar(answer: (call: HookCall) => Answer) {
   const calls: HookCall[] = [];
@@ -304,6 +304,9 @@ describe('Pi secrets extension, loaded and executed', () => {
 
       expect(result.message.content).toContain(BLOCKED_PLACEHOLDER);
       expect(result.message.content).toContain('could not mask all of them.');
+      expect(result.message.content).toEndWith(
+        'Let the user know that SonarQube blocked this message.',
+      );
       expect(result.message.content).not.toContain(SECRET_VALUE);
     });
 
