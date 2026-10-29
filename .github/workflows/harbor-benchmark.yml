@@ -5,7 +5,10 @@ on:
     inputs:
       model:
         description: Model passed to Harbor
-        required: true
+        type: choice
+        options:
+          - anthropic/claude-sonnet-5-5
+          - anthropic/claude-haiku-4-5
         default: anthropic/claude-sonnet-5-5
 
 permissions:
@@ -29,6 +32,7 @@ jobs:
           - integrate--happy
           - secrets-context--prompt
           - secrets-context--file-read
+          - auth--missing-org
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
