@@ -522,12 +522,12 @@ describe('hasSonarHookInPreCommitConfig', () => {
 
 describe('runPreCommitInstall', () => {
   it('calls pre-commit uninstall, clean, and install for pre-commit stage', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(PRE_COMMIT_OK);
 
     try {
       await runPreCommitInstall(TEMP_DIR, 'pre-commit');
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toContainEqual(['uninstall']);
       expect(calls).toContainEqual(['clean']);
       expect(calls).toContainEqual(['install']);
@@ -538,12 +538,12 @@ describe('runPreCommitInstall', () => {
   });
 
   it('also calls pre-commit install --hook-type pre-push for pre-push stage', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(PRE_COMMIT_OK);
 
     try {
       await runPreCommitInstall(TEMP_DIR, 'pre-push');
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toContainEqual(['install', '--hook-type', 'pre-push']);
     } finally {
       spawnSpy.mockRestore();
@@ -551,7 +551,9 @@ describe('runPreCommitInstall', () => {
   });
 
   it('throws when a pre-commit command exits with non-zero code', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(
+      PRE_COMMIT_FAIL,
+    );
 
     try {
       // eslint-disable-next-line @typescript-eslint/await-thenable
@@ -564,7 +566,9 @@ describe('runPreCommitInstall', () => {
   });
 
   it('throws CommandFailedError when spawnProcess rejects', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(new Error('not found'));
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockRejectedValue(
+      new Error('not found'),
+    );
 
     try {
       const err = await runPreCommitInstall(TEMP_DIR, 'pre-commit').catch((e: unknown) => e);
@@ -578,7 +582,7 @@ describe('runPreCommitInstall', () => {
 
 describe('activatePreCommitFramework', () => {
   it('succeeds when all pre-commit commands pass', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(PRE_COMMIT_OK);
 
     try {
       await activatePreCommitFramework(TEMP_DIR, 'pre-commit');
@@ -589,7 +593,9 @@ describe('activatePreCommitFramework', () => {
   });
 
   it('throws CommandFailedError with remediation hint when commands fail (pre-commit stage)', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(
+      PRE_COMMIT_FAIL,
+    );
 
     try {
       const err: unknown = await activatePreCommitFramework(TEMP_DIR, 'pre-commit').catch(
@@ -607,7 +613,9 @@ describe('activatePreCommitFramework', () => {
   });
 
   it('includes --hook-type pre-push in remediation hint for pre-push stage', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(
+      PRE_COMMIT_FAIL,
+    );
 
     try {
       const err: unknown = await activatePreCommitFramework(TEMP_DIR, 'pre-push').catch(
@@ -623,12 +631,12 @@ describe('activatePreCommitFramework', () => {
 
 describe('garbageCollectPreCommitFramework', () => {
   it('calls pre-commit gc', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(PRE_COMMIT_OK);
 
     try {
       await garbageCollectPreCommitFramework(TEMP_DIR);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
     } finally {
       spawnSpy.mockRestore();
@@ -636,12 +644,14 @@ describe('garbageCollectPreCommitFramework', () => {
   });
 
   it('does not throw when pre-commit gc fails', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_FAIL);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(
+      PRE_COMMIT_FAIL,
+    );
 
     try {
       await garbageCollectPreCommitFramework(TEMP_DIR);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
     } finally {
       spawnSpy.mockRestore();
@@ -691,7 +701,7 @@ describe('pre-commit integration remove', () => {
       }),
     );
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(PRE_COMMIT_OK);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(PRE_COMMIT_OK);
     const context: ContainerIntegrationContext = {
       state: getDefaultState('test'),
       targetRoot: TEMP_DIR,
@@ -705,7 +715,7 @@ describe('pre-commit integration remove', () => {
     try {
       await installer.removeFeature(context, preCommitFeature);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
 
       const config = yaml.load(

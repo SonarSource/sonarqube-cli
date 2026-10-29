@@ -25,7 +25,19 @@ import { Readable, Writable } from 'node:stream';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { spawnProcess, spawnProcessCapturingBytes } from '@/core/process/process.ts';
+import {
+  ProcessTimedOutError,
+  type SpawnOptions,
+  spawnProcessCapturingBytes,
+  spawnProcessWithTimeout,
+} from '@/core/process/process.ts';
+
+const TEST_TIMEOUT_MS = 15_000;
+const TEST_TIMEOUT_MESSAGE = 'test process timed out';
+
+function spawnProcess(command: string, args: string[], options: SpawnOptions = {}) {
+  return spawnProcessWithTimeout(command, args, options, TEST_TIMEOUT_MS, TEST_TIMEOUT_MESSAGE);
+}
 
 // Three bytes per character, so the boundaries of power-of-two sized chunks fall inside one.
 const WIDE_CHAR = '€';
@@ -47,6 +59,34 @@ describe('spawnProcess', () => {
     const result = await spawnProcess(process.execPath, emitTo('stderr'), { stderr: 'pipe' });
 
     expect(result.stderr).toBe(EXPECTED);
+  });
+
+  it('keeps a trailing newline when trimming is turned off', async () => {
+    const result = await spawnProcess(
+      process.execPath,
+      ['-e', 'process.stdout.write("skill\\n")'],
+      { stdout: 'pipe', trimOutput: false },
+    );
+
+    expect(result.stdout).toBe('skill\n');
+  });
+
+  it('does not pass the parent environment through when env is isolated', async () => {
+    const leak = 'SQCLI_ISOLATED_ENV_LEAK';
+    const previous = process.env[leak];
+    process.env[leak] = 'yes';
+    try {
+      const result = await spawnProcess(
+        process.execPath,
+        ['-e', `process.stdout.write(process.env.${leak} ?? 'absent')`],
+        { stdout: 'pipe', isolateEnv: true, env: {} },
+      );
+
+      expect(result.stdout).toBe('absent');
+    } finally {
+      if (previous === undefined) delete process.env[leak];
+      else process.env[leak] = previous;
+    }
   });
 });
 
@@ -230,6 +270,23 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(proc.killed).toBe(true);
   });
 
+  it('rejects and kills a child that does not exit', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+
+    const failure = await spawnProcessWithTimeout(
+      'child',
+      [],
+      { stdout: 'pipe' },
+      20,
+      'hung',
+    ).catch((err: Error) => err);
+
+    expect(failure).toBeInstanceOf(ProcessTimedOutError);
+    expect((failure as Error).message).toBe('hung');
+    expect(proc.killed).toBe(true);
+  });
+
   it('writes a string straight through rather than pulling it', async () => {
     const { stream, written } = sink();
     const proc = mockChild(stream);
@@ -246,9 +303,13 @@ describe('spawnProcess stdin, against a mocked child', () => {
 
 describe('spawnProcessCapturingBytes', () => {
   it('keeps a character whose bytes straddle two stderr chunks intact', async () => {
-    const result = await spawnProcessCapturingBytes(process.execPath, emitTo('stderr'), {
-      stderr: 'pipe',
-    });
+    const result = await spawnProcessCapturingBytes(
+      process.execPath,
+      emitTo('stderr'),
+      { stderr: 'pipe' },
+      TEST_TIMEOUT_MS,
+      TEST_TIMEOUT_MESSAGE,
+    );
 
     expect(result.stderr).toBe(EXPECTED);
   });

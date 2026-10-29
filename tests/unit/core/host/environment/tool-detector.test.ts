@@ -52,18 +52,18 @@ describe('detectContainerRuntime', () => {
   });
 
   it('returns "docker" when docker is available', async () => {
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
     });
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns "podman" when docker is unavailable but podman is available', async () => {
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation(
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation(
       (cmd: string, _args: string[]) => {
         if (cmd === 'docker') {
           return Promise.reject(missingRuntime());
@@ -73,12 +73,12 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'podman', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns "nerdctl" when docker and podman are unavailable but nerdctl is available', async () => {
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation(
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation(
       (cmd: string, _args: string[]) => {
         if (cmd === 'nerdctl') {
           return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
@@ -88,21 +88,21 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info']);
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns null when no container runtime is available and not on Windows', async () => {
     isWindowsMock.mockImplementation(() => false);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
     expect(spawnSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain('wsl.exe');
   });
 
   it('returns "docker" when docker daemon is running even if other runtimes are also available', async () => {
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -115,7 +115,7 @@ describe('detectContainerRuntime', () => {
 
   it('returns null when all runtime daemons are not running and not on Windows', async () => {
     isWindowsMock.mockImplementation(() => false);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: 'Cannot connect to daemon',
@@ -126,7 +126,7 @@ describe('detectContainerRuntime', () => {
 
   it('falls back to WSL when no native runtime is available on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation(
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation(
       (cmd: string, args: string[]) => {
         if (cmd === 'wsl.exe' && args[0] === 'docker') {
           return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
@@ -136,12 +136,18 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: true });
-    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['docker', 'info']);
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'wsl.exe',
+      ['docker', 'info'],
+      {},
+      3_000,
+      expect.any(String),
+    );
   });
 
   it('falls through to nerdctl via WSL when native and earlier WSL runtimes are unavailable', async () => {
     isWindowsMock.mockImplementation(() => true);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation(
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation(
       (cmd: string, args: string[]) => {
         if (cmd === 'wsl.exe' && args[0] === 'nerdctl') {
           return Promise.resolve({ exitCode: 0, stdout: '', stderr: '' });
@@ -151,17 +157,35 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: true });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info']);
-    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['docker', 'info']);
-    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['podman', 'info']);
-    expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['nerdctl', 'info']);
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'wsl.exe',
+      ['docker', 'info'],
+      {},
+      3_000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'wsl.exe',
+      ['podman', 'info'],
+      {},
+      3_000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'wsl.exe',
+      ['nerdctl', 'info'],
+      {},
+      3_000,
+      expect.any(String),
+    );
   });
 
   it('returns null when neither a native nor a WSL runtime is available on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
   });
@@ -173,10 +197,11 @@ describe('detectContainerRuntime', () => {
       if (mode !== undefined) process.env.SONARQUBE_CLI_MCP_WSL = mode;
       else delete process.env.SONARQUBE_CLI_MCP_WSL;
       const logSpy = spyOn(logger, 'info').mockImplementation(() => undefined);
-      spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation((cmd: string) =>
-        cmd === 'wsl.exe'
-          ? Promise.resolve({ exitCode: 0, stdout: '', stderr: '' })
-          : Promise.reject(missingRuntime()),
+      spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation(
+        (cmd: string) =>
+          cmd === 'wsl.exe'
+            ? Promise.resolve({ exitCode: 0, stdout: '', stderr: '' })
+            : Promise.reject(missingRuntime()),
       );
       try {
         expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: true });
@@ -193,7 +218,7 @@ describe('detectContainerRuntime', () => {
     isWindowsMock.mockImplementation(() => true);
     process.env.SONARQUBE_CLI_MCP_WSL = 'auto';
     const warnSpy = spyOn(logger, 'warn').mockImplementation(() => undefined);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation((cmd: string) =>
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation((cmd: string) =>
       cmd === 'docker'
         ? Promise.resolve({ exitCode: 1, stdout: '', stderr: 'Cannot reach daemon' })
         : Promise.reject(missingRuntime()),
@@ -216,7 +241,7 @@ describe('detectContainerRuntime', () => {
   it('logs a native spawn failure without an exit code', async () => {
     isWindowsMock.mockImplementation(() => true);
     const warnSpy = spyOn(logger, 'warn').mockImplementation(() => undefined);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation((cmd: string) =>
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation((cmd: string) =>
       cmd === 'docker'
         ? Promise.reject(Object.assign(new Error('spawn docker EACCES'), { code: 'EACCES' }))
         : Promise.reject(missingRuntime()),
@@ -237,7 +262,7 @@ describe('detectContainerRuntime', () => {
 
   it('uses a later native runtime when an earlier one is unreachable', async () => {
     isWindowsMock.mockImplementation(() => true);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockImplementation((cmd: string) =>
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockImplementation((cmd: string) =>
       Promise.resolve({ exitCode: cmd === 'podman' ? 0 : 1, stdout: '', stderr: 'Unavailable' }),
     );
 
@@ -249,7 +274,7 @@ describe('detectContainerRuntime', () => {
     isWindowsMock.mockImplementation(() => true);
     process.env.SONARQUBE_CLI_MCP_WSL = mode;
     const logSpy = spyOn(logger, 'info').mockImplementation(() => undefined);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -258,7 +283,13 @@ describe('detectContainerRuntime', () => {
     try {
       expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: true });
       expect(spawnSpy).toHaveBeenCalledTimes(1);
-      expect(spawnSpy).toHaveBeenCalledWith('wsl.exe', ['docker', 'info']);
+      expect(spawnSpy).toHaveBeenCalledWith(
+        'wsl.exe',
+        ['docker', 'info'],
+        {},
+        3_000,
+        expect.any(String),
+      );
       expect(logSpy).toHaveBeenCalledWith(
         'SONARQUBE_CLI_MCP_WSL=always; checking container runtimes through WSL only.',
       );
@@ -271,7 +302,7 @@ describe('detectContainerRuntime', () => {
     isWindowsMock.mockImplementation(() => true);
     process.env.SONARQUBE_CLI_MCP_WSL = mode;
     const logSpy = spyOn(logger, 'info').mockImplementation(() => undefined);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
 
     try {
       expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
@@ -287,7 +318,7 @@ describe('detectContainerRuntime', () => {
   it('identifies a failed WSL-only search', async () => {
     isWindowsMock.mockImplementation(() => true);
     process.env.SONARQUBE_CLI_MCP_WSL = 'always';
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false, wslOnly: true });
     expect(spawnSpy.mock.calls.map((call: unknown[]) => String(call[0]))).toEqual([
       'wsl.exe',
@@ -302,7 +333,7 @@ describe('detectContainerRuntime', () => {
     ['x'.repeat(1001), 'x'.repeat(1000)],
   ])('bounds native runtime diagnostics for %s', async (stderr, expected) => {
     isWindowsMock.mockImplementation(() => true);
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr,
@@ -321,7 +352,7 @@ describe('detectContainerRuntime', () => {
   it('rejects an invalid mode on Windows', async () => {
     isWindowsMock.mockImplementation(() => true);
     process.env.SONARQUBE_CLI_MCP_WSL = 'sometimes';
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(detectContainerRuntime()).rejects.toMatchObject({
@@ -334,7 +365,7 @@ describe('detectContainerRuntime', () => {
 
   it('ignores SONARQUBE_CLI_MCP_WSL outside Windows', async () => {
     process.env.SONARQUBE_CLI_MCP_WSL = 'sometimes';
-    spawnSpy = spyOn(processModule, 'spawnProcess').mockRejectedValue(missingRuntime());
+    spawnSpy = spyOn(processModule, 'spawnProcessWithTimeout').mockRejectedValue(missingRuntime());
 
     expect(await detectContainerRuntime()).toEqual({ runtime: null, viaWsl: false });
     expect(spawnSpy.mock.calls.map((call: unknown[]) => String(call[0]))).not.toContain('wsl.exe');
