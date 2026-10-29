@@ -21,6 +21,7 @@
 import { existsSync, lstatSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { GIT_PRE_PUSH_TRACE_PREFIX } from '@/commands/hook/git-pre-push-trace.ts';
 import { SONAR_HOOK_SKIP_SECRETS_MESSAGE } from '@/commands/integrate/git/tools/shared.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
@@ -138,6 +139,14 @@ function probeShellBinaryResolution(env: Record<string, string>): string {
 
 function sonarHookSubcommand(hook: GitHookKind): string {
   return hook === 'pre-commit' ? 'git-pre-commit' : 'git-pre-push';
+}
+
+function extractPrePushTraceFromOperationOutput(output: string): string {
+  const lines = output.split(/\r?\n/).filter((line) => line.includes(GIT_PRE_PUSH_TRACE_PREFIX));
+  if (lines.length === 0) {
+    return '(no pre-push trace lines in git push output — is SONAR_GIT_PRE_PUSH_TRACE=1 set in hook env?)';
+  }
+  return lines.join('\n');
 }
 
 function classifyHookOutput(
@@ -925,6 +934,7 @@ export function buildGitHookDiagnostics(
     'hook env (selected):',
     `  HOME=${context.hookEnv.HOME ?? context.hookEnv.USERPROFILE ?? '(unset)'}`,
     `  SONARQUBE_CLI_KEYCHAIN_FILE=${context.hookEnv.SONARQUBE_CLI_KEYCHAIN_FILE ?? '(unset)'}`,
+    `  SONAR_GIT_PRE_PUSH_TRACE=${context.hookEnv.SONAR_GIT_PRE_PUSH_TRACE ?? '(unset)'}`,
     `  GIT_DIR=${context.hookEnv.GIT_DIR ?? '(unset)'}`,
     `  GIT_WORK_TREE=${context.hookEnv.GIT_WORK_TREE ?? '(unset)'}`,
     `  PATH=${context.hookEnv.PATH ?? '(unset)'}`,
@@ -946,6 +956,11 @@ export function buildGitHookDiagnostics(
     shellCachedStdinReplay.section,
     '',
     prePushGitLog.section,
+    '',
+    'git-pre-push stderr trace (from git push stdout+stderr, production hook path):',
+    context.hook === 'pre-push'
+      ? extractPrePushTraceFromOperationOutput(output)
+      : '(skipped — not pre-push)',
     '',
     `${context.operation} combined output:`,
     output,

@@ -64,6 +64,7 @@ function buildHookEnv(sonarBinDir: string, harness: TestHarness): Record<string,
     ...buildHomeEnv(harness.userHome.path),
     SONARQUBE_CLI_KEYCHAIN_FILE: harness.keychainJsonFile,
     PATH: `${sonarBinDir}${PATH_DELIM}${pathWithoutNodeModules(process.env.PATH)}`,
+    SONAR_GIT_PRE_PUSH_TRACE: '1',
   };
   // On Windows, process.env may use "Path" instead of "PATH". Both keys would
   // coexist in the object, and the OS may pick the wrong one. Remove the original.
