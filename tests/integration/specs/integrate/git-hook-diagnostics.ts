@@ -225,6 +225,28 @@ function classifyHookOutput(
   ) {
     return 'pre-push-no-refs-fail-open';
   }
+  if (
+    postMortem.hook === 'pre-push' &&
+    (exitCode ?? 1) === 0 &&
+    syntheticHasPushRange &&
+    lastCommitWouldBlock &&
+    !syntheticWouldBlock &&
+    !shellReplayWouldBlock &&
+    postMortem.prePushGitLogCommitCount === 0
+  ) {
+    return 'pre-push-empty-commit-list';
+  }
+  if (
+    postMortem.hook === 'pre-push' &&
+    (exitCode ?? 1) === 0 &&
+    syntheticHasPushRange &&
+    lastCommitWouldBlock &&
+    !syntheticWouldBlock &&
+    !shellReplayWouldBlock &&
+    postMortem.prePushGitLogCommitCount > 0
+  ) {
+    return 'pre-push-scan-no-op';
+  }
   if (lastCommitWouldBlock) {
     return 'last-commit-would-scan';
   }
@@ -596,7 +618,8 @@ function probePrePushGitLog(
   if (remoteKnown.exitCode === 0 && !nullOid.test(remoteSha)) {
     exclusions.push(remoteSha);
   }
-  const logArgs = [
+  const originMain = gitSpawn(cwd, env, ['rev-parse', 'refs/remotes/origin/main']);
+  const hookFaithfulArgs = [
     'log',
     '--format=%H',
     '--raw',
@@ -607,23 +630,36 @@ function probePrePushGitLog(
     localSha,
     '--not',
     ...exclusions,
-    remotesExclusion,
   ];
-  const log = gitSpawn(cwd, env, logArgs);
-  const lines = log.output.split(/\r?\n/).filter(Boolean);
-  const commitLines = lines.filter((line) => PRE_PUSH_COMMIT_LINE_PATTERN.test(line));
-  const rawLines = lines.filter((line) => line.startsWith(':'));
+  const productionArgs = [...hookFaithfulArgs, remotesExclusion];
+  const hookFaithfulLog = gitSpawn(cwd, env, hookFaithfulArgs);
+  const productionLog = gitSpawn(cwd, env, productionArgs);
+  const summarize = (log: { exitCode: number | null; output: string }) => {
+    const lines = log.output.split(/\r?\n/).filter(Boolean);
+    const commitLines = lines.filter((line) => PRE_PUSH_COMMIT_LINE_PATTERN.test(line));
+    const rawLines = lines.filter((line) => line.startsWith(':'));
+    return { commitLines, rawLines, exitCode: log.exitCode };
+  };
+  const hookFaithful = summarize(hookFaithfulLog);
+  const production = summarize(productionLog);
   const section = [
-    'pre-push git log probe (mirrors getPushedCommitBlobs):',
-    `  command: git ${logArgs.join(' ')}`,
-    `  exit=${log.exitCode ?? 'null'}, remoteShaKnown=${remoteKnown.exitCode === 0}, remotesExclusion=${remotesExclusion}`,
-    `  commit lines=${commitLines.length}, raw blob lines=${rawLines.length}`,
-    commitLines.length > 0 ? `  commits: ${commitLines.join(', ')}` : '  commits: (none)',
-    rawLines.length > 0 ? `  sample raw: ${rawLines.slice(0, 3).join(' | ')}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-  return { commitCount: commitLines.length, section };
+    'pre-push git log probes:',
+    `  refs/remotes/origin/main=${originMain.exitCode === 0 ? originMain.output : '(missing)'}`,
+    `  stdin localSha=${localSha}, stdin remoteSha=${remoteSha}`,
+    '  hook-faithful (git log LOCAL --not REMOTE_SHA; no --remotes=origin — approximates hook-time before push updates tracking):',
+    `    command: git ${hookFaithfulArgs.join(' ')}`,
+    `    exit=${hookFaithful.exitCode ?? 'null'}, commit lines=${hookFaithful.commitLines.length}, raw blob lines=${hookFaithful.rawLines.length}`,
+    hookFaithful.commitLines.length > 0
+      ? `    commits: ${hookFaithful.commitLines.join(', ')}`
+      : '    commits: (none)',
+    '  production mirror (getPushedCommitBlobs adds --remotes=origin; often empty after push succeeds):',
+    `    command: git ${productionArgs.join(' ')}`,
+    `    exit=${production.exitCode ?? 'null'}, commit lines=${production.commitLines.length}, raw blob lines=${production.rawLines.length}`,
+    production.commitLines.length > 0
+      ? `    commits: ${production.commitLines.join(', ')}`
+      : '    commits: (none)',
+  ].join('\n');
+  return { commitCount: hookFaithful.commitLines.length, section };
 }
 
 function probeShellCachedStdinReplay(
