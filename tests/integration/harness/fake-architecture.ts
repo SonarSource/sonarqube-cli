@@ -27,6 +27,7 @@ import type {
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import type { ProjectDirective } from '@/commands/architecture/_common/directives.ts';
+import type { ProjectFinding } from '@/commands/architecture/_common/findings.ts';
 
 export const FAKE_SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 
@@ -37,6 +38,7 @@ const RESOURCES = [
   'current-architectures',
   'intended-architectures',
   'project-directives',
+  'project-findings',
 ] as const;
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
@@ -82,6 +84,13 @@ export class FakeArchitecture {
 
   withDirectives(directives: ProjectDirective[]): this {
     this.directives = structuredClone(directives);
+    return this;
+  }
+
+  private findings: ProjectFinding[] = [];
+
+  withFindings(findings: ProjectFinding[]): this {
+    this.findings = structuredClone(findings);
     return this;
   }
   private readonly patternGroups = new Map<string, SavedGroup[]>();
@@ -241,6 +250,7 @@ export class FakeArchitecture {
     return (
       this.models.some((model) => model.id === id) ||
       this.directives.some((item) => item.id === id) ||
+      this.findings.some((item) => item.id === id) ||
       this.deletedDirectiveIds.has(id)
     );
   }
@@ -252,6 +262,21 @@ export class FakeArchitecture {
     if (override) return json(override.body, override.status, false);
 
     switch (`${resource}:${request.method}`) {
+      case 'project-findings:GET': {
+        if (request.modelId) {
+          const finding = this.findings.find((item) => item.id === request.modelId);
+          return finding ? json(finding) : json({ message: 'Finding not found' }, 404);
+        }
+        const pageIndex = Number(request.query.pageIndex ?? 1);
+        const pageSize = Number(request.query.pageSize ?? 50);
+        const matching = this.findings.filter(
+          (item) => !request.query.category || item.category === request.query.category,
+        );
+        return json({
+          projectFindings: matching.slice((pageIndex - 1) * pageSize, pageIndex * pageSize),
+          page: { pageIndex, pageSize, total: matching.length },
+        });
+      }
       case 'project-directives:GET': {
         if (request.modelId) {
           const failure = this.directiveReadFailures.get(++this.directiveReads);
