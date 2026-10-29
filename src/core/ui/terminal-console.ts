@@ -73,9 +73,9 @@ const EXIT_CODE_SIGINT = 130;
 const MULTISELECT_VIEWPORT_SIZE = 12;
 const MULTISELECT_MAX_SELECTED = 20;
 
-function noteWidth(): number {
-  const cols = isTTY ? getColumns(process.stdout) : NOTE_MIN_WIDTH;
-  return Math.min(Math.max(cols - 4, NOTE_MIN_WIDTH), NOTE_MAX_WIDTH);
+function noteWidth(wrap = false): number {
+  const cols = (isTTY ? getColumns(process.stdout) : NOTE_MIN_WIDTH) || NOTE_MIN_WIDTH;
+  return Math.min(Math.max(cols - 4, wrap ? 2 : NOTE_MIN_WIDTH), NOTE_MAX_WIDTH);
 }
 
 function formatNoteTty(lines: string[], title: string | undefined, opts: NoteOptions): string {
@@ -83,7 +83,14 @@ function formatNoteTty(lines: string[], title: string | undefined, opts: NoteOpt
   const titleColor: ColorFn = opts.titleColor ?? bold;
   const contentColor: ColorFn = opts.contentColor ?? ((s) => s);
 
-  const width = noteWidth();
+  const width = noteWidth(opts.wrap);
+  if (opts.wrap && title && visibleLength(title) > width - TITLE_BORDER_PREFIX.length) {
+    lines = [titleColor(title), '', ...lines];
+    title = undefined;
+  }
+  const displayLines = opts.wrap
+    ? lines.flatMap((line) => Bun.wrapAnsi(line, width - 1, { hard: true }).split('\n'))
+    : lines;
   const innerWidth = width - 2; // subtract border chars
 
   const top = title
@@ -95,11 +102,13 @@ function formatNoteTty(lines: string[], title: string | undefined, opts: NoteOpt
   const empty = borderColor('│') + ' '.repeat(width) + borderColor('│');
   const bottom = borderColor('└' + '─'.repeat(width) + '┘');
 
-  const contentLines = lines.map((line) => {
+  const contentLines = displayLines.map((line) => {
     // Truncate on visible text so a cut never leaves a dangling "style on"
     // escape that bleeds into the border. Styling is dropped on cut lines.
     const truncated =
-      visibleLength(line) > width - 1 ? stripAnsi(line).slice(0, width - 4) + '...' : line;
+      !opts.wrap && visibleLength(line) > width - 1
+        ? stripAnsi(line).slice(0, width - 4) + '...'
+        : line;
     const padded = truncated + ' '.repeat(Math.max(0, width - 1 - visibleLength(truncated)));
     return borderColor('│') + ' ' + contentColor(padded) + borderColor('│');
   });

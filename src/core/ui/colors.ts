@@ -34,6 +34,7 @@ export type StepStatus =
   | 'info'; // ℹ  cyan
 
 export interface NoteOptions {
+  wrap?: boolean;
   borderColor?: ColorFn;
   titleColor?: ColorFn;
   contentColor?: ColorFn;
