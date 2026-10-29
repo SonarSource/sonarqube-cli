@@ -65,9 +65,16 @@ export function parseProjectFinding(value: unknown): ProjectFinding {
     throw new CommandFailedError(`Public finding ${object.id} has an unsupported category.`);
   if (object.message != null && typeof object.message !== 'string')
     throw new CommandFailedError(`Public finding ${object.id} message must be a string.`);
+  if (object.components != null && !isStringArray(object.components))
+    throw new CommandFailedError(`Public finding ${object.id} components must be strings.`);
+  if (object.relationships != null && !isRelationshipArray(object.relationships))
+    throw new CommandFailedError(`Public finding ${object.id} has invalid relationships.`);
+  if (object.constraint != null && typeof object.constraint !== 'string')
+    throw new CommandFailedError(`Public finding ${object.id} constraint must be a string.`);
   if (
     object.measures != null &&
     (typeof object.measures !== 'object' ||
+      Array.isArray(object.measures) ||
       Object.values(object.measures).some((value) => typeof value !== 'number'))
   )
     throw new CommandFailedError(`Public finding ${object.id} has a non-numeric measure.`);
@@ -79,6 +86,23 @@ export function parseProjectFinding(value: unknown): ProjectFinding {
   for (const name of DETAIL_FIELDS)
     if (object[name] != null) Object.assign(finding, { [name]: object[name] });
   return finding;
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isRelationshipArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as Record<string, unknown>).from === 'string' &&
+        typeof (item as Record<string, unknown>).to === 'string',
+    )
+  );
 }
 
 export function findingId(value: string): string {

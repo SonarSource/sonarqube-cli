@@ -192,6 +192,22 @@ describe('public architecture findings', () => {
       '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","measures":{"m":"text"}}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
     ],
     [
+      'array measures',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","measures":[1]}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
+      'non-string components',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","components":"a"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
+      'invalid relationships',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","relationships":[{"x":1}]}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
+      'a non-string constraint',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","constraint":{}}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
       'duplicate ids',
       '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW"},{"id":"x","projectId":"shop-branch-id","category":"FLAW"}],"page":{"pageIndex":1,"pageSize":50,"total":2}}',
     ],
@@ -204,7 +220,7 @@ describe('public architecture findings', () => {
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toMatch(
-      /Invalid public findings page|unsupported category|different project|duplicate ids|non-numeric measure/,
+      /Invalid public findings page|unsupported category|different project|duplicate ids|non-numeric measure|components must be strings|invalid relationships|constraint must be a string/,
     );
   });
 
