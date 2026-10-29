@@ -43,6 +43,13 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import {
+  type FindingCategory,
+  FindingNotFoundError,
+  type FindingPage,
+  parseProjectFinding,
+  type ProjectFinding,
+} from './findings.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -379,6 +386,61 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The public directive response returned a different id or project. Nothing was changed.',
       );
     return directive;
+  }
+
+  async getFindingsPage(
+    category: FindingCategory | undefined,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<FindingPage> {
+    if (
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 1000
+    )
+      throw new CommandFailedError(
+        'Finding page must be >= 1 and page size must be between 1 and 1000.',
+      );
+    const projectId = await this.projectId('Architecture findings');
+    const result = await this.http
+      .get<{
+        projectFindings?: unknown[];
+        page?: { pageIndex: number; pageSize: number; total: number };
+      } | null>(this.path('project-findings'), {
+        projectId,
+        ...(category && { category }),
+        pageIndex,
+        pageSize,
+      })
+      .orThrow();
+    const page = result?.page;
+    if (
+      !Array.isArray(result?.projectFindings) ||
+      page?.pageIndex !== pageIndex ||
+      page.pageSize !== pageSize ||
+      !Number.isSafeInteger(page.total) ||
+      page.total < 0
+    )
+      throw new CommandFailedError('Invalid public findings page; no complete page was read.');
+    return { findings: result.projectFindings.map(parseProjectFinding), page };
+  }
+
+  async getFinding(id: string): Promise<ProjectFinding> {
+    await this.projectId('Architecture findings');
+    const result = await this.http
+      .get<unknown>(`${this.path('project-findings')}/${encodeURIComponent(id)}`)
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
+          throw new FindingNotFoundError(
+            `Finding ${id} was not found or is not accessible in the selected project.`,
+            { cause: error },
+          );
+        throw error;
+      });
+    return parseProjectFinding(result);
   }
 
   private directivePath(id: string): string {

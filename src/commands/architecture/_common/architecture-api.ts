@@ -24,6 +24,7 @@
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import type { DirectivesApi } from './directives.ts';
+import type { FindingsApi } from './findings.ts';
 import { SonarArchitectureApi } from './sonar-architecture-api.ts';
 
 export const ECOSYSTEMS = ['java', 'cs', 'js', 'ts', 'py'] as const;
@@ -107,5 +108,9 @@ export function createDirectivesApi(
   connection: SonarConnection,
   projectKey: string,
 ): DirectivesApi {
+  return new SonarArchitectureApi(connection, projectKey);
+}
+
+export function createFindingsApi(connection: SonarConnection, projectKey: string): FindingsApi {
   return new SonarArchitectureApi(connection, projectKey);
 }
