@@ -1088,6 +1088,24 @@ describe('gitPrePush', () => {
     },
   );
 
+  it('points a hung git log at a lock or a large range, not a missing Git install', async () => {
+    readGitPushRefsSpy.mockResolvedValue([EXISTING_BRANCH_REF]);
+    spawnProcessSpy.mockResolvedValueOnce({ exitCode: 0, stdout: 'deadbeef', stderr: '' });
+    spawnProcessSpy.mockRejectedValueOnce(new processLib.ProcessTimedOutError('git log timed out'));
+
+    let thrown: unknown;
+    try {
+      await gitPrePush({}, [], makeCtx());
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(CommandFailedError);
+    expect((thrown as CommandFailedError).message).toContain('git log timed out');
+    expect((thrown as CommandFailedError).remediationHint).toBe(
+      'Check for a Git lock or a very large push range, then retry the push.',
+    );
+  });
+
   it('scopes the exclusion to the remote when it is one of the configured remotes', async () => {
     spawnProcessSpy
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'origin\nupstream', stderr: '' }) // git remote

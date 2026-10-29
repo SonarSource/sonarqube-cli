@@ -95,6 +95,8 @@ async function raceWithTimeout<T>(
 
 export interface SpawnResult {
   exitCode: number | null;
+  /** The signal that killed the child, or null when it exited with a code. */
+  signal?: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
 }
@@ -172,9 +174,10 @@ async function spawnProcess(
     proc.on('error', reject);
 
     // 'exit' can run before the last stdout chunk is delivered, so a fast child looks like it produced nothing.
-    proc.on('close', (code) => {
+    proc.on('close', (code, signal) => {
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
+        signal: signal ?? null,
         stdout: presentedText(stdout + stdoutDecoder.end(), options),
         stderr: presentedText(stderr + stderrDecoder.end(), options),
       });

@@ -26,6 +26,8 @@ import { spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
 const RUNTIME_INFO_TIMEOUT_MS = 3_000;
+// `sonar run mcp` waits on a cold Docker Desktop. The 3s deadline is only for status checks.
+const RUNTIME_LAUNCH_TIMEOUT_MS = 2 * 60 * 1000;
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
@@ -59,7 +61,7 @@ async function checkNativeRuntime(runtime: ContainerRuntime): Promise<NativeRunt
       runtime,
       ['info'],
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      RUNTIME_LAUNCH_TIMEOUT_MS,
       `${runtime} info timed out`,
     );
     return result.exitCode === 0
@@ -83,7 +85,7 @@ async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<bool
       WSL_EXECUTABLE,
       [runtime, 'info'], // only support the default distro
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      RUNTIME_LAUNCH_TIMEOUT_MS,
       `${runtime} info timed out`,
     );
     return result.exitCode === 0;

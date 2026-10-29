@@ -215,9 +215,22 @@ describe('spawnProcess stdin, against a mocked child', () => {
 
     expect(result).toEqual({
       exitCode: 0,
+      signal: null,
       stdout: 'secret.js',
       stderr: '',
     });
+  });
+
+  it('records the signal that killed the child', async () => {
+    const { stream } = sink();
+    const proc = mockChild(stream);
+
+    const running = spawnProcess('child', []);
+    proc.emit('close', null, 'SIGTERM');
+    const result = await running;
+
+    expect(result.exitCode).toBeNull();
+    expect(result.signal).toBe('SIGTERM');
   });
 
   it('stops pulling the source once the child stops reading', async () => {
