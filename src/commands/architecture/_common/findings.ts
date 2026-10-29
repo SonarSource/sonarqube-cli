@@ -63,21 +63,7 @@ export function parseProjectFinding(value: unknown): ProjectFinding {
     throw new CommandFailedError('Public finding response has an invalid id or project.');
   if (!(FINDING_CATEGORIES as readonly unknown[]).includes(object.category))
     throw new CommandFailedError(`Public finding ${object.id} has an unsupported category.`);
-  if (object.message != null && typeof object.message !== 'string')
-    throw new CommandFailedError(`Public finding ${object.id} message must be a string.`);
-  if (object.components != null && !isStringArray(object.components))
-    throw new CommandFailedError(`Public finding ${object.id} components must be strings.`);
-  if (object.relationships != null && !isRelationshipArray(object.relationships))
-    throw new CommandFailedError(`Public finding ${object.id} has invalid relationships.`);
-  if (object.constraint != null && typeof object.constraint !== 'string')
-    throw new CommandFailedError(`Public finding ${object.id} constraint must be a string.`);
-  if (
-    object.measures != null &&
-    (typeof object.measures !== 'object' ||
-      Array.isArray(object.measures) ||
-      Object.values(object.measures).some((value) => typeof value !== 'number'))
-  )
-    throw new CommandFailedError(`Public finding ${object.id} has a non-numeric measure.`);
+  assertFindingDetails(object.id, object);
   const finding = {
     id: object.id,
     projectId: object.projectId,
@@ -86,6 +72,24 @@ export function parseProjectFinding(value: unknown): ProjectFinding {
   for (const name of DETAIL_FIELDS)
     if (object[name] != null) Object.assign(finding, { [name]: object[name] });
   return finding;
+}
+
+function assertFindingDetails(id: string, object: Record<string, unknown>): void {
+  if (object.message != null && typeof object.message !== 'string')
+    throw new CommandFailedError(`Public finding ${id} message must be a string.`);
+  if (object.components != null && !isStringArray(object.components))
+    throw new CommandFailedError(`Public finding ${id} components must be strings.`);
+  if (object.relationships != null && !isRelationshipArray(object.relationships))
+    throw new CommandFailedError(`Public finding ${id} has invalid relationships.`);
+  if (object.constraint != null && typeof object.constraint !== 'string')
+    throw new CommandFailedError(`Public finding ${id} constraint must be a string.`);
+  if (
+    object.measures != null &&
+    (typeof object.measures !== 'object' ||
+      Array.isArray(object.measures) ||
+      Object.values(object.measures).some((value) => typeof value !== 'number'))
+  )
+    throw new CommandFailedError(`Public finding ${id} has a non-numeric measure.`);
 }
 
 function isStringArray(value: unknown): boolean {
