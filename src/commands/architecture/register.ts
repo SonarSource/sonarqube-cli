@@ -44,7 +44,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .command('architecture')
     .alias('arch')
     .description('Read and set the architecture of a project')
-    .rootHelp({ category: 'data' });
+    .rootHelp({ category: 'data', label: 'architecture|arch <command>' });
 
   const currentArchitecture = architecture
     .command('current')
