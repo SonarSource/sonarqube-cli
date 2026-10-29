@@ -47,7 +47,7 @@ function gitFailureMessage(
   stderr: string,
 ): string {
   const sections = [
-    `git command failed with exit code ${exitCode ?? 'null'}`,
+    `git command exited with unexpected exit code ${exitCode ?? 'null'}`,
     `  command: ${formatGitCommand(args)}`,
     `  cwd: ${cwd}`,
     '  stdout:',
@@ -68,7 +68,7 @@ function gitFailureMessage(
   return sections.join('\n');
 }
 
-/** Run `git` with centralized exit-code checking; throws with stdout/stderr on unexpected failure. */
+/** Run `git` with centralized exit-code checking; throws with stdout/stderr when the exit code is unexpected. */
 export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResult {
   const result = Bun.spawnSync(['git', ...args], {
     cwd: options.cwd,
