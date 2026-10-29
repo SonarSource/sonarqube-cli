@@ -28,7 +28,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
-import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
@@ -245,7 +245,10 @@ async function getPushedCommitBlobs(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(`${errorMessage} ${detail}`, {
-      remediationHint: 'Check that Git is installed, then retry the push.',
+      remediationHint:
+        error instanceof ProcessTimedOutError
+          ? 'Check for a Git lock or a very large push range, then retry the push.'
+          : 'Check that Git is installed, then retry the push.',
     });
   }
   if (result.exitCode !== 0) {

@@ -59,7 +59,13 @@ describe('detectContainerRuntime', () => {
     });
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'docker',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
   });
 
   it('returns "podman" when docker is unavailable but podman is available', async () => {
@@ -73,8 +79,20 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'podman', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'docker',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'podman',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
   });
 
   it('returns "nerdctl" when docker and podman are unavailable but nerdctl is available', async () => {
@@ -88,9 +106,27 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
-    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'docker',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'podman',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'nerdctl',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
   });
 
   it('returns null when no container runtime is available and not on Windows', async () => {
@@ -140,7 +176,7 @@ describe('detectContainerRuntime', () => {
       'wsl.exe',
       ['docker', 'info'],
       {},
-      3_000,
+      2 * 60 * 1000,
       expect.any(String),
     );
   });
@@ -157,28 +193,46 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: true });
-    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
-    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
-    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'docker',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'podman',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
+    expect(spawnSpy).toHaveBeenCalledWith(
+      'nerdctl',
+      ['info'],
+      {},
+      2 * 60 * 1000,
+      expect.any(String),
+    );
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['docker', 'info'],
       {},
-      3_000,
+      2 * 60 * 1000,
       expect.any(String),
     );
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['podman', 'info'],
       {},
-      3_000,
+      2 * 60 * 1000,
       expect.any(String),
     );
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['nerdctl', 'info'],
       {},
-      3_000,
+      2 * 60 * 1000,
       expect.any(String),
     );
   });
@@ -287,7 +341,7 @@ describe('detectContainerRuntime', () => {
         'wsl.exe',
         ['docker', 'info'],
         {},
-        3_000,
+        2 * 60 * 1000,
         expect.any(String),
       );
       expect(logSpy).toHaveBeenCalledWith(

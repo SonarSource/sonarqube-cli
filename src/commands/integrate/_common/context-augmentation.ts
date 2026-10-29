@@ -291,11 +291,14 @@ async function runCagSubprocess(
       `sonar-context-augmentation timed out after ${timeoutMs}ms`,
     );
     if (result.exitCode !== 0) {
+      const termination = result.signal
+        ? `signal ${result.signal}`
+        : result.exitCode === null
+          ? 'an unknown signal'
+          : `code ${result.exitCode}`;
       return {
         ok: false,
-        failureMessage: `sonar-context-augmentation exited with ${
-          result.exitCode === null ? 'an unknown signal' : `code ${result.exitCode}`
-        }.`,
+        failureMessage: `sonar-context-augmentation exited with ${termination}.`,
         stdout: result.stdout,
         stderr: result.stderr,
       };
