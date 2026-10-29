@@ -24,8 +24,7 @@
 //
 // Behaviour contract (differs from the Claude hook):
 //   - Always exits 0 (hook must never crash Copilot CLI)
-//   - Stdin payload is { toolName: "view", toolArgs: "<JSON-encoded string>" }
-//     (camelCase; toolArgs is a stringified JSON, not a nested object)
+//   - CamelCase stdin payload accepts toolArgs as an object or a JSON-encoded string
 //   - Outputs {"permissionDecision":"deny","permissionDecisionReason":"..."} on a hit
 //     (no `hookSpecificOutput` wrapper)
 //   - Outputs nothing when the file is clean, tool is not `view`, or args/file are missing
@@ -66,6 +65,48 @@ describe('sonar hook copilot-pre-tool-use', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  for (const format of ['object', 'string'] as const) {
+    for (const relative of [false, true]) {
+      it(
+        `blocks a secret with ${format} arguments and a ${relative ? 'relative' : 'absolute'} path`,
+        async () => {
+          harness.state().withSecretsBinaryInstalled();
+          harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+          harness.cwd.writeFile('nested/secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+          const args = {
+            path: relative ? 'secret.js' : join(harness.cwd.path, 'nested', 'secret.js'),
+          };
+
+          const result = await harness.runWithStdin(
+            'hook copilot-pre-tool-use',
+            JSON.stringify({
+              toolName: 'view',
+              cwd: join(harness.cwd.path, 'nested'),
+              toolArgs: format === 'string' ? JSON.stringify(args) : args,
+            }),
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(JSON.parse(result.stdout.trim()).permissionDecision).toBe('deny');
+          expect(result.stdout).toContain('Sonar detected secrets in file');
+        },
+        { timeout: 30000 },
+      );
+    }
+  }
+
+  for (const toolArgs of [null, [], 42, { path: 42 }, { path: '' }, 'null', '[]']) {
+    it(`allows malformed tool arguments ${JSON.stringify(toolArgs)} without crashing`, async () => {
+      const result = await harness.runWithStdin(
+        'hook copilot-pre-tool-use',
+        JSON.stringify({ toolName: 'view', toolArgs }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).not.toContain('"deny"');
+    });
+  }
 
   it(
     'exits 0 and allows when stdin is malformed JSON',
