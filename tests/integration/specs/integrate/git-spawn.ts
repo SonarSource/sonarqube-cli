@@ -25,8 +25,8 @@ export type GitSpawnResult = ReturnType<typeof Bun.spawnSync>;
 export type GitSpawnOptions = {
   cwd: string;
   env?: Record<string, string>;
-  /** Exit codes that must not throw (default: `[0]` only). */
-  allowedExitCodes?: number[];
+  /** Expected process exit code (default: `0`). */
+  expectedExitCode?: number;
 };
 
 function decodeSpawnOutput(data: Uint8Array | string | undefined): string {
@@ -77,8 +77,8 @@ export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResu
     stderr: 'pipe',
   });
   const exitCode = result.exitCode ?? 1;
-  const allowed = options.allowedExitCodes ?? [0];
-  if (!allowed.includes(exitCode)) {
+  const expected = options.expectedExitCode ?? 0;
+  if (exitCode !== expected) {
     throw new Error(
       gitFailureMessage(
         args,
@@ -86,7 +86,7 @@ export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResu
         result.exitCode,
         decodeSpawnOutput(result.stdout),
         decodeSpawnOutput(result.stderr),
-      ),
+      ) + `\n  expected exit code: ${expected}`,
     );
   }
   return result;
