@@ -18,16 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 import { spawnProcessWithTimeout, type SpawnResult } from '@/core/process/process.ts';
-import { SCA_SCAN_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
+
+const SCAN_TIMEOUT_MS = 3 * 60 * 1000;
 
 export class DefaultScaScannerSpawner implements ScaScannerSpawner {
   spawn(
     binaryPath: string,
     args: string[],
     env?: Record<string, string>,
-    timeoutMs: number = SCA_SCAN_TIMEOUT_MS,
+    timeoutMs: number = SCAN_TIMEOUT_MS,
   ): Promise<SpawnResult> {
     return spawnProcessWithTimeout(
       binaryPath,

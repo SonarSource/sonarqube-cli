@@ -32,7 +32,6 @@ import { wholeFile, wholeFileRemover } from '@/core/framework/resources';
 import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { GIT_METADATA_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import type { GitHookType, IntegrateGitOptions } from '../../options.ts';
 import {
@@ -113,12 +112,14 @@ function createNativeGitFeature(
   return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
+const GIT_CONFIG_TIMEOUT_MS = 15_000;
+
 function runGit(args: string[]) {
   return spawnProcessWithTimeout(
     'git',
     args,
     {},
-    GIT_METADATA_TIMEOUT_MS,
+    GIT_CONFIG_TIMEOUT_MS,
     `git ${args[0] ?? 'command'} timed out`,
   );
 }

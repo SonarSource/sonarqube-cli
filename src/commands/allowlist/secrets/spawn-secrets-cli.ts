@@ -21,7 +21,8 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { INTERACTIVE_COMMAND_TIMEOUT_MS } from '@/core/process/timeouts.ts';
+
+const ALLOWLIST_TIMEOUT_MS = 10 * 60 * 1000;
 import type { Console } from '@/core/ui/console.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
@@ -48,8 +49,8 @@ export async function runSecretsAllowlistCommand(
         stdout: 'inherit',
         stderr: 'inherit',
       },
-      INTERACTIVE_COMMAND_TIMEOUT_MS,
-      `sonar-secrets allowlist timed out after ${INTERACTIVE_COMMAND_TIMEOUT_MS}ms`,
+      ALLOWLIST_TIMEOUT_MS,
+      `sonar-secrets allowlist timed out after ${ALLOWLIST_TIMEOUT_MS}ms`,
     );
   } catch (err) {
     throw new CommandFailedError(`Failed to run sonar-secrets: ${(err as Error).message}`, {

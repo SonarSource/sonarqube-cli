@@ -28,15 +28,14 @@ import {
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
-import {
-  CONTEXT_COMMAND_TIMEOUT_MS,
-  CONTEXT_INTEGRATE_TIMEOUT_MS,
-} from '@/core/process/timeouts.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
 // Type-only, so it does not create a runtime cycle with vortex.ts.
 import type { ResolvedVortexSetup } from './vortex.ts';
+
+const COMMAND_TIMEOUT_MS = 30_000;
+const INTEGRATE_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const ENV_SKIP_CAG = '__SQCLI_DEV_SKIP_CAG';
 
@@ -134,7 +133,7 @@ export async function runToolIntegrateCommand(
     p.projectRoot,
     console,
     initEnv,
-    CONTEXT_INTEGRATE_TIMEOUT_MS,
+    INTEGRATE_TIMEOUT_MS,
   );
   console.discreetSuccess('Vortex Context configured');
 }
@@ -272,7 +271,7 @@ async function runCagSubprocess(
   options: CagSubprocessOptions,
 ): Promise<CagSubprocessResult> {
   const env = options.env ?? (await buildContextAugmentationEnv());
-  const timeoutMs = options.timeoutMs ?? CONTEXT_COMMAND_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS;
   try {
     const result = await spawnProcessWithTimeout(
       binaryPath,

@@ -30,7 +30,8 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { VERSION_PROBE_TIMEOUT_MS } from '@/core/process/timeouts.ts';
+
+const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 /**
  * Verify the installation by probing the binary; throws with captured stdout/stderr

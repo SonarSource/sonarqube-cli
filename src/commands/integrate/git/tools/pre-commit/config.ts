@@ -29,7 +29,6 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { IntegrationContext } from '@/core/framework/features/types.ts';
 import { PRE_COMMIT_CONFIG_FILE } from '@/core/host/git/hooks.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { PRE_COMMIT_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import type { GitHookType } from '../../options.ts';
 import { resolveDepRisksArgs } from '../shared.ts';
@@ -211,6 +210,8 @@ export function hasSonarHookInPreCommitConfig(root: string): boolean {
   return findLocalRepo(readPreCommitConfig(root))?.hooks.some(isSonarHookEntry) ?? false;
 }
 
+const COMMAND_TIMEOUT_MS = 2 * 60 * 1000;
+
 async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
   let result;
   try {
@@ -218,7 +219,7 @@ async function runPreCommitCommand(args: string[], cwd: string): Promise<void> {
       'pre-commit',
       args,
       { cwd },
-      PRE_COMMIT_TIMEOUT_MS,
+      COMMAND_TIMEOUT_MS,
       `pre-commit ${args.join(' ')} timed out`,
     );
   } catch (error) {

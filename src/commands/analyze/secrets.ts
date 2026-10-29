@@ -33,13 +33,15 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { SECRETS_PUSH_SCAN_TIMEOUT_MS, SECRETS_SCAN_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import { loadSecretsScanSettings } from '@/core/secrets/scan-settings.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 import { buildSecretsScanArgs } from './secrets-scan-args.ts';
+
+const SCAN_TIMEOUT_MS = 30_000;
+const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
@@ -147,8 +149,8 @@ export async function runSecretsBinary(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SECRETS_SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SECRETS_SCAN_TIMEOUT_MS}ms`,
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
   );
 }
 
@@ -171,8 +173,8 @@ export async function runSecretsBinaryOnText(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SECRETS_SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SECRETS_SCAN_TIMEOUT_MS}ms`,
+    SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
   );
 }
 
@@ -193,8 +195,8 @@ export async function runSecretsBinaryOnStream(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SECRETS_PUSH_SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SECRETS_PUSH_SCAN_TIMEOUT_MS}ms`,
+    PUSH_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${PUSH_SCAN_TIMEOUT_MS}ms`,
   );
 }
 

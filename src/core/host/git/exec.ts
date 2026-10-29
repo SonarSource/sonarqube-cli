@@ -23,7 +23,8 @@
 // when git is unavailable or exits non-zero.
 
 import { ProcessTimedOutError, spawnProcessWithTimeout } from '../../process/process.ts';
-import { GIT_METADATA_TIMEOUT_MS } from '../../process/timeouts.ts';
+
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
 
 export async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {
   try {
@@ -31,7 +32,7 @@ export async function tryRunGit(args: string[], cwd: string): Promise<string | u
       'git',
       args,
       { cwd },
-      GIT_METADATA_TIMEOUT_MS,
+      GIT_COMMAND_TIMEOUT_MS,
       `git ${args[0] ?? 'command'} timed out`,
     );
     if (result.exitCode !== 0) return undefined;

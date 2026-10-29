@@ -23,9 +23,9 @@
 import { InvalidOptionError } from '../../commands/command-error.ts';
 import logger from '../../observability/logger.ts';
 import { spawnProcessWithTimeout } from '../../process/process.ts';
-import { RUNTIME_INFO_TIMEOUT_MS } from '../../process/timeouts.ts';
 import { isWindows } from './platform-detector.ts';
 
+const RUNTIME_INFO_TIMEOUT_MS = 3_000;
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 

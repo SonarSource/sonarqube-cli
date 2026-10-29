@@ -31,7 +31,6 @@ import { runSecretsAllowlistCommand } from '@/commands/allowlist/secrets/spawn-s
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
-import { INTERACTIVE_COMMAND_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import * as installationLocation from '@/core/update/installation-location.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
@@ -74,8 +73,8 @@ describe('runSecretsAllowlistCommand', () => {
         stdout: 'inherit',
         stderr: 'inherit',
       },
-      INTERACTIVE_COMMAND_TIMEOUT_MS,
-      `sonar-secrets allowlist timed out after ${INTERACTIVE_COMMAND_TIMEOUT_MS}ms`,
+      10 * 60 * 1000,
+      'sonar-secrets allowlist timed out after 600000ms',
     );
   });
 
