@@ -82,7 +82,7 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 
 ## Agent benchmark (`benchmarks/harbor/`)
 
-Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker; `scripts/run-isolated.sh` runs the agent as the `nobody` user without `sudo`), `ci/` (fixture repo setup and the `sonar` call recorder; `HB_*` variables are for Harbor only, hidden from the agent, tasks map them to `SONARQUBE_CLI_*`) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch`, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
+Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, model from the trial `result.json`, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker; `scripts/run-isolated.sh` runs the agent as the `nobody` user without `sudo`), `ci/` (fixture repo setup and the `sonar` call recorder; `HB_*` variables are for Harbor only, hidden from the agent, tasks map them to `SONARQUBE_CLI_*`) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch` with a `model` input, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
 
 ## Docs site (`docs/`)
 
