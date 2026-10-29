@@ -20,7 +20,7 @@
 
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 
-const VERSION_TIMEOUT_MS = 5000;
+const VERSION_TIMEOUT_MS = 10_000;
 const VERSION_PATTERN = /(?:^|\s)v?(\d+\.\d+\.\d+)/m;
 
 const FIRST_SUPPORTED_MAJOR_VERSION = 2;

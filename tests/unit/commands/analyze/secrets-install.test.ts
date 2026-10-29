@@ -80,7 +80,7 @@ describe('resolveSecretsBinary: happy path', () => {
     verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(
       undefined,
     );
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: `sonar-secrets ${SONAR_SECRETS_VERSION}\n`,
       stderr: '',
@@ -202,7 +202,7 @@ describe('resolveSecretsBinary: error paths', () => {
     verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(
       undefined,
     );
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: 'not working',
@@ -230,7 +230,7 @@ describe('resolveSecretsBinary: error paths', () => {
     verifyBinarySignatureSpy = spyOn(releases, 'verifyBinarySignature').mockResolvedValue(
       undefined,
     );
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: `sonar-secrets ${SONAR_SECRETS_VERSION}\n`,
       stderr: '',

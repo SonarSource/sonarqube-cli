@@ -31,7 +31,7 @@ import type {
 import { wholeFile, wholeFileRemover } from '@/core/framework/resources';
 import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 import type { GitHookType, IntegrateGitOptions } from '../../options.ts';
 import {
@@ -112,11 +112,23 @@ function createNativeGitFeature(
   return { ...base, dependencies: [sonarSecretsBinaryDependency] };
 }
 
+const GIT_CONFIG_TIMEOUT_MS = 15_000;
+
+function runGit(args: string[]) {
+  return spawnProcessWithTimeout(
+    'git',
+    args,
+    {},
+    GIT_CONFIG_TIMEOUT_MS,
+    `git ${args[0] ?? 'command'} timed out`,
+  );
+}
+
 async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {
   // Only unset core.hooksPath when it still points at the directory we configured.
   // A user or another tool may have repointed it after the Sonar install; we must
   // not clobber a value we no longer own.
-  const current = await spawnProcess('git', ['config', '--global', '--get', 'core.hooksPath']);
+  const current = await runGit(['config', '--global', '--get', 'core.hooksPath']);
   if (current.exitCode !== 0) {
     // Exit code 1: the key is unset. Anything else: cannot read it — leave it alone.
     return;
@@ -127,7 +139,7 @@ async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {
 
   let gitResult;
   try {
-    gitResult = await spawnProcess('git', ['config', '--global', '--unset', 'core.hooksPath']);
+    gitResult = await runGit(['config', '--global', '--unset', 'core.hooksPath']);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(`Failed to run git [${message}]`, {
@@ -147,12 +159,7 @@ async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {
 async function configureGlobalHooksPath(hooksDir: string): Promise<void> {
   let gitResult;
   try {
-    gitResult = await spawnProcess('git', [
-      'config',
-      '--global',
-      'core.hooksPath',
-      normalizePath(hooksDir),
-    ]);
+    gitResult = await runGit(['config', '--global', 'core.hooksPath', normalizePath(hooksDir)]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(`Failed to run git [${message}]`, {

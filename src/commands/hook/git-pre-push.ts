@@ -28,7 +28,7 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
@@ -38,6 +38,8 @@ import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './ho
 import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 import type { PushRef } from './stdin.ts';
 import { readGitPushRefs } from './stdin.ts';
+
+const GIT_LOG_TIMEOUT_MS = 60_000;
 
 // Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
 const NULL_OID_PATTERN = /^0+$/;
@@ -233,10 +235,20 @@ async function getPushedCommitBlobs(
     'Secrets scan could not run because the files being pushed could not be listed by Git.';
   let result;
   try {
-    result = await spawnProcess('git', args, { cwd: process.cwd() });
-  } catch {
-    throw new CommandFailedError(errorMessage, {
-      remediationHint: 'Check that Git is installed, then retry the push.',
+    result = await spawnProcessWithTimeout(
+      'git',
+      args,
+      { cwd: process.cwd() },
+      GIT_LOG_TIMEOUT_MS,
+      'git log timed out',
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new CommandFailedError(`${errorMessage} ${detail}`, {
+      remediationHint:
+        error instanceof ProcessTimedOutError
+          ? 'Check for a Git lock or a very large push range, then retry the push.'
+          : 'Check that Git is installed, then retry the push.',
     });
   }
   if (result.exitCode !== 0) {
