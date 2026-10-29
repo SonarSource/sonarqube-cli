@@ -45,6 +45,7 @@ import {
 } from './directives.ts';
 import {
   type FindingCategory,
+  findingId,
   FindingNotFoundError,
   type FindingPage,
   parseProjectFinding,
@@ -421,16 +422,22 @@ export class SonarArchitectureApi implements ArchitectureApi {
       page?.pageIndex !== pageIndex ||
       page.pageSize !== pageSize ||
       !Number.isSafeInteger(page.total) ||
-      page.total < 0
+      page.total < 0 ||
+      result.projectFindings.length > pageSize
     )
       throw new CommandFailedError('Invalid public findings page; no complete page was read.');
-    return { findings: result.projectFindings.map(parseProjectFinding), page };
+    const findings = result.projectFindings.map(parseProjectFinding);
+    if (new Set(findings.map((item) => item.id)).size !== findings.length)
+      throw new CommandFailedError('The public findings page returned duplicate ids.');
+    if (findings.some((item) => item.projectId !== projectId))
+      throw new CommandFailedError('The public findings page returned a different project.');
+    return { findings, page };
   }
 
   async getFinding(id: string): Promise<ProjectFinding> {
-    await this.projectId('Architecture findings');
+    const projectId = await this.projectId('Architecture findings');
     const result = await this.http
-      .get<unknown>(`${this.path('project-findings')}/${encodeURIComponent(id)}`)
+      .get<unknown>(`${this.path('project-findings')}/${encodeURIComponent(findingId(id))}`)
       .orThrow()
       .catch((error: unknown) => {
         if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
@@ -440,7 +447,12 @@ export class SonarArchitectureApi implements ArchitectureApi {
           );
         throw error;
       });
-    return parseProjectFinding(result);
+    const finding = parseProjectFinding(result);
+    if (finding.id !== id || finding.projectId !== projectId)
+      throw new CommandFailedError(
+        'The public finding response returned a different id or project.',
+      );
+    return finding;
   }
 
   private directivePath(id: string): string {

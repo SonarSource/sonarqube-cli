@@ -263,7 +263,10 @@ export class FakeArchitecture {
 
     switch (`${resource}:${request.method}`) {
       case 'project-findings:GET': {
-        if (request.modelId) return json(this.findings.find((item) => item.id === request.modelId));
+        if (request.modelId) {
+          const finding = this.findings.find((item) => item.id === request.modelId);
+          return finding ? json(finding) : json({ message: 'Finding not found' }, 404);
+        }
         const pageIndex = Number(request.query.pageIndex ?? 1);
         const pageSize = Number(request.query.pageSize ?? 50);
         const matching = this.findings.filter(

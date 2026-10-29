@@ -132,7 +132,37 @@ describe('public architecture findings', () => {
     expect(findingRequests(server)).toHaveLength(0);
   });
 
-  it.each(['--page 1', '--category FLAW'])(
+  it.each([
+    ['a different project', { projectId: 'other-branch-id' }],
+    ['a different id', { id: 'finding-2' }],
+  ])('rejects a single finding from %s', async (_, change) => {
+    await configured((api) =>
+      api
+        .withFindings(findings)
+        .withStatus('project-findings', 200, JSON.stringify({ ...findings[0], ...change }), 'GET'),
+    );
+    const result = await h.run('arch findings get -p shop --id finding-1');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('different id or project');
+  });
+
+  it('drops fields that are not part of the finding contract', async () => {
+    await configured((api) =>
+      api.withFindings([{ ...findings[1], unexpected: 'value' } as ProjectFinding]),
+    );
+    const result = await h.run('arch findings get -p shop --id finding-2 --format json');
+    expect(JSON.parse(result.stdout).finding).toEqual(findings[1]);
+  });
+
+  it('rejects a path-like finding id before requesting it', async () => {
+    const server = await configured();
+    const result = await h.run('arch findings get -p shop --id ..');
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Finding id must be a nonempty id');
+    expect(findingRequests(server)).toHaveLength(0);
+  });
+
+  it.each(['--page 1', '--page-size 5', '--category FLAW'])(
     'refuses %s together with an explicit id',
     async (option) => {
       const server = await configured();
@@ -154,6 +184,18 @@ describe('public architecture findings', () => {
   it.each([
     ['an incomplete page', '{"projectFindings":[]}'],
     [
+      'another project',
+      '{"projectFindings":[{"id":"x","projectId":"other","category":"FLAW"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
+      'a non-numeric measure',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","measures":{"m":"text"}}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
+    ],
+    [
+      'duplicate ids',
+      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW"},{"id":"x","projectId":"shop-branch-id","category":"FLAW"}],"page":{"pageIndex":1,"pageSize":50,"total":2}}',
+    ],
+    [
       'an unsupported category',
       '{"projectFindings":[{"id":"x","projectId":"p","category":"X"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
     ],
@@ -161,7 +203,9 @@ describe('public architecture findings', () => {
     await configured((api) => api.withStatus('project-findings', 200, body, 'GET'));
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toMatch(/Invalid public findings page|unsupported category/);
+    expect(result.stderr).toMatch(
+      /Invalid public findings page|unsupported category|different project|duplicate ids|non-numeric measure/,
+    );
   });
 
   it.each([

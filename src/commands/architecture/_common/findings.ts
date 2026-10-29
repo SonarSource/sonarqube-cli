@@ -26,13 +26,17 @@ export type FindingCategory = (typeof FINDING_CATEGORIES)[number];
 
 export class FindingNotFoundError extends CommandFailedError {}
 
-/** A finding as the public API returns it; detail fields are kept as returned. */
-export interface ProjectFinding extends Record<string, unknown> {
+export interface ProjectFinding {
   id: string;
   projectId: string;
   category: FindingCategory;
   message?: string;
+  components?: string[];
+  relationships?: { from: string; to: string }[];
+  constraint?: string;
+  measures?: Record<string, number>;
 }
+const DETAIL_FIELDS = ['message', 'components', 'relationships', 'constraint', 'measures'] as const;
 export interface FindingPage {
   findings: ProjectFinding[];
   page: { pageIndex: number; pageSize: number; total: number };
@@ -49,12 +53,36 @@ export interface FindingsApi {
 export function parseProjectFinding(value: unknown): ProjectFinding {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new CommandFailedError('Each finding must be an object.');
-  const finding = value as Record<string, unknown>;
-  if (typeof finding.id !== 'string' || !finding.id || typeof finding.projectId !== 'string')
+  const object = value as Record<string, unknown>;
+  if (
+    typeof object.id !== 'string' ||
+    !object.id.trim() ||
+    typeof object.projectId !== 'string' ||
+    !object.projectId.trim()
+  )
     throw new CommandFailedError('Public finding response has an invalid id or project.');
-  if (!(FINDING_CATEGORIES as readonly unknown[]).includes(finding.category))
-    throw new CommandFailedError(`Public finding ${finding.id} has an unsupported category.`);
-  if (finding.message != null && typeof finding.message !== 'string')
-    throw new CommandFailedError(`Public finding ${finding.id} message must be a string.`);
-  return finding as ProjectFinding;
+  if (!(FINDING_CATEGORIES as readonly unknown[]).includes(object.category))
+    throw new CommandFailedError(`Public finding ${object.id} has an unsupported category.`);
+  if (object.message != null && typeof object.message !== 'string')
+    throw new CommandFailedError(`Public finding ${object.id} message must be a string.`);
+  if (
+    object.measures != null &&
+    (typeof object.measures !== 'object' ||
+      Object.values(object.measures).some((value) => typeof value !== 'number'))
+  )
+    throw new CommandFailedError(`Public finding ${object.id} has a non-numeric measure.`);
+  const finding = {
+    id: object.id,
+    projectId: object.projectId,
+    category: object.category,
+  } as ProjectFinding;
+  for (const name of DETAIL_FIELDS)
+    if (object[name] != null) Object.assign(finding, { [name]: object[name] });
+  return finding;
+}
+
+export function findingId(value: string): string {
+  if (!value.trim() || value === '.' || value === '..')
+    throw new CommandFailedError('Finding id must be a nonempty id.');
+  return value;
 }
