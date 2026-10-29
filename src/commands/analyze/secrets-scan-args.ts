@@ -18,6 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { resolve } from 'node:path';
+
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { SecretsScanSettings } from '@/core/secrets/scan-settings.ts';
 
 /** Commander collector for the repeatable `--exclude` option. */
@@ -26,15 +29,18 @@ export function collectExcludeOption(value: string, previous: string[] = []): st
 }
 
 /**
- * `exclusionsOverride` comes from the command line: when non-empty it replaces the configured exclusions, and is
- * passed as given, so it resolves against the cwd.
+ * `exclusionsOverride` comes from the command line: when non-empty it replaces the configured exclusions, resolving
+ * against the cwd and canonicalized like them, since sonar-secrets only matches canonical paths.
  */
 export function buildSecretsScanArgs(
   settings: SecretsScanSettings,
   exclusionsOverride: readonly string[] = [],
 ): string[] {
   const args = ['--max-file-size', String(settings.maxFileSize)];
-  const exclusions = exclusionsOverride.length > 0 ? exclusionsOverride : settings.exclusions;
+  const exclusions =
+    exclusionsOverride.length > 0
+      ? exclusionsOverride.map((path) => canonicalizePath(resolve(process.cwd(), path)))
+      : settings.exclusions;
   for (const path of exclusions) {
     // The `=` form keeps a path that starts with `-` from being read as another option.
     args.push(`--exclude=${path}`);

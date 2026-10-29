@@ -531,6 +531,25 @@ describe('analyze secrets', () => {
     );
 
     it(
+      'skips an absolute --exclude path given through a symlink',
+      async () => {
+        harness.cwd.writeFile('src/app.js', CLEAN_CONTENT);
+        harness.cwd.writeFile('vendor/lib.js', SECRET_CONTENT);
+        const linkedCwd = join(harness.userHome.path, 'linked-cwd');
+        mkdirSync(harness.userHome.path, { recursive: true });
+        symlinkSync(harness.cwd.path, linkedCwd, 'junction');
+
+        const result = await harness.run(
+          `analyze secrets . --exclude ${join(linkedCwd, 'vendor')}`,
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
       'passes the largest accepted secrets.maxFileSize on to sonar-secrets',
       async () => {
         harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
