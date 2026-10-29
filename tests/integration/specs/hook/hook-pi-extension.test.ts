@@ -138,7 +138,7 @@ describe.skipIf(IS_WINDOWS)('Pi secrets extension running the real sonar hooks',
       expect(result?.message.role).toBe('user');
       expect(result?.message.timestamp).toBe(42);
       expect(result?.message.content).not.toContain(GITHUB_TEST_TOKEN);
-      expect(result?.message.content).not.toContain('[Sonar] Message blocked');
+      expect(result?.message.content).not.toContain('[SonarQube] Message blocked');
       expect(result?.message.content.startsWith(before)).toBe(true);
       expect(result?.message.content.endsWith(after)).toBe(true);
     },
