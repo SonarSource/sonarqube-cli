@@ -70,15 +70,34 @@ describe('config set', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'exits with code 1 and writes nothing for an unknown key',
-    async () => {
-      const result = await harness.run('config set not.a.real.key value');
-
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain(
+  it.each([
+    {
+      name: 'an unknown key',
+      args: 'not.a.real.key value',
+      exitCode: 1,
+      message:
         "command-argument value 'not.a.real.key' is invalid for argument 'key'. Allowed choices are",
-      );
+    },
+    {
+      name: 'a value that does not match the key format',
+      args: 'secrets.maxFileSize 2MB',
+      exitCode: 2,
+      message:
+        "Invalid value '2MB' for config key 'secrets.maxFileSize'. Expected a non-negative integer of at most 15 digits.",
+    },
+    {
+      name: 'a size limit too large to pass on as plain digits',
+      args: 'secrets.maxFileSize 1000000000000000000000',
+      exitCode: 2,
+      message: "Invalid value '1000000000000000000000' for config key 'secrets.maxFileSize'.",
+    },
+  ])(
+    'exits with code $exitCode and writes nothing for $name',
+    async ({ args, exitCode, message }) => {
+      const result = await harness.run(`config set ${args}`);
+
+      expect(result.exitCode).toBe(exitCode);
+      expect(result.stdout + result.stderr).toContain(message);
       expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
     },
     { timeout: 15000 },
@@ -91,34 +110,6 @@ describe('config set', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stdout + result.stderr).toContain("Invalid value 'VERBOSE'");
-      expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 and writes nothing for a value that does not match the key format',
-    async () => {
-      const result = await harness.run('config set secrets.maxFileSize 2MB');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain(
-        "Invalid value '2MB' for config key 'secrets.maxFileSize'. Expected a non-negative integer of at most 15 digits.",
-      );
-      expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
-    },
-    { timeout: 15000 },
-  );
-
-  it(
-    'exits with code 2 and writes nothing for a size limit too large to pass on as plain digits',
-    async () => {
-      const result = await harness.run('config set secrets.maxFileSize 1000000000000000000000');
-
-      expect(result.exitCode).toBe(2);
-      expect(result.stdout + result.stderr).toContain(
-        "Invalid value '1000000000000000000000' for config key 'secrets.maxFileSize'.",
-      );
       expect(harness.cliHome.exists(CLI_CONFIG_FILE_NAME)).toBe(false);
     },
     { timeout: 15000 },
