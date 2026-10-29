@@ -28,6 +28,7 @@ import {
 } from '@/core/config/config-schema.ts';
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 
 /** The sonar-secrets analysis settings read from the `secrets.*` config keys. */
@@ -69,20 +70,29 @@ export async function loadSecretsScanSettings(
     fromStored('secrets.disableKnownFakeSecretFilter'),
     fromStored('secrets.demoMode'),
   ]);
+  const defaults = DEFAULT_SECRETS_SCAN_SETTINGS;
   return {
-    maxFileSize: maxFileSize === undefined ? MAX_SCANNED_FILE_SIZE : Number(maxFileSize),
-    exclusions: await resolveConfiguredExclusions(exclude, cwd),
-    disableTestFileDetection: disableTestFileDetection === 'true',
-    disableEntropyFilter: disableEntropyFilter === 'true',
-    disableKnownFakeSecretFilter: disableKnownFakeSecretFilter === 'true',
-    demoMode: demoMode === 'true',
+    maxFileSize: maxFileSize === undefined ? defaults.maxFileSize : Number(maxFileSize),
+    exclusions:
+      exclude === undefined ? defaults.exclusions : await resolveConfiguredExclusions(exclude, cwd),
+    disableTestFileDetection: toBoolean(
+      disableTestFileDetection,
+      defaults.disableTestFileDetection,
+    ),
+    disableEntropyFilter: toBoolean(disableEntropyFilter, defaults.disableEntropyFilter),
+    disableKnownFakeSecretFilter: toBoolean(
+      disableKnownFakeSecretFilter,
+      defaults.disableKnownFakeSecretFilter,
+    ),
+    demoMode: toBoolean(demoMode, defaults.demoMode),
   };
 }
 
-/**
- * The stored value, held to the same rule `config set` applies, so a hand-edited value is never passed on. Stored
- * settings are optional: an unreadable or invalid value counts as unset, whose default scans the most.
- */
+function toBoolean(raw: string | undefined, fallback: boolean): boolean {
+  return raw === undefined ? fallback : raw === 'true';
+}
+
+/** An unreadable value, or one `config set` would reject, counts as unset. */
 async function fromStored(key: ConfigKey): Promise<string | undefined> {
   let raw: string | undefined;
   try {
@@ -106,16 +116,14 @@ function logIgnoredConfig(key: ConfigKey, reason: string): void {
 }
 
 /** The config is shared by every repository, so a relative entry means a path inside the one being scanned. */
-async function resolveConfiguredExclusions(
-  raw: string | undefined,
-  cwd: string,
-): Promise<string[]> {
-  const entries = (raw ?? '')
+async function resolveConfiguredExclusions(raw: string, cwd: string): Promise<string[]> {
+  const entries = raw
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
-  if (entries.every((entry) => isAbsolute(entry))) return entries;
-
-  const base = (await resolveGitRepoRoot(cwd)) ?? cwd;
-  return entries.map((entry) => resolve(base, entry));
+  const base = entries.every((entry) => isAbsolute(entry))
+    ? cwd
+    : ((await resolveGitRepoRoot(cwd)) ?? cwd);
+  // sonar-secrets only matches canonical paths, so an entry through a symlink would never match.
+  return entries.map((entry) => canonicalizePath(resolve(base, entry)));
 }

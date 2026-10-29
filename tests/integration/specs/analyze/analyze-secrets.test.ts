@@ -23,6 +23,9 @@
 // Note: hardcoded token below is an intentional test fixture for the secret scanner.
 // sonar-ignore-next-line S6769
 
+import { mkdirSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
@@ -35,10 +38,13 @@ import {
 } from '../../../_common/stats-helpers.ts';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
+import { commitFile, initGitRepo } from '../hook/git-test-helpers';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
 const GITHUB_TEST_TOKEN = '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';
+// Reported only once both the entropy and the known-fake-secret filters are off.
+const PLACEHOLDER_GITHUB_TOKEN = `ghp_${'a'.repeat(36)}`;
 const CLEAN_CONTENT = 'const greeting = "hello world";';
 const VALID_TOKEN = 'integration-test-token';
 const EXIT_CODE_SECRETS_FOUND = 51;
@@ -381,6 +387,17 @@ describe('analyze secrets', () => {
 
   describe('scan settings', () => {
     const SECRET_CONTENT = `const token = "${GITHUB_TEST_TOKEN}";`;
+    const PLACEHOLDER_SECRET_CONTENT = `const token = "${PLACEHOLDER_GITHUB_TOKEN}";`;
+    const GIT_NULL_OID = '0000000000000000000000000000000000000000';
+
+    function storeConfig(lines: string[]): void {
+      harness.cliHome.writeFile('cli-config.properties', `${lines.join('\n')}\n`);
+    }
+
+    function logFileText(): string {
+      const logFile = harness.cliHome.file('logs', 'sonarqube-cli.log');
+      return logFile.exists() ? logFile.asText() : '';
+    }
 
     beforeEach(() => {
       harness.state().withSecretsBinaryInstalled();
@@ -388,13 +405,16 @@ describe('analyze secrets', () => {
     });
 
     it(
-      'skips a path given with --exclude',
+      'skips every path given with a repeated --exclude',
       async () => {
         harness.cwd.writeFile('src/app.js', CLEAN_CONTENT);
         harness.cwd.writeFile('generated/keys.js', SECRET_CONTENT);
+        harness.cwd.writeFile('-fixtures/keys.js', SECRET_CONTENT);
         expect((await harness.run('analyze secrets .')).exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
-        const result = await harness.run('analyze secrets . --exclude generated');
+        const result = await harness.run(
+          'analyze secrets . --exclude generated --exclude=-fixtures',
+        );
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).toContain('No secrets found');
@@ -466,6 +486,148 @@ describe('analyze secrets', () => {
 
         expect(scanned.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
         expect(scanned.stdout + scanned.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'resolves a relative secrets.exclude entry against the repository root from a subdirectory',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile('vendor/root-keys.js', SECRET_CONTENT);
+        harness.cwd.writeFile('packages/api/vendor/api-keys.js', SECRET_CONTENT);
+        expect((await harness.run('config set secrets.exclude vendor')).exitCode).toBe(0);
+
+        const result = await harness.run('analyze secrets ../..', {
+          cwd: harness.cwd.dir('packages', 'api').path,
+        });
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('api-keys.js');
+        expect(output).not.toContain('root-keys.js');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'skips an absolute secrets.exclude entry given through a symlink',
+      async () => {
+        harness.cwd.writeFile('src/app.js', CLEAN_CONTENT);
+        harness.cwd.writeFile('vendor/lib.js', SECRET_CONTENT);
+        const linkedCwd = join(harness.userHome.path, 'linked-cwd');
+        mkdirSync(harness.userHome.path, { recursive: true });
+        symlinkSync(harness.cwd.path, linkedCwd, 'junction');
+        expect(
+          (await harness.run(`config set secrets.exclude ${join(linkedCwd, 'vendor')}`)).exitCode,
+        ).toBe(0);
+
+        const result = await harness.run('analyze secrets .');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes the largest accepted secrets.maxFileSize on to sonar-secrets',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+        expect((await harness.run('config set secrets.maxFileSize 999999999999999')).exitCode).toBe(
+          0,
+        );
+
+        const result = await harness.run('analyze secrets secrets.js');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(result.stdout + result.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'keeps the default size limit, logging why, for a hand-edited secrets.maxFileSize it cannot pass on',
+      async () => {
+        // Number('1000000000000000000000') prints as '1e+21', which sonar-secrets would reject on every scan.
+        storeConfig(['log.level=DEBUG', 'secrets.maxFileSize=1000000000000000000000']);
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+
+        const result = await harness.run('analyze secrets secrets.js');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(logFileText()).toContain(
+          "Ignoring stored config 'secrets.maxFileSize': '1000000000000000000000' is invalid. Expected a non-negative integer of at most 15 digits.",
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'treats a hand-edited boolean secrets key that is not true or false as false, logging why',
+      async () => {
+        storeConfig(['log.level=DEBUG', 'secrets.disableTestFileDetection=TRUE']);
+        harness.cwd.writeFile('tests/fixture.js', SECRET_CONTENT);
+
+        const result = await harness.run('analyze secrets .');
+
+        expect(result.exitCode).toBe(0);
+        expect(logFileText()).toContain(
+          "Ignoring stored config 'secrets.disableTestFileDetection': 'TRUE' is invalid. Allowed values: true, false.",
+        );
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'reports placeholder tokens when secrets.demoMode is set',
+      async () => {
+        harness.cwd.writeFile('placeholder.js', PLACEHOLDER_SECRET_CONTENT);
+        expect((await harness.run('analyze secrets placeholder.js')).exitCode).toBe(0);
+        expect((await harness.run('config set secrets.demoMode true')).exitCode).toBe(0);
+
+        const result = await harness.run('analyze secrets placeholder.js');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(result.stdout + result.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'applies secrets.maxFileSize to the files a git push sends',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        const sha = commitFile(harness.cwd.path, 'secrets.js', SECRET_CONTENT);
+        const pushedRefs = `refs/heads/main ${sha} refs/heads/main ${GIT_NULL_OID}\n`;
+        expect((await harness.runWithStdin('hook git-pre-push', pushedRefs)).exitCode).toBe(1);
+        expect((await harness.run('config set secrets.maxFileSize 16')).exitCode).toBe(0);
+
+        const result = await harness.runWithStdin('hook git-pre-push', pushedRefs);
+
+        expect(result.exitCode).toBe(0);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'applies the secrets filter keys to a scanned agent prompt',
+      async () => {
+        const prompt = JSON.stringify({ prompt: `my token is ${PLACEHOLDER_GITHUB_TOKEN}` });
+        const filtered = await harness.runWithStdin('hook claude-prompt-submit', prompt);
+        expect(filtered.exitCode).toBe(0);
+        expect(filtered.stdout).not.toContain('"block"');
+        expect((await harness.run('config set secrets.disableEntropyFilter true')).exitCode).toBe(
+          0,
+        );
+        expect(
+          (await harness.run('config set secrets.disableKnownFakeSecretFilter true')).exitCode,
+        ).toBe(0);
+
+        const result = await harness.runWithStdin('hook claude-prompt-submit', prompt);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('"block"');
       },
       { timeout: 30000 },
     );
