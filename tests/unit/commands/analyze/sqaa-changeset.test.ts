@@ -51,7 +51,7 @@ function mockGitResponses(responses: Record<string, string | null>) {
 }
 
 beforeEach(() => {
-  spawnProcessSpy = spyOn(processLib, 'spawnProcess');
+  spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout');
 });
 
 afterEach(() => {

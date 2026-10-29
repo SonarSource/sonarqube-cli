@@ -19,8 +19,7 @@
  */
 
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-
-const VERSION_TIMEOUT_MS = 5000;
+import { VERSION_PROBE_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 const VERSION_PATTERN = /(?:^|\s)v?(\d+\.\d+\.\d+)/m;
 
 const FIRST_SUPPORTED_MAJOR_VERSION = 2;
@@ -31,7 +30,7 @@ export async function detectLegacyOpenCodeVersion(): Promise<string | undefined>
       'opencode',
       ['--version'],
       { stdin: 'ignore' },
-      VERSION_TIMEOUT_MS,
+      VERSION_PROBE_TIMEOUT_MS,
       'opencode --version timed out',
     );
     const version = VERSION_PATTERN.exec(stdout)?.[1];

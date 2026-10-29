@@ -22,6 +22,7 @@ import picomatch from 'picomatch';
 
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import logger from '@/core/observability/logger.ts';
+import { SCA_WATCH_PATTERNS_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
@@ -38,7 +39,12 @@ export class ScaWatchPatternsRunner {
   async run(): Promise<string[]> {
     try {
       const binaryPath = await this.installer.install();
-      const result = await this.spawner.spawn(binaryPath, ['watch-patterns']);
+      const result = await this.spawner.spawn(
+        binaryPath,
+        ['watch-patterns'],
+        undefined,
+        SCA_WATCH_PATTERNS_TIMEOUT_MS,
+      );
       if ((result.exitCode ?? 1) !== 0) {
         logger.debug(`watch-patterns exited with code ${String(result.exitCode)}`);
         return [];

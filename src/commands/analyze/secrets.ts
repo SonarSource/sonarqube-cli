@@ -33,6 +33,7 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { SECRETS_PUSH_SCAN_TIMEOUT_MS, SECRETS_SCAN_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import { loadSecretsScanSettings } from '@/core/secrets/scan-settings.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -120,8 +121,6 @@ export async function analyzeSecrets(
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
-const SCAN_TIMEOUT_MS = 30000;
-
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
@@ -148,8 +147,8 @@ export async function runSecretsBinary(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+    SECRETS_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SECRETS_SCAN_TIMEOUT_MS}ms`,
   );
 }
 
@@ -172,8 +171,8 @@ export async function runSecretsBinaryOnText(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+    SECRETS_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SECRETS_SCAN_TIMEOUT_MS}ms`,
   );
 }
 
@@ -194,8 +193,8 @@ export async function runSecretsBinaryOnStream(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+    SECRETS_PUSH_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${SECRETS_PUSH_SCAN_TIMEOUT_MS}ms`,
   );
 }
 

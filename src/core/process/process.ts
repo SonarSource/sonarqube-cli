@@ -29,15 +29,68 @@ export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
 export interface SpawnOptions {
   cwd?: string;
-  env?: Record<string, string>;
+  env?: NodeJS.ProcessEnv;
   stdin?: StdioMode;
   /** An iterable is pulled one chunk at a time, so a large input is never held whole. */
   stdinData?: string | Buffer | AsyncIterable<Buffer>;
   stdout?: StdioMode;
   stderr?: StdioMode;
   detached?: boolean;
+  /**
+   * When true, `env` is the child's whole environment. The default merges `env` over `process.env`.
+   * Vortex Context deletes inherited `SONAR_CONTEXT_*` keys, which a merge would put back.
+   */
+  isolateEnv?: boolean;
+  /**
+   * When false, stdout and stderr keep their original whitespace. The default trims both.
+   * Session-start context keeps the binary's trailing newline.
+   */
+  trimOutput?: boolean;
   /** Called immediately after the child process spawns, with a function to kill it. */
   onSpawn?: (kill: () => void) => void;
+}
+
+/** A child did not finish before its deadline. Distinct from "the program is not installed". */
+export class ProcessTimedOutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProcessTimedOutError';
+  }
+}
+
+function childEnv(options: SpawnOptions): NodeJS.ProcessEnv {
+  if (options.isolateEnv) {
+    return options.env ?? {};
+  }
+  return { ...process.env, ...options.env };
+}
+
+function presentedText(text: string, options: SpawnOptions): string {
+  return options.trimOutput === false ? text : text.trim();
+}
+
+async function raceWithTimeout<T>(
+  run: (registerKill: (kill: () => void) => void) => Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  let killChild: (() => void) | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run((kill) => {
+        killChild = kill;
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          killChild?.();
+          reject(new ProcessTimedOutError(timeoutMessage));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export interface SpawnResult {
@@ -68,9 +121,10 @@ function feedStdin(
 }
 
 /**
- * Spawn process and wait for completion
+ * Spawn a process and wait until its pipes close.
+ * Not exported: every caller goes through {@link spawnProcessWithTimeout} so a child cannot run forever.
  */
-export async function spawnProcess(
+async function spawnProcess(
   command: string,
   args: string[],
   options: SpawnOptions = {},
@@ -78,7 +132,7 @@ export async function spawnProcess(
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env: childEnv(options),
       stdio: [options.stdin || 'ignore', options.stdout || 'pipe', options.stderr || 'pipe'],
       detached: options.detached || false,
     });
@@ -121,16 +175,16 @@ export async function spawnProcess(
     proc.on('close', (code) => {
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
-        stdout: (stdout + stdoutDecoder.end()).trim(),
-        stderr: (stderr + stderrDecoder.end()).trim(),
+        stdout: presentedText(stdout + stdoutDecoder.end(), options),
+        stderr: presentedText(stderr + stderrDecoder.end(), options),
       });
     });
   });
 }
 
 /**
- * Spawn process and reject with `timeoutMessage` if it does not finish within `timeoutMs`.
- * Kills the child on timeout.
+ * Spawn a process and reject with {@link ProcessTimedOutError} if it does not finish within `timeoutMs`.
+ * Kills the direct child on timeout.
  */
 export async function spawnProcessWithTimeout(
   command: string,
@@ -139,27 +193,18 @@ export async function spawnProcessWithTimeout(
   timeoutMs: number,
   timeoutMessage: string,
 ): Promise<SpawnResult> {
-  let killChild: (() => void) | undefined;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
+  return raceWithTimeout(
+    (registerKill) =>
       spawnProcess(command, args, {
         ...options,
         onSpawn: (kill) => {
-          killChild = kill;
+          registerKill(kill);
           options.onSpawn?.(kill);
         },
       }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          killChild?.();
-          reject(new Error(timeoutMessage));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+    timeoutMs,
+    timeoutMessage,
+  );
 }
 export interface BytesSpawnResult {
   exitCode: number | null;
@@ -168,18 +213,41 @@ export interface BytesSpawnResult {
   stderr: string;
 }
 
-/** Like {@link spawnProcess}, but keeps stdout as bytes for output that is not text. */
+/** Like {@link spawnProcessWithTimeout}, but keeps stdout as bytes for output that is not text. */
 export async function spawnProcessCapturingBytes(
   command: string,
   args: string[],
-  options: SpawnOptions = {},
+  options: SpawnOptions,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<BytesSpawnResult> {
+  return raceWithTimeout(
+    (registerKill) =>
+      captureProcessBytes(command, args, {
+        ...options,
+        onSpawn: (kill) => {
+          registerKill(kill);
+          options.onSpawn?.(kill);
+        },
+      }),
+    timeoutMs,
+    timeoutMessage,
+  );
+}
+
+async function captureProcessBytes(
+  command: string,
+  args: string[],
+  options: SpawnOptions,
 ): Promise<BytesSpawnResult> {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env: childEnv(options),
       stdio: [options.stdin ?? 'ignore', options.stdout ?? 'pipe', options.stderr ?? 'pipe'],
+      detached: options.detached || false,
     });
+    options.onSpawn?.(() => proc.kill());
 
     const stdout: Buffer[] = [];
     let stderr = '';
@@ -201,7 +269,7 @@ export async function spawnProcessCapturingBytes(
       resolve({
         exitCode: code,
         stdout: Buffer.concat(stdout),
-        stderr: (stderr + stderrDecoder.end()).trim(),
+        stderr: presentedText(stderr + stderrDecoder.end(), options),
       });
     });
   });

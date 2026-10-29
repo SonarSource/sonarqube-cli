@@ -20,7 +20,8 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { INTERACTIVE_COMMAND_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import type { Console } from '@/core/ui/console.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
@@ -29,8 +30,8 @@ import {
 
 /**
  * Resolve/install sonar-secrets, then run one of its `allowlist` subcommands with inherited
- * stdio so the binary's own prompts and output reach the user directly. No timeout: unlike
- * `analyze secrets`'s scans, `add`/`clear` can wait indefinitely on interactive input.
+ * stdio so the binary's own prompts and output reach the user directly. The deadline is a
+ * hang ceiling: `add` and `clear` wait on the person at the prompt.
  */
 export async function runSecretsAllowlistCommand(
   subcommandArgs: string[],
@@ -39,11 +40,17 @@ export async function runSecretsAllowlistCommand(
   const binaryPath = await installSecretsBinary(console);
   let result;
   try {
-    result = await spawnProcess(binaryPath, ['allowlist', ...subcommandArgs], {
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
+    result = await spawnProcessWithTimeout(
+      binaryPath,
+      ['allowlist', ...subcommandArgs],
+      {
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit',
+      },
+      INTERACTIVE_COMMAND_TIMEOUT_MS,
+      `sonar-secrets allowlist timed out after ${INTERACTIVE_COMMAND_TIMEOUT_MS}ms`,
+    );
   } catch (err) {
     throw new CommandFailedError(`Failed to run sonar-secrets: ${(err as Error).message}`, {
       remediationHint: isStandaloneInstallerLocation()

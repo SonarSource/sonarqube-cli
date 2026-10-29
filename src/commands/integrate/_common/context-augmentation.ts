@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { spawn } from 'node:child_process';
-
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
@@ -29,6 +27,11 @@ import {
 } from '@/core/host/context-augmentation-env.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
+import {
+  CONTEXT_COMMAND_TIMEOUT_MS,
+  CONTEXT_INTEGRATE_TIMEOUT_MS,
+} from '@/core/process/timeouts.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
@@ -100,6 +103,7 @@ export interface CagSubprocessResult {
 interface CagSubprocessOptions {
   projectRoot: string;
   env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
 }
 
 export class CagStepFailedError extends Error {
@@ -130,6 +134,7 @@ export async function runToolIntegrateCommand(
     p.projectRoot,
     console,
     initEnv,
+    CONTEXT_INTEGRATE_TIMEOUT_MS,
   );
   console.discreetSuccess('Vortex Context configured');
 }
@@ -226,6 +231,7 @@ async function runCagStepOrThrow(
   projectRoot: string,
   console: Console,
   env?: NodeJS.ProcessEnv,
+  timeoutMs?: number,
 ): Promise<void> {
   if (process.stdout.isTTY) {
     try {
@@ -233,6 +239,7 @@ async function runCagStepOrThrow(
         const result = await runCagSubprocess(binaryPath, args, {
           projectRoot,
           env,
+          timeoutMs,
         });
         if (!result.ok) {
           throw new CagStepFailedError(result);
@@ -250,6 +257,7 @@ async function runCagStepOrThrow(
   const result = await runCagSubprocess(binaryPath, args, {
     projectRoot,
     env,
+    timeoutMs,
   });
   if (!result.ok) {
     reportCagFailure(result, console);
@@ -264,58 +272,43 @@ async function runCagSubprocess(
   options: CagSubprocessOptions,
 ): Promise<CagSubprocessResult> {
   const env = options.env ?? (await buildContextAugmentationEnv());
-  return new Promise<CagSubprocessResult>((resolve) => {
-    let child;
-    try {
-      child = spawn(binaryPath, args, {
+  const timeoutMs = options.timeoutMs ?? CONTEXT_COMMAND_TIMEOUT_MS;
+  try {
+    const result = await spawnProcessWithTimeout(
+      binaryPath,
+      args,
+      {
         cwd: options.projectRoot,
-        stdio: ['inherit', 'pipe', 'pipe'],
         env,
-      });
-    } catch (error) {
-      resolve({
+        // The env already dropped inherited SONAR_CONTEXT_* keys. Merging process.env would restore them.
+        isolateEnv: true,
+        stdin: 'inherit',
+        stdout: 'pipe',
+        stderr: 'pipe',
+        // Session-start context is injected with its trailing newline.
+        trimOutput: false,
+      },
+      timeoutMs,
+      `sonar-context-augmentation timed out after ${timeoutMs}ms`,
+    );
+    if (result.exitCode !== 0) {
+      return {
         ok: false,
-        failureMessage: `sonar-context-augmentation failed to start: ${(error as Error).message}`,
-        stdout: '',
-        stderr: '',
-      });
-      return;
+        failureMessage: `sonar-context-augmentation exited with ${
+          result.exitCode === null ? 'an unknown signal' : `code ${result.exitCode}`
+        }.`,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      };
     }
-
-    let stdoutBuf = '';
-    let stderrBuf = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => {
-      stdoutBuf += chunk;
-    });
-    child.stderr.on('data', (chunk: string) => {
-      stderrBuf += chunk;
-    });
-
-    child.on('error', (error) => {
-      resolve({
-        ok: false,
-        failureMessage: `sonar-context-augmentation failed to start: ${error.message}`,
-        stdout: stdoutBuf,
-        stderr: stderrBuf,
-      });
-    });
-    child.on('exit', (code, signal) => {
-      if (code !== 0) {
-        resolve({
-          ok: false,
-          failureMessage: `sonar-context-augmentation exited with ${
-            code === null ? `signal ${signal ?? 'unknown'}` : `code ${code}`
-          }.`,
-          stdout: stdoutBuf,
-          stderr: stderrBuf,
-        });
-        return;
-      }
-      resolve({ ok: true, stdout: stdoutBuf, stderr: stderrBuf });
-    });
-  });
+    return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  } catch (error) {
+    const message =
+      error instanceof ProcessTimedOutError
+        ? error.message
+        : `sonar-context-augmentation failed to start: ${(error as Error).message}`;
+    return { ok: false, failureMessage: message, stdout: '', stderr: '' };
+  }
 }
 
 function reportCagFailure(result: CagSubprocessResult, console: Console): void {
