@@ -38,6 +38,7 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
+import * as secretsScanSettings from '@/core/secrets/scan-settings.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -71,6 +72,9 @@ let loadStateSpy: ReturnType<typeof spyOn>;
 let updateStateSpy: ReturnType<typeof spyOn>;
 let spawnSpy: ReturnType<typeof spyOn>;
 let resolveSecretsBinarySpy: ReturnType<typeof spyOn>;
+let loadScanSettingsSpy: ReturnType<typeof spyOn>;
+
+const DEFAULT_SCAN_ARGS = ['--max-file-size', String(MAX_SCANNED_FILE_SIZE)];
 
 beforeEach(() => {
   fake = new FakeConsole();
@@ -91,6 +95,10 @@ beforeEach(() => {
     binaryPath: '/fake/bin/sonar-secrets',
     freshlyInstalled: false,
   });
+  // Keeps the developer's own `secrets.*` config out of the asserted arguments.
+  loadScanSettingsSpy = spyOn(secretsScanSettings, 'loadSecretsScanSettings').mockResolvedValue(
+    secretsScanSettings.DEFAULT_SECRETS_SCAN_SETTINGS,
+  );
 });
 
 afterEach(() => {
@@ -98,6 +106,7 @@ afterEach(() => {
   updateStateSpy.mockRestore();
   spawnSpy.mockRestore();
   resolveSecretsBinarySpy.mockRestore();
+  loadScanSettingsSpy.mockRestore();
 });
 
 // ─── Auth forwarding paths ────────────────────────────────────────────────────
@@ -175,6 +184,7 @@ describe('secretCheckCommand: auth forwarding', () => {
     expect(spawnCall[1]).toEqual([
       '--non-interactive',
       '--json',
+      ...DEFAULT_SCAN_ARGS,
       'src/index.ts',
       'src/lib/auth.ts',
     ]);
@@ -566,7 +576,12 @@ describe('secretCheckCommand: stdin scan', () => {
       existsSpy.mockRestore();
     }
 
-    expect(spawnSpy.mock.calls[0][1]).toEqual(['--non-interactive', '--json', '--input']);
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--input',
+    ]);
 
     const successes = fake.calls
       .filter((c) => c.method === 'success')
@@ -597,7 +612,7 @@ describe('runSecretsBinaryOnText', () => {
   it('calls spawnProcess with --input and --json args', async () => {
     spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
     await runSecretsBinaryOnText('/fake/bin/sonar-secrets', 'prompt text', FAKE_AUTH);
-    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input', '--json']);
+    expect(spawnSpy.mock.calls[0][1]).toEqual(['--input', '--json', ...DEFAULT_SCAN_ARGS]);
   });
 
   it('passes text as stdinData', async () => {
