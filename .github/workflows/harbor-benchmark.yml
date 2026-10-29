@@ -2,14 +2,6 @@ name: Harbor Benchmark
 
 on:
   workflow_dispatch:
-    inputs:
-      model:
-        description: Model passed to Harbor
-        type: choice
-        options:
-          - anthropic/claude-sonnet-5-5
-          - anthropic/claude-haiku-4-5
-        default: anthropic/claude-sonnet-5-5
 
 permissions:
   id-token: write
@@ -22,7 +14,7 @@ env:
 
 jobs:
   benchmark:
-    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }}
+    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.model }} - ${{ matrix.attempt }}
     runs-on: ${{ matrix.os == 'macos' && 'macos-latest-xlarge' || 'sonar-m' }}
     strategy:
       fail-fast: false
@@ -33,6 +25,10 @@ jobs:
           - secrets-context--prompt
           - secrets-context--file-read
           - auth--missing-org
+        model:
+          - claude-sonnet-5-5
+          - claude-haiku-4-5
+        attempt: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +50,7 @@ jobs:
 
       - name: Run benchmark as an unprivileged user
         env:
-          MODEL: ${{ inputs.model }}
+          MODEL: anthropic/${{ matrix.model }}
           JOB_NAME: ${{ matrix.os }}
           TASK: ${{ matrix.task }}
           HB_SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_TOKEN }}
@@ -70,7 +66,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}
+          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.model }}-${{ matrix.attempt }}
           path: harbor-jobs
 
   report:

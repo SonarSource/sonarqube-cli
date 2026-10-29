@@ -102,7 +102,7 @@ function cell(value: number | null, format: (n: number) => string = String): str
   return value === null ? '-' : format(value);
 }
 
-function renderRow(row: Row): string {
+function renderTrial(row: Row): string[] {
   return [
     row.label,
     row.task,
@@ -114,15 +114,51 @@ function renderRow(row: Row): string {
     cell(row.completionTokens),
     cell(row.cachedTokens),
     cell(row.costUsd, (n) => `$${n.toFixed(4)}`),
-  ].join(' | ');
+  ];
+}
+
+function average(values: (number | null)[]): number | null {
+  const present = values.filter((value): value is number => value !== null);
+  if (present.length === 0) return null;
+  return present.reduce((sum, value) => sum + value, 0) / present.length;
+}
+
+function groupTrials(rows: Row[]): Row[][] {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = [row.task, row.model ?? '-', row.label].join('|');
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
+}
+
+function renderGroup(group: Row[]): string[] {
+  const [first] = group;
+  const passed = group.filter((row) => row.status === 'PASS').length;
+  return [
+    first.label,
+    first.task,
+    first.model ?? '-',
+    `${passed}/${group.length}`,
+    cell(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)}s`),
+    cell(average(group.map((row) => row.steps)), (n) => n.toFixed(1)),
+    cell(average(group.map((row) => row.promptTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.completionTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.cachedTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`),
+  ];
+}
+
+function renderTable(header: string[], lines: string[][]): string[] {
+  return [
+    `| ${header.join(' | ')} |`,
+    `|${header.map(() => '---').join('|')}|`,
+    ...lines.map((line) => `| ${line.join(' | ')} |`),
+  ];
 }
 
 function renderReport(rows: Row[]): string {
-  const header = [
-    'OS',
-    'Task',
-    'Model',
-    'Status',
+  const metrics = [
     'Agent time',
     'Steps',
     'Prompt tokens',
@@ -133,9 +169,19 @@ function renderReport(rows: Row[]): string {
   const lines = [
     '## Harbor benchmark',
     '',
-    `| ${header.join(' | ')} |`,
-    `|${header.map(() => '---').join('|')}|`,
-    ...rows.map((row) => `| ${renderRow(row)} |`),
+    'Averages over the trials of each task, model and OS.',
+    '',
+    ...renderTable(
+      ['OS', 'Task', 'Model', 'Passed', ...metrics],
+      groupTrials(rows).map(renderGroup),
+    ),
+    '',
+    '<details>',
+    '<summary>Trials</summary>',
+    '',
+    ...renderTable(['OS', 'Task', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
+    '',
+    '</details>',
   ];
   return lines.join('\n') + '\n';
 }
