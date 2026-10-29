@@ -20,7 +20,7 @@
 
 // `prompt` hook handler for OpenCode 2.0 — scans the prompt text for secrets and, if every
 // finding can be masked, returns the text with each secret masked in place so the plugin can
-// replace the prompt text before the message is sent (the plugin appends a visible `[Sonar]`
+// replace the prompt text before the message is sent (the plugin appends a visible `[SonarQube]`
 // notice to say what was masked, since OpenCode 2.0 has no hidden part). Unlike
 // `opencode-pre-tool-use`, this does not block on a well-formed finding — but if any finding
 // can't be masked (missing location/mask, or an unparseable scan result), it fails closed and
