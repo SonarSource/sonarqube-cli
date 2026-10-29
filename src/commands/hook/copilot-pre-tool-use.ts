@@ -47,7 +47,7 @@ import { readStdinJson } from './stdin.ts';
 
 interface CopilotPreToolUsePayload {
   toolName?: string;
-  cwd?: string;
+  cwd?: unknown;
   toolArgs?: unknown;
 }
 
@@ -74,7 +74,9 @@ export async function copilotPreToolUse(ctx: CommandInvocationContext): Promise<
 
   const path = extractPath(payload.toolArgs);
   if (!path) return;
-  const filePath = resolve(payload.cwd ?? process.cwd(), path);
+  const baseDir =
+    typeof payload.cwd === 'string' && payload.cwd.length > 0 ? payload.cwd : process.cwd();
+  const filePath = resolve(baseDir, path);
   if (!existsSync(filePath)) return;
 
   let deps: HookDependencies;

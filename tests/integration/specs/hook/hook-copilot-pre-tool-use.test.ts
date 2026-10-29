@@ -96,6 +96,27 @@ describe('sonar hook copilot-pre-tool-use', () => {
     }
   }
 
+  for (const cwd of [undefined, null, 42, {}, [], true, '']) {
+    it(
+      `falls back to the process directory and blocks secrets when cwd is ${JSON.stringify(cwd)}`,
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+        harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.runWithStdin(
+          'hook copilot-pre-tool-use',
+          JSON.stringify({ toolName: 'view', toolArgs: { path: 'secret.js' }, cwd }),
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout.trim()).permissionDecision).toBe('deny');
+        expect(result.stdout).toContain('Sonar detected secrets in file');
+      },
+      { timeout: 30000 },
+    );
+  }
+
   for (const toolArgs of [null, [], 42, { path: 42 }, { path: '' }, 'null', '[]']) {
     it(`allows malformed tool arguments ${JSON.stringify(toolArgs)} without crashing`, async () => {
       const result = await harness.runWithStdin(
