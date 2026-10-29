@@ -94,12 +94,18 @@ recovery instructions, inspect the current state, and obtain approval before res
 
 ## Availability
 
-Intended operations on SonarQube Server await public project UUID resolution. Deviations,
-structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
+Intended operations and findings on SonarQube Server await public project UUID resolution.
+Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
 ## Project directives
 
 Read a page with \`sonar architecture directives get\` or one directive with \`--id <id>\`.
 Retain pagination metadata and use exact project keys.
+
+## Findings
+
+Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
+optionally \`--category DEVIATION|FLAW|SMELL\`, or one finding with its details with \`--id <id>\`.
+Findings are read-only. Follow the page hint for remaining results.
 `;
