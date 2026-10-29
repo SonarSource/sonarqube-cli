@@ -76,9 +76,9 @@ export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResu
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const exitCode = result.exitCode ?? 1;
+  const exitCode = result.exitCode;
   const expected = options.expectedExitCode ?? 0;
-  if (exitCode !== expected) {
+  if (exitCode === null || exitCode !== expected) {
     throw new Error(
       gitFailureMessage(
         args,
