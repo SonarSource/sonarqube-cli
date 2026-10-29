@@ -21,6 +21,7 @@
 // Reads blob contents out of git and encodes them as the analyzer's batched-stdin contract.
 
 import { spawnProcessCapturingBytes } from '@/core/process/process.ts';
+import { GIT_CONTENT_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 /** A blob git holds, named by the path it occupies in the commit that introduced it. */
 export interface GitBlobRef {
@@ -45,11 +46,17 @@ export async function readBlobContents(
   cwd: string,
 ): Promise<BlobContent[] | null> {
   if (blobs.length === 0) return [];
-  const result = await spawnProcessCapturingBytes('git', ['cat-file', '--batch'], {
-    cwd,
-    stdin: 'pipe',
-    stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
-  });
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['cat-file', '--batch'],
+    {
+      cwd,
+      stdin: 'pipe',
+      stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
+    },
+    GIT_CONTENT_TIMEOUT_MS,
+    'git cat-file --batch timed out',
+  );
   if (result.exitCode !== 0) return null;
 
   const contents = parseBatchOutput(result.stdout);
@@ -63,11 +70,17 @@ export async function readBlobSizes(
   cwd: string,
 ): Promise<Map<string, number> | null> {
   if (blobs.length === 0) return new Map();
-  const result = await spawnProcessCapturingBytes('git', ['cat-file', '--batch-check'], {
-    cwd,
-    stdin: 'pipe',
-    stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
-  });
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['cat-file', '--batch-check'],
+    {
+      cwd,
+      stdin: 'pipe',
+      stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
+    },
+    GIT_CONTENT_TIMEOUT_MS,
+    'git cat-file --batch-check timed out',
+  );
   if (result.exitCode !== 0) return null;
 
   const sizes = new Map<string, number>();

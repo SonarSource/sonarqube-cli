@@ -44,6 +44,7 @@ import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import * as binaryInstall from '@/core/host/install/binary.ts';
 import * as processLib from '@/core/process/process.ts';
+import { GIT_METADATA_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -87,7 +88,7 @@ describe('resolveLocalGitHooksDir', () => {
   it('returns <root>/.git/hooks when .git is a directory and core.hooksPath is not set', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await resolveLocalGitHooksDir(TEMP_DIR);
@@ -101,7 +102,7 @@ describe('resolveLocalGitHooksDir', () => {
   it('returns core.hooksPath when it is configured', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '.husky\n',
       stderr: '',
@@ -121,7 +122,7 @@ describe('resolveLocalGitHooksDir', () => {
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
 
     // Both git config and git rev-parse return non-zero → falls through to rev-parse error
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 128,
       stdout: '',
       stderr: 'fatal: not a git repository',
@@ -142,7 +143,7 @@ describe('resolveLocalGitHooksDir', () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /abs/.git/worktrees/foo\n');
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess')
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout')
       .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -164,7 +165,7 @@ describe('resolveLocalGitHooksDir', () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: .git/worktrees/foo\n');
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess')
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout')
       .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({ exitCode: 0, stdout: '.git\n', stderr: '' }); // git rev-parse --git-common-dir
 
@@ -181,7 +182,7 @@ describe('resolveLocalGitHooksDir', () => {
     mkdirSync(TEMP_DIR, { recursive: true });
     writeFileSync(join(TEMP_DIR, '.git'), 'gitdir: /some/real/.git/worktrees/foo\n');
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess')
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout')
       .mockResolvedValueOnce(NO_HOOKS_PATH) // git config --local core.hooksPath → not set
       .mockResolvedValueOnce({
         exitCode: 0,
@@ -193,9 +194,13 @@ describe('resolveLocalGitHooksDir', () => {
       const result = await resolveLocalGitHooksDir(TEMP_DIR);
       expect(result).toBe(join('/some/real/.git', 'hooks'));
       // --git-common-dir never follows an inherited core.hooksPath, unlike --git-path hooks.
-      expect(spawnSpy).toHaveBeenCalledWith('git', ['rev-parse', '--git-common-dir'], {
-        cwd: TEMP_DIR,
-      });
+      expect(spawnSpy).toHaveBeenCalledWith(
+        'git',
+        ['rev-parse', '--git-common-dir'],
+        { cwd: TEMP_DIR },
+        GIT_METADATA_TIMEOUT_MS,
+        expect.any(String),
+      );
     } finally {
       spawnSpy.mockRestore();
       rmSync(TEMP_DIR, { recursive: true, force: true });
@@ -215,7 +220,7 @@ describe('detectHookInstallation', () => {
       `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`,
     );
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await detectHookInstallation(TEMP_DIR);
@@ -234,7 +239,7 @@ describe('detectHookInstallation', () => {
   it('returns all false when no hooks are installed', async () => {
     mkdirSync(join(TEMP_DIR, '.git', 'hooks'), { recursive: true });
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await detectHookInstallation(TEMP_DIR);
@@ -255,7 +260,7 @@ describe('detectHookInstallation', () => {
     writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\necho hello\n');
     writeFileSync(join(TEMP_DIR, '.git', 'hooks', 'pre-push'), '#!/bin/sh\necho hello\n');
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await detectHookInstallation(TEMP_DIR);
@@ -276,7 +281,7 @@ describe('detectHookInstallation', () => {
     writeFileSync(join(TEMP_DIR, '.husky', 'pre-commit'), `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`);
     writeFileSync(join(TEMP_DIR, '.husky', 'pre-push'), `#!/bin/sh\n# ${LEGACY_HOOK_MARKER}\n`);
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '.husky\n',
       stderr: '',
@@ -303,7 +308,7 @@ describe('detectHookInstallation', () => {
       'repos:\n  - repo: local\n    hooks:\n      - id: sonar-secrets\n        name: Sonar secrets scan\n        entry: sonar analyze secrets\n        language: system\n',
     );
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await detectHookInstallation(TEMP_DIR);
@@ -323,7 +328,7 @@ describe('detectHookInstallation', () => {
       'repos:\n  - repo: local\n    hooks:\n      - id: some-other-hook\n        name: Some other hook\n        entry: echo hello\n        language: system\n',
     );
 
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue(NO_HOOKS_PATH);
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue(NO_HOOKS_PATH);
 
     try {
       const result = await detectHookInstallation(TEMP_DIR);
@@ -428,7 +433,7 @@ describe('integrateGitGlobal', () => {
   });
 
   it('shows the installed feature in the completion summary when the full global installation succeeds', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -448,7 +453,7 @@ describe('integrateGitGlobal', () => {
   });
 
   it('throws CommandFailedError when git config exits with non-zero code', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: 'permission denied',
@@ -474,7 +479,9 @@ describe('integrateGitGlobal', () => {
   });
 
   it('throws CommandFailedError when git is not installed', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(new Error('ENOENT'));
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockRejectedValue(
+      new Error('ENOENT'),
+    );
     try {
       let caughtError: unknown;
       try {

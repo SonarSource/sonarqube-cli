@@ -110,7 +110,7 @@ describe('gitPreCommit', () => {
     const mocked = mockAuthResolver(FAKE_AUTH);
     runtime = mocked.runtime;
     resolveAuthSpy = mocked.resolveAuthSpy;
-    spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: 'src/foo.ts\nsrc/bar.ts',
       stderr: '',
@@ -403,7 +403,7 @@ describe('gitPrePush', () => {
     const mocked = mockAuthResolver(FAKE_AUTH);
     runtime = mocked.runtime;
     resolveAuthSpy = mocked.resolveAuthSpy;
-    spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: ONE_COMMIT,
       stderr: '',

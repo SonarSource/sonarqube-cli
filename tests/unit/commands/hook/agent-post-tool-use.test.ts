@@ -68,7 +68,7 @@ describe('agentPostToolUse', () => {
 
   beforeEach(() => {
     // Deterministic git branch auto-detection (hook resolves branch from the edited file).
-    spawnProcessSpy = spyOn(processLib, 'spawnProcess').mockImplementation(
+    spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockImplementation(
       (_cmd: string, args: string[]) => {
         if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
           return Promise.resolve({ exitCode: 0, stdout: `${process.cwd()}\n`, stderr: '' });
