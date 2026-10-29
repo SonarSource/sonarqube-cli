@@ -85,6 +85,8 @@ run_benchmark() {
     --yes \
     --path "${WORKDIR}/harbor/tasks/${TASK}" \
     --ve EXPECTED_INTEGRATION=claude-code \
+    --ve PROMPT_HOOK=claude-prompt-submit \
+    --ve FILE_HOOK=claude-pre-tool-use \
     --agent claude-code \
     --model "${MODEL}" \
     --jobs-dir "${WORKDIR}/harbor-jobs" \
