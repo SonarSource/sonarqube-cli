@@ -9,7 +9,7 @@ harbor run --path benchmarks/harbor/tasks --agent claude-code --model anthropic/
 bun benchmarks/harbor/report/summarize-job.ts linux=/tmp/harbor-jobs/local
 ```
 
-Local Docker runs read the Sonar credentials from `HB_SONAR_TOKEN` and `HB_SONAR_ORG` (export them from `SONARQUBE_CLI_TOKEN` and `SONARQUBE_CLI_ORG`). `HB_SONAR_SERVER` and `HB_SONAR_API_URL` default to production SonarQube Cloud; the CI workflow sets them to staging, with the `sonarlint-it` org. The verifier variables come from `--ve EXPECTED_INTEGRATION=claude-code` (`codex` for Codex).
+Local Docker runs read the Sonar credentials from `HB_SONAR_TOKEN` and `HB_SONAR_ORG` (export them from `SONARQUBE_CLI_TOKEN` and `SONARQUBE_CLI_ORG`). `HB_SONAR_SERVER` and `HB_SONAR_API_URL` default to production SonarQube Cloud; the CI workflow sets them to staging, with the `sonarlint-it` org. The verifier variables come from `--ve EXPECTED_INTEGRATION=claude-code`, `--ve PROMPT_HOOK=claude-prompt-submit` and `--ve FILE_HOOK=claude-pre-tool-use` (other agents use their own names).
 
 In CI, run the `Harbor Benchmark` workflow manually (`workflow_dispatch` only). One job per OS and task, one trial each: the runner is fresh for every task, so nothing a task installs can leak into another. Running several trials per job would make them share the runner, so `~/.sonar`, `~/.claude` and `~/.codex` would have to be reset between trials first. Each job uploads its Harbor jobs directory, and the report job merges them per OS into the run summary.
 
