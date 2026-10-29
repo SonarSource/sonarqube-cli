@@ -22,7 +22,6 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 
 import logger from '@/core/observability/logger.ts';
 import * as processModule from '@/core/process/process.ts';
-import { RUNTIME_INFO_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 // Mock platform-detector so both Windows and non-Windows branches are reachable on any OS.
 const platformDetector = await import('@/core/host/environment/platform-detector.ts');
@@ -60,13 +59,7 @@ describe('detectContainerRuntime', () => {
     });
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'docker', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'docker',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns "podman" when docker is unavailable but podman is available', async () => {
@@ -80,20 +73,8 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'podman', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'docker',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'podman',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns "nerdctl" when docker and podman are unavailable but nerdctl is available', async () => {
@@ -107,27 +88,9 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: false });
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'docker',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'podman',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'nerdctl',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
   });
 
   it('returns null when no container runtime is available and not on Windows', async () => {
@@ -177,7 +140,7 @@ describe('detectContainerRuntime', () => {
       'wsl.exe',
       ['docker', 'info'],
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      3_000,
       expect.any(String),
     );
   });
@@ -194,46 +157,28 @@ describe('detectContainerRuntime', () => {
     );
 
     expect(await detectContainerRuntime()).toEqual({ runtime: 'nerdctl', viaWsl: true });
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'docker',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'podman',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
-    expect(spawnSpy).toHaveBeenCalledWith(
-      'nerdctl',
-      ['info'],
-      {},
-      RUNTIME_INFO_TIMEOUT_MS,
-      expect.any(String),
-    );
+    expect(spawnSpy).toHaveBeenCalledWith('docker', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('podman', ['info'], {}, 3_000, expect.any(String));
+    expect(spawnSpy).toHaveBeenCalledWith('nerdctl', ['info'], {}, 3_000, expect.any(String));
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['docker', 'info'],
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      3_000,
       expect.any(String),
     );
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['podman', 'info'],
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      3_000,
       expect.any(String),
     );
     expect(spawnSpy).toHaveBeenCalledWith(
       'wsl.exe',
       ['nerdctl', 'info'],
       {},
-      RUNTIME_INFO_TIMEOUT_MS,
+      3_000,
       expect.any(String),
     );
   });
@@ -342,7 +287,7 @@ describe('detectContainerRuntime', () => {
         'wsl.exe',
         ['docker', 'info'],
         {},
-        RUNTIME_INFO_TIMEOUT_MS,
+        3_000,
         expect.any(String),
       );
       expect(logSpy).toHaveBeenCalledWith(

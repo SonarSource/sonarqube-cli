@@ -22,9 +22,10 @@ import picomatch from 'picomatch';
 
 import type { ScaScannerInstaller } from '@/core/host/install/sca-scanner.ts';
 import logger from '@/core/observability/logger.ts';
-import { SCA_WATCH_PATTERNS_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
+
+const WATCH_PATTERNS_TIMEOUT_MS = 15_000;
 
 interface WatchPatternsPayload {
   patterns?: unknown;
@@ -43,7 +44,7 @@ export class ScaWatchPatternsRunner {
         binaryPath,
         ['watch-patterns'],
         undefined,
-        SCA_WATCH_PATTERNS_TIMEOUT_MS,
+        WATCH_PATTERNS_TIMEOUT_MS,
       );
       if ((result.exitCode ?? 1) !== 0) {
         logger.debug(`watch-patterns exited with code ${String(result.exitCode)}`);

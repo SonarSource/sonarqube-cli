@@ -27,7 +27,6 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { normalizePath } from '../../io/fs-utils.ts';
 import { ProcessTimedOutError, spawnProcessWithTimeout } from '../../process/process.ts';
-import { GIT_METADATA_TIMEOUT_MS } from '../../process/timeouts.ts';
 
 /** Filename used by the `pre-commit` framework (https://pre-commit.com) for its config. */
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
@@ -68,12 +67,14 @@ export async function resolveEffectiveGitHooksDir(root: string): Promise<string>
   });
 }
 
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
+
 function runGit(args: string[], cwd: string) {
   return spawnProcessWithTimeout(
     'git',
     args,
     { cwd },
-    GIT_METADATA_TIMEOUT_MS,
+    GIT_COMMAND_TIMEOUT_MS,
     `git ${args[0] ?? 'command'} timed out`,
   );
 }

@@ -29,7 +29,6 @@ import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-import { GIT_CONTENT_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
@@ -39,6 +38,8 @@ import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './ho
 import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 import type { PushRef } from './stdin.ts';
 import { readGitPushRefs } from './stdin.ts';
+
+const GIT_LOG_TIMEOUT_MS = 60_000;
 
 // Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
 const NULL_OID_PATTERN = /^0+$/;
@@ -238,7 +239,7 @@ async function getPushedCommitBlobs(
       'git',
       args,
       { cwd: process.cwd() },
-      GIT_CONTENT_TIMEOUT_MS,
+      GIT_LOG_TIMEOUT_MS,
       'git log timed out',
     );
   } catch (error) {

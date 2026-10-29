@@ -527,7 +527,7 @@ describe('runPreCommitInstall', () => {
     try {
       await runPreCommitInstall(TEMP_DIR, 'pre-commit');
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toContainEqual(['uninstall']);
       expect(calls).toContainEqual(['clean']);
       expect(calls).toContainEqual(['install']);
@@ -543,7 +543,7 @@ describe('runPreCommitInstall', () => {
     try {
       await runPreCommitInstall(TEMP_DIR, 'pre-push');
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toContainEqual(['install', '--hook-type', 'pre-push']);
     } finally {
       spawnSpy.mockRestore();
@@ -636,7 +636,7 @@ describe('garbageCollectPreCommitFramework', () => {
     try {
       await garbageCollectPreCommitFramework(TEMP_DIR);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
     } finally {
       spawnSpy.mockRestore();
@@ -651,7 +651,7 @@ describe('garbageCollectPreCommitFramework', () => {
     try {
       await garbageCollectPreCommitFramework(TEMP_DIR);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
     } finally {
       spawnSpy.mockRestore();
@@ -715,7 +715,7 @@ describe('pre-commit integration remove', () => {
     try {
       await installer.removeFeature(context, preCommitFeature);
 
-      const calls = spawnSpy.mock.calls.map((c) => (c as [string, string[]])[1]);
+      const calls = spawnSpy.mock.calls.map((call) => call[1]);
       expect(calls).toEqual([['gc']]);
 
       const config = yaml.load(

@@ -44,7 +44,6 @@ import { GLOBAL_HOOKS_DIR } from '@/core/config-constants.ts';
 import { resolveLocalGitHooksDir } from '@/core/host/git/hooks.ts';
 import * as binaryInstall from '@/core/host/install/binary.ts';
 import * as processLib from '@/core/process/process.ts';
-import { GIT_METADATA_TIMEOUT_MS } from '@/core/process/timeouts.ts';
 import { type CliState, getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 
@@ -198,7 +197,7 @@ describe('resolveLocalGitHooksDir', () => {
         'git',
         ['rev-parse', '--git-common-dir'],
         { cwd: TEMP_DIR },
-        GIT_METADATA_TIMEOUT_MS,
+        15_000,
         expect.any(String),
       );
     } finally {
