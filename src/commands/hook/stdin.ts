@@ -21,6 +21,8 @@
 // Stdin reader used by all sonar callback handlers.
 // Hook agents pipe their JSON event payload to the callback process via stdin.
 
+import { capPrePushTraceText, tracePrePush } from './git-pre-push-trace.ts';
+
 const STDIN_TIMEOUT_MS = 5000;
 
 export interface PushRef {
@@ -39,18 +41,43 @@ export async function readGitPushRefs(): Promise<PushRef[]> {
   let raw: string;
   try {
     raw = await readRawStdin();
-  } catch {
+  } catch (err) {
+    tracePrePush(
+      `readGitPushRefs: stdin read failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    tracePrePush('readGitPushRefs: returning [] (fail-open)');
     return []; // timeout or read error — allow the push
   }
-  return raw
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [localRef, localSha, remoteRef, remoteSha] = line.split(' ');
-      return { localRef, localSha, remoteRef, remoteSha };
-    })
-    .filter((r) => r.localSha && r.remoteSha);
+  tracePrePush(`readGitPushRefs: raw stdin byte length=${Buffer.byteLength(raw, 'utf-8')}`);
+  tracePrePush(`readGitPushRefs: raw stdin repr=${capPrePushTraceText(JSON.stringify(raw))}`);
+
+  const lines = raw.trim().split(/\r?\n/).filter(Boolean);
+  tracePrePush(`readGitPushRefs: ${lines.length} non-empty line(s) after trim/split`);
+
+  const parsed = lines.map((line, index) => {
+    const parts = line.split(' ');
+    tracePrePush(
+      `readGitPushRefs: line ${index + 1} field count=${parts.length} repr=${capPrePushTraceText(JSON.stringify(line))}`,
+    );
+    const [localRef, localSha, remoteRef, remoteSha] = parts;
+    return { localRef, localSha, remoteRef, remoteSha };
+  });
+
+  const refs = parsed.filter((r) => {
+    if (r.localSha && r.remoteSha) return true;
+    tracePrePush(
+      `readGitPushRefs: dropped line (missing localSha or remoteSha) localRef=${r.localRef || '(missing)'} remoteRef=${r.remoteRef || '(missing)'}`,
+    );
+    return false;
+  });
+
+  for (const [index, ref] of refs.entries()) {
+    tracePrePush(
+      `readGitPushRefs: ref[${index}] localRef=${ref.localRef} localSha=${ref.localSha} remoteRef=${ref.remoteRef} remoteSha=${ref.remoteSha}`,
+    );
+  }
+  tracePrePush(`readGitPushRefs: returning ${refs.length} ref(s)`);
+  return refs;
 }
 
 /**
