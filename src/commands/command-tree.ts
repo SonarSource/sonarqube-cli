@@ -75,6 +75,7 @@ import {
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
 } from './analyze/dependency-risks.ts';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './analyze/secrets.ts';
+import { collectExcludeOption } from './analyze/secrets-scan-args.ts';
 import {
   analyzeSqaa,
   type AnalyzeSqaaOptions,
@@ -704,8 +705,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Scan files or stdin for hardcoded secrets')
     .argument('[paths...]', 'File or directory paths to scan for secrets')
     .option('--stdin', 'Read from standard input instead of paths')
+    .option(
+      '--exclude <path>',
+      'File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key',
+      collectExcludeOption,
+    )
     .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
-      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, ctx),
+      analyzeSecrets(
+        {
+          paths: Array.isArray(paths) ? paths : [],
+          stdin: options.stdin,
+          exclude: options.exclude,
+        },
+        ctx,
+      ),
     );
 
   // Shared option set for `analyze agentic` and `verify`.
