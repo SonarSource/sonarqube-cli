@@ -61,7 +61,7 @@ An explicit `--project` pins every file to that key. Its root is the root of the
 
 Architecture command registration lives in `architecture/register.ts`; `command-tree.ts` delegates to it. Keep architecture-specific options, handlers, descriptions and root-help registration in that module.
 
-Project directives support paginated `architecture directives get` and explicit-ID reads. The read handler lives under `architecture/directives/get`. `directives set --file` previews and creates missing directives without replacement.
+Project directives support paginated `architecture directives get` and explicit-ID reads. Handlers live under `architecture/directives/{get,set}`. `directives set --file` previews, updates explicit-ID directives while retaining unspecified fields and rejecting identity collisions, and creates missing directives without replacement. Updates are preflighted before creation. Delete operations are rejected in this layer.
 
 ## Run MCP
 
