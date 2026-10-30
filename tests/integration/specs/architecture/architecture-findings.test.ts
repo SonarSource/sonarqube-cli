@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Integration tests for architecture findings reads on the public architecture API
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { ProjectFinding } from '@/commands/architecture/_common/findings.ts';
@@ -29,24 +27,69 @@ import type { FakeArchitecture } from '../../harness/fake-architecture';
 
 const findings: ProjectFinding[] = [
   {
-    id: 'finding-1',
-    projectId: 'shop-branch-id',
-    category: 'DEVIATION',
-    message: 'app:web depends on app:db',
-    components: ['app:web', 'app:db'],
-    relationships: [{ from: 'app:web', to: 'app:db' }],
-    constraint: 'web must not depend on db',
+    type: 'structuralDeviation',
+    category: 'deviation',
+    language: 'java',
+    details: { reason: 'misplacedComponent', nodeKey: 'app:web', misplacedComponentCount: 3 },
+    files: ['Web.java'],
   },
-  { id: 'finding-2', projectId: 'shop-branch-id', category: 'FLAW', message: 'Cycle in app' },
   {
-    id: 'finding-3',
-    projectId: 'shop-branch-id',
-    category: 'SMELL',
-    measures: { fanIn: 42 },
+    type: 'structuralDeviation',
+    category: 'deviation',
+    language: 'java',
+    details: { reason: 'unimplementedComponent', nodeKey: 'app:missing' },
+    files: [],
+  },
+  {
+    type: 'relationshipDeviation',
+    category: 'deviation',
+    language: 'java',
+    details: {
+      reason: 'disallowedDependency',
+      fromNodeKey: 'app:web',
+      toNodeKey: 'app:db',
+      dependencyCount: 4,
+    },
+    files: ['Web.java'],
+  },
+  {
+    type: 'relationshipDeviation',
+    category: 'deviation',
+    language: 'java',
+    details: { reason: 'interfaceViolation', fromNodeKey: 'app:web', toNodeKey: 'app:internal' },
+    files: [],
+  },
+  {
+    type: 'tangle',
+    category: 'flaw',
+    language: 'java',
+    details: { nodeKeys: ['a', 'b'], nodeCount: 2 },
+    files: [],
+  },
+  {
+    type: 'oversizedComponent',
+    category: 'flaw',
+    language: 'java',
+    details: { nodeKey: 'large', leafArtifactCount: 40 },
+    files: [],
+  },
+  {
+    type: 'weakTangle',
+    category: 'smell',
+    language: 'ts',
+    details: { nodeKeys: ['c', 'd'], nodeCount: 2 },
+    files: [],
+  },
+  {
+    type: 'splitResponsibility',
+    category: 'smell',
+    language: 'ts',
+    details: { nodeKey: 'util', fragmentCount: 3 },
+    files: [],
   },
 ];
 
-describe('public architecture findings', () => {
+describe('public architecture findings contract', () => {
   let h: TestHarness;
   beforeEach(async () => {
     h = await TestHarness.create();
@@ -54,252 +97,207 @@ describe('public architecture findings', () => {
   afterEach(async () => {
     await h.dispose();
   });
-
-  async function configured(configure: (api: FakeArchitecture) => void = () => {}) {
-    const server = await h
+  async function configured(
+    cloud = true,
+    configure: (api: FakeArchitecture) => void = (api) => api.withFindings(findings),
+  ) {
+    const builder = h
       .newFakeServer()
-      .asSonarCloud()
       .withAuthToken('findings-token')
-      .withProject('shop', (project) => project.withArchitecture(configure))
-      .start();
-    h.withAuth(server.recordedAuthServerUrl(), 'findings-token', 'my-org');
+      .withProject('shop', (p) => p.withArchitecture(configure));
+    if (cloud) builder.asSonarCloud();
+    const server = await builder.start();
+    h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
     return server;
   }
-  const findingRequests = (server: Awaited<ReturnType<typeof configured>>) =>
+  const requests = (server: Awaited<ReturnType<typeof configured>>) =>
     server.getRecordedRequests().filter((r) => r.path.includes('project-findings'));
 
-  it.each(['DEVIATION', 'FLAW', 'SMELL'])('filters by category %s', async (category) => {
-    const server = await configured((api) => api.withFindings(findings));
-    const read = await h.run(`arch findings get -p shop --category ${category} --format json`);
-    expect(read.exitCode).toBe(0);
-    const result = JSON.parse(read.stdout);
-    expect(result.findings).toEqual(findings.filter((item) => item.category === category));
-    expect(findingRequests(server)[0].query).toMatchObject({
-      projectId: 'shop-branch-id',
-      category,
-    });
-  });
-
-  it('pages through all categories and tells how to continue', async () => {
-    const server = await configured((api) => api.withFindings(findings));
-    const first = await h.run('arch findings get -p shop --page-size 2 --format text');
-    expect(first.exitCode).toBe(0);
-    expect(first.stdout).toContain('Page 1: 2 of 3 findings. Use --page to continue.');
-    expect(first.stdout).toContain('finding-1: DEVIATION app:web depends on app:db');
-    const last = await h.run('arch findings get -p shop --page 2 --page-size 2 --format json');
-    expect(JSON.parse(last.stdout)).toEqual({
-      project: 'shop',
-      findings: [findings[2]],
-      page: { pageIndex: 2, pageSize: 2, total: 3 },
-    });
-    expect(findingRequests(server)[0].query.category).toBeUndefined();
-  });
-
-  it('reads one finding with its details', async () => {
-    await configured((api) => api.withFindings(findings));
-    const json = await h.run('arch findings get -p shop --id finding-1 --format json');
-    expect(json.exitCode).toBe(0);
-    expect(JSON.parse(json.stdout)).toEqual({ project: 'shop', finding: findings[0] });
-    const text = await h.run('arch findings get -p shop --id finding-1 --format text');
-    expect(text.stdout).toContain('finding-1: DEVIATION app:web depends on app:db');
-    expect(text.stdout).toContain('  relationships: [{"from":"app:web","to":"app:db"}]');
-    expect(text.stdout).toContain('  constraint: "web must not depend on db"');
-  });
-
-  it('explains an empty result without suggesting another page', async () => {
-    await configured();
-    const read = await h.run('arch findings get -p shop --format text');
-    expect(read.exitCode).toBe(0);
-    expect(read.stdout).toContain(
-      'No findings are visible. Check project access and whether the project has been analyzed.',
-    );
-    expect(read.stdout).toContain('Page 1: 0 of 0 findings.');
-    expect(read.stdout).not.toContain('Use --page');
-  });
-
-  it('reports an unknown finding id', async () => {
-    await configured((api) => api.withFindings(findings));
-    const result = await h.run('arch findings get -p shop --id missing');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('Finding missing was not found');
-  });
-
-  it('rejects an unsupported category before requesting findings', async () => {
-    const server = await configured();
-    const result = await h.run('arch findings get -p shop --category COVERAGE');
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('DEVIATION, FLAW, SMELL');
-    expect(findingRequests(server)).toHaveLength(0);
-  });
-
-  it.each([
-    ['a different project', { projectId: 'other-branch-id' }],
-    ['a different id', { id: 'finding-2' }],
-  ])('rejects a single finding from %s', async (_, change) => {
-    await configured((api) =>
-      api
-        .withFindings(findings)
-        .withStatus('project-findings', 200, JSON.stringify({ ...findings[0], ...change }), 'GET'),
-    );
-    const result = await h.run('arch findings get -p shop --id finding-1');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('different id or project');
-  });
-
-  it('drops fields that are not part of the finding contract', async () => {
-    await configured((api) =>
-      api.withFindings([{ ...findings[1], unexpected: 'value' } as ProjectFinding]),
-    );
-    const result = await h.run('arch findings get -p shop --id finding-2 --format json');
-    expect(JSON.parse(result.stdout).finding).toEqual(findings[1]);
-  });
-
-  it('rejects a path-like finding id before requesting it', async () => {
-    const server = await configured();
-    const result = await h.run('arch findings get -p shop --id ..');
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('Finding id must be a nonempty id');
-    expect(findingRequests(server)).toHaveLength(0);
-  });
-
-  it.each(['--page 1', '--page-size 5', '--category FLAW'])(
-    'refuses %s together with an explicit id',
-    async (option) => {
-      const server = await configured();
-      const result = await h.run(`arch findings get -p shop --id finding-1 ${option}`);
-      expect(result.exitCode).not.toBe(0);
-      expect(result.stderr).toContain('Use either --id or --category and pagination');
-      expect(findingRequests(server)).toHaveLength(0);
+  it.each([true, false])(
+    'uses organization and analyzed branch on Cloud=%s without project UUID lookup',
+    async (cloud) => {
+      const server = await configured(cloud);
+      const result = await h.run('arch findings get -p shop --format json');
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        project: 'shop',
+        findings,
+        page: { pageIndex: 1, pageSize: 50, total: 8 },
+      });
+      const [request] = requests(server);
+      expect(request.path).toBe(
+        cloud ? '/architecture/project-findings' : '/api/v2/architecture/project-findings',
+      );
+      expect(request.query).toMatchObject({
+        branchId: 'shop-branch-id',
+        pageIndex: '1',
+        pageSize: '50',
+      });
+      expect(request.query.organizationId).toBe(
+        cloud ? 'my-org-uuid-v4' : '00000000-0000-4000-0000-000000000000',
+      );
+      expect(request.query.projectId).toBeUndefined();
+      expect(request.query.language).toBeUndefined();
+      expect(
+        server.getRecordedRequests().some((r) => r.path === '/api/v2/components/projects'),
+      ).toBe(false);
+      expect(request.method).toBe('GET');
     },
   );
-
-  it.each([0, 1001])('rejects page size %d before requesting findings', async (size) => {
+  it.each(['deviation', 'flaw', 'smell'])('filters category %s', async (category) => {
     const server = await configured();
-    const result = await h.run(`arch findings get -p shop --page-size ${size}`);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain('page size must be between 1 and 1000');
-    expect(findingRequests(server)).toHaveLength(0);
-  });
-
-  it.each([
-    ['an incomplete page', '{"projectFindings":[]}'],
-    [
-      'another project',
-      '{"projectFindings":[{"id":"x","projectId":"other","category":"FLAW"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'a non-numeric measure',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","measures":{"m":"text"}}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'array measures',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","measures":[1]}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'non-string components',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","components":"a"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'invalid relationships',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","relationships":[{"x":1}]}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'a non-string constraint',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW","constraint":{}}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-    [
-      'duplicate ids',
-      '{"projectFindings":[{"id":"x","projectId":"shop-branch-id","category":"FLAW"},{"id":"x","projectId":"shop-branch-id","category":"FLAW"}],"page":{"pageIndex":1,"pageSize":50,"total":2}}',
-    ],
-    [
-      'an unsupported category',
-      '{"projectFindings":[{"id":"x","projectId":"p","category":"X"}],"page":{"pageIndex":1,"pageSize":50,"total":1}}',
-    ],
-  ])('rejects %s from the server', async (_, body) => {
-    await configured((api) => api.withStatus('project-findings', 200, body, 'GET'));
-    const result = await h.run('arch findings get -p shop');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toMatch(
-      /Invalid public findings page|unsupported category|different project|duplicate ids|non-numeric measure|components must be strings|invalid relationships|constraint must be a string/,
+    const result = await h.run(`arch findings get -p shop --category ${category} --format json`);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).findings).toEqual(
+      findings.filter((f) => f.category === category),
     );
+    expect(requests(server)[0].query.category).toBe(category);
   });
-
+  it('combines type, category and language using AND', async () => {
+    const server = await configured();
+    const result = await h.run(
+      'arch findings get -p shop --type relationshipDeviation --category deviation --language java --format json',
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).findings).toEqual(findings.slice(2, 4));
+    expect(requests(server)[0].query).toMatchObject({
+      type: 'relationshipDeviation',
+      category: 'deviation',
+      language: 'java',
+    });
+    const none = await h.run(
+      'arch findings get -p shop --type relationshipDeviation --category smell --format json',
+    );
+    expect(JSON.parse(none.stdout).page.total).toBe(0);
+  });
+  it('pages without requiring IDs or deduplicating identical findings', async () => {
+    await configured(true, (api) => api.withFindings([findings[0], findings[0], findings[1]]));
+    const text = await h.run('arch findings get -p shop --page-size 1 --format text');
+    expect(text.stdout).toContain('Page 1: 1 of 3 findings. Use --page to continue.');
+    expect(text.stdout).toContain('misplacedComponent');
+    expect(text.stdout).toContain('Web.java');
+    const second = await h.run('arch findings get -p shop --page-size 1 --page 2 --format json');
+    expect(JSON.parse(second.stdout).findings).toEqual([findings[0]]);
+  });
+  it('counts with page size zero and does not advise changing the page index', async () => {
+    await configured();
+    const result = await h.run('arch findings get -p shop --page-size 0 --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Page 1: 0 of 8 findings.');
+    expect(result.stdout).toContain('Use --page-size greater than 0');
+    expect(result.stdout).not.toContain('Use --page to continue');
+  });
+  it('does not interpret absence as a clean project or an incomplete report', async () => {
+    await configured(true, (api) => api.withFindings([]));
+    const result = await h.run('arch findings get -p shop --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('No findings are visible');
+    expect(result.stdout).not.toContain('incomplete');
+  });
+  it('normalizes optional null counts and ignores unknown fields', async () => {
+    await configured(true, (api) =>
+      api.withStatus(
+        'project-findings',
+        200,
+        JSON.stringify({
+          findings: [
+            {
+              ...findings[5],
+              id: 'unused',
+              details: { nodeKey: 'large', leafArtifactCount: null, unknown: 'drop' },
+              unknown: true,
+            },
+          ],
+          page: { pageIndex: 1, pageSize: 50, total: 1 },
+        }),
+        'GET',
+      ),
+    );
+    const result = await h.run('arch findings get -p shop --format json');
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).findings).toEqual([
+      { ...findings[5], details: { nodeKey: 'large' } },
+    ]);
+  });
   it.each([
-    [403, "refused access to 'shop' (HTTP 403)"],
-    [404, "Project 'shop' or its architecture was not found"],
-  ])('explains HTTP %d', async (status, message) => {
-    await configured((api) =>
-      api.withStatus('project-findings', status, '{"message":"Access denied"}', 'GET'),
+    '--id missing',
+    '--category DEVIATION',
+    '--type unknown',
+    '--language unknown',
+    '--page-size -1',
+    '--page-size 1001',
+    '--page 0',
+  ])('rejects invalid arguments %s', async (args) => {
+    const server = await configured();
+    const result = await h.run(`arch findings get -p shop ${args}`);
+    expect(result.exitCode).not.toBe(0);
+    expect(requests(server)).toHaveLength(0);
+  });
+  const invalidFindings = [
+    { ...findings[0], type: 'unknown' },
+    { ...findings[0], category: 'DEVIATION' },
+    { ...findings[0], category: 'flaw' },
+    { ...findings[0], language: 'unknown' },
+    { ...findings[0], details: null },
+    { ...findings[0], files: [null] },
+    { ...findings[0], details: { reason: 'unknown', nodeKey: 'a' } },
+    { ...findings[2], details: { reason: 'disallowedDependency', fromNodeKey: 'a' } },
+    { ...findings[4], details: { nodeKeys: ['a'], nodeCount: -1 } },
+    { ...findings[5], details: { nodeKey: 'a', leafArtifactCount: '40' } },
+  ];
+  it.each(invalidFindings)('rejects malformed public finding %j', async (finding) => {
+    await configured(true, (api) =>
+      api.withStatus(
+        'project-findings',
+        200,
+        JSON.stringify({ findings: [finding], page: { pageIndex: 1, pageSize: 50, total: 1 } }),
+        'GET',
+      ),
     );
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain(message);
+    expect(result.stderr).toContain('Invalid public finding response');
   });
-
-  describe('on SonarQube Server', () => {
-    const serverFindings = findings.map((item) => ({ ...item, projectId: 'shop-project-id' }));
-
-    async function onServer(
-      configure: (
-        builder: ReturnType<TestHarness['newFakeServer']>,
-      ) => ReturnType<TestHarness['newFakeServer']> = (builder) => builder,
-    ) {
-      const server = await configure(
-        h
-          .newFakeServer()
-          .withAuthToken('findings-token')
-          .withProject('shop', (project) =>
-            project.withArchitecture((api) => api.withFindings(serverFindings)),
-          ),
-      ).start();
-      h.withAuth(server.recordedAuthServerUrl(), 'findings-token');
-      return server;
-    }
-    const lookups = (server: Awaited<ReturnType<typeof onServer>>) =>
-      server.getRecordedRequests().filter((r) => r.path === '/api/v2/components/projects');
-
-    it('lists findings with the project id from the public project lookup', async () => {
-      const server = await onServer();
-      const read = await h.run('arch findings get -p shop --category FLAW --format json');
-      expect(read.exitCode).toBe(0);
-      expect(JSON.parse(read.stdout).findings).toEqual([serverFindings[1]]);
-      expect(lookups(server)[0].query).toMatchObject({ keys: 'shop', pageSize: '1' });
-      const [request] = findingRequests(server);
-      expect(request.path).toBe('/api/v2/architecture/project-findings');
-      expect(request.query).toMatchObject({ projectId: 'shop-project-id', category: 'FLAW' });
-    });
-
-    it('reads one finding and checks it belongs to the resolved project', async () => {
-      const server = await onServer();
-      const read = await h.run('arch findings get -p shop --id finding-1 --format json');
-      expect(read.exitCode).toBe(0);
-      expect(JSON.parse(read.stdout).finding).toEqual(serverFindings[0]);
-      expect(findingRequests(server)[0].path).toBe(
-        '/api/v2/architecture/project-findings/finding-1',
-      );
-    });
-
-    it.each([
-      ['no match', { projects: [], page: { total: 0 } }],
-      ['another key', { projects: [{ id: 'x', key: 'other' }], page: { total: 1 } }],
-      ['a blank id', { projects: [{ id: ' ', key: 'shop' }], page: { total: 1 } }],
-      ['a null body', null],
-    ])('stops before reading findings when the lookup returns %s', async (_, body) => {
-      const server = await onServer((builder) => builder.withProjectsLookupResponse(200, body));
-      const result = await h.run('arch findings get -p shop');
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain("Could not resolve project 'shop'");
-      expect(findingRequests(server)).toHaveLength(0);
-    });
-
-    it('explains a Server without the public project lookup', async () => {
-      const server = await onServer((builder) =>
-        builder.withProjectsLookupResponse(404, { message: 'Not found' }),
-      );
-      const result = await h.run('arch findings get -p shop --id finding-1');
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('does not expose the public project lookup');
-      expect(findingRequests(server)).toHaveLength(0);
-    });
+  it.each([
+    { findings: [] },
+    { projectFindings: [], page: { pageIndex: 1, pageSize: 50, total: 0 } },
+    { findings: [], page: { pageIndex: 2, pageSize: 50, total: 0 } },
+    { findings: [], page: { pageIndex: 1, pageSize: 50, total: -1 } },
+  ])('rejects malformed pagination %j', async (body) => {
+    await configured(true, (api) =>
+      api.withStatus('project-findings', 200, JSON.stringify(body), 'GET'),
+    );
+    const result = await h.run('arch findings get -p shop');
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Invalid public findings page');
+  });
+  it('rejects findings that do not match the requested filter', async () => {
+    await configured(true, (api) =>
+      api.withStatus(
+        'project-findings',
+        200,
+        JSON.stringify({ findings: [findings[0]], page: { pageIndex: 1, pageSize: 50, total: 1 } }),
+        'GET',
+      ),
+    );
+    const result = await h.run('arch findings get -p shop --category smell');
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('outside the requested filters');
+  });
+  it.each([401, 403, 404, 500])('reports backend error %d without fallback', async (status) => {
+    const server = await configured(true, (api) =>
+      api.withStatus('project-findings', status, '{"message":"Unavailable"}', 'GET'),
+    );
+    const result = await h.run('arch findings get -p shop');
+    expect(result.exitCode).not.toBe(0);
+    expect(requests(server).every((r) => r.path === '/architecture/project-findings')).toBe(true);
+    expect(
+      server
+        .getRecordedRequests()
+        .some(
+          (r) =>
+            r.path.includes('/architecture/structure') || r.path.includes('/architecture/graphs'),
+        ),
+    ).toBe(false);
   });
 });

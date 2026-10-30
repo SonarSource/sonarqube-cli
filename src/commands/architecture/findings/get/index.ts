@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 
@@ -26,7 +25,7 @@ import { createFindingsApi } from '../../_common/architecture-api.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import {
   DEFAULT_FINDINGS_PAGE_SIZE,
-  type FindingCategory,
+  type FindingFilters,
   type ProjectFinding,
 } from '../../_common/findings.ts';
 import { resolveProject } from '../../_common/project.ts';
@@ -37,9 +36,7 @@ import {
   TEXT_FORMATS,
 } from '../../_common/read-options.ts';
 
-export interface FindingsReadOptions extends ArchitectureReadOptions {
-  id?: string;
-  category?: FindingCategory;
+export interface FindingsReadOptions extends ArchitectureReadOptions, FindingFilters {
   page?: number;
   pageSize?: number;
 }
@@ -51,23 +48,9 @@ export async function getFindings(
   const projectKey = await resolveProject(options, ctx);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const api = createFindingsApi(ctx.connection, projectKey);
-  if (options.id !== undefined) {
-    if (
-      options.category !== undefined ||
-      options.page !== undefined ||
-      options.pageSize !== undefined
-    )
-      throw new CommandFailedError('Use either --id or --category and pagination options.');
-    const finding = await api.getFinding(options.id).catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
-    });
-    if (format === 'text') printFindingDetails(ctx, finding);
-    else printPayload(ctx, format, { project: projectKey, finding });
-    return;
-  }
   const { findings, page } = await api
     .getFindingsPage(
-      options.category,
+      { category: options.category, type: options.type, language: options.language },
       options.page ?? 1,
       options.pageSize ?? DEFAULT_FINDINGS_PAGE_SIZE,
     )
@@ -82,20 +65,18 @@ export async function getFindings(
     ctx.console.info(
       'No findings are visible. Check project access and whether the project has been analyzed.',
     );
-  const more = page.pageIndex * page.pageSize < page.total ? ' Use --page to continue.' : '';
+  const more =
+    page.pageSize === 0
+      ? ' Use --page-size greater than 0 to read findings.'
+      : page.pageIndex * page.pageSize < page.total
+        ? ' Use --page to continue.'
+        : '';
   ctx.console.info(`Page ${page.pageIndex}: ${findings.length} of ${page.total} findings.${more}`);
-  for (const finding of findings) ctx.console.info(summary(finding));
+  for (const finding of findings) printFindingDetails(ctx, finding);
 }
-
-const SUMMARY_FIELDS = new Set(['id', 'projectId', 'category', 'message']);
 
 function printFindingDetails(ctx: CommandAuthenticatedInvocationContext, finding: ProjectFinding) {
-  ctx.console.info(summary(finding));
-  for (const [name, value] of Object.entries(finding).filter(([key]) => !SUMMARY_FIELDS.has(key)))
-    ctx.console.info(`  ${name}: ${JSON.stringify(value)}`);
-}
-
-function summary(finding: ProjectFinding): string {
-  const message = finding.message ? ` ${finding.message}` : '';
-  return `${finding.id}: ${finding.category}${message}`;
+  ctx.console.info(`${finding.category}: ${finding.type} (${finding.language})`);
+  ctx.console.info(`  details: ${JSON.stringify(finding.details)}`);
+  ctx.console.info(`  files: ${JSON.stringify(finding.files)}`);
 }

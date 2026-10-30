@@ -20,97 +20,143 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
+import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+
 export const DEFAULT_FINDINGS_PAGE_SIZE = 50;
-export const FINDING_CATEGORIES = ['DEVIATION', 'FLAW', 'SMELL'] as const;
+export const FINDING_CATEGORIES = ['deviation', 'flaw', 'smell'] as const;
+export const FINDING_TYPES = [
+  'structuralDeviation',
+  'relationshipDeviation',
+  'tangle',
+  'oversizedComponent',
+  'weakTangle',
+  'splitResponsibility',
+] as const;
 export type FindingCategory = (typeof FINDING_CATEGORIES)[number];
+export type FindingType = (typeof FINDING_TYPES)[number];
 
-export class FindingNotFoundError extends CommandFailedError {}
-
-export interface ProjectFinding {
-  id: string;
-  projectId: string;
-  category: FindingCategory;
-  message?: string;
-  components?: string[];
-  relationships?: { from: string; to: string }[];
-  constraint?: string;
-  measures?: Record<string, number>;
+export interface FindingDetails {
+  reason?:
+    'misplacedComponent' | 'unimplementedComponent' | 'disallowedDependency' | 'interfaceViolation';
+  nodeKey?: string;
+  fromNodeKey?: string;
+  toNodeKey?: string;
+  nodeKeys?: string[];
+  nodeCount?: number;
+  misplacedComponentCount?: number;
+  dependencyCount?: number;
+  leafArtifactCount?: number;
+  fragmentCount?: number;
 }
-const DETAIL_FIELDS = ['message', 'components', 'relationships', 'constraint', 'measures'] as const;
+export interface ProjectFinding {
+  type: FindingType;
+  category: FindingCategory;
+  language: Ecosystem;
+  details: FindingDetails;
+  files: string[];
+}
+export interface FindingFilters {
+  category?: FindingCategory;
+  type?: FindingType;
+  language?: Ecosystem;
+}
 export interface FindingPage {
   findings: ProjectFinding[];
   page: { pageIndex: number; pageSize: number; total: number };
 }
 export interface FindingsApi {
   getFindingsPage(
-    category: FindingCategory | undefined,
+    filters: FindingFilters,
     pageIndex: number,
     pageSize: number,
   ): Promise<FindingPage>;
-  getFinding(id: string): Promise<ProjectFinding>;
 }
+
+const CATEGORIES_BY_TYPE: Record<FindingType, FindingCategory> = {
+  structuralDeviation: 'deviation',
+  relationshipDeviation: 'deviation',
+  tangle: 'flaw',
+  oversizedComponent: 'flaw',
+  weakTangle: 'smell',
+  splitResponsibility: 'smell',
+};
 
 export function parseProjectFinding(value: unknown): ProjectFinding {
+  const finding = objectOf(value);
+  if (!(FINDING_TYPES as readonly unknown[]).includes(finding.type))
+    throw invalidFinding('unsupported type');
+  const type = finding.type as FindingType;
+  if (finding.category !== CATEGORIES_BY_TYPE[type])
+    throw invalidFinding('invalid category for type');
+  if (!(ECOSYSTEMS as readonly unknown[]).includes(finding.language))
+    throw invalidFinding('unsupported language');
+  return {
+    type,
+    category: CATEGORIES_BY_TYPE[type],
+    language: finding.language as Ecosystem,
+    details: parseDetails(type, objectOf(finding.details)),
+    files: stringsOf(finding.files),
+  };
+}
+
+function parseDetails(type: FindingType, details: Record<string, unknown>): FindingDetails {
+  switch (type) {
+    case 'structuralDeviation':
+      return {
+        reason: reasonOf(details, ['misplacedComponent', 'unimplementedComponent']),
+        nodeKey: stringOf(details.nodeKey),
+        ...optionalCount(details, 'misplacedComponentCount'),
+      };
+    case 'relationshipDeviation':
+      return {
+        reason: reasonOf(details, ['disallowedDependency', 'interfaceViolation']),
+        fromNodeKey: stringOf(details.fromNodeKey),
+        toNodeKey: stringOf(details.toNodeKey),
+        ...optionalCount(details, 'dependencyCount'),
+      };
+    case 'tangle':
+    case 'weakTangle':
+      return { nodeKeys: stringsOf(details.nodeKeys), nodeCount: countOf(details.nodeCount) };
+    case 'oversizedComponent':
+    case 'splitResponsibility':
+      return {
+        nodeKey: stringOf(details.nodeKey),
+        ...optionalCount(details, 'leafArtifactCount'),
+        ...optionalCount(details, 'fragmentCount'),
+      };
+  }
+}
+
+function objectOf(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new CommandFailedError('Each finding must be an object.');
-  const object = value as Record<string, unknown>;
-  if (
-    typeof object.id !== 'string' ||
-    !object.id.trim() ||
-    typeof object.projectId !== 'string' ||
-    !object.projectId.trim()
-  )
-    throw new CommandFailedError('Public finding response has an invalid id or project.');
-  if (!(FINDING_CATEGORIES as readonly unknown[]).includes(object.category))
-    throw new CommandFailedError(`Public finding ${object.id} has an unsupported category.`);
-  assertFindingDetails(object.id, object);
-  const finding = {
-    id: object.id,
-    projectId: object.projectId,
-    category: object.category,
-  } as ProjectFinding;
-  for (const name of DETAIL_FIELDS)
-    if (object[name] != null) Object.assign(finding, { [name]: object[name] });
-  return finding;
+    throw invalidFinding('expected object');
+  return value as Record<string, unknown>;
 }
-
-function assertFindingDetails(id: string, object: Record<string, unknown>): void {
-  if (object.message != null && typeof object.message !== 'string')
-    throw new CommandFailedError(`Public finding ${id} message must be a string.`);
-  if (object.components != null && !isStringArray(object.components))
-    throw new CommandFailedError(`Public finding ${id} components must be strings.`);
-  if (object.relationships != null && !isRelationshipArray(object.relationships))
-    throw new CommandFailedError(`Public finding ${id} has invalid relationships.`);
-  if (object.constraint != null && typeof object.constraint !== 'string')
-    throw new CommandFailedError(`Public finding ${id} constraint must be a string.`);
-  if (
-    object.measures != null &&
-    (typeof object.measures !== 'object' ||
-      Array.isArray(object.measures) ||
-      Object.values(object.measures).some((value) => typeof value !== 'number'))
-  )
-    throw new CommandFailedError(`Public finding ${id} has a non-numeric measure.`);
-}
-
-function isStringArray(value: unknown): boolean {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function isRelationshipArray(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof (item as Record<string, unknown>).from === 'string' &&
-        typeof (item as Record<string, unknown>).to === 'string',
-    )
-  );
-}
-
-export function findingId(value: string): string {
-  if (!value.trim() || value === '.' || value === '..')
-    throw new CommandFailedError('Finding id must be a nonempty id.');
+function stringOf(value: unknown): string {
+  if (typeof value !== 'string') throw invalidFinding('expected string');
   return value;
+}
+function stringsOf(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string'))
+    throw invalidFinding('expected string array');
+  return value as string[];
+}
+function countOf(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw invalidFinding('expected nonnegative integer count');
+  return value;
+}
+function optionalCount(details: Record<string, unknown>, name: string): Record<string, number> {
+  return details[name] == null ? {} : { [name]: countOf(details[name]) };
+}
+function reasonOf(
+  details: Record<string, unknown>,
+  reasons: NonNullable<FindingDetails['reason']>[],
+): NonNullable<FindingDetails['reason']> {
+  if (!(reasons as readonly unknown[]).includes(details.reason))
+    throw invalidFinding('unsupported deviation reason');
+  return details.reason as NonNullable<FindingDetails['reason']>;
+}
+function invalidFinding(reason: string): CommandFailedError {
+  return new CommandFailedError(`Invalid public finding response: ${reason}.`);
 }

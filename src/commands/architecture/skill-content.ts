@@ -94,8 +94,7 @@ recovery instructions, inspect the current state, and obtain approval before res
 
 ## Availability
 
-Intended operations on SonarQube Server await public project UUID resolution. Findings work on
-SonarQube Server once the public project lookup (/api/v2/components/projects) resolves the project.
+Intended operations on SonarQube Server await public project UUID resolution. Findings use the analyzed main branch on Cloud and Server.
 Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
@@ -107,6 +106,8 @@ Retain pagination metadata and use exact project keys.
 ## Findings
 
 Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
-optionally \`--category DEVIATION|FLAW|SMELL\`, or one finding with its details with \`--id <id>\`.
-Findings are read-only. Follow the page hint for remaining results.
+optionally \`--category deviation|flaw|smell\`, \`--type <type>\` or \`--language <language>\`.
+Every row includes its type, language, details and files; findings have no IDs or separate detail lookup.
+Use \`--page-size 0\` to count only. Findings are read-only. Follow the page hint for remaining results.
+An empty page means no findings are visible; it does not establish project access or a clean architecture.
 `;
