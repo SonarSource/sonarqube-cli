@@ -66,6 +66,9 @@ Project directives support paginated `architecture directives get` and explicit-
 
 
 
+
+
+
 ## Architecture directives
 
 `architecture directives get` reads one public page (`--page`, `--page-size`), or one directive with `--id`. `architecture directives set --file <file> [--dry-run]` accepts `{create: [...], update: [{id, changed fields}], delete: [{id}]}`. Lists are optional; unspecified update fields and unmentioned directives are retained. Both commands use standard authentication and project discovery. Preflight the whole batch and reject conflicting IDs before writing. Create duplicate checks read every page, normalize absent perspectives to `default_perspective`, and reject batches exceeding 1000 stored directives before writes. Creations record `sonarqube-cli` as their origin. Updates send required structural fields and explicitly supplied optional fields, retaining the origin from a fresh project-validated read. New or identity-changing directives warn about missing exact keys in the complete current graph; unavailable or unsupported views produce a warning, without blocking writes. Description-only changes and deletions do not fetch graphs. Concurrent changes can still race these reads. Writes are individual, without automatic retry or rollback; partial failures report confirmed IDs. Server directives use the public project-key lookup; current graph diagnostics may be unavailable before analysis. Optional fields cannot be cleared with null; the API has no conditional writes.
