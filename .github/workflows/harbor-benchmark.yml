@@ -5,7 +5,10 @@ on:
     inputs:
       model:
         description: Model passed to Harbor
-        required: true
+        type: choice
+        options:
+          - anthropic/claude-sonnet-5-5
+          - anthropic/claude-haiku-4-5
         default: anthropic/claude-sonnet-5-5
 
 permissions:
