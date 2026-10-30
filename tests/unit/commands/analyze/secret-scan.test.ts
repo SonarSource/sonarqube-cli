@@ -444,9 +444,8 @@ describe('secretCheckCommand: scan failures', () => {
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
   });
 
-  it('displays stdout when scan fails without stderr', async () => {
-    const stdoutMsg = '{"error":"auth_failed"}';
-    spawnSpy.mockResolvedValue({ exitCode: 2, stdout: stdoutMsg, stderr: '' });
+  it('displays stdout that is not JSON when scan fails without stderr', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 2, stdout: 'sonar-secrets crashed', stderr: '' });
 
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
@@ -466,7 +465,29 @@ describe('secretCheckCommand: scan failures', () => {
     );
 
     const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(prints.some((m) => m.includes(stdoutMsg))).toBe(true);
+    expect(prints.some((m) => m.includes('sonar-secrets crashed'))).toBe(true);
+  });
+
+  it('shows only the parsed errors of a JSON report when scan fails, never its raw values', async () => {
+    const stdout = JSON.stringify({
+      issues: [{ ruleKey: 'secrets:S6689', description: 'GitHub Token', secret: 'ghp_invented' }],
+      errors: [{ message: 'auth failed' }],
+    });
+    spawnSpy.mockResolvedValue({ exitCode: 2, stdout, stderr: '' });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+      expect.unreachable('expected analyzeSecrets to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CommandFailedError);
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    const output = fake.calls.map((c) => c.args.map(String).join(' ')).join('\n');
+    expect(output).not.toContain('ghp_invented');
+    expect(output).toContain('Scan warning: auth failed');
   });
 });
 
