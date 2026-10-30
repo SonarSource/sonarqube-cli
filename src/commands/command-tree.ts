@@ -111,6 +111,7 @@ import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
+import { agentSecretsMasking } from './hook/agent-secrets-masking/index.ts';
 import { agentSessionStart } from './hook/agent-session-start';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
@@ -590,7 +591,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   integrateCommand
     .command('codex')
     .description(
-      'Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.',
+      'Setup SonarQube integration for Codex. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.',
     )
     .option('--non-interactive', 'Non-interactive mode (no prompts)')
     .addOption(
@@ -1156,6 +1157,19 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .anonymousAction(
       handleHookInvocation((ctx, options: { agent: string }) =>
         agentSessionStart(ctx, options.agent),
+      ),
+    );
+
+  hookCommand
+    .command('agent-secrets-masking')
+    .description('Mask secrets in agent prompts or tool output')
+    .requiredOption(
+      '--agent <agent>',
+      'Agent whose hook input and output format to use (codex|copilot)',
+    )
+    .anonymousAction(
+      handleHookInvocation((ctx, options: { agent: string }) =>
+        agentSecretsMasking(ctx, options.agent),
       ),
     );
 
