@@ -130,7 +130,8 @@ never repeat a write or roll back automatically.
 
 ## Availability
 
-Intended and directive operations on SonarQube Server await public project UUID resolution. Deviations,
+Intended and directive operations on SonarQube Server require the public project lookup
+(/api/v2/components/projects) and public Architecture APIs. Deviations,
 structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 `;

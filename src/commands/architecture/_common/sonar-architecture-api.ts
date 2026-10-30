@@ -25,6 +25,7 @@ import { AccessDeniedError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
 
 import {
   type ArchitectureApi,
@@ -56,8 +57,6 @@ const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 interface ArchitectureIds {
   organizationId: string;
   branchId: string;
-  /** The project UUID used by the intended architecture endpoint. */
-  projectId: string;
 }
 
 interface IntendedModelExportDto extends Omit<IntendedArchitecture, 'type'> {
@@ -239,6 +238,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   private readonly http: SonarHttpClient;
   private idsPromise?: Promise<ArchitectureIds>;
   private intendedModelId?: string;
+  private serverProjectIdPromise?: Promise<string>;
 
   constructor(
     private readonly connection: SonarConnection,
@@ -337,7 +337,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       throw new CommandFailedError(
         'Directive page must be >= 1 and page size must be between 1 and 1000.',
       );
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .get<{
         projectDirectives?: unknown[];
@@ -363,7 +363,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .post<unknown>(this.path('project-directives'), {
         ...directive,
@@ -387,7 +387,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async getDirective(id: string): Promise<ProjectDirective> {
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .get<unknown>(this.directivePath(id))
       .orThrow()
@@ -415,7 +415,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     };
     const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
     const updated = parseProjectDirective(response);
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     if (
       updated.id.toLowerCase() !== directiveId(id) ||
       updated.projectId !== projectId ||
@@ -508,12 +508,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
     }
     if (this.http.isCloud) {
       // On SonarQube Cloud the architecture endpoints key a project by its main branch id.
-      return { organizationId: await this.cloudOrganizationId(), branchId, projectId: branchId };
+      return { organizationId: await this.cloudOrganizationId(), branchId };
     }
     return {
       organizationId: SERVER_ORGANIZATION_ID,
       branchId,
-      projectId: branchId,
     };
   }
 
@@ -533,12 +532,42 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return organizationId;
   }
 
-  private async projectId(resource = 'Intended architecture'): Promise<string> {
-    if (!this.http.isCloud) {
+  private async projectId(): Promise<string> {
+    if (this.http.isCloud) return (await this.ids()).branchId;
+    this.serverProjectIdPromise ??= this.resolveServerProjectId();
+    return this.serverProjectIdPromise;
+  }
+
+  private async resolveServerProjectId(): Promise<string> {
+    const response = await new ProjectsClient(this.http)
+      .getProjectsByKey(this.projectKey)
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+          throw new CommandFailedError(
+            'This Server does not expose the public project lookup required for intended architecture and directives.',
+            {
+              cause: error,
+              remediationHint:
+                'Use a Server build with GET /api/v2/components/projects and the public Architecture APIs.',
+            },
+          );
+        }
+        throw error;
+      });
+    const project = response?.projects?.[0];
+    if (
+      !Array.isArray(response?.projects) ||
+      response.projects.length !== 1 ||
+      response.page?.total !== 1 ||
+      project?.key !== this.projectKey ||
+      typeof project.id !== 'string' ||
+      project.id.trim().length === 0
+    ) {
       throw new CommandFailedError(
-        `${resource} is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.`,
+        `Could not resolve project '${this.projectKey}'. Check the key and Browse permission.`,
       );
     }
-    return (await this.ids()).projectId;
+    return project.id;
   }
 }
