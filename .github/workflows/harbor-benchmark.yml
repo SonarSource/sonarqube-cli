@@ -19,16 +19,14 @@ env:
 
 jobs:
   benchmark:
-    name: Benchmark - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
+    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }}
+    runs-on: ${{ matrix.os == 'macos' && 'macos-latest-xlarge' || 'sonar-m' }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: linux
-            runner: sonar-m
-          - os: macos
-            runner: macos-latest-xlarge
+        os: [linux, macos]
+        task:
+          - integrate--happy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,6 +42,7 @@ jobs:
         with:
           secrets: |
             development/kv/data/devex-claude-code API_KEY | CLAUDE_CODE_API_KEY;
+            development/team/sonarlint/kv/data/sonarcloud-it token | HB_SONAR_TOKEN;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
 
@@ -51,6 +50,11 @@ jobs:
         env:
           MODEL: ${{ inputs.model }}
           JOB_NAME: ${{ matrix.os }}
+          TASK: ${{ matrix.task }}
+          HB_SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_TOKEN }}
+          HB_SONAR_ORG: sonarlint-it
+          HB_SONAR_SERVER: https://sc-staging.io
+          HB_SONAR_API_URL: https://api.sc-staging.io
           ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
@@ -60,7 +64,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: harbor-jobs-${{ matrix.os }}
+          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}
           path: harbor-jobs
 
   report:

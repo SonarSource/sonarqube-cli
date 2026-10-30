@@ -1,0 +1,41 @@
+schema_version = "1.4"
+artifacts = []
+
+[task]
+name = "sonar/integrate--happy"
+version = "1.0.0"
+description = "JTBD 1: set up SonarQube for the coding agent that is running"
+authors = []
+keywords = ["sonar-cli"]
+
+[metadata]
+
+[verifier]
+environment_mode = "shared"
+timeout_sec = 120.0
+collect = []
+
+[verifier.env]
+
+[agent]
+timeout_sec = 300.0
+
+[environment]
+network_mode = "public"
+build_timeout_sec = 600.0
+os = "linux"
+mcp_servers = []
+
+[environment.env]
+SONARQUBE_CLI_TOKEN = "${HB_SONAR_TOKEN}"
+SONARQUBE_CLI_ORG = "${HB_SONAR_ORG}"
+SONARQUBE_CLI_SERVER = "${HB_SONAR_SERVER:-https://sonarcloud.io}"
+SONARQUBE_CLI_SONARCLOUD_URL = "${HB_SONAR_SERVER:-https://sonarcloud.io}"
+SONARQUBE_CLI_SONARCLOUD_API_URL = "${HB_SONAR_API_URL:-https://api.sonarcloud.io}"
+
+[solution.env]
+SONARQUBE_CLI_TOKEN = "${HB_SONAR_TOKEN}"
+SONARQUBE_CLI_ORG = "${HB_SONAR_ORG}"
+SONARQUBE_CLI_SERVER = "${HB_SONAR_SERVER:-https://sonarcloud.io}"
+SONARQUBE_CLI_SONARCLOUD_URL = "${HB_SONAR_SERVER:-https://sonarcloud.io}"
+SONARQUBE_CLI_SONARCLOUD_API_URL = "${HB_SONAR_API_URL:-https://api.sonarcloud.io}"
