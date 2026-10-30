@@ -63,18 +63,11 @@ Architecture command registration lives in `architecture/register.ts`; `command-
 
 Project directives support paginated `architecture directives get` and explicit-ID reads. The read handler lives under `architecture/directives/get`.
 
-
-
-
-
-
-
 ## Run MCP
 
 `sonar run mcp` accepts `SONARQUBE_CLI_MCP_WSL=auto|always|never` on Windows. `auto` checks native Docker, Podman, and Nerdctl first. It checks WSL only when all native executables are missing. A native `info` failure blocks WSL fallback and produces a runtime-specific error. `always` checks WSL only. `never` checks native runtimes only. Values are case-insensitive and trimmed; blank values use `auto`. The variable is ignored on other platforms. Native failure messages show up to three lines and 1000 characters of diagnostic output and explain how to select WSL. A failed `always` search reports that only WSL was checked. Runtime selection is in `src/core/host/environment/tool-detector.ts`; startup errors are in `src/commands/run/mcp.ts`.
 
 ## System reset
-
 
 `sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Integration teardown is declarative-only: `integrations.installed` features are removed via `removeFeature()`; legacy `agentExtensions` entries are cleared from state in `clearLegacyState()` but are not used for on-disk cleanup (1.0 does not guarantee removal of pre-declarative artifacts). Binary cleanup removes `dependencies.installed` paths under `BIN_DIR`. `systemReset()` also unconditionally empties the persisted `state.knownServerProjectMappings` table — see "known-server-project-mappings" in `.claude/rules/state-and-auth.md` for why it needs this explicit reset. The local `sonar stats` SQLite ledger (see `src/core/stats/CLAUDE.md`) is wiped outright, as its own reported step (`clearStats()`, `src/commands/system/reset-stats.ts`) rather than folded into the generic filesystem-cache step, per the CLI-1114 ADR. `sonar config` configuration is preserved by default; `--all` removes it as its own step (`clearConfig()`, `src/commands/system/reset-config.ts`): the whole `cli-config.properties` file plus every sensitive key's `config/<key>` keychain entry. Partial reset (step warnings) exits `0`.
 
@@ -97,5 +90,4 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar update` detects the Homebrew cask when the canonical executable path contains `/Caskroom/sonarqube-cli/` under any prefix, including through a `bin/sonar` symlink. It exits with code 1 before checking or installing updates, including with `--force`. It recommends `brew upgrade --cask sonarqube-cli`. The remediation hint explains why the CLI does not run Homebrew. Read-only update status, system status recommendations, and post-command update notices also recommend `brew upgrade --cask sonarqube-cli` for this cask. Standalone updates keep their existing behavior.
 
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
-
 
