@@ -75,6 +75,35 @@ describe('parseSecretsJson', () => {
     expect(issues[0].maskedSecret).toBeUndefined();
   });
 
+  it('keeps the raw secret that --dangerous-show-secrets adds to an issue', () => {
+    const stdout = JSON.stringify({
+      issues: [
+        {
+          ruleKey: 'secrets:S6689',
+          description: 'GitHub Token',
+          maskedSecret: 'ghp****',
+          secret: 'ghp_invented',
+        },
+      ],
+    });
+
+    const { issues } = parseSecretsJson(stdout);
+
+    expect(issues[0].secret).toBe('ghp_invented');
+    expect(issues[0].maskedSecret).toBe('ghp****');
+  });
+
+  it('keeps an issue but drops a secret that is not a string', () => {
+    const stdout = JSON.stringify({
+      issues: [{ ruleKey: 'secrets:S6689', description: 'GitHub Token', secret: { value: 1 } }],
+    });
+
+    const { issues } = parseSecretsJson(stdout);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).not.toHaveProperty('secret');
+  });
+
   it('parses multiple issues', () => {
     const stdout = JSON.stringify({
       issues: [
