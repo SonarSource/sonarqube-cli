@@ -22,6 +22,7 @@ import { parseInteger } from '@/core/commands/params.ts';
 import { type SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 
 import { ECOSYSTEMS } from './_common/architecture-api.ts';
+import { FINDING_CATEGORIES } from './_common/findings.ts';
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
 import { getCurrent } from './current/get/index.ts';
@@ -29,6 +30,7 @@ import {
   type DirectivesReadOptions,
   getDirectives as getArchitectureDirectives,
 } from './directives/get/index.ts';
+import { type FindingsReadOptions, getFindings } from './findings/get/index.ts';
 import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
 import { type SetFileOptions, setIntended } from './intended/set/index.ts';
@@ -100,6 +102,22 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .authenticatedAction((ctx, options: DirectivesReadOptions) =>
       getArchitectureDirectives(options, ctx),
     );
+
+  const findings = architecture
+    .command('findings')
+    .description('Read architecture deviations, flaws and smells');
+  findings
+    .command('get')
+    .description('Read a finding by id or list a page of findings from the latest analysis')
+    .option('--id <id>', 'Finding id; cannot be combined with pagination or --category')
+    .option('-p, --project <project>', 'Project key')
+    .addOption(
+      new SonarOption('--category <category>', 'Only this category').choices(FINDING_CATEGORIES),
+    )
+    .addOption(textFormatOption())
+    .option('--page <n>', 'Page number (default 1)', parseInteger)
+    .option('--page-size <n>', 'Items per page (default 50, maximum 1000)', parseInteger)
+    .authenticatedAction((ctx, options: FindingsReadOptions) => getFindings(options, ctx));
 
   architecture
     .command('install-skill')
