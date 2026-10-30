@@ -69,6 +69,7 @@ export interface McpServerOptions {
   containerNetwork?: string;
   containerAddHost?: string;
   containerServerUrl?: string;
+  containerProxyBypassHost?: string;
 }
 
 export type McpServerContext =
@@ -149,7 +150,25 @@ function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): string
   return parts;
 }
 
-function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
+// Java appends these loopback patterns unless nonProxyHosts is explicitly empty.
+const JAVA_DEFAULT_NON_PROXY_HOSTS = 'localhost|127.*|[::1]|0.0.0.0|[::0]';
+
+function matchesJavaNonProxyHosts(hostname: string, nonProxyHosts: string): boolean {
+  return nonProxyHosts
+    .toLowerCase()
+    .split('|')
+    .some((pattern) => {
+      if (pattern === '*') return true;
+      if (pattern.startsWith('*') && pattern.endsWith('*')) {
+        return hostname.includes(pattern.slice(1, -1));
+      }
+      if (pattern.startsWith('*')) return hostname.endsWith(pattern.slice(1));
+      if (pattern.endsWith('*')) return hostname.startsWith(pattern.slice(0, -1));
+      return hostname === pattern;
+    });
+}
+
+function collectProxyJavaOpts(proxy: ProxyGroup, serverUrl: string, bypassHost?: string): string[] {
   const parts: string[] = [];
 
   if (proxy.proxyHttps) {
@@ -160,9 +179,21 @@ function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
     parts.push(...proxyJavaProps(proxy.proxyHttp, 'http'));
   }
 
-  if (proxy.noProxy) {
+  let nonProxyHosts = proxy.noProxy ? toJavaNonProxyHosts(proxy.noProxy) : undefined;
+  if (bypassHost && nonProxyHosts !== '') {
+    const effectiveNonProxyHosts = [nonProxyHosts, JAVA_DEFAULT_NON_PROXY_HOSTS]
+      .filter(Boolean)
+      .join('|');
+    if (
+      matchesJavaNonProxyHosts(new URL(serverUrl).hostname, effectiveNonProxyHosts) &&
+      !matchesJavaNonProxyHosts(bypassHost, effectiveNonProxyHosts)
+    ) {
+      nonProxyHosts = [nonProxyHosts, bypassHost].filter(Boolean).join('|');
+    }
+  }
+  if (nonProxyHosts !== undefined) {
     // Java uses it for both HTTP and HTTPS.
-    parts.push(`-Dhttp.nonProxyHosts=${toJavaNonProxyHosts(proxy.noProxy)}`);
+    parts.push(`-Dhttp.nonProxyHosts=${nonProxyHosts}`);
   }
 
   return parts;
@@ -357,7 +388,9 @@ function buildDockerRunArgsAndEnv(
   let cachedCaCertPath: string | undefined;
 
   if (network.proxy) {
-    javaOpts.push(...collectProxyJavaOpts(network.proxy));
+    javaOpts.push(
+      ...collectProxyJavaOpts(network.proxy, serverUrl, options.containerProxyBypassHost),
+    );
   }
 
   if (network.clientCert) {
