@@ -529,9 +529,9 @@ describe('public project directives', () => {
     },
   );
 
-  it.each([null, [], 'directive', 1, true])(
+  it.each([null, [], 'directive', 1, true].map((value) => ({ value })))(
     'explains an invalid change-file root before requesting architecture: %j',
-    async (value) => {
+    async ({ value }) => {
       const server = await configured();
       h.cwd.writeFile('directives.json', JSON.stringify(value));
       const result = await h.run('arch directives set -p shop --file directives.json');
