@@ -27,6 +27,11 @@ import type {
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import type { ProjectDirective } from '@/commands/architecture/_common/directives.ts';
+import {
+  FINDING_CATEGORIES,
+  FINDING_TYPES,
+  type ProjectFinding,
+} from '@/commands/architecture/_common/findings.ts';
 
 export const FAKE_SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 
@@ -37,6 +42,7 @@ const RESOURCES = [
   'current-architectures',
   'intended-architectures',
   'project-directives',
+  'project-findings',
 ] as const;
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
@@ -82,6 +88,13 @@ export class FakeArchitecture {
 
   withDirectives(directives: ProjectDirective[]): this {
     this.directives = structuredClone(directives);
+    return this;
+  }
+
+  private findings: ProjectFinding[] = [];
+
+  withFindings(findings: ProjectFinding[]): this {
+    this.findings = structuredClone(findings);
     return this;
   }
   private readonly patternGroups = new Map<string, SavedGroup[]>();
@@ -252,6 +265,30 @@ export class FakeArchitecture {
     if (override) return json(override.body, override.status, false);
 
     switch (`${resource}:${request.method}`) {
+      case 'project-findings:GET': {
+        if (
+          (request.query.category &&
+            !FINDING_CATEGORIES.includes(request.query.category as ProjectFinding['category'])) ||
+          (request.query.type &&
+            !FINDING_TYPES.includes(request.query.type as ProjectFinding['type'])) ||
+          (request.query.language &&
+            !['java', 'js', 'ts', 'py', 'cs'].includes(request.query.language))
+        ) {
+          return json({ message: 'Invalid findings filter' }, 400);
+        }
+        const pageIndex = Number(request.query.pageIndex ?? 1);
+        const pageSize = Number(request.query.pageSize ?? 50);
+        const matching = this.findings.filter(
+          (item) =>
+            (!request.query.category || item.category === request.query.category) &&
+            (!request.query.type || item.type === request.query.type) &&
+            (!request.query.language || item.language === request.query.language),
+        );
+        return json({
+          findings: matching.slice((pageIndex - 1) * pageSize, pageIndex * pageSize),
+          page: { pageIndex, pageSize, total: matching.length },
+        });
+      }
       case 'project-directives:GET': {
         if (request.modelId) {
           const failure = this.directiveReadFailures.get(++this.directiveReads);
@@ -500,20 +537,30 @@ export function routeArchitectureRequest(
   if (!isResource(resource) || rest.length > 0) return undefined;
 
   const { query } = request;
-  const projectId = fakeMainBranchId;
+  const projectId = isCloud ? fakeMainBranchId : (key: string) => `${key}-project-id`;
   let project: ArchitectureProject | undefined;
-  if (resource === 'current-architectures') {
+  if (resource === 'current-architectures' || resource === 'project-findings') {
     const expectedOrganization = isCloud ? query.organizationId : FAKE_SERVER_ORGANIZATION_ID;
     if (
       !query.branchId ||
-      !query.language ||
+      (resource === 'current-architectures' && !query.language) ||
       !query.organizationId ||
       query.organizationId !== expectedOrganization
     ) {
       return json({ message: 'organizationId, branchId and language are required' }, 400);
     }
     project = projects.find(({ key }) => fakeMainBranchId(key) === query.branchId);
-    if (!project) return json({ currentArchitectures: [] });
+    if (!project)
+      return resource === 'project-findings'
+        ? json({
+            findings: [],
+            page: {
+              pageIndex: Number(query.pageIndex ?? 1),
+              pageSize: Number(query.pageSize ?? 50),
+              total: 0,
+            },
+          })
+        : json({ currentArchitectures: [] });
   } else if (modelId !== undefined) {
     project = projects.find(({ architecture }) =>
       architecture?.hasModel(decodeURIComponent(modelId)),
