@@ -33,7 +33,8 @@ import {
   HTTP_STATUS_REQUEST_TIMEOUT,
 } from '@/core/server/http-constants.ts';
 
-import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { type ArchitectureApi, type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { indexStructure } from './graph.ts';
 
 const MAX_DIRECTIVE_ENUM_LENGTH = 30;
 const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
@@ -67,6 +68,7 @@ export interface DirectivesApi {
   getDirectivesPage(pageIndex: number, pageSize: number): Promise<DirectivePage>;
   getDirective(id: string): Promise<ProjectDirective>;
   updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective>;
+  deleteDirective(id: string): Promise<void>;
   createDirective(directive: DirectiveInput): Promise<ProjectDirective>;
 }
 
@@ -322,15 +324,18 @@ async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
 export interface DirectiveChanges {
   create: DirectiveInput[];
   update: DirectiveUpdate[];
+  delete: string[];
 }
 
 export function parseDirectiveChanges(value: unknown, projectKey: string): DirectiveChanges {
   const object = record(value);
   if (
-    Object.keys(object).some((key) => !['create', 'update', 'project', 'projectKey'].includes(key))
+    Object.keys(object).some(
+      (key) => !['create', 'update', 'delete', 'project', 'projectKey'].includes(key),
+    )
   )
     throw new CommandFailedError(
-      'Provide a change file with create and update arrays. Nothing was changed.',
+      'Provide a change file with create, update and delete arrays. Nothing was changed.',
     );
   if (
     ['project', 'projectKey'].some((key) => object[key] !== undefined && object[key] !== projectKey)
@@ -339,7 +344,7 @@ export function parseDirectiveChanges(value: unknown, projectKey: string): Direc
       'The directive file belongs to a different project. Nothing was changed.',
     );
   const lists: Record<string, unknown[]> = {};
-  for (const key of ['create', 'update']) {
+  for (const key of ['create', 'update', 'delete']) {
     const list = object[key] === undefined ? [] : object[key];
     if (!Array.isArray(list))
       throw new CommandFailedError(`Directive ${key} must be an array. Nothing was changed.`);
@@ -347,15 +352,31 @@ export function parseDirectiveChanges(value: unknown, projectKey: string): Direc
   }
   const create = lists.create.length ? parseCreates(lists.create) : [];
   const update = lists.update.length ? parseUpdates(lists.update) : [];
-  return { create, update };
+  const ids = new Set(update.map((item) => item.id));
+  const deleted = lists.delete.map((item) => {
+    const object = record(item);
+    if (Object.keys(object).some((key) => key !== 'id'))
+      throw new CommandFailedError('Delete accepts only {id} records. Nothing was changed.');
+    const id = directiveId(object.id);
+    if (ids.has(id))
+      throw new CommandFailedError('Repeated or conflicting directive id. Nothing was changed.');
+    ids.add(id);
+    return id;
+  });
+  return { create, update, delete: deleted };
 }
 
 export async function applyDirectiveChanges(
   api: DirectivesApi,
   changes: DirectiveChanges,
   dryRun: boolean,
+  onPlan?: (directives: DirectiveInput[]) => Promise<void>,
 ) {
   const updates = await planUpdates(api, changes.update);
+  const toDelete: ProjectDirective[] = [];
+  await inSequence(changes.delete, async (id) => {
+    toDelete.push(await api.getDirective(id));
+  });
   const moving = updates.changes.filter(
     (change) => directiveKey(change.before) !== directiveKey(change.after),
   );
@@ -374,11 +395,15 @@ export async function applyDirectiveChanges(
     existing.count + creations.toCreate.length > MAX_PROJECT_DIRECTIVES
   )
     throw new CommandFailedError(
-      'The changes would exceed the limit of 1000 directives per project. Nothing was changed.',
+      'The changes would exceed the limit of 1000 directives per project before deletions run. Nothing was changed.',
     );
-  const touchedKeys = new Set(
-    updates.changes.flatMap((change) => [directiveKey(change.before), directiveKey(change.after)]),
-  );
+  const touchedKeys = new Set([
+    ...updates.changes.flatMap((change) => [
+      directiveKey(change.before),
+      directiveKey(change.after),
+    ]),
+    ...toDelete.map(directiveKey),
+  ]);
   if (changes.create.some((item) => touchedKeys.has(directiveKey(item))))
     throw new CommandFailedError(
       'Create conflicts with an update or deletion of the same directive operation. Nothing was changed.',
@@ -387,10 +412,13 @@ export async function applyDirectiveChanges(
     mode: dryRun ? 'dry-run' : 'applied',
     toCreate: creations.toCreate,
     changes: updates.changes,
+    toDelete,
     skipped: creations.skipped + updates.skipped,
     created: [] as ProjectDirective[],
     updated: [] as ProjectDirective[],
+    deleted: [] as string[],
   };
+  if (onPlan) await onPlan([...result.toCreate, ...moving.map((change) => change.after)]);
   if (dryRun) return result;
   let attempted = 'creation';
   let target = 'the current list';
@@ -404,11 +432,17 @@ export async function applyDirectiveChanges(
       target = `directive ${change.id}`;
       result.updated.push(await api.updateDirective(change.id, change.patch));
     });
+    await inSequence(result.toDelete, async (directive) => {
+      attempted = `delete ${directive.id}`;
+      target = `directive ${directive.id}`;
+      await api.deleteDirective(directive.id);
+      result.deleted.push(directive.id);
+    });
   } catch (error) {
-    const confirmed = result.created.length + result.updated.length;
+    const confirmed = result.created.length + result.updated.length + result.deleted.length;
     if (!confirmed && isDefiniteRejection(error)) throw error;
     throw new CommandFailedError(
-      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. ${isDefiniteRejection(error) ? 'The server rejected the next directive.' : 'The attempted change may already have been applied.'} Inspect ${target} before retrying. Attempted ${attempted}. ${error instanceof Error ? error.message : String(error)}`,
+      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. Deleted ids: ${result.deleted.join(', ') || 'none'}. ${isDefiniteRejection(error) ? 'The server rejected the next directive.' : 'The attempted change may already have been applied.'} Inspect ${target} before retrying. Attempted ${attempted}. ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }
@@ -429,4 +463,60 @@ function validateUpdatedIdentities(updates: DirectiveInput[], known: Set<string>
       );
     afterKeys.add(key);
   }
+}
+
+export async function warnDirectiveKeys(
+  api: ArchitectureApi,
+  directives: DirectiveInput[],
+  warn: (message: string) => void,
+): Promise<void> {
+  const languages = [...new Set(directives.map((directive) => directive.ecosystem))];
+  await inSequence(languages, async (language) => {
+    let keys: Set<string>;
+    try {
+      const graphs = await api.getCurrent(language);
+      if (graphs.length === 0) {
+        warn(`No current ${language} graph is available; directive node keys were not checked.`);
+        return;
+      }
+      keys = new Set(graphs.flatMap(({ graph }) => [...indexStructure(graph).idByKey.keys()]));
+    } catch {
+      warn(
+        `Could not check directive node keys against the current ${language} graph. Review the keys before applying.`,
+      );
+      return;
+    }
+    for (const directive of directives.filter((item) => item.ecosystem === language)) {
+      const graphType = ['java', 'cs'].includes(language) ? 'namespace_graph' : 'file_graph';
+      if (
+        directive.graphType !== graphType ||
+        (directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE) !==
+          DEFAULT_DIRECTIVE_PERSPECTIVE
+      ) {
+        warn(
+          `Node keys were not checked for ${directive.graphType} perspective ${directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE}; the public current graph does not identify that view.`,
+        );
+        continue;
+      }
+      const checked =
+        directive.type === 'RENAME_NODE'
+          ? [directive.fromNodeKey]
+          : [directive.fromNodeKey, directive.toNodeKey];
+      for (const key of new Set(checked)) {
+        if (!keys.has(key)) warn(missingDirectiveKeyWarning(directive, key, language));
+      }
+    }
+  });
+}
+
+function missingDirectiveKeyWarning(
+  directive: DirectiveInput,
+  key: string,
+  language: string,
+): string {
+  const guidance =
+    directive.type === 'MOVE_NODE' && key === directive.toNodeKey
+      ? 'The MOVE_NODE destination must be an existing container, not the moved node’s new key.'
+      : 'Review the key before applying.';
+  return `Directive ${directive.type}: node '${key}' was not found in the current ${language} graph. ${guidance}`;
 }
