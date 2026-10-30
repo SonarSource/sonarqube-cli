@@ -25,6 +25,10 @@ import { ECOSYSTEMS } from './_common/architecture-api.ts';
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
 import { getCurrent } from './current/get/index.ts';
+import {
+  type DirectivesReadOptions,
+  getDirectives as getArchitectureDirectives,
+} from './directives/get/index.ts';
 import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
 import { type SetFileOptions, setIntended } from './intended/set/index.ts';
@@ -83,6 +87,19 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntended(options, ctx));
+
+  const directives = architecture.command('directives').description('Read project directives');
+  directives
+    .command('get')
+    .description('Read a directive by id or list a page of visible project directives')
+    .option('--id <id>', 'Directive UUID; cannot be combined with pagination')
+    .option('-p, --project <project>', 'Project key')
+    .addOption(textFormatOption())
+    .option('--page <n>', 'Page number (default 1)', parseInteger)
+    .option('--page-size <n>', 'Items per page (default 50, maximum 1000)', parseInteger)
+    .authenticatedAction((ctx, options: DirectivesReadOptions) =>
+      getArchitectureDirectives(options, ctx),
+    );
 
   architecture
     .command('install-skill')
