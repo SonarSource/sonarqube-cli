@@ -121,7 +121,8 @@ Use \`sonar architecture directives get --id <id>\` to read one directive. Apply
 \`create\`, \`update\` and \`delete\` arrays. Create records contain directive fields; update records
 contain \`id\` and changed fields; delete records contain only \`id\`. Omitted fields on updates and
 unmentioned directives are retained. Do not turn a paginated read into an implicit replacement.
-When the installed MCP \`architecture_set\` tool lists a \`directives\` target, it accepts the same JSON through its \`model\` parameter; otherwise use the CLI.
+Use MCP only if the installed \`architecture_set\` definition documents the \`directives\` target and
+every requested operation (\`create\`, \`update\`, \`delete\`). Pass the JSON through \`model\`; otherwise use the CLI.
 Preview every batch and obtain user confirmation before applying it. Conflicting IDs are rejected
 and the whole batch is validated before the first write. Writes are individual, not atomic.
 The public API cannot clear optional fields with null and has no conditional writes. On a partial

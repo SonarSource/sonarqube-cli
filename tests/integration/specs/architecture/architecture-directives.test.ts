@@ -455,6 +455,57 @@ describe('public project directives', () => {
     },
   );
 
+  it.each([false, true])(
+    'identifies a DELETE request 404 after successful guard reads, with prior creation: %s',
+    async (create) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('token')
+        .withProject('shop', (p) =>
+          p.withArchitecture((a) =>
+            a
+              .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+              .withStatus(
+                'project-directives',
+                404,
+                '{"message":"directive disappeared"}',
+                'DELETE',
+              ),
+          ),
+        )
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: create ? [{ ...directive, fromNodeKey: 'app:new' }] : [],
+          delete: [{ id }],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(`Directive ${id} was not found`);
+      expect(result.stderr).not.toContain('sonar list projects');
+      expect(result.stderr).not.toContain('may already have been applied');
+      expect(server.getRecordedRequests().filter((r) => r.method === 'DELETE')).toHaveLength(1);
+      expect(
+        server.getRecordedRequests().filter((r) => r.method === 'GET' && r.path.endsWith('/' + id)),
+      ).toHaveLength(2);
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((r) => r.method === 'POST' && r.path.includes('project-directives')),
+      ).toHaveLength(create ? 1 : 0);
+      if (create) {
+        expect(result.stderr).toContain('stopped after 1 confirmed writes');
+        expect(result.stderr).toContain('The server rejected the next directive');
+        expect(result.stderr).toMatch(/Created ids: [0-9a-f-]{36}/);
+      }
+    },
+  );
+
   it('does not suggest another page for an empty project', async () => {
     await configured();
     const read = await h.run('arch directives get -p shop --format text');
