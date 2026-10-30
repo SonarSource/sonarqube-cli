@@ -19,6 +19,19 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import {
+  AccessDeniedError,
+  BadRequestError,
+  ForbiddenApiError,
+  RateLimitError,
+  RequestPayloadTooLargeError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
+import {
+  HTTP_STATUS_BAD_REQUEST,
+  HTTP_STATUS_INTERNAL_SERVER_ERROR,
+  HTTP_STATUS_REQUEST_TIMEOUT,
+} from '@/core/server/http-constants.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
 
@@ -27,6 +40,7 @@ const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
 const DIRECTIVE_UUID_LENGTH = 36;
 export const DEFAULT_DIRECTIVES_PAGE_SIZE = 50;
 export const DEFAULT_DIRECTIVE_PERSPECTIVE = 'default_perspective';
+const MAX_PROJECT_DIRECTIVES = 1000;
 
 export class DirectiveNotFoundError extends CommandFailedError {}
 
@@ -52,6 +66,7 @@ export interface DirectivePage {
 export interface DirectivesApi {
   getDirectivesPage(pageIndex: number, pageSize: number): Promise<DirectivePage>;
   getDirective(id: string): Promise<ProjectDirective>;
+  createDirective(directive: DirectiveInput): Promise<ProjectDirective>;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -122,6 +137,100 @@ export function parseProjectDirective(value: unknown): ProjectDirective {
     ...(object.origin == null ? {} : { origin: object.origin }),
   };
 }
+function parseCreates(items: unknown[]): DirectiveInput[] {
+  return items.map((item) => {
+    const object = record(item);
+    const allowed = new Set([
+      'id',
+      'projectId',
+      'type',
+      'ecosystem',
+      'graphType',
+      'fromNodeKey',
+      'toNodeKey',
+      'graphPerspective',
+      'description',
+      'origin',
+    ]);
+    if (Object.keys(object).some((key) => !allowed.has(key)))
+      throw new CommandFailedError(
+        'A directive contains an unsupported field. Nothing was changed.',
+      );
+    for (const field of ['id', 'projectId', 'origin']) {
+      if (object[field] != null && typeof object[field] !== 'string')
+        throw new CommandFailedError(`Directive ${field} must be a string when supplied.`);
+    }
+    const directive = parseDirective(object);
+    return {
+      ...directive,
+      graphPerspective: directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
+    };
+  });
+}
+export function directiveKey(directive: DirectiveInput): string {
+  return JSON.stringify([
+    directive.type,
+    directive.ecosystem,
+    directive.graphType,
+    directive.fromNodeKey,
+    directive.toNodeKey,
+    directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
+  ]);
+}
+export function isDefiniteRejection(error: unknown): boolean {
+  return (
+    error instanceof DirectiveNotFoundError ||
+    error instanceof BadRequestError ||
+    error instanceof ForbiddenApiError ||
+    error instanceof AccessDeniedError ||
+    error instanceof RateLimitError ||
+    error instanceof RequestPayloadTooLargeError ||
+    (error instanceof UnexpectedApiError &&
+      error.status >= HTTP_STATUS_BAD_REQUEST &&
+      error.status < HTTP_STATUS_INTERNAL_SERVER_ERROR &&
+      error.status !== HTTP_STATUS_REQUEST_TIMEOUT)
+  );
+}
+
+async function existingDirectives(api: DirectivesApi) {
+  const keys = new Set<string>();
+  const ids = new Set<string>();
+  let total: number | undefined;
+  for (let pageIndex = 1; ; pageIndex++) {
+    const page = await api.getDirectivesPage(pageIndex, 100);
+    total ??= page.page.total;
+    if (page.page.total !== total || ids.size + page.directives.length > total)
+      throw new CommandFailedError(
+        'The public directives list changed while reading it. Read it again before changing directives.',
+      );
+    for (const directive of page.directives) {
+      const id = directive.id.toLowerCase();
+      if (ids.has(id))
+        throw new CommandFailedError(
+          'Inconsistent public directives pages; no complete list was read.',
+        );
+      ids.add(id);
+      keys.add(directiveKey(directive));
+    }
+    if (ids.size === total) return { keys, count: ids.size };
+    if (page.directives.length === 0)
+      throw new CommandFailedError('Incomplete public directives pagination.');
+  }
+}
+
+function planCreates(directives: DirectiveInput[], known: Set<string>) {
+  const toCreate: DirectiveInput[] = [];
+  let skipped = 0;
+  for (const directive of directives) {
+    const key = directiveKey(directive);
+    if (known.has(key)) skipped++;
+    else {
+      known.add(key);
+      toCreate.push(directive);
+    }
+  }
+  return { toCreate, skipped };
+}
 
 export function directiveId(value: unknown): string {
   if (
@@ -130,4 +239,75 @@ export function directiveId(value: unknown): string {
   )
     throw new CommandFailedError('Directive id must be a UUID. Nothing was changed.');
   return value.toLowerCase();
+}
+
+export interface DirectiveChanges {
+  create: DirectiveInput[];
+}
+
+export function parseDirectiveChanges(value: unknown, projectKey: string): DirectiveChanges {
+  const object = record(value);
+  if (Object.keys(object).some((key) => !['create', 'project', 'projectKey'].includes(key)))
+    throw new CommandFailedError('Provide a change file with a create array. Nothing was changed.');
+  if (
+    ['project', 'projectKey'].some((key) => object[key] !== undefined && object[key] !== projectKey)
+  )
+    throw new CommandFailedError(
+      'The directive file belongs to a different project. Nothing was changed.',
+    );
+  const lists: Record<string, unknown[]> = {};
+  for (const key of ['create']) {
+    const list = object[key] === undefined ? [] : object[key];
+    if (!Array.isArray(list))
+      throw new CommandFailedError(`Directive ${key} must be an array. Nothing was changed.`);
+    lists[key] = list;
+  }
+  const create = lists.create.length ? parseCreates(lists.create) : [];
+  return { create };
+}
+
+export async function applyDirectiveChanges(
+  api: DirectivesApi,
+  changes: DirectiveChanges,
+  dryRun: boolean,
+) {
+  const existing = changes.create.length
+    ? await existingDirectives(api)
+    : { keys: new Set<string>(), count: 0 };
+  const known = existing.keys;
+  const creations = planCreates(changes.create, known);
+  if (
+    creations.toCreate.length &&
+    existing.count + creations.toCreate.length > MAX_PROJECT_DIRECTIVES
+  )
+    throw new CommandFailedError(
+      'The changes would exceed the limit of 1000 directives per project. Nothing was changed.',
+    );
+  const result = {
+    mode: dryRun ? 'dry-run' : 'applied',
+    toCreate: creations.toCreate,
+    skipped: creations.skipped,
+    created: [] as ProjectDirective[],
+  };
+  if (dryRun) return result;
+  let attempted = 'creation';
+  const target = 'the current list';
+  try {
+    await inSequence(result.toCreate, async (directive) => {
+      attempted = `create ${directive.type} ${directive.fromNodeKey} -> ${directive.toNodeKey}`;
+      result.created.push(await api.createDirective(directive));
+    });
+  } catch (error) {
+    const confirmed = result.created.length;
+    if (!confirmed && isDefiniteRejection(error)) throw error;
+    throw new CommandFailedError(
+      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. ${isDefiniteRejection(error) ? 'The server rejected the next directive.' : 'The attempted change may already have been applied.'} Inspect ${target} before retrying. Attempted ${attempted}. ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+  return result;
+}
+
+function inSequence<T>(items: T[], action: (item: T) => Promise<void>): Promise<void> {
+  return items.reduce((previous, item) => previous.then(() => action(item)), Promise.resolve());
 }
