@@ -28,14 +28,11 @@ import type {
 import {
   jsonPatch,
   sonarSecretsBinaryDependency,
-  textSnippet,
+  textSnippetRemover,
   wholeFile,
 } from '@/core/framework/features';
 
-import {
-  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
+import { SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -66,15 +63,13 @@ import {
   SCRIPT_REL_DIR,
   upsertCopilotHooks,
 } from './hooks.ts';
-import {
-  INSTRUCTIONS_FILENAME,
-  PROJECT_INSTRUCTIONS_REL_DIR,
-  PROMPT_SECRETS_BODY,
-} from './instructions.ts';
 
 export const COPILOT_INTEGRATION_ID = 'copilot-cli';
 export const COPILOT_HOOKS_CONFIG_RESOURCE_ID = 'copilot-hooks-config';
 const COPILOT_DISPLAY_NAME = 'Copilot';
+const PROMPT_SECRETS_MARKER = 'sonar-prompt-secrets';
+const INSTRUCTIONS_FILENAME = 'sonarqube.instructions.md';
+const PROJECT_INSTRUCTIONS_REL_DIR = join('.github', 'instructions');
 
 export type CopilotIntegrationOptions = IntegrateAgentOptions;
 
@@ -86,7 +81,6 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       id: 'pre-tool-use-hook',
       displayName: 'pre-tool-use hook',
       previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      postInstallExample: secretsScanningExample('Copilot'),
       dependencies: [sonarSecretsBinaryDependency],
       resources: [
         wholeFile({
@@ -115,17 +109,46 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
       ],
     },
     {
-      id: 'prompt-secrets-instructions',
-      displayName: 'prompt-secrets instructions',
-      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
+      id: 'prompt-secrets-hook',
+      displayName: 'prompt-secrets hook',
+      previewDescription: 'Masks hardcoded secrets in your prompts before the agent sees them.',
+      replacedIds: ['prompt-secrets-instructions'],
+      dependencies: [sonarSecretsBinaryDependency],
+      postInstallExample: secretsScanningExample(
+        'Copilot',
+        '  SonarQube will mask the token before the prompt reaches the agent.',
+      ),
       resources: [
-        textSnippet({
+        wholeFile({
+          id: 'prompt-secrets-script',
+          displayName: 'Copilot prompt secrets hook script',
+          targetPath: resolvePromptSecretsHookScriptPath,
+          content: {
+            unix: buildUnixHookScript('agent-secrets-masking --agent copilot'),
+            windows: buildWindowsHookScript('agent-secrets-masking --agent copilot'),
+          },
+          executable: true,
+        }),
+        jsonPatch({
+          id: 'copilot-prompt-secrets-hooks-config',
+          displayName: 'Copilot prompt secrets hook configuration',
+          targetPath: resolveHooksJsonPath,
+          defaultValue: { version: 1, hooks: {} },
+          patch: (document, context) =>
+            upsertCopilotHooks(document, PROMPT_SECRETS_MARKER, {
+              userPromptTransformed: buildCopilotHookEntry(
+                resolveCopilotHookCommandPath(context, resolvePromptSecretsHookScriptPath(context)),
+              ),
+            }),
+          removePatch: (document) => removeCopilotHooks(document, [PROMPT_SECRETS_MARKER]),
+        }),
+      ],
+      legacyCleanups: [
+        textSnippetRemover({
           id: 'prompt-secrets-instructions-file',
-          displayName: 'Copilot prompt-secrets instructions',
           targetPath: resolveInstructionsPath,
           startMarker: sonarBeginMarker('copilot-prompt-secrets'),
           endMarker: sonarEndMarker('copilot-prompt-secrets'),
-          content: PROMPT_SECRETS_BODY,
         }),
       ],
     },
@@ -167,6 +190,15 @@ function createCagHookConfigResource(): ResourceDeclaration {
 
 function resolveCopilotHookScriptPath(context: IntegrationContext): string {
   return join(resolveHooksDir(context), SCRIPT_REL_DIR, hookScriptName());
+}
+
+function resolvePromptSecretsHookScriptPath(context: IntegrationContext): string {
+  return join(
+    resolveHooksDir(context),
+    PROMPT_SECRETS_MARKER,
+    'build-scripts',
+    `prompt-secrets${hookScriptExtension()}`,
+  );
 }
 
 function resolveCagHookScriptPath(context: IntegrationContext): string {
