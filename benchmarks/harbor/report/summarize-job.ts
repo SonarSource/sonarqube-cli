@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 interface TrialResult {
   task_name: string;
+  agent_info: { model_info?: { name?: string } } | null;
   started_at: string | null;
   finished_at: string | null;
   exception_info: { exception_type?: string } | null;
@@ -23,6 +24,7 @@ type Status = 'PASS' | 'FAIL' | 'ERROR';
 interface Row {
   label: string;
   task: string;
+  model: string | null;
   status: Status;
   agentSeconds: number | null;
   steps: number | null;
@@ -54,6 +56,7 @@ function errorRow(label: string, task: string): Row {
   return {
     label,
     task,
+    model: null,
     status: 'ERROR',
     agentSeconds: null,
     steps: null,
@@ -74,6 +77,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   return {
     label,
     task: trial.task_name,
+    model: trial.agent_info?.model_info?.name ?? null,
     status: statusOf(trial),
     agentSeconds: secondsBetween(
       trial.agent_execution?.started_at,
@@ -102,6 +106,7 @@ function renderRow(row: Row): string {
   return [
     row.label,
     row.task,
+    row.model ?? '-',
     row.status,
     cell(row.agentSeconds, (n) => `${n.toFixed(0)}s`),
     cell(row.steps),
@@ -116,6 +121,7 @@ function renderReport(rows: Row[]): string {
   const header = [
     'OS',
     'Task',
+    'Model',
     'Status',
     'Agent time',
     'Steps',
