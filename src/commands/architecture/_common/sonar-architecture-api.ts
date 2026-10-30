@@ -42,6 +42,7 @@ import {
   directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
+  isDefiniteRejection,
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
@@ -429,6 +430,26 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The directive update response did not confirm the requested directive. Inspect it before retrying.',
       );
     return updated;
+  }
+
+  async deleteDirective(id: string): Promise<void> {
+    await this.getDirective(id);
+    let deleteAccepted = false;
+    try {
+      await this.http.delete(this.directivePath(id)).orThrow();
+      deleteAccepted = true;
+      const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
+        throw new CommandFailedError(
+          `Expected HTTP 404 after deletion, received ${response.status}.`,
+        );
+    } catch (error) {
+      if (!deleteAccepted && isDefiniteRejection(error)) throw error;
+      throw new CommandFailedError(
+        `Directive deletion could not be confirmed. Inspect directive ${id} before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
   }
 
   private directivePath(id: string): string {
