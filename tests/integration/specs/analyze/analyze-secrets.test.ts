@@ -399,6 +399,10 @@ describe('analyze secrets', () => {
       return logFile.exists() ? logFile.asText() : '';
     }
 
+    function outputWithoutTimings(result: { stdout: string; stderr: string }): string {
+      return (result.stdout + result.stderr).replaceAll(/\d+ms/g, '<duration>');
+    }
+
     beforeEach(() => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
@@ -647,6 +651,38 @@ describe('analyze secrets', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('"block"');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prints the same masked report for a path scan with --dangerous-show-secrets as without it',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+        const withoutOption = await harness.run('analyze secrets secrets.js');
+
+        const result = await harness.run('analyze secrets secrets.js --dangerous-show-secrets');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain(GITHUB_TEST_TOKEN);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prints the same masked report for a stdin scan with --dangerous-show-secrets as without it',
+      async () => {
+        const withoutOption = await harness.runWithStdin('analyze secrets --stdin', SECRET_CONTENT);
+
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --dangerous-show-secrets',
+          SECRET_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain(GITHUB_TEST_TOKEN);
       },
       { timeout: 30000 },
     );

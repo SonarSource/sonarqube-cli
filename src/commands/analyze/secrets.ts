@@ -38,7 +38,7 @@ import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
-import { buildSecretsScanArgs } from './secrets-scan-args.ts';
+import { buildSecretsScanArgs, type SecretsScanRunOptions } from './secrets-scan-args.ts';
 
 // Agent hooks are killed by their host after 60s, so this deadline stays inside that budget.
 const SCAN_TIMEOUT_MS = 60 * 1000;
@@ -49,6 +49,8 @@ export interface AnalyzeSecretsOptions {
   stdin?: boolean;
   /** Paths to skip; when given, they replace the `secrets.exclude` config key. */
   exclude?: string[];
+  /** Passed on to sonar-secrets, which then reports raw values in each issue's `secret`. */
+  dangerousShowSecrets?: boolean;
   /** Defaults to {@link SECRETS_CALLER_COMMANDS.analyzeSecrets}. Bare `analyze` passes `analyze`. */
   telemetryCallerCommand?: SecretsCallerCommand;
 }
@@ -67,6 +69,8 @@ export interface SecretsJsonIssue {
     endColumn: number;
   };
   maskedSecret?: string;
+  /** The raw matched value, only reported with `--dangerous-show-secrets`. Nothing displays, stores or sends it. */
+  secret?: string;
 }
 
 /** Top-level structure of sonar-secrets `--json` stdout. */
@@ -94,19 +98,28 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
           .filter((m): m is string => typeof m === 'string' && m.length > 0)
       : undefined;
     const issues = Array.isArray(parsed.issues)
-      ? (parsed.issues as unknown[]).filter(
-          (i): i is SecretsJsonIssue =>
-            typeof i === 'object' &&
-            i !== null &&
-            typeof (i as Record<string, unknown>).description === 'string' &&
-            typeof (i as Record<string, unknown>).ruleKey === 'string',
-        )
+      ? (parsed.issues as unknown[])
+          .filter(
+            (i): i is SecretsJsonIssue =>
+              typeof i === 'object' &&
+              i !== null &&
+              typeof (i as Record<string, unknown>).description === 'string' &&
+              typeof (i as Record<string, unknown>).ruleKey === 'string',
+          )
+          .map(dropMalformedSecret)
       : [];
     return { issues, errors };
   } catch (err) {
     logger.debug(`parseSecretsJson: failed to parse stdout: ${(err as Error).message}`);
     return { issues: [] };
   }
+}
+
+function dropMalformedSecret(issue: SecretsJsonIssue): SecretsJsonIssue {
+  if (issue.secret === undefined || typeof issue.secret === 'string') return issue;
+  const withoutSecret = { ...issue };
+  delete withoutSecret.secret;
+  return withoutSecret;
 }
 
 interface ScanDisplayContext {
@@ -133,17 +146,12 @@ export async function runSecretsBinary(
   files: string[],
   auth: ResolvedAuth,
   stdin: StdioMode = 'pipe',
-  exclusionsOverride: readonly string[] = [],
+  runOptions: SecretsScanRunOptions = {},
 ): Promise<SpawnResult> {
   const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    [
-      '--non-interactive',
-      '--json',
-      ...buildSecretsScanArgs(settings, exclusionsOverride),
-      ...files,
-    ],
+    ['--non-interactive', '--json', ...buildSecretsScanArgs(settings, runOptions), ...files],
     {
       stdin,
       stdout: 'pipe',
@@ -224,7 +232,10 @@ async function handleCheckCommand(
     const { result, parsed } = await scanAndEmitSecrets(
       callerCommand,
       auth,
-      () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+      () =>
+        runSecretsBinary(binaryPath, ['--input'], auth, 'inherit', {
+          dangerousShowSecrets: options.dangerousShowSecrets,
+        }),
       ctx,
       randomUUID(),
     );
@@ -233,7 +244,7 @@ async function handleCheckCommand(
     await performPathsScan(
       binaryPath,
       options.paths ?? [],
-      options.exclude ?? [],
+      { exclusionsOverride: options.exclude, dangerousShowSecrets: options.dangerousShowSecrets },
       auth,
       scanStartTime,
       callerCommand,
@@ -260,7 +271,7 @@ function validateScanOptions(options: AnalyzeSecretsOptions): void {
 async function performPathsScan(
   binaryPath: string,
   paths: string[],
-  exclusions: string[],
+  runOptions: SecretsScanRunOptions,
   auth: ResolvedAuth,
   scanStartTime: number,
   callerCommand: SecretsCallerCommand,
@@ -279,7 +290,7 @@ async function performPathsScan(
   const { result, parsed } = await scanAndEmitSecrets(
     callerCommand,
     auth,
-    () => runSecretsBinary(binaryPath, paths, auth, 'pipe', exclusions),
+    () => runSecretsBinary(binaryPath, paths, auth, 'pipe', runOptions),
     ctx,
   );
   reportScanResult(result, parsed, scanStartTime, { paths }, ctx.console);
