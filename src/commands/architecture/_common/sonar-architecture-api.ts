@@ -21,7 +21,7 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
+import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -440,7 +440,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         .delete(this.directivePath(id))
         .orThrow()
         .catch((error: unknown) => {
-          if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
+          if (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND)
             throw new DirectiveNotFoundError(
               `Directive ${id} was not found or is not accessible in the selected project.`,
               { cause: error },
