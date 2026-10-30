@@ -26,6 +26,7 @@ import {
   CONFIG_KEY_BY_NAME,
   type ConfigKey,
   type ConfigKeyDefinition,
+  describeAcceptedValues,
   isValidConfigValue,
 } from './config-schema.ts';
 
@@ -61,7 +62,7 @@ export async function setConfigValue(key: ConfigKey, value: string): Promise<voi
   }
   if (!isValidConfigValue(definition, trimmedValue)) {
     throw new InvalidOptionError(
-      `Invalid value '${trimmedValue}' for config key '${key}'. Allowed values: ${definition.allowedValues?.join(', ')}.`,
+      `Invalid value '${trimmedValue}' for config key '${key}'. ${describeAcceptedValues(definition)}`,
     );
   }
   if (definition.sensitive) {
