@@ -188,6 +188,61 @@ describe('new TerminalConsole().note(): TTY box rendering (renderTTY)', () => {
     }
   });
 
+  it.each([0, 32, 40, 60, 80, 120])('wraps complete warning content at %i columns', (columns) => {
+    const previousColumns = process.stdout.columns;
+    process.stdout.columns = columns;
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    const title = '! This project expects a different connection';
+    const explanation =
+      'This project records the connection above, which differs from the one your credentials are for. ' +
+      'Commands that resolve credentials per project, such as sonar context, will not use your current credentials here. ' +
+      'Either point your credentials at this connection, or re-run sonar integrate from this project to record the one you are authenticated with.';
+    const server = 'Server  https://sonarcloud.io';
+    try {
+      new TerminalConsole().note([server, '', explanation], title, { wrap: true });
+      const rendered = stripAnsi(output.join(''));
+      const rows = rendered.trimEnd().split('\n');
+      expect(rows.every((row) => Bun.stringWidth(row) <= (columns || 40))).toBe(true);
+      expect(rendered).not.toContain('...');
+      const content = rows
+        .filter((row) => row.startsWith('│'))
+        .map((row) => row.slice(2, -1).trim())
+        .filter(Boolean)
+        .join(' ');
+      expect(content).toContain(explanation);
+      expect(content.replace(/\s+/g, ' ')).toContain(server.replace(/\s+/g, ' '));
+      expect(rendered.replace(/[│┌┐└┘─]/g, ' ').replace(/\s+/g, ' ')).toContain(title);
+      expect(rows.length).toBeGreaterThan(6);
+    } finally {
+      writeSpy.mockRestore();
+      process.stdout.columns = previousColumns;
+    }
+  });
+
+  it('wraps styled long words without losing text or bleeding into borders', () => {
+    const output: string[] = [];
+    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {
+      output.push(String(s));
+      return true;
+    });
+    try {
+      new TerminalConsole().note([`\x1b[31m${'x'.repeat(200)}\x1b[39m`], undefined, { wrap: true });
+      const rendered = output.join('');
+      expect(stripAnsi(rendered).match(/x/g)).toHaveLength(200);
+      expect(rendered).not.toContain('...');
+      for (const row of rendered.split('\n').filter((line) => line.includes('x'))) {
+        expect(row).toContain('\x1b[39m');
+        expect(stripAnsi(row).endsWith('│')).toBe(true);
+      }
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   it('appends newline at the end', () => {
     const output: string[] = [];
     const writeSpy = spyOn(process.stdout, 'write').mockImplementation((s) => {

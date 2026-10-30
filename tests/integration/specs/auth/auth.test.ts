@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { type RunInteractiveOptions, TestHarness } from '../../harness';
+import { IS_WINDOWS, type RunInteractiveOptions, TestHarness } from '../../harness';
 
 const CALLBACK_VALIDATION_TIMEOUT_MS = 5000;
 const CALLBACK_POLL_INTERVAL_MS = 10;
@@ -2337,6 +2337,39 @@ describe('auth status', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.skipIf(IS_WINDOWS)(
+    'shows the complete connection mismatch explanation in a real terminal',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('status-token').start();
+      harness
+        .state()
+        .withActiveConnection(server.baseUrl())
+        .withKeychainToken(server.baseUrl(), 'status-token');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        'sonar.projectKey=example\nsonar.organization=sonarsource\nsonar.host.url=https://sonarcloud.io\n',
+      );
+
+      const result = await harness.runWithRealTty('auth status');
+      const plain = Bun.stripANSI(result.stdout);
+      const warning = plain.slice(plain.indexOf('! This project expects'));
+      const text = warning.replace(/[│┌┐└┘─]/g, ' ').replace(/\s+/g, ' ');
+      expect(result.exitCode).toBe(0);
+      expect(text).toContain(
+        'This project records the connection above, which differs from the one your credentials are for.',
+      );
+      expect(text).toContain(
+        'Commands that resolve credentials per project, such as sonar context, will not use your current credentials here.',
+      );
+      expect(text).toContain(
+        'Either point your credentials at this connection, or re-run sonar integrate from this project to record the one you are authenticated with.',
+      );
+      expect(warning).not.toContain('...');
+      expect(warning).toContain('https://sonarcloud.io');
+    },
+    { timeout: 15000 },
+  );
 
   it(
     'reports not authenticated when no connection exists in state',

@@ -332,7 +332,7 @@ function displayProjectConnectionMismatch(
       're-run sonar integrate from this project to record the one you are authenticated with.',
     ],
     '! This project expects a different connection',
-    NOTE_STYLES.warn,
+    { ...NOTE_STYLES.warn, wrap: true },
   );
 }
 
