@@ -124,7 +124,151 @@ describe('public project directives', () => {
     ).toHaveLength(1);
   });
 
-  it.each(['get'])(
+  it('omits untouched optional PATCH fields and preserves the origin from the fresh guard read', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const original = {
+      ...directive,
+      id,
+      projectId: 'shop-branch-id',
+      description: 'old',
+      graphPerspective: 'old',
+      origin: 'old-origin',
+    };
+    const server = await configured((api) => {
+      api.withDirectives([original]);
+      const handle = api.handle.bind(api);
+      let reads = 0;
+      api.handle = (resource, request) => {
+        if (
+          resource === 'project-directives' &&
+          request.method === 'GET' &&
+          request.modelId &&
+          ++reads === 2
+        )
+          api.withDirectives([
+            {
+              ...original,
+              description: 'concurrent',
+              graphPerspective: 'concurrent',
+              origin: 'fresh-origin',
+            },
+          ]);
+        return handle(resource, request);
+      };
+    });
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:new' }] }));
+    const result = await h.run('arch directives set -p shop --file changes.json');
+    expect(result.exitCode).toBe(0);
+    const patch = JSON.parse(server.getRecordedRequests().find((r) => r.method === 'PATCH')!.body!);
+    expect(patch).toEqual({ ...directive, fromNodeKey: 'app:new', origin: 'fresh-origin' });
+    const read = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(JSON.parse(read.stdout).directive).toMatchObject({
+      description: 'concurrent',
+      graphPerspective: 'concurrent',
+      origin: 'fresh-origin',
+    });
+  });
+
+  it('reads persisted long optional fields and leaves them omitted from an unrelated update', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const server = await configured((api) =>
+      api.withDirectives([
+        {
+          ...directive,
+          id,
+          projectId: 'shop-branch-id',
+          graphPerspective: 'p'.repeat(256),
+          description: 'd'.repeat(10001),
+        },
+      ]),
+    );
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, toNodeKey: 'app:next' }] }));
+    expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    const patch = JSON.parse(server.getRecordedRequests().find((r) => r.method === 'PATCH')!.body!);
+    expect(patch).not.toHaveProperty('description');
+    expect(patch).not.toHaveProperty('graphPerspective');
+  });
+
+  it.each(['existing', 'batch', 'later-page'])(
+    'refuses identity collisions before any write: %s',
+    async (kind: string) => {
+      const first = '00000000-0000-4000-8000-000000000001';
+      const second = '00000000-0000-4000-8000-000000000002';
+      const rows: ProjectDirective[] = [
+        { ...directive, id: first, projectId: 'shop-branch-id' },
+        { ...directive, id: second, projectId: 'shop-branch-id', fromNodeKey: 'app:other' },
+      ];
+      if (kind === 'later-page')
+        rows.splice(
+          1,
+          0,
+          ...Array.from({ length: 99 }, (_, i) => ({
+            ...directive,
+            id: `00000000-0000-4000-8000-${String(i + 3).padStart(12, '0')}`,
+            projectId: 'shop-branch-id',
+            fromNodeKey: `filler:${i}`,
+          })),
+        );
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('token')
+        .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives(rows)))
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+      const update =
+        kind === 'batch'
+          ? [
+              { id: first, fromNodeKey: 'app:new' },
+              { id: second, fromNodeKey: 'app:new' },
+            ]
+          : [{ id: first, fromNodeKey: 'app:other' }];
+      for (const create of [[], [{ ...directive, fromNodeKey: 'new:source' }]]) {
+        h.cwd.writeFile(
+          'changes.json',
+          JSON.stringify({
+            create,
+            update,
+          }),
+        );
+        for (const flag of ['', ' --dry-run']) {
+          const result = await h.run(`arch directives set -p shop --file changes.json${flag}`);
+          expect(result.exitCode).not.toBe(0);
+          expect(result.stderr).toContain('An update would duplicate another directive');
+        }
+      }
+      expect(
+        server
+          .getRecordedRequests()
+          .filter(
+            (r) =>
+              ['POST', 'PATCH', 'DELETE'].includes(r.method) &&
+              r.path.includes('project-directives'),
+          ),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('allows an update to a new directive identity after checking all existing identities', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const server = await h
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('token')
+      .withProject('shop', (p) =>
+        p.withArchitecture((a) =>
+          a.withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }]),
+        ),
+      )
+      .start();
+    h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:new' }] }));
+    expect((await h.run('arch directives set -p shop --file changes.json')).exitCode).toBe(0);
+    const read = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(JSON.parse(read.stdout).directive.fromNodeKey).toBe('app:new');
+  });
+
+  it.each(['get', 'update'])(
     'identifies an unknown directive without blaming the project: %s',
     async (operation: string) => {
       const server = await configured();
@@ -153,6 +297,53 @@ describe('public project directives', () => {
               r.path.includes('project-directives'),
           ),
       ).toHaveLength(0);
+    },
+  );
+
+  it.each([
+    { operation: 'update', create: false },
+    { operation: 'update', create: true },
+  ])(
+    'keeps a write-time missing directive as a definite rejection: %j',
+    async ({ operation, create }) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('token')
+        .withProject('shop', (p) =>
+          p.withArchitecture((a) =>
+            a
+              .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+              .withDirectiveReadFailure(2, 404),
+          ),
+        )
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: create ? [{ ...directive, fromNodeKey: 'app:new' }] : [],
+          [operation]: [{ id, ...(operation === 'update' ? { description: 'updated' } : {}) }],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stderr).toContain(`Directive ${id} was not found`);
+      expect(result.stderr).not.toContain('may already have been applied');
+      expect(result.stderr).not.toContain('sonar list projects');
+      if (create) {
+        expect(result.stderr).toContain('stopped after 1 confirmed writes');
+        expect(result.stderr).toContain('The server rejected the next directive');
+      }
+      expect(
+        server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((r) => r.method === 'POST' && r.path.includes('project-directives')),
+      ).toHaveLength(create ? 1 : 0);
     },
   );
 
@@ -216,6 +407,120 @@ describe('public project directives', () => {
           (r) =>
             ['POST', 'PATCH', 'DELETE'].includes(r.method) && r.path.includes('project-directives'),
         ),
+    ).toHaveLength(0);
+  });
+
+  it('reads, previews and updates explicit ids without changing other directives', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const other = '00000000-0000-4000-8000-000000000002';
+    const existing = [
+      {
+        ...directive,
+        id,
+        projectId: 'shop-branch-id',
+        description: 'original',
+        origin: 'SONAR_CLI',
+      },
+      { ...directive, id: other, projectId: 'shop-branch-id', fromNodeKey: 'other' },
+    ];
+    const server = await h
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('token')
+      .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives(existing)))
+      .start();
+    h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+    const read = await h.run(`arch directives get -p shop --id ${id} --format json`);
+    expect(read.exitCode).toBe(0);
+    expect(JSON.parse(read.stdout).directive.description).toBe('original');
+    h.cwd.writeFile('updates.json', JSON.stringify({ update: [{ id, description: 'updated' }] }));
+    const preview = await h.run('arch directives set -p shop --file updates.json --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain('Would update');
+    expect(preview.stdout).toContain('original');
+    expect(preview.stdout).toContain('updated');
+    expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(0);
+    const apply = await h.run('arch directives set -p shop --file updates.json');
+    expect(apply.exitCode).toBe(0);
+    const updated = await h.run('arch directives get -p shop --format json');
+    const records: ProjectDirective[] = JSON.parse(updated.stdout).directives;
+    expect(records.find((record) => record.id === id)).toMatchObject({
+      ...existing[0],
+      description: 'updated',
+    });
+    expect(records.find((record) => record.id === other)).toMatchObject(existing[1]);
+    const noop = await h.run('arch directives set -p shop --file updates.json');
+    expect(noop.stdout).toMatch(/Skipped 1.*unchanged/);
+    expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(1);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('current-architectures')),
+    ).toHaveLength(0);
+    const patch = server.getRecordedRequests().find((r) => r.method === 'PATCH')!;
+    expect(JSON.parse(patch.body!)).toEqual({
+      ...directive,
+      description: 'updated',
+      origin: 'SONAR_CLI',
+    });
+  });
+
+  it.each([
+    [{ id: 'not-an-id', description: 'changed' }],
+    [{ id: '00000000-0000-4000-8000-000000000001', description: null }],
+    [{ id: '00000000-0000-4000-8000-000000000001', surprise: true }],
+    [
+      { id: '00000000-0000-4000-8000-000000000001' },
+      { id: '00000000-0000-4000-8000-000000000001' },
+    ],
+  ])('rejects invalid updates before writing: %j', async (...items) => {
+    const server = await h
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('token')
+      .withProject('shop', (p) =>
+        p.withArchitecture((a) =>
+          a.withDirectives([
+            {
+              ...directive,
+              id: '00000000-0000-4000-8000-000000000001',
+              projectId: 'shop-branch-id',
+            },
+          ]),
+        ),
+      )
+      .start();
+    h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+    h.cwd.writeFile('updates.json', JSON.stringify({ update: items }));
+    const result = await h.run('arch directives set -p shop --file updates.json');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain('was not found');
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project-directives/')),
+    ).toHaveLength(0);
+    expect(
+      server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
+    ).toHaveLength(0);
+  });
+
+  it('rejects a targeted directive from another project before mutation', async () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const wrong = { ...directive, id, projectId: 'other-branch-id' };
+    const server = await h
+      .newFakeServer()
+      .asSonarCloud()
+      .withAuthToken('token')
+      .withProject('shop', (p) =>
+        p.withArchitecture((a) =>
+          a
+            .withDirectives([{ ...wrong, projectId: 'shop-branch-id' }])
+            .withStatus('project-directives', 200, JSON.stringify(wrong), 'GET'),
+        ),
+      )
+      .start();
+    h.withAuth(server.recordedAuthServerUrl(), 'token', 'my-org');
+    h.cwd.writeFile('updates.json', JSON.stringify({ update: [{ id, description: 'changed' }] }));
+    expect((await h.run('arch directives set -p shop --file updates.json')).exitCode).not.toBe(0);
+    expect(
+      server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
     ).toHaveLength(0);
   });
 
@@ -442,7 +747,7 @@ describe('public project directives', () => {
 
   it.each(['malformed', 'wrong-node', 'server-error'])(
     'reports an uncertain %s response without retrying',
-    async (kind) => {
+    async (kind: string) => {
       const response =
         kind === 'wrong-node'
           ? {
@@ -584,7 +889,7 @@ describe('public project directives', () => {
 
   it.each(['incomplete', 'wrong-project', 'missing-fields', 'duplicate-id'])(
     'refuses a %s public list before writing',
-    async (kind) => {
+    async (kind: string) => {
       const item = {
         ...directive,
         id: '00000000-0000-4000-8000-000000000001',
@@ -654,7 +959,7 @@ describe('public project directives', () => {
 
   it('rejects unsupported mutation phases before sending any write', async () => {
     const server = await configured();
-    for (const operation of ['update', 'delete']) {
+    for (const operation of ['delete']) {
       h.cwd.writeFile('unsupported.json', JSON.stringify({ create: [directive], [operation]: [] }));
       const result = await h.run('arch directives set -p shop --file unsupported.json');
       expect(result.exitCode).not.toBe(0);
