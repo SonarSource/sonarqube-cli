@@ -28,6 +28,7 @@ import type { SpawnResult } from '@/core/process/process.ts';
 
 import type { SecretsJsonIssue } from '../analyze/secrets.ts';
 import { runSecretsBinary, runSecretsBinaryOnStream, warnScanErrors } from '../analyze/secrets.ts';
+import { tracePrePush, tracePrePushGitSpawnResult } from './git-pre-push-trace.ts';
 import {
   handleScanError,
   MissingDependenciesError,
@@ -82,8 +83,10 @@ async function runScan(
 ): Promise<BatchScanOutcome | null> {
   const binaryPath = resolveSecretsBinaryPath();
   if (!binaryPath) {
+    tracePrePush('scanCommitScans: sonar-secrets binary not installed');
     throw new MissingDependenciesError(SECRETS_INACTIVE_BINARY_MISSING);
   }
+  tracePrePush(`scanCommitScans: using binary ${binaryPath}`);
 
   let scan: Awaited<ReturnType<typeof scanAndEmitSecrets>>;
   try {
@@ -96,11 +99,18 @@ async function runScan(
   } catch (err) {
     // A failure the CLI raised itself already says what went wrong; only the analyzer's is softened to a warning.
     if (err instanceof CliError) throw err;
+    tracePrePush(
+      `scanCommitScans: analyzer error (fail-soft): ${err instanceof Error ? err.message : String(err)}`,
+    );
     handleScanError('Push', err as Error, auth, ctx.console);
     return null;
   }
 
   const { result, parsed } = scan;
+  tracePrePushGitSpawnResult('scanCommitScans sonar-secrets', ['(stream batch)'], result);
+  tracePrePush(
+    `scanCommitScans: parsed issueCount=${parsed.issues.length} parseErrors=${parsed.errors?.length ?? 0}`,
+  );
   warnScanErrors(ctx.console, parsed.errors);
   return {
     secretsFound: (result.exitCode ?? 1) === EXIT_CODE_SECRETS_FOUND,

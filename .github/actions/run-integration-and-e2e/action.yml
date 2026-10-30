@@ -11,6 +11,22 @@ inputs:
   binary-artifact:
     description: Artifact name uploaded by build-binaries
     required: true
+  integration-test-path:
+    description: >-
+      When set, run only this integration test file or directory instead of the full
+      ./tests/integration/ suite (pretest steps still run via setup-integration-resources).
+    required: false
+    default: ''
+  integration-until-failure:
+    description: >-
+      When true, re-run the integration scope in a loop until a run fails (for flaky-test
+      reproduction). Intended for temporary diagnostic branches only.
+    required: false
+    default: 'false'
+  skip-e2e:
+    description: Skip e2e tests (useful when narrowing integration scope for faster CI).
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -78,12 +94,20 @@ runs:
     - name: Run integration tests (Windows)
       if: ${{ inputs.os == 'windows' }}
       shell: bash
-      run: bun run test:integration
+      env:
+        INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
+        INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
+        USE_COVERAGE: '0'
+      run: bash .github/scripts/run-integration-scope.sh
 
     - name: Run integration tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       shell: bash
-      run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
+      env:
+        INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
+        INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
+        USE_COVERAGE: '1'
+      run: bash .github/scripts/run-integration-scope.sh
 
     # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
     # as api.localhost. GitHub-hosted Ubuntu resolves *.localhost per RFC 6761;
@@ -106,7 +130,7 @@ runs:
         getent hosts api.localhost
 
     - name: Run e2e tests (Windows)
-      if: ${{ inputs.os == 'windows' }}
+      if: ${{ inputs.os == 'windows' && inputs.skip-e2e != 'true' }}
       shell: bash
       env:
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
@@ -115,7 +139,7 @@ runs:
       run: bun run test:e2e
 
     - name: Run e2e tests with coverage (Linux)
-      if: ${{ inputs.os == 'linux' }}
+      if: ${{ inputs.os == 'linux' && inputs.skip-e2e != 'true' }}
       shell: bash
       env:
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
