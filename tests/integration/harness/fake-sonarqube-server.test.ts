@@ -32,6 +32,15 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
     await server?.stop();
   });
 
+  it('preserves an explicit null public project lookup response', async () => {
+    server = await new FakeSonarQubeServerBuilder().withProjectsLookupResponse(200, null).start();
+
+    const response = await fetch(`${server.baseUrl()}/api/v2/components/projects?keys=shop`);
+
+    expect(response.status).toBe(HTTP_OK);
+    expect(await response.json()).toBeNull();
+  });
+
   it('returns cag-entitlement 200 when org has both SQAA and CAG entitlement', async () => {
     server = await new FakeSonarQubeServerBuilder()
       .withSqaaEntitlement('my-org', 'test-uuid-1234')
