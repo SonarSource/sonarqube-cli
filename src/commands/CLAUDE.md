@@ -61,6 +61,8 @@ An explicit `--project` pins every file to that key. Its root is the root of the
 
 Architecture command registration lives in `architecture/register.ts`; `command-tree.ts` delegates to it. Keep architecture-specific options, handlers, descriptions and root-help registration in that module.
 
+Project directives support paginated `architecture directives get` and explicit-ID reads. The read handler lives under `architecture/directives/get`. `directives set --file` previews and creates missing directives without replacement.
+
 ## Run MCP
 
 `sonar run mcp` accepts `SONARQUBE_CLI_MCP_WSL=auto|always|never` on Windows. `auto` checks native Docker, Podman, and Nerdctl first. It checks WSL only when all native executables are missing. A native `info` failure blocks WSL fallback and produces a runtime-specific error. `always` checks WSL only. `never` checks native runtimes only. Values are case-insensitive and trimmed; blank values use `auto`. The variable is ignored on other platforms. Native failure messages show up to three lines and 1000 characters of diagnostic output and explain how to select WSL. A failed `always` search reports that only WSL was checked. Runtime selection is in `src/core/host/environment/tool-detector.ts`; startup errors are in `src/commands/run/mcp.ts`.
@@ -91,4 +93,3 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
 
 
-Project directives support paginated `architecture directives get` and explicit-ID reads. `directives set --file` previews and creates missing directives without replacement.

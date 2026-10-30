@@ -350,8 +350,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       page.pageSize !== pageSize ||
       !Number.isSafeInteger(page.total) ||
       page.total < 0 ||
-      result.projectDirectives.length !==
-        Math.min(pageSize, Math.max(0, page.total - (pageIndex - 1) * pageSize))
+      result.projectDirectives.length > pageSize
     )
       throw new CommandFailedError('Invalid public directives page; no complete page was read.');
     const directives = result.projectDirectives.map((item) => parseProjectDirective(item));
