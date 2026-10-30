@@ -436,7 +436,17 @@ export class SonarArchitectureApi implements ArchitectureApi {
     await this.getDirective(id);
     let deleteAccepted = false;
     try {
-      await this.http.delete(this.directivePath(id)).orThrow();
+      await this.http
+        .delete(this.directivePath(id))
+        .orThrow()
+        .catch((error: unknown) => {
+          if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
+            throw new DirectiveNotFoundError(
+              `Directive ${id} was not found or is not accessible in the selected project.`,
+              { cause: error },
+            );
+          throw error;
+        });
       deleteAccepted = true;
       const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
       if (response.status !== HTTP_STATUS_NOT_FOUND)
