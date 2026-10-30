@@ -61,22 +61,17 @@ An explicit `--project` pins every file to that key. Its root is the root of the
 
 Architecture command registration lives in `architecture/register.ts`; `command-tree.ts` delegates to it. Keep architecture-specific options, handlers, descriptions and root-help registration in that module.
 
-Project directives support paginated `architecture directives get` and explicit-ID reads. The read handler lives under `architecture/directives/get`. `directives set --file` previews and creates missing directives without replacement.
+Project directives support paginated `architecture directives get` and explicit-ID reads. Handlers live under `architecture/directives/{get,set}`; see "Architecture directives" below for `set` create/update/delete semantics.
 
 ## Architecture directives
 
 `architecture directives get` reads one public page (`--page`, `--page-size`), or one directive with `--id`. `architecture directives set --file <file> [--dry-run]` accepts `{create: [...], update: [{id, changed fields}], delete: [{id}]}`. Lists are optional; unspecified update fields and unmentioned directives are retained. Both commands use standard authentication and project discovery. Preflight the whole batch and reject conflicting IDs before writing. Create duplicate checks read every page, normalize absent perspectives to `default_perspective`, and reject batches exceeding 1000 stored directives before writes. Creations record `sonarqube-cli` as their origin. Updates send required structural fields and explicitly supplied optional fields, retaining the origin from a fresh project-validated read. New or identity-changing directives warn about missing exact keys in the complete current graph; unavailable or unsupported views produce a warning, without blocking writes. Description-only changes and deletions do not fetch graphs. Concurrent changes can still race these reads. Writes are individual, without automatic retry or rollback; partial failures report confirmed IDs. Directives are Cloud-only until public project UUID resolution is available on Server. Optional fields cannot be cleared with null; the API has no conditional writes.
-
-
-
-
 
 ## Run MCP
 
 `sonar run mcp` accepts `SONARQUBE_CLI_MCP_WSL=auto|always|never` on Windows. `auto` checks native Docker, Podman, and Nerdctl first. It checks WSL only when all native executables are missing. A native `info` failure blocks WSL fallback and produces a runtime-specific error. `always` checks WSL only. `never` checks native runtimes only. Values are case-insensitive and trimmed; blank values use `auto`. The variable is ignored on other platforms. Native failure messages show up to three lines and 1000 characters of diagnostic output and explain how to select WSL. A failed `always` search reports that only WSL was checked. Runtime selection is in `src/core/host/environment/tool-detector.ts`; startup errors are in `src/commands/run/mcp.ts`.
 
 ## System reset
-
 
 `sonar system reset` returns the CLI to a factory-like state in one shot. Registered as `anonymousAction` so it works when auth is broken. Integration teardown is declarative-only: `integrations.installed` features are removed via `removeFeature()`; legacy `agentExtensions` entries are cleared from state in `clearLegacyState()` but are not used for on-disk cleanup (1.0 does not guarantee removal of pre-declarative artifacts). Binary cleanup removes `dependencies.installed` paths under `BIN_DIR`. `systemReset()` also unconditionally empties the persisted `state.knownServerProjectMappings` table — see "known-server-project-mappings" in `.claude/rules/state-and-auth.md` for why it needs this explicit reset. The local `sonar stats` SQLite ledger (see `src/core/stats/CLAUDE.md`) is wiped outright, as its own reported step (`clearStats()`, `src/commands/system/reset-stats.ts`) rather than folded into the generic filesystem-cache step, per the CLI-1114 ADR. `sonar config` configuration is preserved by default; `--all` removes it as its own step (`clearConfig()`, `src/commands/system/reset-config.ts`): the whole `cli-config.properties` file plus every sensitive key's `config/<key>` keychain entry. Partial reset (step warnings) exits `0`.
 
