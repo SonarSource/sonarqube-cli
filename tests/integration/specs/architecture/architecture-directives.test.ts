@@ -1239,6 +1239,22 @@ describe('public project directives', () => {
     },
   );
 
+  it.each([null, [], 'directive', 1, true])(
+    'explains an invalid change-file root before requesting architecture: %j',
+    async (value) => {
+      const server = await configured();
+      h.cwd.writeFile('directives.json', JSON.stringify(value));
+      const result = await h.run('arch directives set -p shop --file directives.json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'The directive change file must be a JSON object. Nothing was changed.',
+      );
+      expect(
+        server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
+      ).toHaveLength(0);
+    },
+  );
+
   it('refuses short pages before mutation even if later pages could make the declared total', async () => {
     const rows = Array.from({ length: 101 }, (_, i) => ({
       ...directive,
