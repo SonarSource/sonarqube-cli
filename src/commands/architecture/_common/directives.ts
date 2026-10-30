@@ -198,6 +198,11 @@ async function existingDirectives(api: DirectivesApi) {
   let total: number | undefined;
   for (let pageIndex = 1; ; pageIndex++) {
     const page = await api.getDirectivesPage(pageIndex, 100);
+    if (
+      page.directives.length !==
+      Math.min(page.page.pageSize, Math.max(0, page.page.total - (pageIndex - 1) * page.page.pageSize))
+    )
+      throw new CommandFailedError('Invalid public directives page; no complete page was read.');
     total ??= page.page.total;
     if (page.page.total !== total || ids.size + page.directives.length > total)
       throw new CommandFailedError(
