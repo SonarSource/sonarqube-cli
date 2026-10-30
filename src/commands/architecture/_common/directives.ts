@@ -70,9 +70,12 @@ export interface DirectivesApi {
   createDirective(directive: DirectiveInput): Promise<ProjectDirective>;
 }
 
-function record(value: unknown): Record<string, unknown> {
+function record(
+  value: unknown,
+  message = 'Each directive must be an object.',
+): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new CommandFailedError('Each directive must be an object.');
+    throw new CommandFailedError(message);
   return value as Record<string, unknown>;
 }
 function stringField(value: Record<string, unknown>, name: string, max: number): string {
@@ -325,7 +328,10 @@ export interface DirectiveChanges {
 }
 
 export function parseDirectiveChanges(value: unknown, projectKey: string): DirectiveChanges {
-  const object = record(value);
+  const object = record(
+    value,
+    'The directive change file must be a JSON object. Nothing was changed.',
+  );
   if (
     Object.keys(object).some((key) => !['create', 'update', 'project', 'projectKey'].includes(key))
   )
