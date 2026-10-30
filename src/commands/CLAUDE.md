@@ -63,9 +63,6 @@ Architecture command registration lives in `architecture/register.ts`; `command-
 
 Project directives support paginated `architecture directives get` and explicit-ID reads. The read handler lives under `architecture/directives/get`.
 
-
-
-
 ## Run MCP
 
 `sonar run mcp` accepts `SONARQUBE_CLI_MCP_WSL=auto|always|never` on Windows. `auto` checks native Docker, Podman, and Nerdctl first. It checks WSL only when all native executables are missing. A native `info` failure blocks WSL fallback and produces a runtime-specific error. `always` checks WSL only. `never` checks native runtimes only. Values are case-insensitive and trimmed; blank values use `auto`. The variable is ignored on other platforms. Native failure messages show up to three lines and 1000 characters of diagnostic output and explain how to select WSL. A failed `always` search reports that only WSL was checked. Runtime selection is in `src/core/host/environment/tool-detector.ts`; startup errors are in `src/commands/run/mcp.ts`.
