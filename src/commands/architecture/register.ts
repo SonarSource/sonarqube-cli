@@ -31,15 +31,9 @@ import {
   getDirectives as getArchitectureDirectives,
 } from './directives/get/index.ts';
 import { type FindingsReadOptions, getFindings } from './findings/get/index.ts';
-import {
-  installSkill,
-  type InstallSkillOptions,
-} from './install-skill.ts';
+import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
-import {
-  type SetFileOptions,
-  setIntended,
-} from './intended/set/index.ts';
+import { type SetFileOptions, setIntended } from './intended/set/index.ts';
 
 export function registerArchitectureCommands(parent: SonarCommand): void {
   const architecture = parent
