@@ -29,16 +29,24 @@ import { join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BIN_DIR } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+
+const VERSION_PROBE_TIMEOUT_MS = 10_000;
 
 /**
  * Verify the installation by probing the binary; throws with captured stdout/stderr
  * when the binary does not respond to `--version` or exits non-zero.
  */
 export async function verifyInstallation(path: string): Promise<void> {
-  let result: Awaited<ReturnType<typeof spawnProcess>>;
+  let result: Awaited<ReturnType<typeof spawnProcessWithTimeout>>;
   try {
-    result = await spawnProcess(path, ['--version'], { stdout: 'pipe', stderr: 'pipe' });
+    result = await spawnProcessWithTimeout(
+      path,
+      ['--version'],
+      { stdout: 'pipe', stderr: 'pipe' },
+      VERSION_PROBE_TIMEOUT_MS,
+      `${path} --version timed out`,
+    );
   } catch (err) {
     throw new CommandFailedError(
       `Installation verification failed: could not spawn ${path} --version: ${(err as Error).message}`,

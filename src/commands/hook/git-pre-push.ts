@@ -28,16 +28,19 @@ import type { CommandInvocationContext } from '@/core/commands/invocation-contex
 import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
 import { tryRunGit, tryRunGitLines } from '@/core/host/git/exec.ts';
 import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 import type { GitBlobRef } from './git-blob-batch.ts';
 import { isEncodablePath, readBlobContents, readBlobSizes, scanChunks } from './git-blob-batch.ts';
 import type { BatchScanOutcome } from './git-pre-push-secrets.ts';
 import { runSecretsStage, scanCommitScans } from './git-pre-push-secrets.ts';
+import { tracePrePush, tracePrePushGitSpawnResult } from './git-pre-push-trace.ts';
 import { MissingDependenciesError, SECRETS_INACTIVE_UNAUTHENTICATED } from './hook-dependencies.ts';
 import { printSecretsFindingsOrStderr } from './secrets-display.ts';
 import type { PushRef } from './stdin.ts';
 import { readGitPushRefs } from './stdin.ts';
+
+const GIT_LOG_TIMEOUT_MS = 60_000;
 
 // Zero-OID width follows the repository hash algorithm: 40 under SHA-1, 64 under SHA-256.
 const NULL_OID_PATTERN = /^0+$/;
@@ -49,6 +52,9 @@ const DESTINATION_OID_OFFSET = -2;
 const GITLINK_MODE = '160000';
 
 const SHORT_SHA_LENGTH = 8;
+
+/** How much of an unexpected `git log --raw` line the trace prints. */
+const RAW_LINE_TRACE_PREFIX_LENGTH = 120;
 
 /** Set by the generated hook. An env var, not a flag, so an older CLI ignores it instead of failing. */
 export const REMOTE_NAME_ENV = 'SONAR_PRE_PUSH_REMOTE_NAME';
@@ -75,21 +81,40 @@ export async function gitPrePush(
    * However, there's no easy solution, as the pre-commit framework can't pass all files at once due to ARG_MAX limits
    * and there's no support for stdin.
    */
+  tracePrePush(
+    `gitPrePush: start cwd=${process.cwd()} filesMode=${files.length > 0} fileCount=${files.length} remoteNameOption=${options.remoteName ?? '(unset)'} ${REMOTE_NAME_ENV}=${process.env[REMOTE_NAME_ENV] ?? '(unset)'}`,
+  );
+
   if (files.length > 0) {
     // Only filenames reach us here, with no commits to read them from, so this falls back to the working tree.
+    tracePrePush(`gitPrePush: files mode, scanning ${files.length} path(s): ${files.join(', ')}`);
     await runSecretsStage(files, await resolveAuth(ctx), ctx);
+    tracePrePush('gitPrePush: files mode finished (exit 0 unless throw)');
     return;
   }
 
   const refs = await readGitPushRefs();
-  if (refs.length === 0) return;
+  if (refs.length === 0) {
+    tracePrePush('gitPrePush: early exit 0 — no push refs from stdin');
+    return;
+  }
 
   const remotesExclusion = await resolveRemotesExclusion(options.remoteName);
+  tracePrePush(`gitPrePush: remotesExclusion=${remotesExclusion}`);
   const pushed = await getPushedCommitBlobs(refs, remotesExclusion);
   const commits = await dropOversizeBlobs(pushed);
-  if (commits.length === 0) return;
+  if (commits.length === 0) {
+    tracePrePush(
+      'gitPrePush: early exit 0 — no commits with scannable blobs after listing/filtering',
+    );
+    return;
+  }
 
+  tracePrePush(
+    `gitPrePush: scanning ${commits.length} commit(s), ${commits.reduce((n, c) => n + c.blobs.length, 0)} blob(s) total`,
+  );
   await scanCommits(commits, await resolveAuth(ctx), ctx);
+  tracePrePush('gitPrePush: finished scan stage (exit 0 — no secrets reported)');
 }
 
 /**
@@ -101,13 +126,30 @@ async function dropOversizeBlobs(commits: CommitBlobs[]): Promise<CommitBlobs[]>
     commits.flatMap((commit) => commit.blobs),
     process.cwd(),
   );
-  if (sizes === null) return commits;
+  if (sizes === null) {
+    tracePrePush('dropOversizeBlobs: blob sizes unavailable (null), keeping all commits/blobs');
+    return commits;
+  }
 
   const withinLimit: CommitBlobs[] = [];
   for (const { commit, blobs } of commits) {
-    const kept = blobs.filter((blob) => (sizes.get(blob.oid) ?? 0) <= MAX_SCANNED_FILE_SIZE);
+    const kept = blobs.filter((blob) => {
+      const size = sizes.get(blob.oid) ?? 0;
+      if (size <= MAX_SCANNED_FILE_SIZE) return true;
+      tracePrePush(
+        `dropOversizeBlobs: skip ${blob.path} oid=${blob.oid.slice(0, SHORT_SHA_LENGTH)} size=${size} > limit=${MAX_SCANNED_FILE_SIZE}`,
+      );
+      return false;
+    });
     if (kept.length > 0) withinLimit.push({ commit, blobs: kept });
+    else
+      tracePrePush(
+        `dropOversizeBlobs: commit ${commit.slice(0, SHORT_SHA_LENGTH)} has no blobs within size limit`,
+      );
   }
+  tracePrePush(
+    `dropOversizeBlobs: ${commits.length} commit(s) in -> ${withinLimit.length} commit(s) with blobs out`,
+  );
   return withinLimit;
 }
 
@@ -118,7 +160,14 @@ async function scanCommits(
 ): Promise<void> {
   const outcome = await scanCommitScans(batchOf(commits), auth, ctx);
 
-  if (!outcome?.secretsFound) return;
+  if (outcome === null) {
+    tracePrePush('scanCommits: scanCommitScans returned null (fail-soft) — allowing push');
+    return;
+  }
+  tracePrePush(
+    `scanCommits: secretsFound=${outcome.secretsFound} issueCount=${outcome.issues.length} analyzer stderr length=${outcome.stderr.length}`,
+  );
+  if (!outcome.secretsFound) return;
   reportFindings(commits, outcome, ctx);
 }
 
@@ -192,29 +241,99 @@ async function resolveAuth(ctx: CommandInvocationContext): Promise<ResolvedAuth>
 /** Git passes a URL when the push names no remote, and `--remotes=<url>` matches no refs. */
 async function resolveRemotesExclusion(remoteName: string | undefined): Promise<string> {
   const name = (remoteName ?? process.env[REMOTE_NAME_ENV])?.trim();
-  if (!name) return '--remotes';
+  if (!name) {
+    tracePrePush('resolveRemotesExclusion: no remote name, using --remotes');
+    return '--remotes';
+  }
   const configured = await tryRunGitLines(['remote'], process.cwd());
   if (configured === undefined) {
+    tracePrePush('resolveRemotesExclusion: git remote failed');
     throw new CommandFailedError(
       'Secrets scan could not run because Git remotes could not be listed.',
       { remediationHint: "Run `git remote` to see Git's error, then retry the push." },
     );
   }
-  return configured.includes(name) ? `--remotes=${name}` : '--remotes';
+  tracePrePush(`resolveRemotesExclusion: git remote list=${configured.join(', ') || '(empty)'}`);
+  const exclusion = configured.includes(name) ? `--remotes=${name}` : '--remotes';
+  tracePrePush(
+    `resolveRemotesExclusion: push remote name=${name} configured=${configured.includes(name)} -> ${exclusion}`,
+  );
+  return exclusion;
 }
 
 /**
  * Groups the blobs the push would transfer by the commit that introduced them, oldest first. One walk over every
  * pushed ref, so a commit two refs share is scanned once; `-c` catches content a merge introduced itself.
  */
+function traceNullOidRefs(refs: PushRef[]): void {
+  for (const ref of refs) {
+    if (NULL_OID_PATTERN.test(ref.localSha)) {
+      tracePrePush(
+        `getPushedCommitBlobs: ref localSha is null OID (branch delete?) localRef=${ref.localRef}`,
+      );
+    }
+    if (NULL_OID_PATTERN.test(ref.remoteSha)) {
+      tracePrePush(
+        `getPushedCommitBlobs: ref remoteSha is null OID (new branch?) remoteRef=${ref.remoteRef}`,
+      );
+    }
+  }
+}
+
+function parsePushedCommitGroups(lines: string[]): CommitBlobs[] {
+  const groups: CommitBlobs[] = [];
+  let unparsedRawLines = 0;
+  for (const line of lines) {
+    if (COMMIT_LINE_PATTERN.test(line)) {
+      groups.push({ commit: line, blobs: [] });
+      continue;
+    }
+    const blob = parseRawBlobLine(line);
+    if (!blob && line.startsWith(':')) unparsedRawLines += 1;
+    const current = groups.at(-1);
+    if (blob && current) {
+      current.blobs.push(blob);
+    } else if (blob && !current) {
+      tracePrePush(
+        `getPushedCommitBlobs: raw blob line before any commit header: ${line.slice(0, RAW_LINE_TRACE_PREFIX_LENGTH)}`,
+      );
+    }
+  }
+  if (unparsedRawLines > 0) {
+    tracePrePush(`getPushedCommitBlobs: ${unparsedRawLines} raw line(s) not parsed as blobs`);
+  }
+  tracePrePush(
+    `getPushedCommitBlobs: parsed ${groups.length} commit group(s) before reverse/dedupe`,
+  );
+  for (const group of groups) {
+    tracePrePush(
+      `getPushedCommitBlobs: pre-reverse commit ${group.commit.slice(0, SHORT_SHA_LENGTH)} blobCount=${group.blobs.length}`,
+    );
+  }
+  return groups;
+}
+
 async function getPushedCommitBlobs(
   refs: PushRef[],
   remotesExclusion: string,
 ): Promise<CommitBlobs[]> {
+  traceNullOidRefs(refs);
+
   const localShas = [
     ...new Set(refs.map((ref) => ref.localSha).filter((sha) => !NULL_OID_PATTERN.test(sha))),
   ];
-  if (localShas.length === 0) return [];
+  tracePrePush(
+    `getPushedCommitBlobs: ${refs.length} ref(s) -> ${localShas.length} unique localSha(s) after null-OID filter: ${localShas.join(', ') || '(none)'}`,
+  );
+  if (localShas.length === 0) {
+    tracePrePush('getPushedCommitBlobs: returning [] — no local SHAs to walk');
+    return [];
+  }
+
+  const remoteTips = await knownRemoteTips(refs);
+  tracePrePush(
+    `getPushedCommitBlobs: knownRemoteTips for --not (${remoteTips.length}): ${remoteTips.join(', ') || '(none)'}`,
+  );
 
   const args = [
     'log',
@@ -226,19 +345,31 @@ async function getPushedCommitBlobs(
     '--root',
     ...localShas,
     '--not',
-    ...(await knownRemoteTips(refs)),
+    ...remoteTips,
     remotesExclusion,
   ];
   const errorMessage =
     'Secrets scan could not run because the files being pushed could not be listed by Git.';
   let result;
   try {
-    result = await spawnProcess('git', args, { cwd: process.cwd() });
-  } catch {
-    throw new CommandFailedError(errorMessage, {
-      remediationHint: 'Check that Git is installed, then retry the push.',
+    result = await spawnProcessWithTimeout(
+      'git',
+      args,
+      { cwd: process.cwd() },
+      GIT_LOG_TIMEOUT_MS,
+      'git log timed out',
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    tracePrePush(`getPushedCommitBlobs: spawn failed: ${detail}`);
+    throw new CommandFailedError(`${errorMessage} ${detail}`, {
+      remediationHint:
+        error instanceof ProcessTimedOutError
+          ? 'Check for a Git lock or a very large push range, then retry the push.'
+          : 'Check that Git is installed, then retry the push.',
     });
   }
+  tracePrePushGitSpawnResult('getPushedCommitBlobs git log', args, result);
   if (result.exitCode !== 0) {
     const detail = result.stderr.trim();
     throw new CommandFailedError(
@@ -249,19 +380,9 @@ async function getPushedCommitBlobs(
     );
   }
   const lines = result.stdout.split(/\r?\n/).filter(Boolean);
+  tracePrePush(`getPushedCommitBlobs: git log produced ${lines.length} stdout line(s)`);
 
-  const groups: CommitBlobs[] = [];
-  for (const line of lines) {
-    if (COMMIT_LINE_PATTERN.test(line)) {
-      groups.push({ commit: line, blobs: [] });
-      continue;
-    }
-    const blob = parseRawBlobLine(line);
-    const current = groups.at(-1);
-    if (blob && current) {
-      current.blobs.push(blob);
-    }
-  }
+  const groups = parsePushedCommitGroups(lines);
   // `git log` walks newest first; reversing attributes each blob to the commit that first carried it.
   groups.reverse();
   return dedupeAcrossCommits(groups);
@@ -271,14 +392,33 @@ function dedupeAcrossCommits(groups: CommitBlobs[]): CommitBlobs[] {
   const seen = new Set<string>();
   const result: CommitBlobs[] = [];
   for (const group of groups) {
-    const blobs = group.blobs.filter((blob) => {
+    const blobs: GitBlobRef[] = [];
+    for (const blob of group.blobs) {
       const key = `${blob.oid}\t${blob.path}`;
-      if (seen.has(key) || !isEncodablePath(blob.path)) return false;
+      if (seen.has(key)) {
+        tracePrePush(
+          `dedupeAcrossCommits: skip duplicate ${blob.path} oid=${blob.oid.slice(0, SHORT_SHA_LENGTH)} commit=${group.commit.slice(0, SHORT_SHA_LENGTH)}`,
+        );
+        continue;
+      }
+      if (!isEncodablePath(blob.path)) {
+        tracePrePush(
+          `dedupeAcrossCommits: skip non-encodable path ${blob.path} commit=${group.commit.slice(0, SHORT_SHA_LENGTH)}`,
+        );
+        continue;
+      }
       seen.add(key);
-      return true;
-    });
+      blobs.push(blob);
+    }
     if (blobs.length > 0) result.push({ commit: group.commit, blobs });
+    else
+      tracePrePush(
+        `dedupeAcrossCommits: commit ${group.commit.slice(0, SHORT_SHA_LENGTH)} omitted (no blobs after dedupe)`,
+      );
   }
+  tracePrePush(
+    `dedupeAcrossCommits: ${groups.length} group(s) -> ${result.length} commit(s) with scannable blobs`,
+  );
   return result;
 }
 
@@ -308,7 +448,17 @@ function batchSafePath(field: string): string {
 
 async function knownRemoteTips(refs: PushRef[]): Promise<string[]> {
   const shas = [...new Set(refs.map((ref) => ref.remoteSha))];
-  const known = await Promise.all(shas.map((sha) => isKnownCommit(sha)));
+  const known = await Promise.all(
+    shas.map(async (sha) => {
+      const isKnown = await isKnownCommit(sha);
+      if (NULL_OID_PATTERN.test(sha)) {
+        tracePrePush(`knownRemoteTips: remoteSha ${sha} is null OID -> excluded from --not`);
+      } else {
+        tracePrePush(`knownRemoteTips: remoteSha ${sha} known=${isKnown}`);
+      }
+      return isKnown;
+    }),
+  );
   return shas.filter((_, index) => known[index]);
 }
 

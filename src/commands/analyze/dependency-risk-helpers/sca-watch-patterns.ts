@@ -25,6 +25,8 @@ import logger from '@/core/observability/logger.ts';
 
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
+const WATCH_PATTERNS_TIMEOUT_MS = 15_000;
+
 interface WatchPatternsPayload {
   patterns?: unknown;
 }
@@ -38,7 +40,12 @@ export class ScaWatchPatternsRunner {
   async run(): Promise<string[]> {
     try {
       const binaryPath = await this.installer.install();
-      const result = await this.spawner.spawn(binaryPath, ['watch-patterns']);
+      const result = await this.spawner.spawn(
+        binaryPath,
+        ['watch-patterns'],
+        undefined,
+        WATCH_PATTERNS_TIMEOUT_MS,
+      );
       if ((result.exitCode ?? 1) !== 0) {
         logger.debug(`watch-patterns exited with code ${String(result.exitCode)}`);
         return [];
