@@ -355,34 +355,29 @@ describe('public project directives', () => {
     { pageIndex: 2, total: 1, copies: 1 },
     { pageIndex: 1, total: 3, copies: 1 },
     { pageIndex: 1, total: 1, copies: 0 },
-  ])(
-    'accepts count drift on display reads: %j',
-    async ({ pageIndex, total, copies }) => {
-      const saved = {
-        ...directive,
-        id: '00000000-0000-4000-8000-000000000001',
-        projectId: 'shop-branch-id',
-      };
-      const server = await configured((api) =>
-        api.withStatus(
-          'project-directives',
-          200,
-          JSON.stringify({
-            projectDirectives: Array.from({ length: copies }, () => saved),
-            page: { pageIndex, pageSize: 100, total },
-          }),
-          'GET',
-        ),
-      );
-      const result = await h.run(`arch directives get -p shop --page ${pageIndex} --page-size 100`);
-      expect(result.exitCode).toBe(0);
-      expect(server.getRecordedRequests().some((request) => request.method === 'POST')).toBe(false);
-    },
-  );
+  ])('accepts count drift on display reads: %j', async ({ pageIndex, total, copies }) => {
+    const saved = {
+      ...directive,
+      id: '00000000-0000-4000-8000-000000000001',
+      projectId: 'shop-branch-id',
+    };
+    const server = await configured((api) =>
+      api.withStatus(
+        'project-directives',
+        200,
+        JSON.stringify({
+          projectDirectives: Array.from({ length: copies }, () => saved),
+          page: { pageIndex, pageSize: 100, total },
+        }),
+        'GET',
+      ),
+    );
+    const result = await h.run(`arch directives get -p shop --page ${pageIndex} --page-size 100`);
+    expect(result.exitCode).toBe(0);
+    expect(server.getRecordedRequests().some((request) => request.method === 'POST')).toBe(false);
+  });
 
-  it.each([
-    { pageIndex: 1, total: 2, copies: 2 },
-  ])(
+  it.each([{ pageIndex: 1, total: 2, copies: 2 }])(
     'rejects inconsistent public pages on direct reads: %j',
     async ({ pageIndex, total, copies }) => {
       const saved = {
@@ -503,6 +498,36 @@ describe('public project directives', () => {
     const read = await h.run('arch directives get -p shop --format json');
     expect(JSON.parse(read.stdout).directives).toHaveLength(1);
   });
+
+  it.each([0, 2])(
+    'refuses count drift before writes when the reported total is %i',
+    async (total) => {
+      const saved = {
+        ...directive,
+        id: '00000000-0000-4000-8000-000000000001',
+        projectId: 'shop-branch-id',
+      };
+      const server = await configured((api) =>
+        api.withStatus(
+          'project-directives',
+          200,
+          JSON.stringify({
+            projectDirectives: [saved],
+            page: { pageIndex: 1, pageSize: 100, total },
+          }),
+          'GET',
+        ),
+      );
+      for (const flag of ['', ' --dry-run']) {
+        const result = await h.run('arch directives set -p shop --file directives.json' + flag);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('Invalid public directives page');
+      }
+      expect(
+        server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+    },
+  );
 
   it('refuses short pages before mutation even if later pages could make the declared total', async () => {
     const rows = Array.from({ length: 101 }, (_, i) => ({
