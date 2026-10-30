@@ -65,12 +65,9 @@ export async function getFindings(
     ctx.console.info(
       'No findings are visible. Check project access and whether the project has been analyzed.',
     );
-  const more =
-    page.pageSize === 0
-      ? ' Use --page-size greater than 0 to read findings.'
-      : page.pageIndex * page.pageSize < page.total
-        ? ' Use --page to continue.'
-        : '';
+  let more = '';
+  if (page.pageSize === 0) more = ' Use --page-size greater than 0 to read findings.';
+  else if (page.pageIndex * page.pageSize < page.total) more = ' Use --page to continue.';
   ctx.console.info(`Page ${page.pageIndex}: ${findings.length} of ${page.total} findings.${more}`);
   for (const finding of findings) printFindingDetails(ctx, finding);
 }
