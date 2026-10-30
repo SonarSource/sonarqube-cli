@@ -25,8 +25,13 @@ export type GitSpawnResult = ReturnType<typeof Bun.spawnSync>;
 export type GitSpawnOptions = {
   cwd: string;
   env?: Record<string, string>;
-  /** Expected process exit code (default: `0`). */
+  /** Expected process exit code (default: `0`). Ignored when `unchecked` is set. */
   expectedExitCode?: number;
+  /**
+   * Return the result without checking the exit code, so a caller can attach richer diagnostics
+   * when a hook does not reject.
+   */
+  unchecked?: boolean;
 };
 
 function decodeSpawnOutput(data: Uint8Array | string | undefined): string {
@@ -78,7 +83,7 @@ export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResu
   });
   const exitCode = result.exitCode;
   const expected = options.expectedExitCode ?? 0;
-  if (exitCode === null || exitCode !== expected) {
+  if (!options.unchecked && (exitCode === null || exitCode !== expected)) {
     throw new Error(
       gitFailureMessage(
         args,
