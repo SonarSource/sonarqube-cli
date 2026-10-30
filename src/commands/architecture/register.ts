@@ -25,20 +25,20 @@ import { ECOSYSTEMS } from './_common/architecture-api.ts';
 import { FINDING_CATEGORIES } from './_common/findings.ts';
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
-import { getCurrent as getCurrentArchitecture } from './current/get/index.ts';
+import { getCurrent } from './current/get/index.ts';
 import {
   type DirectivesReadOptions,
   getDirectives as getArchitectureDirectives,
 } from './directives/get/index.ts';
 import { type FindingsReadOptions, getFindings } from './findings/get/index.ts';
 import {
-  installSkill as installArchitectureSkill,
+  installSkill,
   type InstallSkillOptions,
 } from './install-skill.ts';
-import { getIntended as getIntendedArchitecture } from './intended/get/index.ts';
+import { getIntended } from './intended/get/index.ts';
 import {
   type SetFileOptions,
-  setIntended as setIntendedArchitecture,
+  setIntended,
 } from './intended/set/index.ts';
 
 export function registerArchitectureCommands(parent: SonarCommand): void {
@@ -73,9 +73,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
-      getCurrentArchitecture(options, ctx),
-    );
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) => getCurrent(options, ctx));
   intendedArchitecture
     .command('get')
     .description(
@@ -86,9 +84,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('--depth <n>', 'Levels of groups below the start group (default: all)', parseInteger)
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
-      getIntendedArchitecture(options, ctx),
-    );
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) => getIntended(options, ctx));
 
   intendedArchitecture
     .command('set')
@@ -98,7 +94,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .requiredOption('--file <file>', 'Intended architecture JSON file')
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
-    .authenticatedAction((ctx, options: SetFileOptions) => setIntendedArchitecture(options, ctx));
+    .authenticatedAction((ctx, options: SetFileOptions) => setIntended(options, ctx));
 
   const directives = architecture.command('directives').description('Read project directives');
   directives
@@ -135,7 +131,5 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .description('Install the architecture skill for Claude Code and Cursor in this repository')
     .option('--global', 'Install in the home directory instead of the repository')
     .option('--force', 'Replace a SKILL.md that was not written by this command')
-    .authenticatedAction((ctx, options: InstallSkillOptions) =>
-      installArchitectureSkill(options, ctx),
-    );
+    .authenticatedAction((ctx, options: InstallSkillOptions) => installSkill(options, ctx));
 }

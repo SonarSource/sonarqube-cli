@@ -21,7 +21,7 @@
 import type { ChildProcess } from 'node:child_process';
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { Writable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -99,11 +99,11 @@ describe('spawnProcess stdin source', () => {
 });
 
 describe('spawnProcess stdin, against a mocked child', () => {
-  /** A child whose stdin the test controls, and whose exit the test decides. */
+  /** A child whose stdin the test controls, and whose close the test decides. */
   function mockChild(stdin: Writable) {
     const proc = new EventEmitter() as EventEmitter & {
       stdin: Writable;
-      stdout: null;
+      stdout: Readable | null;
       stderr: null;
       kill: () => void;
       killed: boolean;
@@ -154,8 +154,30 @@ describe('spawnProcess stdin, against a mocked child', () => {
     expect(written).toHaveLength(1);
     expect(produced).toBeLessThan(5);
 
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
+  });
+
+  it('keeps stdout that arrives after exit and before the pipes close', async () => {
+    const stdout = new Readable({ read() {} });
+    const { stream } = sink();
+    const proc = mockChild(stream);
+    proc.stdout = stdout;
+
+    const running = spawnProcess('child', [], { stdout: 'pipe' });
+    proc.emit('exit', 0);
+    stdout.push(Buffer.from('secret.js'));
+    await new Promise((resolve) => {
+      stdout.once('data', () => resolve(undefined));
+    });
+    proc.emit('close', 0);
+    const result = await running;
+
+    expect(result).toEqual({
+      exitCode: 0,
+      stdout: 'secret.js',
+      stderr: '',
+    });
   });
 
   it('stops pulling the source once the child stops reading', async () => {
@@ -186,7 +208,7 @@ describe('spawnProcess stdin, against a mocked child', () => {
     // The generator is returned rather than abandoned, so anything it holds is released.
     expect(cleanedUp).toBe(true);
 
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
   });
 
@@ -214,7 +236,7 @@ describe('spawnProcess stdin, against a mocked child', () => {
 
     const running = spawnProcess('child', [], { stdin: 'pipe', stdinData: 'hello' });
     await Bun.sleep(10);
-    proc.emit('exit', 0);
+    proc.emit('close', 0);
     await running;
 
     expect(Buffer.concat(written).toString()).toBe('hello');
