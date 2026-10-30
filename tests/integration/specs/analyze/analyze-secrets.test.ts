@@ -399,6 +399,10 @@ describe('analyze secrets', () => {
       return logFile.exists() ? logFile.asText() : '';
     }
 
+    function outputWithoutTimings(result: { stdout: string; stderr: string }): string {
+      return (result.stdout + result.stderr).replaceAll(/\d+ms/g, '<duration>');
+    }
+
     beforeEach(() => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
@@ -649,6 +653,38 @@ describe('analyze secrets', () => {
         expect(result.stdout).toContain('"block"');
       },
       { timeout: 30000 },
+    );
+
+    it(
+      'prints the same report with --show-skipped-files as without it',
+      async () => {
+        harness.cwd.writeFile('src/app.js', SECRET_CONTENT);
+        harness.cwd.writeFile('tests/fixture.js', SECRET_CONTENT);
+        const withoutOption = await harness.run('analyze secrets .');
+
+        const result = await harness.run('analyze secrets . --show-skipped-files');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain('tests/fixture.js');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits with code 2 when --show-skipped-files is combined with --stdin',
+      async () => {
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --show-skipped-files',
+          CLEAN_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stdout + result.stderr).toContain(
+          'Cannot use --show-skipped-files with --stdin',
+        );
+      },
+      { timeout: 15000 },
     );
 
     it(

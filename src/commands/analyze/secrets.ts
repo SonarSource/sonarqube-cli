@@ -38,7 +38,7 @@ import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
-import { buildSecretsScanArgs } from './secrets-scan-args.ts';
+import { buildSecretsScanArgs, type SecretsScanRunOptions } from './secrets-scan-args.ts';
 
 // Agent hooks are killed by their host after 60s, so this deadline stays inside that budget.
 const SCAN_TIMEOUT_MS = 60 * 1000;
@@ -49,6 +49,8 @@ export interface AnalyzeSecretsOptions {
   stdin?: boolean;
   /** Paths to skip; when given, they replace the `secrets.exclude` config key. */
   exclude?: string[];
+  /** Passed on to sonar-secrets, which then lists the skipped test files in `skippedFiles.paths`. */
+  showSkippedFiles?: boolean;
   /** Defaults to {@link SECRETS_CALLER_COMMANDS.analyzeSecrets}. Bare `analyze` passes `analyze`. */
   telemetryCallerCommand?: SecretsCallerCommand;
 }
@@ -69,10 +71,21 @@ export interface SecretsJsonIssue {
   maskedSecret?: string;
 }
 
+/**
+ * Files sonar-secrets (2.54+) skipped as test files. Absent for `--input`, after a terminal error and when test-file
+ * detection is off. `paths` (relative to the scan root) only comes with `--show-skipped-files`.
+ */
+export interface SecretsSkippedFiles {
+  count: number;
+  paths?: string[];
+}
+
 /** Top-level structure of sonar-secrets `--json` stdout. */
 export interface SecretsJsonOutput {
   issues: SecretsJsonIssue[];
   errors?: string[];
+  /** Parsed but not displayed yet. */
+  skippedFiles?: SecretsSkippedFiles;
 }
 
 /**
@@ -87,6 +100,7 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
     const parsed = JSON.parse(stdout) as {
       issues?: unknown;
       errors?: Array<{ message?: string } | string | null>;
+      skippedFiles?: unknown;
     };
     const errors = Array.isArray(parsed.errors)
       ? parsed.errors
@@ -102,11 +116,21 @@ export function parseSecretsJson(stdout: string): SecretsJsonOutput {
             typeof (i as Record<string, unknown>).ruleKey === 'string',
         )
       : [];
-    return { issues, errors };
+    const skippedFiles = parseSkippedFiles(parsed.skippedFiles);
+    return skippedFiles === undefined ? { issues, errors } : { issues, errors, skippedFiles };
   } catch (err) {
     logger.debug(`parseSecretsJson: failed to parse stdout: ${(err as Error).message}`);
     return { issues: [] };
   }
+}
+
+function parseSkippedFiles(raw: unknown): SecretsSkippedFiles | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const { count, paths } = raw as Record<string, unknown>;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return undefined;
+  if (paths === undefined) return { count };
+  if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) return undefined;
+  return { count, paths: paths };
 }
 
 interface ScanDisplayContext {
@@ -133,17 +157,12 @@ export async function runSecretsBinary(
   files: string[],
   auth: ResolvedAuth,
   stdin: StdioMode = 'pipe',
-  exclusionsOverride: readonly string[] = [],
+  runOptions: SecretsScanRunOptions = {},
 ): Promise<SpawnResult> {
   const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    [
-      '--non-interactive',
-      '--json',
-      ...buildSecretsScanArgs(settings, exclusionsOverride),
-      ...files,
-    ],
+    ['--non-interactive', '--json', ...buildSecretsScanArgs(settings, runOptions), ...files],
     {
       stdin,
       stdout: 'pipe',
@@ -233,7 +252,7 @@ async function handleCheckCommand(
     await performPathsScan(
       binaryPath,
       options.paths ?? [],
-      options.exclude ?? [],
+      { exclusionsOverride: options.exclude, showSkippedFiles: options.showSkippedFiles },
       auth,
       scanStartTime,
       callerCommand,
@@ -255,12 +274,16 @@ function validateScanOptions(options: AnalyzeSecretsOptions): void {
   if (options.stdin && (options.exclude?.length ?? 0) > 0) {
     throw new InvalidOptionError('Cannot use --exclude with --stdin');
   }
+
+  if (options.stdin && options.showSkippedFiles) {
+    throw new InvalidOptionError('Cannot use --show-skipped-files with --stdin');
+  }
 }
 
 async function performPathsScan(
   binaryPath: string,
   paths: string[],
-  exclusions: string[],
+  runOptions: SecretsScanRunOptions,
   auth: ResolvedAuth,
   scanStartTime: number,
   callerCommand: SecretsCallerCommand,
@@ -279,7 +302,7 @@ async function performPathsScan(
   const { result, parsed } = await scanAndEmitSecrets(
     callerCommand,
     auth,
-    () => runSecretsBinary(binaryPath, paths, auth, 'pipe', exclusions),
+    () => runSecretsBinary(binaryPath, paths, auth, 'pipe', runOptions),
     ctx,
   );
   reportScanResult(result, parsed, scanStartTime, { paths }, ctx.console);

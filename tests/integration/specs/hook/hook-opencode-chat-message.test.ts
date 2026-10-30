@@ -189,7 +189,9 @@ describe('sonar hook opencode-chat-message', () => {
         privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
         publicKeyEncoding: { type: 'pkcs1', format: 'pem' },
       });
-      const header = '-----BEGIN RSA PRIVATE KEY-----';
+      const keyMaterialLines = privateKey
+        .split('\n')
+        .filter((line) => line.length > 0 && !line.startsWith('-----'));
 
       const result = await harness.runWithStdin(
         'hook opencode-chat-message',
@@ -200,7 +202,9 @@ describe('sonar hook opencode-chat-message', () => {
       const decision = parseDecision(result.stdout);
       expect(decision.block).toBe(false);
       expect(decision.redactedText).toBeDefined();
-      expect(decision.redactedText).not.toContain(header);
+      for (const line of keyMaterialLines) {
+        expect(decision.redactedText).not.toContain(line);
+      }
       expect(decision.redactedText?.startsWith('use this key:\n')).toBe(true);
       expect(decision.redactedText?.endsWith('\nto sign the release')).toBe(true);
     },
