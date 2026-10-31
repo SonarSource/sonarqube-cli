@@ -22,14 +22,24 @@
 // run `git <args>` in `cwd` and return its output on success, or `undefined`
 // when git is unavailable or exits non-zero.
 
-import { spawnProcess } from '../../process/process.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '../../process/process.ts';
+
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
 
 export async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {
   try {
-    const result = await spawnProcess('git', args, { cwd });
+    const result = await spawnProcessWithTimeout(
+      'git',
+      args,
+      { cwd },
+      GIT_COMMAND_TIMEOUT_MS,
+      `git ${args[0] ?? 'command'} timed out`,
+    );
     if (result.exitCode !== 0) return undefined;
     return result.stdout;
-  } catch {
+  } catch (error) {
+    // A hung git is not "this directory is not a repository" or "there is no remote".
+    if (error instanceof ProcessTimedOutError) throw error;
     return undefined;
   }
 }

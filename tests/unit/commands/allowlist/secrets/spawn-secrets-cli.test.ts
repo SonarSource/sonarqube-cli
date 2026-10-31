@@ -57,7 +57,7 @@ afterEach(() => {
 
 describe('runSecretsAllowlistCommand', () => {
   it('resolves without throwing when the binary exits 0', async () => {
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: '',
       stderr: '',
@@ -65,15 +65,21 @@ describe('runSecretsAllowlistCommand', () => {
 
     await runSecretsAllowlistCommand(['show'], fake);
 
-    expect(spawnSpy).toHaveBeenCalledWith(FAKE_BINARY_PATH, ['allowlist', 'show'], {
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
-    });
+    expect(spawnSpy).toHaveBeenCalledWith(
+      FAKE_BINARY_PATH,
+      ['allowlist', 'show'],
+      {
+        stdin: 'inherit',
+        stdout: 'inherit',
+        stderr: 'inherit',
+      },
+      10 * 60 * 1000,
+      'sonar-secrets allowlist timed out after 600000ms',
+    );
   });
 
   it('throws a CommandFailedError carrying the exit code when the binary exits non-zero', async () => {
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 2,
       stdout: '',
       stderr: '',
@@ -103,7 +109,7 @@ describe('runSecretsAllowlistCommand', () => {
       locationSpy = spyOn(installationLocation, 'isStandaloneInstallerLocation').mockReturnValue(
         standalone,
       );
-      spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(
+      spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockRejectedValue(
         Object.assign(new Error('spawn EACCES'), { code: 'EACCES' }),
       );
 
