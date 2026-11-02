@@ -803,16 +803,16 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /**
-   * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
-   * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
-   * An empty string body produces a response with no body at all.
-   */
   withSqaaStatusSequence(statuses: number[]): this {
     this.sqaaStatusSequence = [...statuses];
     return this;
   }
 
+  /**
+   * Force POST /a3s-analysis/analyses to return a specific HTTP status code.
+   * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
+   * An empty string body produces a response with no body at all.
+   */
   withSqaaStatusCode(status: number, body?: string): this {
     this.sqaaStatusCode = status;
     this.sqaaStatusBody = body;

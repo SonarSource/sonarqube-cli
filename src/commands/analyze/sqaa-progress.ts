@@ -158,6 +158,7 @@ export class SqaaProgress {
     }
     this.retryLabel = undefined;
     this.runPhase = 'analyzing';
+    this.renderLiveLine();
   }
 
   skipRemaining(fromIndex: number): void {
@@ -192,12 +193,13 @@ export class SqaaProgress {
 
   private buildLiveLine(): string {
     const total = this.processableTotal;
+    const fileLabel = total === 1 ? 'file' : 'files';
     const dots = DOT_FRAMES[this.dotFrameIndex];
     if (this.runPhase === 'retrying') {
-      return yellow(`Analyzing ${total} files${dots} ${this.retryLabel ?? 'retrying...'}`);
+      return yellow(`Analyzing ${total} ${fileLabel}${dots} ${this.retryLabel ?? 'retrying...'}`);
     }
     const analyzed = this.filesAnalyzedCount();
-    const base = `Analyzing ${total} files${dots}`;
+    const base = `Analyzing ${total} ${fileLabel}${dots}`;
     if (analyzed > 0) {
       return cyan(`${base} (${analyzed}/${total})`);
     }
