@@ -22,8 +22,11 @@
 const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com', 'ssh.dev.azure.com']);
 const AZURE_LEGACY_HOST_SUFFIX = '.visualstudio.com';
 const SCP_LIKE_REMOTE = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)(.*)$/;
-// `[<org>/][<collection>/]<project>/_git/<repo>` over HTTPS, `v3/<org>/<project>/<repo>` over SSH.
-const AZURE_HTTPS_PATH = /([^/]+)\/_git\/([^/]+)$/;
+// `<org>/<project>/_git/<repo>` on dev.azure.com, `[<collection>/]<project>/_git/<repo>` on the legacy
+// host, `v3/<org>/<project>/<repo>` over SSH. The short `<org>/_git/<repo>` form names no project.
+const AZURE_HTTPS_PATH = /^\/[^/]+\/([^/]+)\/_git\/([^/]+)$/;
+const AZURE_LEGACY_PATH = /^\/(?:[^/]+\/)?([^/]+)\/_git\/([^/]+)$/;
+const LEGACY_DEFAULT_COLLECTION = 'defaultcollection';
 const AZURE_SSH_PATH = /^\/v3\/[^/]+\/([^/]+)\/([^/]+)$/;
 const GIT_SUFFIX = /\.git$/;
 
@@ -74,8 +77,14 @@ export function remoteRepositorySlug(remote: string): string | null {
   path = path.replace(GIT_SUFFIX, '');
   const hostname = remoteHostname(remote);
   if (hostname !== null && isAzureHost(hostname)) {
-    const match = AZURE_HTTPS_PATH.exec(path) ?? AZURE_SSH_PATH.exec(path);
-    return match ? `${match[1]}/${match[2]}` : null;
+    const pattern = hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX)
+      ? AZURE_LEGACY_PATH
+      : AZURE_HTTPS_PATH;
+    const match = pattern.exec(path) ?? AZURE_SSH_PATH.exec(path);
+    if (!match || match[1].toLowerCase() === LEGACY_DEFAULT_COLLECTION) {
+      return null;
+    }
+    return `${match[1]}/${match[2]}`;
   }
   const parts = path.split('/').filter(Boolean);
   return parts.length === 2 ? parts.join('/') : null;

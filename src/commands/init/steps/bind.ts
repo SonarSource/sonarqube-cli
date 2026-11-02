@@ -29,6 +29,7 @@ import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -100,14 +101,16 @@ async function waitForAlmKey(
   return waitForAlmKey(api, orgKey, deadline);
 }
 
-function shellArgument(value: string): string {
-  return /^[\w./-]+$/.test(value) ? value : JSON.stringify(value);
-}
-
-function linkCommand(projectKey: string, path: string): string {
-  return path === '.'
-    ? `sonar link ${shellArgument(projectKey)}`
-    : `sonar link --monorepo ${shellArgument(projectKey)} --path ${shellArgument(path)}`;
+function linkCommand(
+  projectKey: string,
+  path: string,
+  monorepo: boolean,
+  runFrom: string | undefined,
+): string {
+  const link = monorepo
+    ? `sonar link --monorepo ${shellQuote(projectKey)} --path ${shellQuote(path)}`
+    : `sonar link ${shellQuote(projectKey)}`;
+  return runFrom === undefined ? link : `cd ${shellQuote(runFrom)} && ${link}`;
 }
 
 /** The project already exists on the server by now, so a failure here has to say how to finish. */
@@ -121,6 +124,7 @@ async function writeMapping(
   const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
   const path = relative(configDir, projectRoot).split(sep).join('/') || '.';
   const entry = deriveEntry(auth, projectKey, path);
+  let monorepo = path !== '.';
 
   try {
     const mapped = await sharedProjectConfigRepository.load(configDir);
@@ -132,17 +136,21 @@ async function writeMapping(
         `Replacing the mapping of this directory to '${replaced.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
-    const shadowed =
-      path === '.' ? await sharedProjectConfigRepository.set(configDir, entry) : true;
-    if (shadowed) {
+    if (path === '.') {
+      monorepo = await sharedProjectConfigRepository.set(configDir, entry);
+    }
+    if (monorepo) {
       await sharedProjectConfigRepository.addProject(configDir, entry);
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+    const cwdRoot = findGitRoot(process.cwd());
+    const linkRoot = canonicalizePath(cwdRoot.isGit ? cwdRoot.gitRoot : process.cwd());
+    const runFrom = linkRoot === configDir ? undefined : configDir;
     throw new CommandFailedError(
       `Created project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
       {
-        remediationHint: `Fix the file, then run '${linkCommand(projectKey, path)}' to map the project.`,
+        remediationHint: `Fix the file, then run '${linkCommand(projectKey, path, monorepo, runFrom)}' to map the project.`,
       },
     );
   }
