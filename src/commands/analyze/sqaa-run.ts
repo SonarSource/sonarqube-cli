@@ -30,8 +30,9 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { RunTally } from './sqaa-analysis.ts';
 import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
-import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
+import { recordSqaaAnalysisTelemetry } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api.ts';
+import { resolveSqaaBranch } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   buildJsonReport,
@@ -53,30 +54,6 @@ import type {
   SqaaProjectFiles,
 } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
-
-export function finishSqaaTelemetryFromReport(
-  report: SqaaJsonReport,
-  runOptions: AnalyzeSqaaRunOptions,
-  durationMs: number,
-): void {
-  const { telemetryCallerCommand, telemetryCtx, auth } = runOptions;
-  if (!telemetryCallerCommand || !telemetryCtx || !auth) return;
-  const exitCode =
-    runOptions.telemetryProcessExitCode ??
-    resolveSqaaCommandExitCode(
-      report.summary.totalIssues,
-      report.summary.totalFailures,
-      report.globalError !== undefined,
-    );
-  recordSqaaAnalysisTelemetry(
-    telemetryCtx,
-    auth,
-    telemetryCallerCommand,
-    tallyFromSqaaJsonReport(report),
-    durationMs,
-    exitCode,
-  );
-}
 
 export async function enrichForbiddenGlobalError(
   report: SqaaJsonReport,
@@ -165,32 +142,6 @@ async function fetchSingleFileTally(
   }
 }
 
-export async function fetchSingleFileReport(
-  connection: SonarConnection,
-  projectKey: string,
-  path: SqaaPath,
-  content: string,
-  branch?: string,
-  wireDepth?: SqaaDeepWireDepth,
-  displayDepth: SqaaAnalysisDepth = 'STANDARD',
-): Promise<{ report: SqaaJsonReport; error?: Error }> {
-  const tally = await fetchSingleFileTally(
-    connection,
-    projectKey,
-    path,
-    content,
-    branch,
-    wireDepth,
-  );
-  const result = tally.allResults[0];
-  return {
-    report: buildJsonReport(tally, [], [path.displayPath], undefined, displayDepth, [
-      { projectKey, paths: [path.displayPath] },
-    ]),
-    error: 'failure' in result ? result.failure : undefined,
-  };
-}
-
 export function finishSqaaRun(
   tally: RunTally,
   durationMs: number,
@@ -223,19 +174,28 @@ export async function executeSqaaRun(
   if (mode === 'single-file' || mode === 'edited-file') {
     const { projectKey, file: path } = soleFile(files);
     const content = readSqaaFileContent(path.absolutePath);
+    const singleBranch =
+      mode === 'edited-file' ? await resolveSqaaBranch(undefined, path.absolutePath) : branch;
     const progress = new SqaaProgress({
       files: [path.displayPath],
       console: options.console,
       silent: options.format === 'json',
     });
     execute = () =>
-      fetchSingleFileTally(connection, projectKey, path, content, branch, wireDepth, (attempt) =>
-        progress.retryingChunk(
-          0,
-          attempt,
-          MAX_503_RETRIES,
-          getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
-        ),
+      fetchSingleFileTally(
+        connection,
+        projectKey,
+        path,
+        content,
+        singleBranch,
+        wireDepth,
+        (attempt) =>
+          progress.retryingChunk(
+            0,
+            attempt,
+            MAX_503_RETRIES,
+            getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
+          ),
       ).finally(() => {
         progress.finish();
       });
