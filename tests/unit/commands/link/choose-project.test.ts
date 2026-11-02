@@ -258,6 +258,18 @@ describe('link without a project key', () => {
       expect(writtenKey()).toBe('second');
     });
 
+    it('re-prompts without calling the server for a one-character term', async () => {
+      fake.queueResponse('x');
+      fake.queueResponse('xs');
+      fake.queueResponse('a');
+
+      await link(undefined, { path: '.' }, ctx);
+
+      expect(fake.findCall('warn', 'Enter at least 2 characters')).toBeDefined();
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+      expect(searchSpy).toHaveBeenCalledWith(expect.objectContaining({ q: 'xs' }));
+    });
+
     it('says when the list is truncated and asks to refine', async () => {
       searchSpy.mockReturnValue(okAsync(searchResult(['a', 'b'], 40)));
 
