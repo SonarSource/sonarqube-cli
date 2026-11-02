@@ -195,7 +195,7 @@ describe('integrate antigravity', () => {
             extraEnv,
           });
           await chooseCustomize(session);
-          await session.accept('Install Secrets detection?');
+          await session.accept('Install secrets detection?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {

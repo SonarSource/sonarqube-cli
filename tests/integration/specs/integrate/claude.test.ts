@@ -118,7 +118,7 @@ describe('integrate claude', () => {
       expect(result.stdout).toContain('Setup complete!');
       expect(result.stderr).toContain('MCP container networking:');
       expect(result.stderr).toContain('mcp.container.serverUrl');
-      expect(result.stdout).toContain('Secrets detection');
+      expect(result.stdout).toContain('secrets detection');
       expect(result.stdout).toContain('paste this into your agent');
     },
     { timeout: 30000 },
@@ -1354,13 +1354,13 @@ describe('integrate claude — interactive feature selection', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.accept('Install Secrets detection?');
+      await session.accept('Install secrets detection?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Install Secrets detection?');
+      expect(output).toContain('Install secrets detection?');
       expect(output).toContain('Install MCP server?');
       expect(output).not.toContain('Install Vortex?');
       expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
@@ -1405,7 +1405,7 @@ describe('integrate claude — interactive feature selection', () => {
       if (isInteractive) {
         const session = harness.runInteractive('integrate claude', { extraEnv });
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install MCP server?');
         result = await session.waitFinish();
       } else {
@@ -1435,7 +1435,7 @@ describe('integrate claude — interactive feature selection', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.decline('Install Secrets detection?');
+      await session.decline('Install secrets detection?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
@@ -1469,7 +1469,7 @@ describe('integrate claude — interactive feature selection', () => {
       const output = `${result.stdout}
 ${result.stderr}`;
       expect(output).toContain('What will be installed');
-      expect(output).not.toContain('Install Secrets detection?');
+      expect(output).not.toContain('Install secrets detection?');
       expect(output).not.toContain('Install MCP server?');
       expect(findClaudeFeature(harness, 'secrets-detection')).toBeDefined();
       expect(findClaudeFeature(harness, 'mcp-server')).toBeDefined();
@@ -1489,7 +1489,7 @@ ${result.stderr}`;
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.decline('Install Secrets detection?');
+      await session.decline('Install secrets detection?');
       await session.decline('Install MCP server?');
       const result = await session.waitFinish();
 
@@ -1563,7 +1563,7 @@ ${result.stderr}`).toContain('Installation cancelled');
         },
       });
       await chooseCustomize(session);
-      await session.accept('Install Secrets detection?');
+      await session.accept('Install secrets detection?');
       await session.accept('Install Vortex?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
@@ -1618,7 +1618,7 @@ ${result.stderr}`).toContain('Installation cancelled');
         },
       });
       await chooseCustomize(session);
-      await session.accept('Install Secrets detection?');
+      await session.accept('Install secrets detection?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
 
@@ -1676,7 +1676,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.accept('Secrets detection (currently installed)  Keep?');
+      await session.accept('secrets detection (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       const result = await session.waitFinish();
@@ -1708,7 +1708,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.accept('Secrets detection (currently installed)  Keep?');
+      await session.accept('secrets detection (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.decline('Proceed with removal?');
       const result = await session.waitFinish();
@@ -1733,15 +1733,15 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.decline('Secrets detection (currently installed)  Keep?');
+      await session.decline('secrets detection (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       const output = `${result.stdout}\n${result.stderr}`;
-      expect(output).toContain('Secrets detection (currently installed)  Keep?');
-      expect(output).toContain('Secrets detection will be removed.');
+      expect(output).toContain('secrets detection (currently installed)  Keep?');
+      expect(output).toContain('secrets detection will be removed.');
 
       // The feature is gone, but the binary and its record survive.
       expect(findClaudeFeature(harness, 'secrets-detection')).toBeUndefined();
@@ -1779,7 +1779,7 @@ describe('integrate claude — keep/remove already-installed features', () => {
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.decline('Secrets detection (currently installed)  Keep?');
+      await session.decline('secrets detection (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
       const result = await session.waitFinish();
@@ -1872,7 +1872,7 @@ ${result.stderr}`).not.toContain('Keep?');
 
       const session = harness.runInteractive('integrate claude');
       await chooseCustomize(session);
-      await session.decline('Secrets detection (currently installed)  Keep?');
+      await session.decline('secrets detection (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
@@ -1938,7 +1938,7 @@ ${result.stderr}`).not.toContain('Keep?');
         },
       });
       await chooseCustomize(session);
-      await session.accept('Secrets detection (currently installed)  Keep?');
+      await session.accept('secrets detection (currently installed)  Keep?');
       await session.decline('Vortex (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.accept('MCP server (currently installed)  Keep?');
@@ -1979,7 +1979,7 @@ ${result.stderr}`).not.toContain('Keep?');
         },
       });
       await chooseCustomize(session);
-      await session.accept('Install Secrets detection?');
+      await session.accept('Install secrets detection?');
       await session.decline('Install Vortex?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();

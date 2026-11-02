@@ -501,7 +501,7 @@ describe('integrate cursor', () => {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
@@ -538,7 +538,7 @@ describe('integrate cursor', () => {
             extraEnv: runEnv,
           });
           await chooseCustomize(session);
-          await session.accept('Install Secrets detection?');
+          await session.accept('Install secrets detection?');
           await session.accept('Install Vortex?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();

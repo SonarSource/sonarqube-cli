@@ -486,7 +486,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
 
       const session = harness.runInteractive('integrate opencode');
       await chooseCustomize(session);
-      await session.accept('Secrets detection (currently installed)  Keep?');
+      await session.accept('secrets detection (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       const result: CliResult = await session.waitFinish();

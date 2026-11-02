@@ -586,14 +586,14 @@ describe('integrate codex', () => {
         // is not_applicable. Secrets hooks and MCP each ask.
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
         // Each opted feature surfaced its confirm prompt.
-        expect(output).toContain('Install Secrets detection?');
+        expect(output).toContain('Install secrets detection?');
         expect(output).toContain('Install MCP server?');
         expect(output).not.toContain('Install Vortex?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
@@ -627,7 +627,7 @@ describe('integrate codex', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
           await chooseCustomize(session);
-          await session.accept('Install Secrets detection?');
+          await session.accept('Install secrets detection?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -649,7 +649,7 @@ describe('integrate codex', () => {
       async () => {
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
-        await session.decline('Install Secrets detection?');
+        await session.decline('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
@@ -689,7 +689,7 @@ describe('integrate codex', () => {
           },
         });
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
