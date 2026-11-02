@@ -133,7 +133,7 @@ export interface PreparedSqaaRun {
   displayDepth: SqaaAnalysisDepth;
 }
 
-export type SqaaPreparedRunOptions = Pick<
-  SqaaBatchRunOptions,
-  'console' | 'format' | 'telemetryCallerCommand' | 'telemetryCtx'
->;
+export type SqaaPreparedRunOptions = AnalyzeSqaaRunOptions & {
+  console: Console;
+  format?: OutputFormat;
+};
