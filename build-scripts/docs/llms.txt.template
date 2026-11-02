@@ -14,6 +14,8 @@ sonar auth login
 sonar integrate claude
 
 ## For AI Agents
+Scan specific files with `sonar analyze secrets <file1> <file2>`. Do not scan whole trees with `.` or a repository-root path.
+Use `sonar analyze` to scan changed files. For a required directory scan, use `--exclude <path>` to skip large directories. Repeat the option for each exact path or directory prefix; wildcards are not supported. `--exclude` replaces the `secrets.exclude` configuration; repeat any configured paths you still need to exclude.
 Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
 Use `sonar list projects` to discover available projects before running analysis.
 Commands marked with * require prior authentication via `sonar auth login`.
