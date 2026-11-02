@@ -28,12 +28,10 @@ import {
 } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
-import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import {
-  type SharedProjectConfigMapping,
-  sharedProjectConfigRepository,
-} from '@/core/project-discovery/shared-project-config.ts';
+import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
+import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
@@ -64,24 +62,12 @@ export function resolveProjectRoot(pathOption: string): string {
   return canonicalizePath(root);
 }
 
-/** Mappings on the project root's ancestry line, either direction; used only to name a bound organization. */
-function mappingsOnPath(
-  mappings: SharedProjectConfigMapping[],
-  projectRoot: string,
-): SharedProjectConfigMapping[] {
-  return mappings.filter(
-    (mapping) =>
-      isAncestorOrSelf(mapping.projectRoot, projectRoot) ||
-      isAncestorOrSelf(projectRoot, mapping.projectRoot),
-  );
-}
-
 // A committed config is untrusted and the name ends up in a command the user is told to run.
 const ORGANIZATION_KEY = /^[A-Za-z0-9_.-]+$/;
 
 /** Organization that a mapping on the same server records, when it differs from the active one. */
 function recordedOtherOrganization(
-  mappings: SharedProjectConfigMapping[],
+  mappings: CompleteProjectMapping[],
   auth: ResolvedAuth,
 ): string | undefined {
   return mappings.find(
@@ -98,13 +84,18 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   const { auth } = deps;
   const { gitRoot, isGit } = findGitRoot(projectRoot);
 
-  const mappings = await sharedProjectConfigRepository.load(isGit ? gitRoot : projectRoot);
-  const onPath = mappingsOnPath(mappings, projectRoot);
+  // Local config and known mappings prove no server project exists, so only `.sonar-config.json` counts.
+  const discovered = await discoverProjects(projectRoot, {
+    auth,
+    console: deps.console,
+    silent: true,
+    useKnownMappings: false,
+    useGitRemoteBinding: false,
+  });
+  const onPath = discovered.fromSharedConfig ? discovered.scope(projectRoot) : [];
   // A project below the root leaves the rest of it unlinked, so only enclosing mappings count.
-  const linked = mappings.filter(
-    (mapping) =>
-      isAncestorOrSelf(mapping.projectRoot, projectRoot) &&
-      authMatchesRecordedConnection(auth, mapping),
+  const linked = onPath.filter(
+    (mapping) => mapping.contains && authMatchesRecordedConnection(auth, mapping),
   );
   if (linked.length > 0) {
     return { path: 'complete', projectRoot, projectKeys: linked.map((p) => p.projectKey) };

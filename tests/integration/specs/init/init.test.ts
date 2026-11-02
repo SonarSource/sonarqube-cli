@@ -163,6 +163,46 @@ describe('sonar init', () => {
   );
 
   it(
+    'reports setup as complete when .sonar-config.json sits in a directory between --path and the repository root',
+    async () => {
+      const serverUrl = await signInToCloud(() => {});
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('services/api/.keep', '');
+      harness.cwd.writeFile(
+        'services/.sonar-config.json',
+        JSON.stringify({
+          project: { projectKey: 'mapped', serverUrl, organization: ORG, path: '.' },
+        }),
+      );
+
+      const result = await harness.run('init --path services/api');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'does not report setup as complete from sonar-project.properties alone',
+    async () => {
+      await signInToCloud(() => {});
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.projectKey=local-key\nsonar.organization=${ORG}\n`,
+      );
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Nothing left to set up');
+    },
+    TIMEOUT,
+  );
+
+  it(
     'continues with a note when the binding lookup cannot tell',
     async () => {
       await signInToCloud((server) => server.withProjectBindingsStatus(500));
