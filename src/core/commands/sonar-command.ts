@@ -41,6 +41,7 @@ import {
 import logger from '@/core/observability/logger.ts';
 import { isResult, type ResultAsync } from '@/core/result.ts';
 import { loadState, updateState } from '@/core/state/state-manager.ts';
+import { authLoginHint } from '@/core/ui/components/agent-prompt-hint.ts';
 import type { Console } from '@/core/ui/console.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import { UpdateNotifier } from '@/core/update/notification.ts';
@@ -582,7 +583,7 @@ export class SonarCommand extends Command {
         }
         if (!authResult.value) {
           throw new CommandFailedError('Not authenticated.', {
-            remediationHint: "Run 'sonar auth login' to authenticate.",
+            remediationHint: authLoginHint(),
           });
         }
         const outcome = await fn(
