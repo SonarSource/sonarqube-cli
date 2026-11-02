@@ -110,7 +110,9 @@ function linkCommand(
   const link = monorepo
     ? `sonar link --monorepo ${shellQuote(projectKey)} --path ${shellQuote(path)}`
     : `sonar link ${shellQuote(projectKey)}`;
-  return runFrom === undefined ? link : `cd ${shellQuote(runFrom)} && ${link}`;
+  // Windows PowerShell 5.1, the default shell there, has no `&&`.
+  const separator = process.platform === 'win32' ? '; ' : ' && ';
+  return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
 }
 
 /** The project already exists on the server by now, so a failure here has to say how to finish. */
@@ -150,7 +152,7 @@ async function writeMapping(
     throw new CommandFailedError(
       `Created project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
       {
-        remediationHint: `Fix the file, then run '${linkCommand(projectKey, path, monorepo, runFrom)}' to map the project.`,
+        remediationHint: `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, monorepo, runFrom)}`,
       },
     );
   }

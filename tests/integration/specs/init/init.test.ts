@@ -634,7 +634,7 @@ describe('sonar init', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain('Created project');
         expect(output).toContain('could not save .sonar-config.json');
-        expect(output).toContain("'sonar link ");
+        expect(output).toContain('sonar link ');
       },
       TIMEOUT,
     );
