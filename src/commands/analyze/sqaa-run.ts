@@ -283,6 +283,11 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   const { auth } = connection;
   const fileContent = readSqaaFileContent(file);
 
+  const progress = new SqaaProgress({
+    files: [path.displayPath],
+    console,
+    silent: format === 'json',
+  });
   const { result: fetchResult, durationMs } = await timed(() =>
     fetchSingleFileReport(
       connection,
@@ -294,14 +299,16 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
       displayDepth,
       format === 'text'
         ? (attempt) =>
-            new SqaaProgress({ files: [path.displayPath], console }).retryingChunk(
+            progress.retryingChunk(
               0,
               attempt,
               MAX_503_RETRIES,
               getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
             )
         : undefined,
-    ),
+    ).finally(() => {
+      progress.finish();
+    }),
   );
   const { report, error } = fetchResult;
 
