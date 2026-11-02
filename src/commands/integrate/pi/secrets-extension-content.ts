@@ -41,7 +41,7 @@ function blockedMessage(reason: string): string {
 const NARROW_NO_BREAK_SPACE = '\u202F';
 const CURLY_APOSTROPHE = '\u2019';
 const NO_BYPASS_SENTENCE =
-  'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action.';
+  'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action. Scan only specific files with sonar analyze secrets <files>. Do not scan whole trees with . or a repository-root path.';
 
 interface PreToolUseDecision {
   block: boolean;

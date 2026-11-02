@@ -154,7 +154,9 @@ export async function analyzeSecrets(
   options: AnalyzeSecretsOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return handleCheckCommand(options, ctx).catch(handleScanError);
+  return handleCheckCommand(options, ctx).catch((err: unknown) => {
+    handleScanError(err, options);
+  });
 }
 
 // Env var names expected by the sonar-secrets binary
@@ -476,7 +478,17 @@ function isJson(text: string): boolean {
   }
 }
 
-function handleScanError(err: unknown): void {
+function scanTimeoutHint(options: AnalyzeSecretsOptions): string {
+  if (options.stdin) {
+    return "Retry with less input, or scan specific files with 'sonar analyze secrets <file1> <file2>'.";
+  }
+  if (options.telemetryCallerCommand === SECRETS_CALLER_COMMANDS.analyze) {
+    return "Narrow the change set with 'sonar analyze --staged' or 'sonar analyze --file <path>', or scan specific files with 'sonar analyze secrets <file1> <file2>'.";
+  }
+  return "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. For a directory scan, use '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards). This replaces 'secrets.exclude'; repeat any configured paths you still need to exclude.";
+}
+
+function handleScanError(err: unknown, options: AnalyzeSecretsOptions): void {
   if (err instanceof InvalidOptionError || err instanceof CommandFailedError) {
     throw err;
   }
@@ -485,7 +497,7 @@ function handleScanError(err: unknown): void {
 
   let details: string;
   if (errorMessage.includes('timed out')) {
-    details = 'Try scanning a smaller file or check system resources.';
+    details = scanTimeoutHint(options);
   } else if (errorMessage.includes('ENOENT')) {
     details = "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.";
   } else {
