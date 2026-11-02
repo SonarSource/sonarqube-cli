@@ -28,8 +28,7 @@ import {
 import { buildStatsFromTelemetry, upsertRuleMessages } from '@/core/stats/facts.ts';
 
 import { type AnalysisCompletedPayload, CLI_ANALYSIS_COMPLETED } from './analysis-completed.ts';
-import type { FileResult, RunTally } from './sqaa-analysis.ts';
-import type { SqaaJsonReport } from './sqaa-display-json.ts';
+import type { RunTally } from './sqaa-analysis.ts';
 import type { SqaaIssue } from './sqaa-wire-types.ts';
 
 export const SQAA_ANALYZE_CALLER_COMMAND = 'analyze';
@@ -99,37 +98,6 @@ function collectRuleMessages(
     messages[issue.rule] = issue.message;
   }
   return messages;
-}
-
-/** Builds a RunTally from a SQAA JSON report (change-set / Codex hook path). */
-export function tallyFromSqaaJsonReport(report: SqaaJsonReport): RunTally {
-  const allResults: FileResult[] = [];
-
-  for (const file of report.files) {
-    allResults.push({
-      file: file.path,
-      filePath: file.path,
-      issues: file.issues,
-      errors: file.errors,
-    });
-  }
-
-  for (const failure of report.failures) {
-    allResults.push({
-      file: failure.path,
-      filePath: failure.path,
-      failure: new Error(failure.message),
-    });
-  }
-
-  const totalErrors = report.files.reduce((count, file) => count + (file.errors?.length ?? 0), 0);
-
-  return {
-    allResults,
-    totalIssues: report.summary.totalIssues,
-    totalErrors,
-    totalFailures: report.summary.totalFailures,
-  };
 }
 
 /**
