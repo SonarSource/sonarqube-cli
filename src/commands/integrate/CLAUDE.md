@@ -98,5 +98,3 @@ The CAG installer (`src/core/host/install/context-augmentation.ts`) handles `.ta
 Codex help lists secrets scanning hooks, Vortex analysis and MCP Server. `sonar system status` labels Codex as `INSTALLED` and keeps the recorded resource path. It shows managed Sonar hooks on a separate line. The managed file is `/etc/codex/requirements.toml` on Unix and macOS, and `%ProgramData%\OpenAI\Codex\requirements.toml` on Windows (`C:\ProgramData` when `ProgramData` is unset). If that file contains Sonar hook commands, a separate line shows that managed file and the Sonar hook events. Other tools' hook events are excluded. Tests isolate the managed file with `__SQCLI_DEV_CODEX_REQUIREMENTS_PATH`.
 
 Managed Codex configuration read and parse errors are logged at debug level. Status keeps the recorded installation output when the managed file is unavailable or invalid.
-
-Explicit-file SQAA commands and report callers share `prepareSqaaExplicitFiles` in `analyze/sqaa-context.ts`; it resolves project/path views, branch, depth, and confirmation once into `PreparedSqaaRun`.
