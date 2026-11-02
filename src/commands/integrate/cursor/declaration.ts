@@ -26,18 +26,18 @@ import type {
   IntegrationDeclaration,
   ResourceDeclaration,
 } from '@/core/framework/features';
-import { jsonPatch, sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
+import { jsonPatch } from '@/core/framework/features';
 
-import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
+  createSonarSecretsHooksResources,
   resolveAgentHooksConfigPath,
-  secretsScanningExample,
 } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsRule,
@@ -50,7 +50,12 @@ import {
 } from '../_common/hooks.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
-import { buildCursorHookEntry, removeCursorHooks, upsertCursorHooks } from './hooks.ts';
+import {
+  buildCursorHookEntry,
+  createCursorHooksWriter,
+  removeCursorHooks,
+  upsertCursorHooks,
+} from './hooks.ts';
 import { buildCursorAlwaysOnRule } from './rules.ts';
 
 const HOOKS_JSON = 'hooks.json';
@@ -114,71 +119,9 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
   id: CURSOR_INTEGRATION_ID,
   displayName: 'Cursor',
   features: [
-    {
-      id: 'sonar-secrets-hooks',
-      displayName: 'secret scanning hooks',
-      previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      postInstallExample: secretsScanningExample('Cursor'),
-      dependencies: [sonarSecretsBinaryDependency],
-      resources: [
-        wholeFile({
-          id: 'preread-secrets-script',
-          displayName: 'Cursor beforeReadFile hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PREREAD_SCRIPT_REL),
-          content: {
-            unix: buildUnixHookScript('cursor-pre-file-read'),
-            windows: buildWindowsHookScript('cursor-pre-file-read'),
-          },
-          executable: true,
-        }),
-        wholeFile({
-          id: 'pretool-secrets-script',
-          displayName: 'Cursor preToolUse hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PRETOOL_SCRIPT_REL),
-          content: {
-            unix: buildUnixHookScript('cursor-pre-tool-use'),
-            windows: buildWindowsHookScript('cursor-pre-tool-use'),
-          },
-          executable: true,
-        }),
-        wholeFile({
-          id: 'prompt-secrets-script',
-          displayName: 'Cursor beforeSubmitPrompt hook script',
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, PROMPT_SCRIPT_REL),
-          content: {
-            unix: buildUnixHookScript('cursor-prompt-submit'),
-            windows: buildWindowsHookScript('cursor-prompt-submit'),
-          },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'cursor-hooks-config',
-          displayName: 'Cursor hooks configuration',
-          targetPath: resolveCursorHooksJsonPath,
-          defaultValue: { version: 1, hooks: {} },
-          patch: (document, context) =>
-            upsertCursorHooks(document, [
-              buildCursorHookEntry(context, CURSOR_CONFIG_DIR, 'preToolUse', PRETOOL_SCRIPT_REL),
-              buildCursorHookEntry(
-                context,
-                CURSOR_CONFIG_DIR,
-                'beforeReadFile',
-                PREREAD_SCRIPT_REL,
-              ),
-              buildCursorHookEntry(
-                context,
-                CURSOR_CONFIG_DIR,
-                'beforeSubmitPrompt',
-                PROMPT_SCRIPT_REL,
-              ),
-            ]),
-          removePatch: (document) => removeCursorHooks(document, ['sonar-secrets']),
-        }),
-      ],
-    },
+    createSecretsDetectionFeature<CursorIntegrationOptions>({
+      resources: createCursorSecretsDetectionResources(),
+    }),
     createVortexFeature<CursorIntegrationOptions>(
       [
         createSqaaInstructionsSubfeature([
@@ -198,3 +141,45 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     }),
   ],
 };
+
+function createCursorSecretsDetectionResources(): ResourceDeclaration[] {
+  return createSonarSecretsHooksResources({
+    configDir: CURSOR_CONFIG_DIR,
+    hooksConfigFileName: HOOKS_JSON,
+    scripts: [
+      {
+        id: 'preread-secrets-script',
+        displayName: 'Cursor beforeReadFile hook script',
+        scriptPath: PREREAD_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('cursor-pre-file-read'),
+          windows: buildWindowsHookScript('cursor-pre-file-read'),
+        },
+      },
+      {
+        id: 'pretool-secrets-script',
+        displayName: 'Cursor preToolUse hook script',
+        scriptPath: PRETOOL_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('cursor-pre-tool-use'),
+          windows: buildWindowsHookScript('cursor-pre-tool-use'),
+        },
+      },
+      {
+        id: 'prompt-secrets-script',
+        displayName: 'Cursor beforeSubmitPrompt hook script',
+        scriptPath: PROMPT_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('cursor-prompt-submit'),
+          windows: buildWindowsHookScript('cursor-prompt-submit'),
+        },
+      },
+    ],
+    hookEntries: [
+      { eventType: 'preToolUse', marker: 'sonar-secrets', scriptPath: PRETOOL_SCRIPT_REL },
+      { eventType: 'beforeReadFile', marker: 'sonar-secrets', scriptPath: PREREAD_SCRIPT_REL },
+      { eventType: 'beforeSubmitPrompt', marker: 'sonar-secrets', scriptPath: PROMPT_SCRIPT_REL },
+    ],
+    hookWriter: createCursorHooksWriter(),
+  });
+}

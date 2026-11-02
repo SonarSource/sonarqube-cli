@@ -22,7 +22,6 @@ import { join } from 'node:path';
 
 import type {
   FeatureContainer,
-  FeatureDeclaration,
   IntegrationContext,
   IntegrationDeclaration,
   ResourceDeclaration,
@@ -31,14 +30,14 @@ import type {
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
-import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
+import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -95,13 +94,10 @@ function devinHookContext(context: IntegrationContext): IntegrationContext {
   return { ...context, targetRoot: resolveDevinConfigDir(context.targetRoot) };
 }
 
-function createDevinSecretsHooksFeature(): FeatureDeclaration<DevinIntegrationOptions> {
-  const hooksFeature = createSonarSecretsHooksFeature<DevinIntegrationOptions>({
-    agentDisplayName: DEVIN_DISPLAY_NAME,
+function createDevinSecretsDetectionResources(): ResourceDeclaration[] {
+  return createSonarSecretsHooksResources({
     configDir: '',
     hooksConfigFileName: DEVIN_CONFIG_FILE,
-    hooksPatchId: 'devin-hooks-secrets-hook',
-    previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
     resolveContext: devinHookContext,
     scripts: [
       {
@@ -138,19 +134,6 @@ function createDevinSecretsHooksFeature(): FeatureDeclaration<DevinIntegrationOp
       },
     ],
   });
-
-  return {
-    ...hooksFeature,
-    replacedIds: ['secrets-instructions'],
-    legacyCleanups: [
-      textSnippetRemover({
-        id: 'devin-secrets-instructions',
-        targetPath: resolveDevinAgentsMdPath,
-        startMarker: sonarBeginMarker(SECRETS_ON_READ_MARKER),
-        endMarker: sonarEndMarker(SECRETS_ON_READ_MARKER),
-      }),
-    ],
-  };
 }
 
 function createSqaaHookSubfeature(): SubfeatureDeclaration<DevinIntegrationOptions> {
@@ -253,7 +236,18 @@ export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> =
   id: DEVIN_INTEGRATION_ID,
   displayName: DEVIN_DISPLAY_NAME,
   features: [
-    createDevinSecretsHooksFeature(),
+    createSecretsDetectionFeature<DevinIntegrationOptions>({
+      resources: createDevinSecretsDetectionResources(),
+      replacedIds: ['secrets-instructions'],
+      legacyCleanups: [
+        textSnippetRemover({
+          id: 'devin-secrets-instructions',
+          targetPath: resolveDevinAgentsMdPath,
+          startMarker: sonarBeginMarker(SECRETS_ON_READ_MARKER),
+          endMarker: sonarEndMarker(SECRETS_ON_READ_MARKER),
+        }),
+      ],
+    }),
     createDevinVortexFeature(),
     createMcpServerFeature<DevinIntegrationOptions>({
       resolveConfigPath: resolveDevinMcpConfigPath,

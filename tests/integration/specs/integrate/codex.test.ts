@@ -146,7 +146,7 @@ describe('integrate codex', () => {
         // Completion summary
         expect(result.stdout).toContain('Installed');
         expect(result.stdout).toContain('Setup complete!');
-        expect(result.stdout).toContain('paste this into Codex');
+        expect(result.stdout).toContain('paste this into your agent');
       },
       { timeout: 30000 },
     );
@@ -586,14 +586,14 @@ describe('integrate codex', () => {
         // is not_applicable. Secrets hooks and MCP each ask.
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
-        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = `${result.stdout}\n${result.stderr}`;
         // Each opted feature surfaced its confirm prompt.
-        expect(output).toContain('Install secret scanning hooks?');
+        expect(output).toContain('Install secrets detection?');
         expect(output).toContain('Install MCP server?');
         expect(output).not.toContain('Install Vortex?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
@@ -605,7 +605,7 @@ describe('integrate codex', () => {
         expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.
-        expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+        expect(findCodexFeature(harness, 'secrets-detection')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCodexFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
@@ -627,7 +627,7 @@ describe('integrate codex', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate codex', { extraEnv });
           await chooseCustomize(session);
-          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install secrets detection?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -649,7 +649,7 @@ describe('integrate codex', () => {
       async () => {
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
-        await session.decline('Install secret scanning hooks?');
+        await session.decline('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
@@ -657,7 +657,7 @@ describe('integrate codex', () => {
         // Hook was declined: no hook artifacts and no state entry.
         expect(harness.userHome.exists('.codex', 'hooks')).toBe(false);
         expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(false);
-        expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+        expect(findCodexFeature(harness, 'secrets-detection')).toBeUndefined();
         // The accepted features are still installed.
         expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
@@ -689,7 +689,7 @@ describe('integrate codex', () => {
           },
         });
         await chooseCustomize(session);
-        await session.accept('Install secret scanning hooks?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
