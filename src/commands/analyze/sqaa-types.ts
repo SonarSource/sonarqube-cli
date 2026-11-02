@@ -97,17 +97,6 @@ export interface SqaaResolvedRun {
   projectRoots: string[];
 }
 
-export interface SqaaBatchRunOptions {
-  resolved: SqaaResolvedRun;
-  console: Console;
-  branch?: string;
-  format?: OutputFormat;
-  wireDepth?: SqaaDeepWireDepth;
-  displayDepth?: SqaaAnalysisDepth;
-  telemetryCallerCommand?: SqaaTelemetryCallerCommand;
-  telemetryCtx?: CommandInvocationContext;
-}
-
 export interface PreparedSqaaRun {
   connection: SonarConnection;
   files: SqaaRunFiles;
