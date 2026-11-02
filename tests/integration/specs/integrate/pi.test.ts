@@ -63,7 +63,7 @@ describe('integrate pi — secrets scanning extension', () => {
       const result = await harness.run('integrate pi --non-interactive');
 
       expect(result.exitCode).toBe(0);
-      expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findPiFeature(harness, 'secrets-detection')).toBeDefined();
       const extension = harness.userHome.file(...SECRETS_EXTENSION_PATH.split('/')).asText();
       expect(extension).toContain(PI_EXTENSION_MANAGED_MARKER);
       expect(extension).toContain('pi-pre-tool-use');
@@ -81,7 +81,7 @@ describe('integrate pi — secrets scanning extension', () => {
         .state()
         .withInstalledIntegrationFeature(
           piIntegration,
-          'sonar-secrets-hooks',
+          'secrets-detection',
           'global',
           harness.userHome.path,
         );
@@ -93,13 +93,13 @@ describe('integrate pi — secrets scanning extension', () => {
 
       const session = harness.runInteractive('integrate pi');
       await chooseCustomize(session);
-      await session.decline('secret scanning hooks (currently installed)  Keep?');
+      await session.decline('Secrets detection (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       await session.decline('Install MCP server?');
       const result: CliResult = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
-      expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
+      expect(findPiFeature(harness, 'secrets-detection')).toBeUndefined();
       expect(harness.userHome.exists(SECRETS_EXTENSION_PATH)).toBe(false);
       expect(harness.userHome.exists('.pi/agent/extensions/other.ts')).toBe(true);
     },
@@ -277,7 +277,7 @@ describe('integrate pi — MCP server configuration', () => {
       const server = await harness.newFakeServer().withAuthToken('tok').withProject('proj').start();
       harness.withAuth(server.baseUrl(), 'tok');
       writeProjectProperties(harness, server.baseUrl());
-      for (const featureId of ['sonar-secrets-hooks', 'mcp-server']) {
+      for (const featureId of ['secrets-detection', 'mcp-server']) {
         harness
           .state()
           .withInstalledIntegrationFeature(
@@ -303,14 +303,14 @@ describe('integrate pi — MCP server configuration', () => {
 
       const session = harness.runInteractive('integrate pi');
       await chooseCustomize(session);
-      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Secrets detection (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       const result: CliResult = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(findPiFeature(harness, 'mcp-server')).toBeUndefined();
-      expect(findPiFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findPiFeature(harness, 'secrets-detection')).toBeDefined();
       const { mcpServers } = readPiMcpConfig(harness);
       expect(mcpServers?.sonarqube).toBeUndefined();
       expect(mcpServers?.other).toMatchObject({ command: 'x' });

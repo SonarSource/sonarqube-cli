@@ -28,14 +28,14 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
-import { SECRETS_PROMPT_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
+import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -72,48 +72,8 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: CODEX_DISPLAY_NAME,
   features: [
-    {
-      ...createSonarSecretsHooksFeature<CodexIntegrationOptions>({
-        agentDisplayName: CODEX_DISPLAY_NAME,
-        configDir: CODEX_CONFIG_DIR,
-        hooksConfigFileName: HOOKS_FILE,
-        hooksPatchId: 'codex-hooks-secrets-hook',
-        previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-        scripts: [
-          {
-            id: 'posttool-secrets-script',
-            displayName: 'Codex PostToolUse secrets hook script',
-            scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
-            content: {
-              unix: buildUnixHookScript('agent-secrets-masking --agent codex'),
-              windows: buildWindowsHookScript('agent-secrets-masking --agent codex'),
-            },
-          },
-          {
-            id: 'prompt-secrets-script',
-            displayName: 'Codex UserPromptSubmit hook script',
-            scriptPath: PROMPT_SCRIPT_REL,
-            content: {
-              unix: buildUnixHookScript('codex-prompt-submit'),
-              windows: buildWindowsHookScript('codex-prompt-submit'),
-            },
-          },
-        ],
-        hookEntries: [
-          {
-            eventType: 'PostToolUse',
-            matcher: '*',
-            marker: 'sonar-secrets',
-            scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
-          },
-          {
-            eventType: 'UserPromptSubmit',
-            matcher: '*',
-            marker: 'sonar-secrets',
-            scriptPath: PROMPT_SCRIPT_REL,
-          },
-        ],
-      }),
+    createSecretsDetectionFeature<CodexIntegrationOptions>({
+      resources: createCodexSecretsDetectionResources(),
       replacedIds: ['secrets-instructions'],
       legacyCleanups: [
         textSnippetRemover({
@@ -123,7 +83,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
           endMarker: sonarEndMarker('codex-secrets-on-read'),
         }),
       ],
-    },
+    }),
     createVortexFeature<CodexIntegrationOptions>(
       [
         createSqaaHookSubfeature(),
@@ -232,4 +192,45 @@ function resolveCodexMcpConfigPath(context: IntegrationContext): string {
 
 function resolveCodexSkillPath(context: IntegrationContext): string {
   return join(context.targetRoot, '.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md');
+}
+
+function createCodexSecretsDetectionResources(): ResourceDeclaration[] {
+  return createSonarSecretsHooksResources({
+    configDir: CODEX_CONFIG_DIR,
+    hooksConfigFileName: HOOKS_FILE,
+    scripts: [
+      {
+        id: 'posttool-secrets-script',
+        displayName: 'Codex PostToolUse secrets hook script',
+        scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('agent-secrets-masking --agent codex'),
+          windows: buildWindowsHookScript('agent-secrets-masking --agent codex'),
+        },
+      },
+      {
+        id: 'prompt-secrets-script',
+        displayName: 'Codex UserPromptSubmit hook script',
+        scriptPath: PROMPT_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('codex-prompt-submit'),
+          windows: buildWindowsHookScript('codex-prompt-submit'),
+        },
+      },
+    ],
+    hookEntries: [
+      {
+        eventType: 'PostToolUse',
+        matcher: '*',
+        marker: 'sonar-secrets',
+        scriptPath: POSTTOOL_SECRETS_SCRIPT_REL,
+      },
+      {
+        eventType: 'UserPromptSubmit',
+        matcher: '*',
+        marker: 'sonar-secrets',
+        scriptPath: PROMPT_SCRIPT_REL,
+      },
+    ],
+  });
 }

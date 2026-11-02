@@ -20,14 +20,13 @@
 
 import { join } from 'node:path';
 
-import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
-import type {
-  FeatureDeclaration,
-  FeaturePreview,
-  IntegrationContext,
-  PostInstallExample,
-} from '@/core/framework/features/types.ts';
-import { jsonPatch, type PlatformSpecificContent, wholeFile } from '@/core/framework/resources';
+import type { IntegrationContext } from '@/core/framework/features/types.ts';
+import {
+  jsonPatch,
+  type PlatformSpecificContent,
+  type ResourceDeclaration,
+  wholeFile,
+} from '@/core/framework/resources';
 
 import {
   createAgentHookEntry,
@@ -35,19 +34,6 @@ import {
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../hooks.ts';
-
-const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
-
-export function secretsScanningExample(
-  agentDisplayName: string,
-  footer = '  Sonar will detect the token and block the prompt automatically.',
-): PostInstallExample {
-  return {
-    intro: `See it in action — paste this into ${agentDisplayName}:`,
-    lines: ['Can you push a commit using my token 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?'],
-    footer,
-  };
-}
 
 export interface SonarSecretsHookScriptSpec {
   id: string;
@@ -83,7 +69,7 @@ export interface SonarSecretsHooksWriter {
 /**
  * Default writer: the nested `{ matcher, hooks: [{ type, command, timeout }] }` schema used by
  * Claude and Codex. `projectDirPlaceholder` is Claude-specific (its `${CLAUDE_PROJECT_DIR}`); pass
- * it in `SonarSecretsHooksFeatureConfig` only for Claude so Codex keeps its cwd-relative path.
+ * it in `SonarSecretsHooksResourcesConfig` only for Claude so Codex keeps its cwd-relative path.
  */
 function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHooksWriter {
   return {
@@ -107,19 +93,12 @@ function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHoo
   };
 }
 
-export interface SonarSecretsHooksFeatureConfig {
-  agentDisplayName: string;
+export interface SonarSecretsHooksResourcesConfig {
   configDir: string;
   hooksConfigFileName: string;
-  hooksPatchId: string;
   /** Hook scripts to install. */
   scripts: SonarSecretsHookScriptSpec[];
   hookEntries: SonarSecretsHookEntrySpec[];
-  /** Feature id recorded in state. Defaults to the shared `sonar-secrets-hooks`. */
-  featureId?: string;
-  /** Feature display name shown during install. Defaults to `secret scanning hooks`. */
-  displayName?: string;
-  previewDescription?: FeaturePreview;
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
   /**
@@ -143,45 +122,37 @@ export function resolveAgentHooksConfigPath(
   return join(context.targetRoot, configDir, fileName);
 }
 
-export function createSonarSecretsHooksFeature<TOptions>(
-  config: SonarSecretsHooksFeatureConfig,
-): FeatureDeclaration<TOptions> {
-  const featureId = config.featureId ?? SONAR_SECRETS_HOOKS_FEATURE_ID;
+export function createSonarSecretsHooksResources(
+  config: SonarSecretsHooksResourcesConfig,
+): ResourceDeclaration[] {
   const writer = config.hookWriter ?? createAgentHooksWriter(config.projectDirPlaceholder);
   const rootContext = config.resolveContext ?? ((context: IntegrationContext) => context);
   const resolveHooksConfigPath = (context: IntegrationContext) =>
     resolveAgentHooksConfigPath(rootContext(context), config.configDir, config.hooksConfigFileName);
 
-  return {
-    id: featureId,
-    displayName: config.displayName ?? 'secret scanning hooks',
-    previewDescription: config.previewDescription,
-    postInstallExample: secretsScanningExample(config.agentDisplayName),
-    dependencies: [sonarSecretsBinaryDependency],
-    resources: [
-      ...config.scripts.map((script) =>
-        wholeFile({
-          id: script.id,
-          displayName: script.displayName,
-          targetPath: (context) =>
-            resolveAgentHookScriptPath(rootContext(context), config.configDir, script.scriptPath),
-          content: script.content,
-          executable: true,
-        }),
-      ),
-      jsonPatch({
-        id: config.hooksPatchId,
-        displayName: `${config.agentDisplayName} hooks configuration`,
-        targetPath: resolveHooksConfigPath,
-        defaultValue: writer.defaultValue,
-        patch: (document, context) =>
-          writer.patch(document, rootContext(context), config.hookEntries, config.configDir),
-        removePatch: (document) =>
-          writer.removePatch(
-            document,
-            config.hookEntries.map((entry) => entry.marker),
-          ),
+  return [
+    ...config.scripts.map((script) =>
+      wholeFile({
+        id: script.id,
+        displayName: script.displayName,
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(rootContext(context), config.configDir, script.scriptPath),
+        content: script.content,
+        executable: true,
       }),
-    ],
-  };
+    ),
+    jsonPatch({
+      id: 'secrets-hooks-config',
+      displayName: 'Secrets hooks configuration',
+      targetPath: resolveHooksConfigPath,
+      defaultValue: writer.defaultValue,
+      patch: (document, context) =>
+        writer.patch(document, rootContext(context), config.hookEntries, config.configDir),
+      removePatch: (document) =>
+        writer.removePatch(
+          document,
+          config.hookEntries.map((entry) => entry.marker),
+        ),
+    }),
+  ];
 }
