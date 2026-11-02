@@ -98,7 +98,7 @@ describe('integrate copilot', () => {
         // Completion summary
         expect(result.stdout).toContain('Installed');
         expect(result.stdout).toContain('Setup complete!');
-        expect(result.stdout).toContain('paste this into Copilot');
+        expect(result.stdout).toContain('paste this into your agent');
       },
       { timeout: 30000 },
     );
@@ -140,9 +140,8 @@ describe('integrate copilot', () => {
           copilotIntegration?.features
             .map((feature: { featureId: string }) => feature.featureId)
             .sort(),
-        ).toEqual(['mcp-server', 'pre-tool-use-hook', 'prompt-secrets-hook']);
-        expect(findCopilotFeature(harness, 'pre-tool-use-hook')?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'prompt-secrets-hook')?.scope).toBe('global');
+        ).toEqual(['mcp-server', 'secrets-detection']);
+        expect(findCopilotFeature(harness, 'secrets-detection')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
@@ -270,7 +269,7 @@ describe('integrate copilot', () => {
         expect(body).toContain('sonar analyze agentic --depth DEEP');
         expect(body).toContain('--file');
 
-        const promptSecrets = findCopilotFeature(harness, 'prompt-secrets-hook');
+        const promptSecrets = findCopilotFeature(harness, 'secrets-detection');
         expect(promptSecrets?.scope).toBe('global');
         expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
@@ -287,8 +286,7 @@ describe('integrate copilot', () => {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
         await chooseCustomize(session);
-        await session.accept('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets hook?');
+        await session.accept('Install Secrets detection?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
@@ -383,25 +381,22 @@ describe('integrate copilot', () => {
 
   describe('interactive feature selection', () => {
     it(
-      'removes only the prompt hook when that installed feature is declined',
+      'removes both secrets hooks when Secrets detection is declined',
       async () => {
         await harness.run('integrate copilot --non-interactive');
         harness.state().withRawState(harness.stateJsonFile.asText());
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.accept('pre-tool-use hook (currently installed)  Keep?');
-        await session.decline('prompt-secrets hook (currently installed)  Keep?');
+        await session.decline('Secrets detection (currently installed)  Keep?');
         await session.accept('Proceed with removal?');
         await session.accept('MCP server (currently installed)  Keep?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'secrets-detection')).toBeUndefined();
         expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(true);
-        const hooks = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
-        expect(hooks.hooks.preToolUse).toHaveLength(1);
-        expect(hooks.hooks.userPromptTransformed ?? []).toHaveLength(0);
+        expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_HOOKS_JSON_PATH)).toBe(false);
       },
       { timeout: 60000 },
     );
@@ -410,20 +405,17 @@ describe('integrate copilot', () => {
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
-        // is not_applicable. The three remaining
-        // features (hook, prompt-secrets, MCP) each ask.
+        // is not_applicable.
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.accept('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets hook?');
+        await session.accept('Install Secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         // Each opted feature surfaced its confirm prompt.
-        expect(output).toContain('Install pre-tool-use hook?');
-        expect(output).toContain('Install prompt-secrets hook?');
+        expect(output).toContain('Install Secrets detection?');
         expect(output).toContain('Install MCP server?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
@@ -432,8 +424,7 @@ describe('integrate copilot', () => {
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
         expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
         // Declarative state records only the accepted features.
-        expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeDefined();
-        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeDefined();
+        expect(findCopilotFeature(harness, 'secrets-detection')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
       },
@@ -453,8 +444,7 @@ describe('integrate copilot', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
           await chooseCustomize(session);
-          await session.accept('Install pre-tool-use hook?');
-          await session.accept('Install prompt-secrets hook?');
+          await session.accept('Install Secrets detection?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -477,21 +467,17 @@ describe('integrate copilot', () => {
       async () => {
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.decline('Install pre-tool-use hook?');
-        await session.accept('Install prompt-secrets hook?');
+        await session.decline('Install Secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.exists(...GLOBAL_HOOK_SCRIPT_PATH)).toBe(false);
-        expect(findCopilotFeature(harness, 'pre-tool-use-hook')).toBeUndefined();
+        expect(findCopilotFeature(harness, 'secrets-detection')).toBeUndefined();
         // The accepted features are still installed.
-        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(true);
-        const hooks = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
-        expect(hooks.hooks.preToolUse ?? []).toHaveLength(0);
-        expect(hooks.hooks.userPromptTransformed).toHaveLength(1);
+        expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(false);
+        expect(harness.userHome.exists(...GLOBAL_HOOKS_JSON_PATH)).toBe(false);
         expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
-        expect(findCopilotFeature(harness, 'prompt-secrets-hook')).toBeDefined();
         expect(findCopilotFeature(harness, 'mcp-server')).toBeDefined();
       },
       { timeout: 30000 },

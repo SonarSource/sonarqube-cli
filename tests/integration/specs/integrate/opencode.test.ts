@@ -451,7 +451,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
       .state()
       .withInstalledIntegrationFeature(
         openCodeIntegration,
-        'sonar-secrets-hooks',
+        'secrets-detection',
         'global',
         harness.userHome.path,
       )
@@ -486,7 +486,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
 
       const session = harness.runInteractive('integrate opencode');
       await chooseCustomize(session);
-      await session.accept('secret scanning hooks (currently installed)  Keep?');
+      await session.accept('Secrets detection (currently installed)  Keep?');
       await session.decline('MCP server (currently installed)  Keep?');
       await session.accept('Proceed with removal?');
       const result: CliResult = await session.waitFinish();
@@ -496,7 +496,7 @@ describe('integrate opencode — keep/remove the mcp-server feature', () => {
       expect(output).toContain('Removed');
 
       expect(findOpenCodeFeature(harness, 'mcp-server')).toBeUndefined();
-      expect(findOpenCodeFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
+      expect(findOpenCodeFeature(harness, 'secrets-detection')).toBeDefined();
 
       const config = readOpenCodeConfig(harness);
       expect(config.mcp?.sonarqube).toBeUndefined();
