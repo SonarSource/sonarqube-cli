@@ -124,11 +124,11 @@ function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRu
  * happened and replace the report's generic 403 text with that resolved message,
  * mirroring what the text-mode branches already show via `printVortexUnavailable`.
  */
-async function enrichForbiddenGlobalError(
+export async function enrichForbiddenGlobalError(
   report: SqaaJsonReport,
   connection: SonarConnection,
 ): Promise<void> {
-  if (!report.globalError) return;
+  if (report.globalError?.kind !== 'forbidden') return;
   const status = await recheckVortexEntitlement(connection);
   report.globalError = {
     ...report.globalError,
@@ -148,9 +148,7 @@ async function printSqaaJsonReport(
   connection: SonarConnection,
   console: Console,
 ): Promise<void> {
-  if (report.globalError?.kind === 'forbidden') {
-    await enrichForbiddenGlobalError(report, connection);
-  }
+  await enrichForbiddenGlobalError(report, connection);
   console.print(JSON.stringify(report, null, 2));
 }
 
