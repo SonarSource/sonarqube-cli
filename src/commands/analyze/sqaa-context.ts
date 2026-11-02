@@ -22,7 +22,12 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { resolveSqaaBranch } from './sqaa-changeset.ts';
+import {
+  excludeIgnoredFiles,
+  resolveChangeSet,
+  resolveSqaaBranch,
+  resolveSqaaBranchAtRepoRoot,
+} from './sqaa-changeset.ts';
 import {
   labelAnalysisDepth,
   parseSqaaDepthOption,
@@ -162,5 +167,55 @@ export async function prepareSqaaExplicitFiles(
     displayBase,
     branch,
     ...depth,
+  };
+}
+
+export async function prepareSqaaRun(
+  options: AnalyzeSqaaOptions,
+  connection: SonarConnection,
+  console: Console,
+  policy: Pick<AnalyzeSqaaRunOptions, 'requireProject' | 'silentSkip'> = {},
+): Promise<PreparedSqaaRun | null> {
+  if (options.file?.length) return prepareSqaaExplicitFiles(options, connection, console, policy);
+  const depth = resolveDepthForMode(options.depth, 'change-set', options.forcedDepth);
+  let changeSet = await resolveChangeSet(process.cwd(), options);
+  const branch = await resolveSqaaBranchAtRepoRoot(options.branch, changeSet.repoRoot);
+  let files = resolveSqaaRunFiles([], changeSet.repoRoot);
+  if (changeSet.files.length > 0) {
+    const resolution = await resolveSqaaConnectionAndProject(
+      connection,
+      options.project,
+      console,
+      changeSet.files,
+    );
+    const resolved = resolveSqaaContext(
+      resolution,
+      { ...policy, requireProject: policy.requireProject ?? false },
+      console,
+    );
+    if (!resolved) return null;
+    connection = resolved.connection;
+    changeSet = excludeIgnoredFiles(changeSet, resolved.ignored);
+    files = resolveSqaaRunFiles(resolved.groups, changeSet.repoRoot);
+    if (
+      !(await confirmLargeRunIfNeeded(
+        changeSet.files.length,
+        console,
+        options.force,
+        options.format,
+      ))
+    )
+      return null;
+  }
+  return {
+    connection,
+    files,
+    mode: 'change-set',
+    ignored: changeSet.ignored,
+    displayBase: changeSet.repoRoot,
+    repoRoot: changeSet.repoRoot,
+    branch,
+    ...depth,
+    ...(files.displayPaths.length === 0 ? { displayDepth: 'STANDARD' as const } : {}),
   };
 }

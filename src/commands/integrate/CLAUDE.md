@@ -98,3 +98,5 @@ Codex help lists secrets scanning hooks, Vortex analysis and MCP Server. `sonar 
 Managed Codex configuration read and parse errors are logged at debug level. Status keeps the recorded installation output when the managed file is unavailable or invalid.
 
 Explicit-file SQAA commands and report callers share `prepareSqaaExplicitFiles` in `analyze/sqaa-context.ts`; it resolves project/path views, branch, depth, and confirmation once into `PreparedSqaaRun`.
+
+`prepareSqaaRun` also owns changeset collection, exclusion, confirmation, and repository-relative views. Null means unavailable/cancelled; an empty prepared run retains ignored-file reasons without recording an analysis.
