@@ -33,6 +33,8 @@ import type { SonarQubeProject } from '@/core/server/types.ts';
 
 const SEARCH_AGAIN = '__search_again__';
 const PICKER_PAGE_SIZE = 25;
+// /api/components/search silently returns nothing for a one-character `q`.
+const MIN_SEARCH_LENGTH = 2;
 
 export function assertCanChooseProject(
   ctx: Pick<CommandAuthenticatedInvocationContext, 'console'>,
@@ -155,6 +157,13 @@ async function searchForProject(
     }
     const query = term.trim();
 
+    if (query.length > 0 && query.length < MIN_SEARCH_LENGTH) {
+      console.warn(
+        ` Enter at least ${MIN_SEARCH_LENGTH} characters, or leave it empty to list all projects.`,
+      );
+      continue;
+    }
+
     const { components, paging } = await projects
       .searchProjects({
         q: query || undefined,
@@ -186,7 +195,7 @@ async function searchForProject(
         value: project.key,
         label: `${project.name} (${project.key})`,
       })),
-      { value: SEARCH_AGAIN, label: 'Search again' },
+      { value: SEARCH_AGAIN, label: '↻ Search again' },
     ]);
     if (choice === null) {
       throw cancelled();
