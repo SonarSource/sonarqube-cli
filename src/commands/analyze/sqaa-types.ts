@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -41,8 +40,6 @@ export interface AnalyzeSqaaRunOptions {
   telemetryProcessExitCode?: number | null;
   /** Invocation context used to record telemetry facts. */
   telemetryCtx?: CommandInvocationContext;
-  /** Auth the analysis ran against; identity is resolved from it at drain time. */
-  auth?: ResolvedAuth;
 }
 
 export interface AnalyzeSqaaOptions {
