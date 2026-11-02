@@ -190,6 +190,31 @@ update_profile() {
   fi
 }
 
+print_completion() {
+  local dest="$INSTALL_DIR/$BINARY_NAME"
+  echo ""
+  echo "Installation complete! (pre-release $version)"
+  echo ""
+  echo "sonar has been installed to: $dest"
+  echo ""
+  case ":${PATH:-}:" in
+    *":$INSTALL_DIR:"*) ;;
+    *)
+      echo "What happens next:"
+      echo "  - Any NEW terminal window you open will have 'sonar' available automatically."
+      echo "  - This current terminal window won't see it yet — you have two options:"
+      echo ""
+      echo "    Option 1: Open a new terminal window (recommended)"
+      echo ""
+      echo "    Option 2: Activate it in this window right now by running:"
+      echo "      export PATH=\"$INSTALL_DIR:\$PATH\""
+      echo "      (This only applies to this window — you won't need to run it again.)"
+      echo ""
+      ;;
+  esac
+  echo "Once ready, run 'sonar --help' to get started."
+}
+
 main() {
   local version=""
   local token="${ARTIFACTORY_ACCESS_TOKEN:-}"
@@ -249,22 +274,7 @@ main() {
 
   update_profile
 
-  echo ""
-  echo "Installation complete! (pre-release $version)"
-  echo ""
-  echo "sonar has been installed to: $dest"
-  echo ""
-  echo "What happens next:"
-  echo "  - Any NEW terminal window you open will have 'sonar' available automatically."
-  echo "  - This current terminal window won't see it yet — you have two options:"
-  echo ""
-  echo "    Option 1: Open a new terminal window (recommended)"
-  echo ""
-  echo "    Option 2: Activate it in this window right now by running:"
-  echo "      export PATH=\"$INSTALL_DIR:\$PATH\""
-  echo "      (This only applies to this window — you won't need to run it again.)"
-  echo ""
-  echo "Once ready, run 'sonar --help' to get started."
+  print_completion
 }
 
 main "$@"
