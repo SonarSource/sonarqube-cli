@@ -102,3 +102,5 @@ Explicit-file SQAA commands and report callers share `prepareSqaaExplicitFiles` 
 `prepareSqaaRun` also owns changeset collection, exclusion, confirmation, and repository-relative views. Null means unavailable/cancelled; an empty prepared run retains ignored-file reasons without recording an analysis.
 
 SQAA request retries are silent by default. Command text output supplies the existing `SqaaProgress` retry callback; JSON reports and unattended hooks never print retry feedback.
+
+Command presentation resolves a SQAA 403 explanation once, including combined JSON output. Raw reports retain typed-error classification for hook cooldown checks before entitlement rechecks.
