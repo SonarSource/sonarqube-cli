@@ -27,6 +27,7 @@ import type { ImportOptions } from './types';
 /** What happened to one repository, when more than "imported" is worth saying. */
 export interface ImportRepoOutcome {
   detail?: string;
+  projectKey?: string;
 }
 
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
