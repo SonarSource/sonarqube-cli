@@ -232,9 +232,13 @@ export async function prepareSqaaEditedFile(
     logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${file}`);
     return null;
   }
-  const resolution = await resolveSqaaConnectionAndProject(connection, undefined, console, [
-    canonicalPath,
-  ]);
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
+    undefined,
+    console,
+    [canonicalPath],
+    { noteFocusedProject: false },
+  );
   const resolved = resolveSqaaContext(
     resolution,
     { requireProject: false, silentSkip: true },
