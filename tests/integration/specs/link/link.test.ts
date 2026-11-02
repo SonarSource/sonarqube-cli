@@ -261,4 +261,122 @@ describe('sonar link', () => {
       expect(result.stdout).toContain('--monorepo');
     });
   });
+
+  describe('without a project key', () => {
+    const TIMEOUT = 30_000;
+
+    beforeEach(() => {
+      initGitRepo(harness.cwd.path);
+    });
+
+    async function signInToServer(): Promise<string> {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('alpha')
+        .withProject('beta')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: '1' });
+      return server.baseUrl();
+    }
+
+    it(
+      'fails with a hint to pass the key when the terminal cannot prompt',
+      async () => {
+        harness.withAuth(SERVER_URL, 'test-token');
+
+        const result = await harness.run('link');
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stdout + result.stderr).toContain('sonar link <projectKey>');
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'proposes a project found in local config once the server confirms it exists',
+      async () => {
+        const serverUrl = await signInToServer();
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          `sonar.projectKey=beta\nsonar.host.url=${serverUrl}\n`,
+        );
+
+        const session = harness.runInteractive('link');
+        await session.accept('beta (beta)?');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(`Linked ${harness.cwd.path} to project beta`);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, projectKey: 'beta', path: '.' },
+        });
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'falls back to the search list when the proposal is declined, then links the selection',
+      async () => {
+        const serverUrl = await signInToServer();
+        harness.cwd.writeFile(
+          'sonar-project.properties',
+          `sonar.projectKey=beta\nsonar.host.url=${serverUrl}\n`,
+        );
+
+        const session = harness.runInteractive('link');
+        await session.decline('beta (beta)?');
+        await session.waitText('Search projects');
+        session.write('alpha');
+        session.keyEnter();
+        await session.waitText('Select a project');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, projectKey: 'alpha', path: '.' },
+        });
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'opens the search list straight away when nothing is discovered',
+      async () => {
+        const serverUrl = await signInToServer();
+
+        const session = harness.runInteractive('link');
+        await session.waitText('Search projects');
+        session.keyEnter();
+        await session.waitText('Select a project');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+          project: { serverUrl, projectKey: 'alpha', path: '.' },
+        });
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'fails when the user cancels the search prompt',
+      async () => {
+        await signInToServer();
+
+        const session = harness.runInteractive('link');
+        await session.waitText('Search projects');
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).not.toBe(0);
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+  });
 });
