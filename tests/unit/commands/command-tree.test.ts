@@ -42,15 +42,7 @@ function resolveCommand(path: string[]): Command {
 describe('createCommandTree', () => {
   it('describes every installed Codex component', () => {
     const description = resolveCommand(['integrate', 'codex']).description();
-    for (const part of [
-      'UserPromptSubmit',
-      'secrets-on-read instructions',
-      'MCP server',
-      'When Vortex is available',
-      'startup context hooks',
-      'analysis hooks',
-      'end-of-turn analysis instructions',
-    ]) {
+    for (const part of ['secrets scanning hooks', 'Vortex analysis', 'MCP Server']) {
       expect(description).toContain(part);
     }
   });

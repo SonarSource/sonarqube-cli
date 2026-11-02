@@ -112,7 +112,7 @@ export interface SonarSecretsHooksFeatureConfig {
   configDir: string;
   hooksConfigFileName: string;
   hooksPatchId: string;
-  /** Hook scripts to install. Codex supplies only UserPromptSubmit; Claude adds PreToolUse. */
+  /** Hook scripts to install. */
   scripts: SonarSecretsHookScriptSpec[];
   hookEntries: SonarSecretsHookEntrySpec[];
   /** Feature id recorded in state. Defaults to the shared `sonar-secrets-hooks`. */

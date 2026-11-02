@@ -28,8 +28,12 @@ import { BadRequestError, type HttpClientError } from '@/core/server/errors.ts';
  */
 export type PatStatus = 'valid' | 'missing' | 'invalid';
 
-/** Matches the server's "personal access token for '<key>' is missing" in any capitalisation. */
-const MISSING_PAT_MESSAGE = /personal access token .*is missing|no personal access token found/i;
+/**
+ * Matches the server's "personal access token for '<key>' is missing" in any capitalisation, and
+ * the "No GitHub authorization found for your user" message newer servers send for GitHub.
+ */
+const MISSING_PAT_MESSAGE =
+  /personal access token .*is missing|no personal access token found|no github authorization found/i;
 
 /**
  * What the platform clients say when they reject the stored token: "Invalid personal access

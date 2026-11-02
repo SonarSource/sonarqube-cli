@@ -188,6 +188,7 @@ describe('isSecretsBlocked classification (drift protection)', () => {
     cursorPromptSubmit: true,
     claudePreToolUse: true,
     copilotPreToolUse: true,
+    agentSecretsMasking: false,
     antigravityPreToolUse: true,
     cursorPreFileRead: true,
     cursorPreToolUse: true,

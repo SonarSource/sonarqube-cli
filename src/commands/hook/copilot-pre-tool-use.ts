@@ -25,13 +25,13 @@
 //
 // Behaviour contract (differs from the Claude hook):
 //   - Always exits 0 (hook must never crash Copilot CLI)
-//   - Stdin payload is { toolName: "view", toolArgs: "<JSON-encoded string>" }
-//     (camelCase; toolArgs is a stringified JSON, not a nested object)
+//   - CamelCase stdin payload accepts toolArgs as an object or a JSON-encoded string
 //   - Outputs {"permissionDecision":"deny","permissionDecisionReason":"..."} on a hit
 //     (no `hookSpecificOutput` wrapper)
 //   - Outputs nothing when the file is clean, tool is not `view`, or args/file are missing
 
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
@@ -47,8 +47,8 @@ import { readStdinJson } from './stdin.ts';
 
 interface CopilotPreToolUsePayload {
   toolName?: string;
-  /** JSON-encoded string containing the tool's arguments. */
-  toolArgs?: string;
+  cwd?: unknown;
+  toolArgs?: unknown;
 }
 
 interface CopilotViewToolArgs {
@@ -72,8 +72,12 @@ export async function copilotPreToolUse(ctx: CommandInvocationContext): Promise<
   // Only the dedicated file-read tool is scanned.
   if (payload.toolName !== 'view') return;
 
-  const filePath = extractPath(payload.toolArgs);
-  if (!filePath || !existsSync(filePath)) return;
+  const path = extractPath(payload.toolArgs);
+  if (!path) return;
+  const baseDir =
+    typeof payload.cwd === 'string' && payload.cwd.length > 0 ? payload.cwd : process.cwd();
+  const filePath = resolve(baseDir, path);
+  if (!existsSync(filePath)) return;
 
   let deps: HookDependencies;
   try {
@@ -101,11 +105,12 @@ export async function copilotPreToolUse(ctx: CommandInvocationContext): Promise<
   }
 }
 
-function extractPath(toolArgs: string | undefined): string | undefined {
-  if (!toolArgs) return undefined;
+function extractPath(toolArgs: unknown): string | undefined {
   try {
-    const parsed = JSON.parse(toolArgs) as CopilotViewToolArgs;
-    return parsed.path;
+    const parsed: unknown = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : toolArgs;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const { path } = parsed as CopilotViewToolArgs;
+    return typeof path === 'string' && path.length > 0 ? path : undefined;
   } catch {
     return undefined;
   }

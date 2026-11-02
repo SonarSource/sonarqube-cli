@@ -61,7 +61,6 @@ const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
 const PROJECT_AGENTS_MD_DIRS = ['AGENTS.md'];
 const GLOBAL_AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
 const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
-const SECRETS_HEADING = '# SonarQube secrets scanning for files protocol';
 const SQAA_HEADING = '# Vortex analysis protocol';
 
 interface CodexHooksFile {
@@ -99,15 +98,7 @@ describe('integrate codex', () => {
     const result = await harness.run('integrate codex --help');
     expect(result.exitCode).toBe(0);
     const help = result.stdout.replace(/\s+/g, ' ');
-    for (const part of [
-      'UserPromptSubmit',
-      'secrets-on-read instructions',
-      'MCP server',
-      'When Vortex is available',
-      'startup context hooks',
-      'analysis hooks',
-      'end-of-turn analysis instructions',
-    ]) {
+    for (const part of ['secrets scanning hooks', 'Vortex analysis', 'MCP Server']) {
       expect(help).toContain(part);
     }
   });
@@ -138,6 +129,20 @@ describe('integrate codex', () => {
         expect(isAbsolute(command)).toBe(true);
         expect(command.startsWith(normalizePath(harness.userHome.path))).toBe(true);
 
+        const outputScript = harness.userHome.file(
+          ...PROMPT_SCRIPT_DIRS,
+          hookScriptName('posttool-secrets'),
+        );
+        expect(outputScript.exists()).toBe(true);
+        expect(outputScript.isExecutable).toBe(true);
+        expect(outputScript.asText()).toContain('sonar hook agent-secrets-masking --agent codex');
+        const outputEntry = hooks.hooks?.PostToolUse?.[0];
+        expect(outputEntry?.matcher).toBe('*');
+        expect(outputEntry?.hooks?.[0]?.type).toBe('command');
+        expect(hookScriptPath(String(outputEntry?.hooks?.[0]?.command))).toBe(
+          normalizePath(outputScript.path),
+        );
+
         // Completion summary
         expect(result.stdout).toContain('Installed');
         expect(result.stdout).toContain('Setup complete!');
@@ -147,7 +152,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      're-running does not duplicate the UserPromptSubmit entry',
+      're-running does not duplicate either secrets hook entry',
       async () => {
         await harness.run('integrate codex --non-interactive');
         const result = await harness.run('integrate codex --non-interactive');
@@ -155,6 +160,7 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         expect(hooks.hooks?.UserPromptSubmit).toHaveLength(1);
+        expect(hooks.hooks?.PostToolUse).toHaveLength(1);
       },
       { timeout: 30000 },
     );
@@ -357,24 +363,26 @@ describe('integrate codex', () => {
     );
   });
 
-  describe('AGENTS.md instructions', () => {
+  describe('Vortex', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
 
     it(
-      'writes ~/.codex/AGENTS.md (and nothing project-side), showing the Vortex promotion when not entitled',
+      'does not install Vortex hooks or instructions when Vortex is unavailable',
       async () => {
         const result = await harness.run('integrate codex --non-interactive');
 
         expect(result.exitCode).toBe(0);
         expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
-        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-
-        expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
-        expect(body).toContain('<!-- sonar:end:codex-secrets-on-read -->');
-        expect(body).toContain(SECRETS_HEADING);
-        expect(body).toContain('sonar analyze secrets');
-        expect(body).not.toContain(SQAA_HEADING);
+        expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
+        expect(harness.userHome.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
+        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
+        expect(
+          hooks.hooks?.PostToolUse?.find((entry) =>
+            entry.hooks?.some((hook) => hook.command?.includes('sonar-sqaa')),
+          ),
+        ).toBeUndefined();
+        expect(findCodexFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
         const output = `${result.stdout}\n${result.stderr}`;
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
       },
@@ -404,7 +412,6 @@ describe('integrate codex', () => {
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(body).toContain('<!-- sonar:begin:codex-secrets-on-read -->');
         expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
         expect(body).toContain(SQAA_HEADING);
         expect(body).toContain("installed by `sonar integrate` at the user's request");
@@ -473,7 +480,6 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
 
         const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(globalBody).toContain(SECRETS_HEADING);
         expect(globalBody).toContain(SQAA_HEADING);
 
         const sqaaScript = harness.userHome.file(
@@ -488,20 +494,6 @@ describe('integrate codex', () => {
             e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
           )?.matcher,
         ).toBe('apply_patch');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'does not install PostToolUse SQAA hook when the org has no Vortex entitlement',
-      async () => {
-        const result = await harness.run('integrate codex --non-interactive');
-
-        expect(result.exitCode).toBe(0);
-        const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
-        expect(hooks.hooks?.PostToolUse).toBeUndefined();
-        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(body).not.toContain('sonarqube-agentic-analysis-protocol');
       },
       { timeout: 30000 },
     );
@@ -591,12 +583,10 @@ describe('integrate codex', () => {
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
-        // is not_applicable. The three remaining features
-        // (secrets hook, secrets instructions, MCP) each ask.
+        // is not_applicable. Secrets hooks and MCP each ask.
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
-        await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
@@ -604,7 +594,6 @@ describe('integrate codex', () => {
         const output = `${result.stdout}\n${result.stderr}`;
         // Each opted feature surfaced its confirm prompt.
         expect(output).toContain('Install secret scanning hooks?');
-        expect(output).toContain('Install secrets-on-read instructions?');
         expect(output).toContain('Install MCP server?');
         expect(output).not.toContain('Install Vortex?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
@@ -613,14 +602,10 @@ describe('integrate codex', () => {
           harness.userHome.file(...PROMPT_SCRIPT_DIRS, hookScriptName('prompt-secrets')).exists(),
         ).toBe(true);
         expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(true);
-        const agentsMd = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(agentsMd).toContain(SECRETS_HEADING);
-        // No SQAA marker block was written (Server hubs absent).
-        expect(agentsMd).not.toContain(SQAA_HEADING);
+        expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
         // Declarative state records only the accepted features.
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeDefined();
-        expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
         expect(findCodexFeature(harness, VORTEX_FEATURE_ID)).toBeUndefined();
       },
@@ -643,7 +628,6 @@ describe('integrate codex', () => {
           const session = harness.runInteractive('integrate codex', { extraEnv });
           await chooseCustomize(session);
           await session.accept('Install secret scanning hooks?');
-          await session.accept('Install secrets-on-read instructions?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -666,7 +650,6 @@ describe('integrate codex', () => {
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
         await session.decline('Install secret scanning hooks?');
-        await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
@@ -676,9 +659,8 @@ describe('integrate codex', () => {
         expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(false);
         expect(findCodexFeature(harness, 'sonar-secrets-hooks')).toBeUndefined();
         // The accepted features are still installed.
-        expect(harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText()).toContain(SECRETS_HEADING);
+        expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...CONFIG_TOML_DIRS)).toBe(true);
-        expect(findCodexFeature(harness, 'secrets-instructions')).toBeDefined();
         expect(findCodexFeature(harness, 'mcp-server')).toBeDefined();
       },
       { timeout: 30000 },
@@ -709,7 +691,6 @@ describe('integrate codex', () => {
         await chooseCustomize(session);
         await session.accept('Install secret scanning hooks?');
         await session.accept('Install Vortex?');
-        await session.accept('Install secrets-on-read instructions?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 

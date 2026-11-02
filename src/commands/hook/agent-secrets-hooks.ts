@@ -111,7 +111,7 @@ function redactSecrets(text: string, issues: MaskableSpan[]): string {
   return out;
 }
 
-function maskingDecision(text: string, issues: SecretsJsonIssue[]): HookDecision {
+export function maskingDecision(text: string, issues: SecretsJsonIssue[]): HookDecision {
   const lineStarts = lineStartOffsets(text);
   const maskable = issues
     .map((issue) => toMaskableIssue(issue, lineStarts, text.length))
@@ -119,7 +119,7 @@ function maskingDecision(text: string, issues: SecretsJsonIssue[]): HookDecision
   if (issues.length === 0 || maskable.length !== issues.length) {
     return {
       block: true,
-      reason: 'Sonar detected secrets in this message but could not mask all of them.',
+      reason: 'SonarQube detected secrets in this message but could not mask all of them.',
     };
   }
   return {

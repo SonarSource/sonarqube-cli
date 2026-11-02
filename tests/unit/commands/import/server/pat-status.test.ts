@@ -33,6 +33,9 @@ describe('patStatusFromError', () => {
     ["personal access token for 'my-gitlab' is missing"],
     ["Personal Access Token for 'my-gitlab' Is Missing"],
     ['No personal access token found'],
+    [
+      'No GitHub authorization found for your user. Authorize SonarQube on GitHub from Projects > Create Project > From GitHub, then try again.',
+    ],
   ])('reports a missing token for %p', (message) => {
     expect(patStatusFromError(new BadRequestError(message))).toBe('missing');
   });

@@ -54,7 +54,7 @@ import {
 import {
   GLOBAL_HOOK_SCRIPT_PATH as COPILOT_HOOK_SCRIPT_PATH,
   GLOBAL_HOOKS_JSON_PATH as COPILOT_HOOKS_JSON_PATH,
-  GLOBAL_INSTRUCTIONS_PATH as COPILOT_INSTRUCTIONS_PATH,
+  GLOBAL_PROMPT_HOOK_SCRIPT_PATH as COPILOT_PROMPT_HOOK_SCRIPT_PATH,
 } from '../integrate/copilot-test-helpers';
 
 const CODEX_SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
@@ -1050,7 +1050,7 @@ describe('system reset --force', () => {
       // user content), so removal should leave nothing behind to delete.
       expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(true);
       expect(harness.userHome.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(true);
-      expect(harness.userHome.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(true);
+      expect(harness.userHome.file(...COPILOT_PROMPT_HOOK_SCRIPT_PATH).exists()).toBe(true);
       expect(harness.userHome.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(true);
 
       // harness.run() re-seeds state.json from the env builder before each subprocess;
@@ -1068,7 +1068,7 @@ describe('system reset --force', () => {
       // outright rather than leaving an empty husk behind.
       expect(harness.userHome.exists('.copilot', 'mcp-config.json')).toBe(false);
       expect(harness.userHome.file(...COPILOT_HOOKS_JSON_PATH).exists()).toBe(false);
-      expect(harness.userHome.file(...COPILOT_INSTRUCTIONS_PATH).exists()).toBe(false);
+      expect(harness.userHome.file(...COPILOT_PROMPT_HOOK_SCRIPT_PATH).exists()).toBe(false);
       expect(harness.userHome.file(...COPILOT_HOOK_SCRIPT_PATH).exists()).toBe(false);
     },
     { timeout: 30000 },

@@ -117,7 +117,8 @@ export async function spawnProcess(
 
     proc.on('error', reject);
 
-    proc.on('exit', (code) => {
+    // 'exit' can run before the last stdout chunk is delivered, so a fast child looks like it produced nothing.
+    proc.on('close', (code) => {
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
         stdout: (stdout + stdoutDecoder.end()).trim(),
