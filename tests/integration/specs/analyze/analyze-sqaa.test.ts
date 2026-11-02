@@ -2282,6 +2282,7 @@ describe('analyze agentic — API error codes', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('still unavailable');
+      expect(result.stdout).toContain('Server busy');
       expect(result.stdout + result.stderr).toContain(
         '  → Check your network connection and try again later.',
       );
@@ -2292,6 +2293,31 @@ describe('analyze agentic — API error codes', () => {
       expect(sqaaCalls).toHaveLength(4);
     },
     { timeout: 15000 },
+  );
+
+  it.each([false, true])(
+    'keeps single-file JSON parseable after retries (exhausted: %s)',
+    async (exhausted) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaStatusSequence(exhausted ? [503, 503, 503, 503] : [503, 200])
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
+      const report = JSON.parse(result.stdout);
+      expect(result.exitCode).toBe(exhausted ? 1 : 0);
+      expect(report.summary.totalFailures).toBe(exhausted ? 1 : 0);
+      expect(result.stdout).not.toContain('Server busy');
+      expect(server.getRecordedRequests().filter((r) => r.path.endsWith('/analyses'))).toHaveLength(
+        exhausted ? 4 : 2,
+      );
+    },
   );
 
   it(
