@@ -1001,16 +1001,17 @@ describe('SonarCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('outputs a descriptive error message when not authenticated', async () => {
+    it('outputs non-interactive authentication guidance', async () => {
       const mocked = mockAuthResolver(null);
       resolveAuthSpy = mocked.resolveAuthSpy;
       const cmd = sonarCommand({ runtime: mocked.runtime });
       cmd.authenticatedAction(() => Promise.resolve());
       await cmd.parseAsync([], { from: 'user' });
-      const errCall = ui.calls.find((c) => c.method === 'error');
-      expect(errCall?.args[0]).toContain('Not authenticated');
-      const hintCall = ui.calls.find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
+      const hint = ui.calls.find((c) => c.method === 'print')?.args[0];
+      expect(hint).toContain('separate terminal');
+      expect(hint).toContain('SONARQUBE_CLI_TOKEN');
+      expect(hint).toContain('SONARQUBE_CLI_ORG');
+      expect(hint).toContain('SONARQUBE_CLI_SERVER for the US region');
     });
 
     it('catches handler errors and sets process.exitCode', async () => {
