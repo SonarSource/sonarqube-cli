@@ -31,9 +31,11 @@ import {
 } from './sqaa-depth.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
 import { assertExplicitFilesAnalyzable, resolveSqaaRunFiles } from './sqaa-paths.ts';
-import type { SqaaResolution } from './sqaa-resolution.ts';
-import { confirmLargeChangeset } from './sqaa-resolution.ts';
-import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
+import {
+  confirmLargeChangeset,
+  resolveSqaaConnectionAndProject,
+  type SqaaResolution,
+} from './sqaa-resolution.ts';
 import type {
   AnalyzeSqaaOptions,
   AnalyzeSqaaRunOptions,
