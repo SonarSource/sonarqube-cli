@@ -244,6 +244,8 @@ ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
 Supports one project per repository. Linking again replaces the existing link.
+Without a project key, in an interactive terminal, 'sonar link' suggests a project it can verify
+on the server, or lets you search for one. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
 For a monorepo, use --monorepo to link several directories:
@@ -860,14 +862,17 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'core',
       label: 'link',
     })
-    .argument('<projectKey>', 'SonarQube project key')
+    .argument(
+      '[projectKey]',
+      'SonarQube project key (omit to pick one: a verified suggestion, or a search)',
+    )
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
     .option(
       '--monorepo',
       'Add or update this directory in the projects array instead of replacing the single link',
     )
     .addHelpText('after', linkExtraHelp)
-    .authenticatedAction((ctx, projectKey: string, options: LinkOptions) =>
+    .authenticatedAction((ctx, projectKey: string | undefined, options: LinkOptions) =>
       link(projectKey, options, ctx),
     );
 

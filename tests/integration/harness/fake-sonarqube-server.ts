@@ -1687,7 +1687,11 @@ export class FakeSonarQubeServerBuilder {
             return boundOnly
               ? new Response(
                   JSON.stringify({
-                    component: { key: boundOnly.projectKey, name: boundOnly.projectKey },
+                    component: {
+                      key: boundOnly.projectKey,
+                      name: boundOnly.projectKey,
+                      qualifier: 'TRK',
+                    },
                   }),
                   { headers: { 'Content-Type': 'application/json' } },
                 )
@@ -1706,6 +1710,7 @@ export class FakeSonarQubeServerBuilder {
                 component: {
                   key: projectData.key,
                   name: projectData.name,
+                  qualifier: 'TRK',
                   organization: projectData.organization,
                 },
               }),
