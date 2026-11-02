@@ -38,6 +38,7 @@ import {
   SonarOption,
   Stage,
 } from '@/core/commands/sonar-command.ts';
+import * as agentDetector from '@/core/host/environment/agent-detector.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 import { RateLimitError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { getDefaultState } from '@/core/state/state.ts';
@@ -1001,17 +1002,32 @@ describe('SonarCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('outputs a descriptive error message when not authenticated', async () => {
-      const mocked = mockAuthResolver(null);
-      resolveAuthSpy = mocked.resolveAuthSpy;
-      const cmd = sonarCommand({ runtime: mocked.runtime });
-      cmd.authenticatedAction(() => Promise.resolve());
-      await cmd.parseAsync([], { from: 'user' });
-      const errCall = ui.calls.find((c) => c.method === 'error');
-      expect(errCall?.args[0]).toContain('Not authenticated');
-      const hintCall = ui.calls.find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
-    });
+    for (const agent of [null, 'claude'] as const) {
+      it(`outputs authentication guidance for ${agent ?? 'a human'}`, async () => {
+        const detection = spyOn(agentDetector, 'detectCallerAgent').mockReturnValue(agent);
+        try {
+          const mocked = mockAuthResolver(null);
+          resolveAuthSpy = mocked.resolveAuthSpy;
+          const cmd = sonarCommand({ runtime: mocked.runtime });
+          cmd.authenticatedAction(() => Promise.resolve());
+          await cmd.parseAsync([], { from: 'user' });
+          const errCall = ui.calls.find((c) => c.method === 'error');
+          expect(errCall?.args[0]).toContain('Not authenticated');
+          const hint = ui.calls.find((c) => c.method === 'print')?.args[0];
+          expect(hint).toContain('SONARQUBE_CLI_TOKEN');
+          if (agent) {
+            expect(hint).toContain('Ask the user');
+            expect(hint).toContain('separate terminal');
+          } else {
+            expect(hint).toContain("Run 'sonar auth login'");
+            expect(hint).not.toContain('Ask the user');
+            expect(hint).not.toContain('agent conversation');
+          }
+        } finally {
+          detection.mockRestore();
+        }
+      });
+    }
 
     it('catches handler errors and sets process.exitCode', async () => {
       const mocked = mockAuthResolver(FAKE_AUTH);

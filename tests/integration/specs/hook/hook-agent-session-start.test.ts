@@ -147,6 +147,8 @@ describe('sonar hook agent-session-start', () => {
       expect(output.systemMessage).toStartWith(
         'Vortex context was not loaded. No usable credentials.',
       );
+      expect(output.systemMessage).toContain('separate terminal');
+      expect(output.systemMessage).toContain('SONARQUBE_CLI_TOKEN');
       expect(cagSessionStartInvocations()).toEqual([]);
     },
     TEST_TIMEOUT,
