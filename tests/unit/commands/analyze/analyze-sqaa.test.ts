@@ -381,6 +381,24 @@ describe('analyzeSqaa: explicit --project option', () => {
 });
 
 describe('buildSqaaJsonReport', () => {
+  it('records completion once and leaves process exit handling to the caller', async () => {
+    process.exitCode = 51;
+    const report = await buildSqaaJsonReport(
+      { file: ['src/index.ts'] },
+      FAKE_AUTHENTICATED_CONTEXT.connection,
+      {
+        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+        telemetryCallerCommand: 'codex-post-tool-use',
+        telemetryProcessExitCode: 0,
+      },
+    );
+    expect(report?.summary.totalFailures).toBe(0);
+    expect(FAKE_AUTHENTICATED_CONTEXT.telemetryFacts()).toHaveLength(1);
+    expect(FAKE_AUTHENTICATED_CONTEXT.statsFacts()).toHaveLength(1);
+    expect(FAKE_AUTHENTICATED_CONTEXT.telemetryFacts()[0]?.payload).toMatchObject({ exit_code: 0 });
+    expect(process.exitCode).toBe(51);
+  });
+
   it('returns a single-file JSON report with forcedDepth STANDARD', async () => {
     const report = await buildSqaaJsonReport(
       { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
