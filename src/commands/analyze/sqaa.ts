@@ -19,16 +19,19 @@
  */
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { prepareSqaaRun } from './sqaa-context.ts';
-import { applyExitCode } from './sqaa-display.ts';
-import { executeSqaaRun, presentSqaaRun } from './sqaa-run.ts';
+import { applyExitCode, type SqaaJsonReport } from './sqaa-display.ts';
+import { buildSqaaRunReport, executeSqaaRun, presentSqaaRun } from './sqaa-run.ts';
 import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions } from './sqaa-types.ts';
 import { VALID_FORMATS } from './sqaa-types.ts';
 
-export { buildSqaaJsonReport } from './sqaa-json-report.ts';
 export {
   type AnalyzeSqaaOptions,
   type AnalyzeSqaaRunOptions,
@@ -64,4 +67,19 @@ export async function analyzeSqaa(
   const { tally } = await executeSqaaRun(prepared, execution);
   applyExitCode(tally.totalIssues, tally.totalFailures, tally.globalError !== undefined);
   await presentSqaaRun(prepared, tally, execution);
+}
+
+export async function buildSqaaJsonReport(
+  options: AnalyzeSqaaOptions,
+  connection: SonarConnection,
+  runOptions: AnalyzeSqaaRunOptions & { telemetryCtx: CommandInvocationContext },
+): Promise<SqaaJsonReport | null> {
+  const { console } = runOptions.telemetryCtx;
+  const prepared = await prepareSqaaRun(options, connection, console, {
+    requireProject: false,
+    silentSkip: runOptions.silentSkip,
+  });
+  if (!prepared) return null;
+  const { tally } = await executeSqaaRun(prepared, { ...runOptions, console, format: 'json' });
+  return buildSqaaRunReport(prepared, tally);
 }
