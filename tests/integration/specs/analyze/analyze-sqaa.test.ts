@@ -2320,6 +2320,37 @@ describe('analyze agentic — API error codes', () => {
     },
   );
 
+  it('preserves single-file failures and one-file changeset skips on a global outage', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaStatusCode(503)
+      .start();
+    harness
+      .state()
+      .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+      .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    const single = await harness.run('analyze agentic --file a.ts --format json');
+    const changeset = await harness.run('analyze agentic --format json');
+    expect(single.exitCode).toBe(1);
+    expect(changeset.exitCode).toBe(1);
+    expect(JSON.parse(single.stdout).summary).toEqual({
+      totalIssues: 0,
+      totalFailures: 1,
+      totalSkipped: 0,
+    });
+    expect(JSON.parse(changeset.stdout).summary).toEqual({
+      totalIssues: 0,
+      totalFailures: 0,
+      totalSkipped: 1,
+    });
+    expect(JSON.parse(single.stdout).globalError.kind).toBe('unavailable');
+    expect(JSON.parse(changeset.stdout).globalError.kind).toBe('unavailable');
+  });
+
   it(
     'retries 503 per chunk in change-set mode',
     async () => {
