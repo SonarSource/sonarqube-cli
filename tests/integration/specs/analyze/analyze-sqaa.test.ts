@@ -2833,6 +2833,38 @@ describe('analyze agentic — --format json', () => {
     { timeout: 15000 },
   );
 
+  it.each([false, true])(
+    'resolves the same 403 explanation in direct and combined JSON (multiple files: %s)',
+    async (multiple) => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+      const args = `--file a.ts ${multiple ? '--file b.ts' : ''} --format json`;
+      const direct = await harness.run(`analyze agentic ${args}`);
+      const combined = await harness.run(`analyze ${args}`);
+      expect(direct.exitCode).toBe(1);
+      expect(combined.exitCode).toBe(1);
+      expect(JSON.parse(combined.stdout).agentic.globalError).toEqual(
+        JSON.parse(direct.stdout).globalError,
+      );
+      expect(JSON.parse(combined.stdout).agentic.globalError.message).toContain('usage limit');
+      const entitlementCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path.includes('/org-entitlement/'));
+      expect(entitlementCalls).toHaveLength(2);
+    },
+  );
+
   it(
     'reports globalError with the raw error message for a 503 service outage',
     async () => {
