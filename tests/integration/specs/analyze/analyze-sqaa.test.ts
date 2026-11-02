@@ -2282,6 +2282,7 @@ describe('analyze agentic — API error codes', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('still unavailable');
+      expect(result.stdout).toContain('Server busy');
       expect(result.stdout + result.stderr).toContain(
         '  → Check your network connection and try again later.',
       );
@@ -2292,6 +2293,31 @@ describe('analyze agentic — API error codes', () => {
       expect(sqaaCalls).toHaveLength(4);
     },
     { timeout: 15000 },
+  );
+
+  it.each([false, true])(
+    'keeps single-file JSON parseable after retries (exhausted: %s)',
+    async (exhausted) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaStatusSequence(exhausted ? [503, 503, 503, 503] : [503, 200])
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
+      const report = JSON.parse(result.stdout);
+      expect(result.exitCode).toBe(exhausted ? 1 : 0);
+      expect(report.summary.totalFailures).toBe(exhausted ? 1 : 0);
+      expect(result.stdout).not.toContain('Server busy');
+      expect(server.getRecordedRequests().filter((r) => r.path.endsWith('/analyses'))).toHaveLength(
+        exhausted ? 4 : 2,
+      );
+    },
   );
 
   it(
@@ -2885,6 +2911,38 @@ describe('analyze agentic — --format json', () => {
       expect(report.globalError?.message).toContain('usage limit');
     },
     { timeout: 15000 },
+  );
+
+  it.each([false, true])(
+    'resolves the same 403 explanation in direct and combined JSON (multiple files: %s)',
+    async (multiple) => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+      const args = `--file a.ts ${multiple ? '--file b.ts' : ''} --format json`;
+      const direct = await harness.run(`analyze agentic ${args}`);
+      const combined = await harness.run(`analyze ${args}`);
+      expect(direct.exitCode).toBe(1);
+      expect(combined.exitCode).toBe(1);
+      expect(JSON.parse(combined.stdout).agentic.globalError).toEqual(
+        JSON.parse(direct.stdout).globalError,
+      );
+      expect(JSON.parse(combined.stdout).agentic.globalError.message).toContain('usage limit');
+      const entitlementCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path.includes('/org-entitlement/'));
+      expect(entitlementCalls).toHaveLength(2);
+    },
   );
 
   it(
