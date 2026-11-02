@@ -71,8 +71,8 @@ export async function chooseProjectKey(
 
   if (discovered.fromSharedConfig) {
     // Other directories' mappings are never proposed again; only one covering this directory counts.
-    const linked = covering.find(
-      (mapping) => !monorepo || canonicalizePath(mapping.projectRoot) === root,
+    const linked = nearestMapping(
+      covering.filter((mapping) => !monorepo || canonicalizePath(mapping.projectRoot) === root),
     );
     return linked
       ? relinkOrKeep(projectRoot, linked.projectKey, projects, ctx)
@@ -94,6 +94,15 @@ export async function chooseProjectKey(
   }
 
   return searchForProject(projects, ctx);
+}
+
+/** The mapping with the deepest root, which is the one that owns the directory (nearest wins). */
+function nearestMapping<T extends CompleteProjectMapping>(mappings: readonly T[]): T | undefined {
+  return mappings.reduce<T | undefined>(
+    (nearest, mapping) =>
+      nearest && nearest.projectRoot.length >= mapping.projectRoot.length ? nearest : mapping,
+    undefined,
+  );
 }
 
 async function relinkOrKeep(
@@ -164,21 +173,7 @@ async function searchForProject(
       continue;
     }
 
-    const { components, paging } = await projects
-      .searchProjects({
-        q: query || undefined,
-        ps: PICKER_PAGE_SIZE,
-        organization: auth.orgKey,
-      })
-      .match(
-        (result) => result,
-        (error) => {
-          throw new CommandFailedError(`Could not search projects: ${error.message}`, {
-            remediationHint:
-              "Check your network connection and the server status, or pass the key directly: 'sonar link <projectKey>'.",
-          });
-        },
-      );
+    const { components, paging } = await fetchProjectPage(projects, query, auth.orgKey);
 
     if (components.length === 0) {
       console.warn(query ? ` No projects match '${query}'.` : ' No projects found.');
@@ -190,18 +185,45 @@ async function searchForProject(
       );
     }
 
-    const choice = await console.selectPrompt<string>('Select a project', [
-      ...components.map((project) => ({
-        value: project.key,
-        label: `${project.name} (${project.key})`,
-      })),
-      { value: SEARCH_AGAIN, label: '↻ Search again' },
-    ]);
-    if (choice === null) {
-      throw cancelled();
-    }
+    const choice = await selectProject(console, components);
     if (choice !== SEARCH_AGAIN) {
       return choice;
     }
   }
+}
+
+function fetchProjectPage(
+  projects: ProjectsClient,
+  query: string,
+  organization: string | undefined,
+) {
+  return projects
+    .searchProjects({ q: query || undefined, ps: PICKER_PAGE_SIZE, organization })
+    .match(
+      (result) => result,
+      (error) => {
+        throw new CommandFailedError(`Could not search projects: ${error.message}`, {
+          remediationHint:
+            "Check your network connection and the server status, or pass the key directly: 'sonar link <projectKey>'.",
+        });
+      },
+    );
+}
+
+/** Resolves to the selected project key, or `SEARCH_AGAIN`; throws when the user cancels. */
+async function selectProject(
+  console: CommandAuthenticatedInvocationContext['console'],
+  components: readonly SonarQubeProject[],
+): Promise<string> {
+  const choice = await console.selectPrompt<string>('Select a project', [
+    ...components.map((project) => ({
+      value: project.key,
+      label: `${project.name} (${project.key})`,
+    })),
+    { value: SEARCH_AGAIN, label: '↻ Search again' },
+  ]);
+  if (choice === null) {
+    throw cancelled();
+  }
+  return choice;
 }

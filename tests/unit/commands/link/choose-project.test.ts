@@ -20,6 +20,8 @@
 
 // Unit tests for `sonar link` without a project key: the discovery proposal and the search picker.
 
+import { dirname } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -173,6 +175,15 @@ describe('link without a project key', () => {
       expect(findSpy).not.toHaveBeenCalled();
       expect(searchSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('names the nearest covering project, not an enclosing one listed first', async () => {
+      discovered([mapping('outer', dirname(root)), mapping('inner')], true);
+
+      await link(undefined, { path: '.' }, ctx);
+
+      expect(fake.findCall('info', 'is already linked to project inner')).toBeDefined();
+      expect(fake.findCall('info', 'is already linked to project outer')).toBeUndefined();
     });
 
     it('opens the search list when the user wants to link an already linked directory elsewhere', async () => {
