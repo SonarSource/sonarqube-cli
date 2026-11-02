@@ -106,3 +106,5 @@ SQAA request retries are silent by default. Command text output supplies the exi
 Command presentation resolves a SQAA 403 explanation once, including combined JSON output. Raw reports retain typed-error classification for hook cooldown checks before entitlement rechecks.
 
 Direct SQAA commands execute prepared runs through `executeSqaaRun`, which returns raw `RunTally` results and records completion before presentation. Renderers do not change process exit codes; command boundaries apply only nonzero analysis exits. Single-file invocation retains failure-plus-global-error accounting while changesets use batch skip accounting.
+
+`buildSqaaJsonReport` is a thin adapter in `analyze/sqaa.ts` over the same preparation, execution, and report builder as direct commands. Combined analysis and Codex record facts from raw tallies; only command presentation enriches 403 descriptions.
