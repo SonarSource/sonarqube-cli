@@ -605,6 +605,7 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
   private sqaaStatusCode?: number;
+  private sqaaStatusSequence: number[] = [];
   private sqaaStatusBody?: string;
   private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
@@ -814,6 +815,11 @@ export class FakeSonarQubeServerBuilder {
    * Takes precedence over withSqaaResponse. Useful for testing 429, 503, etc.
    * An empty string body produces a response with no body at all.
    */
+  withSqaaStatusSequence(statuses: number[]): this {
+    this.sqaaStatusSequence = [...statuses];
+    return this;
+  }
+
   withSqaaStatusCode(status: number, body?: string): this {
     this.sqaaStatusCode = status;
     this.sqaaStatusBody = body;
@@ -1113,6 +1119,7 @@ export class FakeSonarQubeServerBuilder {
       revokeTokenResponseBody,
       sqaaResponse,
       sqaaStatusCode,
+      sqaaStatusSequence,
       sqaaStatusBody,
       sqaaPayloadLimit,
       sqaaEntitlementOrgs,
@@ -2173,12 +2180,13 @@ export class FakeSonarQubeServerBuilder {
           (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
           req.method === 'POST'
         ) {
-          if (sqaaStatusCode !== undefined) {
+          const statusCode = sqaaStatusSequence.shift() ?? sqaaStatusCode;
+          if (statusCode !== undefined && statusCode !== 200) {
             if (sqaaStatusBody === '') {
-              return new Response('', { status: sqaaStatusCode });
+              return new Response('', { status: statusCode });
             }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
-              status: sqaaStatusCode,
+              status: statusCode,
               headers: { 'Content-Type': 'application/json' },
             });
           }
