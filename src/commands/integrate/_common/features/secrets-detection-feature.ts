@@ -21,6 +21,7 @@
 import { sonarSecretsBinaryDependency } from '@/core/framework/dependencies';
 import type { FeatureDeclaration } from '@/core/framework/features';
 
+export const SECRETS_DETECTION_FEATURE_ID = 'secrets-detection';
 export const LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
 type SecretsDetectionFeatureConfig<TOptions> = Pick<
@@ -33,7 +34,7 @@ export function createSecretsDetectionFeature<TOptions>(
 ): FeatureDeclaration<TOptions> {
   return {
     ...config,
-    id: 'secrets-detection',
+    id: SECRETS_DETECTION_FEATURE_ID,
     replacedIds: [LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID, ...(config.replacedIds ?? [])],
     displayName: 'Secrets detection',
     previewDescription:
