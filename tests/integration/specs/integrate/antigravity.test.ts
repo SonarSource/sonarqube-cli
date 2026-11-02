@@ -110,17 +110,16 @@ describe('integrate antigravity', () => {
     );
 
     it(
-      'records secrets hooks and instructions as global features',
+      'records secrets hooks and instructions as one global feature',
       async () => {
         await harness.run('integrate antigravity --non-interactive');
 
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')).toBeDefined();
-        expect(
-          findAntigravityFeature(harness, 'prompt-secrets-global-rules', 'global'),
-        ).toBeDefined();
+        expect(findAntigravityFeature(harness, 'secrets-detection', 'global')).toBeDefined();
+        expect(findAntigravityFeature(harness, 'prompt-secrets-global-rules')).toBeUndefined();
+        expect(findAntigravityFeature(harness, 'prompt-secrets-project-rules')).toBeUndefined();
 
         const expectedGlobalRoot = join(harness.userHome.path, '.gemini', 'config');
-        expect(findAntigravityFeature(harness, 'sonar-secrets-hooks', 'global')?.targetRoot).toBe(
+        expect(findAntigravityFeature(harness, 'secrets-detection', 'global')?.targetRoot).toBe(
           expectedGlobalRoot,
         );
       },
@@ -196,9 +195,8 @@ describe('integrate antigravity', () => {
             extraEnv,
           });
           await chooseCustomize(session);
-          await session.accept('Install secret scanning hooks?');
+          await session.accept('Install Secrets detection?');
           await session.accept('Install MCP server?');
-          await session.accept('Install prompt-secrets global rules?');
           result = await session.waitFinish();
         } else {
           result = await harness.run('integrate antigravity --non-interactive', { extraEnv });

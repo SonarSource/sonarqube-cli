@@ -100,7 +100,7 @@ describe('integrate (bare command)', () => {
       const session = harness.runInteractive('integrate');
       await session.accept('Select the tool you want to integrate with');
       await chooseCustomize(session);
-      await session.accept('Install secret scanning hooks?');
+      await session.accept('Install Secrets detection?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
       const output = result.stdout + result.stderr;
@@ -109,7 +109,7 @@ describe('integrate (bare command)', () => {
       expect(output).toContain('SonarQube Integration Setup for Claude Code');
       expect(output.split('Setup complete!').length - 1).toBe(1);
 
-      const feature = findInstalledFeature(harness, 'claude-code', 'sonar-secrets-hooks');
+      const feature = findInstalledFeature(harness, 'claude-code', 'secrets-detection');
       expect(feature?.scope).toBe('global');
       expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
       expect(

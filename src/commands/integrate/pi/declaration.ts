@@ -23,14 +23,14 @@ import { join } from 'node:path';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
+  ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
+import { wholeFile } from '@/core/framework/features';
 
-import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import { createContextAugmentationExtensionSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
@@ -51,9 +51,6 @@ const MCP_CONFIG_FILE = 'mcp.json';
 
 export const PI_INTEGRATION_ID = 'pi';
 const PI_DISPLAY_NAME = 'Pi';
-const SECRETS_EXAMPLE_FOOTER =
-  '  Sonar will detect the token and mask it before the message is sent.';
-const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
 function resolveExtensionFilePath(context: IntegrationContext, fileName: string): string {
   const configDir = context.scope === 'global' ? PI_GLOBAL_CONFIG_DIR : PI_PROJECT_CONFIG_DIR;
@@ -110,22 +107,9 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
   id: PI_INTEGRATION_ID,
   displayName: PI_DISPLAY_NAME,
   features: [
-    {
-      id: SONAR_SECRETS_HOOKS_FEATURE_ID,
-      displayName: 'secret scanning hooks',
-      previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      postInstallExample: secretsScanningExample(PI_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
-      dependencies: [sonarSecretsBinaryDependency],
-      resources: [
-        wholeFile({
-          id: 'pi-secrets-extension',
-          displayName: 'Pi secrets scanning extension',
-          targetPath: resolvePiSecretsExtensionPath,
-          content: PI_SECRETS_EXTENSION_CONTENT,
-          managedMarker: PI_EXTENSION_MANAGED_MARKER,
-        }),
-      ],
-    },
+    createSecretsDetectionFeature<IntegrateAgentOptions>({
+      resources: createPiSecretsDetectionResources(),
+    }),
     createVortexFeature<IntegrateAgentOptions>([
       createSqaaExtensionSubfeature(),
       createCagExtensionSubfeature(),
@@ -133,3 +117,15 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
     createMcpServerFeature<IntegrateAgentOptions>({ resolveConfigPath: resolvePiMcpConfigPath }),
   ],
 };
+
+function createPiSecretsDetectionResources(): ResourceDeclaration[] {
+  return [
+    wholeFile({
+      id: 'pi-secrets-extension',
+      displayName: 'Pi secrets scanning extension',
+      targetPath: resolvePiSecretsExtensionPath,
+      content: PI_SECRETS_EXTENSION_CONTENT,
+      managedMarker: PI_EXTENSION_MANAGED_MARKER,
+    }),
+  ];
+}
