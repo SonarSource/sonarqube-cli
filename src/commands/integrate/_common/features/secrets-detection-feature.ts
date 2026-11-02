@@ -26,7 +26,7 @@ export const LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
 type SecretsDetectionFeatureConfig<TOptions> = Pick<
   FeatureDeclaration<TOptions>,
-  'resources' | 'replacedIds' | 'legacyCleanups'
+  'resources' | 'replacedIds' | 'legacyCleanups' | 'previewDescription'
 >;
 
 export function createSecretsDetectionFeature<TOptions>(
@@ -36,13 +36,14 @@ export function createSecretsDetectionFeature<TOptions>(
     ...config,
     id: SECRETS_DETECTION_FEATURE_ID,
     replacedIds: [LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID, ...(config.replacedIds ?? [])],
-    displayName: 'Secrets detection',
+    displayName: 'secrets detection',
     previewDescription:
+      config.previewDescription ??
       'Scans your prompts and files for hardcoded secrets before the agent sees them.',
     dependencies: [sonarSecretsBinaryDependency],
     postInstallExample: {
       intro: 'See it in action — paste this into your agent:',
-      lines: ['Can you push a commit using my token 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?'],
+      lines: ['What permissions does my token have: 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?'],
     },
   };
 }

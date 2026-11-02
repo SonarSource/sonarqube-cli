@@ -100,7 +100,7 @@ describe('integrate (bare command)', () => {
       const session = harness.runInteractive('integrate');
       await session.accept('Select the tool you want to integrate with');
       await chooseCustomize(session);
-      await session.accept('Install Secrets detection?');
+      await session.accept('Install secrets detection?');
       await session.accept('Install MCP server?');
       const result = await session.waitFinish();
       const output = result.stdout + result.stderr;

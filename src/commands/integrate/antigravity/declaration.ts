@@ -96,6 +96,8 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   features: [
     createSecretsDetectionFeature<AntigravityIntegrationOptions>({
       resources: createAntigravitySecretsDetectionResources(),
+      previewDescription:
+        'Scans files for hardcoded secrets and helps detect secrets in your prompts.',
       replacedIds: ['prompt-secrets-project-rules', 'prompt-secrets-global-rules'],
       legacyCleanups: [
         wholeFileRemover({

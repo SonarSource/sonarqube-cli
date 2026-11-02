@@ -286,7 +286,7 @@ describe('integrate copilot', () => {
           extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
         });
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install Vortex?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
@@ -387,7 +387,7 @@ describe('integrate copilot', () => {
         harness.state().withRawState(harness.stateJsonFile.asText());
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.decline('Secrets detection (currently installed)  Keep?');
+        await session.decline('secrets detection (currently installed)  Keep?');
         await session.accept('Proceed with removal?');
         await session.accept('MCP server (currently installed)  Keep?');
         const result = await session.waitFinish();
@@ -408,14 +408,14 @@ describe('integrate copilot', () => {
         // is not_applicable.
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.accept('Install Secrets detection?');
+        await session.accept('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         // Each opted feature surfaced its confirm prompt.
-        expect(output).toContain('Install Secrets detection?');
+        expect(output).toContain('Install secrets detection?');
         expect(output).toContain('Install MCP server?');
         expect(output).toContain('Vortex requires SonarQube Server 2026.5 Enterprise or later.');
         // Accepted features are installed on disk.
@@ -444,7 +444,7 @@ describe('integrate copilot', () => {
         if (isInteractive) {
           const session = harness.runInteractive('integrate copilot', { extraEnv });
           await chooseCustomize(session);
-          await session.accept('Install Secrets detection?');
+          await session.accept('Install secrets detection?');
           await session.accept('Install MCP server?');
           result = await session.waitFinish();
         } else {
@@ -467,7 +467,7 @@ describe('integrate copilot', () => {
       async () => {
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
-        await session.decline('Install Secrets detection?');
+        await session.decline('Install secrets detection?');
         await session.accept('Install MCP server?');
         const result = await session.waitFinish();
 
