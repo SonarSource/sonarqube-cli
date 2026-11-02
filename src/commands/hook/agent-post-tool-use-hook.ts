@@ -18,26 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-
-import {
-  recordSqaaAnalysisTelemetry,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
-  type SqaaTelemetryCallerCommand,
-} from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
+import type { SqaaTelemetryCallerCommand } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { timed } from '@/core/observability/timed.ts';
-import { SqaaForbiddenError } from '@/core/server/errors.ts';
 
-import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
-import { resolveSqaaPath } from '../analyze/sqaa-paths.ts';
-import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
-import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
-import { resolveHookProject } from './sqaa-hook-project.ts';
+import { analyzeEditedSqaaFile } from './sqaa-edited-file.ts';
 import { readStdinJson } from './stdin.ts';
 import { resolveVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
@@ -62,89 +48,6 @@ function writeResult(result: PostToolUseResult): void {
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 
-async function analyzeEditedFile(
-  options: PostToolUseHookOptions,
-  filePath: string,
-  ctx: CommandInvocationContext,
-): Promise<string | undefined> {
-  const connection = await ctx.resolveConnection();
-  if (!connection) {
-    return undefined;
-  }
-  const { auth } = connection;
-
-  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
-    return undefined;
-  }
-
-  const canonicalPath = canonicalizePath(filePath);
-  const normalizedPath = toRelativePosixPath(canonicalPath);
-  if (normalizedPath == null) {
-    logger.debug(`${options.logPrefix} SQAA skipped: file outside cwd: ${filePath}`);
-    return undefined;
-  }
-
-  const project = await resolveHookProject(auth, ctx.console, canonicalPath);
-  if (!project) {
-    logger.debug(`${options.logPrefix} SQAA skipped: no project owns ${filePath}`);
-    return undefined;
-  }
-  const { projectKey, projectRoot } = project;
-
-  const runStart = performance.now();
-  let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
-  try {
-    const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const branch = await resolveSqaaBranch(undefined, canonicalPath);
-
-    const timedFetch = await timed(() =>
-      fetchSingleFileReport(
-        connection,
-        projectKey,
-        resolveSqaaPath(canonicalPath, projectRoot),
-        fileContent,
-        branch,
-        undefined,
-        'STANDARD',
-      ),
-    );
-    fetchResult = timedFetch.result;
-
-    finishSqaaTelemetryFromReport(
-      fetchResult.report,
-      {
-        telemetryCallerCommand: options.callerCommand,
-        telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-        telemetryCtx: ctx,
-        auth,
-      },
-      timedFetch.durationMs,
-    );
-  } catch (err) {
-    recordSqaaAnalysisTelemetry(
-      ctx,
-      auth,
-      options.callerCommand,
-      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
-      Math.round(performance.now() - runStart),
-      SQAA_HOOK_TELEMETRY_EXIT_CODE,
-    );
-    logger.debug(`${options.logPrefix} SQAA analysis failed: ${(err as Error).message}`);
-    return undefined;
-  }
-
-  if (fetchResult.error) {
-    if (fetchResult.error instanceof SqaaForbiddenError) {
-      return resolveVortexUnavailableHookNotice(connection);
-    }
-    logger.debug(`${options.logPrefix} SQAA analysis failed: ${fetchResult.error.message}`);
-    return undefined;
-  }
-
-  const file = fetchResult.report.files[0];
-  return formatSqaaIssuesForHook(file.issues, file.errors, normalizedPath);
-}
-
 export function createPostToolUseHook(
   options: PostToolUseHookOptions,
 ): (ctx: CommandInvocationContext) => Promise<HookCommandResult> {
@@ -160,13 +63,17 @@ export function createPostToolUseHook(
     const agentSessionId = payload.sessionID ?? null;
     const filePath = payload.filePath;
 
-    if (!SQAA_TOOLS.has(payload.tool ?? '') || !filePath || !existsSync(filePath)) {
+    if (!SQAA_TOOLS.has(payload.tool ?? '') || !filePath) {
       writeResult({});
       return { agentSessionId };
     }
 
     try {
-      const context = await analyzeEditedFile(options, filePath, ctx);
+      const result = await analyzeEditedSqaaFile(filePath, ctx, options.callerCommand);
+      const context =
+        result?.kind === 'forbidden'
+          ? await resolveVortexUnavailableHookNotice(result.connection)
+          : result?.context;
       writeResult(context === undefined ? {} : { context });
     } catch (err) {
       logger.debug(`${options.logPrefix} failed: ${(err as Error).message}`);

@@ -19,6 +19,8 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -133,7 +135,7 @@ export async function confirmLargeRunIfNeeded(
   return true;
 }
 
-export async function prepareSqaaExplicitFiles(
+async function prepareSqaaExplicitFiles(
   options: AnalyzeSqaaOptions,
   connection: SonarConnection,
   console: Console,
@@ -217,5 +219,35 @@ export async function prepareSqaaRun(
     branch,
     ...depth,
     ...(files.displayPaths.length === 0 ? { displayDepth: 'STANDARD' as const } : {}),
+  };
+}
+
+export async function prepareSqaaEditedFile(
+  file: string,
+  connection: SonarConnection,
+  console: Console,
+): Promise<PreparedSqaaRun | null> {
+  const canonicalPath = canonicalizePath(file);
+  if (toRelativePosixPath(canonicalPath) === null) {
+    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${file}`);
+    return null;
+  }
+  const resolution = await resolveSqaaConnectionAndProject(connection, undefined, console, [
+    canonicalPath,
+  ]);
+  const resolved = resolveSqaaContext(
+    resolution,
+    { requireProject: false, silentSkip: true },
+    console,
+  );
+  if (!resolved || resolved.groups.length === 0) return null;
+  const displayBase = process.cwd();
+  return {
+    connection: resolved.connection,
+    files: resolveSqaaRunFiles(resolved.groups, displayBase),
+    mode: 'edited-file',
+    ignored: [],
+    displayBase,
+    displayDepth: 'STANDARD',
   };
 }
