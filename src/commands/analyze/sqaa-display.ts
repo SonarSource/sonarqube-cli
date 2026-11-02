@@ -597,10 +597,4 @@ export function displaySqaaResults(
 }
 
 export type { SqaaJsonReport } from './sqaa-display-json.ts';
-export {
-  buildJsonReport,
-  ignoredReportPath,
-  makeReport,
-  singleFileFailureReport,
-  singleFileSuccessReport,
-} from './sqaa-display-json.ts';
+export { buildJsonReport, ignoredReportPath, makeReport } from './sqaa-display-json.ts';

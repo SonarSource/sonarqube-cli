@@ -180,6 +180,14 @@ describe('opencodePostToolUse', () => {
     expect(result.agentSessionId).toBe('ses_1');
   });
 
+  it('does not record another analysis when writing the completed hook output fails', async () => {
+    stdoutSpy.mockImplementationOnce(() => {
+      throw new Error('stdout closed');
+    });
+    await opencodePostToolUse(ctx);
+    expect(recordTelemetrySpy).toHaveBeenCalledTimes(1);
+  });
+
   it('records hook telemetry with the OpenCode caller command and exit code 0', async () => {
     createAnalysisSpy.mockResolvedValue({ id: 'analysis-id', issues: [ISSUE], errors: null });
 
