@@ -230,6 +230,24 @@ describe('analyzeSqaa: auth resolution', () => {
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
+  it('records completion once before JSON presentation fails', async () => {
+    const output = spyOn(fake, 'print').mockImplementation(() => {
+      throw new Error('output failed');
+    });
+    try {
+      const error = await analyzeSqaa(
+        { file: ['src/index.ts'], format: 'json' },
+        FAKE_AUTHENTICATED_CONTEXT,
+        { telemetryCallerCommand: 'analyze agentic' },
+      ).catch((err: unknown) => err);
+      expect(error).toMatchObject({ message: 'output failed' });
+      expect(FAKE_AUTHENTICATED_CONTEXT.telemetryFacts()).toHaveLength(1);
+      expect(FAKE_AUTHENTICATED_CONTEXT.statsFacts()).toHaveLength(1);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
   it('finishes single-file progress before presenting a request failure', async () => {
     const finish = spyOn(SqaaProgress.prototype, 'finish');
     try {
