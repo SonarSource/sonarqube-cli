@@ -39,7 +39,6 @@ export class CloudBackend implements ImportBackend {
     private readonly client: ImportApiClient,
     private readonly orgKey: string | undefined,
     private readonly serverUrl: string,
-    /** The organization when the caller already resolved it, so `plan()` does not look it up again. */
     private readonly resolvedOrg?: ResolvedOrg,
   ) {}
 

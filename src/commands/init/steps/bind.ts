@@ -101,15 +101,11 @@ async function waitForAlmKey(
   return waitForAlmKey(api, orgKey, deadline);
 }
 
-function linkCommand(
-  projectKey: string,
-  path: string,
-  monorepo: boolean,
-  runFrom: string | undefined,
-): string {
-  const link = monorepo
-    ? `sonar link --monorepo ${shellQuote(projectKey)} --path ${shellQuote(path)}`
-    : `sonar link ${shellQuote(projectKey)}`;
+export function linkCommand(projectKey: string, path: string, runFrom: string | undefined): string {
+  const link =
+    path === '.'
+      ? `sonar link ${shellQuote(projectKey)}`
+      : `sonar link ${shellQuote(projectKey)} --path ${shellQuote(path)}`;
   // Windows PowerShell 5.1, the default shell there, has no `&&`.
   const separator = process.platform === 'win32' ? '; ' : ' && ';
   return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
@@ -126,7 +122,6 @@ async function writeMapping(
   const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
   const path = relative(configDir, projectRoot).split(sep).join('/') || '.';
   const entry = deriveEntry(auth, projectKey, path);
-  let monorepo = path !== '.';
 
   try {
     const mapped = await sharedProjectConfigRepository.load(configDir);
@@ -138,11 +133,11 @@ async function writeMapping(
         `Replacing the mapping of this directory to '${replaced.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
-    if (path === '.') {
-      monorepo = await sharedProjectConfigRepository.set(configDir, entry);
-    }
-    if (monorepo) {
-      await sharedProjectConfigRepository.addProject(configDir, entry);
+    const shadowed = await sharedProjectConfigRepository.set(configDir, entry);
+    if (shadowed) {
+      console.warn(
+        `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
+      );
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
@@ -152,7 +147,7 @@ async function writeMapping(
     throw new CommandFailedError(
       `Created project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
       {
-        remediationHint: `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, monorepo, runFrom)}`,
+        remediationHint: `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
       },
     );
   }
