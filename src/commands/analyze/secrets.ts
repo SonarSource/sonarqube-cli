@@ -412,7 +412,8 @@ function handleScanError(err: unknown): void {
 
   let details: string;
   if (errorMessage.includes('timed out')) {
-    details = 'Try scanning a smaller file or check system resources.';
+    details =
+      "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. If you need a directory scan, skip large directories with '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards).";
   } else if (errorMessage.includes('ENOENT')) {
     details = "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.";
   } else {

@@ -48,6 +48,8 @@ Before reading any file in this workspace, scan it for secrets with the determin
 sonar analyze secrets <path/to/file>
 \`\`\`
 
+Scan only the specific files you need to read. Do not scan whole directory trees with \`.\` or a repository-root path.
+
 If the command reports that the file contains a secret, **do not read the file**. Instead:
 
 1. Inform the user that the file appears to contain a secret or credential and that reading it would expose the value in chat history, logs, and any downstream telemetry.

@@ -488,7 +488,7 @@ describe('secretCheckCommand: scan error handling', () => {
     expect(caughtError).toBeInstanceOf(CommandFailedError);
     expect((caughtError as CommandFailedError).message).toBe('Error: Scan timed out after 30000ms');
     expect((caughtError as CommandFailedError).remediationHint).toBe(
-      'Try scanning a smaller file or check system resources.',
+      "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. If you need a directory scan, skip large directories with '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards).",
     );
   });
 
