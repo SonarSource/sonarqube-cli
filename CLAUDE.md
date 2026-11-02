@@ -33,6 +33,7 @@ bun run test:e2e          # end-to-end tests
 - Use `import type` for type-only imports.
 - **MANDATORY**: After editing any `.ts` file, run `bun run format` (or `bun x prettier --write <file>`), then `bun run lint:fix` (or `bun x eslint --fix <file>`) so ESLint autofix applies `simple-import-sort/imports` and other safe fixes.
 - Comments are exceptional, not default: name things well instead; a comment must earn its place by saying a one-line "why" that naming can't.
+- Before opening a pull request, and when reviewing one, run the `design-review` skill (`.claude/skills/design-review/SKILL.md`): it checks for flows already written next door, oversized diffs, missed reuse and unearned abstractions.
 
 Each command lives in `src/commands/`. The command tree is built by `createCommandTree()` in `src/commands/command-tree.ts` and the entry point is `src/index.ts`.
 
