@@ -120,3 +120,20 @@ export interface SingleFileRunOptions {
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
   telemetryCtx?: CommandInvocationContext;
 }
+
+export interface PreparedSqaaRun {
+  connection: SonarConnection;
+  files: SqaaRunFiles;
+  mode: 'single-file' | 'multi-file' | 'change-set' | 'edited-file';
+  ignored: IgnoredFile[];
+  displayBase: string;
+  repoRoot?: string;
+  branch?: string;
+  wireDepth?: SqaaDeepWireDepth;
+  displayDepth: SqaaAnalysisDepth;
+}
+
+export type SqaaPreparedRunOptions = Pick<
+  SqaaBatchRunOptions,
+  'console' | 'format' | 'telemetryCallerCommand' | 'telemetryCtx'
+>;
