@@ -291,6 +291,66 @@ describe('sonar hook claude-post-tool-use', () => {
     { timeout: 15000 },
   );
 
+  it.each([
+    ['claude', 'outside-project'],
+    ['claude', 'other-connection'],
+    ['opencode', 'outside-project'],
+    ['opencode', 'other-connection'],
+  ] as const)(
+    'keeps project_uuid null for %s edits skipped as %s',
+    async (agent, reason) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT)
+        .start();
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/other/.keep', '');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            {
+              serverUrl: server.baseUrl(),
+              organization: TEST_ORG,
+              projectKey: TEST_PROJECT,
+              path: 'pkg',
+            },
+            {
+              serverUrl: server.baseUrl(),
+              organization: 'other-org',
+              projectKey: 'other-project',
+              path: 'pkg/other',
+            },
+          ],
+        }),
+      );
+      const file = reason === 'outside-project' ? 'unowned.ts' : 'pkg/other/main.ts';
+      harness.cwd.writeFile(file, 'const x = 1;');
+      const filePath = join(harness.cwd.path, file);
+      const payload =
+        agent === 'claude'
+          ? postToolUseStdin(filePath)
+          : JSON.stringify({ tool: 'edit', filePath, sessionID: 'ses_test' });
+
+      const result = await harness.runWithStdin(`hook ${agent}-post-tool-use`, payload);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe(agent === 'claude' ? '' : '{}');
+      expect(readAnalysisEvents(harness.sonarUserHome.path)).toHaveLength(0);
+      const commands = readCommandEvents(harness.sonarUserHome.path);
+      expect(commands).toHaveLength(1);
+      expect(commands[0].event_payload.project_uuid).toBeNull();
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/navigation/component'),
+      ).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
   it.skipIf(process.platform !== 'win32')(
     'POSIX-normalizes Windows-style separators before sending to SQAA',
     async () => {
