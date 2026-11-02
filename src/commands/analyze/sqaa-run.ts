@@ -31,7 +31,6 @@ import type { RunTally } from './sqaa-analysis.ts';
 import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
-import type { ChangeSetResult } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   applyExitCode,
@@ -47,12 +46,11 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
-import { resolveSqaaRunFiles, soleFile, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
+import { soleFile, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
 import type {
   AnalyzeSqaaRunOptions,
   PreparedSqaaRun,
-  SqaaBatchRunOptions,
   SqaaPreparedRunOptions,
   SqaaProjectFiles,
 } from './sqaa-types.ts';
@@ -294,23 +292,10 @@ export async function runSqaaAnalysisOnExplicitFiles(
 }
 
 export async function runSqaaAnalysisOnFiles(
-  changeSet: ChangeSetResult,
-  options: SqaaBatchRunOptions,
+  prepared: PreparedSqaaRun,
+  options: SqaaPreparedRunOptions,
 ): Promise<void> {
-  await runSqaaBatch(
-    {
-      connection: options.resolved.connection,
-      files: resolveSqaaRunFiles(options.resolved.groups, changeSet.repoRoot),
-      mode: 'change-set',
-      ignored: changeSet.ignored,
-      displayBase: changeSet.repoRoot,
-      repoRoot: changeSet.repoRoot,
-      branch: options.branch,
-      wireDepth: options.wireDepth,
-      displayDepth: options.displayDepth ?? 'STANDARD',
-    },
-    options,
-  );
+  await runSqaaBatch(prepared, options);
 }
 
 async function runSqaaBatch(

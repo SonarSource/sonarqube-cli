@@ -2740,6 +2740,29 @@ describe('analyze agentic — --format json', () => {
     { timeout: 15000 },
   );
 
+  it('prepares the same changeset and exclusions for direct and combined reports', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaResponse({ issues: [] })
+      .start();
+    harness
+      .state()
+      .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+      .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+    harness.cwd.writeFile('src/a.ts', 'const a = 1;');
+    harness.cwd.writeFile('image.bin', '\0binary');
+    const direct = await harness.run('analyze agentic --format json');
+    const combined = await harness.run('analyze --format json');
+    expect(direct.exitCode).toBe(0);
+    expect(combined.exitCode).toBe(0);
+    const report = JSON.parse(direct.stdout);
+    expect(JSON.parse(combined.stdout).agentic).toEqual(report);
+    expect(report.analysisDepth).toBe('DEEP');
+    expect(report.ignored).toEqual([{ path: 'image.bin', reason: 'binary' }]);
+    expect(report.files.map((file: { path: string }) => file.path)).toEqual(['src/a.ts']);
+  });
+
   it.each([false, true])(
     'prepares the same explicit files for direct and combined reports (multiple files: %s)',
     async (multiple) => {
