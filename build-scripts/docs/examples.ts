@@ -132,6 +132,11 @@ export const EXAMPLES: Record<string, Example[]> = {
   ],
   'sonar analyze secrets': [
     {
+      command: 'sonar analyze secrets src --exclude src/generated --exclude src/vendor',
+      description:
+        'Skip directories with repeatable --exclude options (exact paths or directory prefixes, no wildcards). Replaces secrets.exclude; repeat configured paths you still need to exclude',
+    },
+    {
       command: 'sonar analyze secrets src/config.ts',
       description: 'Scan a file for hardcoded secrets',
     },
