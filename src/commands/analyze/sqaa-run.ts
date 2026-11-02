@@ -20,6 +20,7 @@
 
 import { relative } from 'node:path';
 
+import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -30,7 +31,7 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import type { RunTally } from './sqaa-analysis.ts';
 import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
-import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
+import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api.ts';
 import type { ChangeSetResult } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
@@ -122,11 +123,11 @@ function finishSqaaRun(
  * happened and replace the report's generic 403 text with that resolved message,
  * mirroring what the text-mode branches already show via `printVortexUnavailable`.
  */
-async function enrichForbiddenGlobalError(
+export async function enrichForbiddenGlobalError(
   report: SqaaJsonReport,
   connection: SonarConnection,
 ): Promise<void> {
-  if (!report.globalError) return;
+  if (report.globalError?.kind !== 'forbidden') return;
   const status = await recheckVortexEntitlement(connection);
   report.globalError = {
     ...report.globalError,
@@ -146,9 +147,7 @@ async function printSqaaJsonReport(
   connection: SonarConnection,
   console: Console,
 ): Promise<void> {
-  if (report.globalError?.kind === 'forbidden') {
-    await enrichForbiddenGlobalError(report, connection);
-  }
+  await enrichForbiddenGlobalError(report, connection);
   console.print(JSON.stringify(report, null, 2));
 }
 
@@ -211,6 +210,7 @@ export async function fetchSingleFileReport(
   branch?: string,
   wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
+  onRetry?: (attempt: number) => Promise<void>,
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
   try {
     const response = await fetchWithRetry(
@@ -220,6 +220,7 @@ export async function fetchSingleFileReport(
       branch,
       {
         analysisDepth: wireDepth,
+        onRetry,
       },
     );
     return {
@@ -259,6 +260,11 @@ export async function runSqaaAnalysis(
   const { auth } = connection;
   const fileContent = readSqaaFileContent(path.absolutePath);
 
+  const progress = new SqaaProgress({
+    files: [path.displayPath],
+    console,
+    silent: format === 'json',
+  });
   const { result: fetchResult, durationMs } = await timed(() =>
     fetchSingleFileReport(
       connection,
@@ -268,7 +274,18 @@ export async function runSqaaAnalysis(
       branch,
       wireDepth,
       displayDepth,
-    ),
+      format === 'text'
+        ? (attempt) =>
+            progress.retryingChunk(
+              0,
+              attempt,
+              MAX_503_RETRIES,
+              getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
+            )
+        : undefined,
+    ).finally(() => {
+      progress.finish();
+    }),
   );
   const { report, error } = fetchResult;
 
