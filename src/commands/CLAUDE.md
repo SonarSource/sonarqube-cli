@@ -4,6 +4,8 @@
 
 The `hook/`, `context/` and `analyze/` handlers are the runtime half of the agent integrations that install them: `src/commands/integrate/CLAUDE.md` covers both halves and is the file to read before changing either.
 
+Authentication hints in SessionStart, inactive hook messages, and authenticated command errors share `AUTH_LOGIN_HINT`. They direct users to a separate terminal or environment authentication without requesting tokens in agent conversations.
+
 `sonar auth login` selects the browser sign-in page in `src/core/auth/token.ts`. SonarQube Cloud uses `/auth`. SonarQube Server uses `/auth` from full-year version 2026.2, while Community Build uses it from short-year version 26.4. Earlier or unknown versions use `/sonarlint/auth`.
 
 `sonar auth status` reports the active credentials and warns in text mode when a discovered project records a different connection that `sonar context` cannot use. The mismatch warning wraps its full text to the terminal width and grows vertically. Both commands compare the recorded server with `authMatchesRecordedServer()`: normalized server URLs must match for active-token use, and the organization is not compared. A different port is a different server even when the keychain account uses the same hostname. Cloud organization membership failures advise checking the token's account or asking an organization administrator to add the account. They do not depend on token age. Missing and unverified membership retain distinct JSON statuses and exit code 1.

@@ -1010,7 +1010,8 @@ describe('SonarCommand', () => {
       const errCall = ui.calls.find((c) => c.method === 'error');
       expect(errCall?.args[0]).toContain('Not authenticated');
       const hintCall = ui.calls.find((c) => c.method === 'print');
-      expect(hintCall?.args[0]).toBe("  → Run 'sonar auth login' to authenticate.");
+      expect(hintCall?.args[0]).toContain('separate terminal');
+      expect(hintCall?.args[0]).toContain('SONARQUBE_CLI_TOKEN');
     });
 
     it('catches handler errors and sets process.exitCode', async () => {

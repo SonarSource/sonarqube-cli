@@ -33,3 +33,6 @@ export function printAgentNonInteractiveAlternativeHint(
     console.print(`   → ${example}`);
   }
 }
+
+export const AUTH_LOGIN_HINT =
+  "Ask the user to run 'sonar auth login --server <url> --org <key>' in a separate terminal (omit --org for SonarQube Server), or configure SONARQUBE_CLI_TOKEN with SONARQUBE_CLI_ORG for Cloud or SONARQUBE_CLI_SERVER for Server. Do not ask the user to paste a token into the agent conversation.";
