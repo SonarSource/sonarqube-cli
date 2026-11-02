@@ -499,7 +499,8 @@ describe('integrate copilot', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain('❌ Not authenticated.');
-        expect(output).toContain("  → Run 'sonar auth login' to authenticate.");
+        expect(output).toContain('separate terminal');
+        expect(output).toContain('SONARQUBE_CLI_TOKEN');
       },
       { timeout: 15000 },
     );

@@ -1166,3 +1166,10 @@ describe('gitPrePush', () => {
     );
   });
 });
+
+it('inactive authentication hints describe both authentication alternatives', () => {
+  for (const hint of [SECRETS_INACTIVE_UNAUTHENTICATED, HOOK_INACTIVE_UNAUTHENTICATED]) {
+    expect(hint).toContain('SONARQUBE_CLI_TOKEN');
+    expect(hint).toContain('separate terminal');
+  }
+});
