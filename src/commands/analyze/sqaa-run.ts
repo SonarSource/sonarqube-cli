@@ -31,8 +31,7 @@ import type { RunTally } from './sqaa-analysis.ts';
 import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
-import type { ChangeSetResult, IgnoredFile } from './sqaa-changeset.ts';
-import { resolveSqaaContext } from './sqaa-context.ts';
+import type { ChangeSetResult } from './sqaa-changeset.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   applyExitCode,
@@ -48,19 +47,13 @@ import {
   type SqaaJsonReport,
 } from './sqaa-display.ts';
 import { globalSqaaErrorKind, isGlobalSqaaError } from './sqaa-errors.ts';
-import {
-  assertExplicitFilesAnalyzable,
-  resolveSqaaRunFiles,
-  soleFile,
-  type SqaaPath,
-  withDisplayFilePath,
-} from './sqaa-paths.ts';
+import { resolveSqaaRunFiles, soleFile, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
-import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import type {
   AnalyzeSqaaRunOptions,
-  SingleFileRunOptions,
+  PreparedSqaaRun,
   SqaaBatchRunOptions,
+  SqaaPreparedRunOptions,
   SqaaProjectFiles,
 } from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
@@ -99,7 +92,12 @@ export function finishSqaaTelemetryFromReport(
   );
 }
 
-function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRunOptions): void {
+function finishSqaaRun(
+  tally: RunTally,
+  durationMs: number,
+  options: SqaaPreparedRunOptions,
+  connection: SonarConnection,
+): void {
   const hasGlobalError = tally.globalError !== undefined;
   const exitCode = resolveSqaaCommandExitCode(
     tally.totalIssues,
@@ -110,7 +108,7 @@ function finishSqaaRun(tally: RunTally, durationMs: number, options: SqaaBatchRu
   if (options.telemetryCallerCommand && options.telemetryCtx) {
     recordSqaaAnalysisTelemetry(
       options.telemetryCtx,
-      options.resolved.connection.auth,
+      connection.auth,
       options.telemetryCallerCommand,
       tally,
       durationMs,
@@ -251,34 +249,15 @@ export async function fetchSingleFileReport(
   }
 }
 
-export async function runSqaaAnalysis(file: string, options: SingleFileRunOptions): Promise<void> {
-  const {
-    connection: requestedConnection,
-    branch,
-    explicitProject,
-    format = 'text',
-    requireProject = true,
-    wireDepth,
-    displayDepth = 'STANDARD',
-    telemetryCallerCommand,
-    telemetryCtx,
-    console,
-  } = options;
-
-  const resolution = await resolveSqaaConnectionAndProject(
-    requestedConnection,
-    explicitProject,
-    console,
-    [file],
-  );
-  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
-  if (!resolved) return;
-  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
-
-  const { connection } = resolved;
-  const { projectKey, file: path } = soleFile(resolveSqaaRunFiles(resolved.groups, process.cwd()));
+export async function runSqaaAnalysis(
+  prepared: PreparedSqaaRun,
+  options: SqaaPreparedRunOptions,
+): Promise<void> {
+  const { connection, files, branch, wireDepth, displayDepth } = prepared;
+  const { format = 'text', telemetryCallerCommand, telemetryCtx, console } = options;
+  const { projectKey, file: path } = soleFile(files);
   const { auth } = connection;
-  const fileContent = readSqaaFileContent(file);
+  const fileContent = readSqaaFileContent(path.absolutePath);
 
   const { result: fetchResult, durationMs } = await timed(() =>
     fetchSingleFileReport(
@@ -307,34 +286,40 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   finishSqaaTelemetryFromReport(report, { telemetryCallerCommand, telemetryCtx, auth }, durationMs);
 }
 
-export async function runSqaaAnalysisOnExplicitFiles(options: SqaaBatchRunOptions): Promise<void> {
-  await runSqaaBatch(options, process.cwd(), []);
+export async function runSqaaAnalysisOnExplicitFiles(
+  prepared: PreparedSqaaRun,
+  options: SqaaPreparedRunOptions,
+): Promise<void> {
+  await runSqaaBatch(prepared, options);
 }
 
 export async function runSqaaAnalysisOnFiles(
   changeSet: ChangeSetResult,
   options: SqaaBatchRunOptions,
 ): Promise<void> {
-  await runSqaaBatch(options, changeSet.repoRoot, changeSet.ignored, changeSet.repoRoot);
+  await runSqaaBatch(
+    {
+      connection: options.resolved.connection,
+      files: resolveSqaaRunFiles(options.resolved.groups, changeSet.repoRoot),
+      mode: 'change-set',
+      ignored: changeSet.ignored,
+      displayBase: changeSet.repoRoot,
+      repoRoot: changeSet.repoRoot,
+      branch: options.branch,
+      wireDepth: options.wireDepth,
+      displayDepth: options.displayDepth ?? 'STANDARD',
+    },
+    options,
+  );
 }
 
-/** `displayBase` is what reported paths are relative to: cwd for `--file`, the repository root for a change set. */
 async function runSqaaBatch(
-  options: SqaaBatchRunOptions,
-  displayBase: string,
-  ignored: IgnoredFile[],
-  repoRoot?: string,
+  prepared: PreparedSqaaRun,
+  options: SqaaPreparedRunOptions,
 ): Promise<void> {
-  const {
-    resolved,
-    branch,
-    format = 'text',
-    wireDepth,
-    displayDepth = 'STANDARD',
-    console,
-  } = options;
-  const { connection } = resolved;
-  const files = resolveSqaaRunFiles(resolved.groups, displayBase);
+  const { connection, files, branch, wireDepth, displayDepth, ignored, displayBase, repoRoot } =
+    prepared;
+  const { format = 'text', console } = options;
   const isJson = format === 'json';
 
   const { result: tally, durationMs } = await timed(() =>
@@ -378,5 +363,5 @@ async function runSqaaBatch(
       console,
     );
   }
-  finishSqaaRun(tally, durationMs, options);
+  finishSqaaRun(tally, durationMs, options, connection);
 }
