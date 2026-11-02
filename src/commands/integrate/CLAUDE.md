@@ -20,6 +20,8 @@ All agent handlers use `finalizeAgentInstall` for Vortex resolution, installatio
 
 # Agent secrets hooks
 
+The shared secrets-on-read instructions require scans of specific files and prohibit whole-tree scans with `.` or a repository-root path. Secrets scan timeout hints recommend specific files, `sonar analyze` for changed files, or repeatable `--exclude <path>` options for a required directory scan. Exclusions match exact paths or directory prefixes without wildcards. Public examples and agent documentation come from `build-scripts/docs/examples.ts` and `build-scripts/docs/llms.txt.template`; release automation updates generated docs.
+
 **Copilot file reads** use `sonar hook copilot-pre-tool-use` on `preToolUse`. The handler scans the `view` tool target, accepts `toolArgs` as either an object or a JSON-encoded string, and resolves relative file paths against the payload’s `cwd` (falling back to the hook process working directory). Findings deny the read; shell reads and searches are not covered by this handler.
 
 **Copilot** uses `sonar hook agent-secrets-masking --agent copilot` on `userPromptTransformed` to redact secrets or replace unsafe prompts with a blocking notice via `modifiedTransformedPrompt`. Invalid input passes through silently. The `agent-secrets-masking --agent codex|copilot` command uses `hook/agent-secrets-masking/`, with agent adapters for payload parsing and output formatting. The entry point resolves the adapter, parses input and emits the handler's result; unknown agents, unparseable input and clean scans produce no output. The `prompt-secrets-hook` feature replaces `prompt-secrets-instructions` and removes its old snippet; Antigravity retains the instructions in `integrate/antigravity/rules.ts`.
