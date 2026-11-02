@@ -326,13 +326,13 @@ function displayProjectConnectionMismatch(
     [
       ...connectionLines(project.serverUrl, project.orgKey),
       '',
-      'This project records the connection above, which differs from the one your credentials',
-      'are for. Commands that resolve credentials per project, such as sonar context, will not',
-      'use your current credentials here. Either point your credentials at this connection, or',
-      're-run sonar integrate from this project to record the one you are authenticated with.',
+      'This project records the connection above, which differs from the one your credentials ' +
+        'are for. Commands that resolve credentials per project, such as sonar context, will not ' +
+        'use your current credentials here. Either point your credentials at this connection, or ' +
+        're-run sonar integrate from this project to record the one you are authenticated with.',
     ],
     '! This project expects a different connection',
-    NOTE_STYLES.warn,
+    { ...NOTE_STYLES.warn, wrap: true },
   );
 }
 

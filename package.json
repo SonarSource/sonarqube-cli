@@ -118,7 +118,7 @@
     "js-yaml": "5.5.0",
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
-    "node-forge": "1.4.1",
+    "node-forge": "1.4.2",
     "openpgp": "6.3.2",
     "picocolors": "1.1.1",
     "picomatch": "4.0.7",
@@ -146,12 +146,12 @@
     "lint-staged": "16.4.0",
     "prettier": "3.9.10",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.72.0"
+    "typescript-eslint": "8.72.1"
   },
   "overrides": {
     "flatted": "3.4.4",
-    "follow-redirects": "1.16.1",
-    "node-forge": "1.4.1",
+    "follow-redirects": "1.16.2",
+    "node-forge": "1.4.2",
     "picomatch": "4.0.7"
   },
   "lint-staged": {

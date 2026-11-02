@@ -108,6 +108,10 @@ describe('authStatus with FakeConsole', () => {
     expect(output).toContain('This project expects a different connection');
     expect(output).toContain('https://regional.sonarcloud.io');
     expect(output).toContain('another-org');
+    // Hard line breaks would leave short orphans once the note wraps them on a narrow terminal.
+    expect(output).toContain(
+      'Commands that resolve credentials per project, such as sonar context, will not use your current credentials here.',
+    );
   });
 
   it('warns for another port on the same host even when the keychain has a token', async () => {
