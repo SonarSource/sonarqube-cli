@@ -46,9 +46,6 @@ import type { SqaaAnalysisFile, SqaaIssue } from './sqaa-wire-types.ts';
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
 
-/** Interval for the live countdown tick in milliseconds. */
-const COUNTDOWN_TICK_MS = 1000;
-
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -439,31 +436,6 @@ export async function waitBeforeRetry(
   if (onRetry) {
     await onRetry(attempt);
   } else {
-    await defaultRetryCountdown(attempt, MAX_503_RETRIES, delayMs);
-  }
-}
-
-/**
- * Countdown used for the single-file path (no SqaaProgress block on screen). Writes to stdout directly.
- */
-export async function defaultRetryCountdown(
-  attempt: number,
-  maxRetries: number,
-  delayMs: number,
-): Promise<void> {
-  const totalSeconds = Math.round(delayMs / 1000);
-  if (!process.stdout.isTTY) {
-    process.stdout.write(
-      `⚠️  Server busy (503). Retrying in ${totalSeconds}s... [Attempt ${attempt}/${maxRetries}]\n`,
-    );
     await sleep(delayMs);
-    return;
   }
-  for (let remaining = totalSeconds; remaining > 0; remaining--) {
-    process.stdout.write(
-      `\r⚠️  Server busy (503). Retrying in ${remaining}s... [Attempt ${attempt}/${maxRetries}]  `,
-    );
-    await sleep(COUNTDOWN_TICK_MS);
-  }
-  process.stdout.write('\r\x1b[K');
 }
