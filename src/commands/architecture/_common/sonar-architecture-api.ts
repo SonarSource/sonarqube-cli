@@ -256,7 +256,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
           branchId,
           language: ecosystem,
         })
-        .orThrow();
+        .orThrow()
+        .catch((error: unknown) => this.collectionFailure(error));
       if (!Array.isArray(response?.currentArchitectures)) {
         throw new CommandFailedError(
           'Invalid public current architecture response: currentArchitectures must be an array.',
@@ -270,7 +271,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const projectId = await this.projectId();
     const response = await this.http
       .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => this.collectionFailure(error));
     if (!Array.isArray(response?.intendedArchitectures)) {
       throw new CommandFailedError(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
@@ -343,7 +345,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
         projectDirectives?: unknown[];
         page?: { pageIndex: number; pageSize: number; total: number };
       } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => this.collectionFailure(error));
     const page = result?.page;
     if (
       !Array.isArray(result?.projectDirectives) ||
@@ -548,6 +551,23 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return this.serverProjectIdPromise;
   }
 
+  private collectionFailure(error: unknown): never {
+    if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+      throw new CommandFailedError(
+        'The public Architecture API endpoint was not found (HTTP 404).',
+        {
+          cause: error,
+          remediationHint:
+            'Check feature availability, Browse permission and API routing.' +
+            (this.http.isCloud
+              ? ''
+              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+        },
+      );
+    }
+    throw error;
+  }
+
   private async resolveServerProjectId(): Promise<string> {
     const response = await new ProjectsClient(this.http)
       .getProjectsByKey(this.projectKey)
@@ -574,9 +594,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
       typeof project.id !== 'string' ||
       project.id.trim().length === 0
     ) {
-      throw new CommandFailedError(
-        `Could not resolve project '${this.projectKey}'. Check the key and Browse permission.`,
-      );
+      throw new CommandFailedError(`Could not resolve project '${this.projectKey}'.`, {
+        remediationHint: 'Check the project key and Browse permission.',
+      });
     }
     return project.id;
   }
