@@ -111,7 +111,7 @@ function drillDownCommands(
 
 function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string, unknown> {
   const where = slice.root ? `below '${slice.root}'` : 'from the top level';
-  const cap = slice.capped ? ` ${formatSliceLimit(slice)}` : '';
+  const cap = slice.omittedLevel !== undefined ? ` ${formatSliceLimit(slice)}` : '';
   let edgeCap = '';
   if (slice.omittedEdges > 0) {
     edgeCap =
@@ -121,7 +121,7 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
   }
   return {
     language: current.ecosystem,
-    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
+    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${slice.message === undefined ? '' : ` ${slice.message}`}${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
     ...slice,
   };
 }
@@ -140,6 +140,8 @@ function limitResponseEdges(slices: GraphSlice[]): void {
     slice.omittedEdges += slice.edges.length - shown.length;
     slice.edges = shown;
     slice.feedbackPairs.heaviest = slice.feedbackPairs.heaviest.filter((pair) => pairs.has(pair));
+    slice.capped ||=
+      slice.omittedEdges > 0 || slice.feedbackPairs.heaviest.length < slice.feedbackPairs.total;
   }
 }
 
