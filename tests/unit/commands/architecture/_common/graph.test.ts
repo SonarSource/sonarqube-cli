@@ -68,6 +68,29 @@ const GRAPH: StructureGraph = {
   ],
 };
 
+describe('truncation reporting', () => {
+  it('marks edge-only truncation without a node cap', () => {
+    const graph = {
+      nodeCount: 16,
+      edgeCount: 15,
+      nodes: Array.from({ length: 16 }, (_, id) => ({
+        id,
+        name: `module${id}`,
+        kind: 'module',
+        edges:
+          id === 0
+            ? Array.from({ length: 15 }, (_, target) => ({ toId: target + 1, weight: 1 }))
+            : [],
+      })),
+    };
+    const sliced = sliceGraph(indexStructure(graph), undefined, 1, 150, 5);
+    expect(sliced.omittedLevel).toBeUndefined();
+    expect(sliced.omittedEdges).toBe(10);
+    expect(sliced.capped).toBe(true);
+    expect(sliceGraph(indexStructure(graph), undefined, 1, 150, 20).capped).toBe(false);
+  });
+});
+
 describe('indexStructure', () => {
   it('joins children with a separator inferred from the parent kind', () => {
     const index = indexStructure(GRAPH);
@@ -154,7 +177,13 @@ describe('sliceGraph', () => {
       { from: 'src', to: 'lib', weight: 5 },
       { from: 'app', to: 'src', weight: 2 },
     ]);
-    expect(slice).toMatchObject({ totalNodes: 7, capped: false, omittedNodes: 4, omittedEdges: 0 });
+    expect(slice).toMatchObject({
+      totalNodes: 7,
+      nodesInScope: 3,
+      capped: false,
+      omittedNodes: 0,
+      omittedEdges: 0,
+    });
     expect(slice.drillDown).toEqual(['app', 'src']);
     expect(slice.feedbackPairs).toEqual({ total: 0, heaviest: [] });
     expect(slice.outsideViewWeight).toBe(0);
@@ -186,12 +215,23 @@ describe('sliceGraph', () => {
     expect(slice.nodes.map(({ key }) => key)).toEqual(['app']);
     expect(slice).toMatchObject({
       capped: true,
-      omittedNodes: 6,
+      omittedNodes: 2,
       depth: 1,
       requestedDepth: 1,
       nodeLimit: 1,
       levels: [{ depth: 1, nodes: 1 }],
       omittedLevel: { depth: 1, nodes: 3 },
+    });
+  });
+
+  it('counts only requested nodes omitted by the cap, including levels after it is reached', () => {
+    expect(sliceGraph(index, undefined, 1, 1)).toMatchObject({ nodesInScope: 3, omittedNodes: 2 });
+    expect(sliceGraph(index, undefined, 2, 1)).toMatchObject({ nodesInScope: 5, omittedNodes: 4 });
+    expect(sliceGraph(index, undefined, 3, 1)).toMatchObject({ nodesInScope: 7, omittedNodes: 6 });
+    expect(sliceGraph(index, 'app', 1, 1)).toMatchObject({
+      nodesInScope: 1,
+      omittedNodes: 0,
+      capped: false,
     });
   });
 
