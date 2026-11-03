@@ -37,9 +37,28 @@ import {
 } from '@/core/project-discovery/shared-project-config.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
+import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
+
 export interface LinkOptions {
   path: string;
   monorepo?: boolean;
+}
+
+/** Fails when a Cloud connection has no organization, before any prompt or write. */
+function requireCloudOrganization({ orgKey }: ResolvedAuth): string {
+  if (!orgKey) {
+    throw new CommandFailedError(
+      'Could not determine the SonarQube Cloud organization for the active connection.',
+      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
+    );
+  }
+  return orgKey;
+}
+
+function assertLinkableConnection(auth: ResolvedAuth): void {
+  if (auth.connectionType === 'cloud') {
+    requireCloudOrganization(auth);
+  }
 }
 
 export function deriveEntry(
@@ -51,26 +70,21 @@ export function deriveEntry(
     return { projectKey, path, serverUrl: auth.serverUrl };
   }
 
-  if (!auth.orgKey) {
-    throw new CommandFailedError(
-      'Could not determine the SonarQube Cloud organization for the active connection.',
-      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
-    );
-  }
+  const organization = requireCloudOrganization(auth);
 
   const region = cloudRegionFromUrl(auth.serverUrl);
   const origin = region ? new URL(auth.serverUrl).origin : undefined;
   if (!region || (origin !== SONARCLOUD_URL && origin !== SONARCLOUD_US_URL)) {
-    return { projectKey, path, serverUrl: auth.serverUrl, organization: auth.orgKey };
+    return { projectKey, path, serverUrl: auth.serverUrl, organization };
   }
-  return { projectKey, path, region, organization: auth.orgKey };
+  return { projectKey, path, region, organization };
 }
 
 /** Resolves to whether the written link takes effect (a shadowed link does not). */
 type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<boolean>;
 
 export function linkProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
@@ -81,11 +95,11 @@ export function linkProject(
 
 /** Single-project link: replaces the legacy singular `project` binding. */
 function linkSingleProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return writeLink(projectKey, options, ctx, async (dir, entry) => {
+  return runLink(projectKey, options, ctx, async (dir, entry) => {
     const shadowed = await sharedProjectConfigRepository.set(dir, entry);
     if (shadowed) {
       ctx.console.warn(
@@ -98,11 +112,11 @@ function linkSingleProject(
 
 /** Monorepo link: adds or updates a mapping in the `projects` array. */
 function linkMonorepoProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return writeLink(
+  return runLink(
     projectKey,
     options,
     ctx,
@@ -114,24 +128,35 @@ function linkMonorepoProject(
   );
 }
 
-async function writeLink(
-  projectKey: string,
-  options: LinkOptions,
-  ctx: CommandAuthenticatedInvocationContext,
-  write: WriteEntry,
-  monorepo = false,
-): Promise<void> {
-  const { auth, console } = ctx;
-  const { path } = options;
+interface LinkTarget {
+  /** Where `.sonar-config.json` lives: the git root, else the current directory. */
+  targetDir: string;
+  projectRoot: string;
+  inGitRepository: boolean;
+}
 
+/** Fails before any prompt, server call or write when the request cannot be carried out. */
+function assertLinkable(
+  givenKey: string | undefined,
+  { path }: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): void {
   if (path.trim().length === 0) {
     throw new CommandFailedError('--path must not be empty.', {
       remediationHint: "Use '--path .' for a project at the repository root.",
     });
   }
 
-  const entry = deriveEntry(auth, projectKey, path);
+  assertLinkableConnection(ctx.auth);
+  if (givenKey === undefined) {
+    assertCanChooseProject(ctx);
+  }
+}
 
+async function resolveLinkTarget(
+  path: string,
+  { console }: CommandAuthenticatedInvocationContext,
+): Promise<LinkTarget> {
   const cwd = process.cwd();
   const gitRoot = await resolveGitRepoRoot(cwd);
   const targetDir = canonicalizePath(gitRoot ?? cwd);
@@ -152,18 +177,43 @@ async function writeLink(
   if (!gitRoot) {
     console.warn('No git repository found. Writing to the current directory instead.');
   }
+  return { targetDir, projectRoot, inGitRepository: gitRoot !== null };
+}
 
-  if (!(await write(targetDir, entry))) {
-    return;
-  }
-
-  const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
+function reportLinked(
+  console: CommandAuthenticatedInvocationContext['console'],
+  { targetDir, projectRoot, inGitRepository }: LinkTarget,
+  projectKey: string,
+  monorepo: boolean,
+): void {
   const summaryLines = [
     `Linked ${projectRoot} to project ${projectKey}${monorepo ? ' (monorepo mapping)' : ''}`,
-    `Config saved to ${configPath}`,
+    `Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
   ];
-  if (gitRoot) {
+  if (inGitRepository) {
     summaryLines.push(`Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`);
   }
   console.success(summaryLines.join('\n'));
+}
+
+/** Validates the request, picks the project key when none was given, writes the link, reports it. */
+async function runLink(
+  givenKey: string | undefined,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+  write: WriteEntry,
+  monorepo = false,
+): Promise<void> {
+  assertLinkable(givenKey, options, ctx);
+  const target = await resolveLinkTarget(options.path, ctx);
+
+  const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, ctx));
+  if (projectKey === null) {
+    return;
+  }
+
+  const entry = deriveEntry(ctx.auth, projectKey, options.path);
+  if (await write(target.targetDir, entry)) {
+    reportLinked(ctx.console, target, projectKey, monorepo);
+  }
 }
