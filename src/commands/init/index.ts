@@ -19,13 +19,15 @@
  */
 
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import type { InitOutcome } from './init-outcome.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
 import { runBoundNew } from './steps/bind.ts';
-import { detectInitPath, resolveProjectRoot } from './steps/detect.ts';
+import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
+import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
 
 export interface InitOptions {
@@ -43,20 +45,26 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
 
-  const outcome = await run(projectRoot, ctx, interactive);
-  renderInitOutcome(outcome, ctx.console, {
-    suggestIntegrate: findInstalledIntegrationIds().length === 0,
-  });
+  const { outcome, auth } = await run(projectRoot, ctx, interactive);
+  const suggestIntegrate = findInstalledIntegrationIds().length === 0;
+  // const suggestIntegrate = true;
+  renderInitOutcome(outcome, ctx.console, { suggestIntegrate: suggestIntegrate && !interactive });
+  if (suggestIntegrate && interactive) {
+    await offerIntegrate(ctx, auth);
+  }
 }
 
 async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   interactive: boolean,
-): Promise<InitOutcome> {
+): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
   const auth = await resolveInitAuth(ctx, interactive);
   const deps = { auth, console: ctx.console, interactive };
-  const outcome = await detectInitPath(projectRoot, deps);
+  return { outcome: await runDetectedPath(await detectInitPath(projectRoot, deps), deps), auth };
+}
+
+function runDetectedPath(outcome: InitOutcome, deps: DetectDeps): Promise<InitOutcome> {
   switch (outcome.path) {
     case 'bound-new':
       return runBoundNew(outcome, deps);
@@ -64,6 +72,6 @@ async function run(
       return runLinkExisting(outcome, deps);
     case 'complete':
     case 'unbound-new':
-      return outcome;
+      return Promise.resolve(outcome);
   }
 }

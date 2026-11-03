@@ -119,6 +119,20 @@ export class CommandInvocationContext {
   }
 
   /**
+   * A context for the same invocation once credentials exist that this context's memoized
+   * {@link resolveAuth} cannot see, such as right after a login. Its telemetry and stats facts
+   * are its own, so the caller forwards them.
+   */
+  withAuth(auth: ResolvedAuth): CommandAuthenticatedInvocationContext {
+    return new CommandAuthenticatedInvocationContext(
+      auth,
+      this.console,
+      this.lifecycle,
+      this.runtime,
+    );
+  }
+
+  /**
    * Resolve auth for this invocation. `Ok(null)` means not authenticated;
    * `Err` means credentials could not be read (for example corrupt state).
    * Memoized for the lifetime of this context.
