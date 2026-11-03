@@ -26,6 +26,7 @@ import type {
   OutputChannel,
   PhaseItem,
   PhaseOptions,
+  SearchPromptOptions,
   SelectOption,
 } from '@/core/ui/console.ts';
 
@@ -43,6 +44,9 @@ function findUiCall(
     (c) => c.method === method && typeof c.args[0] === 'string' && c.args[0].includes(substring),
   );
 }
+
+/** What a test types and picks in `searchPrompt`; `null` cancels, `pick` defaults to the first result. */
+export type FakeSearchAnswer = { query: string; pick?: unknown } | null;
 
 export class FakeConsole implements Console {
   readonly calls: UiCall[] = [];
@@ -156,6 +160,20 @@ export class FakeConsole implements Console {
     const value = this.dequeue<T | null>(options.length ? options[0].value : null);
     this.record('selectPrompt', message, value);
     return Promise.resolve(value);
+  }
+
+  /** Runs the real `search` with the queued query, so tests see exactly what the server is asked. */
+  async searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
+    const answer = this.dequeue<FakeSearchAnswer>({ query: '' });
+    this.record('searchPrompt', message, answer);
+    if (answer === null) {
+      return null;
+    }
+    const { options: found } = await options.search(answer.query);
+    if ('pick' in answer) {
+      return answer.pick as T;
+    }
+    return found.length > 0 ? found[0].value : null;
   }
 
   multiSelectPrompt<T>(

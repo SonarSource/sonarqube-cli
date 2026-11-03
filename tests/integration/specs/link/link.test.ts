@@ -328,10 +328,9 @@ describe('sonar link', () => {
 
         const session = harness.runInteractive('link');
         await session.decline('beta (beta)?');
-        await session.waitText('Search projects');
+        await session.waitText('Choose a project');
         session.write('alpha');
-        session.keyEnter();
-        await session.waitText('Select a project');
+        await session.waitText('1 match');
         session.keyEnter();
         const result = await session.waitFinish();
 
@@ -349,9 +348,8 @@ describe('sonar link', () => {
         const serverUrl = await signInToServer();
 
         const session = harness.runInteractive('link');
-        await session.waitText('Search projects');
-        session.keyEnter();
-        await session.waitText('Select a project');
+        await session.waitText('Choose a project');
+        await session.waitText('2 projects');
         session.keyEnter();
         const result = await session.waitFinish();
 
@@ -369,7 +367,7 @@ describe('sonar link', () => {
         await signInToServer();
 
         const session = harness.runInteractive('link');
-        await session.waitText('Search projects');
+        await session.waitText('Choose a project');
         session.keyCtrlC();
         const result = await session.waitFinish();
 

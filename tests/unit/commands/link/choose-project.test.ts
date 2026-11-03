@@ -128,8 +128,6 @@ describe('link without a project key', () => {
 
     it('does not propose a discovered key the server does not know', async () => {
       discovered([mapping('stale')]);
-      fake.queueResponse('');
-      fake.queueResponse('found');
 
       await link(undefined, { path: '.' }, ctx);
 
@@ -236,74 +234,48 @@ describe('link without a project key', () => {
   });
 
   describe('search list', () => {
-    it('searches on the server with the typed term and links the selected project', async () => {
+    it('searches on the server with the typed query and links the picked project', async () => {
       searchSpy.mockReturnValue(okAsync(searchResult(['a', 'b'])));
-      fake.queueResponse('my term');
-      fake.queueResponse('b');
+      fake.queueResponse({ query: 'my term', pick: 'b' });
 
       await link(undefined, { path: '.' }, ctx);
 
       expect(searchSpy).toHaveBeenCalledWith(expect.objectContaining({ q: 'my term' }));
+      expect(fake.findCall('searchPrompt', 'Choose a project')).toBeDefined();
       expect(writtenKey()).toBe('b');
     });
 
-    it('lists everything for an empty term', async () => {
-      fake.queueResponse('   ');
-
+    it('lists everything for an empty query', async () => {
       await link(undefined, { path: '.' }, ctx);
 
       expect(searchSpy.mock.calls.at(0)?.[0].q).toBeUndefined();
+      expect(writtenKey()).toBe('found');
     });
 
-    it('asks again instead of exiting when nothing matches', async () => {
-      searchSpy
-        .mockReturnValueOnce(okAsync(searchResult([])))
-        .mockReturnValueOnce(okAsync(searchResult(['second'])));
-      fake.queueResponse('nothing');
-      fake.queueResponse('second term');
-      fake.queueResponse('second');
+    it('asks the server for one short page and reports the total', async () => {
+      searchSpy.mockReturnValue(okAsync(searchResult(['a', 'b'], 2175)));
+      const searchPrompt = spyOn(fake, 'searchPrompt');
 
       await link(undefined, { path: '.' }, ctx);
 
-      expect(fake.findCall('warn', "No projects match 'nothing'.")).toBeDefined();
-      expect(writtenKey()).toBe('second');
+      expect(searchSpy.mock.calls.at(0)?.[0].ps).toBe(10);
+      expect(searchPrompt).toHaveBeenCalledWith(
+        'Choose a project',
+        expect.objectContaining({ noun: 'projects', minQueryLength: 2 }),
+      );
     });
 
-    it('re-prompts without calling the server for a one-character term', async () => {
-      fake.queueResponse('x');
-      fake.queueResponse('xs');
-      fake.queueResponse('a');
+    it('shows the project name with its key as the detail column', async () => {
+      const searchPrompt = spyOn(fake, 'searchPrompt');
+      searchSpy.mockReturnValue(okAsync(searchResult(['a'])));
 
       await link(undefined, { path: '.' }, ctx);
 
-      expect(fake.findCall('warn', 'Enter at least 2 characters')).toBeDefined();
-      expect(searchSpy).toHaveBeenCalledTimes(1);
-      expect(searchSpy).toHaveBeenCalledWith(expect.objectContaining({ q: 'xs' }));
-    });
-
-    it('says when the list is truncated and asks to refine', async () => {
-      searchSpy.mockReturnValue(okAsync(searchResult(['a', 'b'], 40)));
-
-      await link(undefined, { path: '.' }, ctx);
-
-      expect(
-        fake.findCall('print', 'Showing the first 2 of 40 projects. Refine your search'),
-      ).toBeDefined();
-    });
-
-    it('searches again when asked to', async () => {
-      searchSpy
-        .mockReturnValueOnce(okAsync(searchResult(['first'])))
-        .mockReturnValueOnce(okAsync(searchResult(['second'])));
-      fake.queueResponse('one');
-      fake.queueResponse('__search_again__');
-      fake.queueResponse('two');
-      fake.queueResponse('second');
-
-      await link(undefined, { path: '.' }, ctx);
-
-      expect(searchSpy).toHaveBeenCalledTimes(2);
-      expect(writtenKey()).toBe('second');
+      const results = await searchPrompt.mock.calls.at(0)?.[1].search('a');
+      expect(results).toEqual({
+        options: [{ value: 'a', label: 'Name of a', detail: 'a' }],
+        total: 1,
+      });
     });
 
     it('fails with a hint when the search itself fails', async () => {
@@ -352,7 +324,7 @@ describe('link without a project key', () => {
       await link('explicit', { path: '.' }, ctx);
 
       expect(discoverSpy).not.toHaveBeenCalled();
-      expect(fake.findCall('textPrompt', 'Search')).toBeUndefined();
+      expect(fake.findCall('searchPrompt', 'Choose a project')).toBeUndefined();
       expect(writtenKey()).toBe('explicit');
     });
   });

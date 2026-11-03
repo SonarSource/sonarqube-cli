@@ -19,7 +19,7 @@
  */
 
 // Picks the project for `sonar link` when no key is given: a verified proposal from project
-// discovery first, then a server-side search the user refines until they select one project.
+// discovery first, then a live server-side search the user narrows by typing.
 
 import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -31,8 +31,7 @@ import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { SonarQubeProject } from '@/core/server/types.ts';
 
-const SEARCH_AGAIN = '__search_again__';
-const PICKER_PAGE_SIZE = 25;
+const PICKER_PAGE_SIZE = 10;
 // /api/components/search silently returns nothing for a one-character `q`.
 const MIN_SEARCH_LENGTH = 2;
 
@@ -152,44 +151,31 @@ function verifyProject(
   );
 }
 
-/** Text prompt plus select prompt, repeated until the user selects a project. */
+/** Live search: the server filters as the user types, until they pick one project. */
 async function searchForProject(
   projects: ProjectsClient,
-  ctx: CommandAuthenticatedInvocationContext,
+  { auth, console }: CommandAuthenticatedInvocationContext,
 ): Promise<string> {
-  const { auth, console } = ctx;
-
-  for (;;) {
-    const term = await console.textPrompt('Search projects by name or key (empty lists all)');
-    if (term === null) {
-      throw cancelled();
-    }
-    const query = term.trim();
-
-    if (query.length > 0 && query.length < MIN_SEARCH_LENGTH) {
-      console.warn(
-        ` Enter at least ${MIN_SEARCH_LENGTH} characters, or leave it empty to list all projects.`,
-      );
-      continue;
-    }
-
-    const { components, paging } = await fetchProjectPage(projects, query, auth.orgKey);
-
-    if (components.length === 0) {
-      console.warn(query ? ` No projects match '${query}'.` : ' No projects found.');
-      continue;
-    }
-    if (paging.total > components.length) {
-      console.print(
-        `Showing the first ${components.length} of ${paging.total} projects. Refine your search to narrow the list.`,
-      );
-    }
-
-    const choice = await selectProject(console, components);
-    if (choice !== SEARCH_AGAIN) {
-      return choice;
-    }
+  const choice = await console.searchPrompt<string>('Choose a project', {
+    hint: 'type a name or key',
+    noun: 'projects',
+    minQueryLength: MIN_SEARCH_LENGTH,
+    search: async (query) => {
+      const { components, paging } = await fetchProjectPage(projects, query, auth.orgKey);
+      return {
+        options: components.map((project) => ({
+          value: project.key,
+          label: project.name,
+          detail: project.key === project.name ? undefined : project.key,
+        })),
+        total: paging.total,
+      };
+    },
+  });
+  if (choice === null) {
+    throw cancelled();
   }
+  return choice;
 }
 
 function fetchProjectPage(
@@ -208,22 +194,4 @@ function fetchProjectPage(
         });
       },
     );
-}
-
-/** Resolves to the selected project key, or `SEARCH_AGAIN`; throws when the user cancels. */
-async function selectProject(
-  console: CommandAuthenticatedInvocationContext['console'],
-  components: readonly SonarQubeProject[],
-): Promise<string> {
-  const choice = await console.selectPrompt<string>('Select a project', [
-    ...components.map((project) => ({
-      value: project.key,
-      label: `${project.name} (${project.key})`,
-    })),
-    { value: SEARCH_AGAIN, label: '↻ Search again' },
-  ]);
-  if (choice === null) {
-    throw cancelled();
-  }
-  return choice;
 }
