@@ -44,7 +44,10 @@ import {
 } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
 import { shellQuote } from './shell-quote.ts';
-import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
+import {
+  ArchitectureApiCompatibilityError,
+  IntendedModelIdentityError,
+} from './sonar-architecture-api.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;
 const SECOND_VERIFICATION_RETRY_DELAY_MS = 250;
@@ -172,7 +175,13 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), { cause: error });
+  const incompatibleResponse = [readError, error].find(
+    (failure) => failure instanceof ArchitectureApiCompatibilityError,
+  );
+  return new CommandFailedError(lines.join('\n'), {
+    cause: error,
+    remediationHint: incompatibleResponse?.remediationHint,
+  });
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
