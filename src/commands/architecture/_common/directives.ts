@@ -413,26 +413,26 @@ export async function applyDirectiveChanges(
     });
   } catch (error) {
     const confirmed = result.created.length + result.updated.length;
-    const preWriteFailure = error instanceof DirectivePreWriteError;
-    if (!confirmed && preWriteFailure) {
-      if (isDefiniteRejection(error.cause)) throw error.cause;
-      throw new CommandFailedError(
-        `${error.message} No write request was sent; nothing was changed.`,
-        {
-          cause: error,
-        },
-      );
-    }
+    rethrowUnsentChange(error, confirmed);
     if (!confirmed && isDefiniteRejection(error)) throw error;
-    const followup = preWriteFailure
-      ? 'Only the confirmed writes above were applied.'
-      : `Inspect ${target} before retrying. Attempted ${attempted}.`;
+    const followup =
+      error instanceof DirectivePreWriteError
+        ? 'Only the confirmed writes above were applied.'
+        : `Inspect ${target} before retrying. Attempted ${attempted}.`;
     throw new CommandFailedError(
       `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. ${directiveFailureOutcome(error)} ${followup} ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }
   return result;
+}
+
+function rethrowUnsentChange(error: unknown, confirmed: number): void {
+  if (confirmed || !(error instanceof DirectivePreWriteError)) return;
+  if (isDefiniteRejection(error.cause)) throw error.cause;
+  throw new CommandFailedError(`${error.message} No write request was sent; nothing was changed.`, {
+    cause: error,
+  });
 }
 
 function directiveFailureOutcome(error: unknown): string {
