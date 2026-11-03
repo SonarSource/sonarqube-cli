@@ -92,7 +92,7 @@ export interface GraphSlice {
  * build node keys: the node's own `separator`, or one inferred from its kind when the DTO
  * leaves it out (`module:package.Class`, `folder/file`).
  */
-function childSeparator(node: StructureNode): string {
+export function childSeparator(node: StructureNode): string {
   if (node.separator) return node.separator;
   if (node.kind === 'file' && (node.nodes?.length ?? 0) > 0) {
     throw new CommandFailedError(
@@ -204,7 +204,7 @@ export function sliceGraph(
     edges: edges.slice(0, maxEdges),
     feedbackPairs: feedbackPairs(edges),
     outsideViewWeight,
-    capped,
+    capped: capped || edges.length > maxEdges || feedbackPairs(edges).total > MAX_FEEDBACK_PAIRS,
     omittedNodes: totalBelow - nodes.length,
     omittedEdges: Math.max(0, edges.length - maxEdges),
     drillDown: nodes

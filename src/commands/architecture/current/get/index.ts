@@ -111,7 +111,7 @@ function drillDownCommands(
 
 function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string, unknown> {
   const where = slice.root ? `below '${slice.root}'` : 'from the top level';
-  const cap = slice.capped ? ` ${formatSliceLimit(slice)}` : '';
+  const cap = slice.omittedLevel !== undefined ? ` ${formatSliceLimit(slice)}` : '';
   let edgeCap = '';
   if (slice.omittedEdges > 0) {
     edgeCap =
@@ -140,6 +140,8 @@ function limitResponseEdges(slices: GraphSlice[]): void {
     slice.omittedEdges += slice.edges.length - shown.length;
     slice.edges = shown;
     slice.feedbackPairs.heaviest = slice.feedbackPairs.heaviest.filter((pair) => pairs.has(pair));
+    slice.capped ||=
+      slice.omittedEdges > 0 || slice.feedbackPairs.heaviest.length < slice.feedbackPairs.total;
   }
 }
 
