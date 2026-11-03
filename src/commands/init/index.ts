@@ -47,7 +47,6 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
 
   const { outcome, auth } = await run(projectRoot, ctx, interactive);
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  // const suggestIntegrate = true;
   renderInitOutcome(outcome, ctx.console, { suggestIntegrate: suggestIntegrate && !interactive });
   if (suggestIntegrate && interactive) {
     await offerIntegrate(ctx, auth);
