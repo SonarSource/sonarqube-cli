@@ -26,6 +26,7 @@ import type {
   IntendedArchitecture,
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import type { DependencyPage } from '@/commands/architecture/_common/dependency-query.ts';
 
 import {
   SYNTHETIC_GRAPH,
@@ -124,6 +125,47 @@ describe('sonar architecture reads', () => {
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     return server;
   }
+
+  it('queries dependencies through the public API with pagination and text output', async () => {
+    await serverWith((project) =>
+      project.withArchitecture((architecture) => architecture.withStructure('java', SMALL_GRAPH)),
+    );
+    const command = `architecture current get -p ${PROJECT} --from app --to core --language java`;
+    const json = await harness.run(`${command} --format json --page-size 1`);
+    expect(json.exitCode).toBe(0);
+    const result = JSON.parse(json.stdout) as DependencyPage;
+    expect(result.dependencies).toEqual([
+      { from: 'app:com.example.web', to: 'core:com.example.domain', weight: 4 },
+    ]);
+    expect(result.page.total).toBe(1);
+    const next = await harness.run(`${command} --format json --page 2 --page-size 1`);
+    const nextPage = JSON.parse(next.stdout) as DependencyPage;
+    expect(nextPage.dependencies).toEqual([]);
+    expect(nextPage.revision).toBe(result.revision);
+    const text = await harness.run(`${command} --format text`);
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain('app:com.example.web → core:com.example.domain: 4');
+    expect(text.stdout).toContain('Compare revisions');
+  });
+
+  it('rejects invalid dependency arguments before Architecture requests', async () => {
+    const server = await serverWith();
+    for (const argumentsText of [
+      '--from app',
+      '--page 2',
+      '--from app --to core --component app',
+      '--from app --to core --page-size 21',
+      '--from app --to core --page 1.5',
+      '--from app --to core --page-size 1junk',
+      '--from app --to core --page 1e2',
+    ]) {
+      const result = await harness.run(`architecture current get -p ${PROJECT} ${argumentsText}`);
+      expect(result.exitCode).not.toBe(0);
+    }
+    expect(
+      server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
+    ).toHaveLength(0);
+  });
 
   it('exposes architecture commands and the arch alias without an Alpha flag', async () => {
     const result = await harness.run('architecture --help');
