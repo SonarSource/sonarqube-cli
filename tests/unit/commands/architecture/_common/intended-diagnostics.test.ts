@@ -137,4 +137,23 @@ describe('intended discovery diagnostics', () => {
     backend.getCurrent = () => Promise.resolve([]);
     expect((await intendedDiagnostics(backend, [model])).join()).toContain('checks unavailable');
   });
+  it('keeps unavailable languages and counts warnings beyond the shared budget', async () => {
+    const backend = api();
+    backend.getCurrent = (language) =>
+      language === 'java'
+        ? Promise.resolve([{ ecosystem: 'java', graph }])
+        : Promise.reject(new Error('unavailable'));
+    const crowded: IntendedArchitecture = {
+      ...model,
+      groups: Array.from({ length: 13 }, (_, i) => ({
+        label: `group${i}`,
+        patterns: ['gctoolkit-parser'],
+      })),
+    };
+    const warnings = await intendedDiagnostics(backend, [crowded, { ...model, language: 'ts' }]);
+    expect(warnings[0]).toContain('ts: pattern and physical hierarchy checks unavailable');
+    expect(warnings.filter((warning) => warning.includes('names a container'))).toHaveLength(10);
+    expect(warnings.at(-1)).toBe('3 additional discovery warning(s) omitted.');
+    expect(warnings).toHaveLength(12);
+  });
 });

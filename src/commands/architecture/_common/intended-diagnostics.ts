@@ -32,7 +32,8 @@ export async function intendedDiagnostics(
   api: ArchitectureApi,
   models: IntendedArchitecture[],
 ): Promise<string[]> {
-  const warnings: string[] = [];
+  const warnings: DiscoveryWarnings = { shown: [], total: 0 };
+  const unavailable: string[] = [];
   for (const language of new Set(
     models.filter((model) => model.groups.length > 0).map((model) => model.language),
   )) {
@@ -58,49 +59,87 @@ export async function intendedDiagnostics(
         inspectGroups(model.groups, graph, artifacts, warnings);
       }
     } catch {
-      warnings.push(
+      unavailable.push(
         `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read. Structural validation still applies.`,
       );
     }
   }
-  return warnings.slice(0, MAX_WARNINGS);
+  return [
+    ...unavailable,
+    ...warnings.shown,
+    ...(warnings.total > warnings.shown.length
+      ? [`${warnings.total - warnings.shown.length} additional discovery warning(s) omitted.`]
+      : []),
+  ];
+}
+
+interface DiscoveryWarnings {
+  shown: string[];
+  total: number;
+}
+
+function addWarning(warnings: DiscoveryWarnings, message: string): void {
+  warnings.total++;
+  if (warnings.shown.length < MAX_WARNINGS) warnings.shown.push(message);
 }
 
 function inspectGroups(
   groups: IntendedGroup[],
   graph: IndexedGraph,
   artifacts: Map<string, number>,
-  warnings: string[],
+  warnings: DiscoveryWarnings,
   parentArtifact?: number,
 ): void {
   for (const group of groups) {
-    if (group.patternId !== undefined || warnings.length >= MAX_WARNINGS) continue;
-    let artifact: number | undefined;
-    for (const pattern of group.patterns ?? []) {
-      const exact = artifacts.get(pattern);
-      if (
-        !pattern.endsWith('**') &&
-        exact !== undefined &&
-        (graph.children.get(exact)?.length ?? 0) > 0
-      ) {
-        warnings.push(
-          `Group "${group.label}": exact pattern "${pattern}" names a container, not its descendants. Use its discovery pattern with the child separator and ** if the subtree is intended; exact leaf patterns remain valid.`,
-        );
-      }
-      artifact ??= artifacts.get(pattern);
-    }
-    if (
-      artifact !== undefined &&
-      parentArtifact !== undefined &&
-      graph.parent.get(artifact) !== parentArtifact
-    ) {
-      const actualParent = graph.key.get(graph.parent.get(artifact) ?? -1);
-      if (actualParent !== undefined) {
-        warnings.push(
-          `Group "${group.label}" is under a different parent from discovery ("${actualParent}"). For a physical hierarchy, retain intermediate parents; logical groupings are allowed. No groups were moved.`,
-        );
-      }
-    }
+    if (group.patternId !== undefined) continue;
+    const artifact = inspectPatterns(group, graph, artifacts, warnings);
+    inspectParent(group, graph, warnings, artifact, parentArtifact);
     inspectGroups(group.groups ?? [], graph, artifacts, warnings, artifact);
+  }
+}
+
+function inspectPatterns(
+  group: IntendedGroup,
+  graph: IndexedGraph,
+  artifacts: Map<string, number>,
+  warnings: DiscoveryWarnings,
+): number | undefined {
+  let artifact: number | undefined;
+  for (const pattern of group.patterns ?? []) {
+    const exact = artifacts.get(pattern);
+    if (
+      !pattern.endsWith('**') &&
+      exact !== undefined &&
+      (graph.children.get(exact)?.length ?? 0) > 0
+    ) {
+      addWarning(
+        warnings,
+        `Group "${group.label}": exact pattern "${pattern}" names a container, not its descendants. Use its discovery pattern with the child separator and ** if the subtree is intended; exact leaf patterns remain valid.`,
+      );
+    }
+    artifact ??= exact;
+  }
+  return artifact;
+}
+
+function inspectParent(
+  group: IntendedGroup,
+  graph: IndexedGraph,
+  warnings: DiscoveryWarnings,
+  artifact?: number,
+  parentArtifact?: number,
+): void {
+  if (
+    artifact === undefined ||
+    parentArtifact === undefined ||
+    graph.parent.get(artifact) === parentArtifact
+  )
+    return;
+  const actualParent = graph.key.get(graph.parent.get(artifact) ?? -1);
+  if (actualParent !== undefined) {
+    addWarning(
+      warnings,
+      `Group "${group.label}" is under a different parent from discovery ("${actualParent}"). For a physical hierarchy, retain intermediate parents; logical groupings are allowed. No groups were moved.`,
+    );
   }
 }
