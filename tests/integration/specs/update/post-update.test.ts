@@ -21,6 +21,7 @@
 // Integration tests for post-update migration (runPostUpdateActions)
 
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -147,6 +148,66 @@ describe('post-update migration', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.each([{ managed: true }, { managed: false }])(
+    'removes legacy Antigravity project rules only when Sonar-managed (%j)',
+    async ({ managed }) => {
+      const server = await harness.newFakeServer().withAuthToken('tok').start();
+      harness.withAuth(server.baseUrl(), 'tok');
+      const rulePath = '.agents/rules/sonar-prompt-secrets.md';
+      harness.cwd.writeFile(
+        rulePath,
+        managed
+          ? '---\ntrigger: always_on\n---\n\n# SonarQube secrets scanning for prompts protocol\nOld rules'
+          : '# User workspace rules',
+      );
+      const builder = harness.state().withSecretsBinaryInstalled().withCliVersion('0.5.0');
+      const state = builder.build(join(harness.cliHome.path, 'bin'));
+      const now = new Date().toISOString();
+      const metadata = {
+        installedByCliVersion: '0.5.0',
+        installedAt: now,
+        updatedByCliVersion: '0.5.0',
+        updatedAt: now,
+      };
+      state.integrations.installed = [
+        {
+          ...metadata,
+          id: 'legacy-antigravity',
+          integrationId: 'antigravity',
+          features: [
+            {
+              ...metadata,
+              featureId: 'prompt-secrets-project-rules',
+              scope: 'project',
+              targetRoot: harness.cwd.path,
+              dependencies: [],
+              operations: [],
+              resources: [
+                {
+                  id: 'prompt-secrets-rule-file',
+                  resourceType: 'whole-file',
+                  path: harness.cwd.file(rulePath).path,
+                  updatedByCliVersion: '0.5.0',
+                  updatedAt: now,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      builder.withRawState(JSON.stringify(state));
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.exists(rulePath)).toBe(!managed);
+      if (!managed) {
+        expect(harness.cwd.file(rulePath).asText()).toBe('# User workspace rules');
+      }
+    },
+    { timeout: 30000 },
+  );
 
   it(
     're-records resources whose declared id changed, preserving the config file',
