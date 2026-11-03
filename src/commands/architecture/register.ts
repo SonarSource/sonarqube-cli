@@ -29,6 +29,7 @@ import {
   type DirectivesReadOptions,
   getDirectives as getArchitectureDirectives,
 } from './directives/get/index.ts';
+import { setProjectDirectives } from './directives/set/index.ts';
 import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
 import { type SetFileOptions, setIntended } from './intended/set/index.ts';
@@ -88,7 +89,9 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('-p, --project <project>', 'Project key')
     .authenticatedAction((ctx, options: SetFileOptions) => setIntended(options, ctx));
 
-  const directives = architecture.command('directives').description('Read project directives');
+  const directives = architecture
+    .command('directives')
+    .description('Read, create, update and delete project directives');
   directives
     .command('get')
     .description('Read a directive by id or list a page of visible project directives')
@@ -100,6 +103,17 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .authenticatedAction((ctx, options: DirectivesReadOptions) =>
       getArchitectureDirectives(options, ctx),
     );
+  directives
+    .command('set')
+    .description('Create, update or delete explicit project directives')
+    .requiredOption('--file <file>', 'JSON object with create, update and delete arrays')
+    .option('--dry-run', 'Preview changes without writing')
+    .option('-p, --project <project>', 'Project key')
+    .addHelpText(
+      'after',
+      '\nCreation skips existing directives. Updates retain unspecified fields. Deletion requires an explicit ID; omissions never delete entries.',
+    )
+    .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
 
   architecture
     .command('install-skill')
