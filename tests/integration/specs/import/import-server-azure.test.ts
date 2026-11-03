@@ -76,7 +76,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 3 repositories');
-    expect(result.stdout).toContain(`Projects: ${server.baseUrl()}/projects`);
+    expect(result.stdout).toContain(`Dashboard: ${server.baseUrl()}/admin/project-coverage`);
     const payloads = putPayloads(server);
     expect(payloads.map((p) => p.projectKey).sort()).toEqual([
       'Project_A_api',

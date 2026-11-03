@@ -120,11 +120,11 @@ describe('resolveOpenCodeMcpConfigPath', () => {
 });
 
 describe('openCodeIntegration', () => {
-  it('declares the secret-scanning-hooks feature backed by the sonar-secrets binary', () => {
+  it('declares the Secrets detection feature backed by the sonar-secrets binary', () => {
     expect(openCodeIntegration.id).toBe('opencode');
 
     const feature = openCodeIntegration.features.find(
-      (candidate) => candidate.id === 'sonar-secrets-hooks',
+      (candidate) => candidate.id === 'secrets-detection',
     );
     expect(feature?.dependencies).toHaveLength(1);
     expect(feature?.resources).toHaveLength(1);

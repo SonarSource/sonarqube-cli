@@ -21,16 +21,21 @@ import { spawnProcessWithTimeout, type SpawnResult } from '@/core/process/proces
 
 import { type ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
-const ThreeMinuteTimeoutMs = 3 * 60 * 1000;
+const SCAN_TIMEOUT_MS = 3 * 60 * 1000;
 
 export class DefaultScaScannerSpawner implements ScaScannerSpawner {
-  spawn(binaryPath: string, args: string[], env?: Record<string, string>): Promise<SpawnResult> {
+  spawn(
+    binaryPath: string,
+    args: string[],
+    env?: Record<string, string>,
+    timeoutMs: number = SCAN_TIMEOUT_MS,
+  ): Promise<SpawnResult> {
     return spawnProcessWithTimeout(
       binaryPath,
       args,
       { stdout: 'pipe', stderr: 'pipe', env },
-      ThreeMinuteTimeoutMs,
-      'Dependency Risk scanner timed out',
+      timeoutMs,
+      `Dependency Risk scanner timed out after ${timeoutMs}ms`,
     );
   }
 }

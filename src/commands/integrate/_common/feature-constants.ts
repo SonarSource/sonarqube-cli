@@ -23,18 +23,6 @@
  * preview box (see `FeatureDeclaration.previewDescription`).
  */
 
-/** Combined prompt + pre-tool-use secrets scanning. */
-export const SECRETS_COMBINED_FEATURE_PREVIEW =
-  'Scans files and prompts for hardcoded secrets before the agent can read or act on them.';
-
-/** Prompt-only secrets scanning. */
-export const SECRETS_PROMPT_FEATURE_PREVIEW =
-  'Scans your prompts for hardcoded secrets before the agent can act on them.';
-
-/** pre-tool-use secrets scanning. */
-export const SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW =
-  'Scans files for hardcoded secrets before the agent can read them.';
-
 export const VORTEX_FEATURE_PREVIEW =
   'Analyzes the code your agent writes, and enriches its prompts with SonarQube context: issues, hotspots, and rules for the file at hand.';
 
