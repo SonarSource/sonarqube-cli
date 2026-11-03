@@ -414,13 +414,15 @@ export async function applyDirectiveChanges(
   } catch (error) {
     const confirmed = result.created.length + result.updated.length;
     const preWriteFailure = error instanceof DirectivePreWriteError;
-    if (!confirmed && preWriteFailure)
+    if (!confirmed && preWriteFailure) {
+      if (isDefiniteRejection(error.cause)) throw error.cause;
       throw new CommandFailedError(
         `${error.message} No write request was sent; nothing was changed.`,
         {
           cause: error,
         },
       );
+    }
     if (!confirmed && isDefiniteRejection(error)) throw error;
     const followup = preWriteFailure
       ? 'Only the confirmed writes above were applied.'
