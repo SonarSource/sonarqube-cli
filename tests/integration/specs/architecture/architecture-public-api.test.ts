@@ -1227,7 +1227,9 @@ describe('sonar architecture intended set on the public API', () => {
   });
   it('deletes an existing empty resource only on apply', async () => {
     const server = await startWith((fake) => fake.withIntended([]));
-    expect((await setFile({ models: [] }, ' --dry-run')).exitCode).toBe(0);
+    const preview = await setFile({ models: [] }, ' --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain('resource will be deleted');
     expect(writes(server)).toEqual([]);
     const result = await setFile({ models: [] });
     expect(result.exitCode).toBe(0);

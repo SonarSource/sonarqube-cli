@@ -45,7 +45,7 @@ describe('Architecture API compatibility diagnostics', () => {
                 target === 'current'
                   ? 'current-architectures'
                   : target === 'intended'
-                    ? 'intended-architectures'
+                    ? 'project-intended-architectures'
                     : 'project-directives',
                 200,
                 '{}',
@@ -112,7 +112,7 @@ describe('Architecture API compatibility diagnostics', () => {
         .withAuthToken('test-token')
         .withProject('shop', (project) =>
           project.withArchitecture((architecture) =>
-            architecture.withStatus('intended-architectures', 201, '{}', 'POST'),
+            architecture.withStatus('project-intended-architectures', 201, '{}', 'POST'),
           ),
         );
       const server = await (cloud ? builder.asSonarCloud() : builder).start();

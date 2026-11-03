@@ -65,6 +65,8 @@ export interface SetIntendedResult {
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
+  /** The preview includes deletion of the stored intended resource. */
+  clearsResource?: boolean;
 }
 
 export interface SetIntendedOptions {
@@ -89,7 +91,13 @@ export async function setIntended(
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
-  if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
+  if (options.dryRun)
+    return {
+      mode: 'dry-run',
+      diff,
+      unchecked,
+      clearsResource: stored.id !== undefined && next.length === 0,
+    };
   if (isEmptyDiff(diff) && !(stored.id !== undefined && next.length === 0))
     return { mode: 'unchanged', diff, unchecked };
   if (stored.id === undefined) {
