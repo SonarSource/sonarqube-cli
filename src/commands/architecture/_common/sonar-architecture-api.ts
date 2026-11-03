@@ -47,6 +47,8 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import { collectionFailure, incompatibleResponse } from './errors.ts';
+import { type FindingFilters, type FindingPage, parseProjectFinding } from './findings.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -406,6 +408,62 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The public directive response returned a different id or project. Nothing was changed.',
       );
     return directive;
+  }
+
+  async getFindingsPage(
+    filters: FindingFilters,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<FindingPage> {
+    if (
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 0 ||
+      pageSize > 1000
+    )
+      throw new CommandFailedError(
+        'Finding page must be >= 1 and page size must be between 0 and 1000.',
+      );
+    const { organizationId, branchId } = await this.ids();
+    const result = await this.http
+      .get<{ findings?: unknown[]; page?: FindingPage['page'] } | null>(
+        this.path('project-findings'),
+        {
+          organizationId,
+          branchId,
+          ...(filters.category === undefined ? {} : { category: filters.category }),
+          ...(filters.type === undefined ? {} : { type: filters.type }),
+          ...(filters.language === undefined ? {} : { language: filters.language }),
+          pageIndex,
+          pageSize,
+        },
+      )
+      .orThrow()
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
+    const page = result?.page;
+    if (
+      !Array.isArray(result?.findings) ||
+      page?.pageIndex !== pageIndex ||
+      page.pageSize !== pageSize ||
+      !Number.isSafeInteger(page.total) ||
+      page.total < 0 ||
+      result.findings.length > pageSize
+    )
+      throw incompatibleResponse('Invalid public findings page; no complete page was read.');
+    const findings = result.findings.map(parseProjectFinding);
+    if (
+      findings.some(
+        (item) =>
+          (filters.category && item.category !== filters.category) ||
+          (filters.type && item.type !== filters.type) ||
+          (filters.language && item.language !== filters.language),
+      )
+    )
+      throw incompatibleResponse(
+        'The public findings page returned a finding outside the requested filters.',
+      );
+    return { findings, page };
   }
 
   private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
