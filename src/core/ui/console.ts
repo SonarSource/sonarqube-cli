@@ -49,6 +49,30 @@ export interface SelectOption<T> {
   label: string;
 }
 
+export interface SearchOption<T> {
+  value: T;
+  label: string;
+  /** Secondary column shown dimmed next to the label (e.g. a project key). */
+  detail?: string;
+}
+
+export interface SearchResults<T> {
+  options: SearchOption<T>[];
+  /** Number of matches on the backing store, which may exceed `options.length`. */
+  total: number;
+}
+
+export interface SearchPromptOptions<T> {
+  /** Runs once for the empty query and again, debounced, after each change. A rejection aborts the prompt and is rethrown. */
+  search: (query: string) => Promise<SearchResults<T>>;
+  /** Placeholder shown after the message, e.g. `type a name or key`. */
+  hint?: string;
+  /** Plural noun for the footer, e.g. `projects`. */
+  noun?: string;
+  /** Non-empty queries shorter than this are not searched. Defaults to 1. */
+  minQueryLength?: number;
+}
+
 export interface MultiSelectOption<T> {
   value: T;
   label: string;
@@ -192,6 +216,12 @@ export interface Console {
    * Single-select prompt. Returns `null` if cancelled (Ctrl+C).
    */
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null>;
+
+  /**
+   * Search-as-you-type single select: the list is re-queried through `options.search` while the
+   * user types. Returns the chosen value, or `null` if cancelled (Esc or Ctrl+C).
+   */
+  searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null>;
 
   /**
    * Multi-select prompt. Space toggles, Enter confirms. Returns the selected values
