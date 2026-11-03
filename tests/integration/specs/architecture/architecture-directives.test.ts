@@ -505,6 +505,55 @@ describe('public project directives', () => {
       }
     },
   );
+  for (const create of [false, true]) {
+    for (const failure of ['server', 'timeout', 'malformed', 'wrong-project']) {
+      it(`does not claim an attempted update when its guard read fails (${failure}, create=${create})`, async () => {
+        const id = '00000000-0000-4000-8000-000000000001';
+        const body =
+          failure === 'wrong-project'
+            ? JSON.stringify({ ...directive, id, projectId: 'different-project' })
+            : '{}';
+        const status = failure === 'server' ? 500 : failure === 'timeout' ? 408 : 200;
+        const server = await configured((api) =>
+          api
+            .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
+            .withDirectiveReadResponse(2, status, body),
+        );
+        h.cwd.writeFile(
+          'changes.json',
+          JSON.stringify({
+            create: create ? [{ ...directive, fromNodeKey: 'app:new' }] : [],
+            update: [{ id, description: 'Changed' }],
+          }),
+        );
+        const result = await h.run('arch directives set -p shop --file changes.json');
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).not.toContain('may already have been applied');
+        expect(result.stderr).not.toContain('Attempted update');
+        expect(
+          server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
+        ).toHaveLength(0);
+        const posts = server
+          .getRecordedRequests()
+          .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+        expect(posts).toHaveLength(create ? 1 : 0);
+        if (create) {
+          expect(result.stderr).toContain('stopped after 1 confirmed writes');
+          expect(result.stderr).toContain('The next update was not sent');
+          const saved = await h.run('arch directives get -p shop --format json');
+          expect(saved.exitCode).toBe(0);
+          const created = (
+            JSON.parse(saved.stdout) as { directives: ProjectDirective[] }
+          ).directives.find((row: ProjectDirective) => row.fromNodeKey === 'app:new');
+          expect(created).toBeDefined();
+          expect(result.stderr).toContain(created!.id);
+        } else {
+          expect(result.stderr).toContain('No PATCH was sent');
+          expect(result.stderr).toContain('nothing was changed');
+        }
+      });
+    }
+  }
 
   it('does not suggest another page for an empty project', async () => {
     await configured();
