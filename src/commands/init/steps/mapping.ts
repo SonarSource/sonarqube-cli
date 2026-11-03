@@ -27,6 +27,7 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
@@ -42,13 +43,23 @@ export function linkCommand(projectKey: string, path: string, runFrom: string | 
   return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
 }
 
+/** The mapping could not be saved; `remediationHint` says how to finish with `sonar link`. */
+export class MappingWriteError extends CommandFailedError {
+  constructor(message: string, remediationHint: string) {
+    super(message, { remediationHint });
+    this.name = 'MappingWriteError';
+  }
+}
+
+const PROJECT_ORIGIN_LEAD = { created: 'Created', found: 'Found' } as const;
+
 /** The project already exists on the server by now, so a failure here has to say how to finish. */
 export async function writeMapping(
   auth: ResolvedAuth,
   projectKey: string,
   projectRoot: string,
   console: Console,
-  failureLead: string,
+  origin: keyof typeof PROJECT_ORIGIN_LEAD,
 ): Promise<void> {
   const { gitRoot, isGit } = findGitRoot(projectRoot);
   const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
@@ -76,11 +87,9 @@ export async function writeMapping(
     const cwdRoot = findGitRoot(process.cwd());
     const linkRoot = canonicalizePath(cwdRoot.isGit ? cwdRoot.gitRoot : process.cwd());
     const runFrom = linkRoot === configDir ? undefined : configDir;
-    throw new CommandFailedError(
-      `${failureLead}, but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
-      {
-        remediationHint: `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
-      },
+    throw new MappingWriteError(
+      `${PROJECT_ORIGIN_LEAD[origin]} project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
+      `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
     );
   }
 }
@@ -98,9 +107,14 @@ export async function showAnalysisResults(
 ): Promise<void> {
   const status = await new QualityGatesClient(api).getProjectStatus({ projectKey }).match(
     (value) => value?.status ?? 'NONE',
-    () => 'NONE' as const,
+    (error) => {
+      logger.debug(`Could not read the quality gate of '${projectKey}': ${error.message}`);
+      return 'UNKNOWN' as const;
+    },
   );
-  if (status === 'NONE') {
+  if (status === 'UNKNOWN') {
+    console.print('Could not fetch the analysis results.');
+  } else if (status === 'NONE') {
     console.print(noResultsNote);
   } else {
     console.print(

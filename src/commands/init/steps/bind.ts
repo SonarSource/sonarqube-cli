@@ -144,7 +144,7 @@ export async function runBoundNew(
     importRepository(api, auth, repositorySlug, { ...org, almKey }, new QuietConsole(console)),
   );
 
-  await writeMapping(auth, projectKey, projectRoot, console, `Created project '${projectKey}'`);
+  await writeMapping(auth, projectKey, projectRoot, console, 'created');
   console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
   await showAnalysisResults(
     http,

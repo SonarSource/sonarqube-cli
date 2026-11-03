@@ -29,7 +29,12 @@ import { ProjectsClient } from '@/core/server/projects.ts';
 
 import type { InitOutcome, LinkExistingOutcome } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, showAnalysisResults, writeMapping } from './mapping.ts';
+import {
+  MappingWriteError,
+  projectDashboardUrl,
+  showAnalysisResults,
+  writeMapping,
+} from './mapping.ts';
 
 /**
  * Asks to link the directory to the project the server already binds to the repository. When the
@@ -72,12 +77,13 @@ export async function runLinkExisting(
   }
 
   try {
-    await writeMapping(auth, projectKey, projectRoot, console, `Found project '${projectKey}'`);
+    await writeMapping(auth, projectKey, projectRoot, console, 'found');
   } catch (error) {
-    if (!(error instanceof CommandFailedError)) {
+    if (!(error instanceof MappingWriteError)) {
       throw error;
     }
-    console.warn([error.message, error.remediationHint].filter(Boolean).join('\n'));
+    console.warn(error.message);
+    console.print(`  → ${error.remediationHint}`, 'stderr');
     return unbound;
   }
 
