@@ -21,7 +21,10 @@
 import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import { ECOSYSTEMS } from '@/commands/architecture/_common/architecture-api.ts';
-import { type CurrentReadOptions, parseDependencyPageNumber } from '@/commands/architecture/_common/dependency-query.ts';
+import {
+  type CurrentReadOptions,
+  parseDependencyPageNumber,
+} from '@/commands/architecture/_common/dependency-query.ts';
 import { DEFAULT_MAX_NODES } from '@/commands/architecture/_common/graph.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
