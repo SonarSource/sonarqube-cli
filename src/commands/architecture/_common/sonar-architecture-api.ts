@@ -42,6 +42,8 @@ import {
   directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
+  DirectivePreWriteError,
+  isDefiniteRejection,
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
@@ -407,7 +409,13 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
-    const current = await this.getDirective(id);
+    const current = await this.getDirective(id).catch((error: unknown) => {
+      if (isDefiniteRejection(error)) throw error;
+      throw new DirectivePreWriteError(
+        `The current state of directive ${id} could not be verified.`,
+        { cause: error },
+      );
+    });
     const payload = {
       ...directive,
       ...(current.origin === undefined ? {} : { origin: current.origin }),
