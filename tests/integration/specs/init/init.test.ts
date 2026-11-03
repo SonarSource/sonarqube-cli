@@ -227,7 +227,7 @@ describe('sonar init', () => {
       const result = await harness.run('init --path packages/app');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('bound_project');
+      expect(result.stdout + result.stderr).toContain('bound_project');
     },
     TIMEOUT,
   );
@@ -241,7 +241,7 @@ describe('sonar init', () => {
       const result = await harness.run('init');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('bound_project');
+      expect(result.stdout + result.stderr).toContain('bound_project');
       expect(result.stdout + result.stderr).not.toContain('secret-token');
     },
     TIMEOUT,
@@ -266,7 +266,7 @@ describe('sonar init', () => {
   );
 
   it(
-    'selects the link-existing path when the remote is already bound to a project',
+    'does not link a project already bound to the remote when it cannot ask, and says why',
     async () => {
       await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
       withRemote(GITHUB_REMOTE);
@@ -274,10 +274,9 @@ describe('sonar init', () => {
       const result = await harness.run('init');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(
-        'A Sonar project already exists for this repository: bound_project.',
-      );
-      expect(result.stdout).toContain('link the existing project');
+      expect(result.stderr).toContain("Not linking the existing project 'bound_project'");
+      expect(result.stdout).toContain(UNBOUND);
+      expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
     },
     TIMEOUT,
   );
@@ -726,6 +725,156 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'links the project already bound to the remote, shows its results and never writes a token',
+      async () => {
+        await signInToCloud((server) =>
+          server
+            .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+            .withProject('bound_project', (p) => p.withProjectStatus('OK')),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
+        expect(result.stdout).toContain('not a result for your uncommitted local changes');
+        expect(result.stdout).toContain('Quality gate: passed');
+        expect(result.stdout).toContain(
+          'Project dashboard: https://sonarcloud.io/project/overview?id=bound_project',
+        );
+        expect(result.stdout).not.toContain(UNBOUND);
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config).toContain('"projectKey": "bound_project"');
+        expect(config).not.toContain(TOKEN);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'lets the user pick another existing project with the sonar link picker when declining',
+      async () => {
+        await signInToCloud((server) =>
+          server
+            .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+            .withProject('other_project', (p) => p.withProjectStatus('OK')),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.accept('another existing project');
+        await session.waitText('Choose a project');
+        session.write('other');
+        await session.waitText('1 match');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'other_project'");
+        expect(result.stdout).toContain('Quality gate: passed');
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config).toContain('"projectKey": "other_project"');
+        expect(config).not.toContain('bound_project');
+        expect(config).not.toContain(TOKEN);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'continues unbound and writes nothing when the user declines every link',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.decline('another existing project');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('Choose a project');
+        expect(result.stdout).toContain(UNBOUND);
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'asks to abandon linking when the user leaves the project picker, then continues unbound',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.accept('another existing project');
+        await session.waitText('Choose a project');
+        session.keyCtrlC();
+        await session.waitText('Abandon linking a project');
+        session.write('y');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).not.toContain('Project selection cancelled');
+        expect(result.stdout).toContain(UNBOUND);
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'reopens the project picker when the user does not abandon linking',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.accept('another existing project');
+        await session.waitText('Choose a project');
+        session.keyCtrlC();
+        await session.decline('Abandon linking a project');
+        await session.waitText('other_project');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'other_project'");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'continues unbound with a sonar link hint when the mapping cannot be written',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('.sonar-config.json', '{ not json');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('could not save .sonar-config.json');
+        expect(result.stderr).toContain('sonar link bound_project');
         expect(result.stdout).toContain(UNBOUND);
       },
       TIMEOUT,

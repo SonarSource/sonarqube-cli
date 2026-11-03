@@ -46,8 +46,16 @@ export function assertCanChooseProject(
   });
 }
 
+/** Thrown when the user leaves a picker prompt; `sonar init` catches it to carry on without a link. */
+export class ProjectSelectionCancelledError extends CommandFailedError {
+  constructor() {
+    super('Project selection cancelled');
+    this.name = 'ProjectSelectionCancelledError';
+  }
+}
+
 function cancelled(): CommandFailedError {
-  return new CommandFailedError('Project selection cancelled');
+  return new ProjectSelectionCancelledError();
 }
 
 /**
@@ -143,9 +151,9 @@ function verifyProject(
 }
 
 /** Live search: the server filters as the user types, until they pick one project. */
-async function searchForProject(
+export async function searchForProject(
   projects: ProjectsClient,
-  { auth, console }: CommandAuthenticatedInvocationContext,
+  { auth, console }: Pick<CommandAuthenticatedInvocationContext, 'auth' | 'console'>,
 ): Promise<string> {
   const choice = await console.searchPrompt<string>('Choose a project', {
     hint: 'type a name or key',
