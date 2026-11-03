@@ -46,14 +46,16 @@ describe('intended backup safety', () => {
   let deleted: boolean;
   function api(): ArchitectureApi {
     let saved = [MODEL];
-    return {
+    const backend: ArchitectureApi = {
       getCurrent: () => Promise.resolve([]),
       getIntended: () => Promise.resolve(saved),
-      getIntendedState: () =>
-        Promise.resolve({
-          id: saved.length ? '11111111-1111-4111-8111-111111111111' : undefined,
-          models: saved,
-        }),
+      getIntendedState: async () => {
+        const models = await backend.getIntended();
+        return {
+          id: models.length ? '11111111-1111-4111-8111-111111111111' : undefined,
+          models,
+        };
+      },
       createIntended: (models) => {
         saved = models;
         return Promise.resolve();
@@ -68,6 +70,7 @@ describe('intended backup safety', () => {
         return Promise.resolve();
       },
     };
+    return backend;
   }
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'architecture-backup-'));
@@ -146,11 +149,9 @@ describe('intended backup safety', () => {
     });
     let reads = 0;
     let writes = 0;
-    backend.getIntendedState = () => {
+    backend.getIntended = () => {
       reads++;
-      return reads <= 2
-        ? Promise.resolve({ id: '11111111-1111-4111-8111-111111111111', models: [MODEL] })
-        : Promise.reject(readFailure);
+      return reads <= 2 ? Promise.resolve([MODEL]) : Promise.reject(readFailure);
     };
     backend.updateIntended = () => {
       writes++;
