@@ -146,9 +146,11 @@ describe('intended backup safety', () => {
     });
     let reads = 0;
     let writes = 0;
-    backend.getIntended = () => {
+    backend.getIntendedState = () => {
       reads++;
-      return reads <= 2 ? Promise.resolve([MODEL]) : Promise.reject(readFailure);
+      return reads <= 2
+        ? Promise.resolve({ id: '11111111-1111-4111-8111-111111111111', models: [MODEL] })
+        : Promise.reject(readFailure);
     };
     backend.updateIntended = () => {
       writes++;
