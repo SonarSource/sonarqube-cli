@@ -57,6 +57,15 @@ Do not bypass those limits by fetching raw current-graph endpoints, requesting a
 graph, or assembling all slices into the agent context. Use a specific bounded slice when more
 detail is needed. Reported dependencies are static references, not runtime calls.
 
+To inspect a dependency between two known components, use current get with both --from and
+--to (MCP: target current, from and to). These are exact keys including descendants; do not combine
+with component. Depth 1 groups by the endpoints' direct children and preserves leaf endpoints;
+increase depth or select a returned pair for detail. Results are directional static dependencies,
+not runtime calls. Use --page/--page-size (MCP: pageIndex/pageSize) to continue the selected query,
+with at most 20 rows per page. Compare revision across pages and restart if it changes. Specify
+language if the pair is ambiguous. Only retrieve pages relevant to the user's question, not the
+whole project graph. Container-level relationship graphs are explicitly unsupported by this mode.
+
 This current-graph cap does not apply to complete intended exports. Keep large intended exports
 in local files rather than pasting them into the conversation. Never substitute a partial view
 when a complete export is required for a write.
