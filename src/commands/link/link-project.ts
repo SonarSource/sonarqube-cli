@@ -99,7 +99,7 @@ function linkSingleProject(
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return writeLink(projectKey, options, ctx, async (dir, entry) => {
+  return runLink(projectKey, options, ctx, async (dir, entry) => {
     const shadowed = await sharedProjectConfigRepository.set(dir, entry);
     if (shadowed) {
       ctx.console.warn(
@@ -116,7 +116,7 @@ function linkMonorepoProject(
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return writeLink(
+  return runLink(
     projectKey,
     options,
     ctx,
@@ -128,27 +128,35 @@ function linkMonorepoProject(
   );
 }
 
-async function writeLink(
-  givenKey: string | undefined,
-  options: LinkOptions,
-  ctx: CommandAuthenticatedInvocationContext,
-  write: WriteEntry,
-  monorepo = false,
-): Promise<void> {
-  const { auth, console } = ctx;
-  const { path } = options;
+interface LinkTarget {
+  /** Where `.sonar-config.json` lives: the git root, else the current directory. */
+  targetDir: string;
+  projectRoot: string;
+  inGitRepository: boolean;
+}
 
+/** Fails before any prompt, server call or write when the request cannot be carried out. */
+function assertLinkable(
+  givenKey: string | undefined,
+  { path }: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+): void {
   if (path.trim().length === 0) {
     throw new CommandFailedError('--path must not be empty.', {
       remediationHint: "Use '--path .' for a project at the repository root.",
     });
   }
 
-  assertLinkableConnection(auth);
+  assertLinkableConnection(ctx.auth);
   if (givenKey === undefined) {
     assertCanChooseProject(ctx);
   }
+}
 
+async function resolveLinkTarget(
+  path: string,
+  { console }: CommandAuthenticatedInvocationContext,
+): Promise<LinkTarget> {
   const cwd = process.cwd();
   const gitRoot = await resolveGitRepoRoot(cwd);
   const targetDir = canonicalizePath(gitRoot ?? cwd);
@@ -169,24 +177,43 @@ async function writeLink(
   if (!gitRoot) {
     console.warn('No git repository found. Writing to the current directory instead.');
   }
+  return { targetDir, projectRoot, inGitRepository: gitRoot !== null };
+}
 
-  const projectKey = givenKey ?? (await chooseProjectKey(projectRoot, monorepo, ctx));
-  if (projectKey === null) {
-    return;
-  }
-  const entry = deriveEntry(auth, projectKey, path);
-
-  if (!(await write(targetDir, entry))) {
-    return;
-  }
-
-  const configPath = join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME);
+function reportLinked(
+  console: CommandAuthenticatedInvocationContext['console'],
+  { targetDir, projectRoot, inGitRepository }: LinkTarget,
+  projectKey: string,
+  monorepo: boolean,
+): void {
   const summaryLines = [
     `Linked ${projectRoot} to project ${projectKey}${monorepo ? ' (monorepo mapping)' : ''}`,
-    `Config saved to ${configPath}`,
+    `Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
   ];
-  if (gitRoot) {
+  if (inGitRepository) {
     summaryLines.push(`Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`);
   }
   console.success(summaryLines.join('\n'));
+}
+
+/** Validates the request, picks the project key when none was given, writes the link, reports it. */
+async function runLink(
+  givenKey: string | undefined,
+  options: LinkOptions,
+  ctx: CommandAuthenticatedInvocationContext,
+  write: WriteEntry,
+  monorepo = false,
+): Promise<void> {
+  assertLinkable(givenKey, options, ctx);
+  const target = await resolveLinkTarget(options.path, ctx);
+
+  const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, ctx));
+  if (projectKey === null) {
+    return;
+  }
+
+  const entry = deriveEntry(ctx.auth, projectKey, options.path);
+  if (await write(target.targetDir, entry)) {
+    reportLinked(ctx.console, target, projectKey, monorepo);
+  }
 }

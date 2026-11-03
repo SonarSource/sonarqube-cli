@@ -70,9 +70,9 @@ export async function chooseProjectKey(
 
   if (discovered.fromSharedConfig) {
     // Other directories' mappings are never proposed again; only one covering this directory counts.
-    const linked = nearestMapping(
-      covering.filter((mapping) => !monorepo || canonicalizePath(mapping.projectRoot) === root),
-    );
+    const owner = discovered.groupByMapping([root]).groups.at(0)?.mapping;
+    const linked =
+      owner && (!monorepo || canonicalizePath(owner.projectRoot) === root) ? owner : undefined;
     return linked
       ? relinkOrKeep(projectRoot, linked.projectKey, projects, ctx)
       : searchForProject(projects, ctx);
@@ -93,15 +93,6 @@ export async function chooseProjectKey(
   }
 
   return searchForProject(projects, ctx);
-}
-
-/** The mapping with the deepest root, which is the one that owns the directory (nearest wins). */
-function nearestMapping<T extends CompleteProjectMapping>(mappings: readonly T[]): T | undefined {
-  return mappings.reduce<T | undefined>(
-    (nearest, mapping) =>
-      nearest && nearest.projectRoot.length >= mapping.projectRoot.length ? nearest : mapping,
-    undefined,
-  );
 }
 
 async function relinkOrKeep(
