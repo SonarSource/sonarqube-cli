@@ -170,16 +170,7 @@ function aggregateDependencies(
     const from = sources.get(edge.from);
     const to = targets.get(edge.to);
     if (from === undefined || to === undefined) continue;
-    if (!Number.isSafeInteger(edge.weight) || edge.weight < 0)
-      throw new CommandFailedError('Current graph contains an invalid dependency weight.');
-    const identity = JSON.stringify([edge.from, edge.to]);
-    if (seen.has(identity))
-      throw new CommandFailedError('Current graph contains duplicate dependency edges.');
-    seen.add(identity);
-    if ((index.children.get(edge.from)?.length ?? 0) || (index.children.get(edge.to)?.length ?? 0))
-      throw new CommandFailedError(
-        'Targeted dependencies require leaf-level edges; this graph has container-level relationships in the selected scope.',
-      );
+    validateDependencyEdge(index, edge, seen);
     if (from === to) continue;
     const key = JSON.stringify([from, to]);
     const weight = (weights.get(key)?.weight ?? 0) + edge.weight;
@@ -192,4 +183,21 @@ function aggregateDependencies(
   return [...weights.values()].sort(
     (a, b) => b.weight - a.weight || compareKeys(a.from, b.from) || compareKeys(a.to, b.to),
   );
+}
+
+function validateDependencyEdge(
+  index: IndexedGraph,
+  edge: IndexedGraph['edges'][number],
+  seen: Set<string>,
+): void {
+  if (!Number.isSafeInteger(edge.weight) || edge.weight < 0)
+    throw new CommandFailedError('Current graph contains an invalid dependency weight.');
+  const identity = JSON.stringify([edge.from, edge.to]);
+  if (seen.has(identity))
+    throw new CommandFailedError('Current graph contains duplicate dependency edges.');
+  seen.add(identity);
+  if ((index.children.get(edge.from)?.length ?? 0) || (index.children.get(edge.to)?.length ?? 0))
+    throw new CommandFailedError(
+      'Targeted dependencies require leaf-level edges; this graph has container-level relationships in the selected scope.',
+    );
 }
