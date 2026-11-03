@@ -444,7 +444,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async deleteDirective(id: string): Promise<void> {
-    await this.getDirective(id);
+    await this.readDirectiveBeforeWrite(id);
     let deleteAccepted = false;
     try {
       await this.http
