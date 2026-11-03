@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   analyzeSecrets,
+  runSecretsBinary,
   runSecretsBinaryOnStream,
   runSecretsBinaryOnText,
 } from '@/commands/analyze/secrets.ts';
@@ -187,6 +188,35 @@ describe('secretCheckCommand: auth forwarding', () => {
       'src/index.ts',
       'src/lib/auth.ts',
     ]);
+  });
+
+  it('passes --show-skipped-files ahead of the paths when requested', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ issues: [] }), stderr: '' });
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets(
+        { paths: ['src/index.ts'], showSkippedFiles: true },
+        FAKE_AUTHENTICATED_CONTEXT,
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--show-skipped-files',
+      'src/index.ts',
+    ]);
+  });
+
+  it('never passes --show-skipped-files without per-run options, as hooks and the other scanners call it', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinary('/fake/bin/sonar-secrets', ['src/index.ts'], FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][1]).not.toContain('--show-skipped-files');
   });
 });
 
