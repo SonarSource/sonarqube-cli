@@ -21,13 +21,13 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
-
-const ALLOWLIST_TIMEOUT_MS = 10 * 60 * 1000;
 import type { Console } from '@/core/ui/console.ts';
 import {
   EXTERNAL_UPDATE_GUIDANCE,
   isStandaloneInstallerLocation,
 } from '@/core/update/installation-location.ts';
+
+const ALLOWLIST_TIMEOUT_MS = 2 * 60 * 1000;
 
 /**
  * Resolve/install sonar-secrets, then run one of its `allowlist` subcommands with inherited
