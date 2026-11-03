@@ -1368,14 +1368,16 @@ describe('sonar architecture intended set on the public API', () => {
   for (const body of [
     JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
     JSON.stringify({ intendedArchitectures: [] }),
-    JSON.stringify({ intendedArchitectures: [{ ...NEXT[0], id: 'invalid-id' }] }),
+    JSON.stringify({ id: 'invalid-id', perspectives: wireModels(NEXT) }),
     JSON.stringify({ id: null, perspectives: wireModels(NEXT) }),
   ]) {
     it(`rejects malformed POST response envelope: ${body}`, async () => {
       const server = await startWith((fake) =>
         fake.withStatus('project-intended-architectures', 201, body, 'POST'),
       );
-      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('expected a resource id and perspectives');
       expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
       expect((await readSaved()).models).toEqual([]);
     });
