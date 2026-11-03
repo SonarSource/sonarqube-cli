@@ -58,10 +58,13 @@ graph, or assembling all slices into the agent context. Use a specific bounded s
 detail is needed. Reported dependencies are static references, not runtime calls.
 
 To inspect a dependency between two known components, use current get with both --from and
---to (MCP: target current, from and to). These are exact keys including descendants; do not combine
+--to. Use MCP only when its installed architecture_get definition lists from, to, pageIndex and
+pageSize; otherwise use the CLI. These are exact keys including descendants; do not combine
 with component. Depth 1 groups by the endpoints' direct children and preserves leaf endpoints;
-increase depth or select a returned pair for detail. Results are directional static dependencies,
-not runtime calls. Use --page/--page-size (MCP: pageIndex/pageSize) to continue the selected query,
+increase depth or select a returned pair for detail. Ancestor/descendant aggregate rows are omitted;
+increase depth to inspect their internal dependencies. Results are directional static dependencies,
+not runtime calls. Use --page/--page-size (MCP: pageIndex/pageSize, when documented by the installed
+tool) to continue the selected query,
 with at most 20 rows per page. Compare revision across pages and restart if it changes. Specify
 language if the pair is ambiguous. Only retrieve pages relevant to the user's question, not the
 whole project graph. Container-level relationship graphs are explicitly unsupported by this mode.
