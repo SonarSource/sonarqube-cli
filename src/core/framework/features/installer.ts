@@ -209,11 +209,14 @@ export class IntegrationInstaller {
       try {
         options.callbacks?.onFeatureApplyStart?.(execution.application);
         await this.removeDeactivatedSubfeatures(execution);
-        const applied = await this.applyFeatureWithUniqueDependencies(
+        // Features are applied in order: they can write to the same config files and the
+        // start callbacks and recorded state must follow the declared feature order.
+        const pendingApply = this.applyFeatureWithUniqueDependencies(
           execution,
           preparedDependencies,
           options.callbacks ?? {},
         );
+        const applied = await pendingApply; // NOSONAR: sequential by design
         installedFeatures.push(
           recordInstalledFeature(
             state,
@@ -242,17 +245,17 @@ export class IntegrationInstaller {
   ): Promise<void> {
     const subfeatures = declaredSubfeatures(feature);
     for (const resource of resolveAllResources(feature, subfeatures)) {
-      await resource.remove(context);
+      await resource.remove(context); // NOSONAR: sequential by design, resources may share files and are removed in declaration order
       callbacks.onResourceRemoved?.(resource);
     }
 
     for (const cleanup of feature.legacyCleanups ?? []) {
-      await cleanup.remove(context);
+      await cleanup.remove(context); // NOSONAR: sequential by design, legacy cleanups may touch the same files
     }
 
     for (const operation of [...resolveAllOperations(feature, subfeatures)].reverse()) {
       if (operation.undo) {
-        await operation.undo(context);
+        await operation.undo(context); // NOSONAR: sequential by design, operations must be undone in reverse order
         callbacks.onOperationUndone?.(operation);
       }
     }
@@ -276,7 +279,7 @@ export class IntegrationInstaller {
       const context = this.contextForApplication(state, application, 'install', options.console);
 
       options.callbacks?.onFeatureRemoveStart?.(feature);
-      await this.removeFeature(context, feature, options.callbacks ?? {});
+      await this.removeFeature(context, feature, options.callbacks ?? {}); // NOSONAR: sequential by design, features may share config files and state that must be updated in order
 
       removeInstalledFeature(state, context, integration, feature);
 
@@ -328,17 +331,21 @@ export class IntegrationInstaller {
     const recordedResourceIds = new Set((recorded.resources ?? []).map((entry) => entry.id));
     const recordedOperationIds = new Set((recorded.operations ?? []).map((entry) => entry.id));
 
-    for (const resource of subfeature.resources ?? []) {
-      if (recordedResourceIds.has(resource.id)) {
+    // Resources may share files and operations must be undone in reverse order: run sequentially.
+    await (subfeature.resources ?? [])
+      .filter((resource) => recordedResourceIds.has(resource.id))
+      .reduce<Promise<void>>(async (previous, resource) => {
+        await previous;
         await resource.remove(context);
-      }
-    }
+      }, Promise.resolve());
 
-    for (const operation of [...(subfeature.operations ?? [])].reverse()) {
-      if (recordedOperationIds.has(operation.id)) {
+    await [...(subfeature.operations ?? [])]
+      .reverse()
+      .filter((operation) => recordedOperationIds.has(operation.id))
+      .reduce<Promise<void>>(async (previous, operation) => {
+        await previous;
         await operation.undo?.(context);
-      }
-    }
+      }, Promise.resolve());
   }
 
   private async prepareUniqueDependencies<TOptions>(
