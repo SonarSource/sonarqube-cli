@@ -73,6 +73,7 @@ import {
   VALID_FORMATS as DEPENDENCY_RISKS_FORMATS,
 } from './analyze/dependency-risks.ts';
 import { analyzeSecrets, type AnalyzeSecretsOptions } from './analyze/secrets.ts';
+import { collectExcludeOption } from './analyze/secrets-scan-args.ts';
 import {
   analyzeSqaa,
   type AnalyzeSqaaOptions,
@@ -138,6 +139,7 @@ import { piPostToolUse } from './hook/pi-post-tool-use.ts';
 import { piPreToolUse } from './hook/pi-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
 import { collectRepoOption } from './import/repo-option.ts';
+import { init, type InitOptions } from './init';
 import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
@@ -692,8 +694,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Scan files or stdin for hardcoded secrets')
     .argument('[paths...]', 'File or directory paths to scan for secrets')
     .option('--stdin', 'Read from standard input instead of paths')
+    .option(
+      '--exclude <path>',
+      'File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key',
+      collectExcludeOption,
+    )
     .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
-      analyzeSecrets({ paths: Array.isArray(paths) ? paths : [], stdin: options.stdin }, ctx),
+      analyzeSecrets(
+        {
+          paths: Array.isArray(paths) ? paths : [],
+          stdin: options.stdin,
+          exclude: options.exclude,
+        },
+        ctx,
+      ),
     );
 
   // Shared option set for `analyze agentic` and `verify`.
@@ -808,6 +822,23 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Comma-separated issue keys to remediate non-interactively (max 20). Required when stdin is not a TTY.',
     )
     .authenticatedAction((ctx, options: RemediateOptions) => remediate(options, ctx));
+
+  COMMAND_TREE.command('init')
+    .description(
+      'Set up Sonar for this project: login, pick an organization and bind or create a new Sonar project',
+    )
+    .stage(Stage.Alpha)
+    .rootHelp({
+      category: 'core',
+      label: 'init',
+    })
+    .option(
+      '--path <directory>',
+      'Directory to onboard, relative or absolute (default: current directory)',
+    )
+    .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
+    .showUpdateNotification((opts) => !opts.nonInteractive)
+    .anonymousAction((ctx, options: InitOptions) => init(options, ctx));
 
   // Overwrites the single .sonar-config.json project binding, or with --monorepo
   // appends to (or updates) the `projects` array (barebones; UX will change)

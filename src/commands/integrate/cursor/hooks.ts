@@ -26,6 +26,7 @@
 
 import type { IntegrationContext } from '@/core/framework/features';
 
+import type { SonarSecretsHooksWriter } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   HOOK_TIMEOUT_SEC,
   resolveAgentHookCommand,
@@ -145,5 +146,21 @@ function toCursorHooksDocument(document: unknown): CursorHooksDocument {
       doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks)
         ? { ...doc.hooks }
         : {},
+  };
+}
+
+export function createCursorHooksWriter(): SonarSecretsHooksWriter {
+  return {
+    defaultValue: { version: 1, hooks: {} },
+    patch: (document, context, entries, configDir) =>
+      upsertCursorHooks(
+        document,
+        entries.map((entry) =>
+          buildCursorHookEntry(context, configDir, entry.eventType, entry.scriptPath, {
+            marker: entry.marker,
+          }),
+        ),
+      ),
+    removePatch: removeCursorHooks,
   };
 }

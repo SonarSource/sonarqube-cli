@@ -23,14 +23,14 @@ import { join } from 'node:path';
 import type {
   IntegrationContext,
   IntegrationDeclaration,
+  ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { sonarSecretsBinaryDependency, wholeFile } from '@/core/framework/features';
+import { wholeFile } from '@/core/framework/features';
 
-import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import { createContextAugmentationSkillSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -56,9 +56,6 @@ const CONFIG_FILE = 'opencode.json';
 
 export const OPENCODE_INTEGRATION_ID = 'opencode';
 const OPENCODE_DISPLAY_NAME = 'OpenCode';
-const SECRETS_EXAMPLE_FOOTER =
-  '  Sonar will detect the token and mask it before the message is sent.';
-const SONAR_SECRETS_HOOKS_FEATURE_ID = 'sonar-secrets-hooks';
 
 export type OpenCodeIntegrationOptions = IntegrateAgentOptions;
 
@@ -115,22 +112,9 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
   id: OPENCODE_INTEGRATION_ID,
   displayName: OPENCODE_DISPLAY_NAME,
   features: [
-    {
-      id: SONAR_SECRETS_HOOKS_FEATURE_ID,
-      displayName: 'secret scanning hooks',
-      previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      postInstallExample: secretsScanningExample(OPENCODE_DISPLAY_NAME, SECRETS_EXAMPLE_FOOTER),
-      dependencies: [sonarSecretsBinaryDependency],
-      resources: [
-        wholeFile({
-          id: 'opencode-secrets-plugin',
-          displayName: 'OpenCode secrets scanning plugin',
-          targetPath: resolveOpenCodeSecretsPluginPath,
-          content: OPENCODE_SECRETS_PLUGIN_CONTENT,
-          managedMarker: OPENCODE_PLUGIN_MANAGED_MARKER,
-        }),
-      ],
-    },
+    createSecretsDetectionFeature<OpenCodeIntegrationOptions>({
+      resources: createOpenCodeSecretsDetectionResources(),
+    }),
     createVortexFeature<OpenCodeIntegrationOptions>([
       createSqaaPluginSubfeature(),
       createSqaaInstructionsSubfeature<OpenCodeIntegrationOptions>([
@@ -147,3 +131,15 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
     }),
   ],
 };
+
+function createOpenCodeSecretsDetectionResources(): ResourceDeclaration[] {
+  return [
+    wholeFile({
+      id: 'opencode-secrets-plugin',
+      displayName: 'OpenCode secrets scanning plugin',
+      targetPath: resolveOpenCodeSecretsPluginPath,
+      content: OPENCODE_SECRETS_PLUGIN_CONTENT,
+      managedMarker: OPENCODE_PLUGIN_MANAGED_MARKER,
+    }),
+  ];
+}
