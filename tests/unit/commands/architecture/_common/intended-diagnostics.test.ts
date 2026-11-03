@@ -79,13 +79,15 @@ const model: IntendedArchitecture = {
   ],
 };
 function api(current = graph): ArchitectureApi {
-  return {
-    getCurrent: () => Promise.resolve([{ ecosystem: 'java', graph: current }]),
+  const backend = {
+    getCurrent: () => Promise.resolve([{ ecosystem: 'java' as const, graph: current }]),
     getIntended: () => Promise.resolve([]),
+    getIntendedState: () => Promise.resolve({ models: [] }),
     createIntended: mock(async () => {}),
     updateIntended: mock(async () => {}),
     deleteIntended: mock(async () => {}),
   };
+  return backend;
 }
 describe('intended discovery diagnostics', () => {
   it('reports the missing container wildcard and skipped physical parent without changing the model', async () => {
