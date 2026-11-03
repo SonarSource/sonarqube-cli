@@ -100,7 +100,8 @@ function renderFooter<T>(
   noun: string,
   minQueryLength: number,
 ): string | undefined {
-  const needsMore = state.query.length > 0 && state.query.length < minQueryLength;
+  const query = state.query.trim();
+  const needsMore = query.length > 0 && query.length < minQueryLength;
   if (needsMore) {
     return dim(`Type at least ${minQueryLength} characters to search.`);
   }
@@ -111,9 +112,12 @@ function renderFooter<T>(
     return undefined;
   }
   if (state.options.length === 0) {
-    return dim(state.query ? `No ${noun} match '${state.query.trim()}'.` : `No ${noun} found.`);
+    return dim(query ? `No ${noun} match '${query}'.` : `No ${noun} found.`);
   }
-  const what = state.query ? (state.total === 1 ? 'match' : 'matches') : noun;
+  let what = noun;
+  if (query) {
+    what = state.total === 1 ? 'match' : 'matches';
+  }
   return state.total > state.options.length
     ? dim(
         `Showing ${state.options.length} of ${formatCount(state.total)} ${what}. Type more to narrow.`,
@@ -173,7 +177,7 @@ export function createSearchPrompt<T>(
       }
       if (this.state === 'cancel') return `  ${red('✗')}  ${message}`;
 
-      const hint = opts.hint ? ` ${dim(`(${opts.hint})`)}` : '';
+      const hint = opts.hint ? ` ${dim('(' + opts.hint + ')')}` : '';
       const lines = [`  ${cyan('?')}  ${message}${hint}  ${prompt.inputWithCursor}`];
       lines.push(...renderRows(state));
       const footer = renderFooter(state, noun, minQueryLength);
@@ -183,9 +187,10 @@ export function createSearchPrompt<T>(
     },
   });
 
-  function runSearch(query: string, delayMs: number): void {
+  function runSearch(rawQuery: string, delayMs: number): void {
     clearTimeout(timer);
     const id = ++generation;
+    const query = rawQuery.trim();
     if (query.length > 0 && query.length < minQueryLength) {
       state.loading = false;
       state.options = [];

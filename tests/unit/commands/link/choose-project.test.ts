@@ -263,6 +263,8 @@ describe('link without a project key', () => {
         'Choose a project',
         expect.objectContaining({ noun: 'projects', minQueryLength: 2 }),
       );
+      const results = await searchPrompt.mock.calls.at(0)?.[1].search('');
+      expect(results?.total).toBe(2175);
     });
 
     it('shows the project name with its key as the detail column', async () => {
