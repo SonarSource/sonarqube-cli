@@ -20,10 +20,32 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { AccessDeniedError, BadRequestError, ForbiddenApiError } from '@/core/server/errors.ts';
-import { HTTP_STATUS_FORBIDDEN } from '@/core/server/http-constants.ts';
+import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 
 const PLAN_HINT =
   'Architecture needs SonarQube Cloud Team or Enterprise, or the Architecture feature on SonarQube Server.';
+
+export function incompatibleResponse(message: string): CommandFailedError {
+  return new CommandFailedError(message, {
+    remediationHint:
+      "The response does not match this CLI's supported public Architecture API contract. " +
+      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
+  });
+}
+
+export function collectionFailure(error: unknown, isCloud: boolean): never {
+  if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+    throw new CommandFailedError('The public Architecture API endpoint was not found (HTTP 404).', {
+      cause: error,
+      remediationHint:
+        'Check feature availability, Browse permission and API routing.' +
+        (isCloud
+          ? ''
+          : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+    });
+  }
+  throw error;
+}
 
 /** Translates an HTTP failure of an architecture call into a message that says what to do. */
 export function toArchitectureError(error: unknown, projectKey: string): unknown {

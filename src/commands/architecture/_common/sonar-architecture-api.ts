@@ -48,6 +48,7 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import { collectionFailure, incompatibleResponse } from './errors.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -89,7 +90,7 @@ async function currentPerEcosystem(
 }
 
 function invalidPublicModel(): never {
-  throw new CommandFailedError(
+  throw incompatibleResponse(
     'Invalid public intended architecture response: invalid model field shape.',
   );
 }
@@ -178,7 +179,7 @@ function normalizeOptionalGroupFields(raw: Record<string, unknown>): Record<stri
 }
 
 function invalidPublicGraph(): never {
-  throw new CommandFailedError(
+  throw incompatibleResponse(
     'Invalid public current architecture response: invalid graph field shape.',
   );
 }
@@ -258,9 +259,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
           language: ecosystem,
         })
         .orThrow()
-        .catch((error: unknown) => this.collectionFailure(error));
+        .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
       if (!Array.isArray(response?.currentArchitectures)) {
-        throw new CommandFailedError(
+        throw incompatibleResponse(
           'Invalid public current architecture response: currentArchitectures must be an array.',
         );
       }
@@ -273,9 +274,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const response = await this.http
       .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
       .orThrow()
-      .catch((error: unknown) => this.collectionFailure(error));
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     if (!Array.isArray(response?.intendedArchitectures)) {
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
       );
     }
@@ -284,7 +285,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         (model: unknown) => model === null || typeof model !== 'object',
       )
     ) {
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: each model must be an object.',
       );
     }
@@ -293,7 +294,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       (id !== undefined && (typeof id !== 'string' || !MODEL_ID.test(id))) ||
       (response.intendedArchitectures.length > 0 && id === undefined)
     ) {
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: expected a root server model id.',
       );
     }
@@ -344,16 +345,23 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const result = await this.http
       .get<{
         projectDirectives?: unknown[];
-        page?: { pageIndex: number; pageSize: number; total: number };
+        page?: { pageIndex: number; pageSize: number; total: number } | null;
       } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
       .orThrow()
-      .catch((error: unknown) => this.collectionFailure(error));
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     const page = result?.page;
     if (
       !Array.isArray(result?.projectDirectives) ||
-      page?.pageIndex !== pageIndex ||
+      page === undefined ||
+      page === null ||
+      !Number.isSafeInteger(page.pageIndex) ||
+      !Number.isSafeInteger(page.pageSize) ||
+      !Number.isSafeInteger(page.total)
+    )
+      throw incompatibleResponse('Invalid public directives page; no complete page was read.');
+    if (
+      page.pageIndex !== pageIndex ||
       page.pageSize !== pageSize ||
-      !Number.isSafeInteger(page.total) ||
       page.total < 0 ||
       result.projectDirectives.length > pageSize
     )
@@ -494,7 +502,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       !Array.isArray(response?.intendedArchitectures) ||
       response.intendedArchitectures.length === 0
     ) {
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'Invalid public intended architecture write response: missing model envelope or server id.',
       );
     }
@@ -505,7 +513,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       );
     }
     if (typeof id !== 'string' || !MODEL_ID.test(id)) {
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'Invalid public intended architecture write response: unexpected server model id.',
       );
     }
@@ -560,23 +568,6 @@ export class SonarArchitectureApi implements ArchitectureApi {
     if (this.http.isCloud) return (await this.ids()).branchId;
     this.serverProjectIdPromise ??= this.resolveServerProjectId();
     return this.serverProjectIdPromise;
-  }
-
-  private collectionFailure(error: unknown): never {
-    if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
-      throw new CommandFailedError(
-        'The public Architecture API endpoint was not found (HTTP 404).',
-        {
-          cause: error,
-          remediationHint:
-            'Check feature availability, Browse permission and API routing.' +
-            (this.http.isCloud
-              ? ''
-              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
-        },
-      );
-    }
-    throw error;
   }
 
   private async resolveServerProjectId(): Promise<string> {
