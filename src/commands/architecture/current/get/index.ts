@@ -112,6 +112,7 @@ function drillDownCommands(
 function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string, unknown> {
   const where = slice.root ? `below '${slice.root}'` : 'from the top level';
   const cap = slice.omittedLevel !== undefined ? ` ${formatSliceLimit(slice)}` : '';
+  const message = slice.message === undefined ? '' : ' ' + slice.message;
   let edgeCap = '';
   if (slice.omittedEdges > 0) {
     edgeCap =
@@ -121,7 +122,7 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
   }
   return {
     language: current.ecosystem,
-    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${slice.message === undefined ? '' : ` ${slice.message}`}${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
+    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${message}${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
     ...slice,
   };
 }

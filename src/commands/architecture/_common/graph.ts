@@ -170,22 +170,22 @@ export function sliceGraph(
   }
 
   const visible: number[] = [];
-  let frontier = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
+  const firstLevel = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
+  let frontier = firstLevel;
   let capped = false;
-  let nodesInScope = 0;
+  const nodesInScope = countNodesInScope(graph, firstLevel, depth);
   const levels: GraphSlice['levels'] = [];
   let omittedLevel: GraphSlice['omittedLevel'];
   for (let level = 1; level <= depth && frontier.length > 0; level++) {
-    nodesInScope += frontier.length;
-    if (!capped && visible.length + frontier.length > maxNodes) {
+    if (visible.length + frontier.length > maxNodes) {
       capped = true;
       omittedLevel = { depth: level, nodes: frontier.length };
       if (visible.length === 0) {
         appendVisibleLevel(visible, levels, largest(graph, frontier, maxNodes), level);
       }
-    } else if (!capped) {
-      appendVisibleLevel(visible, levels, frontier, level);
+      break;
     }
+    appendVisibleLevel(visible, levels, frontier, level);
     frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
   }
 
@@ -222,6 +222,16 @@ export function sliceGraph(
       .slice(0, MAX_DRILL_DOWN_HINTS)
       .map((node) => node.key),
   };
+}
+
+function countNodesInScope(graph: IndexedGraph, firstLevel: number[], depth: number): number {
+  let frontier = firstLevel;
+  let count = 0;
+  for (let level = 1; level <= depth && frontier.length > 0; level++) {
+    count += frontier.length;
+    frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
+  }
+  return count;
 }
 
 function descendantsOf(graph: IndexedGraph, id: number): number {
