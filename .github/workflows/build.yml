@@ -428,8 +428,6 @@ jobs:
     needs: [prepare, build-binaries]
     strategy:
       fail-fast: false
-      # Cap parallel shard startups to reduce GitHub Actions download 429s (checkout/vault).
-      max-parallel: 2
       matrix:
         shard: [0, 1, 2, 3]
     steps:
@@ -465,7 +463,6 @@ jobs:
     needs: [prepare, build-binaries]
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
         shard: [0, 1, 2, 3]
     steps:
