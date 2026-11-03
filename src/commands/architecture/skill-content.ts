@@ -94,7 +94,7 @@ recovery instructions, inspect the current state, and obtain approval before res
 
 ## Availability
 
-Intended operations on SonarQube Server await public project UUID resolution. Deviations,
+Intended and project directive operations on SonarQube Server await public project UUID resolution. Deviations,
 structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
