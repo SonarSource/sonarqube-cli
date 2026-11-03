@@ -141,10 +141,15 @@ export class RepositoryCollection {
     onlyPrivateProjects: OnlyPrivateProjects,
   ): Promise<RepositoryCollection> {
     const collection = new RepositoryCollection(fetchPage, onlyPrivateProjects);
-    while (collection.eligible.length === 0 && !collection.exhausted) {
-      await collection.loadMore();
-    }
+    await collection.loadUntilEligibleOrExhausted();
     return collection;
+  }
+
+  /** Pages are inherently sequential: whether to fetch the next one depends on the previous. */
+  private async loadUntilEligibleOrExhausted(): Promise<void> {
+    if (this.eligible.length > 0 || this.exhausted) return;
+    await this.loadMore();
+    await this.loadUntilEligibleOrExhausted();
   }
 
   /** Repos found eligible for import across every page fetched so far. */
