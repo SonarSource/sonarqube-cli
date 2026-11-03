@@ -100,12 +100,9 @@ export async function runBulkImportJob(
     );
   };
 
-  // `RepositoryCollection.create` already loaded the first eligible-or-exhausted window before
-  // handing the collection here — import it before fetching any further pages.
-  progress.recordSkipped(collection.skippedRepos.length);
-  await importPage(collection.eligibleRepos);
-
-  while (collection.hasMore) {
+  // Pages are cursor-based, so each fetch depends on the previous one and must run in order.
+  const importRemainingPages = async (): Promise<void> => {
+    if (!collection.hasMore) return;
     let page;
     try {
       page = await collection.loadMore();
@@ -121,7 +118,14 @@ export async function runBulkImportJob(
     progress.recordSkipped(page.skipped.length);
     progress.setTotal(collection.total);
     await importPage(page.eligible);
-  }
+    await importRemainingPages();
+  };
+
+  // `RepositoryCollection.create` already loaded the first eligible-or-exhausted window before
+  // handing the collection here — import it before fetching any further pages.
+  progress.recordSkipped(collection.skippedRepos.length);
+  await importPage(collection.eligibleRepos);
+  await importRemainingPages();
 
   const { succeeded, failed } = progress.finish();
   return { succeeded, failed, skipped: [...collection.skippedRepos, ...skippedByRegex] };
