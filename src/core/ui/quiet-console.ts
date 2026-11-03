@@ -28,6 +28,7 @@ import type {
   OutputChannel,
   PhaseItem,
   PhaseOptions,
+  SearchPromptOptions,
   SelectOption,
 } from './console.ts';
 
@@ -118,6 +119,10 @@ export class QuietConsole implements Console {
 
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {
     return this.delegate.selectPrompt(message, options);
+  }
+
+  searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
+    return this.delegate.searchPrompt(message, options);
   }
 
   multiSelectPrompt<T>(
