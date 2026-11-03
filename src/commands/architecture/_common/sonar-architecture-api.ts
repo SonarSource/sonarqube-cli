@@ -353,12 +353,18 @@ export class SonarArchitectureApi implements ArchitectureApi {
       } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
       .orThrow();
     const page = result?.page;
-    if (!Array.isArray(result?.projectDirectives) || page === undefined || page === null)
+    if (
+      !Array.isArray(result?.projectDirectives) ||
+      page === undefined ||
+      page === null ||
+      !Number.isSafeInteger(page.pageIndex) ||
+      !Number.isSafeInteger(page.pageSize) ||
+      !Number.isSafeInteger(page.total)
+    )
       throw incompatibleResponse('Invalid public directives page; no complete page was read.');
     if (
       page.pageIndex !== pageIndex ||
       page.pageSize !== pageSize ||
-      !Number.isSafeInteger(page.total) ||
       page.total < 0 ||
       result.projectDirectives.length > pageSize
     )

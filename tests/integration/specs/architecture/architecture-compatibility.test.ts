@@ -76,6 +76,39 @@ describe('Architecture API compatibility diagnostics', () => {
         ).toEqual([]);
       });
     }
+    it(`explains malformed directives page fields but keeps value mismatches separate on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      for (const [page, compatibleShape] of [
+        [{ pageIndex: '1', pageSize: 50, total: 0 }, false],
+        [{ pageIndex: 1, total: 0 }, false],
+        [{ pageIndex: 1, pageSize: 50, total: 0.5 }, false],
+        [{ pageIndex: 2, pageSize: 50, total: 0 }, true],
+      ] as const) {
+        const builder = harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withProject('shop', (project) =>
+            project.withArchitecture((architecture) =>
+              architecture.withStatus(
+                'project-directives',
+                200,
+                JSON.stringify({ projectDirectives: [], page }),
+                'GET',
+              ),
+            ),
+          );
+        const server = await (cloud ? builder.asSonarCloud() : builder).start();
+        harness.withAuth(
+          cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
+          'test-token',
+          cloud ? 'my-org' : undefined,
+        );
+        const result = await harness.run('arch directives get -p shop --format json');
+        expect(result.exitCode).toBe(1);
+        if (compatibleShape) expect(result.stderr).not.toContain(COMPATIBILITY);
+        else expect(result.stderr).toContain(COMPATIBILITY);
+      }
+    });
+
     it(`keeps valid empty results and invalid input separate from compatibility on ${cloud ? 'Cloud' : 'Server'}`, async () => {
       const builder = harness
         .newFakeServer()
