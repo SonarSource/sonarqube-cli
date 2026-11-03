@@ -10,6 +10,10 @@ echo "run-integration-scope: USE_COVERAGE=${USE_COVERAGE:-0}"
 
 run_bun_test() {
   local -a test_paths=("$@")
+  if [ "${#test_paths[@]}" -eq 0 ]; then
+    echo "run-integration-scope: refusing to run bun test with no paths (would run the whole repo)" >&2
+    return 1
+  fi
   local log
   log="$(mktemp)"
   set +e
@@ -32,7 +36,14 @@ run_bun_test() {
 
 run_once() {
   if [ "${INTEGRATION_SHARDED:-false}" = 'true' ]; then
-    mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh)
+    if ! mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh); then
+      echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
+      return 1
+    fi
+    if [ "${#shard_paths[@]}" -eq 0 ]; then
+      echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL} resolved no paths" >&2
+      return 1
+    fi
     echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}:"
     printf '  %s\n' "${shard_paths[@]}"
     run_bun_test "${shard_paths[@]}"

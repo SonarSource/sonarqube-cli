@@ -22,15 +22,23 @@ if [ ! -d "$specs_root" ]; then
   exit 1
 fi
 
+# Git Bash on Windows exposes CMD's `find.exe` ahead of GNU find; `sort -z` is also unavailable there.
+if [ -x /usr/bin/find ]; then
+  FIND=/usr/bin/find
+else
+  FIND=find
+fi
+
 count=0
-while IFS= read -r -d '' dir; do
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
   name=$(basename "$dir")
   bucket=$(printf '%s' "$name" | cksum | awk '{print $1}')
   if (( bucket % total == index )); then
     printf '%s\n' "${dir%/}"
     count=$((count + 1))
   fi
-done < <(find "$specs_root" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+done < <("$FIND" "$specs_root" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
 
 if (( index == 0 )); then
   printf '%s\n' "tests/integration/harness"
