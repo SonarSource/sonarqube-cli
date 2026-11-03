@@ -1339,16 +1339,20 @@ describe('sonar architecture intended set on the public API', () => {
     });
   }
   for (const body of [
-    JSON.stringify({ intendedArchitectures: INTENDED }),
-    JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'bad-id' }] }),
-    JSON.stringify({ id: null, perspectives: wireModels(INTENDED) }),
-    JSON.stringify({ id: 'bad-id', perspectives: wireModels(INTENDED) }),
+    JSON.stringify({ intendedArchitectures: [{ perspectives: wireModels(INTENDED) }] }),
+    JSON.stringify({
+      intendedArchitectures: [{ id: 'bad-id', perspectives: wireModels(INTENDED) }],
+    }),
+    JSON.stringify({ intendedArchitectures: [{ id: null, perspectives: wireModels(INTENDED) }] }),
+    JSON.stringify({ intendedArchitectures: [{ id: 42, perspectives: wireModels(INTENDED) }] }),
   ]) {
     it(`rejects malformed public model identity before writing: ${body}`, async () => {
       const server = await startWith((fake) =>
         fake.withStatus('project-intended-architectures', 200, body, 'GET'),
       );
-      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('expected a resource id and perspectives');
       expect(writes(server)).toEqual([]);
     });
   }
