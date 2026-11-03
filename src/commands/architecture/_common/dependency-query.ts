@@ -20,6 +20,8 @@
 
 import { createHash } from 'node:crypto';
 
+import { InvalidArgumentError } from 'commander';
+
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 
 import type { CurrentGraph, StructureGraph } from './architecture-api.ts';
@@ -31,7 +33,7 @@ const MAX_DEPENDENCY_PAGE_INDEX = 2_147_483_647;
 
 export function parseDependencyPageNumber(value: string): number {
   if (!/^\d+$/.test(value))
-    throw new InvalidOptionError('Dependency pagination requires whole decimal integers.');
+    throw new InvalidArgumentError('Dependency pagination requires whole decimal integers.');
   return Number(value);
 }
 
@@ -58,20 +60,21 @@ export function dependencySelection(options: CurrentReadOptions): DependencySele
   }
   if (!options.from?.trim() || !options.to?.trim() || options.component !== undefined)
     throw new InvalidOptionError('Use both --from and --to, without --component.');
+  if (options.from !== options.from.trim() || options.to !== options.to.trim())
+    throw new InvalidOptionError(
+      'Dependency endpoint keys must not contain surrounding whitespace. Use exact keys.',
+    );
   const pageIndex = options.page ?? 1;
   const pageSize = options.pageSize ?? DEPENDENCY_PAGE_SIZE;
-  if (
-    !Number.isSafeInteger(pageIndex) ||
-    pageIndex < 1 ||
-    pageIndex > MAX_DEPENDENCY_PAGE_INDEX ||
-    !Number.isInteger(pageSize) ||
-    pageSize < 1 ||
-    pageSize > DEPENDENCY_PAGE_SIZE
-  )
-    throw new InvalidOptionError(
-      'Page must be between 1 and 2147483647; dependency page size must be between 1 and 20.',
-    );
+  validatePagination(pageIndex, pageSize);
   return { from: options.from, to: options.to, pageIndex, pageSize };
+}
+
+function validatePagination(pageIndex: number, pageSize: number): void {
+  if (!Number.isSafeInteger(pageIndex) || pageIndex < 1 || pageIndex > MAX_DEPENDENCY_PAGE_INDEX)
+    throw new InvalidOptionError('--page must be between 1 and 2147483647.');
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > DEPENDENCY_PAGE_SIZE)
+    throw new InvalidOptionError('--page-size must be between 1 and 20.');
 }
 
 function compareKeys(left: string, right: string): number {
@@ -168,12 +171,14 @@ function aggregateDependencies(
   const weights = new Map<string, SliceEdge>();
   const seen = new Set<string>();
   for (const edge of index.edges) {
+    if (!intersectsSelection(index, edge.from, sources)) continue;
     if (!index.key.has(edge.to))
       throw new CommandFailedError('Current graph contains an unresolved dependency target.');
+    if (!intersectsSelection(index, edge.to, targets)) continue;
+    validateDependencyEdge(index, edge, seen);
     const from = sources.get(edge.from);
     const to = targets.get(edge.to);
     if (from === undefined || to === undefined) continue;
-    validateDependencyEdge(index, edge, seen);
     if (sameHierarchy(index, from, to)) continue;
     const key = JSON.stringify([from, to]);
     const weight = (weights.get(key)?.weight ?? 0) + edge.weight;
@@ -186,6 +191,16 @@ function aggregateDependencies(
   return [...weights.values()].sort(
     (a, b) => b.weight - a.weight || compareKeys(a.from, b.from) || compareKeys(a.to, b.to),
   );
+}
+
+function intersectsSelection(
+  index: IndexedGraph,
+  node: number,
+  selected: Map<number, string>,
+): boolean {
+  if (selected.has(node)) return true;
+  const first = selected.keys().next().value;
+  return first !== undefined && isAncestor(index.parent, node, first);
 }
 
 function validateDependencyEdge(

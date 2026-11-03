@@ -62,6 +62,12 @@ export async function getCurrent(
       throw toArchitectureError(error, projectKey);
     });
 
+  if (graphs.length === 0) {
+    ctx.console.warn(
+      `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`,
+    );
+    if (selection) return;
+  }
   if (selection) {
     const result = queryDependencies(graphs, selection, depth);
     if (format === 'text') {
@@ -71,15 +77,11 @@ export async function getCurrent(
           `Page ${result.page.pageIndex}, ${result.dependencies.length} of ${result.page.total} dependencies`,
           ...result.dependencies.map((edge) => `${edge.from} → ${edge.to}: ${edge.weight}`),
           `Revision: ${result.revision}. Compare revisions before combining pages; restart if changed.`,
+          ...(result.page.hasNextPage ? [nextDependencyPageCommand(result, projectKey)] : []),
         ].join('\n'),
       );
     } else printPayload(ctx, format, { project: projectKey, ...result });
     return;
-  }
-  if (graphs.length === 0) {
-    ctx.console.warn(
-      `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`,
-    );
   }
   const indexed = graphs.map((current) => ({ current, index: indexStructure(current.graph) }));
   const { component } = options;
@@ -113,6 +115,13 @@ export async function getCurrent(
     drillDown: format === 'toon' ? drillDown.map((command) => ({ command })) : drillDown,
   }));
   printPayload(ctx, format, { project: projectKey, languages });
+}
+
+function nextDependencyPageCommand(
+  result: ReturnType<typeof queryDependencies>,
+  projectKey: string,
+): string {
+  return `Next page: sonar architecture current get --project ${shellQuote(projectKey)} --language ${result.language} --from ${shellQuote(result.from)} --to ${shellQuote(result.to)} --depth ${result.depth} --page ${result.page.pageIndex + 1} --page-size ${result.page.pageSize} --format text`;
 }
 
 function drillDownCommands(

@@ -18,9 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Current-architecture graph: a key index over SonarQube's nested structure tree and a
-// size-capped slice of it, so an agent explores a large project top-down.
-
 // Cross-language ordering, malformed graph guards and content revisions are pure graph operations.
 import { describe, expect, it } from 'bun:test';
 
@@ -145,6 +142,49 @@ describe('targeted dependencies', () => {
     expect(queryDependencies([unrelated, fixture()], selection(), 1).dependencies).toEqual([
       { from: 'compat:a', to: 'impl:C', weight: 7 },
     ]);
+  });
+
+  it('ignores dangling edges outside the selected source subtree', () => {
+    const current = fixture();
+    current.graph.nodes.push(node(90, 'unrelated', [], [{ toId: 999, weight: 1 }]));
+    expect(queryDependencies([current], selection(), 1).dependencies).toEqual([
+      { from: 'compat:a', to: 'impl:C', weight: 7 },
+    ]);
+  });
+
+  it('rejects ancestor container relationships overlapping selected descendants', () => {
+    const current = fixture();
+    current.graph.nodes[0].edges.push({ toId: 5, weight: 7 });
+    expect(() =>
+      queryDependencies([current], { ...selection(), from: 'compat:a', to: 'impl:C' }, 1),
+    ).toThrow('container-level');
+    expect(() => queryDependencies([current], { ...selection(), from: 'compat:a' }, 1)).toThrow(
+      'container-level',
+    );
+    expect(() => queryDependencies([current], { ...selection(), to: 'impl:C' }, 1)).toThrow(
+      'container-level',
+    );
+  });
+
+  it('ignores unrelated container relationships in the matched graph', () => {
+    const current = fixture();
+    current.graph.nodes.push(node(90, 'unrelated', [node(91, 'child')], [{ toId: 5, weight: 1 }]));
+    expect(queryDependencies([current], selection(), 1).page.total).toBe(1);
+  });
+
+  it('rejects padded exact keys and identifies the invalid pagination option', () => {
+    expect(() => dependencySelection({ from: ' compat', to: 'impl' })).toThrow(
+      'surrounding whitespace',
+    );
+    expect(() => dependencySelection({ from: 'compat', to: 'impl ' })).toThrow(
+      'surrounding whitespace',
+    );
+    expect(() => dependencySelection({ from: 'compat', to: 'impl', page: 0 })).toThrow(
+      '--page must',
+    );
+    expect(() => dependencySelection({ from: 'compat', to: 'impl', pageSize: 21 })).toThrow(
+      '--page-size must',
+    );
   });
 
   it('rejects ambiguity and never combines endpoints from different graphs', () => {
