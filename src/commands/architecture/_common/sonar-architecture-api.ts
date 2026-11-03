@@ -54,14 +54,12 @@ const MAX_PUBLIC_GROUPS = 50_000;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
 const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export class ArchitectureApiCompatibilityError extends CommandFailedError {
-  constructor(message: string) {
-    super(message, {
-      remediationHint:
-        "The response does not match this CLI's supported public Architecture API contract. " +
-        'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
-    });
-  }
+function incompatibleResponse(message: string): CommandFailedError {
+  return new CommandFailedError(message, {
+    remediationHint:
+      "The response does not match this CLI's supported public Architecture API contract. " +
+      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
+  });
 }
 
 interface ArchitectureIds {
@@ -98,7 +96,7 @@ async function currentPerEcosystem(
 }
 
 function invalidPublicModel(): never {
-  throw new ArchitectureApiCompatibilityError(
+  throw incompatibleResponse(
     'Invalid public intended architecture response: invalid model field shape.',
   );
 }
@@ -187,7 +185,7 @@ function normalizeOptionalGroupFields(raw: Record<string, unknown>): Record<stri
 }
 
 function invalidPublicGraph(): never {
-  throw new ArchitectureApiCompatibilityError(
+  throw incompatibleResponse(
     'Invalid public current architecture response: invalid graph field shape.',
   );
 }
@@ -268,7 +266,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         })
         .orThrow();
       if (!Array.isArray(response?.currentArchitectures)) {
-        throw new ArchitectureApiCompatibilityError(
+        throw incompatibleResponse(
           'Invalid public current architecture response: currentArchitectures must be an array.',
         );
       }
@@ -282,7 +280,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
       .orThrow();
     if (!Array.isArray(response?.intendedArchitectures)) {
-      throw new ArchitectureApiCompatibilityError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
       );
     }
@@ -291,7 +289,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         (model: unknown) => model === null || typeof model !== 'object',
       )
     ) {
-      throw new ArchitectureApiCompatibilityError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: each model must be an object.',
       );
     }
@@ -300,7 +298,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       (id !== undefined && (typeof id !== 'string' || !MODEL_ID.test(id))) ||
       (response.intendedArchitectures.length > 0 && id === undefined)
     ) {
-      throw new ArchitectureApiCompatibilityError(
+      throw incompatibleResponse(
         'Invalid public intended architecture response: expected a root server model id.',
       );
     }
@@ -356,9 +354,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .orThrow();
     const page = result?.page;
     if (!Array.isArray(result?.projectDirectives) || page === undefined || page === null)
-      throw new ArchitectureApiCompatibilityError(
-        'Invalid public directives page; no complete page was read.',
-      );
+      throw incompatibleResponse('Invalid public directives page; no complete page was read.');
     if (
       page.pageIndex !== pageIndex ||
       page.pageSize !== pageSize ||
@@ -493,7 +489,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       !Array.isArray(response?.intendedArchitectures) ||
       response.intendedArchitectures.length === 0
     ) {
-      throw new ArchitectureApiCompatibilityError(
+      throw incompatibleResponse(
         'Invalid public intended architecture write response: missing model envelope or server id.',
       );
     }
@@ -504,7 +500,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       );
     }
     if (typeof id !== 'string' || !MODEL_ID.test(id)) {
-      throw new ArchitectureApiCompatibilityError(
+      throw incompatibleResponse(
         'Invalid public intended architecture write response: unexpected server model id.',
       );
     }
