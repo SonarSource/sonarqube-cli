@@ -49,8 +49,8 @@ export async function removeBinaries(state: CliState): Promise<BinaryResetResult
   let removedFileCount = 0;
   let purgedStaleCount = 0;
 
-  for (const plan of plans) {
-    const outcome = await tryRemoveBinaryAtPath(plan);
+  const outcomes = await Promise.all(plans.map((plan) => tryRemoveBinaryAtPath(plan)));
+  for (const outcome of outcomes) {
     if (outcome.status === 'cleaned') {
       if (outcome.fileRemoved) {
         removedFileCount += 1;

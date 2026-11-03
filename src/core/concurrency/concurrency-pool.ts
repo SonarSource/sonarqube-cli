@@ -39,17 +39,16 @@ export async function runWithConcurrencyLimit<TItem, TValue>(
   let nextIndex = 0;
 
   async function worker(): Promise<void> {
-    for (;;) {
-      const index = nextIndex++;
-      if (index >= items.length) return;
-      const item = items[index];
-      try {
-        const value = await task(item, index);
-        results[index] = { item, status: 'fulfilled', value };
-      } catch (reason) {
-        results[index] = { item, status: 'rejected', reason };
-      }
+    const index = nextIndex++;
+    if (index >= items.length) return;
+    const item = items[index];
+    try {
+      const value = await task(item, index);
+      results[index] = { item, status: 'fulfilled', value };
+    } catch (reason) {
+      results[index] = { item, status: 'rejected', reason };
     }
+    return worker();
   }
 
   const workerCount = Math.min(limit, items.length);
