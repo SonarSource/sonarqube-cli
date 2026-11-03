@@ -193,6 +193,7 @@ export interface ComponentTreeMeasure {
 export interface ComponentSummary {
   organization?: string;
   key: string;
+  name?: string;
   qualifier: string;
 }
 
