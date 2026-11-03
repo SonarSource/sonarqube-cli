@@ -175,24 +175,24 @@ async function with503Retry<T>(
   attemptRequest: () => Promise<T>,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<T> {
-  let lastServiceError: ServiceUnavailableError | undefined;
-  for (let attempt = 1; attempt <= MAX_503_RETRIES + 1; attempt++) {
+  const attemptWithRetry = async (attempt: number): Promise<T> => {
     try {
       return await attemptRequest();
     } catch (err) {
       if (!(err instanceof ServiceUnavailableError)) {
         throw err;
       }
-      lastServiceError = err;
-      if (attempt <= MAX_503_RETRIES) {
-        await waitBeforeRetry(attempt, onRetry);
+      if (attempt > MAX_503_RETRIES) {
+        throw new CommandFailedError(
+          `Vortex analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
+          { cause: err },
+        );
       }
+      await waitBeforeRetry(attempt, onRetry);
+      return attemptWithRetry(attempt + 1);
     }
-  }
-  throw new CommandFailedError(
-    `Vortex analysis failed after ${MAX_503_RETRIES} retries. The service is still unavailable.`,
-    { cause: lastServiceError },
-  );
+  };
+  return attemptWithRetry(1);
 }
 
 export interface FetchSqaaRetryOptions {
@@ -459,11 +459,13 @@ export async function defaultRetryCountdown(
     await sleep(delayMs);
     return;
   }
-  for (let remaining = totalSeconds; remaining > 0; remaining--) {
-    process.stdout.write(
-      `\r⚠️  Server busy (503). Retrying in ${remaining}s... [Attempt ${attempt}/${maxRetries}]  `,
-    );
-    await sleep(COUNTDOWN_TICK_MS);
-  }
+  const ticks = Array.from({ length: totalSeconds }, (_, elapsed) =>
+    sleep(elapsed * COUNTDOWN_TICK_MS).then(() => {
+      process.stdout.write(
+        `\r⚠️  Server busy (503). Retrying in ${totalSeconds - elapsed}s... [Attempt ${attempt}/${maxRetries}]  `,
+      );
+    }),
+  );
+  await Promise.all([...ticks, sleep(totalSeconds * COUNTDOWN_TICK_MS)]);
   process.stdout.write('\r\x1b[K');
 }

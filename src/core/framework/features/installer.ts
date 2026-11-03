@@ -209,11 +209,14 @@ export class IntegrationInstaller {
       try {
         options.callbacks?.onFeatureApplyStart?.(execution.application);
         await this.removeDeactivatedSubfeatures(execution);
-        const applied = await this.applyFeatureWithUniqueDependencies(
+        // Features are applied in order: they can write to the same config files and the
+        // start callbacks and recorded state must follow the declared feature order.
+        const pendingApply = this.applyFeatureWithUniqueDependencies(
           execution,
           preparedDependencies,
           options.callbacks ?? {},
         );
+        const applied = await pendingApply; // NOSONAR: sequential by design
         installedFeatures.push(
           recordInstalledFeature(
             state,
@@ -242,17 +245,17 @@ export class IntegrationInstaller {
   ): Promise<void> {
     const subfeatures = declaredSubfeatures(feature);
     for (const resource of resolveAllResources(feature, subfeatures)) {
-      await resource.remove(context);
+      await resource.remove(context); // NOSONAR: sequential by design, resources may share files and are removed in declaration order
       callbacks.onResourceRemoved?.(resource);
     }
 
     for (const cleanup of feature.legacyCleanups ?? []) {
-      await cleanup.remove(context);
+      await cleanup.remove(context); // NOSONAR: sequential by design, legacy cleanups may touch the same files
     }
 
     for (const operation of [...resolveAllOperations(feature, subfeatures)].reverse()) {
       if (operation.undo) {
-        await operation.undo(context);
+        await operation.undo(context); // NOSONAR: sequential by design, operations must be undone in reverse order
         callbacks.onOperationUndone?.(operation);
       }
     }
@@ -276,7 +279,7 @@ export class IntegrationInstaller {
       const context = this.contextForApplication(state, application, 'install', options.console);
 
       options.callbacks?.onFeatureRemoveStart?.(feature);
-      await this.removeFeature(context, feature, options.callbacks ?? {});
+      await this.removeFeature(context, feature, options.callbacks ?? {}); // NOSONAR: sequential by design, features may share config files and state that must be updated in order
 
       removeInstalledFeature(state, context, integration, feature);
 
@@ -328,17 +331,21 @@ export class IntegrationInstaller {
     const recordedResourceIds = new Set((recorded.resources ?? []).map((entry) => entry.id));
     const recordedOperationIds = new Set((recorded.operations ?? []).map((entry) => entry.id));
 
-    for (const resource of subfeature.resources ?? []) {
-      if (recordedResourceIds.has(resource.id)) {
+    // Resources may share files and operations must be undone in reverse order: run sequentially.
+    await (subfeature.resources ?? [])
+      .filter((resource) => recordedResourceIds.has(resource.id))
+      .reduce<Promise<void>>(async (previous, resource) => {
+        await previous;
         await resource.remove(context);
-      }
-    }
+      }, Promise.resolve());
 
-    for (const operation of [...(subfeature.operations ?? [])].reverse()) {
-      if (recordedOperationIds.has(operation.id)) {
+    await [...(subfeature.operations ?? [])]
+      .reverse()
+      .filter((operation) => recordedOperationIds.has(operation.id))
+      .reduce<Promise<void>>(async (previous, operation) => {
+        await previous;
         await operation.undo?.(context);
-      }
-    }
+      }, Promise.resolve());
   }
 
   private async prepareUniqueDependencies<TOptions>(
@@ -349,42 +356,57 @@ export class IntegrationInstaller {
     const installedDependencies = new Map<string, InstalledDependency>();
     const failedDependencies = new Map<string, Error>();
 
-    for (const execution of this.collectUniqueDependencies(executions)) {
-      const existingDependency = this.findInstalledDependency(
+    const prepared = { resolvedDependencies, installedDependencies, failedDependencies };
+    // Later dependencies resolve against the ones prepared before them, so they are chained in order.
+    await this.collectUniqueDependencies(executions).reduce<Promise<void>>(
+      async (previous, execution) => {
+        await previous;
+        await this.prepareUniqueDependency(execution, prepared, callbacks);
+      },
+      Promise.resolve(),
+    );
+
+    return prepared;
+  }
+
+  private async prepareUniqueDependency<TOptions>(
+    execution: UniqueDependencyExecution<TOptions>,
+    prepared: PreparedDependencies,
+    callbacks: ApplyFeatureCallbacks<TOptions>,
+  ): Promise<void> {
+    const { resolvedDependencies, installedDependencies, failedDependencies } = prepared;
+    const existingDependency = this.findInstalledDependency(
+      execution.execution.context.state,
+      execution.dependency,
+    );
+    const dependencyContext = {
+      ...execution.execution.context,
+      resolvedDependencies: this.makeResolvedDependencies(
         execution.execution.context.state,
-        execution.dependency,
-      );
-      const dependencyContext = {
-        ...execution.execution.context,
-        resolvedDependencies: this.makeResolvedDependencies(
-          execution.execution.context.state,
-          execution.execution.application,
-          resolvedDependencies,
-        ),
-      };
+        execution.execution.application,
+        resolvedDependencies,
+      ),
+    };
 
-      if (!(await this.dependencyNeedsInstall(dependencyContext, execution.dependency))) {
-        if (existingDependency) {
-          resolvedDependencies.set(execution.dependency.id, existingDependency);
-        }
-        callbacks.onDependencySkipped?.(execution.dependency);
-        continue;
+    if (!(await this.dependencyNeedsInstall(dependencyContext, execution.dependency))) {
+      if (existingDependency) {
+        resolvedDependencies.set(execution.dependency.id, existingDependency);
       }
-
-      try {
-        const installedDependency = await execution.dependency.installOrUpdate({
-          ...dependencyContext,
-          existingDependency,
-        });
-        resolvedDependencies.set(installedDependency.id, installedDependency);
-        installedDependencies.set(installedDependency.id, installedDependency);
-        callbacks.onDependencyInstalled?.(execution.dependency);
-      } catch (error) {
-        failedDependencies.set(execution.dependency.id, error as Error);
-      }
+      callbacks.onDependencySkipped?.(execution.dependency);
+      return;
     }
 
-    return { resolvedDependencies, installedDependencies, failedDependencies };
+    try {
+      const installedDependency = await execution.dependency.installOrUpdate({
+        ...dependencyContext,
+        existingDependency,
+      });
+      resolvedDependencies.set(installedDependency.id, installedDependency);
+      installedDependencies.set(installedDependency.id, installedDependency);
+      callbacks.onDependencyInstalled?.(execution.dependency);
+    } catch (error) {
+      failedDependencies.set(execution.dependency.id, error as Error);
+    }
   }
 
   private async applyFeatureWithUniqueDependencies<TOptions>(
@@ -422,23 +444,32 @@ export class IntegrationInstaller {
 
     await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
-    for (const resource of resolveAllResources(feature, subfeatures)) {
-      if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
-        callbacks.onResourceSkipped?.(resource);
-        continue;
-      }
-      resources.push(await resource.apply(featureContext));
-      callbacks.onResourceInstalled?.(resource);
-    }
+    // Resources may share files and operations depend on earlier ones: apply in declaration order.
+    await resolveAllResources(feature, subfeatures).reduce<Promise<void>>(
+      async (previous, resource) => {
+        await previous;
+        if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
+          callbacks.onResourceSkipped?.(resource);
+          return;
+        }
+        resources.push(await resource.apply(featureContext));
+        callbacks.onResourceInstalled?.(resource);
+      },
+      Promise.resolve(),
+    );
 
-    for (const operation of resolveAllOperations(feature, subfeatures)) {
-      if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
-        continue;
-      }
-      await operation.apply(featureContext);
-      operations.push({ id: operation.id, version: operation.version });
-      callbacks.onOperationApplied?.(operation);
-    }
+    await resolveAllOperations(feature, subfeatures).reduce<Promise<void>>(
+      async (previous, operation) => {
+        await previous;
+        if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
+          return;
+        }
+        await operation.apply(featureContext);
+        operations.push({ id: operation.id, version: operation.version });
+        callbacks.onOperationApplied?.(operation);
+      },
+      Promise.resolve(),
+    );
 
     return { dependencies, resources, operations };
   }
@@ -462,9 +493,11 @@ export class IntegrationInstaller {
     feature: FeatureDeclaration<TOptions>,
     featureContext: IntegrationContext,
   ) {
-    for (const cleanup of feature.legacyCleanups ?? []) {
+    // Legacy cleanups may touch the same files: run sequentially.
+    await (feature.legacyCleanups ?? []).reduce<Promise<void>>(async (previous, cleanup) => {
+      await previous;
       await cleanup.remove(featureContext);
-    }
+    }, Promise.resolve());
   }
 
   private prepareFeatureExecutions<TOptions>(
