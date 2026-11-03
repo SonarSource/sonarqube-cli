@@ -20,6 +20,7 @@
 
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import { createArchitectureApi, type CurrentGraph } from '../../_common/architecture-api.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
@@ -41,7 +42,6 @@ import {
   resolveDepth,
   TEXT_FORMATS,
 } from '../../_common/read-options.ts';
-import { shellQuote } from '../../_common/shell-quote.ts';
 import { formatCurrentText, formatSliceLimit } from './current-text.ts';
 
 export async function getCurrent(

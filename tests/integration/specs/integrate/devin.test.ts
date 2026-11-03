@@ -370,9 +370,7 @@ describe('integrate devin', () => {
           join(harness.userHome.path, secretsScriptRelPath('prompt-secrets')).replaceAll('\\', '/'),
         );
         expect(harness.userHome.exists(devinConfigRelPath(harness, 'hooks.v1.json'))).toBe(false);
-        expect(
-          findInstalledFeature(harness, 'devin', 'sonar-secrets-hooks', 'global'),
-        ).toBeDefined();
+        expect(findInstalledFeature(harness, 'devin', 'secrets-detection', 'global')).toBeDefined();
       },
       { timeout: 30000 },
     );

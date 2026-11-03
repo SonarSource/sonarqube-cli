@@ -24,6 +24,7 @@ import {
   CONFIG_KEY_BY_NAME,
   CONFIG_KEY_DEFINITIONS,
   type ConfigKeyDefinition,
+  describeAcceptedValues,
   isValidConfigValue,
 } from '@/core/config/config-schema.ts';
 
@@ -106,6 +107,38 @@ describe('config-schema', () => {
         }
         expect(isValidConfigValue(definition, 'not-a-real-value')).toBe(false);
       }
+    });
+
+    it('accepts only values matching valueFormat when one is set', () => {
+      const integer = CONFIG_KEY_BY_NAME.get('secrets.maxFileSize')!;
+
+      expect(isValidConfigValue(integer, '0')).toBe(true);
+      expect(isValidConfigValue(integer, '2097152')).toBe(true);
+      expect(isValidConfigValue(integer, '-1')).toBe(false);
+      expect(isValidConfigValue(integer, '1.5')).toBe(false);
+      expect(isValidConfigValue(integer, '2MB')).toBe(false);
+    });
+
+    it('caps secrets.maxFileSize at 15 digits, so every accepted value stays a safe integer', () => {
+      const integer = CONFIG_KEY_BY_NAME.get('secrets.maxFileSize')!;
+      const largest = '9'.repeat(15);
+
+      expect(isValidConfigValue(integer, largest)).toBe(true);
+      expect(Number.isSafeInteger(Number(largest))).toBe(true);
+      expect(isValidConfigValue(integer, '1'.repeat(16))).toBe(false);
+      expect(isValidConfigValue(integer, '1000000000000000000000')).toBe(false);
+    });
+  });
+
+  describe('describeAcceptedValues', () => {
+    it('lists allowedValues, or names the valueFormat', () => {
+      const restricted = CONFIG_KEY_BY_NAME.get('telemetry.enabled')!;
+      const formatted = CONFIG_KEY_BY_NAME.get('secrets.maxFileSize')!;
+
+      expect(describeAcceptedValues(restricted)).toBe('Allowed values: true, false.');
+      expect(describeAcceptedValues(formatted)).toBe(
+        'Expected a non-negative integer of at most 15 digits.',
+      );
     });
   });
 });

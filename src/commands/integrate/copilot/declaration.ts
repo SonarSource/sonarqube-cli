@@ -25,21 +25,15 @@ import type {
   IntegrationDeclaration,
   ResourceDeclaration,
 } from '@/core/framework/features';
-import {
-  jsonPatch,
-  sonarSecretsBinaryDependency,
-  textSnippetRemover,
-  wholeFile,
-} from '@/core/framework/features';
+import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
-import { SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -77,72 +71,9 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
   id: COPILOT_INTEGRATION_ID,
   displayName: COPILOT_DISPLAY_NAME,
   features: [
-    {
-      id: 'pre-tool-use-hook',
-      displayName: 'pre-tool-use hook',
-      previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      dependencies: [sonarSecretsBinaryDependency],
-      resources: [
-        wholeFile({
-          id: 'pretool-secrets-script',
-          displayName: 'Copilot pre-tool-use hook script',
-          targetPath: resolveCopilotHookScriptPath,
-          content: {
-            unix: buildUnixHookScript('copilot-pre-tool-use'),
-            windows: buildWindowsHookScript('copilot-pre-tool-use'),
-          },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'copilot-hooks-config',
-          displayName: 'Copilot hooks configuration',
-          targetPath: resolveHooksJsonPath,
-          defaultValue: { version: 1, hooks: {} },
-          patch: (document, context) =>
-            upsertCopilotHooks(document, SONAR_SECRETS_MARKER, {
-              preToolUse: buildCopilotHookEntry(
-                resolveCopilotHookCommandPath(context, resolveCopilotHookScriptPath(context)),
-              ),
-            }),
-          removePatch: (document) => removeCopilotHooks(document, [SONAR_SECRETS_MARKER]),
-        }),
-      ],
-    },
-    {
-      id: 'prompt-secrets-hook',
-      displayName: 'prompt-secrets hook',
-      previewDescription: 'Masks hardcoded secrets in your prompts before the agent sees them.',
-      replacedIds: ['prompt-secrets-instructions'],
-      dependencies: [sonarSecretsBinaryDependency],
-      postInstallExample: secretsScanningExample(
-        'Copilot',
-        '  SonarQube will mask the token before the prompt reaches the agent.',
-      ),
-      resources: [
-        wholeFile({
-          id: 'prompt-secrets-script',
-          displayName: 'Copilot prompt secrets hook script',
-          targetPath: resolvePromptSecretsHookScriptPath,
-          content: {
-            unix: buildUnixHookScript('agent-secrets-masking --agent copilot'),
-            windows: buildWindowsHookScript('agent-secrets-masking --agent copilot'),
-          },
-          executable: true,
-        }),
-        jsonPatch({
-          id: 'copilot-prompt-secrets-hooks-config',
-          displayName: 'Copilot prompt secrets hook configuration',
-          targetPath: resolveHooksJsonPath,
-          defaultValue: { version: 1, hooks: {} },
-          patch: (document, context) =>
-            upsertCopilotHooks(document, PROMPT_SECRETS_MARKER, {
-              userPromptTransformed: buildCopilotHookEntry(
-                resolveCopilotHookCommandPath(context, resolvePromptSecretsHookScriptPath(context)),
-              ),
-            }),
-          removePatch: (document) => removeCopilotHooks(document, [PROMPT_SECRETS_MARKER]),
-        }),
-      ],
+    createSecretsDetectionFeature<CopilotIntegrationOptions>({
+      resources: createCopilotSecretsDetectionResources(),
+      replacedIds: ['pre-tool-use-hook', 'prompt-secrets-hook', 'prompt-secrets-instructions'],
       legacyCleanups: [
         textSnippetRemover({
           id: 'prompt-secrets-instructions-file',
@@ -151,7 +82,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
           endMarker: sonarEndMarker('copilot-prompt-secrets'),
         }),
       ],
-    },
+    }),
     createVortexFeature<CopilotIntegrationOptions>(
       [
         createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveInstructionsPath)]),
@@ -229,4 +160,56 @@ function resolveHooksDir(context: IntegrationContext): string {
   return context.scope === 'global'
     ? join(context.targetRoot, '.copilot', 'hooks')
     : join(context.targetRoot, PROJECT_HOOKS_REL_DIR);
+}
+
+function createCopilotSecretsDetectionResources(): ResourceDeclaration[] {
+  return [
+    wholeFile({
+      id: 'pretool-secrets-script',
+      displayName: 'Copilot pre-tool-use hook script',
+      targetPath: resolveCopilotHookScriptPath,
+      content: {
+        unix: buildUnixHookScript('copilot-pre-tool-use'),
+        windows: buildWindowsHookScript('copilot-pre-tool-use'),
+      },
+      executable: true,
+    }),
+    jsonPatch({
+      id: 'copilot-hooks-config',
+      displayName: 'Copilot hooks configuration',
+      targetPath: resolveHooksJsonPath,
+      defaultValue: { version: 1, hooks: {} },
+      patch: (document, context) =>
+        upsertCopilotHooks(document, SONAR_SECRETS_MARKER, {
+          preToolUse: buildCopilotHookEntry(
+            resolveCopilotHookCommandPath(context, resolveCopilotHookScriptPath(context)),
+          ),
+        }),
+      removePatch: (document) => removeCopilotHooks(document, [SONAR_SECRETS_MARKER]),
+    }),
+
+    wholeFile({
+      id: 'prompt-secrets-script',
+      displayName: 'Copilot prompt secrets hook script',
+      targetPath: resolvePromptSecretsHookScriptPath,
+      content: {
+        unix: buildUnixHookScript('agent-secrets-masking --agent copilot'),
+        windows: buildWindowsHookScript('agent-secrets-masking --agent copilot'),
+      },
+      executable: true,
+    }),
+    jsonPatch({
+      id: 'copilot-prompt-secrets-hooks-config',
+      displayName: 'Copilot prompt secrets hook configuration',
+      targetPath: resolveHooksJsonPath,
+      defaultValue: { version: 1, hooks: {} },
+      patch: (document, context) =>
+        upsertCopilotHooks(document, PROMPT_SECRETS_MARKER, {
+          userPromptTransformed: buildCopilotHookEntry(
+            resolveCopilotHookCommandPath(context, resolvePromptSecretsHookScriptPath(context)),
+          ),
+        }),
+      removePatch: (document) => removeCopilotHooks(document, [PROMPT_SECRETS_MARKER]),
+    }),
+  ];
 }

@@ -207,6 +207,68 @@ describe('ProjectBindingsClient', () => {
     });
   });
 
+  describe('resolveGitRemoteBinding', () => {
+    const remoteUrl = 'https://github.com/foo/bar.git';
+    let cloudClient: ProjectBindingsClient;
+
+    beforeEach(() => {
+      cloudClient = new ProjectBindingsClient(new SonarHttpClient(SONARCLOUD_URL, TOKEN));
+    });
+
+    function mockCloudBinding(searchResponse: Response) {
+      fetchSpy = spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(okJsonResponse({ bindings: [{ projectId: 'proj:abc' }] }))
+        .mockResolvedValueOnce(searchResponse);
+    }
+
+    it('is in-org when the organization contains the bound project', async () => {
+      mockCloudBinding(okJsonResponse({ components: [{ key: 'cloud-project-key' }] }));
+      expect(await cloudClient.resolveGitRemoteBinding(remoteUrl, 'my-org').orThrow()).toEqual({
+        kind: 'in-org',
+        projectKey: 'cloud-project-key',
+      });
+    });
+
+    it('is other-org when the bound project is not in the organization', async () => {
+      mockCloudBinding(okJsonResponse({ components: [] }));
+      expect(await cloudClient.resolveGitRemoteBinding(remoteUrl, 'my-org').orThrow()).toEqual({
+        kind: 'other-org',
+      });
+    });
+
+    it('is unknown, not other-org, when search_projects returns no components array', async () => {
+      mockCloudBinding(okJsonResponse({}));
+      expect(await cloudClient.resolveGitRemoteBinding(remoteUrl, 'my-org').orThrow()).toEqual({
+        kind: 'unknown',
+      });
+    });
+
+    it('is unbound when SonarCloud has no binding for the remote', async () => {
+      fetchSpy = mockFetch({ bindings: [] });
+      expect(await cloudClient.resolveGitRemoteBinding(remoteUrl, 'my-org').orThrow()).toEqual({
+        kind: 'unbound',
+      });
+    });
+
+    it('is unknown on SonarCloud when the organization is missing', async () => {
+      fetchSpy = mockFetch({ bindings: [{ projectId: 'proj:abc' }] });
+      expect(await cloudClient.resolveGitRemoteBinding(remoteUrl).orThrow()).toEqual({
+        kind: 'unknown',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('is in-org on SonarQube Server when a binding exists', async () => {
+      fetchSpy = mockFetch({
+        projectBindings: [{ projectId: 'proj:123', projectKey: 'my-project' }],
+      });
+      expect(await client.resolveGitRemoteBinding(remoteUrl).orThrow()).toEqual({
+        kind: 'in-org',
+        projectKey: 'my-project',
+      });
+    });
+  });
+
   describe('listGitlabDopSettings', () => {
     it('returns only gitlab-type settings', async () => {
       fetchSpy = mockFetch({
