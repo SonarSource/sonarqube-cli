@@ -310,10 +310,12 @@ export class SonarArchitectureApi implements ArchitectureApi {
       })
       .orThrow()
       .catch((error: unknown) => this.collectionFailure(error));
-    if (
-      !Array.isArray(response?.intendedArchitectures) ||
-      response.intendedArchitectures.length > 1
-    ) {
+    if (!Array.isArray(response?.intendedArchitectures)) {
+      throw incompatibleResponse(
+        'Invalid public intended architecture response: intendedArchitectures must be an array.',
+      );
+    }
+    if (response.intendedArchitectures.length > 1) {
       throw incompatibleResponse(
         'Invalid public intended architecture response: expected at most one resource.',
       );

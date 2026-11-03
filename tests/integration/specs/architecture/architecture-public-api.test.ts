@@ -1251,6 +1251,19 @@ describe('sonar architecture intended set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
     expect((await readSaved()).models).toEqual(publicModels(NEXT));
   });
+  for (const body of ['null', '{}', '{"intendedArchitectures":{}}']) {
+    it(`reports the intended collection shape separately from resource count: ${body}`, async () => {
+      const server = await startWith((fake) =>
+        fake.withStatus('project-intended-architectures', 200, body, 'GET'),
+      );
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('intendedArchitectures must be an array');
+      expect(result.stderr).toContain('supported public Architecture API contract');
+      expect(result.stderr).not.toContain('expected at most one resource');
+      expect(writes(server)).toEqual([]);
+    });
+  }
   it('rejects ambiguous multiple resources before any deletion', async () => {
     const server = await startWith((fake) =>
       fake.withIntended(INTENDED).withAdditionalIntended(NEXT),
@@ -1258,6 +1271,7 @@ describe('sonar architecture intended set on the public API', () => {
     const result = await setFile({ models: [] });
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('expected at most one resource');
+    expect(result.stderr).not.toContain('intendedArchitectures must be an array');
     expect(writes(server)).toEqual([]);
   });
   it('confirms POST committed before its response failed without another write', async () => {
