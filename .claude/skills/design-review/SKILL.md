@@ -9,7 +9,13 @@ Four checks, each answered by reading the code. Do not recite principles (KISS, 
 they give nothing to verify and produce remarks that people stop reading. A finding exists only
 when it carries the locations that prove it. If there is nothing to report, say so in one line.
 
-Read the diff first: `git diff $(git merge-base HEAD origin/master)...HEAD`.
+Read the diff first, against the target branch of the pull request. For a stacked pull request
+that is the parent branch, not master, or the diff also contains every ancestor in the stack:
+
+```
+BASE=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo master)
+git fetch origin "$BASE" && git diff "origin/$BASE"...HEAD
+```
 
 ## 1. Is this flow already written next door?
 
@@ -22,7 +28,7 @@ For each new flow, branch or command:
 1. Write its steps down in one line each.
 2. Search the sibling modules (the same directory and the one next to it) for the same
    sequence of steps, not for the same text.
-3. Report a match only with both locations, as `file:line` and `file:line`.
+3. Report a match only with every location, one `file:line` per copy.
 
 Two copies of a short sequence are acceptable. At three copies, or two copies of a long one,
 the finding is to extract the shared steps and keep only the variation in each caller.
@@ -48,8 +54,8 @@ inline it.
 
 ## How to report
 
-- One finding per issue: what repeats or what is missing, both locations, and the concrete
-  refactor (which function to extract, where it lives, what stays in each caller).
+- One finding per issue: what repeats or what is missing, every location (one `file:line` per
+  copy, so a third copy lists all three), and the concrete refactor (which function to extract, where it lives, what stays in each caller).
 - No principle names, no style remarks, nothing a linter already says.
 - Distinguish a blocking finding (a third copy, an unreviewable size) from a suggestion.
 - When used by an author before opening a pull request, fix the findings or explain in the
