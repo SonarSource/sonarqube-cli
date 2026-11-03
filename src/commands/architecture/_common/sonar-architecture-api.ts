@@ -47,6 +47,7 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import { collectionFailure, incompatibleResponse } from './errors.ts';
 import { type FindingFilters, type FindingPage, parseProjectFinding } from './findings.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
@@ -438,7 +439,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
           pageSize,
         },
       )
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     const page = result?.page;
     if (
       !Array.isArray(result?.findings) ||
@@ -448,7 +450,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       page.total < 0 ||
       result.findings.length > pageSize
     )
-      throw new CommandFailedError('Invalid public findings page; no complete page was read.');
+      throw incompatibleResponse('Invalid public findings page; no complete page was read.');
     const findings = result.findings.map(parseProjectFinding);
     if (
       findings.some(
@@ -458,7 +460,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
           (filters.language && item.language !== filters.language),
       )
     )
-      throw new CommandFailedError(
+      throw incompatibleResponse(
         'The public findings page returned a finding outside the requested filters.',
       );
     return { findings, page };

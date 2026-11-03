@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { incompatibleResponse } from './errors.ts';
 
 export const DEFAULT_FINDINGS_PAGE_SIZE = 50;
 export const FINDING_CATEGORIES = ['deviation', 'flaw', 'smell'] as const;
@@ -158,5 +159,5 @@ function reasonOf(
   return details.reason as NonNullable<FindingDetails['reason']>;
 }
 function invalidFinding(reason: string): CommandFailedError {
-  return new CommandFailedError(`Invalid public finding response: ${reason}.`);
+  return incompatibleResponse(`Invalid public finding response: ${reason}.`);
 }

@@ -257,6 +257,7 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Invalid public finding response');
+    expect(result.stderr).toContain('supported public Architecture API contract');
   });
   it.each([
     { findings: [] },
@@ -270,6 +271,7 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Invalid public findings page');
+    expect(result.stderr).toContain('supported public Architecture API contract');
   });
   it('rejects findings that do not match the requested filter', async () => {
     await configured(true, (api) =>
@@ -283,7 +285,35 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop --category smell');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('outside the requested filters');
+    expect(result.stderr).toContain('supported public Architecture API contract');
   });
+  for (const cloud of [true, false]) {
+    it(`explains malformed findings pages on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      await configured(cloud, (api) =>
+        api.withStatus('project-findings', 200, '{"findings":null}', 'GET'),
+      );
+      const result = await h.run('arch findings get -p shop --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('Invalid public findings page');
+      expect(result.stderr).toContain('supported public Architecture API contract');
+      expect(result.stderr).toContain('same Architecture API');
+    });
+
+    it(`explains an unavailable public findings endpoint on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      const server = await configured(cloud, (api) =>
+        api.withStatus('project-findings', 404, '{"message":"Missing endpoint"}', 'GET'),
+      );
+      const result = await h.run('arch findings get -p shop --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('public Architecture API endpoint was not found (HTTP 404)');
+      expect(result.stderr).toContain('feature availability, Browse permission and API routing');
+      if (cloud) expect(result.stderr).not.toContain('older Server versions');
+      else expect(result.stderr).toContain('older Server versions');
+      expect(requests(server)).toHaveLength(1);
+    });
+  }
   it.each([401, 403, 404, 500])('reports backend error %d without fallback', async (status) => {
     const server = await configured(true, (api) =>
       api.withStatus('project-findings', status, '{"message":"Unavailable"}', 'GET'),
