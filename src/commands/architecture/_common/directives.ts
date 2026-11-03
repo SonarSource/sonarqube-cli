@@ -415,24 +415,28 @@ export async function applyDirectiveChanges(
     const confirmed = result.created.length + result.updated.length;
     const preWriteFailure = error instanceof DirectivePreWriteError;
     if (!confirmed && preWriteFailure)
-      throw new CommandFailedError(`${error.message} No PATCH was sent; nothing was changed.`, {
-        cause: error,
-      });
+      throw new CommandFailedError(
+        `${error.message} No write request was sent; nothing was changed.`,
+        {
+          cause: error,
+        },
+      );
     if (!confirmed && isDefiniteRejection(error)) throw error;
-    const outcome = preWriteFailure
-      ? 'The next update was not sent.'
-      : isDefiniteRejection(error)
-        ? 'The server rejected the next directive.'
-        : 'The attempted change may already have been applied.';
     const followup = preWriteFailure
       ? 'Only the confirmed writes above were applied.'
       : `Inspect ${target} before retrying. Attempted ${attempted}.`;
     throw new CommandFailedError(
-      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. ${outcome} ${followup} ${error instanceof Error ? error.message : String(error)}`,
+      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. ${directiveFailureOutcome(error)} ${followup} ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }
   return result;
+}
+
+function directiveFailureOutcome(error: unknown): string {
+  if (error instanceof DirectivePreWriteError) return 'The next change was not sent.';
+  if (isDefiniteRejection(error)) return 'The server rejected the next directive.';
+  return 'The attempted change may already have been applied.';
 }
 
 function inSequence<T>(items: T[], action: (item: T) => Promise<void>): Promise<void> {

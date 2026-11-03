@@ -381,7 +381,7 @@ describe('public project directives', () => {
         expect(posts).toHaveLength(create ? 1 : 0);
         if (create) {
           expect(result.stderr).toContain('stopped after 1 confirmed writes');
-          expect(result.stderr).toContain('The next update was not sent');
+          expect(result.stderr).toContain('The next change was not sent');
           const saved = await h.run('arch directives get -p shop --format json');
           expect(saved.exitCode).toBe(0);
           const created = (
@@ -390,7 +390,7 @@ describe('public project directives', () => {
           expect(created).toBeDefined();
           expect(result.stderr).toContain(created!.id);
         } else {
-          expect(result.stderr).toContain('No PATCH was sent');
+          expect(result.stderr).toContain('No write request was sent');
           expect(result.stderr).toContain('nothing was changed');
         }
       });
