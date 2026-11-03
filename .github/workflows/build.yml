@@ -497,9 +497,14 @@ jobs:
           path: tests/coverage/reports/integration/
 
   integration-and-e2e-windows:
-    name: Integration and E2E Tests - windows
+    name: Integration and E2E Tests - windows (shard ${{ matrix.shard }})
     runs-on: warp-custom-windows-2022-s
     needs: [prepare, build-binaries]
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -522,6 +527,10 @@ jobs:
           os: windows
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-windows-x86-64
+          integration-shard-index: ${{ format('{0}', matrix.shard) }}
+          integration-shard-total: '4'
+          integration-sharded: 'true'
+          skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   scan:
     name: SonarQube Analysis

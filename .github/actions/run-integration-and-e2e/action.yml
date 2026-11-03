@@ -104,6 +104,9 @@ runs:
       shell: bash
       env:
         INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
+        INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
+        INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
+        INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
         USE_COVERAGE: '0'
       run: bash .github/scripts/run-integration-scope.sh
 
