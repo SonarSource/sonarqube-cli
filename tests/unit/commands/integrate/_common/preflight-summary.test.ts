@@ -36,7 +36,7 @@ describe('printGitPreflightSummary', () => {
   let spawnSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockImplementation((_cmd, args) => {
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockImplementation((_cmd, args) => {
       if (args[0] === 'config') {
         return Promise.resolve({ exitCode: 1, stdout: '', stderr: '' });
       }

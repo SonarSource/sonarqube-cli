@@ -599,7 +599,13 @@ export class FakeSonarQubeServerBuilder {
   private readonly dopRepositoriesByOrgId: Map<string, DopRepositoryConfig[]> = new Map();
   /** Keyed by org legacy id, for `GET /dop-translation/organization-bindings`. */
   private readonly organizationBindingsByOrgId: Map<string, string> = new Map();
+  /** Bindings that show up only after some lookups, as when the user finishes linking in the browser. */
+  private readonly organizationBindingsAppearingLater: Map<
+    string,
+    { devOpsPlatform: string; afterLookups: number; lookups: number }
+  > = new Map();
   private readonly projectKeysByGitRemote: Map<string, string> = new Map();
+  private readonly otherOrgGitRemotes: Set<string> = new Set();
   private revokeTokenStatusCode = 204;
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
@@ -736,11 +742,34 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Like {@link withOrganizationBinding}, but the endpoint reports no binding for the first
+   * `afterLookups` lookups of this organization and the platform from then on.
+   */
+  withOrganizationBindingAppearingAfter(
+    organizationId: string,
+    devOpsPlatform: string,
+    afterLookups: number,
+  ): this {
+    this.organizationBindingsAppearingLater.set(organizationId, {
+      devOpsPlatform,
+      afterLookups,
+      lookups: 0,
+    });
+    return this;
+  }
+
+  /**
    * Bind a git remote URL to a project for the Cloud lookup: `GET /dop-translation/project-bindings`
    * resolves the URL to a project id, then `GET /api/components/search_projects` resolves the id to a key.
    */
   withGitRemoteBinding(remoteUrl: string, projectKey: string): this {
     this.projectKeysByGitRemote.set(remoteUrl, projectKey);
+    return this;
+  }
+
+  /** Bind a git remote to a Cloud project that the active organization does not contain. */
+  withGitRemoteBoundInOtherOrg(remoteUrl: string): this {
+    this.otherOrgGitRemotes.add(remoteUrl);
     return this;
   }
 
@@ -1108,7 +1137,9 @@ export class FakeSonarQubeServerBuilder {
       currentUserId,
       dopRepositoriesByOrgId,
       organizationBindingsByOrgId,
+      organizationBindingsAppearingLater,
       projectKeysByGitRemote,
+      otherOrgGitRemotes,
       revokeTokenStatusCode,
       revokeTokenResponseBody,
       sqaaResponse,
@@ -1953,10 +1984,14 @@ export class FakeSonarQubeServerBuilder {
             return new Response('{}', { status: projectBindingsStatusCode });
           }
           const projectKey = projectKeysByGitRemote.get(query.url ?? '');
-          return new Response(
-            JSON.stringify({ bindings: projectKey ? [{ projectId: `id-${projectKey}` }] : [] }),
-            { headers: { 'Content-Type': 'application/json' } },
-          );
+          const bindings = projectKey
+            ? [{ projectId: `id-${projectKey}` }]
+            : otherOrgGitRemotes.has(query.url ?? '')
+              ? [{ projectId: 'id-in-another-org' }]
+              : [];
+          return new Response(JSON.stringify({ bindings }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/components/search_projects' && req.method === 'GET') {
@@ -1983,8 +2018,16 @@ export class FakeSonarQubeServerBuilder {
           // defaults to the org key itself in this fake server (see above), so matching on
           // `key` mirrors real lookup-by-legacy-id behavior for these tests.
           const org = memberOrganizations.find((o) => o.key === query.organizationId);
+          const appearingLater = organizationBindingsAppearingLater.get(query.organizationId ?? '');
+          if (appearingLater) {
+            appearingLater.lookups += 1;
+          }
           const devOpsPlatform =
-            organizationBindingsByOrgId.get(query.organizationId ?? '') ?? org?.alm?.key;
+            (appearingLater && appearingLater.lookups > appearingLater.afterLookups
+              ? appearingLater.devOpsPlatform
+              : undefined) ??
+            organizationBindingsByOrgId.get(query.organizationId ?? '') ??
+            org?.alm?.key;
           const organizationBindings = devOpsPlatform ? [{ devOpsPlatform }] : [];
           return new Response(
             JSON.stringify({
