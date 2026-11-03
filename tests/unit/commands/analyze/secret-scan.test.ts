@@ -86,7 +86,7 @@ beforeEach(() => {
   updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
     update(stateRepository.loadState()),
   );
-  spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+  spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
     exitCode: 0,
     stdout: '{}',
     stderr: '',
@@ -473,7 +473,7 @@ describe('secretCheckCommand: scan failures', () => {
 
 describe('secretCheckCommand: scan error handling', () => {
   it('shows timeout hint and exits 1 when scan times out', async () => {
-    spawnSpy.mockRejectedValue(new Error('Scan timed out after 30000ms'));
+    spawnSpy.mockRejectedValue(new Error('Scan timed out after 60000ms'));
 
     const existsSpy = mockBinaryExists(true);
     let caughtError: unknown;
@@ -486,7 +486,7 @@ describe('secretCheckCommand: scan error handling', () => {
     }
 
     expect(caughtError).toBeInstanceOf(CommandFailedError);
-    expect((caughtError as CommandFailedError).message).toBe('Error: Scan timed out after 30000ms');
+    expect((caughtError as CommandFailedError).message).toBe('Error: Scan timed out after 60000ms');
     expect((caughtError as CommandFailedError).remediationHint).toBe(
       'Try scanning a smaller file or check system resources.',
     );
