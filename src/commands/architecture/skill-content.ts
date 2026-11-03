@@ -97,4 +97,9 @@ recovery instructions, inspect the current state, and obtain approval before res
 Intended operations on SonarQube Server await public project UUID resolution. Deviations,
 structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
+
+## Project directives
+
+Read a page with \`sonar architecture directives get\` or one directive with \`--id <id>\`.
+Retain pagination metadata and use exact project keys.
 `;
