@@ -26,7 +26,7 @@ import { isAbsolute, join } from 'node:path';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import { normalizePath } from '../../io/fs-utils.ts';
-import { spawnProcess } from '../../process/process.ts';
+import { ProcessTimedOutError, spawnProcessWithTimeout } from '../../process/process.ts';
 
 /** Filename used by the `pre-commit` framework (https://pre-commit.com) for its config. */
 export const PRE_COMMIT_CONFIG_FILE = '.pre-commit-config.yaml';
@@ -67,6 +67,18 @@ export async function resolveEffectiveGitHooksDir(root: string): Promise<string>
   });
 }
 
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
+
+function runGit(args: string[], cwd: string) {
+  return spawnProcessWithTimeout(
+    'git',
+    args,
+    { cwd },
+    GIT_COMMAND_TIMEOUT_MS,
+    `git ${args[0] ?? 'command'} timed out`,
+  );
+}
+
 async function resolveGitHooksDirWithConfigScope(
   root: string,
   configCommand: string[],
@@ -74,8 +86,9 @@ async function resolveGitHooksDirWithConfigScope(
 ): Promise<string> {
   let configResult;
   try {
-    configResult = await spawnProcess('git', configCommand, { cwd: root });
-  } catch {
+    configResult = await runGit(configCommand, root);
+  } catch (error) {
+    if (error instanceof ProcessTimedOutError) throw error;
     configResult = null;
   }
   if (configResult?.exitCode === 0) {
@@ -96,7 +109,7 @@ async function resolveGitHooksDirWithConfigScope(
 
   let result;
   try {
-    result = await spawnProcess('git', fallback.command, { cwd: root });
+    result = await runGit(fallback.command, root);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(`Failed to run git [${message}]`, {
