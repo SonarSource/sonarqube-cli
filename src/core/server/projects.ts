@@ -20,7 +20,12 @@
 import type { ResultAsync } from '../result.ts';
 import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
-import type { ProjectsSearchParams, ProjectsSearchResponse } from './types.ts';
+import type {
+  ComponentShowResponse,
+  ProjectsSearchParams,
+  ProjectsSearchResponse,
+  SonarQubeProject,
+} from './types.ts';
 
 /**
  * The `ps` (page size) ceiling on nearly every paginated SonarQube list endpoint - not specific
@@ -65,5 +70,30 @@ export class ProjectsClient {
     }
 
     return this.client.get<ProjectsSearchResponse>('/api/components/search', queryParams);
+  }
+
+  /**
+   * Resolves the project with this key, or `null` when the server has no such project. Only a
+   * 404, a component that is not a project, or (on Cloud) a project of another organization
+   * resolves to `null`; every other failure propagates, so an outage never reads as "missing".
+   */
+  findProject(
+    projectKey: string,
+    organization?: string,
+  ): ResultAsync<SonarQubeProject | null, HttpClientError> {
+    return this.client
+      .getOrNullIf404<ComponentShowResponse>('/api/components/show', { component: projectKey })
+      .map((response) => {
+        const component = response?.component;
+        if (!component) {
+          return null;
+        }
+        const isProject = component.qualifier === 'TRK';
+        const inOrganization =
+          !organization || !component.organization || component.organization === organization;
+        return isProject && inOrganization
+          ? { key: component.key, name: component.name ?? component.key }
+          : null;
+      });
   }
 }
