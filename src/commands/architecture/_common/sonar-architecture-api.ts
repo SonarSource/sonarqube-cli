@@ -413,11 +413,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
 
   private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
     return this.getDirective(id).catch((error: unknown) => {
-      if (isDefiniteRejection(error)) throw error;
-      throw new DirectivePreWriteError(
-        `The current state of directive ${id} could not be verified.`,
-        { cause: error },
-      );
+      const message =
+        isDefiniteRejection(error) && error instanceof Error
+          ? error.message
+          : `The current state of directive ${id} could not be verified.`;
+      throw new DirectivePreWriteError(message, { cause: error });
     });
   }
 
