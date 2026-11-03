@@ -42,6 +42,8 @@ import {
   directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
+  DirectivePreWriteError,
+  isDefiniteRejection,
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
@@ -404,6 +406,41 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The public directive response returned a different id or project. Nothing was changed.',
       );
     return directive;
+  }
+
+  private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
+    return this.getDirective(id).catch((error: unknown) => {
+      const message =
+        isDefiniteRejection(error) && error instanceof Error
+          ? error.message
+          : `The current state of directive ${id} could not be verified.`;
+      throw new DirectivePreWriteError(message, { cause: error });
+    });
+  }
+
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.readDirectiveBeforeWrite(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
+    const updated = parseProjectDirective(response);
+    const projectId = await this.projectId('Project directives');
+    if (
+      updated.id.toLowerCase() !== directiveId(id) ||
+      updated.projectId !== projectId ||
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
+    )
+      throw new CommandFailedError(
+        'The directive update response did not confirm the requested directive. Inspect it before retrying.',
+      );
+    return updated;
   }
 
   private directivePath(id: string): string {
