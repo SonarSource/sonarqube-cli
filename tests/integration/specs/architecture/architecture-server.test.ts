@@ -279,6 +279,35 @@ describe('Server public architecture project lookup', () => {
     expect(writes.map((r) => r.method)).toEqual(['POST', 'PATCH']);
   });
 
+  for (const cloud of [false, true]) {
+    it(`reports a missing Architecture collection without blaming a resolved project on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      const builder = h
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('shop', (p) =>
+          p.withArchitecture((a) =>
+            a.withStatus('project-intended-architectures', 404, '{"message":"Missing endpoint"}', 'GET'),
+          ),
+        );
+      const server = await (cloud ? builder.asSonarCloud() : builder).start();
+      h.withAuth(
+        cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
+        'test-token',
+        cloud ? 'my-org' : undefined,
+      );
+      const result = await h.run('arch intended get -p shop --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('public Architecture API endpoint');
+      expect(result.stderr).not.toContain("Project 'shop' or its architecture was not found");
+      const lookup = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/v2/components/projects');
+      expect(lookup).toHaveLength(cloud ? 0 : 1);
+      if (cloud) expect(result.stderr).not.toContain('older Server versions');
+      else expect(result.stderr).toContain('older Server versions');
+    });
+  }
+
   it('encodes the project key without changing the returned project id', async () => {
     const server = await h
       .newFakeServer()
@@ -288,11 +317,13 @@ describe('Server public architecture project lookup', () => {
     h.withAuth(server.baseUrl(), 'test-token');
     const result = await h.run('arch intended get -p shop:api-v2 --format json');
     expect(result.exitCode).toBe(0);
+    const requests = server.getRecordedRequests();
+    expect(requests.find((r) => r.path === '/api/v2/components/projects')?.query.keys).toBe(
+      'shop:api-v2',
+    );
     expect(
-      server
-        .getRecordedRequests()
-        .some((r) => r.path === '/api/v2/architecture/project-intended-architectures'),
-    ).toBe(true);
+      requests.find((r) => r.path === '/api/v2/architecture/project-intended-architectures')?.query.projectId,
+    ).toBe('shop:api-v2-project-id');
   });
 
   it('accepts an empty intended response with a null unsaved model id', async () => {
