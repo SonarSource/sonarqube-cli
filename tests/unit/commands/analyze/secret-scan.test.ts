@@ -86,7 +86,7 @@ beforeEach(() => {
   updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
     update(stateRepository.loadState()),
   );
-  spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+  spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
     exitCode: 0,
     stdout: '{}',
     stderr: '',
