@@ -93,7 +93,7 @@ describe('Server public architecture project lookup', () => {
     const requests = server.getRecordedRequests();
     expect(requests.some((r) => r.path.includes('project_branches'))).toBe(false);
     const post = requests.find(
-      (r) => r.method === 'POST' && r.path.endsWith('intended-architectures'),
+      (r) => r.method === 'POST' && r.path.endsWith('project-intended-architectures'),
     );
     expect(JSON.parse(post!.body!).projectId).toBe('shop-project-id');
     expect(requests.some((r) => r.path === '/api/v2/components/projects')).toBe(true);
@@ -200,7 +200,7 @@ describe('Server public architecture project lookup', () => {
     );
   });
 
-  it.each(['intended-architectures', 'project-directives'] as const)(
+  it.each(['project-intended-architectures', 'project-directives'] as const)(
     'explains unavailable public Architecture APIs on Server (%s)',
     async (resource) => {
       const server = await h
@@ -213,7 +213,7 @@ describe('Server public architecture project lookup', () => {
         )
         .start();
       h.withAuth(server.baseUrl(), 'test-token');
-      const target = resource === 'intended-architectures' ? 'intended' : 'directives';
+      const target = resource === 'project-intended-architectures' ? 'intended' : 'directives';
       const result = await h.run(`arch ${target} get -p shop --format json`);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('older Server versions');
@@ -286,7 +286,12 @@ describe('Server public architecture project lookup', () => {
         .withAuthToken('test-token')
         .withProject('shop', (p) =>
           p.withArchitecture((a) =>
-            a.withStatus('intended-architectures', 404, '{"message":"Missing endpoint"}', 'GET'),
+            a.withStatus(
+              'project-intended-architectures',
+              404,
+              '{"message":"Missing endpoint"}',
+              'GET',
+            ),
           ),
         );
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
@@ -322,7 +327,7 @@ describe('Server public architecture project lookup', () => {
       'shop:api-v2',
     );
     expect(
-      requests.find((r) => r.path === '/api/v2/architecture/intended-architectures')?.query
+      requests.find((r) => r.path === '/api/v2/architecture/project-intended-architectures')?.query
         .projectId,
     ).toBe('shop:api-v2-project-id');
   });
@@ -334,7 +339,7 @@ describe('Server public architecture project lookup', () => {
       .withProject('shop', (p) =>
         p.withArchitecture((a) =>
           a.withStatus(
-            'intended-architectures',
+            'project-intended-architectures',
             200,
             '{"id":null,"intendedArchitectures":[]}',
             'GET',
