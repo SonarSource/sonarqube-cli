@@ -56,7 +56,7 @@ export async function setProjectDirectives(
     dry_run: options.dryRun === true,
     removed: 0,
     added: result.toCreate.length,
-    changed: 0,
+    changed: result.changes.length,
     created: result.created.length,
     skipped: result.skipped,
   });
@@ -69,13 +69,27 @@ export async function setProjectDirectives(
     if (item.description !== undefined)
       ctx.console.info(`  description: ${JSON.stringify(item.description)}`);
   }
+  for (const change of result.changes) printUpdate(ctx, prefix, change);
   ctx.console.info(`Skipped ${result.skipped} existing, repeated or unchanged directives.`);
   ctx.console.info(
     options.dryRun
       ? 'Dry run: nothing was written.'
-      : `Created ${result.created.length} directives. Unmentioned directives were retained.`,
+      : `Created ${result.created.length} directives. Updated ${result.updated.length} directives. Unmentioned directives were retained.`,
   );
   ctx.console.warn(
     'Concurrent edits can race the reads; the public API has no conditional writes. Changes are applied individually without automatic retry or rollback.',
   );
+}
+
+function printUpdate(
+  ctx: CommandAuthenticatedInvocationContext,
+  prefix: string,
+  change: Awaited<ReturnType<typeof applyDirectiveChanges>>['changes'][number],
+): void {
+  ctx.console.info(`${prefix} update: ${change.id}`);
+  for (const key of Object.keys(change.after) as (keyof typeof change.after)[])
+    if (change.before[key] !== change.after[key])
+      ctx.console.info(
+        `  ${key}: ${change.before[key] === undefined ? '(unset)' : JSON.stringify(change.before[key])} -> ${JSON.stringify(change.after[key])}`,
+      );
 }

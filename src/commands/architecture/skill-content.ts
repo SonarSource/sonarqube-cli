@@ -104,4 +104,5 @@ Read a page with \`sonar architecture directives get\` or one directive with \`-
 Retain pagination metadata and use exact project keys.
 Use \`sonar architecture directives set --file <file> --dry-run\` to preview a change file.
 It accepts a create array; creation is additive and skips duplicates. Apply only after user confirmation.
+An update array targets explicit IDs and retains unspecified fields. Optional fields cannot be cleared with null.
 `;
