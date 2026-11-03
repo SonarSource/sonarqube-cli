@@ -27,7 +27,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
-import { spawnProcess } from '@/core/process/process.ts';
+import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -162,10 +162,18 @@ async function getUntrackedNonIgnoredFiles(cwd: string): Promise<string[]> {
   return parseNulSeparated(result);
 }
 
+const GIT_COMMAND_TIMEOUT_MS = 15_000;
+
 async function runGit(args: string[], cwd: string): Promise<string> {
   let result;
   try {
-    result = await spawnProcess('git', args, { cwd });
+    result = await spawnProcessWithTimeout(
+      'git',
+      args,
+      { cwd },
+      GIT_COMMAND_TIMEOUT_MS,
+      `git ${args[0] ?? 'command'} timed out`,
+    );
   } catch (err) {
     throw new CommandFailedError(`Failed to run git: ${(err as Error).message}`, {
       remediationHint:
