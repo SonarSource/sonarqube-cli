@@ -39,7 +39,7 @@ const FULL_EXPORT_HINT =
 export const VALID_MODEL_RULES =
   'Each model requires type (file or namespace), a supported language, groups and constraints arrays. ' +
   'Groups require a label; optional patterns contain strings. Constraints require from and to strings. ' +
-  'Sibling group labels must be unique and duplicate constraints are rejected by this client.';
+  'Sibling group labels must be unique and constraint endpoints must name groups (or use public wildcard selectors). Self-references and duplicate constraints are rejected by this client.';
 
 /** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
@@ -53,6 +53,8 @@ export interface IntendedFile {
 interface GroupContext {
   language: Ecosystem;
   keys: Set<string>;
+  endpointCounts: Map<string, number>;
+  importedKeys: string[];
   count: number;
   problems: string[];
 }
@@ -129,6 +131,8 @@ function parseModel(
   const context: GroupContext = {
     language,
     keys: new Set(),
+    endpointCounts: new Map(),
+    importedKeys: [],
     count: 0,
     problems,
   };
@@ -181,6 +185,8 @@ function parseGroups(
     const name = `Group "${key}" (${language})`;
     if (context.keys.has(identity)) problems.push(`${name} is defined twice.`);
     context.keys.add(identity);
+    context.endpointCounts.set(key, (context.endpointCounts.get(key) ?? 0) + 1);
+    if (typeof raw.patternId === 'string') context.importedKeys.push(key);
 
     const patterns = parsePatterns(raw.patterns, name, problems);
     const group: IntendedGroup = {
@@ -246,6 +252,15 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
       return [];
     }
     const { from, to } = raw;
+    for (const endpoint of [from, to]) {
+      if (!isKnownConstraintEnd(endpoint, context)) {
+        problems.push(
+          `The ${language} constraint endpoint "${endpoint}" does not name a unique group.`,
+        );
+      }
+    }
+    if (from === to && !from.includes('*') && !from.includes('?'))
+      problems.push(`The ${language} constraint ${from} -> ${to} refers to itself.`);
     const pair = JSON.stringify([from, to]);
     if (seen.has(pair)) {
       problems.push(`The ${language} constraint ${from} -> ${to} is defined twice.`);
@@ -253,6 +268,15 @@ function parseConstraints(value: unknown, context: GroupContext): IntendedConstr
     seen.add(pair);
     return [{ from, to }];
   });
+}
+
+function isKnownConstraintEnd(endpoint: string, context: GroupContext): boolean {
+  // Wildcard selectors and server-resolved imported descendants keep their public semantics.
+  const count = context.endpointCounts.get(endpoint);
+  if (count !== undefined) return count === 1;
+  if (endpoint.includes('*') || endpoint.includes('?')) return true;
+  if (context.importedKeys.some((key) => endpoint.startsWith(`${key}/`))) return true;
+  return false;
 }
 
 function partialViewError(): CommandFailedError {

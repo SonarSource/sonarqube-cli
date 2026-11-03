@@ -68,6 +68,29 @@ const GRAPH: StructureGraph = {
   ],
 };
 
+describe('truncation reporting', () => {
+  it('marks edge-only truncation without a node cap', () => {
+    const graph = {
+      nodeCount: 16,
+      edgeCount: 15,
+      nodes: Array.from({ length: 16 }, (_, id) => ({
+        id,
+        name: `module${id}`,
+        kind: 'module',
+        edges:
+          id === 0
+            ? Array.from({ length: 15 }, (_, target) => ({ toId: target + 1, weight: 1 }))
+            : [],
+      })),
+    };
+    const sliced = sliceGraph(indexStructure(graph), undefined, 1, 150, 5);
+    expect(sliced.omittedLevel).toBeUndefined();
+    expect(sliced.omittedEdges).toBe(10);
+    expect(sliced.capped).toBe(true);
+    expect(sliceGraph(indexStructure(graph), undefined, 1, 150, 20).capped).toBe(false);
+  });
+});
+
 describe('indexStructure', () => {
   it('joins children with a separator inferred from the parent kind', () => {
     const index = indexStructure(GRAPH);
