@@ -102,4 +102,6 @@ unavailable operations, claim their results or substitute other analysis tools.
 
 Read a page with \`sonar architecture directives get\` or one directive with \`--id <id>\`.
 Retain pagination metadata and use exact project keys.
+Use \`sonar architecture directives set --file <file> --dry-run\` to preview a change file.
+It accepts a create array; creation is additive and skips duplicates. Apply only after user confirmation.
 `;
