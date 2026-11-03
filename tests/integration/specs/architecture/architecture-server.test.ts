@@ -308,6 +308,26 @@ describe('Server public architecture project lookup', () => {
     });
   }
 
+  for (const cloud of [false, true]) {
+    it(`keeps missing-project guidance separate from Server API availability on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      const builder = h.newFakeServer().withAuthToken('test-token').withProject('shop');
+      const server = await (cloud ? builder.asSonarCloud() : builder).start();
+      h.withAuth(
+        cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
+        'test-token',
+        cloud ? 'my-org' : undefined,
+      );
+      const result = await h.run('arch current get -p missing --language java --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain("Project 'missing' or its architecture was not found");
+      expect(result.stderr).toContain('Browse permission');
+      expect(result.stderr).not.toContain('older Server versions');
+      expect(
+        server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
+      ).toHaveLength(0);
+    });
+  }
+
   it('encodes the project key without changing the returned project id', async () => {
     const server = await h
       .newFakeServer()
