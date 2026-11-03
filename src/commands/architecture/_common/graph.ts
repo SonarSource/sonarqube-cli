@@ -92,7 +92,7 @@ export interface GraphSlice {
  * build node keys: the node's own `separator`, or one inferred from its kind when the DTO
  * leaves it out (`module:package.Class`, `folder/file`).
  */
-function childSeparator(node: StructureNode): string {
+export function childSeparator(node: StructureNode): string {
   if (node.separator) return node.separator;
   if (node.kind === 'file' && (node.nodes?.length ?? 0) > 0) {
     throw new CommandFailedError(

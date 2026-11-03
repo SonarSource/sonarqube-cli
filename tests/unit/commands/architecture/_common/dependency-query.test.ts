@@ -125,6 +125,28 @@ describe('targeted dependencies', () => {
     ).toEqual([]);
   });
 
+  it('omits ancestor-to-descendant aggregate rows while retaining deeper internal dependencies', () => {
+    const nested = fixture();
+    nested.graph.nodes[0].nodes![0].nodes![0].edges.push({ toId: 4, weight: 9 });
+    const target = { ...selection(), to: 'compat:a' };
+    expect(queryDependencies([nested], target, 1).dependencies).toEqual([]);
+    expect(queryDependencies([nested], target, 2).dependencies).toEqual([
+      { from: 'compat:a:A', to: 'compat:a:B', weight: 9 },
+    ]);
+    const reverse = { ...selection(), from: 'compat:a', to: 'compat' };
+    expect(queryDependencies([nested], reverse, 1).dependencies).toEqual([]);
+    expect(queryDependencies([nested], reverse, 2).dependencies).toEqual([
+      { from: 'compat:a:A', to: 'compat:a:B', weight: 9 },
+    ]);
+  });
+
+  it('does not index an unrelated malformed language graph', () => {
+    const unrelated = graph([node(99, 'other'), node(99, 'unrelated')], 'py');
+    expect(queryDependencies([unrelated, fixture()], selection(), 1).dependencies).toEqual([
+      { from: 'compat:a', to: 'impl:C', weight: 7 },
+    ]);
+  });
+
   it('rejects ambiguity and never combines endpoints from different graphs', () => {
     expect(() =>
       queryDependencies([fixture(), { ...fixture(), ecosystem: 'ts' }], selection(), 1),
@@ -144,7 +166,11 @@ describe('targeted dependencies', () => {
       queryDependencies([graph([node(1, 'compat'), node(1, 'impl')])], selection(), 1),
     ).toThrow('duplicate');
     expect(() =>
-      queryDependencies([graph([node(1, 'compat'), node(2, 'compat')])], selection(), 1),
+      queryDependencies(
+        [graph([node(1, 'compat'), node(2, 'compat'), node(3, 'impl')])],
+        selection(),
+        1,
+      ),
     ).toThrow('ambiguous');
     const broken = fixture();
     broken.graph.nodes[0].nodes![0].nodes![0].edges = [{ toId: 999, weight: 1 }];

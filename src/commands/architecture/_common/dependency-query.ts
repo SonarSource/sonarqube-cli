@@ -22,14 +22,15 @@ import { createHash } from 'node:crypto';
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 
-import type { CurrentGraph } from './architecture-api.ts';
-import { type IndexedGraph, indexStructure, type SliceEdge } from './graph.ts';
+import type { CurrentGraph, StructureGraph } from './architecture-api.ts';
+import { childSeparator, type IndexedGraph, indexStructure, type SliceEdge } from './graph.ts';
 import type { ArchitectureReadOptions } from './read-options.ts';
 
 export const DEPENDENCY_PAGE_SIZE = 20;
+const MAX_DEPENDENCY_PAGE_INDEX = 2_147_483_647;
 
 export function parseDependencyPageNumber(value: string): number {
-  if (!/^[0-9]+$/.test(value))
+  if (!/^\d+$/.test(value))
     throw new InvalidOptionError('Dependency pagination requires whole decimal integers.');
   return Number(value);
 }
@@ -62,7 +63,7 @@ export function dependencySelection(options: CurrentReadOptions): DependencySele
   if (
     !Number.isSafeInteger(pageIndex) ||
     pageIndex < 1 ||
-    pageIndex > 2147483647 ||
+    pageIndex > MAX_DEPENDENCY_PAGE_INDEX ||
     !Number.isInteger(pageSize) ||
     pageSize < 1 ||
     pageSize > DEPENDENCY_PAGE_SIZE
@@ -92,10 +93,12 @@ export function queryDependencies(
   selection: DependencySelection,
   depth: number,
 ): DependencyPage {
-  const indexed = graphs.map(({ ecosystem, graph }) => ({
-    language: ecosystem,
-    index: indexStructure(graph),
-  }));
+  const indexed = graphs
+    .filter(
+      ({ graph }) =>
+        mayContainEndpoint(graph, selection.from) && mayContainEndpoint(graph, selection.to),
+    )
+    .map(({ ecosystem, graph }) => ({ language: ecosystem, index: indexStructure(graph) }));
   const matching = indexed.filter(
     ({ index }) => index.idByKey.has(selection.from) && index.idByKey.has(selection.to),
   );
@@ -171,7 +174,7 @@ function aggregateDependencies(
     const to = targets.get(edge.to);
     if (from === undefined || to === undefined) continue;
     validateDependencyEdge(index, edge, seen);
-    if (from === to) continue;
+    if (sameHierarchy(index, from, to)) continue;
     const key = JSON.stringify([from, to]);
     const weight = (weights.get(key)?.weight ?? 0) + edge.weight;
     if (!Number.isSafeInteger(weight))
@@ -200,4 +203,31 @@ function validateDependencyEdge(
     throw new CommandFailedError(
       'Targeted dependencies require leaf-level edges; this graph has container-level relationships in the selected scope.',
     );
+}
+
+function mayContainEndpoint(graph: StructureGraph, key: string): boolean {
+  return graph.nodes.some((root) => {
+    if (key === root.name) return true;
+    if (!root.nodes?.length) return false;
+    if (root.kind === 'file' && !root.separator) return key.startsWith(root.name);
+    return key.startsWith(root.name + childSeparator(root));
+  });
+}
+
+function sameHierarchy(index: IndexedGraph, from: string, to: string): boolean {
+  const source = index.idByKey.get(from);
+  const target = index.idByKey.get(to);
+  return isAncestor(index.parent, source, target) || isAncestor(index.parent, target, source);
+}
+
+function isAncestor(
+  parents: Map<number, number>,
+  ancestor: number | undefined,
+  node: number | undefined,
+): boolean {
+  while (node !== undefined) {
+    if (node === ancestor) return true;
+    node = parents.get(node);
+  }
+  return false;
 }
