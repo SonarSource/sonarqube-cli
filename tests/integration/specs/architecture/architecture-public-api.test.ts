@@ -1404,6 +1404,31 @@ describe('sonar architecture intended set on the public API', () => {
     });
   }
 
+  for (const create of [false, true]) {
+    for (const committed of [false, true]) {
+      it(`handles malformed successful ${create ? 'POST' : 'PATCH'} JSON with committed=${committed} without replay`, async () => {
+        const server = await startWith((fake) => {
+          if (!create) fake.withIntended(INTENDED);
+          if (committed) fake.withMalformedWriteResponse();
+          else
+            fake.withStatus(
+              'project-intended-architectures',
+              create ? 201 : 200,
+              'not JSON',
+              create ? 'POST' : 'PATCH',
+            );
+        });
+        const result = await setFile({ models: NEXT });
+        expect(result.exitCode).toBe(committed ? 0 : 1);
+        if (!committed) {
+          expect(result.stderr).toContain('write could not be confirmed');
+          expect(result.stderr).toContain('supported public Architecture API contract');
+        }
+        expect(writes(server).map(({ method }) => method)).toEqual([create ? 'POST' : 'PATCH']);
+      });
+    }
+  }
+
   it('recovers from a transient verification read failure without repeating PATCH', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED).failIntendedRead(3));
     expect((await setFile({ models: NEXT })).exitCode).toBe(0);

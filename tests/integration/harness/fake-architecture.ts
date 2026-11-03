@@ -93,6 +93,12 @@ export class FakeArchitecture {
     { intendedArchitectures: { id: string; perspectives: unknown[] }[] }
   >();
   private staleWriteResponse = false;
+  private malformedWriteResponse = false;
+
+  withMalformedWriteResponse(): this {
+    this.malformedWriteResponse = true;
+    return this;
+  }
   private missingPatchResponseId: 'null' | 'omitted' | undefined;
 
   withMissingPatchResponseId(value: 'null' | 'omitted'): this {
@@ -399,7 +405,9 @@ export class FakeArchitecture {
     this.models.push(model);
     return this.committedCreateFailures.has(++this.intendedCreates)
       ? json({ message: 'Create response failed after commit' }, 500)
-      : json(this.staleWriteResponse ? previous : this.exportResource(), 201);
+      : this.malformedWriteResponse
+        ? new Response('not JSON', { status: 201 })
+        : json(this.staleWriteResponse ? previous : this.exportResource(), 201);
   }
 
   private updateIntendedArchitectures(id: string | undefined, body: string | undefined): Response {
@@ -420,7 +428,9 @@ export class FakeArchitecture {
       response.id = this.missingPatchResponseId === 'null' ? null : undefined;
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json(response);
+      : this.malformedWriteResponse
+        ? new Response('not JSON', { status: 200 })
+        : json(response);
   }
 
   private exportModel({ perspectives }: SavedModel): unknown[] {

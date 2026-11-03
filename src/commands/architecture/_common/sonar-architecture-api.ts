@@ -54,14 +54,31 @@ const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 const MAX_PUBLIC_GROUPS = 50_000;
 const MAX_PUBLIC_PERSPECTIVES = 50;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
+const FIRST_SUCCESS_STATUS = 200;
+const FIRST_REDIRECT_STATUS = 300;
 const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function incompatibleResponse(message: string): CommandFailedError {
+function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
   return new CommandFailedError(message, {
+    cause,
     remediationHint:
       "The response does not match this CLI's supported public Architecture API contract. " +
       'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
   });
+}
+
+function intendedWriteError(error: Error): Error {
+  if (
+    error instanceof UnexpectedApiError &&
+    error.status >= FIRST_SUCCESS_STATUS &&
+    error.status < FIRST_REDIRECT_STATUS
+  ) {
+    return incompatibleResponse(
+      'Invalid public intended architecture write response: expected JSON.',
+      error,
+    );
+  }
+  return error;
 }
 
 interface ArchitectureIds {
@@ -339,6 +356,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         projectId: await this.projectId(),
         perspectives: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
       })
+      .mapErr(intendedWriteError)
       .orThrow();
     this.verifySaved(response);
   }
@@ -348,6 +366,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .patch<IntendedResourceDto | null>(this.modelPath(), {
         perspectives: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
       })
+      .mapErr(intendedWriteError)
       .orThrow();
     this.verifySaved(response);
   }
