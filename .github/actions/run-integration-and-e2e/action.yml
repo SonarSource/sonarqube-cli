@@ -171,9 +171,20 @@ runs:
         name: integration-coverage
         path: tests/coverage/reports/integration/
 
-    - name: Upload integration coverage raw (Linux shard)
+    - name: Merge integration coverage (Linux shard)
+      if: ${{ inputs.os == 'linux' && inputs.integration-sharded == 'true' }}
+      shell: bash
+      env:
+        INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
+      run: |
+        bun build-scripts/report-coverage.ts
+        shard_dir="tests/coverage/reports/integration-shard-${INTEGRATION_SHARD_INDEX}"
+        mkdir -p "$shard_dir"
+        mv tests/coverage/reports/integration/lcov.info "$shard_dir/lcov.info"
+
+    - name: Upload integration coverage shard (Linux)
       if: ${{ inputs.os == 'linux' && inputs.integration-sharded == 'true' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: integration-coverage-raw-${{ inputs.integration-shard-index }}
-        path: tests/coverage/reports/raw/
+        name: integration-coverage-shard-${{ inputs.integration-shard-index }}
+        path: tests/coverage/reports/integration-shard-${{ inputs.integration-shard-index }}/
