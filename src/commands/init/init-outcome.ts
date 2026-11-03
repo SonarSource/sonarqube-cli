@@ -29,8 +29,17 @@ export type InitOutcome =
    * `projectKeys` is a list because `.sonar-config.json` can map several projects, for a monorepo.
    */
   | { path: 'complete'; projectRoot: string; projectKeys: string[] }
-  /** The server already binds the git remote to a project of the active organization. */
-  | { path: 'link-existing'; projectRoot: string; projectKey: string }
+  /**
+   * The server already binds the git remote to a project of the active organization.
+   * `linked` is set once the user confirmed and `.sonar-config.json` maps it.
+   */
+  | {
+      path: 'link-existing';
+      projectRoot: string;
+      remote: string;
+      projectKey: string;
+      linked?: true;
+    }
   /** No project exists yet and the user agreed to bind the new one to the repository. */
   | {
       path: 'bound-new';
@@ -46,4 +55,5 @@ export type InitOutcome =
    */
   | { path: 'unbound-new'; projectRoot: string; remote?: string };
 
+export type LinkExistingOutcome = Extract<InitOutcome, { path: 'link-existing' }>;
 export type BoundNewOutcome = Extract<InitOutcome, { path: 'bound-new' }>;
