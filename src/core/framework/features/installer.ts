@@ -356,42 +356,57 @@ export class IntegrationInstaller {
     const installedDependencies = new Map<string, InstalledDependency>();
     const failedDependencies = new Map<string, Error>();
 
-    for (const execution of this.collectUniqueDependencies(executions)) {
-      const existingDependency = this.findInstalledDependency(
+    const prepared = { resolvedDependencies, installedDependencies, failedDependencies };
+    // Later dependencies resolve against the ones prepared before them, so they are chained in order.
+    await this.collectUniqueDependencies(executions).reduce<Promise<void>>(
+      async (previous, execution) => {
+        await previous;
+        await this.prepareUniqueDependency(execution, prepared, callbacks);
+      },
+      Promise.resolve(),
+    );
+
+    return prepared;
+  }
+
+  private async prepareUniqueDependency<TOptions>(
+    execution: UniqueDependencyExecution<TOptions>,
+    prepared: PreparedDependencies,
+    callbacks: ApplyFeatureCallbacks<TOptions>,
+  ): Promise<void> {
+    const { resolvedDependencies, installedDependencies, failedDependencies } = prepared;
+    const existingDependency = this.findInstalledDependency(
+      execution.execution.context.state,
+      execution.dependency,
+    );
+    const dependencyContext = {
+      ...execution.execution.context,
+      resolvedDependencies: this.makeResolvedDependencies(
         execution.execution.context.state,
-        execution.dependency,
-      );
-      const dependencyContext = {
-        ...execution.execution.context,
-        resolvedDependencies: this.makeResolvedDependencies(
-          execution.execution.context.state,
-          execution.execution.application,
-          resolvedDependencies,
-        ),
-      };
+        execution.execution.application,
+        resolvedDependencies,
+      ),
+    };
 
-      if (!(await this.dependencyNeedsInstall(dependencyContext, execution.dependency))) {
-        if (existingDependency) {
-          resolvedDependencies.set(execution.dependency.id, existingDependency);
-        }
-        callbacks.onDependencySkipped?.(execution.dependency);
-        continue;
+    if (!(await this.dependencyNeedsInstall(dependencyContext, execution.dependency))) {
+      if (existingDependency) {
+        resolvedDependencies.set(execution.dependency.id, existingDependency);
       }
-
-      try {
-        const installedDependency = await execution.dependency.installOrUpdate({
-          ...dependencyContext,
-          existingDependency,
-        });
-        resolvedDependencies.set(installedDependency.id, installedDependency);
-        installedDependencies.set(installedDependency.id, installedDependency);
-        callbacks.onDependencyInstalled?.(execution.dependency);
-      } catch (error) {
-        failedDependencies.set(execution.dependency.id, error as Error);
-      }
+      callbacks.onDependencySkipped?.(execution.dependency);
+      return;
     }
 
-    return { resolvedDependencies, installedDependencies, failedDependencies };
+    try {
+      const installedDependency = await execution.dependency.installOrUpdate({
+        ...dependencyContext,
+        existingDependency,
+      });
+      resolvedDependencies.set(installedDependency.id, installedDependency);
+      installedDependencies.set(installedDependency.id, installedDependency);
+      callbacks.onDependencyInstalled?.(execution.dependency);
+    } catch (error) {
+      failedDependencies.set(execution.dependency.id, error as Error);
+    }
   }
 
   private async applyFeatureWithUniqueDependencies<TOptions>(
@@ -429,23 +444,32 @@ export class IntegrationInstaller {
 
     await this.cleanupRecordedLegacyInstallations(feature, featureContext);
 
-    for (const resource of resolveAllResources(feature, subfeatures)) {
-      if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
-        callbacks.onResourceSkipped?.(resource);
-        continue;
-      }
-      resources.push(await resource.apply(featureContext));
-      callbacks.onResourceInstalled?.(resource);
-    }
+    // Resources may share files and operations depend on earlier ones: apply in declaration order.
+    await resolveAllResources(feature, subfeatures).reduce<Promise<void>>(
+      async (previous, resource) => {
+        await previous;
+        if (!(await this.resourceNeedsApply(featureContext, installedFeature, resource))) {
+          callbacks.onResourceSkipped?.(resource);
+          return;
+        }
+        resources.push(await resource.apply(featureContext));
+        callbacks.onResourceInstalled?.(resource);
+      },
+      Promise.resolve(),
+    );
 
-    for (const operation of resolveAllOperations(feature, subfeatures)) {
-      if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
-        continue;
-      }
-      await operation.apply(featureContext);
-      operations.push({ id: operation.id, version: operation.version });
-      callbacks.onOperationApplied?.(operation);
-    }
+    await resolveAllOperations(feature, subfeatures).reduce<Promise<void>>(
+      async (previous, operation) => {
+        await previous;
+        if (operation.shouldApply && !(await operation.shouldApply(featureContext))) {
+          return;
+        }
+        await operation.apply(featureContext);
+        operations.push({ id: operation.id, version: operation.version });
+        callbacks.onOperationApplied?.(operation);
+      },
+      Promise.resolve(),
+    );
 
     return { dependencies, resources, operations };
   }
@@ -469,9 +493,11 @@ export class IntegrationInstaller {
     feature: FeatureDeclaration<TOptions>,
     featureContext: IntegrationContext,
   ) {
-    for (const cleanup of feature.legacyCleanups ?? []) {
+    // Legacy cleanups may touch the same files: run sequentially.
+    await (feature.legacyCleanups ?? []).reduce<Promise<void>>(async (previous, cleanup) => {
+      await previous;
       await cleanup.remove(featureContext);
-    }
+    }, Promise.resolve());
   }
 
   private prepareFeatureExecutions<TOptions>(
