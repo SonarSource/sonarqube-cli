@@ -27,7 +27,7 @@ import {
   isStandaloneInstallerLocation,
 } from '@/core/update/installation-location.ts';
 
-const ALLOWLIST_TIMEOUT_MS = 2 * 60 * 1000;
+const ALLOWLIST_TIMEOUT_MS = 60 * 1000;
 
 /**
  * Resolve/install sonar-secrets, then run one of its `allowlist` subcommands with inherited

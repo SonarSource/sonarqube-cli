@@ -73,8 +73,8 @@ describe('runSecretsAllowlistCommand', () => {
         stdout: 'inherit',
         stderr: 'inherit',
       },
-      2 * 60 * 1000,
-      'sonar-secrets allowlist timed out after 120000ms',
+      60 * 1000,
+      'sonar-secrets allowlist timed out after 60000ms',
     );
   });
 
