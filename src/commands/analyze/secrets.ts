@@ -25,7 +25,6 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   EXIT_CODE_SECRETS_FOUND,
-  MAX_SCANNED_FILE_SIZE,
   SECRETS_CALLER_COMMANDS,
   type SecretsCallerCommand,
 } from '@/core/config-constants.ts';
@@ -34,14 +33,22 @@ import { installSecretsBinary } from '@/core/host/install/secrets.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SpawnResult, StdioMode } from '@/core/process/process.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { loadSecretsScanSettings } from '@/core/secrets/scan-settings.ts';
 import { green, yellow } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
+import { buildSecretsScanArgs } from './secrets-scan-args.ts';
+
+// Agent hooks are killed by their host after 60s, so this deadline stays inside that budget.
+const SCAN_TIMEOUT_MS = 60 * 1000;
+const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface AnalyzeSecretsOptions {
   paths?: string[];
   stdin?: boolean;
+  /** Paths to skip; when given, they replace the `secrets.exclude` config key. */
+  exclude?: string[];
   /** Defaults to {@link SECRETS_CALLER_COMMANDS.analyzeSecrets}. Bare `analyze` passes `analyze`. */
   telemetryCallerCommand?: SecretsCallerCommand;
 }
@@ -117,8 +124,6 @@ export async function analyzeSecrets(
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
-const SCAN_TIMEOUT_MS = 30000;
-
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
@@ -128,10 +133,17 @@ export async function runSecretsBinary(
   files: string[],
   auth: ResolvedAuth,
   stdin: StdioMode = 'pipe',
+  exclusionsOverride: readonly string[] = [],
 ): Promise<SpawnResult> {
+  const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    ['--non-interactive', '--json', ...files],
+    [
+      '--non-interactive',
+      '--json',
+      ...buildSecretsScanArgs(settings, exclusionsOverride),
+      ...files,
+    ],
     {
       stdin,
       stdout: 'pipe',
@@ -151,9 +163,10 @@ export async function runSecretsBinaryOnText(
   text: string,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
+  const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    ['--input', '--json'],
+    ['--input', '--json', ...buildSecretsScanArgs(settings)],
     {
       stdin: 'pipe',
       stdinData: text,
@@ -172,15 +185,10 @@ export async function runSecretsBinaryOnStream(
   batch: AsyncIterable<Buffer>,
   auth: ResolvedAuth,
 ): Promise<SpawnResult> {
+  const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    [
-      '--non-interactive',
-      '--json',
-      '--input-batch',
-      '--max-file-size',
-      String(MAX_SCANNED_FILE_SIZE),
-    ],
+    ['--non-interactive', '--json', '--input-batch', ...buildSecretsScanArgs(settings)],
     {
       stdin: 'pipe',
       stdinData: batch,
@@ -188,8 +196,8 @@ export async function runSecretsBinaryOnStream(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+    PUSH_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${PUSH_SCAN_TIMEOUT_MS}ms`,
   );
 }
 
@@ -225,6 +233,7 @@ async function handleCheckCommand(
     await performPathsScan(
       binaryPath,
       options.paths ?? [],
+      options.exclude ?? [],
       auth,
       scanStartTime,
       callerCommand,
@@ -233,7 +242,7 @@ async function handleCheckCommand(
   }
 }
 
-function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): void {
+function validateScanOptions(options: AnalyzeSecretsOptions): void {
   const hasPaths = (options.paths?.length ?? 0) > 0;
   if (!hasPaths && !options.stdin) {
     throw new InvalidOptionError('Either provide file/directory paths or --stdin');
@@ -242,11 +251,16 @@ function validateScanOptions(options: { paths?: string[]; stdin?: boolean }): vo
   if (hasPaths && options.stdin) {
     throw new InvalidOptionError('Cannot use both paths and --stdin');
   }
+
+  if (options.stdin && (options.exclude?.length ?? 0) > 0) {
+    throw new InvalidOptionError('Cannot use --exclude with --stdin');
+  }
 }
 
 async function performPathsScan(
   binaryPath: string,
   paths: string[],
+  exclusions: string[],
   auth: ResolvedAuth,
   scanStartTime: number,
   callerCommand: SecretsCallerCommand,
@@ -265,7 +279,7 @@ async function performPathsScan(
   const { result, parsed } = await scanAndEmitSecrets(
     callerCommand,
     auth,
-    () => runSecretsBinary(binaryPath, paths, auth),
+    () => runSecretsBinary(binaryPath, paths, auth, 'pipe', exclusions),
     ctx,
   );
   reportScanResult(result, parsed, scanStartTime, { paths }, ctx.console);

@@ -64,7 +64,7 @@ describe('global-integrations migration', () => {
 
   function seedProjectScopedInstall<TOptions>(
     integration: IntegrationDeclaration<TOptions>,
-    featureId = 'sonar-secrets-hooks',
+    featureId = integration.features[0].id,
     targetRoot: string = realpathSync(harness.cwd.path),
   ): void {
     harness.state().withInstalledIntegrationFeature(integration, featureId, 'project', targetRoot);
@@ -166,7 +166,7 @@ describe('global-integrations migration', () => {
         .state()
         .withInstalledIntegrationFeature(
           claudeIntegration,
-          'sonar-secrets-hooks',
+          'secrets-detection',
           'global',
           harness.userHome.path,
         );
@@ -187,7 +187,7 @@ describe('global-integrations migration', () => {
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(
         claudeIntegration,
-        'sonar-secrets-hooks',
+        'secrets-detection',
         join(harness.cwd.path, 'deleted-repo'),
       );
 
@@ -209,7 +209,7 @@ describe('global-integrations migration', () => {
       harness.cwd.writeFile('.cursor/rules/sonar-agentic-analysis.mdc', '# stale\n');
       const secondRepo = realpathSync(join(harness.cwd.path, 'second-repo'));
       seedProjectScopedInstall(cursorIntegration);
-      seedProjectScopedInstall(cursorIntegration, 'sonar-secrets-hooks', secondRepo);
+      seedProjectScopedInstall(cursorIntegration, 'secrets-detection', secondRepo);
 
       const result = await runAsUpgrade();
 
@@ -279,7 +279,7 @@ describe('global-integrations migration', () => {
         .state()
         .withInstalledIntegrationFeature(
           claudeIntegration,
-          'sonar-secrets-hooks',
+          'secrets-detection',
           'global',
           harness.userHome.path,
         );
@@ -290,7 +290,7 @@ describe('global-integrations migration', () => {
       expect(result.exitCode).toBe(0);
       expect(recordedScopes('claude-code')).not.toContain('project');
       expect(recordedFeatures('claude-code').map((feature) => feature.featureId)).toEqual([
-        'sonar-secrets-hooks',
+        'secrets-detection',
       ]);
     },
     { timeout: TEST_TIMEOUT },
@@ -302,7 +302,7 @@ describe('global-integrations migration', () => {
       await authenticateAgainstFakeServer();
       seedProjectScopedInstall(claudeIntegration);
       seedProjectScopedInstall(cursorIntegration);
-      seedProjectScopedInstall(copilotIntegration, 'pre-tool-use-hook');
+      seedProjectScopedInstall(copilotIntegration, 'secrets-detection');
       harness.cwd.writeFile('.cursor/rules/sonar-agentic-analysis.mdc', '# stale\n');
 
       const result = await runAsUpgrade();
@@ -327,7 +327,7 @@ describe('global-integrations migration', () => {
       // No fake server and no auth: `harness.cwd` is never created, so pass its path
       // unresolved — `realpathSync` would throw on the missing directory.
       harness.state().clearAuth();
-      seedProjectScopedInstall(claudeIntegration, 'sonar-secrets-hooks', harness.cwd.path);
+      seedProjectScopedInstall(claudeIntegration, 'secrets-detection', harness.cwd.path);
 
       const result = await runAsUpgrade();
 
@@ -348,7 +348,7 @@ describe('global-integrations migration', () => {
     'recommends sonar update for a standalone installer when migration needs authentication',
     async () => {
       harness.state().clearAuth();
-      seedProjectScopedInstall(claudeIntegration, 'sonar-secrets-hooks', harness.cwd.path);
+      seedProjectScopedInstall(claudeIntegration, 'secrets-detection', harness.cwd.path);
 
       const result = await runAsUpgrade(harness.installerManagedBinaryPath());
 

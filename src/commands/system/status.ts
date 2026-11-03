@@ -78,6 +78,10 @@ import {
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
 import { MCP_CONFIG_RESOURCE_ID } from '../integrate/_common/features/mcp-server-feature.ts';
+import {
+  LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID,
+  SECRETS_DETECTION_FEATURE_ID,
+} from '../integrate/_common/features/secrets-detection-feature.ts';
 import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
@@ -309,7 +313,10 @@ function findAntigravitySecretsHookFeatures(
       continue;
     }
     for (const feature of integration.features) {
-      if (feature.featureId === 'sonar-secrets-hooks') {
+      if (
+        feature.featureId === SECRETS_DETECTION_FEATURE_ID ||
+        feature.featureId === LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID
+      ) {
         features.push({ scope: feature.scope, targetRoot: feature.targetRoot });
       }
     }

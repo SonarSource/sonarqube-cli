@@ -26,10 +26,11 @@ import { describe, expect, it, spyOn } from 'bun:test';
 
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import * as processLib from '@/core/process/process.ts';
+import { ProcessTimedOutError } from '@/core/process/process.ts';
 
 describe('getGitRemote', () => {
   it('reads the origin remote URL when git succeeds', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: 'https://github.com/example/test-project.git\n',
       stderr: '',
@@ -43,7 +44,7 @@ describe('getGitRemote', () => {
   });
 
   it('returns an empty string when the git spawn fails', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockRejectedValue(
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockRejectedValue(
       new Error('git not available'),
     );
 
@@ -54,8 +55,23 @@ describe('getGitRemote', () => {
     }
   });
 
+  it('reports a timeout instead of an empty remote', async () => {
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockRejectedValue(
+      new ProcessTimedOutError('git remote timed out'),
+    );
+
+    try {
+      await getGitRemote('/repo');
+      expect.unreachable('a timed-out git remote must not look like a missing remote');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProcessTimedOutError);
+    } finally {
+      spawnSpy.mockRestore();
+    }
+  });
+
   it('returns an empty string when git exits non-zero (no origin configured)', async () => {
-    const spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    const spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 1,
       stdout: '',
       stderr: 'no origin',
