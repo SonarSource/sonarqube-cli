@@ -21,6 +21,10 @@
 import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import { ECOSYSTEMS } from '@/commands/architecture/_common/architecture-api.ts';
+import {
+  type CurrentReadOptions,
+  parseDependencyPageNumber,
+} from '@/commands/architecture/_common/dependency-query.ts';
 import { DEFAULT_MAX_NODES } from '@/commands/architecture/_common/graph.ts';
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
@@ -968,9 +972,21 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('-p, --project <project>', 'Project key')
     .option('--component <key>', 'Node key to start below, from a previous current get')
     .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
+    .option('--from <key>', 'Dependency source key, including descendants; requires --to')
+    .option('--to <key>', 'Dependency destination key, including descendants; requires --from')
+    .option(
+      '--page <n>',
+      'Dependency page (default 1; requires --from/--to)',
+      parseDependencyPageNumber,
+    )
+    .option(
+      '--page-size <n>',
+      'Dependencies per page (default/maximum 20)',
+      parseDependencyPageNumber,
+    )
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) =>
+    .authenticatedAction((ctx, options: CurrentReadOptions) =>
       getCurrentArchitecture(options, ctx),
     );
   intendedArchitecture

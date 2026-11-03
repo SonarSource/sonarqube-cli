@@ -23,6 +23,11 @@ import { resolveFormatOption } from '@/core/commands/params.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import { createArchitectureApi, type CurrentGraph } from '../../_common/architecture-api.ts';
+import {
+  type CurrentReadOptions,
+  dependencySelection,
+  queryDependencies,
+} from '../../_common/dependency-query.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import {
   DEFAULT_MAX_EDGES,
@@ -36,7 +41,6 @@ import {
 } from '../../_common/graph.ts';
 import { resolveProject } from '../../_common/project.ts';
 import {
-  type ArchitectureReadOptions,
   defaultTextFormat,
   printPayload,
   resolveDepth,
@@ -45,9 +49,10 @@ import {
 import { formatCurrentText, formatSliceLimit } from './current-text.ts';
 
 export async function getCurrent(
-  options: ArchitectureReadOptions,
+  options: CurrentReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const selection = dependencySelection(options);
   const depth = resolveDepth(options, 1);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const projectKey = await resolveProject(options, ctx);
@@ -57,6 +62,20 @@ export async function getCurrent(
       throw toArchitectureError(error, projectKey);
     });
 
+  if (selection) {
+    const result = queryDependencies(graphs, selection, depth);
+    if (format === 'text') {
+      ctx.console.print(
+        [
+          `${result.language}: ${result.from} → ${result.to} (depth ${depth})`,
+          `Page ${result.page.pageIndex}, ${result.dependencies.length} of ${result.page.total} dependencies`,
+          ...result.dependencies.map((edge) => `${edge.from} → ${edge.to}: ${edge.weight}`),
+          `Revision: ${result.revision}. Compare revisions before combining pages; restart if changed.`,
+        ].join('\n'),
+      );
+    } else printPayload(ctx, format, { project: projectKey, ...result });
+    return;
+  }
   if (graphs.length === 0) {
     ctx.console.warn(
       `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`,
