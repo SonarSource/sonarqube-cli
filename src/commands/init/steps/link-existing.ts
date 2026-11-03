@@ -18,7 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { searchForProject } from '@/commands/link/choose-project.ts';
+import {
+  ProjectSelectionCancelledError,
+  searchForProject,
+} from '@/commands/link/choose-project.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -31,9 +34,10 @@ import { projectDashboardUrl, showAnalysisResults, writeMapping } from './mappin
 /**
  * Asks to link the directory to the project the server already binds to the repository. When the
  * user declines, they are asked whether to link another existing project, picked with the
- * `sonar link` picker, and otherwise the path continues as `unbound-new`. The chosen
- * project is mapped in `.sonar-config.json` and its existing results are shown. A missing answer or
- * a failed write continue as `unbound-new`, leaving the onboarding incomplete.
+ * `sonar link` picker. Declining that continues as `unbound-new`, and leaving the picker asks
+ * whether to abandon linking (default no, which reopens the picker) before doing the same. The
+ * chosen project is mapped in `.sonar-config.json` and its existing results are shown. A missing
+ * answer or a failed write continue as `unbound-new`, leaving the onboarding incomplete.
  */
 export async function runLinkExisting(
   { projectRoot, remote, projectKey: detectedKey }: LinkExistingOutcome,
@@ -62,7 +66,10 @@ export async function runLinkExisting(
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const projectKey = link
     ? detectedKey
-    : await searchForProject(new ProjectsClient(http), { auth, console });
+    : await pickProject(new ProjectsClient(http), { auth, console });
+  if (projectKey === null) {
+    return unbound;
+  }
 
   try {
     await writeMapping(auth, projectKey, projectRoot, console, `Found project '${projectKey}'`);
@@ -99,4 +106,30 @@ async function confirmAnotherProject(console: DetectDeps['console']): Promise<bo
     throw new CommandFailedError('Onboarding cancelled.');
   }
   return another;
+}
+
+/** Leaving the picker asks whether to give up linking; declining reopens it. */
+async function pickProject(
+  projects: ProjectsClient,
+  ctx: Pick<DetectDeps, 'auth' | 'console'>,
+): Promise<string | null> {
+  for (;;) {
+    try {
+      return await searchForProject(projects, ctx);
+    } catch (error) {
+      if (!(error instanceof ProjectSelectionCancelledError)) {
+        throw error;
+      }
+    }
+    const abandon = await ctx.console.confirmPrompt(
+      'Abandon linking a project and create a new project without repository binding instead?',
+      false,
+    );
+    if (abandon === null) {
+      throw new CommandFailedError('Onboarding cancelled.');
+    }
+    if (abandon) {
+      return null;
+    }
+  }
 }

@@ -772,10 +772,9 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.decline('Link this directory');
         await session.accept('another existing project');
-        await session.waitText('Search projects');
+        await session.waitText('Choose a project');
         session.write('other');
-        session.keyEnter();
-        await session.waitText('Select a project');
+        await session.waitText('1 match');
         session.keyEnter();
         const result = await session.waitFinish();
 
@@ -804,9 +803,58 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).not.toContain('Search projects');
+        expect(result.stdout).not.toContain('Choose a project');
         expect(result.stdout).toContain(UNBOUND);
         expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'asks to abandon linking when the user leaves the project picker, then continues unbound',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.accept('another existing project');
+        await session.waitText('Choose a project');
+        session.keyCtrlC();
+        await session.waitText('Abandon linking a project');
+        session.write('y');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).not.toContain('Project selection cancelled');
+        expect(result.stdout).toContain(UNBOUND);
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'reopens the project picker when the user does not abandon linking',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory');
+        await session.accept('another existing project');
+        await session.waitText('Choose a project');
+        session.keyCtrlC();
+        await session.decline('Abandon linking a project');
+        await session.waitText('other_project');
+        session.keyEnter();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'other_project'");
       },
       TIMEOUT,
     );

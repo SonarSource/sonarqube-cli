@@ -46,8 +46,16 @@ export function assertCanChooseProject(
   });
 }
 
+/** Thrown when the user leaves a picker prompt; `sonar init` catches it to carry on without a link. */
+export class ProjectSelectionCancelledError extends CommandFailedError {
+  constructor() {
+    super('Project selection cancelled');
+    this.name = 'ProjectSelectionCancelledError';
+  }
+}
+
 function cancelled(): CommandFailedError {
-  return new CommandFailedError('Project selection cancelled');
+  return new ProjectSelectionCancelledError();
 }
 
 /**
