@@ -22,14 +22,16 @@
 
 import { InvalidOptionError } from '../../commands/command-error.ts';
 import logger from '../../observability/logger.ts';
-import { spawnProcess, spawnProcessWithTimeout } from '../../process/process.ts';
+import { spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
+const RUNTIME_INFO_TIMEOUT_MS = 3_000;
+// `sonar run mcp` waits on a cold Docker Desktop. The 3s deadline is only for status checks.
+const RUNTIME_LAUNCH_TIMEOUT_MS = 2 * 60 * 1000;
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];
 
 const WSL_EXECUTABLE = 'wsl.exe';
-const RUNTIME_PROBE_TIMEOUT_MS = 3000;
 const RUNTIME_PROBE_TIMEOUT_MESSAGE = 'Container runtime probe timed out';
 const MAX_RUNTIME_ERROR_LINES = 3;
 const MAX_RUNTIME_ERROR_LENGTH = 1000;
@@ -55,7 +57,13 @@ function summarizeRuntimeError(stderr: string): string {
 
 async function checkNativeRuntime(runtime: ContainerRuntime): Promise<NativeRuntimeResult> {
   try {
-    const result = await spawnProcess(runtime, ['info']);
+    const result = await spawnProcessWithTimeout(
+      runtime,
+      ['info'],
+      {},
+      RUNTIME_LAUNCH_TIMEOUT_MS,
+      `${runtime} info timed out`,
+    );
     return result.exitCode === 0
       ? 'available'
       : { runtime, exitCode: result.exitCode, stderr: summarizeRuntimeError(result.stderr) };
@@ -73,7 +81,13 @@ async function checkNativeRuntime(runtime: ContainerRuntime): Promise<NativeRunt
 
 async function isRuntimeAvailableViaWsl(runtime: ContainerRuntime): Promise<boolean> {
   try {
-    const result = await spawnProcess(WSL_EXECUTABLE, [runtime, 'info']); // only support the default distro
+    const result = await spawnProcessWithTimeout(
+      WSL_EXECUTABLE,
+      [runtime, 'info'], // only support the default distro
+      {},
+      RUNTIME_LAUNCH_TIMEOUT_MS,
+      `${runtime} info timed out`,
+    );
     return result.exitCode === 0;
   } catch {
     return false;
@@ -97,7 +111,7 @@ async function probeRuntime(
       viaWsl ? WSL_EXECUTABLE : runtime,
       viaWsl ? [runtime, ...args] : args,
       {},
-      RUNTIME_PROBE_TIMEOUT_MS,
+      RUNTIME_INFO_TIMEOUT_MS,
       RUNTIME_PROBE_TIMEOUT_MESSAGE,
     );
     return result.exitCode === 0 ? 'ready' : 'failed';
