@@ -305,7 +305,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
   async getIntendedState(): Promise<IntendedState> {
     const projectId = await this.projectId();
     const response = await this.http
-      .get<IntendedArchitecturesDto | null>(this.path('project-intended-architectures'), { projectId })
+      .get<IntendedArchitecturesDto | null>(this.path('project-intended-architectures'), {
+        projectId,
+      })
       .orThrow()
       .catch((error: unknown) => this.collectionFailure(error));
     if (

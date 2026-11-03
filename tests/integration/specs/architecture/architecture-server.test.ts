@@ -286,7 +286,12 @@ describe('Server public architecture project lookup', () => {
         .withAuthToken('test-token')
         .withProject('shop', (p) =>
           p.withArchitecture((a) =>
-            a.withStatus('project-intended-architectures', 404, '{"message":"Missing endpoint"}', 'GET'),
+            a.withStatus(
+              'project-intended-architectures',
+              404,
+              '{"message":"Missing endpoint"}',
+              'GET',
+            ),
           ),
         );
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
@@ -322,7 +327,8 @@ describe('Server public architecture project lookup', () => {
       'shop:api-v2',
     );
     expect(
-      requests.find((r) => r.path === '/api/v2/architecture/project-intended-architectures')?.query.projectId,
+      requests.find((r) => r.path === '/api/v2/architecture/project-intended-architectures')?.query
+        .projectId,
     ).toBe('shop:api-v2-project-id');
   });
 
