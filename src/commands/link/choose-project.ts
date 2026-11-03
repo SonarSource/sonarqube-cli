@@ -143,9 +143,9 @@ function verifyProject(
 }
 
 /** Live search: the server filters as the user types, until they pick one project. */
-async function searchForProject(
+export async function searchForProject(
   projects: ProjectsClient,
-  { auth, console }: CommandAuthenticatedInvocationContext,
+  { auth, console }: Pick<CommandAuthenticatedInvocationContext, 'auth' | 'console'>,
 ): Promise<string> {
   const choice = await console.searchPrompt<string>('Choose a project', {
     hint: 'type a name or key',
