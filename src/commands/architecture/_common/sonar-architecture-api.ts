@@ -408,14 +408,18 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return directive;
   }
 
-  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
-    const current = await this.getDirective(id).catch((error: unknown) => {
+  private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
+    return this.getDirective(id).catch((error: unknown) => {
       if (isDefiniteRejection(error)) throw error;
       throw new DirectivePreWriteError(
         `The current state of directive ${id} could not be verified.`,
         { cause: error },
       );
     });
+  }
+
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.readDirectiveBeforeWrite(id);
     const payload = {
       ...directive,
       ...(current.origin === undefined ? {} : { origin: current.origin }),
