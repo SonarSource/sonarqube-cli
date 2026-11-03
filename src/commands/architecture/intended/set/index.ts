@@ -32,34 +32,13 @@ import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff
 import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
 import { setIntended as setIntendedModel } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import {
-  type CommandAuthenticatedInvocationContext,
-  TelemetryFact,
-} from '@/core/commands/invocation-context.ts';
+import { type CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CLI_DIR } from '@/core/config-constants.ts';
 import { green, red, yellow } from '@/core/ui/colors.ts';
 
 import { resolveProject } from '../../_common/project.ts';
-
-export const CLI_ARCHITECTURE_SET = 'CliArchitectureSet';
-
-/** Domain payload for CliArchitectureSet (identity is filled at drain time). */
-export interface ArchitectureSetPayload {
-  target: 'intended';
-  mode: string;
-  dry_run: boolean;
-  removed: number;
-  added: number;
-  changed: number;
-  created: number;
-  skipped: number;
-}
-
-export interface SetFileOptions {
-  project?: string;
-  file: string;
-  dryRun?: boolean;
-}
+import { recordSet, type SetFileOptions } from '../../_common/write-options.ts';
+export type { SetFileOptions } from '../../_common/write-options.ts';
 
 const BACKUP_DIR = join(CLI_DIR, 'architecture', 'backups');
 
@@ -147,17 +126,6 @@ function printDiff(ctx: CommandAuthenticatedInvocationContext, diff: IntendedDif
   for (const line of diff.changed) ctx.console.print(yellow(`  ~ ${line}`));
   ctx.console.print(
     `${diff.removed.length} removed, ${diff.added.length} added, ${diff.changed.length} changed.`,
-  );
-}
-
-function recordSet(
-  ctx: CommandAuthenticatedInvocationContext,
-  payload: ArchitectureSetPayload,
-): void {
-  ctx.recordTelemetry(
-    new TelemetryFact<ArchitectureSetPayload>(CLI_ARCHITECTURE_SET, payload, {
-      auth: ctx.auth,
-    }),
   );
 }
 
