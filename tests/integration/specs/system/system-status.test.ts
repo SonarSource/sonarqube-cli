@@ -180,6 +180,7 @@ function antigravityStatusState(
   targetRoot: string,
   userHome: string,
   scope: 'project' | 'global' = 'project',
+  secretsFeatureId = 'secrets-detection',
 ): Record<string, unknown> {
   const mcpConfigPath = join(userHome, '.gemini', 'config', 'mcp_config.json');
   const featureTemplate = {
@@ -205,7 +206,7 @@ function antigravityStatusState(
           updatedByCliVersion: '0.14.0',
           updatedAt: new Date().toISOString(),
           features: [
-            { ...featureTemplate, featureId: 'sonar-secrets-hooks' },
+            { ...featureTemplate, featureId: secretsFeatureId },
             {
               ...featureTemplate,
               featureId: 'mcp-server',
@@ -1483,9 +1484,9 @@ command = "another-tool stop"
     { timeout: 15000 },
   );
 
-  it(
-    'shows Antigravity secrets hook and MCP status when both are configured',
-    async () => {
+  it.each(['secrets-detection', 'sonar-secrets-hooks'])(
+    'shows Antigravity secrets hook and MCP status when both are configured (%s)',
+    async (featureId) => {
       const scriptPath = join(harness.cwd.path, '.agents', 'sonar', 'hooks', hookScriptName());
       mkdirSync(join(harness.cwd.path, '.agents', 'sonar', 'hooks'), { recursive: true });
       writeFileSync(scriptPath, '#!/bin/bash\n');
@@ -1513,7 +1514,9 @@ command = "another-tool stop"
       harness
         .state()
         .withRawState(
-          JSON.stringify(antigravityStatusState(harness.cwd.path, harness.userHome.path)),
+          JSON.stringify(
+            antigravityStatusState(harness.cwd.path, harness.userHome.path, 'project', featureId),
+          ),
         );
 
       const result = await harness.run('system status');
@@ -1539,9 +1542,9 @@ command = "another-tool stop"
     { timeout: 15000 },
   );
 
-  it(
-    'shows invalid Antigravity secrets hook config and recommends reinstall',
-    async () => {
+  it.each(['secrets-detection', 'sonar-secrets-hooks'])(
+    'shows invalid Antigravity secrets hook config and recommends reinstall (%s)',
+    async (featureId) => {
       mkdirSync(join(harness.cwd.path, '.agents'), { recursive: true });
       writeFileSync(
         join(harness.cwd.path, '.agents', 'hooks.json'),
@@ -1567,7 +1570,9 @@ command = "another-tool stop"
       harness
         .state()
         .withRawState(
-          JSON.stringify(antigravityStatusState(harness.cwd.path, harness.userHome.path)),
+          JSON.stringify(
+            antigravityStatusState(harness.cwd.path, harness.userHome.path, 'project', featureId),
+          ),
         );
 
       const result = await harness.run('system status');

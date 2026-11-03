@@ -143,7 +143,7 @@ function reportOutcome(
   succeeded: number,
   failed: number,
   skippedCount: number,
-  projectListUrl: string,
+  outroLink: ImportPlan['outroLink'],
   console: Console,
 ): void {
   const skippedSuffix = skippedCount > 0 ? ` (${skippedCount} skipped)` : '';
@@ -163,7 +163,7 @@ function reportOutcome(
   console.outro(
     `Imported ${succeeded} ${succeededNoun}${skippedSuffix}`,
     'success',
-    `Projects: ${projectListUrl}`,
+    `${outroLink.label}: ${outroLink.url}`,
   );
 }
 
@@ -195,7 +195,7 @@ export async function importHandler(
   console.intro('Import repositories', 'SonarQube');
 
   const plan = await createBackend(options, ctx).plan(options, console);
-  const { selection, projectListUrl } = plan;
+  const { selection, outroLink } = plan;
 
   if (selection.kind === 'streaming') {
     const { succeeded, failed, skipped } = await runBulkImportJob(
@@ -205,7 +205,7 @@ export async function importHandler(
       console,
     );
     reportSkipped(skipped, console);
-    reportOutcome(succeeded, failed, skipped.length, projectListUrl, console);
+    reportOutcome(succeeded, failed, skipped.length, outroLink, console);
     return;
   }
 
@@ -229,5 +229,5 @@ export async function importHandler(
   );
 
   const { succeeded, failed } = progress.finish();
-  reportOutcome(succeeded, failed, skipped.length, projectListUrl, console);
+  reportOutcome(succeeded, failed, skipped.length, outroLink, console);
 }

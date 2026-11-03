@@ -29,21 +29,21 @@ import {
   ANTIGRAVITY_PROMPT_SECRETS_RULE_FILE,
   ANTIGRAVITY_SQAA_RULE_FILE,
 } from '@/core/config-constants.ts';
-import type { IntegrationContext, IntegrationDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  IntegrationDeclaration,
+  ResourceDeclaration,
+} from '@/core/framework/features';
 import {
   jsonPatch,
-  sonarSecretsBinaryDependency,
   textSnippet,
   textSnippetRemover,
   wholeFile,
+  wholeFileRemover,
 } from '@/core/framework/features';
 
-import {
-  SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-  SECRETS_PROMPT_FEATURE_PREVIEW,
-} from '../_common/feature-constants.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { secretsScanningExample } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
   createSqaaInstructionsRule,
   createSqaaInstructionsSnippet,
@@ -94,33 +94,28 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
   id: ANTIGRAVITY_INTEGRATION_ID,
   displayName: ANTIGRAVITY_DISPLAY_NAME,
   features: [
-    {
-      id: 'sonar-secrets-hooks',
-      displayName: 'secret scanning hooks',
-      previewDescription: SECRETS_PRE_TOOL_USE_FEATURE_PREVIEW,
-      postInstallExample: secretsScanningExample('Antigravity'),
-      dependencies: [sonarSecretsBinaryDependency],
-      resources: [
-        wholeFile({
-          id: 'pretool-secrets-script',
-          displayName: 'Antigravity PreToolUse hook script',
-          targetPath: resolvePretoolSecretsScriptPath,
-          content: {
-            unix: buildUnixHookScript('antigravity-pre-tool-use'),
-            windows: buildWindowsHookScript('antigravity-pre-tool-use'),
-          },
-          executable: true,
+    createSecretsDetectionFeature<AntigravityIntegrationOptions>({
+      resources: createAntigravitySecretsDetectionResources(),
+      previewDescription:
+        'Scans files for hardcoded secrets and helps detect secrets in your prompts.',
+      replacedIds: ['prompt-secrets-project-rules', 'prompt-secrets-global-rules'],
+      legacyCleanups: [
+        wholeFileRemover({
+          id: 'legacy-prompt-secrets-project-rule',
+          targetPath: resolvePromptSecretsRulePath,
+          managedMarker: PROMPT_SECRETS_RULE_MARKER,
         }),
-        jsonPatch({
-          id: 'antigravity-hooks-secrets',
-          displayName: 'Antigravity hooks configuration',
-          targetPath: resolveAntigravityHooksJsonPath,
-          defaultValue: {},
-          patch: (document, context) => upsertAntigravitySecretsBlock(document, context),
-          removePatch: (document) => removeAntigravitySecretsBlock(document),
+        textSnippetRemover({
+          id: 'legacy-prompt-secrets-instructions',
+          targetPath: (context) =>
+            context.scope === 'global'
+              ? resolveLegacyGlobalInstructionsPath()
+              : resolveLegacyProjectInstructionsPath(context.targetRoot),
+          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
         }),
       ],
-    },
+    }),
     {
       ...antigravityVortexFeature,
       legacyCleanups: [
@@ -137,53 +132,6 @@ export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrati
       resolveConfigPath: () => ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
       alwaysGlobal: true,
     }),
-    {
-      id: 'prompt-secrets-project-rules',
-      displayName: 'prompt-secrets workspace rules',
-      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      isAvailable: ({ scope }) => ({ available: scope === 'project' }),
-      resources: [
-        wholeFile({
-          id: 'prompt-secrets-rule-file',
-          displayName: 'Antigravity prompt-secrets workspace rule',
-          targetPath: resolvePromptSecretsRulePath,
-          content: () => buildAntigravityAlwaysOnRule(PROMPT_SECRETS_BODY),
-          managedMarker: PROMPT_SECRETS_RULE_MARKER,
-        }),
-      ],
-      legacyCleanups: [
-        textSnippetRemover({
-          id: 'legacy-prompt-secrets-project-instructions',
-          targetPath: (context) => resolveLegacyProjectInstructionsPath(context.targetRoot),
-          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
-          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
-        }),
-      ],
-    },
-    {
-      id: 'prompt-secrets-global-rules',
-      displayName: 'prompt-secrets global rules',
-      previewDescription: SECRETS_PROMPT_FEATURE_PREVIEW,
-      isAvailable: ({ scope }) => ({ available: scope === 'global' }),
-      resources: [
-        textSnippet({
-          id: 'prompt-secrets-gemini-snippet',
-          displayName: 'Antigravity prompt-secrets global rules',
-          targetPath: () => ANTIGRAVITY_GLOBAL_GEMINI_MD,
-          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
-          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
-          content: PROMPT_SECRETS_BODY,
-        }),
-      ],
-      legacyCleanups: [
-        textSnippetRemover({
-          id: 'legacy-prompt-secrets-global-instructions',
-          targetPath: () => resolveLegacyGlobalInstructionsPath(),
-          startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
-          endMarker: sonarEndMarker('antigravity-prompt-secrets'),
-        }),
-      ],
-    },
   ],
 };
 
@@ -210,4 +158,35 @@ function resolveAntigravitySkillPath(context: IntegrationContext): string {
     'sonar-context-augmentation',
     'SKILL.md',
   );
+}
+
+function createAntigravitySecretsDetectionResources(): ResourceDeclaration[] {
+  return [
+    wholeFile({
+      id: 'pretool-secrets-script',
+      displayName: 'Antigravity PreToolUse hook script',
+      targetPath: resolvePretoolSecretsScriptPath,
+      content: {
+        unix: buildUnixHookScript('antigravity-pre-tool-use'),
+        windows: buildWindowsHookScript('antigravity-pre-tool-use'),
+      },
+      executable: true,
+    }),
+    jsonPatch({
+      id: 'secrets-hooks-config',
+      displayName: 'Secrets hooks configuration',
+      targetPath: resolveAntigravityHooksJsonPath,
+      defaultValue: {},
+      patch: (document, context) => upsertAntigravitySecretsBlock(document, context),
+      removePatch: (document) => removeAntigravitySecretsBlock(document),
+    }),
+    textSnippet({
+      id: 'prompt-secrets-gemini-snippet',
+      displayName: 'Antigravity prompt-secrets global rules',
+      targetPath: () => ANTIGRAVITY_GLOBAL_GEMINI_MD,
+      startMarker: sonarBeginMarker('antigravity-prompt-secrets'),
+      endMarker: sonarEndMarker('antigravity-prompt-secrets'),
+      content: PROMPT_SECRETS_BODY,
+    }),
+  ];
 }

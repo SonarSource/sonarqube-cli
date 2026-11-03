@@ -35,14 +35,14 @@ import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
-import { SECRETS_COMBINED_FEATURE_PREVIEW } from '../_common/feature-constants.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
 } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
-import { createSonarSecretsHooksFeature } from '../_common/features/sonar-secrets-hooks-feature.ts';
+import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
+import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
   createSqaaInstructionsSubfeature,
@@ -148,47 +148,8 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: CLAUDE_DISPLAY_NAME,
   features: [
-    createSonarSecretsHooksFeature({
-      agentDisplayName: 'Claude',
-      configDir: CLAUDE_CONFIG_DIR,
-      hooksConfigFileName: SETTINGS_FILE,
-      hooksPatchId: 'claude-settings-secrets-hooks',
-      previewDescription: SECRETS_COMBINED_FEATURE_PREVIEW,
-      projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
-      scripts: [
-        {
-          id: 'pretool-secrets-script',
-          displayName: 'Claude PreToolUse hook script',
-          scriptPath: PRETOOL_SCRIPT_REL,
-          content: {
-            unix: buildUnixHookScript('claude-pre-tool-use'),
-            windows: buildWindowsHookScript('claude-pre-tool-use'),
-          },
-        },
-        {
-          id: 'prompt-secrets-script',
-          displayName: 'Claude UserPromptSubmit hook script',
-          scriptPath: PROMPT_SCRIPT_REL,
-          content: {
-            unix: buildUnixHookScript('claude-prompt-submit'),
-            windows: buildWindowsHookScript('claude-prompt-submit'),
-          },
-        },
-      ],
-      hookEntries: [
-        {
-          eventType: 'PreToolUse',
-          matcher: 'Read',
-          marker: 'sonar-secrets',
-          scriptPath: PRETOOL_SCRIPT_REL,
-        },
-        {
-          eventType: 'UserPromptSubmit',
-          matcher: '*',
-          marker: 'sonar-secrets',
-          scriptPath: PROMPT_SCRIPT_REL,
-        },
-      ],
+    createSecretsDetectionFeature<ClaudeIntegrationOptions>({
+      resources: createClaudeSecretsDetectionResources(),
     }),
     claudeVortexFeature,
     createMcpServerFeature<ClaudeIntegrationOptions>({
@@ -306,4 +267,46 @@ function resolveClaudeSkillPath(context: IntegrationContext): string {
     'sonar-context-augmentation',
     'SKILL.md',
   );
+}
+
+function createClaudeSecretsDetectionResources(): ResourceDeclaration[] {
+  return createSonarSecretsHooksResources({
+    configDir: CLAUDE_CONFIG_DIR,
+    hooksConfigFileName: SETTINGS_FILE,
+    projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
+    scripts: [
+      {
+        id: 'pretool-secrets-script',
+        displayName: 'Claude PreToolUse hook script',
+        scriptPath: PRETOOL_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('claude-pre-tool-use'),
+          windows: buildWindowsHookScript('claude-pre-tool-use'),
+        },
+      },
+      {
+        id: 'prompt-secrets-script',
+        displayName: 'Claude UserPromptSubmit hook script',
+        scriptPath: PROMPT_SCRIPT_REL,
+        content: {
+          unix: buildUnixHookScript('claude-prompt-submit'),
+          windows: buildWindowsHookScript('claude-prompt-submit'),
+        },
+      },
+    ],
+    hookEntries: [
+      {
+        eventType: 'PreToolUse',
+        matcher: 'Read',
+        marker: 'sonar-secrets',
+        scriptPath: PRETOOL_SCRIPT_REL,
+      },
+      {
+        eventType: 'UserPromptSubmit',
+        matcher: '*',
+        marker: 'sonar-secrets',
+        scriptPath: PROMPT_SCRIPT_REL,
+      },
+    ],
+  });
 }
