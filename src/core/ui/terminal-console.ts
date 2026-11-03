@@ -51,8 +51,10 @@ import type {
   OutputChannel,
   PhaseItem,
   PhaseOptions,
+  SearchPromptOptions,
   SelectOption,
 } from './console.ts';
+import { createSearchPrompt } from './search-prompt.ts';
 
 const NOTE_MIN_WIDTH = 40;
 const NOTE_MAX_WIDTH = 80;
@@ -468,6 +470,26 @@ export class TerminalConsole implements Console {
     const result = await cancellation.run(prompt);
     if (isCancel(result)) return null;
     return result as T;
+  }
+
+  async searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
+    const cancellation = promptCancellation();
+    const failure = new AbortController();
+    let failed: { error: unknown } | undefined;
+    const prompt = createSearchPrompt<T>(
+      message,
+      options,
+      AbortSignal.any([cancellation.signal, failure.signal]),
+      (error) => {
+        failed = { error };
+        failure.abort();
+      },
+    );
+
+    const result = await cancellation.run(prompt);
+    if (failed) throw failed.error;
+    if (isCancel(result)) return null;
+    return result ?? null;
   }
 
   async multiSelectPrompt<T>(
