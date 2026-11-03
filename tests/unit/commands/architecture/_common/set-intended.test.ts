@@ -49,6 +49,11 @@ describe('intended backup safety', () => {
     return {
       getCurrent: () => Promise.resolve([]),
       getIntended: () => Promise.resolve(saved),
+      getIntendedState: () =>
+        Promise.resolve({
+          id: saved.length ? '11111111-1111-4111-8111-111111111111' : undefined,
+          models: saved,
+        }),
       createIntended: (models) => {
         saved = models;
         return Promise.resolve();
