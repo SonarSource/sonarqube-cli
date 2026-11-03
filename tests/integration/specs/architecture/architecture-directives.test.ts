@@ -412,7 +412,7 @@ describe('public project directives', () => {
     { operation: 'update', create: true },
     { operation: 'delete', create: true },
   ])(
-    'keeps a write-time missing directive as a definite rejection: %j',
+    'keeps a missing guard read diagnostic without claiming a write: %j',
     async ({ operation, create }) => {
       const id = '00000000-0000-4000-8000-000000000001';
       const server = await h
@@ -442,7 +442,7 @@ describe('public project directives', () => {
       expect(result.stderr).not.toContain('sonar list projects');
       if (create) {
         expect(result.stderr).toContain('stopped after 1 confirmed writes');
-        expect(result.stderr).toContain('The server rejected the next directive');
+        expect(result.stderr).toContain('The next change was not sent');
       }
       expect(
         server.getRecordedRequests().filter((r) => ['PATCH', 'DELETE'].includes(r.method)),
@@ -507,14 +507,21 @@ describe('public project directives', () => {
   );
   for (const operation of ['update', 'delete']) {
     for (const create of [false, true]) {
-      for (const failure of ['server', 'timeout', 'malformed', 'wrong-project']) {
+      for (const { failure, status } of [
+        { failure: 'server', status: 500 },
+        { failure: 'timeout', status: 408 },
+        { failure: 'malformed', status: 200 },
+        { failure: 'wrong-project', status: 200 },
+        { failure: 'forbidden', status: 403 },
+        { failure: 'missing', status: 404 },
+        { failure: 'limited', status: 429 },
+      ]) {
         it(`does not claim an attempted ${operation} when its guard read fails (${failure}, create=${create})`, async () => {
           const id = '00000000-0000-4000-8000-000000000001';
           const body =
             failure === 'wrong-project'
               ? JSON.stringify({ ...directive, id, projectId: 'different-project' })
               : '{}';
-          const status = failure === 'server' ? 500 : failure === 'timeout' ? 408 : 200;
           const server = await configured((api) =>
             api
               .withDirectives([{ ...directive, id, projectId: 'shop-branch-id' }])
@@ -548,6 +555,10 @@ describe('public project directives', () => {
             ).directives.find((row: ProjectDirective) => row.fromNodeKey === 'app:new');
             expect(created).toBeDefined();
             expect(result.stderr).toContain(created!.id);
+          } else if (status === 403 || status === 404 || status === 429) {
+            expect(result.stderr).not.toContain('The current state of directive');
+            if (status === 404) expect(result.stderr).toContain(`Directive ${id} was not found`);
+            else expect(result.stderr).toContain(String(status));
           } else {
             expect(result.stderr).toContain('No write request was sent');
             expect(result.stderr).toContain('nothing was changed');
