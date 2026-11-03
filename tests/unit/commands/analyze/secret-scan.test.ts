@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   analyzeSecrets,
+  runSecretsBinary,
   runSecretsBinaryOnStream,
   runSecretsBinaryOnText,
 } from '@/commands/analyze/secrets.ts';
@@ -187,6 +188,35 @@ describe('secretCheckCommand: auth forwarding', () => {
       'src/index.ts',
       'src/lib/auth.ts',
     ]);
+  });
+
+  it('passes --dangerous-show-secrets ahead of the paths when requested', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ issues: [] }), stderr: '' });
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await analyzeSecrets(
+        { paths: ['src/index.ts'], dangerousShowSecrets: true },
+        FAKE_AUTHENTICATED_CONTEXT,
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--dangerous-show-secrets',
+      'src/index.ts',
+    ]);
+  });
+
+  it('never passes --dangerous-show-secrets without per-run options, as hooks and the other scanners call it', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+    await runSecretsBinary('/fake/bin/sonar-secrets', ['src/index.ts'], FAKE_AUTH);
+
+    expect(spawnSpy.mock.calls[0][1]).not.toContain('--dangerous-show-secrets');
   });
 });
 
@@ -586,6 +616,27 @@ describe('secretCheckCommand: stdin scan', () => {
       .filter((c) => c.method === 'success')
       .map((c) => String(c.args[0]));
     expect(successes.some((m) => m.includes('No secrets found'))).toBe(true);
+  });
+
+  it('passes --dangerous-show-secrets for a stdin scan when requested', async () => {
+    spawnSpy.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ issues: [] }), stderr: '' });
+
+    const existsSpy = mockBinaryExists(true);
+    try {
+      await withMockStdin('const x = 1;\n', () =>
+        analyzeSecrets({ stdin: true, dangerousShowSecrets: true }, FAKE_AUTHENTICATED_CONTEXT),
+      );
+    } finally {
+      existsSpy.mockRestore();
+    }
+
+    expect(spawnSpy.mock.calls[0][1]).toEqual([
+      '--non-interactive',
+      '--json',
+      ...DEFAULT_SCAN_ARGS,
+      '--dangerous-show-secrets',
+      '--input',
+    ]);
   });
 
   it('throws when binary exits 51 during stdin scan (secrets found)', async () => {
