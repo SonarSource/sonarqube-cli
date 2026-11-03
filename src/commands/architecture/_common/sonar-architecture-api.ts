@@ -21,7 +21,7 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
+import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -38,8 +38,12 @@ import {
 } from './architecture-api.ts';
 import {
   directiveId,
+  type DirectiveInput,
+  directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
+  DirectivePreWriteError,
+  isDefiniteRejection,
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
@@ -360,6 +364,30 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return { directives, page };
   }
 
+  async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .post<unknown>(this.path('project-directives'), {
+        ...directive,
+        projectId,
+        origin: 'sonarqube-cli',
+      })
+      .orThrow();
+    const created = parseProjectDirective(result);
+    if (created.projectId !== projectId)
+      throw new CommandFailedError(
+        'The directive write returned a different project. Inspect the current list before retrying.',
+      );
+    if (
+      directiveKey(created) !== directiveKey(directive) ||
+      (directive.description !== undefined && directive.description !== created.description)
+    )
+      throw new CommandFailedError(
+        'The directive write response did not confirm the requested directive. Inspect the current list before retrying.',
+      );
+    return created;
+  }
+
   async getDirective(id: string): Promise<ProjectDirective> {
     const projectId = await this.projectId('Project directives');
     const result = await this.http
@@ -434,6 +462,71 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The public findings page returned a finding outside the requested filters.',
       );
     return { findings, page };
+  }
+
+  private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
+    return this.getDirective(id).catch((error: unknown) => {
+      const message =
+        isDefiniteRejection(error) && error instanceof Error
+          ? error.message
+          : `The current state of directive ${id} could not be verified.`;
+      throw new DirectivePreWriteError(message, { cause: error });
+    });
+  }
+
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.readDirectiveBeforeWrite(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
+    const updated = parseProjectDirective(response);
+    const projectId = await this.projectId('Project directives');
+    if (
+      updated.id.toLowerCase() !== directiveId(id) ||
+      updated.projectId !== projectId ||
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
+    )
+      throw new CommandFailedError(
+        'The directive update response did not confirm the requested directive. Inspect it before retrying.',
+      );
+    return updated;
+  }
+
+  async deleteDirective(id: string): Promise<void> {
+    await this.readDirectiveBeforeWrite(id);
+    let deleteAccepted = false;
+    try {
+      await this.http
+        .delete(this.directivePath(id))
+        .orThrow()
+        .catch((error: unknown) => {
+          if (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND)
+            throw new DirectiveNotFoundError(
+              `Directive ${id} was not found or is not accessible in the selected project.`,
+              { cause: error },
+            );
+          throw error;
+        });
+      deleteAccepted = true;
+      const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
+        throw new CommandFailedError(
+          `Expected HTTP 404 after deletion, received ${response.status}.`,
+        );
+    } catch (error) {
+      if (!deleteAccepted && isDefiniteRejection(error)) throw error;
+      throw new CommandFailedError(
+        `Directive deletion could not be confirmed. Inspect directive ${id} before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
   }
 
   private directivePath(id: string): string {
