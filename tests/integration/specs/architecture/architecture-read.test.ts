@@ -141,7 +141,7 @@ describe('sonar architecture reads', () => {
     'lists architecture with its arch alias in the root help',
     async () => {
       const help = await harness.run('--help');
-      expect(help.stdout).toContain('architecture|arch <current|intended');
+      expect(help.stdout).toContain('architecture|arch <command>');
     },
     { timeout: 15000 },
   );
