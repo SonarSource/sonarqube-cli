@@ -40,7 +40,8 @@ import type { Console } from '@/core/ui/console.ts';
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 import { buildSecretsScanArgs } from './secrets-scan-args.ts';
 
-const SCAN_TIMEOUT_MS = 2 * 60 * 1000;
+// Agent hooks are killed by their host after 60s, so this deadline stays inside that budget.
+const SCAN_TIMEOUT_MS = 60 * 1000;
 const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface AnalyzeSecretsOptions {
