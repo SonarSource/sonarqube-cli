@@ -1687,7 +1687,11 @@ export class FakeSonarQubeServerBuilder {
             return boundOnly
               ? new Response(
                   JSON.stringify({
-                    component: { key: boundOnly.projectKey, name: boundOnly.projectKey },
+                    component: {
+                      key: boundOnly.projectKey,
+                      name: boundOnly.projectKey,
+                      qualifier: 'TRK',
+                    },
                   }),
                   { headers: { 'Content-Type': 'application/json' } },
                 )
@@ -1706,6 +1710,7 @@ export class FakeSonarQubeServerBuilder {
                 component: {
                   key: projectData.key,
                   name: projectData.name,
+                  qualifier: 'TRK',
                   organization: projectData.organization,
                 },
               }),
@@ -1785,11 +1790,15 @@ export class FakeSonarQubeServerBuilder {
           if (projectsSearchErrorStatusCode !== undefined) {
             return new Response(projectsSearchErrorBody, { status: projectsSearchErrorStatusCode });
           }
-          const allProjects = [...projects.values()].map((p) => ({
-            key: p.key,
-            name: p.name,
-            qualifier: 'TRK',
-          }));
+          const needle = (query.q ?? '').toLowerCase();
+          const allProjects = [...projects.values()]
+            .filter(
+              (p) =>
+                !needle ||
+                p.key.toLowerCase().includes(needle) ||
+                p.name.toLowerCase().includes(needle),
+            )
+            .map((p) => ({ key: p.key, name: p.name, qualifier: 'TRK' }));
 
           const pageSize = Number.parseInt(query.ps ?? '500', 10);
           const page = Number.parseInt(query.p ?? '1', 10);
@@ -1797,7 +1806,7 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               paging: { pageIndex: page, pageSize, total: allProjects.length },
-              components: allProjects,
+              components: allProjects.slice((page - 1) * pageSize, page * pageSize),
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

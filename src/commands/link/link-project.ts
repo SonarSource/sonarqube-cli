@@ -37,9 +37,28 @@ import {
 } from '@/core/project-discovery/shared-project-config.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
+import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
+
 export interface LinkOptions {
   path: string;
   monorepo?: boolean;
+}
+
+/** Fails when a Cloud connection has no organization, before any prompt or write. */
+function requireCloudOrganization({ orgKey }: ResolvedAuth): string {
+  if (!orgKey) {
+    throw new CommandFailedError(
+      'Could not determine the SonarQube Cloud organization for the active connection.',
+      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
+    );
+  }
+  return orgKey;
+}
+
+function assertLinkableConnection(auth: ResolvedAuth): void {
+  if (auth.connectionType === 'cloud') {
+    requireCloudOrganization(auth);
+  }
 }
 
 export function deriveEntry(
@@ -51,26 +70,21 @@ export function deriveEntry(
     return { projectKey, path, serverUrl: auth.serverUrl };
   }
 
-  if (!auth.orgKey) {
-    throw new CommandFailedError(
-      'Could not determine the SonarQube Cloud organization for the active connection.',
-      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
-    );
-  }
+  const organization = requireCloudOrganization(auth);
 
   const region = cloudRegionFromUrl(auth.serverUrl);
   const origin = region ? new URL(auth.serverUrl).origin : undefined;
   if (!region || (origin !== SONARCLOUD_URL && origin !== SONARCLOUD_US_URL)) {
-    return { projectKey, path, serverUrl: auth.serverUrl, organization: auth.orgKey };
+    return { projectKey, path, serverUrl: auth.serverUrl, organization };
   }
-  return { projectKey, path, region, organization: auth.orgKey };
+  return { projectKey, path, region, organization };
 }
 
 /** Resolves to whether the written link takes effect (a shadowed link does not). */
 type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<boolean>;
 
 export function linkProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
@@ -81,7 +95,7 @@ export function linkProject(
 
 /** Single-project link: replaces the legacy singular `project` binding. */
 function linkSingleProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
@@ -98,7 +112,7 @@ function linkSingleProject(
 
 /** Monorepo link: adds or updates a mapping in the `projects` array. */
 function linkMonorepoProject(
-  projectKey: string,
+  projectKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
@@ -115,7 +129,7 @@ function linkMonorepoProject(
 }
 
 async function writeLink(
-  projectKey: string,
+  givenKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
   write: WriteEntry,
@@ -130,7 +144,10 @@ async function writeLink(
     });
   }
 
-  const entry = deriveEntry(auth, projectKey, path);
+  assertLinkableConnection(auth);
+  if (givenKey === undefined) {
+    assertCanChooseProject(ctx);
+  }
 
   const cwd = process.cwd();
   const gitRoot = await resolveGitRepoRoot(cwd);
@@ -152,6 +169,12 @@ async function writeLink(
   if (!gitRoot) {
     console.warn('No git repository found. Writing to the current directory instead.');
   }
+
+  const projectKey = givenKey ?? (await chooseProjectKey(projectRoot, monorepo, ctx));
+  if (projectKey === null) {
+    return;
+  }
+  const entry = deriveEntry(auth, projectKey, path);
 
   if (!(await write(targetDir, entry))) {
     return;
