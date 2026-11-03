@@ -192,6 +192,7 @@ export function sliceGraph(
   const totalBelow =
     below ?? graph.roots.reduce((sum, id) => sum + 1 + descendantsOf(graph, id), 0);
 
+  const pairs = feedbackPairs(edges);
   return {
     root: component ?? '',
     depth: levels.at(-1)?.depth ?? 0,
@@ -202,9 +203,9 @@ export function sliceGraph(
     totalNodes: totalBelow,
     nodes,
     edges: edges.slice(0, maxEdges),
-    feedbackPairs: feedbackPairs(edges),
+    feedbackPairs: pairs,
     outsideViewWeight,
-    capped: capped || edges.length > maxEdges || feedbackPairs(edges).total > MAX_FEEDBACK_PAIRS,
+    capped: capped || edges.length > maxEdges || pairs.total > MAX_FEEDBACK_PAIRS,
     omittedNodes: totalBelow - nodes.length,
     omittedEdges: Math.max(0, edges.length - maxEdges),
     drillDown: nodes
