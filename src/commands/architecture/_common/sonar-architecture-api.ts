@@ -48,20 +48,13 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import { collectionFailure, incompatibleResponse } from './errors.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 const MAX_PUBLIC_GROUPS = 50_000;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
 const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function incompatibleResponse(message: string): CommandFailedError {
-  return new CommandFailedError(message, {
-    remediationHint:
-      "The response does not match this CLI's supported public Architecture API contract. " +
-      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
-  });
-}
 
 interface ArchitectureIds {
   organizationId: string;
@@ -266,7 +259,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
           language: ecosystem,
         })
         .orThrow()
-        .catch((error: unknown) => this.collectionFailure(error));
+        .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
       if (!Array.isArray(response?.currentArchitectures)) {
         throw incompatibleResponse(
           'Invalid public current architecture response: currentArchitectures must be an array.',
@@ -281,7 +274,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const response = await this.http
       .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
       .orThrow()
-      .catch((error: unknown) => this.collectionFailure(error));
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     if (!Array.isArray(response?.intendedArchitectures)) {
       throw incompatibleResponse(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
@@ -355,7 +348,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         page?: { pageIndex: number; pageSize: number; total: number } | null;
       } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
       .orThrow()
-      .catch((error: unknown) => this.collectionFailure(error));
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     const page = result?.page;
     if (
       !Array.isArray(result?.projectDirectives) ||
@@ -575,23 +568,6 @@ export class SonarArchitectureApi implements ArchitectureApi {
     if (this.http.isCloud) return (await this.ids()).branchId;
     this.serverProjectIdPromise ??= this.resolveServerProjectId();
     return this.serverProjectIdPromise;
-  }
-
-  private collectionFailure(error: unknown): never {
-    if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
-      throw new CommandFailedError(
-        'The public Architecture API endpoint was not found (HTTP 404).',
-        {
-          cause: error,
-          remediationHint:
-            'Check feature availability, Browse permission and API routing.' +
-            (this.http.isCloud
-              ? ''
-              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
-        },
-      );
-    }
-    throw error;
   }
 
   private async resolveServerProjectId(): Promise<string> {
