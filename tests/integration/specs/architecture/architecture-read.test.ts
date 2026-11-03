@@ -190,16 +190,17 @@ describe('sonar architecture reads', () => {
     },
   );
 
-  it('reports empty current architecture before validating selected endpoints', async () => {
+  it('reports unavailable current architecture before validating selected endpoints', async () => {
     await serverWith((project) =>
       project.withArchitecture((architecture) => architecture.withStructure('java', [])),
     );
     const result = await harness.run(
-      `architecture current get -p ${PROJECT} --language java --from app --to core`,
+      `architecture current get -p ${PROJECT} --language java --from app --to core --format json`,
     );
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('No current architecture was returned');
     expect(result.stderr).not.toContain('Both dependency endpoints');
+    expect(result.stdout).toBe('');
   });
 
   it('prints an executable next-page command only while more dependencies exist', async () => {

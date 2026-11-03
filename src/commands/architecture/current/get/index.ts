@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
@@ -63,10 +64,9 @@ export async function getCurrent(
     });
 
   if (graphs.length === 0) {
-    ctx.console.warn(
-      `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`,
-    );
-    if (selection) return;
+    const message = `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`;
+    if (selection) throw new CommandFailedError(message);
+    ctx.console.warn(message);
   }
   if (selection) {
     const result = queryDependencies(graphs, selection, depth);

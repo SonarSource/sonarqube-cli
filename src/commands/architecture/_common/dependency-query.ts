@@ -32,8 +32,13 @@ export const DEPENDENCY_PAGE_SIZE = 20;
 const MAX_DEPENDENCY_PAGE_INDEX = 2_147_483_647;
 
 export function parseDependencyPageNumber(value: string): number {
-  if (!/^\d+$/.test(value))
-    throw new InvalidArgumentError('Dependency pagination requires whole decimal integers.');
+  if (!/^\d+$/.test(value)) {
+    const error = new InvalidArgumentError(
+      'Dependency pagination requires whole decimal integers.',
+    );
+    error.exitCode = 2;
+    throw error;
+  }
   return Number(value);
 }
 
