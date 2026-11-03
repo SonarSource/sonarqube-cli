@@ -35,6 +35,18 @@ run_bun_test() {
 }
 
 run_once() {
+  if [ -n "${INTEGRATION_TEST_PATH:-}" ]; then
+    path="./${INTEGRATION_TEST_PATH#./}"
+    echo "Narrow integration scope: ${path}"
+    if [ ! -f "${path}" ] && [ ! -d "${path}" ]; then
+      echo "Integration test path not found: ${path}"
+      ls -la tests/integration/specs/integrate/ 2>/dev/null || true
+      exit 1
+    fi
+    run_bun_test "${path}"
+    return $?
+  fi
+
   if [ "${INTEGRATION_SHARDED:-false}" = 'true' ]; then
     if ! mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh); then
       echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
@@ -47,18 +59,6 @@ run_once() {
     echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}:"
     printf '  %s\n' "${shard_paths[@]}"
     run_bun_test "${shard_paths[@]}"
-    return $?
-  fi
-
-  if [ -n "${INTEGRATION_TEST_PATH:-}" ]; then
-    path="./${INTEGRATION_TEST_PATH#./}"
-    echo "Narrow integration scope: ${path}"
-    if [ ! -f "${path}" ] && [ ! -d "${path}" ]; then
-      echo "Integration test path not found: ${path}"
-      ls -la tests/integration/specs/integrate/ 2>/dev/null || true
-      exit 1
-    fi
-    run_bun_test "${path}"
     return $?
   fi
 

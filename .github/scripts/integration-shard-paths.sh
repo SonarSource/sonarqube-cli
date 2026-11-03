@@ -35,13 +35,14 @@ while IFS= read -r dir; do
   name=$(basename "$dir")
   bucket=$(printf '%s' "$name" | cksum | awk '{print $1}')
   if (( bucket % total == index )); then
-    printf '%s\n' "${dir%/}"
+    # Explicit ./dir/ paths so bun test treats them as directories, not substring filters.
+    printf './%s/\n' "${dir%/}"
     count=$((count + 1))
   fi
 done < <("$FIND" "$specs_root" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
 
 if (( index == 0 )); then
-  printf '%s\n' "tests/integration/harness"
+  printf './%s/\n' "tests/integration/harness"
   count=$((count + 1))
 fi
 

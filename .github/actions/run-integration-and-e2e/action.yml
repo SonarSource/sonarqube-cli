@@ -32,7 +32,9 @@ inputs:
     required: false
     default: '4'
   integration-sharded:
-    description: When true, Linux integration runs a hash shard and uploads raw coverage for merge.
+    description: >-
+      When true, integration runs only the hash shard selected by integration-shard-index/total
+      (Linux and Windows). On Linux it also merges shard coverage and uploads an LCOV artifact.
     required: false
     default: 'false'
 
