@@ -25,6 +25,7 @@ import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import {
   AccessDeniedError,
   BadRequestError,
@@ -43,7 +44,6 @@ import {
   writableRevisionOf,
 } from './intended-model.ts';
 import type { IntendedFile } from './intended-validation.ts';
-import { shellQuote } from './shell-quote.ts';
 import { IntendedModelIdentityError } from './sonar-architecture-api.ts';
 
 const BACKUP_DIRECTORY_MODE = 0o700;

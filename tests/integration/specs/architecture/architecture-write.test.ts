@@ -25,12 +25,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import type { IntendedArchitecture } from '@/commands/architecture/_common/architecture-api.ts';
-import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
+import type { RecordedRequest } from '../../harness';
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 import { type FakeArchitecture } from '../../harness/fake-architecture';
-import type { RecordedRequest } from '../../harness/types';
 
 const TOKEN = 'arch-token';
 const PROJECT = 'shop';

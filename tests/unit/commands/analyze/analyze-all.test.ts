@@ -59,7 +59,7 @@ describe('analyzeAll --format json: SecretsReport.warnings', () => {
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
       '/fake/sonar-secrets',
     );
-    spawnSpy = spyOn(processLib, 'spawnProcess').mockResolvedValue({
+    spawnSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
       stdout: JSON.stringify({ issues: [] }),
       stderr: '',

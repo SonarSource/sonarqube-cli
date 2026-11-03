@@ -33,6 +33,8 @@ export interface BlobContent {
   content: Buffer;
 }
 
+const CAT_FILE_TIMEOUT_MS = 60_000;
+
 const LINE_FEED = 0x0a;
 const RECORD_TERMINATOR = Buffer.from('\n');
 
@@ -45,11 +47,17 @@ export async function readBlobContents(
   cwd: string,
 ): Promise<BlobContent[] | null> {
   if (blobs.length === 0) return [];
-  const result = await spawnProcessCapturingBytes('git', ['cat-file', '--batch'], {
-    cwd,
-    stdin: 'pipe',
-    stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
-  });
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['cat-file', '--batch'],
+    {
+      cwd,
+      stdin: 'pipe',
+      stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
+    },
+    CAT_FILE_TIMEOUT_MS,
+    'git cat-file --batch timed out',
+  );
   if (result.exitCode !== 0) return null;
 
   const contents = parseBatchOutput(result.stdout);
@@ -63,11 +71,17 @@ export async function readBlobSizes(
   cwd: string,
 ): Promise<Map<string, number> | null> {
   if (blobs.length === 0) return new Map();
-  const result = await spawnProcessCapturingBytes('git', ['cat-file', '--batch-check'], {
-    cwd,
-    stdin: 'pipe',
-    stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
-  });
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['cat-file', '--batch-check'],
+    {
+      cwd,
+      stdin: 'pipe',
+      stdinData: blobs.map((blob) => blob.oid).join('\n') + '\n',
+    },
+    CAT_FILE_TIMEOUT_MS,
+    'git cat-file --batch-check timed out',
+  );
   if (result.exitCode !== 0) return null;
 
   const sizes = new Map<string, number>();

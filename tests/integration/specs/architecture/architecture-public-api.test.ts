@@ -28,8 +28,9 @@ import {
   type IntendedArchitecture,
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
-import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 
+import type { RecordedRequest } from '../../harness';
 import { type FakeSonarQubeServer, TestHarness } from '../../harness';
 import {
   type FakeArchitecture,
@@ -37,7 +38,6 @@ import {
   routeArchitectureRequest,
 } from '../../harness/fake-architecture';
 import type { ProjectBuilder } from '../../harness/fake-sonarqube-server';
-import type { RecordedRequest } from '../../harness/types';
 import { git, initGitRepo } from '../hook/git-test-helpers';
 
 function collectionResponse(response: {
