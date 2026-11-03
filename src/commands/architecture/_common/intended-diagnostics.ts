@@ -34,36 +34,28 @@ export async function intendedDiagnostics(
 ): Promise<string[]> {
   const warnings: DiscoveryWarnings = { shown: [], total: 0 };
   const unavailable: string[] = [];
-  for (const language of new Set(
-    models.filter((model) => model.groups.length > 0).map((model) => model.language),
-  )) {
-    try {
-      const graphs = await api.getCurrent(language);
-      if (graphs.length !== 1) throw new Error('No unique discovery graph');
-      const graph = indexStructure(graphs[0].graph);
-      const artifacts = new Map<string, number>();
-      const visit = (nodes: StructureNode[]): void => {
-        for (const node of nodes) {
-          const key = graph.key.get(node.id);
-          if (key === undefined) throw new Error('Missing discovery key');
-          artifacts.set(key, node.id);
-          if ((node.nodes?.length ?? 0) > 0) {
-            artifacts.set(`${key}${childSeparator(node)}`, node.id);
-            artifacts.set(`${key}${childSeparator(node)}**`, node.id);
+  const languages = [
+    ...new Set(models.filter((model) => model.groups.length > 0).map((model) => model.language)),
+  ];
+  await languages.reduce(
+    (pending, language) =>
+      pending.then(async () => {
+        try {
+          const graphs = await api.getCurrent(language);
+          if (graphs.length !== 1) throw new Error('No unique discovery graph');
+          const graph = indexStructure(graphs[0].graph);
+          const artifacts = discoveryArtifacts(graphs[0].graph.nodes, graph);
+          for (const model of models.filter((model) => model.language === language)) {
+            inspectGroups(model.groups, graph, artifacts, warnings);
           }
-          visit(node.nodes ?? []);
+        } catch {
+          unavailable.push(
+            `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read. Structural validation still applies.`,
+          );
         }
-      };
-      visit(graphs[0].graph.nodes);
-      for (const model of models.filter((model) => model.language === language)) {
-        inspectGroups(model.groups, graph, artifacts, warnings);
-      }
-    } catch {
-      unavailable.push(
-        `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read. Structural validation still applies.`,
-      );
-    }
-  }
+      }),
+    Promise.resolve(),
+  );
   return [
     ...unavailable,
     ...warnings.shown,
@@ -71,6 +63,24 @@ export async function intendedDiagnostics(
       ? [`${warnings.total - warnings.shown.length} additional discovery warning(s) omitted.`]
       : []),
   ];
+}
+
+function discoveryArtifacts(nodes: StructureNode[], graph: IndexedGraph): Map<string, number> {
+  const artifacts = new Map<string, number>();
+  const visit = (children: StructureNode[]): void => {
+    for (const node of children) {
+      const key = graph.key.get(node.id);
+      if (key === undefined) throw new Error('Missing discovery key');
+      artifacts.set(key, node.id);
+      if ((node.nodes?.length ?? 0) > 0) {
+        artifacts.set(`${key}${childSeparator(node)}`, node.id);
+        artifacts.set(`${key}${childSeparator(node)}**`, node.id);
+      }
+      visit(node.nodes ?? []);
+    }
+  };
+  visit(nodes);
+  return artifacts;
 }
 
 interface DiscoveryWarnings {
