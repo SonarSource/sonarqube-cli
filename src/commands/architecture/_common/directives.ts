@@ -33,8 +33,7 @@ import {
   HTTP_STATUS_REQUEST_TIMEOUT,
 } from '@/core/server/http-constants.ts';
 
-import { type ArchitectureApi, type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
-import { indexStructure } from './graph.ts';
+import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
 
 const MAX_DIRECTIVE_ENUM_LENGTH = 30;
 const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
@@ -490,60 +489,4 @@ function validateUpdatedIdentities(updates: DirectiveInput[], known: Set<string>
       );
     afterKeys.add(key);
   }
-}
-
-export async function warnDirectiveKeys(
-  api: ArchitectureApi,
-  directives: DirectiveInput[],
-  warn: (message: string) => void,
-): Promise<void> {
-  const languages = [...new Set(directives.map((directive) => directive.ecosystem))];
-  await inSequence(languages, async (language) => {
-    let keys: Set<string>;
-    try {
-      const graphs = await api.getCurrent(language);
-      if (graphs.length === 0) {
-        warn(`No current ${language} graph is available; directive node keys were not checked.`);
-        return;
-      }
-      keys = new Set(graphs.flatMap(({ graph }) => [...indexStructure(graph).idByKey.keys()]));
-    } catch {
-      warn(
-        `Could not check directive node keys against the current ${language} graph. Review the keys before applying.`,
-      );
-      return;
-    }
-    for (const directive of directives.filter((item) => item.ecosystem === language)) {
-      const graphType = ['java', 'cs'].includes(language) ? 'namespace_graph' : 'file_graph';
-      if (
-        directive.graphType !== graphType ||
-        (directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE) !==
-          DEFAULT_DIRECTIVE_PERSPECTIVE
-      ) {
-        warn(
-          `Node keys were not checked for ${directive.graphType} perspective ${directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE}; the public current graph does not identify that view.`,
-        );
-        continue;
-      }
-      const checked =
-        directive.type === 'RENAME_NODE'
-          ? [directive.fromNodeKey]
-          : [directive.fromNodeKey, directive.toNodeKey];
-      for (const key of new Set(checked)) {
-        if (!keys.has(key)) warn(missingDirectiveKeyWarning(directive, key, language));
-      }
-    }
-  });
-}
-
-function missingDirectiveKeyWarning(
-  directive: DirectiveInput,
-  key: string,
-  language: string,
-): string {
-  const guidance =
-    directive.type === 'MOVE_NODE' && key === directive.toNodeKey
-      ? 'The MOVE_NODE destination must be an existing container, not the moved node’s new key.'
-      : 'Review the key before applying.';
-  return `Directive ${directive.type}: node '${key}' was not found in the current ${language} graph. ${guidance}`;
 }
