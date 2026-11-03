@@ -130,7 +130,7 @@ function parseSkippedFiles(raw: unknown): SecretsSkippedFiles | undefined {
   if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return undefined;
   if (paths === undefined) return { count };
   if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) return undefined;
-  return { count, paths: paths };
+  return { count, paths };
 }
 
 interface ScanDisplayContext {
