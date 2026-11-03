@@ -61,11 +61,11 @@ describe('spawnProcess', () => {
     expect(result.stderr).toBe(EXPECTED);
   });
 
-  it('keeps a trailing newline when trimming is turned off', async () => {
+  it('returns stdout unchanged, including a trailing newline', async () => {
     const result = await spawnProcess(
       process.execPath,
       ['-e', 'process.stdout.write("skill\\n")'],
-      { stdout: 'pipe', trimOutput: false },
+      { stdout: 'pipe' },
     );
 
     expect(result.stdout).toBe('skill\n');

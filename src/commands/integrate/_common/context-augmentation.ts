@@ -284,8 +284,6 @@ async function runCagSubprocess(
         stdin: 'inherit',
         stdout: 'pipe',
         stderr: 'pipe',
-        // Session-start context is injected with its trailing newline.
-        trimOutput: false,
       },
       timeoutMs,
       `sonar-context-augmentation timed out after ${timeoutMs}ms`,

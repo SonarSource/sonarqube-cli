@@ -41,11 +41,6 @@ export interface SpawnOptions {
    * Vortex Context deletes inherited `SONAR_CONTEXT_*` keys, which a merge would put back.
    */
   isolateEnv?: boolean;
-  /**
-   * When false, stdout and stderr keep their original whitespace. The default trims both.
-   * Session-start context keeps the binary's trailing newline.
-   */
-  trimOutput?: boolean;
   /** Called immediately after the child process spawns, with a function to kill it. */
   onSpawn?: (kill: () => void) => void;
 }
@@ -63,10 +58,6 @@ function childEnv(options: SpawnOptions): NodeJS.ProcessEnv {
     return options.env ?? {};
   }
   return { ...process.env, ...options.env };
-}
-
-function presentedText(text: string, options: SpawnOptions): string {
-  return options.trimOutput === false ? text : text.trim();
 }
 
 async function raceWithTimeout<T>(
@@ -178,8 +169,8 @@ async function spawnProcess(
       resolve({
         exitCode: stdinBroken ? code || 1 : code,
         signal: signal ?? null,
-        stdout: presentedText(stdout + stdoutDecoder.end(), options),
-        stderr: presentedText(stderr + stderrDecoder.end(), options),
+        stdout: stdout + stdoutDecoder.end(),
+        stderr: stderr + stderrDecoder.end(),
       });
     });
   });
@@ -272,7 +263,7 @@ async function captureProcessBytes(
       resolve({
         exitCode: code,
         stdout: Buffer.concat(stdout),
-        stderr: presentedText(stderr + stderrDecoder.end(), options),
+        stderr: stderr + stderrDecoder.end(),
       });
     });
   });

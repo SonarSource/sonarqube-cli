@@ -133,7 +133,7 @@ async function unsetGlobalHooksPath(expectedHooksDir: string): Promise<void> {
     // Exit code 1: the key is unset. Anything else: cannot read it — leave it alone.
     return;
   }
-  if (normalizePath(current.stdout) !== normalizePath(expectedHooksDir)) {
+  if (normalizePath(current.stdout.trim()) !== normalizePath(expectedHooksDir)) {
     return;
   }
 
