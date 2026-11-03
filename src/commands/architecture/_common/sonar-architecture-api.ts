@@ -21,7 +21,7 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
+import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
@@ -42,6 +42,7 @@ import {
   directiveKey,
   DirectiveNotFoundError,
   type DirectivePage,
+  isDefiniteRejection,
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
@@ -429,6 +430,36 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'The directive update response did not confirm the requested directive. Inspect it before retrying.',
       );
     return updated;
+  }
+
+  async deleteDirective(id: string): Promise<void> {
+    await this.getDirective(id);
+    let deleteAccepted = false;
+    try {
+      await this.http
+        .delete(this.directivePath(id))
+        .orThrow()
+        .catch((error: unknown) => {
+          if (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND)
+            throw new DirectiveNotFoundError(
+              `Directive ${id} was not found or is not accessible in the selected project.`,
+              { cause: error },
+            );
+          throw error;
+        });
+      deleteAccepted = true;
+      const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
+        throw new CommandFailedError(
+          `Expected HTTP 404 after deletion, received ${response.status}.`,
+        );
+    } catch (error) {
+      if (!deleteAccepted && isDefiniteRejection(error)) throw error;
+      throw new CommandFailedError(
+        `Directive deletion could not be confirmed. Inspect directive ${id} before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
   }
 
   private directivePath(id: string): string {
