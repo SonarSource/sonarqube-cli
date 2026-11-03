@@ -40,6 +40,9 @@ import type { Console } from '@/core/ui/console.ts';
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 import { buildSecretsScanArgs } from './secrets-scan-args.ts';
 
+const SCAN_TIMEOUT_MS = 30_000;
+const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
+
 export interface AnalyzeSecretsOptions {
   paths?: string[];
   stdin?: boolean;
@@ -120,8 +123,6 @@ export async function analyzeSecrets(
 const BINARY_AUTH_URL_ENV = 'SONAR_SECRETS_AUTH_URL';
 const BINARY_AUTH_TOKEN_ENV = 'SONAR_SECRETS_TOKEN';
 
-const SCAN_TIMEOUT_MS = 30000;
-
 /**
  * Run sonar-secrets binary on the given files. Returns the full spawn result.
  * Kills the child process on timeout.
@@ -194,8 +195,8 @@ export async function runSecretsBinaryOnStream(
       stderr: 'pipe',
       env: await buildAuthEnv(auth),
     },
-    SCAN_TIMEOUT_MS,
-    `Scan timed out after ${SCAN_TIMEOUT_MS}ms`,
+    PUSH_SCAN_TIMEOUT_MS,
+    `Scan timed out after ${PUSH_SCAN_TIMEOUT_MS}ms`,
   );
 }
 
