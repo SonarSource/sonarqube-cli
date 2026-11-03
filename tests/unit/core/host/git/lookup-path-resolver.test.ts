@@ -80,7 +80,7 @@ describe('resolveLookupPaths', () => {
   }
 
   beforeEach(() => {
-    spawnProcessSpy = spyOn(processLib, 'spawnProcess');
+    spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout');
   });
 
   afterEach(() => {

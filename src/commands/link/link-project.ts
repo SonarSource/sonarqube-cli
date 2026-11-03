@@ -42,7 +42,7 @@ export interface LinkOptions {
   monorepo?: boolean;
 }
 
-function deriveEntry(
+export function deriveEntry(
   auth: ResolvedAuth,
   projectKey: string,
   path: string,
