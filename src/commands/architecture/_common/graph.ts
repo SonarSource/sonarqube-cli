@@ -73,6 +73,8 @@ export interface GraphSlice {
   levels: Array<{ depth: number; nodes: number }>;
   omittedLevel?: { depth: number; nodes: number };
   totalNodes: number;
+  nodesInScope: number;
+  message?: string;
   nodes: SliceNode[];
   /** The heaviest dependencies between visible nodes, at most `maxEdges`. */
   edges: SliceEdge[];
@@ -170,18 +172,20 @@ export function sliceGraph(
   const visible: number[] = [];
   let frontier = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
   let capped = false;
+  let nodesInScope = 0;
   const levels: GraphSlice['levels'] = [];
   let omittedLevel: GraphSlice['omittedLevel'];
   for (let level = 1; level <= depth && frontier.length > 0; level++) {
-    if (visible.length + frontier.length > maxNodes) {
+    nodesInScope += frontier.length;
+    if (!capped && visible.length + frontier.length > maxNodes) {
       capped = true;
       omittedLevel = { depth: level, nodes: frontier.length };
       if (visible.length === 0) {
         appendVisibleLevel(visible, levels, largest(graph, frontier, maxNodes), level);
       }
-      break;
+    } else if (!capped) {
+      appendVisibleLevel(visible, levels, frontier, level);
     }
-    appendVisibleLevel(visible, levels, frontier, level);
     frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
   }
 
@@ -201,12 +205,16 @@ export function sliceGraph(
     levels,
     ...(omittedLevel === undefined ? {} : { omittedLevel }),
     totalNodes: totalBelow,
+    nodesInScope,
+    ...(component !== undefined && totalBelow === 0
+      ? { message: `Component '${component}' is a leaf; there are no children below it.` }
+      : {}),
     nodes,
     edges: edges.slice(0, maxEdges),
     feedbackPairs: pairs,
     outsideViewWeight,
     capped: capped || edges.length > maxEdges || pairs.total > MAX_FEEDBACK_PAIRS,
-    omittedNodes: totalBelow - nodes.length,
+    omittedNodes: nodesInScope - nodes.length,
     omittedEdges: Math.max(0, edges.length - maxEdges),
     drillDown: nodes
       .filter((node) => node.truncated)

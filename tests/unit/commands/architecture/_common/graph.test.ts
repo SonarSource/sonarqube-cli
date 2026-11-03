@@ -177,7 +177,13 @@ describe('sliceGraph', () => {
       { from: 'src', to: 'lib', weight: 5 },
       { from: 'app', to: 'src', weight: 2 },
     ]);
-    expect(slice).toMatchObject({ totalNodes: 7, capped: false, omittedNodes: 4, omittedEdges: 0 });
+    expect(slice).toMatchObject({
+      totalNodes: 7,
+      nodesInScope: 3,
+      capped: false,
+      omittedNodes: 0,
+      omittedEdges: 0,
+    });
     expect(slice.drillDown).toEqual(['app', 'src']);
     expect(slice.feedbackPairs).toEqual({ total: 0, heaviest: [] });
     expect(slice.outsideViewWeight).toBe(0);
@@ -209,12 +215,23 @@ describe('sliceGraph', () => {
     expect(slice.nodes.map(({ key }) => key)).toEqual(['app']);
     expect(slice).toMatchObject({
       capped: true,
-      omittedNodes: 6,
+      omittedNodes: 2,
       depth: 1,
       requestedDepth: 1,
       nodeLimit: 1,
       levels: [{ depth: 1, nodes: 1 }],
       omittedLevel: { depth: 1, nodes: 3 },
+    });
+  });
+
+  it('counts only requested nodes omitted by the cap, including levels after it is reached', () => {
+    expect(sliceGraph(index, undefined, 1, 1)).toMatchObject({ nodesInScope: 3, omittedNodes: 2 });
+    expect(sliceGraph(index, undefined, 2, 1)).toMatchObject({ nodesInScope: 5, omittedNodes: 4 });
+    expect(sliceGraph(index, undefined, 3, 1)).toMatchObject({ nodesInScope: 7, omittedNodes: 6 });
+    expect(sliceGraph(index, 'app', 1, 1)).toMatchObject({
+      nodesInScope: 1,
+      omittedNodes: 0,
+      capped: false,
     });
   });
 

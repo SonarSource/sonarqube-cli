@@ -125,6 +125,23 @@ describe('sonar architecture reads', () => {
     return server;
   }
 
+  it('explains a leaf in JSON, TOON and text without claiming missing data', async () => {
+    await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SMALL_GRAPH)));
+    for (const format of ['json', 'toon', 'text']) {
+      const result = await harness.run(
+        `architecture current get --project ${PROJECT} --language java --component app:com.example.web --format ${format}`,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        "Component 'app:com.example.web' is a leaf; there are no children below it.",
+      );
+      if (format === 'json') {
+        const payload = JSON.parse(result.stdout) as CurrentPayload;
+        expect(payload.languages[0]).toMatchObject({ nodes: [], capped: false });
+      }
+    }
+  });
+
   it('exposes architecture commands and the arch alias without an Alpha flag', async () => {
     const result = await harness.run('architecture --help');
     expect(result.exitCode).toBe(0);

@@ -118,6 +118,24 @@ describe('sonar architecture intended set', () => {
   }
 
   describe('intended', () => {
+    it('prints a quoted backup recovery preview after a successful replacement', async () => {
+      const server = await startWith((fake) => fake.withIntended(SAVED));
+      const exported = await readSavedFile();
+      harness.cwd.writeFile('model.json', JSON.stringify({ ...exported, models: NEXT }));
+      const result = await harness.run(
+        `architecture intended set --project ${PROJECT} --file model.json`,
+      );
+      expect(result.exitCode).toBe(0);
+      const backup = backupPathFrom(result.stdout);
+      expect(result.stdout).toContain(
+        `Preview restoring this backup: sonar architecture intended set --project ${shellQuote(PROJECT)} --file ${shellQuote(backup)} --dry-run`,
+      );
+      expect(result.stdout).toContain(
+        'Inspect the current model and the preview before restoring.',
+      );
+      expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    });
+
     for (const endpoint of ['missing', 'Web']) {
       it(`refuses an invalid constraint (${endpoint}) before reading architecture`, async () => {
         const server = await start();

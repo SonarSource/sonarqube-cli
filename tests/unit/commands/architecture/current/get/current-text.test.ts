@@ -39,6 +39,7 @@ function slice(overrides: Partial<GraphSlice>): GraphSlice {
     nodeLimit: 150,
     levels: [{ depth: 1, nodes: 0 }],
     totalNodes: 10,
+    nodesInScope: 0,
     nodes: [],
     edges: [],
     feedbackPairs: { total: 0, heaviest: [] },

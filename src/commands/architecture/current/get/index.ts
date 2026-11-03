@@ -121,7 +121,7 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
   }
   return {
     language: current.ecosystem,
-    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
+    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${slice.message === undefined ? '' : ` ${slice.message}`}${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
     ...slice,
   };
 }

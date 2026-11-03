@@ -56,6 +56,7 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
         `${slice.nodes.length} of ${slice.totalNodes} node(s) in view, ${slice.depth} level(s) ${where}${cap}`,
     ),
   ];
+  if (slice.message !== undefined) lines.push(slice.message);
   if (slice.omittedLevel !== undefined) lines.push(formatSliceLimit(slice));
   if (base !== undefined) lines.push(dim(`Names are relative to ${base}`));
 

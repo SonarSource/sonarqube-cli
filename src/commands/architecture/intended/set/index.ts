@@ -38,6 +38,7 @@ import {
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
 import { CLI_DIR } from '@/core/config-constants.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { green, red, yellow } from '@/core/ui/colors.ts';
 
 import { resolveProject } from '../../_common/project.ts';
@@ -126,6 +127,14 @@ export async function setIntended(
   ctx.console.success(`${verb} the intended architecture of '${projectKey}'.`);
   if (result.backupPath !== undefined) {
     ctx.console.info(`The previous one is backed up in ${result.backupPath}`);
+    const restore =
+      `sonar architecture intended set --project ${shellQuote(projectKey)}` +
+      ` --file ${shellQuote(result.backupPath)}`;
+    ctx.console.info(`Preview restoring this backup: ${restore} --dry-run`);
+    ctx.console.info(
+      'Inspect the current model and the preview before restoring. ' +
+        'To apply, run the same command without --dry-run.',
+    );
   }
   ctx.console.info('SonarQube applies it from the next analysis.');
 }
