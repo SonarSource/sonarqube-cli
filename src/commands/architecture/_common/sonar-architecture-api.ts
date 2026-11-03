@@ -34,6 +34,7 @@ import {
   ECOSYSTEMS,
   type IntendedArchitecture,
   type IntendedGroup,
+  type IntendedState,
   type StructureGraph,
   type StructureNode,
 } from './architecture-api.ts';
@@ -51,15 +52,33 @@ import {
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 const MAX_PUBLIC_GROUPS = 50_000;
+const MAX_PUBLIC_PERSPECTIVES = 50;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
+const FIRST_SUCCESS_STATUS = 200;
+const FIRST_REDIRECT_STATUS = 300;
 const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function incompatibleResponse(message: string): CommandFailedError {
+function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
   return new CommandFailedError(message, {
+    cause,
     remediationHint:
       "The response does not match this CLI's supported public Architecture API contract. " +
       'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
   });
+}
+
+function intendedWriteError(error: Error): Error {
+  if (
+    error instanceof UnexpectedApiError &&
+    error.status >= FIRST_SUCCESS_STATUS &&
+    error.status < FIRST_REDIRECT_STATUS
+  ) {
+    return incompatibleResponse(
+      'Invalid public intended architecture write response: expected JSON.',
+      error,
+    );
+  }
+  return error;
 }
 
 interface ArchitectureIds {
@@ -75,9 +94,13 @@ interface CurrentArchitecturesDto {
   currentArchitectures: StructureGraph[];
 }
 
+interface IntendedResourceDto {
+  id: string;
+  perspectives: IntendedModelExportDto[];
+}
+
 interface IntendedArchitecturesDto {
-  id?: string | null;
-  intendedArchitectures: IntendedModelExportDto[];
+  intendedArchitectures: IntendedResourceDto[];
 }
 
 /** The analyzed graphs of each requested ecosystem, queried in parallel. */
@@ -276,58 +299,76 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async getIntended(): Promise<IntendedArchitecture[]> {
+    return (await this.getIntendedState()).models;
+  }
+
+  async getIntendedState(): Promise<IntendedState> {
     const projectId = await this.projectId();
     const response = await this.http
-      .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
+      .get<IntendedArchitecturesDto | null>(this.path('project-intended-architectures'), {
+        projectId,
+      })
       .orThrow()
       .catch((error: unknown) => this.collectionFailure(error));
-    if (!Array.isArray(response?.intendedArchitectures)) {
-      throw incompatibleResponse(
-        'Invalid public intended architecture response: intendedArchitectures must be an array.',
-      );
-    }
     if (
-      response.intendedArchitectures.some(
-        (model: unknown) => model === null || typeof model !== 'object',
-      )
+      !Array.isArray(response?.intendedArchitectures) ||
+      response.intendedArchitectures.length > 1
     ) {
       throw incompatibleResponse(
-        'Invalid public intended architecture response: each model must be an object.',
+        'Invalid public intended architecture response: expected at most one resource.',
       );
     }
-    const id = response.id ?? undefined;
-    if (
-      (id !== undefined && (typeof id !== 'string' || !MODEL_ID.test(id))) ||
-      (response.intendedArchitectures.length > 0 && id === undefined)
-    ) {
-      throw incompatibleResponse(
-        'Invalid public intended architecture response: expected a root server model id.',
-      );
-    }
-    if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
+    const resource = response.intendedArchitectures.at(0);
+    if (resource === undefined) return { models: [] };
+    const state = this.parseIntendedResource(resource);
+    if (this.intendedModelId !== undefined && this.intendedModelId !== state.id) {
       throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
       );
     }
-    this.intendedModelId ??= id;
-    return response.intendedArchitectures.map(toIntended);
+    this.intendedModelId = state.id;
+    return state;
+  }
+
+  private parseIntendedResource(value: unknown): IntendedState {
+    const resource = objectField(value);
+    if (
+      typeof resource.id !== 'string' ||
+      !MODEL_ID.test(resource.id) ||
+      !Array.isArray(resource.perspectives) ||
+      resource.perspectives.length > MAX_PUBLIC_PERSPECTIVES
+    ) {
+      throw incompatibleResponse(
+        'Invalid public intended architecture response: expected a resource id and perspectives.',
+      );
+    }
+    const models = resource.perspectives.map(toIntended);
+    const identities = models.map(({ type, language }) => `${type}/${language}`);
+    if (new Set(identities).size !== identities.length) {
+      throw incompatibleResponse(
+        'Invalid public intended architecture response: duplicate perspectives.',
+      );
+    }
+    return { id: resource.id, models };
   }
 
   async createIntended(models: IntendedArchitecture[]): Promise<void> {
     const response = await this.http
-      .post<IntendedArchitecturesDto | null>(this.path('intended-architectures'), {
+      .post<IntendedResourceDto | null>(this.path('project-intended-architectures'), {
         projectId: await this.projectId(),
-        intendedArchitectures: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
+        perspectives: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
       })
+      .mapErr(intendedWriteError)
       .orThrow();
     this.verifySaved(response);
   }
 
   async updateIntended(models: IntendedArchitecture[]): Promise<void> {
     const response = await this.http
-      .patch<IntendedArchitecturesDto | null>(this.modelPath(), {
-        intendedArchitectures: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
+      .patch<IntendedResourceDto | null>(this.modelPath(), {
+        perspectives: models.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
       })
+      .mapErr(intendedWriteError)
       .orThrow();
     this.verifySaved(response);
   }
@@ -490,31 +531,27 @@ export class SonarArchitectureApi implements ArchitectureApi {
         'Cannot change an intended architecture without its server id from a public read.',
       );
     }
-    return `${this.path('intended-architectures')}/${encodeURIComponent(this.intendedModelId)}`;
+    return `${this.path('project-intended-architectures')}/${encodeURIComponent(this.intendedModelId)}`;
   }
 
-  private verifySaved(response: IntendedArchitecturesDto | null): void {
-    if (
-      !Array.isArray(response?.intendedArchitectures) ||
-      response.intendedArchitectures.length === 0
-    ) {
+  private verifySaved(response: IntendedResourceDto | null): void {
+    if (!response) {
       throw incompatibleResponse(
-        'Invalid public intended architecture write response: missing model envelope or server id.',
+        'Invalid public intended architecture write response: missing resource.',
       );
     }
-    const id = response.id ?? undefined;
-    if (this.intendedModelId !== undefined && id !== undefined && this.intendedModelId !== id) {
+    const state = this.parseIntendedResource(response);
+    if (state.models.length === 0) {
+      throw incompatibleResponse(
+        'Invalid public intended architecture write response: missing perspectives.',
+      );
+    }
+    if (this.intendedModelId !== undefined && this.intendedModelId !== state.id) {
       throw new IntendedModelIdentityError(
         'The intended architecture model identity changed; read the current state before retrying.',
       );
     }
-    if (typeof id !== 'string' || !MODEL_ID.test(id)) {
-      throw incompatibleResponse(
-        'Invalid public intended architecture write response: unexpected server model id.',
-      );
-    }
-    response.intendedArchitectures.forEach(toIntended);
-    this.intendedModelId = id;
+    this.intendedModelId = state.id;
   }
 
   private path(resource: string): string {
