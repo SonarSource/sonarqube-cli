@@ -172,7 +172,7 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), { cause: error });
+  return new CommandFailedError(lines.join('\n'), { cause: error ?? readError });
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
