@@ -25,8 +25,8 @@ import logger from '../../observability/logger.ts';
 import { spawnProcessWithTimeout } from '../../process/process.ts';
 import { isWindows } from './platform-detector.ts';
 
-const RUNTIME_INFO_TIMEOUT_MS = 3_000;
-// `sonar run mcp` waits on a cold Docker Desktop. The 3s deadline is only for status checks.
+const RUNTIME_INFO_TIMEOUT_MS = 10_000;
+// `sonar run mcp` waits on a cold Docker Desktop. Status checks use a shorter probe.
 const RUNTIME_LAUNCH_TIMEOUT_MS = 2 * 60 * 1000;
 const CONTAINER_RUNTIMES = ['docker', 'podman', 'nerdctl'] as const;
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number];

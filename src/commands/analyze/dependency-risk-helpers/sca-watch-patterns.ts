@@ -25,7 +25,7 @@ import logger from '@/core/observability/logger.ts';
 
 import type { ScaScannerSpawner } from './sca-scanner-spawner.ts';
 
-const WATCH_PATTERNS_TIMEOUT_MS = 15_000;
+const WATCH_PATTERNS_TIMEOUT_MS = 2 * 60 * 1000;
 
 interface WatchPatternsPayload {
   patterns?: unknown;

@@ -40,7 +40,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { scanAndEmitSecrets } from './secrets-analysis-telemetry.ts';
 import { buildSecretsScanArgs } from './secrets-scan-args.ts';
 
-const SCAN_TIMEOUT_MS = 30_000;
+const SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 const PUSH_SCAN_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface AnalyzeSecretsOptions {

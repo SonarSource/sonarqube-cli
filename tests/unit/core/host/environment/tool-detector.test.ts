@@ -523,7 +523,7 @@ describe('checkContainerRuntimeHealth', () => {
       'wsl.exe',
       ['docker', 'info'],
       {},
-      3000,
+      10_000,
       expect.any(String),
     );
   });
