@@ -32,7 +32,7 @@ run_bun_test() {
 }
 
 run_once() {
-  if [ -n "${INTEGRATION_SHARD_INDEX:-}" ]; then
+  if [ "${INTEGRATION_SHARDED:-false}" = true ] || [ "${INTEGRATION_SHARDED:-false}" = True ]; then
     mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh)
     echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}:"
     printf '  %s\n' "${shard_paths[@]}"

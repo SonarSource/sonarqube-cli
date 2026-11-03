@@ -37,6 +37,10 @@ inputs:
     description: Number of integration shards (used with integration-shard-index).
     required: false
     default: '4'
+  integration-sharded:
+    description: When true, Linux integration runs a hash shard and uploads raw coverage for merge.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -117,6 +121,7 @@ runs:
         INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
+        INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
         INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
         USE_COVERAGE: '1'
       run: bash .github/scripts/run-integration-scope.sh
@@ -160,19 +165,19 @@ runs:
       run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:e2e
 
     - name: Merge coverage reports (Linux)
-      if: ${{ inputs.os == 'linux' && inputs.integration-shard-index == '' }}
+      if: ${{ inputs.os == 'linux' && inputs.integration-sharded != 'true' }}
       shell: bash
       run: bun build-scripts/report-coverage.ts
 
     - name: Upload integration coverage (Linux)
-      if: ${{ inputs.os == 'linux' && inputs.integration-shard-index == '' }}
+      if: ${{ inputs.os == 'linux' && inputs.integration-sharded != 'true' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage
         path: tests/coverage/reports/integration/
 
     - name: Upload integration coverage raw (Linux shard)
-      if: ${{ inputs.os == 'linux' && inputs.integration-shard-index != '' }}
+      if: ${{ inputs.os == 'linux' && inputs.integration-sharded == 'true' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage-raw-${{ inputs.integration-shard-index }}

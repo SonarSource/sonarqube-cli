@@ -428,6 +428,8 @@ jobs:
     needs: [prepare, build-binaries]
     strategy:
       fail-fast: false
+      # Cap parallel shard startups to reduce GitHub Actions download 429s (checkout/vault).
+      max-parallel: 2
       matrix:
         shard: [0, 1, 2, 3]
     steps:
@@ -452,8 +454,9 @@ jobs:
           os: linux
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-linux-x86-64
-          integration-shard-index: ${{ matrix.shard }}
+          integration-shard-index: ${{ format('{0}', matrix.shard) }}
           integration-shard-total: '4'
+          integration-sharded: 'true'
           skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   integration-coverage-linux:
