@@ -76,6 +76,23 @@ The write replaces the complete intended model; omitted content is removed.
 5. Read the saved intended architecture to verify the result. It takes effect from the project's
    next analysis.
 
+When the user asks to reproduce a physical package or folder hierarchy, first inspect bounded
+current slices to obtain the real artifact keys, separators and intermediate parents. Keep the
+complete ancestor chain, and follow a single-child chain to its branching point as the UI does.
+For example, under \`gctoolkit-parser\`, put \`jvm\` and \`unified\` inside the shared
+\`com.microsoft.gctoolkit.parser\` group, rather than adding full package names as flat siblings.
+Use the artifact's child separator followed by \`**\` to select a container's descendants
+(e.g. \`gctoolkit-parser:com.microsoft.gctoolkit.parser.**\`). Exact leaf patterns are valid;
+never append \`**\` blindly. Preserve discovery-binding patterns alongside renamed/moved
+intended patterns. Keep user-requested logical groupings; do not normalize them into a physical
+tree. If a physical mapping is ambiguous or the necessary artifacts are unavailable, ask before
+constructing it. The clients report discovery-backed warnings without moving groups or rewriting
+patterns. An unavailable discovery check is not proof that a pattern matches.
+
+Constraint endpoints name full intended group keys, not discovery component keys. Check both
+endpoints against the same perspective. Self-references and nonexistent or ambiguous exact keys
+are rejected. Public wildcard selectors and descendants of imported patterns remain server-resolved.
+
 Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
 a new preview and confirmation.

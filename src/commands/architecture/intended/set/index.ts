@@ -28,6 +28,7 @@ import {
   type IntendedGroup,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { toArchitectureError } from '@/commands/architecture/_common/errors.ts';
+import { intendedDiagnostics } from '@/commands/architecture/_common/intended-diagnostics.ts';
 import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff.ts';
 import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
 import { setIntended as setIntendedModel } from '@/commands/architecture/_common/set-intended.ts';
@@ -70,7 +71,11 @@ export async function setIntended(
   const file = parseIntendedFile(await readJsonFile(options.file));
   const projectKey = await resolveProject(options, ctx);
   const dryRun = options.dryRun === true;
-  const result = await setIntendedModel(createArchitectureApi(ctx.connection, projectKey), file, {
+  const api = createArchitectureApi(ctx.connection, projectKey);
+  const result = await setIntendedModel(api, file, {
+    onValidation: async () => {
+      for (const warning of await intendedDiagnostics(api, file.models)) ctx.console.warn(warning);
+    },
     projectKey,
     dryRun,
     backupDir: BACKUP_DIR,
