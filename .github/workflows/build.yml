@@ -423,9 +423,13 @@ jobs:
         run: bun test:unit
 
   integration-and-e2e-linux:
-    name: Integration and E2E Tests - linux
+    name: Integration and E2E Tests - linux (shard ${{ matrix.shard }})
     runs-on: sonar-m
     needs: [prepare, build-binaries]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -448,6 +452,46 @@ jobs:
           os: linux
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-linux-x86-64
+          integration-shard-index: ${{ matrix.shard }}
+          integration-shard-total: '4'
+          skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
+
+  integration-coverage-linux:
+    name: Merge integration coverage (Linux)
+    runs-on: sonar-xs
+    needs: integration-and-e2e-linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        with:
+          secrets: |
+            development/kv/data/repox url | ARTIFACTORY_URL;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Download sharded integration coverage raw
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: integration-coverage-raw-*
+          merge-multiple: true
+          path: tests/coverage/reports/raw/
+
+      - name: Merge integration coverage reports
+        run: bun build-scripts/report-coverage.ts
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: integration-coverage
+          path: tests/coverage/reports/integration/
 
   integration-and-e2e-windows:
     name: Integration and E2E Tests - windows
@@ -480,7 +524,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: sonar-xs
     # Coverage artifacts are Linux-only; Windows tests still gate publish and promote.
-    needs: [prepare, lint, unit-tests-linux, integration-and-e2e-linux]
+    needs: [prepare, lint, unit-tests-linux, integration-and-e2e-linux, integration-coverage-linux]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
