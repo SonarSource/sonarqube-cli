@@ -475,6 +475,9 @@ jobs:
           os: windows
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-windows-x86-64
+          # Diagnostic branch: loop full integration until a flake reproduces (revert before merge).
+          integration-until-failure: 'true'
+          skip-e2e: 'true'
 
   scan:
     name: SonarQube Analysis
