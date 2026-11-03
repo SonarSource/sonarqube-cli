@@ -30,7 +30,7 @@ import type {
   IntendedArchitecture,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { setIntended } from '@/commands/architecture/_common/set-intended.ts';
-import { shellQuote } from '@/commands/architecture/_common/shell-quote.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { ForbiddenApiError } from '@/core/server/errors.ts';
 
 const MODEL: IntendedArchitecture = {
