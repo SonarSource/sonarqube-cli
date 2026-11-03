@@ -175,6 +175,8 @@ describe('sonar architecture reads', () => {
       5,
     );
     for (const view of languages) {
+      expect(view.capped).toBe(true);
+      expect(view.summary).not.toContain('would exceed');
       expect(view.feedbackPairs.total).toBe(28);
       expect(view.edges.length + view.omittedEdges).toBe(56);
     }
@@ -242,7 +244,8 @@ describe('sonar architecture reads', () => {
         `architecture current get --project ${PROJECT} --language java --format json`,
       );
       const payload = JSON.parse(full.stdout) as CurrentPayload;
-      expect(payload.languages[0].capped).toBe(false);
+      expect(payload.languages[0].capped).toBe(true);
+      expect(payload.languages[0].omittedEdges).toBeGreaterThan(0);
       expect(payload.languages[0].nodes).toHaveLength(SYNTHETIC_MODULE_COUNT);
       expect(payload.languages[0].nodes.every((node) => node.kind === 'module')).toBe(true);
       expect(payload.languages[0].edges.length).toBeGreaterThan(0);

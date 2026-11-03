@@ -118,6 +118,29 @@ describe('sonar architecture intended set', () => {
   }
 
   describe('intended', () => {
+    for (const endpoint of ['missing', 'Web']) {
+      it(`refuses an invalid constraint (${endpoint}) before reading architecture`, async () => {
+        const server = await start();
+        harness.cwd.writeFile(
+          'invalid.json',
+          JSON.stringify({
+            models: [{ ...SAVED[0], constraints: [{ from: 'Web', to: endpoint }] }],
+          }),
+        );
+        const result = await harness.run(
+          `architecture intended set --project ${PROJECT} --file invalid.json`,
+        );
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('nothing was changed');
+        expect(
+          server
+            .getRecordedRequests()
+            .filter((request) => request.path.startsWith('/architecture/')),
+        ).toEqual([]);
+        expect(writes(server)).toEqual([]);
+      });
+    }
+
     for (const direction of ['nest', 'flatten'] as const) {
       it(
         `applies a hierarchy change with a slash in a label (${direction})`,
