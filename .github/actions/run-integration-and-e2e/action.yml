@@ -17,12 +17,6 @@ inputs:
       ./tests/integration/ suite (pretest steps still run via setup-integration-resources).
     required: false
     default: ''
-  integration-until-failure:
-    description: >-
-      When true, re-run the integration scope in a loop until a run fails (for flaky-test
-      reproduction). Intended for temporary diagnostic branches only.
-    required: false
-    default: 'false'
   skip-e2e:
     description: Skip e2e tests (useful when narrowing integration scope for faster CI).
     required: false
@@ -110,7 +104,6 @@ runs:
       shell: bash
       env:
         INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
-        INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
         USE_COVERAGE: '0'
       run: bash .github/scripts/run-integration-scope.sh
 
@@ -122,7 +115,6 @@ runs:
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
         INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
-        INTEGRATION_UNTIL_FAILURE: ${{ inputs.integration-until-failure }}
         USE_COVERAGE: '1'
       run: bash .github/scripts/run-integration-scope.sh
 

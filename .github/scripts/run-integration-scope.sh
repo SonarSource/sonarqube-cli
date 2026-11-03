@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Shared integration scope runner for CI (full suite, narrowed file, optional repeat-until-failure).
+# Shared integration scope runner for CI (full suite, narrowed file, or hash shard).
 set -euo pipefail
 
 echo "run-integration-scope: cwd=$(pwd)"
 echo "run-integration-scope: INTEGRATION_TEST_PATH=${INTEGRATION_TEST_PATH:-<unset>}"
 echo "run-integration-scope: INTEGRATION_SHARD_INDEX=${INTEGRATION_SHARD_INDEX:-<unset>}"
 echo "run-integration-scope: INTEGRATION_SHARD_TOTAL=${INTEGRATION_SHARD_TOTAL:-<unset>}"
-echo "run-integration-scope: INTEGRATION_UNTIL_FAILURE=${INTEGRATION_UNTIL_FAILURE:-<unset>}"
 echo "run-integration-scope: USE_COVERAGE=${USE_COVERAGE:-0}"
 
 run_bun_test() {
@@ -59,22 +58,4 @@ run_once() {
   fi
 }
 
-until_failure=false
-case "${INTEGRATION_UNTIL_FAILURE:-false}" in
-  true | True | TRUE) until_failure=true ;;
-esac
-
-if [ "${until_failure}" = true ]; then
-  attempt=0
-  while true; do
-    attempt=$((attempt + 1))
-    echo "=== integration scope attempt ${attempt} ==="
-    if ! run_once; then
-      echo "Integration scope failed on attempt ${attempt} (flake reproduction)."
-      exit 1
-    fi
-    echo "Integration scope passed (attempt ${attempt}); re-running until failure..."
-  done
-else
-  run_once
-fi
+run_once
