@@ -43,6 +43,7 @@ export const DEFAULT_DIRECTIVE_PERSPECTIVE = 'default_perspective';
 const MAX_PROJECT_DIRECTIVES = 1000;
 
 export class DirectiveNotFoundError extends CommandFailedError {}
+export class DirectivePreWriteError extends CommandFailedError {}
 
 export const DIRECTIVE_TYPES = ['REMOVE_EDGE', 'RENAME_NODE', 'MOVE_NODE'] as const;
 export interface DirectiveInput {
@@ -66,6 +67,7 @@ export interface DirectivePage {
 export interface DirectivesApi {
   getDirectivesPage(pageIndex: number, pageSize: number): Promise<DirectivePage>;
   getDirective(id: string): Promise<ProjectDirective>;
+  updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective>;
   createDirective(directive: DirectiveInput): Promise<ProjectDirective>;
 }
 
@@ -252,8 +254,78 @@ export function directiveId(value: unknown): string {
   return value.toLowerCase();
 }
 
+export interface DirectiveUpdate {
+  id: string;
+  changes: Partial<DirectiveInput>;
+}
+
+function parseUpdates(items: unknown[]): DirectiveUpdate[] {
+  const ids = new Set<string>();
+  return items.map((item) => {
+    const object = record(item);
+    const id = directiveId(object.id);
+    if (ids.has(id)) throw new CommandFailedError('Repeated directive id. Nothing was changed.');
+    ids.add(id);
+    const changes: Record<string, unknown> = {};
+    const editable = new Set([
+      'type',
+      'ecosystem',
+      'graphType',
+      'fromNodeKey',
+      'toNodeKey',
+      'graphPerspective',
+      'description',
+    ]);
+    for (const [key, field] of Object.entries(object)) {
+      if (editable.has(key)) {
+        if (field === null)
+          throw new CommandFailedError(
+            'Directive fields cannot be cleared with null by the public API. Nothing was changed.',
+          );
+        changes[key] = field;
+      } else if (!['id', 'projectId', 'origin'].includes(key))
+        throw new CommandFailedError(
+          'A directive contains an unsupported field. Nothing was changed.',
+        );
+    }
+    return { id, changes };
+  });
+}
+
+async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
+  const changes: {
+    id: string;
+    before: ProjectDirective;
+    after: DirectiveInput;
+    patch: DirectiveInput;
+  }[] = [];
+  await inSequence(updates, async (update) => {
+    const before = await api.getDirective(update.id);
+    const after = parseDirective(
+      { ...before, ...update.changes },
+      new Set(Object.keys(update.changes)),
+    );
+    if (directiveKey(before) !== directiveKey(after) || before.description !== after.description)
+      changes.push({
+        id: update.id,
+        before,
+        after,
+        patch: {
+          type: after.type,
+          ecosystem: after.ecosystem,
+          graphType: after.graphType,
+          fromNodeKey: after.fromNodeKey,
+          toNodeKey: after.toNodeKey,
+          ...update.changes,
+        },
+      });
+  });
+  return { changes, skipped: updates.length - changes.length };
+}
+
 export interface DirectiveChanges {
   create: DirectiveInput[];
+  update: DirectiveUpdate[];
 }
 
 export function parseDirectiveChanges(value: unknown, projectKey: string): DirectiveChanges {
@@ -261,8 +333,12 @@ export function parseDirectiveChanges(value: unknown, projectKey: string): Direc
     value,
     'The directive change file must be a JSON object. Nothing was changed.',
   );
-  if (Object.keys(object).some((key) => !['create', 'project', 'projectKey'].includes(key)))
-    throw new CommandFailedError('Provide a change file with a create array. Nothing was changed.');
+  if (
+    Object.keys(object).some((key) => !['create', 'update', 'project', 'projectKey'].includes(key))
+  )
+    throw new CommandFailedError(
+      'Provide a change file with create and update arrays. Nothing was changed.',
+    );
   if (
     ['project', 'projectKey'].some((key) => object[key] !== undefined && object[key] !== projectKey)
   )
@@ -270,14 +346,15 @@ export function parseDirectiveChanges(value: unknown, projectKey: string): Direc
       'The directive file belongs to a different project. Nothing was changed.',
     );
   const lists: Record<string, unknown[]> = {};
-  for (const key of ['create']) {
+  for (const key of ['create', 'update']) {
     const list = object[key] === undefined ? [] : object[key];
     if (!Array.isArray(list))
       throw new CommandFailedError(`Directive ${key} must be an array. Nothing was changed.`);
     lists[key] = list;
   }
   const create = lists.create.length ? parseCreates(lists.create) : [];
-  return { create };
+  const update = lists.update.length ? parseUpdates(lists.update) : [];
+  return { create, update };
 }
 
 export async function applyDirectiveChanges(
@@ -285,10 +362,19 @@ export async function applyDirectiveChanges(
   changes: DirectiveChanges,
   dryRun: boolean,
 ) {
-  const existing = changes.create.length
-    ? await existingDirectives(api)
-    : { keys: new Set<string>(), count: 0 };
+  const updates = await planUpdates(api, changes.update);
+  const moving = updates.changes.filter(
+    (change) => directiveKey(change.before) !== directiveKey(change.after),
+  );
+  const existing =
+    changes.create.length || moving.length
+      ? await existingDirectives(api)
+      : { keys: new Set<string>(), count: 0 };
   const known = existing.keys;
+  validateUpdatedIdentities(
+    moving.map((change) => change.after),
+    known,
+  );
   const creations = planCreates(changes.create, known);
   if (
     creations.toCreate.length &&
@@ -297,31 +383,76 @@ export async function applyDirectiveChanges(
     throw new CommandFailedError(
       'The changes would exceed the limit of 1000 directives per project. Nothing was changed.',
     );
+  const touchedKeys = new Set(
+    updates.changes.flatMap((change) => [directiveKey(change.before), directiveKey(change.after)]),
+  );
+  if (changes.create.some((item) => touchedKeys.has(directiveKey(item))))
+    throw new CommandFailedError(
+      'Create conflicts with an update or deletion of the same directive operation. Nothing was changed.',
+    );
   const result = {
     mode: dryRun ? 'dry-run' : 'applied',
     toCreate: creations.toCreate,
-    skipped: creations.skipped,
+    changes: updates.changes,
+    skipped: creations.skipped + updates.skipped,
     created: [] as ProjectDirective[],
+    updated: [] as ProjectDirective[],
   };
   if (dryRun) return result;
   let attempted = 'creation';
-  const target = 'the current list';
+  let target = 'the current list';
   try {
     await inSequence(result.toCreate, async (directive) => {
       attempted = `create ${directive.type} ${directive.fromNodeKey} -> ${directive.toNodeKey}`;
       result.created.push(await api.createDirective(directive));
     });
+    await inSequence(result.changes, async (change) => {
+      attempted = `update ${change.id}`;
+      target = `directive ${change.id}`;
+      result.updated.push(await api.updateDirective(change.id, change.patch));
+    });
   } catch (error) {
-    const confirmed = result.created.length;
+    const confirmed = result.created.length + result.updated.length;
+    rethrowUnsentChange(error, confirmed);
     if (!confirmed && isDefiniteRejection(error)) throw error;
+    const followup =
+      error instanceof DirectivePreWriteError
+        ? 'Only the confirmed writes above were applied.'
+        : `Inspect ${target} before retrying. Attempted ${attempted}.`;
     throw new CommandFailedError(
-      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. ${isDefiniteRejection(error) ? 'The server rejected the next directive.' : 'The attempted change may already have been applied.'} Inspect ${target} before retrying. Attempted ${attempted}. ${error instanceof Error ? error.message : String(error)}`,
+      `Directive changes stopped after ${confirmed} confirmed writes. Created ids: ${result.created.map((item) => item.id).join(', ') || 'none confirmed'}. Updated ids: ${result.updated.map((item) => item.id).join(', ') || 'none'}. ${directiveFailureOutcome(error)} ${followup} ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
   }
   return result;
 }
 
+function rethrowUnsentChange(error: unknown, confirmed: number): void {
+  if (confirmed || !(error instanceof DirectivePreWriteError)) return;
+  if (isDefiniteRejection(error.cause)) throw error.cause;
+  throw new CommandFailedError(`${error.message} No write request was sent; nothing was changed.`, {
+    cause: error,
+  });
+}
+
+function directiveFailureOutcome(error: unknown): string {
+  if (error instanceof DirectivePreWriteError) return 'The next change was not sent.';
+  if (isDefiniteRejection(error)) return 'The server rejected the next directive.';
+  return 'The attempted change may already have been applied.';
+}
+
 function inSequence<T>(items: T[], action: (item: T) => Promise<void>): Promise<void> {
   return items.reduce((previous, item) => previous.then(() => action(item)), Promise.resolve());
+}
+
+function validateUpdatedIdentities(updates: DirectiveInput[], known: Set<string>): void {
+  const afterKeys = new Set<string>();
+  for (const update of updates) {
+    const key = directiveKey(update);
+    if (known.has(key) || afterKeys.has(key))
+      throw new CommandFailedError(
+        'An update would duplicate another directive. Nothing was changed.',
+      );
+    afterKeys.add(key);
+  }
 }
