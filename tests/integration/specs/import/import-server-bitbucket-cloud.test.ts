@@ -51,10 +51,10 @@ interface BoundProjectPayload {
   monorepo: boolean;
 }
 
-function putPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
+function postPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
   return server
     .getRecordedRequests()
-    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'PUT')
+    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'POST')
     .map((r) => JSON.parse(r.body ?? '{}') as BoundProjectPayload);
 }
 
@@ -92,7 +92,7 @@ describe('sonar import: Bitbucket Cloud on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 2 repositories');
     expect(result.stdout).toContain(`Dashboard: ${server.baseUrl()}/admin/project-coverage`);
-    const payloads = putPayloads(server);
+    const payloads = postPayloads(server);
     expect(payloads).toHaveLength(2);
     expect(payloads).toContainEqual({
       projectKey: 'acme_repo-a',
@@ -112,7 +112,7 @@ describe('sonar import: Bitbucket Cloud on SonarQube Server', () => {
     const result = await harness.run('import --repo acme/repo-b');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
   });
 
   it('skips repositories that are already bound to a project, without failing', async () => {
@@ -128,7 +128,7 @@ describe('sonar import: Bitbucket Cloud on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 1 repository');
     expect(result.stdout).toContain('already imported');
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
   });
 
   it('pages through every repository', async () => {
@@ -139,7 +139,7 @@ describe('sonar import: Bitbucket Cloud on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 120 repositories');
-    expect(putPayloads(server)).toHaveLength(120);
+    expect(postPayloads(server)).toHaveLength(120);
     const searches = server
       .getRecordedRequests()
       .filter((r) => r.path === '/api/alm_integrations/search_bitbucketcloud_repos');

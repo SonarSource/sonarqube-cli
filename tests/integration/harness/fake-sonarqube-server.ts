@@ -2512,8 +2512,19 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          const existed = projectBindings.some((b) => b.projectKey === payload.projectKey);
-          if (!existed || req.method === 'POST') {
+          const existed =
+            projects.has(payload.projectKey) ||
+            projectBindings.some((b) => b.projectKey === payload.projectKey);
+          if (existed && req.method === 'POST') {
+            return new Response(
+              JSON.stringify({ message: `Project '${payload.projectKey}' already exists` }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          if (!existed) {
             projectBindings.push({
               projectKey: payload.projectKey,
               repository: payload.repositoryIdentifier,

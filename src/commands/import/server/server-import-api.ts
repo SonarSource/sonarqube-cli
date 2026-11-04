@@ -23,16 +23,9 @@
 // whether the caller has a usable one.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import {
-  AccessDeniedError,
-  type HttpClientError,
-  UnexpectedApiError,
-} from '@/core/server/errors.ts';
+import { AccessDeniedError, type HttpClientError } from '@/core/server/errors.ts';
 import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
-import {
-  HTTP_STATUS_METHOD_NOT_ALLOWED,
-  HTTP_STATUS_NOT_FOUND,
-} from '@/core/server/http-constants.ts';
+import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { hasNextPage, type Paging } from '@/core/server/paging.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
@@ -132,9 +125,6 @@ export interface GithubRepositoryResponse {
   sqProjectKey?: string;
 }
 
-/** First release whose `bound-projects` endpoint accepts PUT (create-or-update). */
-const PUT_BOUND_PROJECT_MIN_VERSION = '2025.6';
-
 /** The previous LTA, the oldest release `sonar import` supports. */
 const IMPORT_MIN_VERSION = '2025.1';
 
@@ -167,9 +157,8 @@ export class ServerImportApiClient {
   /** Server-enforced max `ps` for the `search_*_repos` endpoints. */
   static readonly SEARCH_MAX_PAGE_SIZE = 100;
 
-  private readonly client: Pick<SonarHttpClient, 'get' | 'put' | 'post'>;
+  private readonly client: Pick<SonarHttpClient, 'get' | 'post'>;
   private serverVersion: Promise<string | undefined> | undefined;
-  private putUnsupported = false;
 
   constructor(
     client: SonarHttpClient,
@@ -177,7 +166,6 @@ export class ServerImportApiClient {
   ) {
     this.client = {
       get: (endpoint, params) => client.get(withPercentEncodedQuery(endpoint, params)),
-      put: (endpoint, body) => client.put(endpoint, body),
       post: (endpoint, body) => client.post(endpoint, body),
     };
   }
@@ -371,33 +359,11 @@ export class ServerImportApiClient {
     return this.findProjectBinding(dopSettingId, repository, matches, pageIndex + 1);
   }
 
-  /**
-   * Creates the project and binds it to the repository, or updates the binding when a project
-   * with that key already exists (the endpoint is idempotent). `newProjectCreated` tells which.
-   * Servers older than 2025.6 have no PUT: there it POSTs instead, which refuses to touch a
-   * project that already exists. The server is probed once, not per repository.
-   */
-  async putBoundProject(request: BoundProjectRequest): Promise<{ newProjectCreated: boolean }> {
-    const body = { ...request, monorepo: false };
-    if (!this.putUnsupported) {
-      try {
-        const response = await this.client
-          .put<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
-          .orThrow();
-        return { newProjectCreated: response.newProjectCreated ?? true };
-      } catch (error) {
-        if (!(await this.isPutUnsupported(error))) throw error;
-        this.putUnsupported = true;
-      }
-    }
-    return this.postBoundProject(body);
-  }
-
-  private async postBoundProject(body: unknown): Promise<{ newProjectCreated: boolean }> {
-    const response = await this.client
-      .post<{ newProjectCreated?: boolean }>(BOUND_PROJECTS_ENDPOINT, body)
+  /** Creates a bound project without changing an existing project. */
+  async createBoundProject(request: BoundProjectRequest): Promise<void> {
+    await this.client
+      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { ...request, monorepo: false })
       .orThrow();
-    return { newProjectCreated: response.newProjectCreated ?? true };
   }
 
   /** Refuses a server older than 2025.1; one whose version cannot be read is given the benefit of the doubt. */
@@ -408,19 +374,6 @@ export class ServerImportApiClient {
       `SonarQube Server ${version} is not supported by sonar import; ${IMPORT_MIN_VERSION} or later is required.`,
       { remediationHint: 'Upgrade SonarQube Server, then retry.' },
     );
-  }
-
-  /**
-   * A 405 always means the server predates PUT. A 404 is ambiguous on a recent server (it also
-   * hides a project the caller cannot administer), so it only counts once the version is known
-   * to be older than 2025.6.
-   */
-  private async isPutUnsupported(error: unknown): Promise<boolean> {
-    if (!(error instanceof UnexpectedApiError)) return false;
-    if (error.status === HTTP_STATUS_METHOD_NOT_ALLOWED) return true;
-    if (error.status !== HTTP_STATUS_NOT_FOUND) return false;
-    const version = await this.version();
-    return version !== undefined && !isAtLeast(version, PUT_BOUND_PROJECT_MIN_VERSION);
   }
 
   private version(): Promise<string | undefined> {

@@ -35,10 +35,10 @@ interface BoundProjectPayload {
   monorepo: boolean;
 }
 
-function putPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
+function postPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
   return server
     .getRecordedRequests()
-    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'PUT')
+    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'POST')
     .map((r) => JSON.parse(r.body ?? '{}') as BoundProjectPayload);
 }
 
@@ -77,7 +77,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 3 repositories');
     expect(result.stdout).toContain(`Dashboard: ${server.baseUrl()}/admin/project-coverage`);
-    const payloads = putPayloads(server);
+    const payloads = postPayloads(server);
     expect(payloads.map((p) => p.projectKey).sort()).toEqual([
       'Project_A_api',
       'Project_A_web',
@@ -100,7 +100,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     const result = await harness.run('import --repo "My Project/web-app"');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server)).toEqual([
+    expect(postPayloads(server)).toEqual([
       {
         projectKey: 'My_Project_web-app',
         projectName: 'web-app',
@@ -124,7 +124,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('already imported');
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['web']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['web']);
   });
 
   it('explains an Azure DevOps setting that lists no repository and points to the reconnect URL', async () => {
@@ -136,7 +136,7 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
     const output = result.stdout + result.stderr;
     expect(output).toContain('Azure DevOps did not return any repository');
     expect(output).toContain(`${server.baseUrl()}/projects/create?mode=azure&resetPat=1`);
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 
   it('still stops at the token gate before listing any project', async () => {
@@ -156,6 +156,6 @@ describe('sonar import: Azure DevOps on SonarQube Server', () => {
       .getRecordedRequests()
       .filter((r) => r.path.startsWith('/api/alm_integrations/') && r.path.includes('azure'));
     expect(listed).toHaveLength(0);
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 });
