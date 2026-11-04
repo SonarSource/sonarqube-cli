@@ -20,7 +20,7 @@
 
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
@@ -72,7 +72,7 @@ describe('generateProjectProposal', () => {
 
     const proposal = generateProjectProposal(root, undefined, undefined);
 
-    expect(proposal.projectName).toBe(root.split('/').at(-1) ?? '');
+    expect(proposal.projectName).toBe(basename(root));
     expect(proposal.projectKey).toMatch(/^init-key-.+-[0-9a-f]{12}$/);
   });
 });
