@@ -33,15 +33,18 @@ import logger from '@/core/observability/logger.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { requireAnswer } from '../answer.ts';
 import type { InitOutcome } from '../init-outcome.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
   auth: ResolvedAuth;
+  /** Bound to `auth`'s server and token. */
+  http: SonarHttpClient;
   console: Console;
   interactive: boolean;
 }
@@ -108,7 +111,7 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   const remote = stripGitRemoteUrlUserinfo(rawRemote);
 
   // Only the server binding proves the project exists; a key in local config may name none.
-  const binding = await lookupRemoteBinding(auth, remote);
+  const binding = await lookupRemoteBinding(deps, remote);
   switch (binding.kind) {
     case 'in-org':
       return { path: 'link-existing', projectRoot, remote, projectKey: binding.projectKey };
@@ -126,9 +129,11 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   return chooseNewProjectPath(projectRoot, remote, deps);
 }
 
-function lookupRemoteBinding(auth: ResolvedAuth, remote: string): Promise<GitRemoteBinding> {
-  const client = new ProjectBindingsClient(new SonarHttpClient(auth.serverUrl, auth.token));
-  return client.resolveGitRemoteBinding(remote, auth.orgKey).match(
+function lookupRemoteBinding(
+  { auth, http }: DetectDeps,
+  remote: string,
+): Promise<GitRemoteBinding> {
+  return new ProjectBindingsClient(http).resolveGitRemoteBinding(remote, auth.orgKey).match(
     (binding) => binding,
     (error): GitRemoteBinding => {
       logger.debug(`Git remote project binding lookup failed: ${error.message}`);
@@ -179,13 +184,9 @@ async function chooseNewProjectPath(
     return { path: 'unbound-new', projectRoot, remote };
   }
 
-  const bind = await console.confirmPrompt(
-    'Bind this repository to a new SonarQube project?',
-    true,
+  const bind = requireAnswer(
+    await console.confirmPrompt('Bind this repository to a new SonarQube project?', true),
   );
-  if (bind === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
   return bind
     ? { path: 'bound-new', projectRoot, remote, repositorySlug }
     : { path: 'unbound-new', projectRoot, remote };
