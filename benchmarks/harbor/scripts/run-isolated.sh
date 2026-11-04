@@ -9,7 +9,7 @@ SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
 AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin"
 INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION
-RUN_ENV=ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_BASE_URL,ANTHROPIC_CUSTOM_HEADERS,MODEL,JOB_NAME,HARBOR_HOST_ENVIRONMENT_ALLOW
+RUN_ENV=ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_BASE_URL,ANTHROPIC_CUSTOM_HEADERS,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
 ROOT_DIR_NAMES=(app logs tests solution)
 
 as_agent() {
@@ -73,13 +73,18 @@ install_tools() {
   "${HOME}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
+  command -v jq >/dev/null || { echo "jq is required by the task verifiers" >&2; exit 1; }
+  install -m 755 "${WORKDIR}/harbor/ci/sonar-wrapper.sh" "${HOME}/.local/bin/sonar"
+  echo "sonar CLI: $("${HOME}/.local/share/sonarqube-cli/bin/sonar" --version | tail -n 1)"
 }
 
 run_benchmark() {
   export PYTHONPATH="${WORKDIR}/harbor/environments"
   cd "${WORKDIR}"
   harbor run \
-    --path "${WORKDIR}/harbor/tasks" \
+    --yes \
+    --path "${WORKDIR}/harbor/tasks/${TASK}" \
+    --ve EXPECTED_INTEGRATION=claude-code \
     --agent claude-code \
     --model "${MODEL}" \
     --jobs-dir "${WORKDIR}/harbor-jobs" \
