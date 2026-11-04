@@ -24,10 +24,10 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import logger from '@/core/observability/logger.ts';
 import {
-  deriveEntry,
+  linkProjectDirectory,
   relativeProjectPath,
   resolveConfigDir,
-  saveProjectLink,
+  resolveProjectTarget,
 } from '@/core/project-discovery/link-target.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
@@ -61,12 +61,12 @@ export async function writeMapping(
   console: Console,
   origin: keyof typeof PROJECT_ORIGIN_LEAD,
 ): Promise<void> {
-  const { targetDir } = await resolveConfigDir(projectRoot);
+  const target = await resolveProjectTarget(projectRoot);
+  const { targetDir } = target;
   const path = relativeProjectPath(targetDir, projectRoot);
-  const entry = deriveEntry(auth, projectKey, path);
 
   try {
-    const { replacedProjectKey, shadowed } = await saveProjectLink(targetDir, entry, {
+    const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
       monorepo: false,
     });
     if (replacedProjectKey !== undefined) {
@@ -80,6 +80,9 @@ export async function writeMapping(
       );
     }
   } catch (error) {
+    if (error instanceof CommandFailedError) {
+      throw error;
+    }
     const reason = error instanceof Error ? error.message : String(error);
     const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
     const runFrom = linkRoot === targetDir ? undefined : targetDir;

@@ -58,7 +58,7 @@ export interface SavedLink {
   shadowed: boolean;
 }
 
-export function deriveEntry(
+function deriveEntry(
   auth: ResolvedAuth,
   projectKey: string,
   path: string,
@@ -85,6 +85,12 @@ export async function resolveConfigDir(
   return { targetDir: canonicalizePath(gitRoot ?? startDir), inGitRepository: gitRoot !== null };
 }
 
+/** The target for a project root that is already known, as `sonar init` has it. */
+export async function resolveProjectTarget(projectRoot: string): Promise<LinkTarget> {
+  const { targetDir, inGitRepository } = await resolveConfigDir(projectRoot);
+  return { targetDir, projectRoot, inGitRepository };
+}
+
 /** Resolves `path` (relative to the config directory) to the project root it names. */
 export async function resolveLinkTarget(startDir: string, path: string): Promise<LinkTarget> {
   const { targetDir, inGitRepository } = await resolveConfigDir(startDir);
@@ -104,7 +110,7 @@ export function relativeProjectPath(targetDir: string, projectRoot: string): str
  * Writes `entry` into `<dir>/.sonar-config.json`: as the singular `project` by default,
  * into the `projects` array in monorepo mode.
  */
-export async function saveProjectLink(
+async function saveProjectLink(
   dir: string,
   entry: SharedProjectConfigEntry,
   { monorepo }: { monorepo: boolean },
@@ -120,4 +126,18 @@ export async function saveProjectLink(
   }
   const shadowed = await sharedProjectConfigRepository.set(dir, entry);
   return { replacedProjectKey: previous?.projectKey, shadowed };
+}
+
+/**
+ * The one write path for `sonar link` and `sonar init`: derives the entry for `target` from the
+ * active connection and saves it, leaving the reporting to the caller.
+ */
+export async function linkProjectDirectory(
+  auth: ResolvedAuth,
+  projectKey: string,
+  target: LinkTarget,
+  options: { monorepo: boolean },
+): Promise<SavedLink> {
+  const path = relativeProjectPath(target.targetDir, target.projectRoot);
+  return saveProjectLink(target.targetDir, deriveEntry(auth, projectKey, path), options);
 }

@@ -25,11 +25,10 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import {
-  deriveEntry,
   InvalidLinkPathError,
+  linkProjectDirectory,
   type LinkTarget,
   resolveLinkTarget,
-  saveProjectLink,
 } from '@/core/project-discovery/link-target.ts';
 
 import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
@@ -147,8 +146,7 @@ async function runLink(
     return;
   }
 
-  const entry = deriveEntry(ctx.auth, projectKey, options.path);
-  const { shadowed } = await saveProjectLink(target.targetDir, entry, { monorepo });
+  const { shadowed } = await linkProjectDirectory(ctx.auth, projectKey, target, { monorepo });
   if (shadowed) {
     ctx.console.warn(
       `${join(target.targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,

@@ -18,18 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import {
   InvalidLinkPathError,
+  linkProjectDirectory,
   relativeProjectPath,
   resolveLinkTarget,
-  saveProjectLink,
 } from '@/core/project-discovery/link-target.ts';
 
 let dir: string;
@@ -82,35 +83,52 @@ describe('relativeProjectPath', () => {
   });
 });
 
-describe('saveProjectLink', () => {
-  const entry = (projectKey: string, path = '.') => ({
-    projectKey,
-    path,
+describe('linkProjectDirectory', () => {
+  const auth = new ResolvedAuth({
+    token: 't',
     serverUrl: 'https://sq.example.com',
+    connectionType: 'on-premise',
+    source: 'state',
   });
+  const link = (key: string, subdir: string, monorepo: boolean) =>
+    linkProjectDirectory(
+      auth,
+      key,
+      { targetDir: dir, projectRoot: join(dir, subdir), inGitRepository: false },
+      { monorepo },
+    );
 
   it('reports the mapping it replaced for the same directory', async () => {
-    await saveProjectLink(dir, entry('first'), { monorepo: false });
+    await link('first', '.', false);
 
-    const saved = await saveProjectLink(dir, entry('second'), { monorepo: false });
+    expect(await link('second', '.', false)).toEqual({
+      replacedProjectKey: 'first',
+      shadowed: false,
+    });
+  });
 
-    expect(saved).toEqual({ replacedProjectKey: 'first', shadowed: false });
+  it('stores the path relative to the config directory', async () => {
+    await link('api', 'services/api', false);
+
+    const written = JSON.parse(readFileSync(join(dir, '.sonar-config.json'), 'utf8'));
+    expect(written.project).toMatchObject({ projectKey: 'api', path: 'services/api' });
   });
 
   it('reports a singular project shadowed by a projects array', async () => {
     writeFileSync(
       join(dir, '.sonar-config.json'),
-      JSON.stringify({ projects: [entry('other', 'services/api')] }),
+      JSON.stringify({
+        projects: [{ projectKey: 'other', path: 'services/api', serverUrl: auth.serverUrl }],
+      }),
     );
 
-    const saved = await saveProjectLink(dir, entry('mine'), { monorepo: false });
-
-    expect(saved.shadowed).toBe(true);
+    expect((await link('mine', '.', false)).shadowed).toBe(true);
   });
 
   it('adds to the projects array in monorepo mode without shadowing', async () => {
-    const saved = await saveProjectLink(dir, entry('api', 'services/api'), { monorepo: true });
-
-    expect(saved).toEqual({ replacedProjectKey: undefined, shadowed: false });
+    expect(await link('api', 'services/api', true)).toEqual({
+      replacedProjectKey: undefined,
+      shadowed: false,
+    });
   });
 });
