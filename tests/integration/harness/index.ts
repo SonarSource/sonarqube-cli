@@ -67,10 +67,10 @@ export class TestHarness {
   private systemEnvVars: Record<string, string> = {};
   private readonly sessions: InteractiveSession[] = [];
 
-  private constructor(tempDir: string) {
+  private constructor(tempDir: string, homeName: string) {
     this.tempDir = new Dir(tempDir);
     this.cwd = this.tempDir.dir('cwd');
-    this.userHome = this.tempDir.dir('home');
+    this.userHome = this.tempDir.dir(homeName);
     this.sonarUserHome = this.userHome.dir('.sonar');
     this.cliHome = this.sonarUserHome.dir('sonarqube-cli');
     this.stateJsonFile = this.cliHome.file('state.json');
@@ -81,7 +81,7 @@ export class TestHarness {
     }
   }
 
-  static create(): Promise<TestHarness> {
+  static create(options: { homeName?: string } = {}): Promise<TestHarness> {
     const rawDir = join(tmpdir(), `sonar-cli-harness-${Date.now()}-${crypto.randomUUID()}`);
     mkdirSync(rawDir, { recursive: true });
     // Canonicalize with the same helper the CLI uses (canonicalizePath →
@@ -93,7 +93,7 @@ export class TestHarness {
     //     `.native` expands it to the long form (`runneradmin`) that `git` and
     //     `process.cwd()` report, so seeded/expected paths match the CLI's.
     const tempDir = canonicalizePath(rawDir);
-    return Promise.resolve(new TestHarness(tempDir));
+    return Promise.resolve(new TestHarness(tempDir, options.homeName ?? 'home'));
   }
 
   /**
