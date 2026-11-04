@@ -72,6 +72,17 @@ export function assertValidCloudServerUrl(serverUrl: string, remediationHint: st
   });
 }
 
+/** Fails when a Cloud connection has no organization, before any prompt or write. */
+export function requireCloudOrganization({ orgKey }: ResolvedAuth): string {
+  if (!orgKey) {
+    throw new CommandFailedError(
+      'Could not determine the SonarQube Cloud organization for the active connection.',
+      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
+    );
+  }
+  return orgKey;
+}
+
 export type ResolvedAuthSource = 'env' | 'state';
 
 export type ResolvedAuthInit = {
