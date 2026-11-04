@@ -20,31 +20,19 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectsClient, type ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { requireAnswer } from '../answer.ts';
+import { type UnboundNewFlags, validateProjectName } from '../flags.ts';
 import type { InitOutcome, UnboundNewOutcome } from '../init-outcome.ts';
-import {
-  generateProjectProposal,
-  type ProjectProposal,
-  validateProjectName,
-} from '../project-key.ts';
+import { generateProjectProposal, type ProjectProposal } from '../key-proposal.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, writeMapping } from './mapping.ts';
-
-export interface UnboundNewFlags {
-  projectKey?: string;
-  name?: string;
-  visibility?: ProjectVisibility;
-}
+import { projectDashboardUrl, reportProjectCreated, writeMapping } from './mapping.ts';
 
 async function askName(console: Console, fallback: string): Promise<string> {
   for (;;) {
-    const answer = await console.textPrompt(`Project name (default: ${fallback})`);
-    if (answer === null) {
-      throw new CommandFailedError('Onboarding cancelled.');
-    }
+    const answer = requireAnswer(await console.textPrompt(`Project name (default: ${fallback})`));
     if (answer.trim() === '') {
       return fallback;
     }
@@ -57,14 +45,12 @@ async function askName(console: Console, fallback: string): Promise<string> {
 }
 
 async function askVisibility(console: Console): Promise<ProjectVisibility> {
-  const answer = await console.selectPrompt<ProjectVisibility>('Project visibility', [
-    { value: 'private', label: 'Private' },
-    { value: 'public', label: 'Public' },
-  ]);
-  if (answer === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
-  return answer;
+  return requireAnswer(
+    await console.selectPrompt<ProjectVisibility>('Project visibility', [
+      { value: 'private', label: 'Private' },
+      { value: 'public', label: 'Public' },
+    ]),
+  );
 }
 
 /**
@@ -74,7 +60,7 @@ async function askVisibility(console: Console): Promise<ProjectVisibility> {
  */
 export async function runUnboundNew(
   { projectRoot, remote }: UnboundNewOutcome,
-  { auth, console, interactive }: DetectDeps,
+  { auth, http, console, interactive }: DetectDeps,
   flags: UnboundNewFlags,
 ): Promise<InitOutcome> {
   const generated = generateProjectProposal(projectRoot, remote, auth.orgKey);
@@ -82,7 +68,6 @@ export async function runUnboundNew(
     projectKey: flags.projectKey ?? generated.projectKey,
     projectName: flags.name ?? generated.projectName,
   };
-  const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const projects = new ProjectsClient(http);
 
   const existing = await projects.findProject(proposal.projectKey, auth.orgKey).orThrow();
@@ -108,10 +93,7 @@ export async function runUnboundNew(
   console.print(`Project key: ${proposal.projectKey}`);
   console.print(`Visibility: ${visibility}`);
   if (interactive) {
-    const confirmed = await console.confirmPrompt('Create this project?', true);
-    if (confirmed === null) {
-      throw new CommandFailedError('Onboarding cancelled.');
-    }
+    const confirmed = requireAnswer(await console.confirmPrompt('Create this project?', true));
     if (!confirmed) {
       return { path: 'unbound-new', projectRoot, remote, declined: true };
     }
@@ -128,7 +110,7 @@ export async function runUnboundNew(
       .orThrow(),
   );
   await writeMapping(auth, key, projectRoot, console, 'created');
-  console.success(`Created project '${key}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
+  reportProjectCreated(console, key);
   console.print(`Project dashboard: ${projectDashboardUrl(auth, key)}`);
   return { path: 'unbound-new', projectRoot, remote, projectKey: key };
 }

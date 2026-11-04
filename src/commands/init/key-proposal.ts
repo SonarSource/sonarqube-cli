@@ -21,32 +21,30 @@
 import { createHash } from 'node:crypto';
 import { basename, relative } from 'node:path';
 
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
-import { isValidProjectKey } from '@/core/project-key.ts';
-import type { ProjectVisibility } from '@/core/server/projects.ts';
 
-const MAX_NAME_LENGTH = 255;
 const MAX_SEGMENT_LENGTH = 80;
 const HASH_LENGTH = 12;
-
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
 interface RepositoryIdentity {
   name: string;
   identity: string;
 }
 
-function trimSlashes(value: string): string {
-  return value.replace(/^\/+|\/+$/g, '');
+function trimChars(value: string, chars: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && chars.includes(value[start])) start++;
+  while (end > start && chars.includes(value[end - 1])) end--;
+  return value.slice(start, end);
 }
 
 function repositoryIdentity(remote: string): RepositoryIdentity | undefined {
   const parsed = parseGitRemote(remote);
   if (!parsed) return undefined;
-  const path = trimSlashes(parsed.path).normalize('NFC');
+  const path = trimChars(parsed.path, '/').normalize('NFC');
   const name = path.split('/').at(-1);
   return name ? { name, identity: `git:${parsed.host}/${path}` } : undefined;
 }
@@ -57,7 +55,7 @@ function keySegment(name: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-');
-  return slug.replace(/^[._-]+|[._-]+$/g, '').slice(0, MAX_SEGMENT_LENGTH) || 'project';
+  return trimChars(slug, '._-').slice(0, MAX_SEGMENT_LENGTH) || 'project';
 }
 
 export interface ProjectProposal {
@@ -89,31 +87,4 @@ export function generateProjectProposal(
     .slice(0, HASH_LENGTH);
   const prefix = organization ? `${keySegment(organization)}_` : '';
   return { projectKey: `${prefix}${keySegment(projectName)}-${hash}`, projectName };
-}
-
-export function validateProjectKey(key: string): string {
-  const trimmed = key.trim();
-  if (!isValidProjectKey(trimmed)) {
-    throw new InvalidOptionError(
-      '--project-key must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
-    );
-  }
-  return trimmed;
-}
-
-export function validateProjectName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed || trimmed.length > MAX_NAME_LENGTH || CONTROL_CHARACTERS.test(trimmed)) {
-    throw new InvalidOptionError(
-      `--name must be non-empty, at most ${MAX_NAME_LENGTH} characters, and free of control characters.`,
-    );
-  }
-  return trimmed;
-}
-
-export function validateVisibility(visibility: string): ProjectVisibility {
-  if (visibility === 'private' || visibility === 'public') {
-    return visibility;
-  }
-  throw new InvalidOptionError('--visibility must be private or public.');
 }

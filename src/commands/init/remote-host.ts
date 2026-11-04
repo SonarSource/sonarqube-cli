@@ -21,7 +21,8 @@
 import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
 
 // Public hosts of the platforms `sonar import` binds today: GitHub and Azure DevOps.
-const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com', 'ssh.dev.azure.com']);
+const GITHUB_HOST = 'github.com';
+const AZURE_HOSTS = new Set(['dev.azure.com', 'ssh.dev.azure.com']);
 const AZURE_LEGACY_HOST_SUFFIX = '.visualstudio.com';
 // `<org>/<project>/_git/<repo>` on dev.azure.com, `[<collection>/]<project>/_git/<repo>` on the legacy
 // host, `v3/<org>/<project>/<repo>` over SSH. The short `<org>/_git/<repo>` form names no project.
@@ -31,19 +32,17 @@ const LEGACY_DEFAULT_COLLECTION = 'defaultcollection';
 const AZURE_SSH_PATH = /^\/v3\/[^/]+\/([^/]+)\/([^/]+)$/;
 
 function isAzureHost(host: string): boolean {
-  return (
-    host === 'dev.azure.com' ||
-    host === 'ssh.dev.azure.com' ||
-    host.endsWith(AZURE_LEGACY_HOST_SUFFIX)
-  );
+  return AZURE_HOSTS.has(host) || host.endsWith(AZURE_LEGACY_HOST_SUFFIX);
+}
+
+function isBindableHost(host: string): boolean {
+  return host === GITHUB_HOST || isAzureHost(host);
 }
 
 /** Whether the remote is on a platform `sonar import` can bind. Self-hosted instances are not recognized. */
 export function isBindableRemote(remote: string): boolean {
   const host = parseGitRemote(remote)?.host;
-  return (
-    host !== undefined && (BINDABLE_HOSTS.has(host) || host.endsWith(AZURE_LEGACY_HOST_SUFFIX))
-  );
+  return host !== undefined && isBindableHost(host);
 }
 
 /**
@@ -52,7 +51,7 @@ export function isBindableRemote(remote: string): boolean {
  */
 export function remoteRepositorySlug(remote: string): string | null {
   const parsed = parseGitRemote(remote);
-  if (!parsed || !isBindableRemote(remote)) {
+  if (!parsed || !isBindableHost(parsed.host)) {
     return null;
   }
   const { host, path } = parsed;

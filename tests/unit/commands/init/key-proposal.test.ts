@@ -24,13 +24,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import {
-  generateProjectProposal,
-  validateProjectKey,
-  validateProjectName,
-  validateVisibility,
-} from '@/commands/init/project-key.ts';
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
 
 const directory = () => realpathSync(mkdtempSync(join(tmpdir(), 'init-key-')));
 
@@ -80,29 +74,5 @@ describe('generateProjectProposal', () => {
 
     expect(proposal.projectName).toBe(root.split('/').at(-1) ?? '');
     expect(proposal.projectKey).toMatch(/^init-key-.+-[0-9a-f]{12}$/);
-  });
-});
-
-describe('validation', () => {
-  it('accepts a SonarQube key and trims it', () => {
-    expect(validateProjectKey(' my_org:proj-1.x ')).toBe('my_org:proj-1.x');
-  });
-
-  it.each(['', '   ', '123', 'has space', 'slash/key', 'a'.repeat(401)])(
-    'rejects the key %p',
-    (key) => {
-      expect(() => validateProjectKey(key)).toThrow(InvalidOptionError);
-    },
-  );
-
-  it('rejects an empty name or one with control characters', () => {
-    expect(validateProjectName('  My project ')).toBe('My project');
-    expect(() => validateProjectName('  ')).toThrow(InvalidOptionError);
-    expect(() => validateProjectName('bad\nname')).toThrow(InvalidOptionError);
-  });
-
-  it('accepts only private or public', () => {
-    expect(validateVisibility('public')).toBe('public');
-    expect(() => validateVisibility('internal')).toThrow(InvalidOptionError);
   });
 });

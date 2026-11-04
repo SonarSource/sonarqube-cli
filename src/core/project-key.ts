@@ -20,15 +20,26 @@
 
 export const PROJECT_KEY_MAX_LENGTH = 400;
 
-/** SonarQube project keys allowed when using a key into a generated hook shell script. */
-export const PROJECT_KEY_SAFE_PATTERN = /^[A-Za-z0-9_.:-]+$/;
+const PROJECT_KEY_CHARACTERS = 'A-Za-z0-9_.:-';
+
+/** Only the characters SonarQube allows in a project key, none of which a shell or YAML template needs quoted. */
+export const PROJECT_KEY_SAFE_PATTERN = new RegExp(`^[${PROJECT_KEY_CHARACTERS}]+$`);
+
+const INVALID_PROJECT_KEY_CHARACTERS = new RegExp(`[^${PROJECT_KEY_CHARACTERS}]`, 'g');
+const ALL_DIGITS = /^\d+$/;
+
+export function replaceInvalidProjectKeyCharacters(value: string, replacement: string): string {
+  return value.replace(INVALID_PROJECT_KEY_CHARACTERS, replacement);
+}
+
+/** SonarQube rejects a key made only of digits. */
+export function isAllDigits(key: string): boolean {
+  return ALL_DIGITS.test(key);
+}
 
 /** SonarQube accepts keys of letters, digits and `-_.:`, at most 400 characters, with a non-digit. */
 export function isValidProjectKey(key: string): boolean {
   return (
-    key.length > 0 &&
-    key.length <= PROJECT_KEY_MAX_LENGTH &&
-    PROJECT_KEY_SAFE_PATTERN.test(key) &&
-    !/^\d+$/.test(key)
+    key.length <= PROJECT_KEY_MAX_LENGTH && PROJECT_KEY_SAFE_PATTERN.test(key) && !isAllDigits(key)
   );
 }

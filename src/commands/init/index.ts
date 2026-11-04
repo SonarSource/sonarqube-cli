@@ -21,17 +21,21 @@
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import type { Console } from '@/core/ui/console.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
+import {
+  type UnboundNewFlags,
+  validateUnboundNewFlags,
+  warnIgnoredUnboundNewFlags,
+} from './flags.ts';
 import type { InitOutcome } from './init-outcome.ts';
 import { renderInitOutcome } from './output.ts';
-import { validateProjectKey, validateProjectName, validateVisibility } from './project-key.ts';
 import { resolveInitAuth } from './steps/auth.ts';
 import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
-import { runUnboundNew, type UnboundNewFlags } from './steps/unbound.ts';
+import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
   path?: string;
@@ -39,29 +43,6 @@ export interface InitOptions {
   projectKey?: string;
   name?: string;
   visibility?: string;
-}
-
-function validateFlags(options: InitOptions): UnboundNewFlags {
-  return {
-    projectKey:
-      options.projectKey === undefined ? undefined : validateProjectKey(options.projectKey),
-    name: options.name === undefined ? undefined : validateProjectName(options.name),
-    visibility:
-      options.visibility === undefined ? undefined : validateVisibility(options.visibility),
-  };
-}
-
-function warnIgnoredFlags(flags: UnboundNewFlags, console: Console): void {
-  const ignored = [
-    flags.projectKey === undefined ? null : '--project-key',
-    flags.name === undefined ? null : '--name',
-    flags.visibility === undefined ? null : '--visibility',
-  ].filter((flag) => flag !== null);
-  if (ignored.length > 0) {
-    console.warn(
-      `${ignored.join(', ')} ignored: they only apply when a new project is created without repository binding.`,
-    );
-  }
 }
 
 /**
@@ -73,16 +54,16 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
-  const flags = validateFlags(options);
+  const flags = validateUnboundNewFlags(options);
 
   const { outcome, auth } = await run(projectRoot, ctx, interactive, flags);
   if (outcome.path !== 'unbound-new') {
-    warnIgnoredFlags(flags, ctx.console);
+    warnIgnoredUnboundNewFlags(flags, ctx.console);
   }
   const declined = outcome.path === 'unbound-new' && outcome.declined === true;
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
   renderInitOutcome(outcome, ctx.console, {
-    suggestIntegrate: declined || (suggestIntegrate && !interactive),
+    suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
   if (suggestIntegrate && interactive && !declined) {
     await offerIntegrate(ctx, auth);
@@ -96,12 +77,16 @@ async function run(
   flags: UnboundNewFlags,
 ): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
   const auth = await resolveInitAuth(ctx, interactive);
-  const deps = { auth, console: ctx.console, interactive };
+  const http = new SonarHttpClient(auth.serverUrl, auth.token);
+  const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
   const detected = await detectInitPath(projectRoot, deps);
   return { outcome: await runDetectedPath(detected, deps, flags), auth };
 }
 
-/** A path that falls back to `unbound-new` (declined binding or linking) continues into it. */
+/**
+ * `bound-new` and `link-existing` hand back `unbound-new` only when the user declined binding or
+ * linking, so it continues into the project creation.
+ */
 async function runDetectedPath(
   outcome: InitOutcome,
   deps: DetectDeps,
@@ -119,8 +104,10 @@ async function runDetectedPath(
   }
 }
 
-function fallBack(outcome: InitOutcome, deps: DetectDeps, flags: UnboundNewFlags) {
-  return outcome.path === 'unbound-new' && !outcome.projectKey && !outcome.declined
-    ? runUnboundNew(outcome, deps, flags)
-    : outcome;
+function fallBack(
+  outcome: InitOutcome,
+  deps: DetectDeps,
+  flags: UnboundNewFlags,
+): InitOutcome | Promise<InitOutcome> {
+  return outcome.path === 'unbound-new' ? runUnboundNew(outcome, deps, flags) : outcome;
 }

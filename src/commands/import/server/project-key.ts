@@ -18,9 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { PROJECT_KEY_MAX_LENGTH } from '@/core/project-key.ts';
-
-const INVALID_KEY_CHARACTERS = /[^A-Za-z0-9\-_.:]/g;
+import {
+  isAllDigits,
+  PROJECT_KEY_MAX_LENGTH,
+  replaceInvalidProjectKeyCharacters,
+} from '@/core/project-key.ts';
 
 /**
  * The SonarQube project key for an imported repository, from its path on the platform:
@@ -28,7 +30,7 @@ const INVALID_KEY_CHARACTERS = /[^A-Za-z0-9\-_.:]/g;
  * within 400 characters.
  */
 export function deriveProjectKey(repositorySlug: string): string {
-  const key = repositorySlug.replace(INVALID_KEY_CHARACTERS, '_');
-  const nonNumeric = /^\d+$/.test(key) ? `repo_${key}` : key;
+  const key = replaceInvalidProjectKeyCharacters(repositorySlug, '_');
+  const nonNumeric = isAllDigits(key) ? `repo_${key}` : key;
   return nonNumeric.slice(0, PROJECT_KEY_MAX_LENGTH);
 }

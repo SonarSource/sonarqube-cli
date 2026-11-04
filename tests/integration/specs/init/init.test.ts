@@ -22,7 +22,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { generateProjectProposal } from '@/commands/init/project-key.ts';
+import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import { TestHarness } from '../../harness';
@@ -236,8 +236,11 @@ describe('sonar init', () => {
 
       const result = await harness.run('init --path packages/app');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('bound_project');
+      // Linking needs an answer, so the non-interactive run stops at the hint for that path.
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'sonar link bound_project --path packages/app',
+      );
     },
     TIMEOUT,
   );
@@ -250,7 +253,7 @@ describe('sonar init', () => {
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
+      expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('bound_project');
       expect(result.stdout + result.stderr).not.toContain('secret-token');
     },
@@ -276,17 +279,21 @@ describe('sonar init', () => {
   );
 
   it(
-    'does not link a project already bound to the remote when it cannot ask, and says why',
+    'fails with a sonar link hint instead of creating a second project when it cannot ask',
     async () => {
       await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain("Not linking the existing project 'bound_project'");
-      expect(result.stdout).toContain(UNBOUND);
-      expect(harness.cwd.exists('.sonar-config.json')).toBe(true);
+      expect(result.exitCode).toBe(1);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain(
+        "A Sonar project already exists for this repository: 'bound_project'",
+      );
+      expect(output).toContain('sonar link bound_project');
+      expect(output).not.toContain(UNBOUND);
+      expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
     },
     TIMEOUT,
   );
@@ -651,6 +658,29 @@ describe('sonar init', () => {
         expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
         expect(result.stdout).toContain("Next, run 'sonar integrate'");
         expect(result.stdout).not.toContain(INTEGRATE_PROMPT);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not suggest sonar integrate on a declined creation once anything is integrated',
+      async () => {
+        harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+        const server = await startServer();
+        initGitRepo(harness.cwd.path);
+        harness.state().withSqaaFeature(harness.cwd.path, 'integrated_project');
+
+        const session = harness.runInteractive('init');
+        await session.waitText('Project name');
+        session.keyEnter();
+        await session.waitText('Project visibility');
+        session.keyEnter();
+        await session.decline('Create this project');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(created(server)).toHaveLength(0);
+        expect(result.stdout).not.toContain("'sonar integrate'");
       },
       TIMEOUT,
     );
@@ -1105,7 +1135,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'continues unbound and ends with a sonar link hint when the mapping cannot be written',
+      'fails with a sonar link hint, without creating a project, when the mapping cannot be written',
       async () => {
         await signInToCloud((server) =>
           server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
@@ -1115,13 +1145,16 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
-        await createProject(session);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('could not save .sonar-config.json');
-        expect(result.stderr).toContain('sonar link bound_project');
-        expect(result.stderr).toContain('Created project');
+        const output = result.stdout + result.stderr;
+        expect(output).toContain(
+          "Found project 'bound_project', but could not save .sonar-config.json",
+        );
+        expect(output).toContain('sonar link bound_project');
+        expect(output).not.toContain('Create this project');
+        expect(output).not.toContain(UNBOUND);
       },
       TIMEOUT,
     );
