@@ -9,7 +9,7 @@ SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
 AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin"
 INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION
-RUN_ENV=ANTHROPIC_API_KEY,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_BASE_URL,ANTHROPIC_CUSTOM_HEADERS,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
+RUN_ENV=PORTKEY_API_KEY,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
 ROOT_DIR_NAMES=(app logs tests solution)
 
 as_agent() {
@@ -79,12 +79,17 @@ install_tools() {
 }
 
 run_benchmark() {
+  export ANTHROPIC_BASE_URL=https://api.portkey.ai
+  export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
+  export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
   export PYTHONPATH="${WORKDIR}/harbor/environments"
   cd "${WORKDIR}"
   harbor run \
     --yes \
     --path "${WORKDIR}/harbor/tasks/${TASK}" \
     --ve EXPECTED_INTEGRATION=claude-code \
+    --ve PROMPT_HOOK=claude-prompt-submit \
+    --ve FILE_HOOK=claude-pre-tool-use \
     --agent claude-code \
     --model "${MODEL}" \
     --jobs-dir "${WORKDIR}/harbor-jobs" \
