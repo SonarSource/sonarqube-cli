@@ -24,11 +24,8 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { createArchitectureApi, createDirectivesApi } from '../../_common/architecture-api.ts';
-import {
-  applyDirectiveChanges,
-  parseDirectiveChanges,
-  warnDirectiveKeys,
-} from '../../_common/directives.ts';
+import { warnDirectiveKeys } from '../../_common/directive-key-warnings.ts';
+import { applyDirectiveChanges, parseDirectiveChanges } from '../../_common/directives.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
 import { recordSet, type SetFileOptions } from '../../_common/write-options.ts';
