@@ -43,11 +43,11 @@ export function validateProjectKey(key: string): string {
   return trimmed;
 }
 
-export function validateProjectName(name: string): string {
+export function validateProjectName(name: string, label = '--name'): string {
   const trimmed = name.trim();
   if (!trimmed || trimmed.length > MAX_NAME_LENGTH || CONTROL_CHARACTERS.test(trimmed)) {
     throw new InvalidOptionError(
-      `--name must be non-empty, at most ${MAX_NAME_LENGTH} characters, and free of control characters.`,
+      `${label} must be non-empty, at most ${MAX_NAME_LENGTH} characters, and free of control characters.`,
     );
   }
   return trimmed;

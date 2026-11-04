@@ -67,6 +67,8 @@ export interface ProjectProposal {
  * Deterministic key `<organization_><name>-<12-char sha256>`. The hash covers the organization and
  * the repository identity (never a local path), so clones and worktrees of one repository agree.
  * A sub-directory of a repository adds its relative path, which keeps monorepo folders apart.
+ * Without a remote there is nothing shared to agree on, so the absolute path is the identity and
+ * unrelated directories with the same name never collide.
  */
 export function generateProjectProposal(
   projectRoot: string,
@@ -79,7 +81,8 @@ export function generateProjectProposal(
     isGit && repository ? normalizePath(relative(gitRoot, projectRoot)).normalize('NFC') : '';
   const directoryName = basename(projectRoot) || 'project';
   const projectName = subdirectory ? directoryName : (repository?.name ?? directoryName);
-  const baseIdentity = repository?.identity ?? `directory:${directoryName.normalize('NFC')}`;
+  const baseIdentity =
+    repository?.identity ?? `directory:${normalizePath(projectRoot).normalize('NFC')}`;
   const identity = subdirectory ? JSON.stringify([baseIdentity, subdirectory]) : baseIdentity;
   const hash = createHash('sha256')
     .update(JSON.stringify([organization ?? '', identity]))

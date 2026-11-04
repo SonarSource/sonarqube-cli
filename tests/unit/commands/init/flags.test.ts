@@ -43,6 +43,8 @@ describe('validation', () => {
     expect(validateProjectName('  My project ')).toBe('My project');
     expect(() => validateProjectName('  ')).toThrow(InvalidOptionError);
     expect(() => validateProjectName('bad\nname')).toThrow(InvalidOptionError);
+    expect(() => validateProjectName('bad\nname')).toThrow(/^--name must be/);
+    expect(() => validateProjectName('bad\nname', 'Project name')).toThrow(/^Project name must be/);
   });
 
   it('accepts only private or public', () => {

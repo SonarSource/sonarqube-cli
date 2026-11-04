@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -65,6 +65,21 @@ describe('generateProjectProposal', () => {
       key('https://github.com/a/repo.git', 'two'),
     );
     expect(key('https://github.com/a/repo.git')).not.toBe(key('https://github.com/b/repo.git'));
+  });
+
+  it('keeps same-named directories without a remote apart, and is stable for one path', () => {
+    const named = (parent: string) => {
+      const path = join(parent, 'app');
+      mkdirSync(path);
+      return path;
+    };
+    const first = named(directory());
+    const second = named(directory());
+
+    const key = (root: string) => generateProjectProposal(root, undefined, 'org').projectKey;
+
+    expect(key(first)).not.toBe(key(second));
+    expect(key(first)).toBe(key(first));
   });
 
   it('falls back to the directory name without a remote, and has no prefix without an organization', () => {

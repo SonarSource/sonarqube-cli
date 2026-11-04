@@ -20,11 +20,12 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
+import { BadRequestError } from '@/core/server/errors.ts';
 import { ProjectsClient, type ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import { type UnboundNewFlags, validateProjectName } from '../flags.ts';
+import { type UnboundNewFlags, validateProjectName, warnIgnoredUnboundNewFlags } from '../flags.ts';
 import type { InitOutcome, UnboundNewOutcome } from '../init-outcome.ts';
 import { generateProjectProposal, type ProjectProposal } from '../key-proposal.ts';
 import type { DetectDeps } from './detect.ts';
@@ -37,7 +38,7 @@ async function askName(console: Console, fallback: string): Promise<string> {
       return fallback;
     }
     try {
-      return validateProjectName(answer);
+      return validateProjectName(answer, 'Project name');
     } catch (error) {
       console.warn(error instanceof Error ? error.message : String(error));
     }
@@ -78,6 +79,7 @@ export async function runUnboundNew(
       });
     }
     console.warn(`Project '${existing.key}' already exists; mapping it instead of creating one.`);
+    warnIgnoredUnboundNewFlags({ name: flags.name, visibility: flags.visibility }, console);
     await writeMapping(auth, existing.key, projectRoot, console, 'found');
     console.success(`Saved ${SHARED_PROJECT_CONFIG_FILE_NAME} for project '${existing.key}'.`);
     return { path: 'unbound-new', projectRoot, remote, projectKey: existing.key };
@@ -107,6 +109,17 @@ export async function runUnboundNew(
         visibility,
         organization: auth.orgKey,
       })
+      .mapErr((error) =>
+        flags.projectKey !== undefined && error instanceof BadRequestError
+          ? new CommandFailedError(
+              `Could not create project '${flags.projectKey}': ${error.message}`,
+              {
+                remediationHint:
+                  'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another --project-key.',
+              },
+            )
+          : error,
+      )
       .orThrow(),
   );
   await writeMapping(auth, key, projectRoot, console, 'created');

@@ -613,6 +613,26 @@ describe('sonar init', () => {
     );
 
     it(
+      'warns that --name and --visibility are ignored when it maps an existing project',
+      async () => {
+        const { projectKey } = generateProjectProposal(
+          harness.cwd.path,
+          'https://gitlab.com/example/repository.git',
+          ORG,
+        );
+        const server = await startServer((s) => s.withProject(projectKey));
+        withRemote(GITLAB_REMOTE);
+
+        const result = await harness.run('init --non-interactive --name Foo --visibility public');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('--name, --visibility ignored');
+        expect(created(server)).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
+
+    it(
       'refuses an explicit --project-key that is already taken',
       async () => {
         const server = await startServer((s) => s.withProject('taken'));
@@ -623,6 +643,28 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(1);
         expect(result.stdout + result.stderr).toContain("Project 'taken' already exists");
         expect(created(server)).toHaveLength(0);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'points to --project-key when the server rejects the key it cannot see (taken elsewhere)',
+      async () => {
+        await startServer((s) =>
+          s.withProjectCreateRejected(
+            JSON.stringify({
+              errors: [{ msg: "Could not create Project, key already exists: 'elsewhere'" }],
+            }),
+          ),
+        );
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive --project-key elsewhere');
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("Could not create project 'elsewhere'");
+        expect(output).toContain('choose another --project-key');
       },
       TIMEOUT,
     );
