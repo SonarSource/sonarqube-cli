@@ -9,3 +9,5 @@ The registry supports a **container + subfeatures** model: a `FeatureContainer<T
 Features and subfeatures declare `isAvailable` (`{ available, unavailableReason? }`; omitted means available, `undefined` means the check failed and leaves the item as is) and `required` (never prompted). A subfeature's `isAvailable` only runs once its own container is available, so a subfeature with no eligibility condition of its own beyond its container's should just be `required: true` rather than re-deriving anything from raw options.
 
 `installIntegration` previews `resolveRecommendedFeatures` (never prompts); `customizeFeatureSelection` refines it through prompts when the user picks **Customize**.
+
+YAML patches treat missing and blank files as empty documents. Malformed YAML and read failures raise a typed error without source contents. Apply, inspection and removal preserve the original file on these errors.

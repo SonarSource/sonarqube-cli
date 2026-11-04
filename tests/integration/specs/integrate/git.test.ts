@@ -240,6 +240,20 @@ describe('integrate git (native hooks)', () => {
     await harness.dispose();
   });
 
+  it('preserves malformed pre-commit YAML and reports a safe error', async () => {
+    await setupAuthenticated(harness, { withSecretsBinary: true });
+    initGitRepo(harness);
+    const original = 'private-setting: hidden-value\nrepos: [broken';
+    harness.cwd.writeFile('.pre-commit-config.yaml', original);
+
+    const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('contains invalid YAML');
+    expect(result.stdout + result.stderr).not.toContain('hidden-value');
+    expect(readFileSync(join(harness.cwd.path, '.pre-commit-config.yaml'), 'utf-8')).toBe(original);
+  });
+
   it(
     'exits with error when user is not authenticated',
     async () => {
