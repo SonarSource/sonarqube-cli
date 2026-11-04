@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Shared integration scope runner for CI (full suite or hash shard).
+# Run integration tests for one CI hash shard (see integration-shard-paths.sh).
 set -euo pipefail
 
 action_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "run-integration-scope: cwd=$(pwd)"
-echo "run-integration-scope: INTEGRATION_SHARD_INDEX=${INTEGRATION_SHARD_INDEX:-<unset>}"
-echo "run-integration-scope: INTEGRATION_SHARD_TOTAL=${INTEGRATION_SHARD_TOTAL:-<unset>}"
-echo "run-integration-scope: USE_COVERAGE=${USE_COVERAGE:-0}"
+: "${INTEGRATION_SHARD_INDEX:?INTEGRATION_SHARD_INDEX is required}"
+: "${INTEGRATION_SHARD_TOTAL:?INTEGRATION_SHARD_TOTAL is required}"
 
 run_bun_test() {
   local -a test_paths=("$@")
@@ -35,27 +33,15 @@ run_bun_test() {
   return "${status}"
 }
 
-run_once() {
-  if [ "${INTEGRATION_SHARDED:-false}" = 'true' ]; then
-    if ! mapfile -t shard_paths < <(bash "${action_dir}/integration-shard-paths.sh"); then
-      echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
-      return 1
-    fi
-    if [ "${#shard_paths[@]}" -eq 0 ]; then
-      echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL} resolved no paths" >&2
-      return 1
-    fi
-    echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}:"
-    printf '  %s\n' "${shard_paths[@]}"
-    run_bun_test "${shard_paths[@]}"
-    return $?
-  fi
+if ! mapfile -t shard_paths < <(bash "${action_dir}/integration-shard-paths.sh"); then
+  echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
+  exit 1
+fi
+if [ "${#shard_paths[@]}" -eq 0 ]; then
+  echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL} resolved no paths" >&2
+  exit 1
+fi
 
-  if [ "${USE_COVERAGE:-0}" = "1" ]; then
-    SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
-  else
-    bun run test:integration
-  fi
-}
-
-run_once
+echo "Integration shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}:"
+printf '  %s\n' "${shard_paths[@]}"
+run_bun_test "${shard_paths[@]}"

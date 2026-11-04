@@ -17,20 +17,12 @@ inputs:
     default: 'false'
   integration-shard-index:
     description: >-
-      When set with integration-shard-total, run only top-level spec folders whose
-      cksum(name) % total equals this index (see integration-shard-paths.sh in this action).
-    required: false
-    default: ''
+      Hash shard index in [0, integration-shard-total); top-level spec folders whose
+      cksum(name) % total equals this index (see integration-shard-paths.sh).
+    required: true
   integration-shard-total:
-    description: Number of integration shards (used with integration-shard-index).
-    required: false
-    default: '4'
-  integration-sharded:
-    description: >-
-      When true, integration runs only the hash shard selected by integration-shard-index/total
-      (Linux and Windows). On Linux it also merges shard coverage and uploads an LCOV artifact.
-    required: false
-    default: 'false'
+    description: Number of integration hash shards.
+    required: true
 
 runs:
   using: composite
@@ -101,7 +93,6 @@ runs:
       env:
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
-        INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
         USE_COVERAGE: '0'
       run: bash .github/actions/run-integration-and-e2e/run-integration-scope.sh
 
@@ -111,7 +102,6 @@ runs:
       env:
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
-        INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
         USE_COVERAGE: '1'
       run: bash .github/actions/run-integration-and-e2e/run-integration-scope.sh
 
@@ -153,20 +143,8 @@ runs:
         SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
       run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:e2e
 
-    - name: Merge coverage reports (Linux)
-      if: ${{ inputs.os == 'linux' && inputs.integration-sharded != 'true' }}
-      shell: bash
-      run: bun build-scripts/report-coverage.ts
-
-    - name: Upload integration coverage (Linux)
-      if: ${{ inputs.os == 'linux' && inputs.integration-sharded != 'true' }}
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: integration-coverage
-        path: tests/coverage/reports/integration/
-
-    - name: Merge integration coverage (Linux shard)
-      if: ${{ inputs.os == 'linux' && inputs.integration-sharded == 'true' }}
+    - name: Merge integration coverage (Linux)
+      if: ${{ inputs.os == 'linux' }}
       shell: bash
       env:
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
@@ -176,8 +154,8 @@ runs:
         mkdir -p "$shard_dir"
         mv tests/coverage/reports/integration/lcov.info "$shard_dir/lcov.info"
 
-    - name: Upload integration coverage shard (Linux)
-      if: ${{ inputs.os == 'linux' && inputs.integration-sharded == 'true' }}
+    - name: Upload integration coverage (Linux)
+      if: ${{ inputs.os == 'linux' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage-shard-${{ inputs.integration-shard-index }}

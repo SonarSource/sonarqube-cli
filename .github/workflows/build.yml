@@ -454,7 +454,6 @@ jobs:
           binary-artifact: binary-linux-x86-64
           integration-shard-index: ${{ format('{0}', matrix.shard) }}
           integration-shard-total: '4'
-          integration-sharded: 'true'
           skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   integration-and-e2e-windows:
@@ -489,7 +488,6 @@ jobs:
           binary-artifact: binary-windows-x86-64
           integration-shard-index: ${{ format('{0}', matrix.shard) }}
           integration-shard-total: '4'
-          integration-sharded: 'true'
           skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   scan:
