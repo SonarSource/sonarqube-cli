@@ -109,3 +109,5 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
 
 Architecture public response validation lives in `architecture/_common/public-architecture-response.ts`; directive node-key warnings live in `architecture/_common/directive-key-warnings.ts`. API routing and directive mutation planning remain in their existing modules.
+
+`analyze secrets` resolves file operands to absolute paths before starting sonar-secrets, so leading dashes cannot change scanner options. Inherited stdin uses a separate internal `--input` argument path.
