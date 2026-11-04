@@ -231,7 +231,8 @@ export abstract class PatchResource<
 
   async isApplied(context: IntegrationContext): Promise<boolean> {
     const path = await resolvePath(context, this.options.targetPath);
-    return (await readTextFile(path)) === (await this.renderContent(path, context));
+    const rendered = await this.renderContent(path, context);
+    return (await readTextFile(path)) === rendered;
   }
 
   async remove(context: IntegrationContext): Promise<void> {
