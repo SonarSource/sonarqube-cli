@@ -178,6 +178,7 @@ export async function runSqaaGroups(
     console: Console;
     silent: boolean;
     isTTY?: boolean;
+    stagedContents?: ReadonlyMap<string, string>;
   },
 ): Promise<RunTally> {
   const tallies: RunTally[] = [];
@@ -191,6 +192,7 @@ export async function runSqaaGroups(
     });
     const tally = await runAnalyses({
       paths: files,
+      stagedContents: run.stagedContents,
       connection,
       projectKey,
       branch: run.branch,
@@ -315,7 +317,13 @@ export async function runSqaaAnalysisOnFiles(
   changeSet: ChangeSetResult,
   options: SqaaBatchRunOptions,
 ): Promise<void> {
-  await runSqaaBatch(options, changeSet.repoRoot, changeSet.ignored, changeSet.repoRoot);
+  await runSqaaBatch(
+    options,
+    changeSet.repoRoot,
+    changeSet.ignored,
+    changeSet.repoRoot,
+    changeSet.stagedContents,
+  );
 }
 
 /** `displayBase` is what reported paths are relative to: cwd for `--file`, the repository root for a change set. */
@@ -324,6 +332,7 @@ async function runSqaaBatch(
   displayBase: string,
   ignored: IgnoredFile[],
   repoRoot?: string,
+  stagedContents?: ReadonlyMap<string, string>,
 ): Promise<void> {
   const {
     resolved,
@@ -344,6 +353,7 @@ async function runSqaaBatch(
       displayDepth,
       console,
       silent: isJson,
+      stagedContents,
     }),
   );
 
