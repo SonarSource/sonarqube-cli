@@ -1,5 +1,4 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
-# DevEx owns every file, including documentation and repository configuration.
 * @sonarsource/agentic-sdlc-development-experience-squad
 
 src/commands/admin/onboard-ci/ @sonarsource/orchestration-workflow-squad @sonarsource/agentic-sdlc-development-experience-squad
