@@ -313,6 +313,7 @@ export class ServerImportApiClient {
     organization: string,
     pageIndex: number,
     pageSize: number,
+    query?: string,
   ): Promise<{ repositories: GithubRepositoryResponse[]; total?: number }> {
     const response = await this.client
       .get<{
@@ -321,6 +322,7 @@ export class ServerImportApiClient {
       }>('/api/alm_integrations/list_github_repositories', {
         almSetting: settingKey,
         organization,
+        ...(query === undefined ? {} : { q: query }),
         p: pageIndex,
         ps: pageSize,
       })

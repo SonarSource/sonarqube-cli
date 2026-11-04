@@ -2431,7 +2431,9 @@ export class FakeSonarQubeServerBuilder {
           const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
             (o) => o.key === query.organization,
           );
-          const repos = organization?.repos ?? [];
+          const repos = (organization?.repos ?? []).filter(
+            (repo) => !query.q || repo.name.toLowerCase().includes(query.q.toLowerCase()),
+          );
           const pageIndex = Number.parseInt(query.p ?? '1', 10);
           const pageSize = Number.parseInt(query.ps ?? '100', 10);
           const start = (pageIndex - 1) * pageSize;

@@ -205,6 +205,16 @@ export async function importHandler(
       console,
     );
     reportSkipped(skipped, console);
+    if (selection.collection.incomplete) {
+      const succeededNoun = succeeded === 1 ? 'repository' : 'repositories';
+      throw new CommandFailedError(
+        `Repository discovery was incomplete. Imported ${succeeded} ${succeededNoun} from the discovered subset (${failed} failed, ${skipped.length} skipped).`,
+        {
+          remediationHint:
+            'Use --repo owner/repository to import repositories beyond the GitHub search limit.',
+        },
+      );
+    }
     reportOutcome(succeeded, failed, skipped.length, outroLink, console);
     return;
   }
