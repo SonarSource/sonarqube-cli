@@ -21,7 +21,8 @@ permissions:
   contents: read
 
 env:
-  INTEGRATION_SHARD_TOTAL: '4'
+  INTEGRATION_SHARD_TOTAL_LINUX: '4'
+  INTEGRATION_SHARD_TOTAL_WINDOWS: '4'
 
 jobs:
   prepare:
@@ -33,8 +34,10 @@ jobs:
     outputs:
       BUILD_NUMBER: ${{ steps.get-build-number.outputs.BUILD_NUMBER }}
       PROJECT_VERSION: ${{ steps.project_version.outputs.PROJECT_VERSION }}
-      INTEGRATION_SHARD_TOTAL: ${{ steps.integration_shards.outputs.total }}
-      INTEGRATION_SHARD_MATRIX: ${{ steps.integration_shards.outputs.matrix }}
+      INTEGRATION_SHARD_TOTAL_LINUX: ${{ steps.integration_shards.outputs.linux_total }}
+      INTEGRATION_SHARD_MATRIX_LINUX: ${{ steps.integration_shards.outputs.linux_matrix }}
+      INTEGRATION_SHARD_TOTAL_WINDOWS: ${{ steps.integration_shards.outputs.windows_total }}
+      INTEGRATION_SHARD_MATRIX_WINDOWS: ${{ steps.integration_shards.outputs.windows_matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,26 +58,33 @@ jobs:
           PROJECT_VERSION=$(bun build-scripts/set-build-number.ts "${BUILD_NUMBER}")
           echo "PROJECT_VERSION=${PROJECT_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Integration shard matrix
+      - name: Integration shard matrices
         id: integration_shards
         env:
-          TOTAL: ${{ env.INTEGRATION_SHARD_TOTAL }}
+          TOTAL_LINUX: ${{ env.INTEGRATION_SHARD_TOTAL_LINUX }}
+          TOTAL_WINDOWS: ${{ env.INTEGRATION_SHARD_TOTAL_WINDOWS }}
         run: |
           set -euo pipefail
-          if ! [[ "${TOTAL}" =~ ^[1-9][0-9]*$ ]]; then
-            echo "INTEGRATION_SHARD_TOTAL must be a positive integer, got: ${TOTAL}" >&2
-            exit 1
-          fi
-          matrix='['
-          for ((i = 0; i < TOTAL; i++)); do
-            if (( i > 0 )); then
-              matrix+=','
+          write_shard_outputs() {
+            local prefix="$1"
+            local total="$2"
+            if ! [[ "${total}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "INTEGRATION_SHARD_TOTAL_${prefix} must be a positive integer, got: ${total}" >&2
+              exit 1
             fi
-            matrix+="${i}"
-          done
-          matrix+=']'
-          echo "total=${TOTAL}" >> "$GITHUB_OUTPUT"
-          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+            local matrix='['
+            for ((i = 0; i < total; i++)); do
+              if (( i > 0 )); then
+                matrix+=','
+              fi
+              matrix+="${i}"
+            done
+            matrix+=']'
+            echo "${prefix,,}_total=${total}" >> "$GITHUB_OUTPUT"
+            echo "${prefix,,}_matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          }
+          write_shard_outputs LINUX "${TOTAL_LINUX}"
+          write_shard_outputs WINDOWS "${TOTAL_WINDOWS}"
 
   build-binaries:
     name: Build All Binaries
@@ -455,7 +465,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.prepare.outputs.INTEGRATION_SHARD_MATRIX) }}
+        shard: ${{ fromJSON(needs.prepare.outputs.INTEGRATION_SHARD_MATRIX_LINUX) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -479,7 +489,7 @@ jobs:
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-linux-x86-64
           integration-shard-index: ${{ format('{0}', matrix.shard) }}
-          integration-shard-total: ${{ needs.prepare.outputs.INTEGRATION_SHARD_TOTAL }}
+          integration-shard-total: ${{ needs.prepare.outputs.INTEGRATION_SHARD_TOTAL_LINUX }}
           skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   integration-and-e2e-windows:
@@ -489,7 +499,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.prepare.outputs.INTEGRATION_SHARD_MATRIX) }}
+        shard: ${{ fromJSON(needs.prepare.outputs.INTEGRATION_SHARD_MATRIX_WINDOWS) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -513,7 +523,7 @@ jobs:
           project-version: ${{ needs.prepare.outputs.PROJECT_VERSION }}
           binary-artifact: binary-windows-x86-64
           integration-shard-index: ${{ format('{0}', matrix.shard) }}
-          integration-shard-total: ${{ needs.prepare.outputs.INTEGRATION_SHARD_TOTAL }}
+          integration-shard-total: ${{ needs.prepare.outputs.INTEGRATION_SHARD_TOTAL_WINDOWS }}
           skip-e2e: ${{ matrix.shard != 0 && 'true' || 'false' }}
 
   scan:
