@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 import { getCliDir } from '@/core/config-constants.ts';
 
-/** Disk cache for LaunchDarkly Private Beta flag decisions and SDK local storage. */
+/** Disk cache for LaunchDarkly Private Beta flag decisions. */
 export function getLaunchDarklyDir(): string {
   return join(getCliDir(), 'launch-darkly');
 }
