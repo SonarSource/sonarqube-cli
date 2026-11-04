@@ -42,7 +42,7 @@ async function importAll(
   bindings: ProjectBindingResponse[] = [],
   repos: GitlabRepo[] = DEFAULT_REPOS,
 ) {
-  const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
+  const createBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
   const api = {
     requireSupportedVersion: () => Promise.resolve(),
     listDopSettings: () =>
@@ -59,7 +59,7 @@ async function importAll(
       _repository: string,
       matches: (binding: ProjectBindingResponse) => boolean,
     ) => Promise.resolve(bindings.find(matches)),
-    putBoundProject,
+    createBoundProject,
   } as unknown as ServerImportApiClient;
   const backend = new ServerBackend(api, 'https://sonarqube.example.com');
 
@@ -69,12 +69,12 @@ async function importAll(
   );
   if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
   const outcomes = await Promise.allSettled(plan.selection.repos.map((r) => plan.importRepo(r)));
-  return { outcomes, putBoundProject };
+  return { outcomes, createBoundProject };
 }
 
 describe('ServerBackend project key guard', () => {
-  it('does not PUT a repository whose key belongs to an unrelated project, and still imports the others', async () => {
-    const { outcomes, putBoundProject } = await importAll({ 'group_repo-a': 'found' });
+  it('does not create a repository whose key belongs to an unrelated project, and still imports the others', async () => {
+    const { outcomes, createBoundProject } = await importAll({ 'group_repo-a': 'found' });
 
     expect(outcomes[0]).toMatchObject({
       status: 'rejected',
@@ -84,24 +84,24 @@ describe('ServerBackend project key guard', () => {
       },
     });
     expect(outcomes[1].status).toBe('fulfilled');
-    expect(putBoundProject).toHaveBeenCalledTimes(1);
-    expect(putBoundProject).toHaveBeenCalledWith(
+    expect(createBoundProject).toHaveBeenCalledTimes(1);
+    expect(createBoundProject).toHaveBeenCalledWith(
       expect.objectContaining({ projectKey: 'group_repo-b', repositoryIdentifier: '2' }),
     );
   });
 
-  it('does not PUT a repository whose key belongs to a project the caller cannot see', async () => {
-    const { outcomes, putBoundProject } = await importAll({
+  it('does not create a repository whose key belongs to a project the caller cannot see', async () => {
+    const { outcomes, createBoundProject } = await importAll({
       'group_repo-a': 'hidden',
       'group_repo-b': 'hidden',
     });
 
     expect(outcomes.map((o) => o.status)).toEqual(['rejected', 'rejected']);
-    expect(putBoundProject).not.toHaveBeenCalled();
+    expect(createBoundProject).not.toHaveBeenCalled();
   });
 
-  it('PUTs a repository again when its key is already bound to it', async () => {
-    const { outcomes, putBoundProject } = await importAll({ 'group_repo-a': 'found' }, [
+  it('does not mutate a project whose binding already matches', async () => {
+    const { outcomes, createBoundProject } = await importAll({ 'group_repo-a': 'found' }, [
       {
         projectKey: 'group_repo-a',
         devOpsPlatformSettingId: 'gl-id',
@@ -110,11 +110,15 @@ describe('ServerBackend project key guard', () => {
     ]);
 
     expect(outcomes.map((o) => o.status)).toEqual(['fulfilled', 'fulfilled']);
-    expect(putBoundProject).toHaveBeenCalledTimes(2);
+    expect(createBoundProject).toHaveBeenCalledTimes(1);
+    expect(outcomes[0]).toMatchObject({
+      status: 'fulfilled',
+      value: { detail: 'project already exists with matching binding' },
+    });
   });
 
   it('refuses a second repository whose derived key collides with one imported in the same run', async () => {
-    const { outcomes, putBoundProject } = await importAll(
+    const { outcomes, createBoundProject } = await importAll(
       {},
       [],
       [
@@ -131,8 +135,8 @@ describe('ServerBackend project key guard', () => {
           "Repository 'acme_my/repo' would get the project key 'acme_my_repo', already used by another repository in this run.",
       },
     });
-    expect(putBoundProject).toHaveBeenCalledTimes(1);
-    expect(putBoundProject).toHaveBeenCalledWith(
+    expect(createBoundProject).toHaveBeenCalledTimes(1);
+    expect(createBoundProject).toHaveBeenCalledWith(
       expect.objectContaining({ projectKey: 'acme_my_repo', repositoryIdentifier: '1' }),
     );
   });

@@ -22,12 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ServerImportApiClient } from '@/commands/import/server/server-import-api.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import {
-  AccessDeniedError,
-  BadRequestError,
-  ServerError,
-  UnexpectedApiError,
-} from '@/core/server/errors.ts';
+import { AccessDeniedError, BadRequestError, ServerError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import {
@@ -454,7 +449,7 @@ describe('ServerImportApiClient', () => {
     });
   });
 
-  describe('putBoundProject', () => {
+  describe('createBoundProject', () => {
     const request = {
       projectKey: 'group_repo',
       projectName: 'repo',
@@ -462,185 +457,53 @@ describe('ServerImportApiClient', () => {
       repositoryIdentifier: '42',
     };
 
-    it('PUTs the project as JSON with monorepo off', async () => {
+    it('POSTs the project as JSON with monorepo off', async () => {
       fetchSpy = mockFetch({ projectId: 'p', bindingId: 'b', newProjectCreated: true });
-      await api.putBoundProject(request);
+      await api.createBoundProject(request);
       expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe(
         '/api/v2/dop-translation/bound-projects',
       );
       const init = lastFetchInit(fetchSpy);
-      expect(init.method).toBe('PUT');
+      expect(init.method).toBe('POST');
       expect(JSON.parse(init.body as string)).toEqual({ ...request, monorepo: false });
     });
 
     it('passes projectIdentifier through when given', async () => {
       fetchSpy = mockFetch({ newProjectCreated: true });
-      await api.putBoundProject({ ...request, projectIdentifier: 'proj' });
+      await api.createBoundProject({ ...request, projectIdentifier: 'proj' });
       expect(JSON.parse(lastFetchInit(fetchSpy).body as string)).toMatchObject({
         projectIdentifier: 'proj',
       });
     });
 
-    it('reports whether the project was new', async () => {
-      fetchSpy = mockFetch({ newProjectCreated: false });
-      expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: false });
-    });
-
     it('rejects with the server message on a 400', async () => {
       fetchSpy = mockFetchSeq(badRequest("personal access token for 's' is missing"));
-      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      const error = await api.createBoundProject(request).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(BadRequestError);
       expect((error as BadRequestError).message).toContain('is missing');
     });
 
     it('rejects on a 500 from the platform', async () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 500 }));
-      const error = await api.putBoundProject(request).catch((e: unknown) => e);
+      const error = await api.createBoundProject(request).catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ServerError);
     });
 
-    describe('on a server without PUT', () => {
-      const BOUND_PROJECTS = '/api/v2/dop-translation/bound-projects';
-
-      /** Answers each call by method and path; `/api/system/status` reports `version`. */
-      function mockServer(answers: {
-        put: Response;
-        post?: Response;
-        version?: string | null;
-      }): ReturnType<typeof spyOn> {
-        return spyOn(globalThis, 'fetch').mockImplementation(((
-          url: string | URL,
-          init?: RequestInit,
-        ) => {
-          const { pathname } = new URL(url.toString());
-          if (pathname === '/api/system/status') {
-            const { version } = answers;
-            return Promise.resolve(
-              version === undefined || version === null
-                ? fakeResponse({}, { status: 500 })
-                : fakeResponse({ status: 'UP', version }),
-            );
-          }
-          const answer = init?.method === 'PUT' ? answers.put : answers.post;
-          return Promise.resolve(answer ?? fakeResponse({}, { status: 500 }));
-        }) as typeof fetch);
-      }
-
-      type FetchCall = [string | URL, RequestInit | undefined];
-
-      function fetchCalls(spy: ReturnType<typeof spyOn>): FetchCall[] {
-        return spy.mock.calls as FetchCall[];
-      }
-
-      function callsTo(spy: ReturnType<typeof spyOn>, method: string): number {
-        return fetchCalls(spy).filter(
-          ([url, init]) =>
-            new URL(url.toString()).pathname === BOUND_PROJECTS && init?.method === method,
-        ).length;
-      }
-
-      function versionCalls(spy: ReturnType<typeof spyOn>): number {
-        return fetchCalls(spy).filter(
-          ([url]) => new URL(url.toString()).pathname === '/api/system/status',
-        ).length;
-      }
-
-      const created = () =>
-        fakeResponse({ projectId: 'p', bindingId: 'b', newProjectCreated: true }, { status: 201 });
-
-      it('POSTs the same body when PUT answers 405, without asking for the version', async () => {
-        fetchSpy = mockServer({ put: fakeResponse({}, { status: 405 }), post: created() });
-        expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: true });
-        expect(callsTo(fetchSpy, 'POST')).toBe(1);
-        expect(versionCalls(fetchSpy)).toBe(0);
-        const post = fetchCalls(fetchSpy).find(([, init]) => init?.method === 'POST');
-        expect(JSON.parse(post?.[1]?.body as string)).toEqual({
-          ...request,
-          monorepo: false,
-        });
-      });
-
-      it('POSTs when PUT answers 404 on a server older than 2025.6', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          post: created(),
-          version: '10.8',
-        });
-        expect(await api.putBoundProject(request)).toEqual({ newProjectCreated: true });
-        expect(callsTo(fetchSpy, 'POST')).toBe(1);
-      });
-
-      it('keeps the original error on a 404 from a server that supports PUT', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          post: created(),
-          version: '2025.6.0.12345',
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(UnexpectedApiError);
-        expect((error as UnexpectedApiError).status).toBe(404);
-        expect(callsTo(fetchSpy, 'POST')).toBe(0);
-      });
-
-      it('keeps the original error on a 404 when the version cannot be read', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          post: created(),
-          version: null,
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(UnexpectedApiError);
-        expect(callsTo(fetchSpy, 'POST')).toBe(0);
-      });
-
-      it('decides once: later repositories go straight to POST and the version is read once', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          post: created(),
-          version: '10.8',
-        });
-        await api.putBoundProject(request);
-        await api.putBoundProject({ ...request, projectKey: 'other' });
-        await api.putBoundProject({ ...request, projectKey: 'third' });
-        expect(callsTo(fetchSpy, 'PUT')).toBe(1);
-        expect(callsTo(fetchSpy, 'POST')).toBe(3);
-        expect(versionCalls(fetchSpy)).toBe(1);
-      });
-
-      it('reads the version once for concurrent repositories on a server with PUT', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 404 }),
-          version: '2026.1',
-        });
-        await Promise.all(
-          ['a', 'b', 'c'].map((projectKey) =>
-            api.putBoundProject({ ...request, projectKey }).catch(() => undefined),
-          ),
-        );
-        expect(versionCalls(fetchSpy)).toBe(1);
-        expect(callsTo(fetchSpy, 'POST')).toBe(0);
-      });
-
-      it('passes a 400 from POST through: an existing project is never rebound', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 405 }),
-          post: badRequest("Project 'group_repo' already exists"),
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(BadRequestError);
-        expect((error as BadRequestError).message).toContain('already exists');
-      });
-
-      it('passes a 404 from POST through as the original error', async () => {
-        fetchSpy = mockServer({
-          put: fakeResponse({}, { status: 405 }),
-          post: fakeResponse({}, { status: 404 }),
-        });
-        const error = await api.putBoundProject(request).catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(UnexpectedApiError);
-        expect((error as UnexpectedApiError).status).toBe(404);
-      });
+    it.each([{}, { newProjectCreated: true }])('accepts a create response %j', async (body) => {
+      fetchSpy = mockFetch(body, { status: 201 });
+      expect(await api.createBoundProject(request)).toBeUndefined();
     });
+
+    it.each([400, 404, 405, 409])(
+      'never retries a failed POST (%s) as an upsert',
+      async (status) => {
+        fetchSpy = mockFetchSeq(fakeResponse({ message: 'Creation refused' }, { status }));
+        const error = await api.createBoundProject(request).catch((error: unknown) => error);
+        expect(error).toBeInstanceOf(Error);
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(lastFetchInit(fetchSpy).method).toBe('POST');
+      },
+    );
   });
 
   describe('requireSupportedVersion', () => {
