@@ -19,12 +19,14 @@
  */
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type {
   FeatureContainer,
   FeatureDeclaration,
@@ -114,22 +116,78 @@ describe('declarative integration framework - remove and undo', () => {
     );
   });
 
-  it('uses defaults when YAML files contain invalid content', async () => {
-    const state = getDefaultState('test');
-    const context = makeContext(state, tempDir);
-    const yamlPath = join(tempDir, 'settings.yml');
-    await writeFile(yamlPath, 'invalid: [yaml');
-    const yamlResource = yamlPatch({
-      id: 'yaml-invalid',
-      targetPath: yamlPath,
-      patch: (document) => ({ ...(document as Record<string, unknown>), enabled: true }),
-      removePatch: (document) => document,
+  describe.each(['apply', 'isApplied', 'remove'] as const)('YAML %s preservation', (operation) => {
+    it.each(['invalid: [yaml', 'private-value: hidden\ninvalid: [yaml'])(
+      'preserves malformed content %j',
+      async (original) => {
+        const context = makeContext(getDefaultState('test'), tempDir);
+        const targetPath = join(tempDir, 'settings.yml');
+        await writeFile(targetPath, original);
+        const resource = yamlPatch({
+          id: 'yaml',
+          targetPath,
+          patch: () => ({ sonar: true }),
+          removePatch: () => ({}),
+        });
+        const error = await Promise.resolve(resource[operation](context)).catch(
+          (error: unknown) => error,
+        );
+        expect(error).toBeInstanceOf(CommandFailedError);
+        if (!(error instanceof CommandFailedError)) throw new Error('Expected a typed YAML error');
+        expect(error.message).toBe(`${targetPath} contains invalid YAML. Fix it and try again.`);
+        expect(error.cause).toBeUndefined();
+        expect(await readFile(targetPath, 'utf-8')).toBe(original);
+      },
+    );
+
+    it('preserves unreadable files without exposing the read error', async () => {
+      const context = makeContext(getDefaultState('test'), tempDir);
+      const targetPath = join(tempDir, 'settings.yml');
+      const original = 'existing: true\n';
+      await writeFile(targetPath, original);
+      const resource = yamlPatch({
+        id: 'yaml',
+        targetPath,
+        patch: () => ({ sonar: true }),
+        removePatch: () => ({}),
+      });
+      const readSpy = spyOn(fsPromises, 'readFile').mockRejectedValue(
+        Object.assign(new Error('sensitive read details'), { code: 'EACCES' }),
+      );
+      let error;
+      try {
+        error = await Promise.resolve(resource[operation](context)).catch(
+          (error: unknown) => error,
+        );
+      } finally {
+        readSpy.mockRestore();
+      }
+      expect(error).toBeInstanceOf(CommandFailedError);
+      if (!(error instanceof CommandFailedError)) throw new Error('Expected a typed YAML error');
+      expect(error.message).toBe(
+        `Cannot read YAML file ${targetPath}. Check its permissions and try again.`,
+      );
+      expect(error.cause).toBeUndefined();
+      expect(await readFile(targetPath, 'utf-8')).toBe(original);
     });
+  });
 
-    await yamlResource.apply(context);
-
-    expect(await readFile(yamlPath, 'utf-8')).toBe('enabled: true\n');
-    expect(await yamlResource.isApplied(context)).toBe(true);
+  it.each([undefined, '', '  \n'])('initializes missing or blank YAML %j', async (original) => {
+    const context = makeContext(getDefaultState('test'), tempDir);
+    const targetPath = join(tempDir, 'settings.yml');
+    if (original !== undefined) await writeFile(targetPath, original);
+    const resource = yamlPatch({
+      id: 'yaml',
+      targetPath,
+      patch: (document) => ({ ...(document as object), sonar: true }),
+      removePatch: () => ({}),
+    });
+    expect(await resource.isApplied(context)).toBe(false);
+    await resource.apply(context);
+    expect(await readFile(targetPath, 'utf-8')).toBe('sonar: true\n');
+    expect(await resource.isApplied(context)).toBe(true);
+    await resource.remove(context);
+    expect(existsSync(targetPath)).toBe(false);
   });
 
   describe('remove', () => {
