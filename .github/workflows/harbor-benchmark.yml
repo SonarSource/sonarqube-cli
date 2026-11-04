@@ -60,8 +60,7 @@ jobs:
           HB_SONAR_API_URL: https://api.sc-staging.io
           ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          PORTKEY_API_KEY: ${{ matrix.agent.name == 'claude-code' && secrets.HB_CLAUDE_PORTKEY_API_KEY || '' }}
-          OPENAI_API_KEY: ${{ matrix.agent.name == 'codex' && secrets.HB_OPENAI_API_KEY || '' }}
+          PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && secrets.HB_PORTKEY_API_KEY || secrets.HB_CLAUDE_PORTKEY_API_KEY }}
         run: bash benchmarks/harbor/scripts/run-isolated.sh
 
       - name: Install the SonarQube CLI for the secrets scan
