@@ -36,7 +36,7 @@ build_javascript_lcov_report_paths() {
   while IFS= read -r -d '' shard_lcov; do
     paths+=("${shard_lcov}")
     has_integration_shards=true
-  done < <(find tests/coverage/reports -maxdepth 2 -path '*/integration-shard-*/lcov.info' -print0 | sort -z)
+  done < <(find tests/coverage/reports -maxdepth 1 -name 'lcov.integration-shard-*.info' -print0 | sort -z)
 
   if [[ "${has_integration_shards}" != true ]] && [[ -f tests/coverage/reports/integration/lcov.info ]]; then
     paths+=('tests/coverage/reports/integration/lcov.info')

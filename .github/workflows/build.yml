@@ -529,6 +529,9 @@ jobs:
           merge-multiple: true
           path: tests/coverage/reports/
 
+      - name: List integration LCOV shards
+        run: find tests/coverage/reports -maxdepth 1 -name 'lcov.integration-shard-*.info' | sort
+
       - name: Analyze on SonarQubeCloud
         env:
           SONAR_HOST_URL: ${{ fromJSON(steps.secrets.outputs.vault).SONAR_URL }}

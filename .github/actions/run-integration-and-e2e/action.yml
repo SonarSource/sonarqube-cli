@@ -150,13 +150,14 @@ runs:
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
       run: |
         bun build-scripts/report-coverage.ts
-        shard_dir="tests/coverage/reports/integration-shard-${INTEGRATION_SHARD_INDEX}"
-        mkdir -p "$shard_dir"
-        mv tests/coverage/reports/integration/lcov.info "$shard_dir/lcov.info"
+        # upload-artifact uploads directory *contents* only; use a unique filename per shard
+        # so merge-multiple download does not overwrite a shared lcov.info.
+        mv tests/coverage/reports/integration/lcov.info \
+          "tests/coverage/reports/lcov.integration-shard-${INTEGRATION_SHARD_INDEX}.info"
 
     - name: Upload integration coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage-shard-${{ inputs.integration-shard-index }}
-        path: tests/coverage/reports/integration-shard-${{ inputs.integration-shard-index }}/
+        path: tests/coverage/reports/lcov.integration-shard-${{ inputs.integration-shard-index }}.info
