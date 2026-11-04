@@ -10,7 +10,7 @@ from harbor.environments.capabilities import EnvironmentCapabilities
 
 ALLOW_ENV_VAR = "HARBOR_HOST_ENVIRONMENT_ALLOW"
 CI_ENV_VAR = "GITHUB_ACTIONS"
-SCRATCH_ROOTS = ("/app", "/tests", "/solution", "/logs")
+SCRATCH_ROOTS = ("/app", "/tests", "/solution", "/logs", "/installed-agent")
 LOG_DIRS = ("/logs/agent", "/logs/verifier", "/logs/artifacts")
 DEFAULT_CWD = "/app"
 RUNNER_ENV_PREFIXES = ("ACTIONS_", "GITHUB_", "RUNNER_", "HB_")
