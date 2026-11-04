@@ -19,7 +19,7 @@
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, stat, writeFile } from 'node:fs/promises';
 import { EOL, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -58,6 +58,34 @@ describe('EOL-preserving resource writes', () => {
       resolvedDependencies: new Map(),
     };
   }
+
+  describe.skipIf(process.platform === 'win32')('resource permission status', () => {
+    for (const factory of [wholeFile, textSnippet]) {
+      for (const executable of [false, true]) {
+        for (const mode of [0o600, 0o640, 0o744, 0o771]) {
+          it(`${factory.name} preserves permissions ${mode.toString(8)} with executable=${executable}`, async () => {
+            const path = join(tempDir, 'resource');
+            const resource = factory({
+              id: 'resource',
+              targetPath: path,
+              content: 'echo managed',
+              startMarker: '# begin',
+              executable,
+            });
+            expect(await resource.isApplied(context())).toBe(false);
+            await resource.apply(context());
+            await chmod(path, mode);
+            expect(await resource.isApplied(context())).toBe(!executable || mode === 0o771);
+            await resource.apply(context());
+            expect((await stat(path)).mode & 0o777).toBe(executable ? mode | 0o111 : mode);
+            expect(await resource.isApplied(context())).toBe(true);
+            await resource.apply(context());
+            expect((await stat(path)).mode & 0o777).toBe(executable ? mode | 0o111 : mode);
+          });
+        }
+      }
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // wholeFile
