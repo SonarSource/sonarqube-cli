@@ -44,10 +44,10 @@ interface BoundProjectPayload {
   monorepo: boolean;
 }
 
-function putPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
+function postPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
   return server
     .getRecordedRequests()
-    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'PUT')
+    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'POST')
     .map((r) => JSON.parse(r.body ?? '{}') as BoundProjectPayload);
 }
 
@@ -88,7 +88,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 3 repositories');
     expect(result.stdout).toContain(`Dashboard: ${server.baseUrl()}/admin/project-coverage`);
-    const payloads = putPayloads(server);
+    const payloads = postPayloads(server);
     expect(payloads).toHaveLength(3);
     expect(payloads).toContainEqual({
       projectKey: 'ALPHA_repo-a',
@@ -127,7 +127,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 5 repositories');
     expect(
-      putPayloads(server)
+      postPayloads(server)
         .map((p) => `${p.projectIdentifier}/${p.repositoryIdentifier}`)
         .sort(),
     ).toEqual(['ALPHA/a1', 'ALPHA/a2', 'ALPHA/a3', 'GAMMA/g1', 'GAMMA/g2']);
@@ -153,7 +153,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 60 repositories');
-    expect(putPayloads(server)).toHaveLength(60);
+    expect(postPayloads(server)).toHaveLength(60);
   });
 
   it('imports only the repository named by --repo, as PROJECTKEY/slug', async () => {
@@ -167,7 +167,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     const result = await harness.run('import --repo BETA/shared');
 
     expect(result.exitCode).toBe(0);
-    const payloads = putPayloads(server);
+    const payloads = postPayloads(server);
     expect(payloads).toHaveLength(1);
     expect(payloads[0]).toMatchObject({
       projectKey: 'BETA_shared',
@@ -192,7 +192,7 @@ describe('sonar import: Bitbucket Server on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 1 repository');
     expect(result.stdout).toContain('already imported');
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['repo-b']);
   });
 
   it('fails when no repository is visible on the server', async () => {
