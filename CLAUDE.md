@@ -14,6 +14,7 @@ Dependency installation runs Husky through its JavaScript entry point with Bun s
 ```bash
 bun run lint              # ESLint (TypeScript-aware, includes import sort)
 bun run lint:fix          # Auto-fix safe issues
+bun run lint:prune        # Drop eslint-suppressions.json entries for files now under 500 code lines
 bun run typecheck         # tsc --noEmit
 bun run test:unit         # All unit tests
 bun run test:integration  # All integration tests, no coverage (local development)
