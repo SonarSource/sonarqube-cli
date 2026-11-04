@@ -21,7 +21,9 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
+import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 import {
@@ -30,16 +32,23 @@ import {
   type Ecosystem,
   ECOSYSTEMS,
   type IntendedArchitecture,
-  type IntendedGroup,
   type StructureGraph,
-  type StructureNode,
 } from './architecture-api.ts';
+import {
+  directiveId,
+  type DirectiveInput,
+  directiveKey,
+  DirectiveNotFoundError,
+  type DirectivePage,
+  DirectivePreWriteError,
+  isDefiniteRejection,
+  parseProjectDirective,
+  type ProjectDirective,
+} from './directives.ts';
+import { MODEL_ID, publicGraph, toIntended } from './public-architecture-response.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
-const MAX_PUBLIC_GROUPS = 50_000;
-const MAX_PUBLIC_GROUP_DEPTH = 64;
-const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ArchitectureIds {
   organizationId: string;
@@ -74,151 +83,6 @@ async function currentPerEcosystem(
     }),
   );
   return perEcosystem.flat();
-}
-
-function invalidPublicModel(): never {
-  throw new CommandFailedError(
-    'Invalid public intended architecture response: invalid model field shape.',
-  );
-}
-
-function objectField(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    return invalidPublicModel();
-  return value as Record<string, unknown>;
-}
-
-function toIntended(value: unknown): IntendedArchitecture {
-  const raw = objectField(value);
-  const { qualifiers: type, language, groups, constraints } = raw;
-  const label = raw.label ?? undefined;
-  const description = raw.description ?? undefined;
-  if (
-    (type !== 'file' && type !== 'namespace') ||
-    (label !== undefined && typeof label !== 'string') ||
-    (description !== undefined && typeof description !== 'string') ||
-    typeof language !== 'string' ||
-    !(ECOSYSTEMS as readonly string[]).includes(language) ||
-    !Array.isArray(groups) ||
-    !Array.isArray(constraints)
-  )
-    return invalidPublicModel();
-  const budget = { count: 0 };
-  return {
-    type,
-    ...(label === undefined ? {} : { label }),
-    ...(description === undefined ? {} : { description }),
-    language: language as Ecosystem,
-    groups: groups.map((group: unknown) => publicGroup(group, 0, budget)),
-    constraints: constraints.map((value: unknown) => {
-      const { from, to } = objectField(value);
-      if (typeof from !== 'string' || typeof to !== 'string') return invalidPublicModel();
-      return { from, to };
-    }),
-  };
-}
-
-function publicGroup(value: unknown, depth: number, budget: { count: number }): IntendedGroup {
-  if (depth > MAX_PUBLIC_GROUP_DEPTH || ++budget.count > MAX_PUBLIC_GROUPS)
-    return invalidPublicModel();
-  const group = normalizeOptionalGroupFields(objectField(value));
-  if (
-    typeof group.label !== 'string' ||
-    (group.description !== undefined && typeof group.description !== 'string') ||
-    (group.patternId !== undefined &&
-      (typeof group.patternId !== 'string' || !MODEL_ID.test(group.patternId))) ||
-    (group.patterns !== undefined &&
-      (!Array.isArray(group.patterns) ||
-        group.patterns.some((pattern: unknown) => typeof pattern !== 'string'))) ||
-    (group.groups !== undefined && !Array.isArray(group.groups)) ||
-    (group.interface !== undefined && typeof group.interface !== 'boolean') ||
-    (group.interfaceAccess !== undefined && typeof group.interfaceAccess !== 'boolean')
-  )
-    return invalidPublicModel();
-  return {
-    label: group.label,
-    ...(group.description === undefined ? {} : { description: group.description }),
-    ...(group.patternId === undefined ? {} : { patternId: group.patternId }),
-    ...(group.patterns === undefined ? {} : { patterns: group.patterns as string[] }),
-    ...(group.groups === undefined
-      ? {}
-      : {
-          groups: (group.groups as unknown[]).map((child) => publicGroup(child, depth + 1, budget)),
-        }),
-    ...(group.interface === undefined ? {} : { interface: group.interface }),
-    ...(group.interfaceAccess === undefined ? {} : { interfaceAccess: group.interfaceAccess }),
-  };
-}
-
-function normalizeOptionalGroupFields(raw: Record<string, unknown>): Record<string, unknown> {
-  const group = { ...raw };
-  for (const field of [
-    'description',
-    'patternId',
-    'patterns',
-    'groups',
-    'interface',
-    'interfaceAccess',
-  ]) {
-    if (group[field] === null) group[field] = undefined;
-  }
-  return group;
-}
-
-function invalidPublicGraph(): never {
-  throw new CommandFailedError(
-    'Invalid public current architecture response: invalid graph field shape.',
-  );
-}
-
-function graphObject(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value))
-    return invalidPublicGraph();
-  return value as Record<string, unknown>;
-}
-
-function isInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value);
-}
-
-function publicGraph(value: unknown): StructureGraph {
-  const graph = graphObject(value);
-  if (!isInteger(graph.nodeCount) || !isInteger(graph.edgeCount) || !Array.isArray(graph.nodes))
-    return invalidPublicGraph();
-  const budget = { count: 0 };
-  return {
-    nodeCount: graph.nodeCount,
-    edgeCount: graph.edgeCount,
-    nodes: graph.nodes.map((node: unknown) => publicNode(node, 0, budget)),
-  };
-}
-
-function publicNode(value: unknown, depth: number, budget: { count: number }): StructureNode {
-  if (depth > 256 || ++budget.count > 1_000_000) return invalidPublicGraph();
-  const node = graphObject(value);
-  if (
-    !isInteger(node.id) ||
-    typeof node.name !== 'string' ||
-    typeof node.kind !== 'string' ||
-    !Array.isArray(node.edges) ||
-    (node.nodes !== undefined && !Array.isArray(node.nodes)) ||
-    (node.separator !== undefined && typeof node.separator !== 'string')
-  )
-    return invalidPublicGraph();
-  return {
-    id: node.id,
-    name: node.name,
-    kind: node.kind,
-    edges: node.edges.map((value: unknown) => {
-      const edge = graphObject(value);
-      if (!isInteger(edge.toId) || !isInteger(edge.weight)) return invalidPublicGraph();
-      return { toId: edge.toId, weight: edge.weight };
-    }),
-    ...(node.nodes === undefined
-      ? {}
-      : { nodes: (node.nodes as unknown[]).map((child) => publicNode(child, depth + 1, budget)) }),
-    ...(node.separator === undefined ? {} : { separator: node.separator }),
-  };
 }
 
 export class IntendedModelIdentityError extends CommandFailedError {}
@@ -314,6 +178,156 @@ export class SonarArchitectureApi implements ArchitectureApi {
     await this.http.delete(this.modelPath()).orThrow();
   }
 
+  async getDirectivesPage(pageIndex: number, pageSize: number): Promise<DirectivePage> {
+    if (
+      !Number.isSafeInteger(pageIndex) ||
+      pageIndex < 1 ||
+      !Number.isSafeInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 1000
+    )
+      throw new CommandFailedError(
+        'Directive page must be >= 1 and page size must be between 1 and 1000.',
+      );
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .get<{
+        projectDirectives?: unknown[];
+        page?: { pageIndex: number; pageSize: number; total: number };
+      } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
+      .orThrow();
+    const page = result?.page;
+    if (
+      !Array.isArray(result?.projectDirectives) ||
+      page?.pageIndex !== pageIndex ||
+      page.pageSize !== pageSize ||
+      !Number.isSafeInteger(page.total) ||
+      page.total < 0 ||
+      result.projectDirectives.length > pageSize
+    )
+      throw new CommandFailedError('Invalid public directives page; no complete page was read.');
+    const directives = result.projectDirectives.map((item) => parseProjectDirective(item));
+    if (new Set(directives.map((item) => item.id.toLowerCase())).size !== directives.length)
+      throw new CommandFailedError('The public directives page returned duplicate ids.');
+    if (directives.some((item) => item.projectId !== projectId))
+      throw new CommandFailedError('The public directives page returned a different project.');
+    return { directives, page };
+  }
+
+  async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .post<unknown>(this.path('project-directives'), {
+        ...directive,
+        projectId,
+        origin: 'sonarqube-cli',
+      })
+      .orThrow();
+    const created = parseProjectDirective(result);
+    if (created.projectId !== projectId)
+      throw new CommandFailedError(
+        'The directive write returned a different project. Inspect the current list before retrying.',
+      );
+    if (
+      directiveKey(created) !== directiveKey(directive) ||
+      (directive.description !== undefined && directive.description !== created.description)
+    )
+      throw new CommandFailedError(
+        'The directive write response did not confirm the requested directive. Inspect the current list before retrying.',
+      );
+    return created;
+  }
+
+  async getDirective(id: string): Promise<ProjectDirective> {
+    const projectId = await this.projectId('Project directives');
+    const result = await this.http
+      .get<unknown>(this.directivePath(id))
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
+          throw new DirectiveNotFoundError(
+            `Directive ${id} was not found or is not accessible in the selected project.`,
+            { cause: error },
+          );
+        throw error;
+      });
+    const directive = parseProjectDirective(result);
+    if (directive.id.toLowerCase() !== directiveId(id) || directive.projectId !== projectId)
+      throw new CommandFailedError(
+        'The public directive response returned a different id or project. Nothing was changed.',
+      );
+    return directive;
+  }
+
+  private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
+    return this.getDirective(id).catch((error: unknown) => {
+      const message =
+        isDefiniteRejection(error) && error instanceof Error
+          ? error.message
+          : `The current state of directive ${id} could not be verified.`;
+      throw new DirectivePreWriteError(message, { cause: error });
+    });
+  }
+
+  async updateDirective(id: string, directive: DirectiveInput): Promise<ProjectDirective> {
+    const current = await this.readDirectiveBeforeWrite(id);
+    const payload = {
+      ...directive,
+      ...(current.origin === undefined ? {} : { origin: current.origin }),
+    };
+    const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
+    const updated = parseProjectDirective(response);
+    const projectId = await this.projectId('Project directives');
+    if (
+      updated.id.toLowerCase() !== directiveId(id) ||
+      updated.projectId !== projectId ||
+      directiveKey(updated) !==
+        directiveKey({
+          ...directive,
+          graphPerspective: directive.graphPerspective ?? current.graphPerspective,
+        }) ||
+      (directive.description !== undefined && updated.description !== directive.description)
+    )
+      throw new CommandFailedError(
+        'The directive update response did not confirm the requested directive. Inspect it before retrying.',
+      );
+    return updated;
+  }
+
+  async deleteDirective(id: string): Promise<void> {
+    await this.readDirectiveBeforeWrite(id);
+    let deleteAccepted = false;
+    try {
+      await this.http
+        .delete(this.directivePath(id))
+        .orThrow()
+        .catch((error: unknown) => {
+          if (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_NOT_FOUND)
+            throw new DirectiveNotFoundError(
+              `Directive ${id} was not found or is not accessible in the selected project.`,
+              { cause: error },
+            );
+          throw error;
+        });
+      deleteAccepted = true;
+      const { response } = await this.http.getSafe<unknown>(this.directivePath(id)).orThrow();
+      if (response.status !== HTTP_STATUS_NOT_FOUND)
+        throw new CommandFailedError(
+          `Expected HTTP 404 after deletion, received ${response.status}.`,
+        );
+    } catch (error) {
+      if (!deleteAccepted && isDefiniteRejection(error)) throw error;
+      throw new CommandFailedError(
+        `Directive deletion could not be confirmed. Inspect directive ${id} before retrying. ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+  }
+
+  private directivePath(id: string): string {
+    return `${this.path('project-directives')}/${directiveId(id)}`;
+  }
+
   private modelPath(): string {
     if (!this.intendedModelId) {
       throw new CommandFailedError(
@@ -391,10 +405,10 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return organizationId;
   }
 
-  private async projectId(): Promise<string> {
+  private async projectId(resource = 'Intended architecture'): Promise<string> {
     if (!this.http.isCloud) {
       throw new CommandFailedError(
-        'Intended architecture is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.',
+        `${resource} is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.`,
       );
     }
     return (await this.ids()).projectId;
