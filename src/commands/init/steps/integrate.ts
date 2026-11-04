@@ -21,12 +21,7 @@
 import { integrateBare } from '@/commands/integrate/integrate-bare.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type {
-  CommandAuthenticatedInvocationContext,
-  CommandInvocationContext,
-} from '@/core/commands/invocation-context.ts';
-
-export type IntegrateRunner = (ctx: CommandAuthenticatedInvocationContext) => Promise<void>;
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 /**
  * Asks whether to set up coding agents now and runs `sonar integrate` when accepted. Onboarding has already succeeded by then, so a failure or an abort
@@ -35,7 +30,6 @@ export type IntegrateRunner = (ctx: CommandAuthenticatedInvocationContext) => Pr
 export async function offerIntegrate(
   ctx: CommandInvocationContext,
   auth: ResolvedAuth,
-  runIntegrate: IntegrateRunner = (integrateCtx) => integrateBare(integrateCtx, {}),
 ): Promise<void> {
   const { console } = ctx;
   const accepted = await console.confirmPrompt(
@@ -51,7 +45,7 @@ export async function offerIntegrate(
 
   const integrateCtx = ctx.withAuth(auth);
   try {
-    await runIntegrate(integrateCtx);
+    await integrateBare(integrateCtx, {});
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.warn(

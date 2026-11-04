@@ -18,9 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { offerIntegrate } from '@/commands/init/steps/integrate.ts';
+import * as integrateBareModule from '@/commands/integrate/integrate-bare.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -44,36 +45,36 @@ function setup(answer?: boolean | null) {
 }
 
 describe('offerIntegrate', () => {
+  const integrateBare = () => spyOn(integrateBareModule, 'integrateBare');
+
+  afterEach(() => {
+    integrateBare().mockRestore();
+  });
+
   it('asks with a default of yes and runs integrate with the established auth', async () => {
     const { console, ctx } = setup();
-    let received: unknown;
+    const run = integrateBare().mockResolvedValue(undefined);
 
-    await offerIntegrate(ctx, AUTH, (integrateCtx) => {
-      received = integrateCtx.auth;
-      return Promise.resolve();
-    });
+    await offerIntegrate(ctx, AUTH);
 
     expect(console.findCall('confirmPrompt', 'sonar integrate')?.args[1]).toBe(true);
-    expect(received).toBe(AUTH);
+    expect(run.mock.calls[0]?.[0].auth).toBe(AUTH);
   });
 
   it('does not run integrate and prints nothing more when declined', async () => {
     const { console, ctx } = setup(false);
-    let ran = false;
+    const run = integrateBare().mockResolvedValue(undefined);
 
-    await offerIntegrate(ctx, AUTH, () => {
-      ran = true;
-      return Promise.resolve();
-    });
+    await offerIntegrate(ctx, AUTH);
 
-    expect(ran).toBe(false);
+    expect(run).not.toHaveBeenCalled();
     expect(console.findCall('print', 'sonar integrate')).toBeUndefined();
   });
 
   it('cancels onboarding on Ctrl+C', async () => {
     const { ctx } = setup(null);
 
-    const error = await offerIntegrate(ctx, AUTH, () => Promise.resolve()).catch((e: unknown) => e);
+    const error = await offerIntegrate(ctx, AUTH).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(CommandFailedError);
     expect((error as Error).message).toBe('Onboarding cancelled.');
@@ -82,9 +83,9 @@ describe('offerIntegrate', () => {
   it('warns with the manual hint when integrate fails, without throwing', async () => {
     const { console, ctx } = setup(true);
 
-    await offerIntegrate(ctx, AUTH, () =>
-      Promise.reject(new CommandFailedError('No integration selected')),
-    );
+    integrateBare().mockRejectedValue(new CommandFailedError('No integration selected'));
+
+    await offerIntegrate(ctx, AUTH);
 
     const warning = console.findCall('warn', 'No integration selected');
     expect(String(warning?.args[0])).toContain("Run 'sonar integrate' to try again.");
