@@ -20,7 +20,7 @@
 
 // Integration tests for `analyze agentic` and `verify` commands.
 
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -1792,6 +1792,123 @@ describe('analyze agentic — change-set mode (no --file)', () => {
       expect(sqaaCalls).toHaveLength(1);
     },
     { timeout: 15000 },
+  );
+
+  it(
+    '--staged: uploads index contents for modifications, additions and renames, excluding deletions',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      commitFile(harness.cwd.path, 'partial.ts', 'original');
+      commitFile(harness.cwd.path, 'old.ts', 'renamed content');
+      commitFile(harness.cwd.path, 'deleted.ts', 'deleted content');
+      stageFile(harness.cwd.path, 'partial.ts', 'staged content\n');
+      harness.cwd.writeFile('partial.ts', 'unstaged replacement');
+      stageFile(harness.cwd.path, 'added.ts', 'staged addition');
+      unlinkSync(join(harness.cwd.path, 'added.ts'));
+      stageFile(harness.cwd.path, 'empty.ts', '');
+      harness.cwd.writeFile('empty.ts', 'unstaged nonempty content');
+      git(['mv', 'old.ts', 'renamed.ts'], harness.cwd.path);
+      harness.cwd.writeFile('renamed.ts', 'unstaged rename replacement');
+      git(['rm', 'deleted.ts'], harness.cwd.path);
+      harness.cwd.writeFile('deleted.ts', 'unstaged recreation');
+      harness.cwd.writeFile('untracked.ts', 'not staged');
+
+      const result = await harness.run('analyze agentic --staged');
+
+      expect(result.exitCode).toBe(0);
+      const calls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(calls).toHaveLength(1);
+      expect(parseSqaaRequestBody(calls[0].body).files).toEqual([
+        { path: 'added.ts', content: 'staged addition' },
+        { path: 'empty.ts', content: '' },
+        { path: 'partial.ts', content: 'staged content\n' },
+        { path: 'renamed.ts', content: 'renamed content' },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    '--staged: checks index binary bytes and size independently of the working tree',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      const maxBytes = 10 * 1024 * 1024;
+      stageFile(harness.cwd.path, 'binary.ts', 'staged\0binary');
+      harness.cwd.writeFile('binary.ts', 'working tree text');
+      stageFile(harness.cwd.path, 'oversized.ts', 'x'.repeat(maxBytes + 1));
+      harness.cwd.writeFile('oversized.ts', 'small working tree');
+      stageFile(harness.cwd.path, 'text.ts', 'staged text');
+      harness.cwd.writeFile('text.ts', 'unstaged\0binary');
+      stageFile(harness.cwd.path, 'small.ts', 'small staged content');
+      harness.cwd.writeFile('small.ts', 'x'.repeat(maxBytes + 1));
+
+      const result = await harness.run('analyze agentic --staged --format json');
+
+      expect(result.exitCode).toBe(0);
+      const calls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(calls).toHaveLength(1);
+      expect(parseSqaaRequestBody(calls[0].body).files).toEqual([
+        { path: 'small.ts', content: 'small staged content' },
+        { path: 'text.ts', content: 'staged text' },
+      ]);
+      expect(JSON.parse(result.stdout).ignored).toEqual([
+        { path: 'binary.ts', reason: 'binary' },
+        { path: 'oversized.ts', reason: 'oversized' },
+      ]);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    '--staged: uploads every snapshot in a large change set',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      const expected = Array.from({ length: 300 }, (_, index) => ({
+        path: `file-${String(index).padStart(3, '0')}.ts`,
+        content: `staged content ${index}`,
+      }));
+      for (const file of expected) harness.cwd.writeFile(file.path, file.content);
+      git(['add', '--', '*.ts'], harness.cwd.path);
+      for (const file of expected) harness.cwd.writeFile(file.path, 'unstaged replacement');
+
+      const result = await harness.run('analyze agentic --staged --force');
+
+      expect(result.exitCode).toBe(0);
+      const calls = server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/a3s-analysis/analyses' || r.path === '/api/v2/a3s/analyses');
+      expect(calls).toHaveLength(1);
+      expect(parseSqaaRequestBody(calls[0].body).files).toEqual(expected);
+    },
+    { timeout: 30000 },
   );
 
   it(

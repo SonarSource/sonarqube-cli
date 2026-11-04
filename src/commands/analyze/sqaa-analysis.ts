@@ -20,6 +20,7 @@
 
 // Sequential chunked execution engine for SQAA change-set analysis
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
@@ -48,6 +49,7 @@ export type FileResult = FileSuccess | FileFailure;
 
 export interface RunContext {
   paths: SqaaPath[];
+  stagedContents?: ReadonlyMap<string, string>;
   connection: SonarConnection;
   projectKey: string;
   branch: string | undefined;
@@ -123,6 +125,15 @@ export function mergeTallies(tallies: RunTally[]): RunTally {
   return merged;
 }
 
+function readAnalysisContent(ctx: RunContext, path: string): string {
+  if (!ctx.stagedContents) return readSqaaFileContent(path);
+  const content = ctx.stagedContents.get(path);
+  if (content === undefined) {
+    throw new CommandFailedError(`Missing staged content for ${path}.`);
+  }
+  return content;
+}
+
 function prepareChunks(
   ctx: RunContext,
   fileIndexByAbsolutePath: Map<string, number>,
@@ -136,7 +147,7 @@ function prepareChunks(
       readableChunkFiles.push({
         absolutePath: path.absolutePath,
         relativePath: path.serverPath,
-        content: readSqaaFileContent(path.absolutePath),
+        content: readAnalysisContent(ctx, path.absolutePath),
       });
     } catch (err) {
       recordFileFailure(progress, tally, idx, path, err as Error);

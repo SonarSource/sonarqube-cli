@@ -27,7 +27,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
-import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { spawnProcessCapturingBytes, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -48,6 +48,7 @@ export interface IgnoredFile {
 /** Result of resolving a change set: files to analyze and files silently ignored. */
 export interface ChangeSetResult {
   files: string[];
+  stagedContents?: ReadonlyMap<string, string>;
   ignored: IgnoredFile[];
   /** Repository root used to resolve git output. Useful for computing relative paths. */
   repoRoot: string;
@@ -88,7 +89,8 @@ export async function resolveChangeSet(
   const repoRoot = await resolveRepoRoot(cwd);
 
   const diffFiles = await getDiffFiles(repoRoot, { staged, base });
-  const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
+  if (staged) return resolveStagedContents(repoRoot, diffFiles);
+  const untrackedFiles = await getUntrackedNonIgnoredFiles(repoRoot);
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
   const inRepo: string[] = [];
   const outsideIgnored: IgnoredFile[] = [];
@@ -104,6 +106,46 @@ export async function resolveChangeSet(
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
   return { files, ignored: [...outsideIgnored, ...binaryIgnored, ...oversizedIgnored], repoRoot };
+}
+
+async function resolveStagedContents(repoRoot: string, paths: string[]): Promise<ChangeSetResult> {
+  const stagedContents = new Map<string, string>();
+  const ignored: IgnoredFile[] = [];
+  const concurrency = 8;
+  const captureBatch = async (offset: number): Promise<void> => {
+    const snapshots = await Promise.all(
+      paths.slice(offset, offset + concurrency).map((path) => readStagedContent(repoRoot, path)),
+    );
+    for (const { path, content } of snapshots) {
+      if (content.subarray(0, 8192).includes(0)) {
+        ignored.push({ path, reason: 'binary' });
+      } else if (content.length > SQAA_MAX_FILE_BYTES) {
+        ignored.push({ path, reason: 'oversized' });
+      } else {
+        stagedContents.set(path, content.toString('utf8'));
+      }
+    }
+    if (offset + concurrency < paths.length) await captureBatch(offset + concurrency);
+  };
+  await captureBatch(0);
+  return { files: [...stagedContents.keys()], ignored, repoRoot, stagedContents };
+}
+
+async function readStagedContent(
+  repoRoot: string,
+  path: string,
+): Promise<{ path: string; content: Buffer }> {
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['show', `:${path}`],
+    { cwd: repoRoot },
+    GIT_COMMAND_TIMEOUT_MS,
+    'Reading staged content timed out',
+  );
+  if (result.exitCode !== 0) {
+    throw new CommandFailedError(`Could not read staged content for ${path}.`);
+  }
+  return { path: join(repoRoot, path), content: result.stdout };
 }
 
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */
