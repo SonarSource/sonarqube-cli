@@ -131,7 +131,8 @@ never repeat a write or roll back automatically.
 
 ## Availability
 
-Intended and project directive operations on SonarQube Server await public project UUID resolution. Findings use the analyzed main branch on Cloud and Server.
+Server intended and directive operations require CLI support for the public project lookup
+and a deployment exposing the matching public Architecture APIs.
 Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
@@ -140,7 +141,7 @@ unavailable operations, claim their results or substitute other analysis tools.
 Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
 optionally \`--category deviation|flaw|smell\`, \`--type <type>\` or \`--language <language>\`.
 Every row includes its type, language, details and files; findings have no IDs or separate detail lookup.
-Findings are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
+Findings use the analyzed main branch on Cloud and Server and are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
 To read findings, use a positive page size. Retain \`pageIndex\`, \`pageSize\` and \`total\` from each response.
 Keep the same filters and page size, and increment \`--page\` while \`pageIndex * pageSize < total\`.
 An empty page means no findings are visible; it does not establish project access or a clean architecture.
