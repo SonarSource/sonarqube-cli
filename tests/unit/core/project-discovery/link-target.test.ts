@@ -64,7 +64,8 @@ describe('resolveLinkTarget', () => {
   });
 
   it('rejects a path that escapes the config directory', async () => {
-    expect(await rejection(resolveLinkTarget(dir, '../elsewhere'))).toBeInstanceOf(
+    mkdirSync(join(dir, 'repo'));
+    expect(await rejection(resolveLinkTarget(join(dir, 'repo'), '../services'))).toBeInstanceOf(
       InvalidLinkPathError,
     );
   });
