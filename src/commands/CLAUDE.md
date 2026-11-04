@@ -109,3 +109,5 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 `sonar api` prints successful response bodies to stdout. Non-2xx responses exit with code 1 and print `SonarQube API error: <status> <status text> - <response body>` to stderr. The body is unparsed; an empty body omits the separator. This handling is specific to `SonarHttpClient.genericRequest`; domain clients retain status-specific error parsing. Generic requests retain rate-limit and service-unavailable retry hints and critical server-error classification.
 
 Architecture public response validation lives in `architecture/_common/public-architecture-response.ts`; directive node-key warnings live in `architecture/_common/directive-key-warnings.ts`. API routing and directive mutation planning remain in their existing modules.
+
+GitHub Server imports retain the 1,000-result search cap per organization. Truncated discovery prints a warning and bulk imports return a non-success result with subset counts. Explicit `--repo owner/repository` selections use the repository-name query filter and require an exact full-name match.

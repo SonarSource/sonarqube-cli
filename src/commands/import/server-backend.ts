@@ -83,11 +83,12 @@ export class ServerBackend implements ImportBackend {
 
     const repositories = new Map<string, ServerRepository>();
     const claimedKeys = new Map<string, string>();
-    const listed = support.listRepositories(this.api, setting);
+    const listed = support.listRepositories(this.api, setting, options.repo);
     const fetchServerPage =
       setting.type === 'azure'
         ? guardAzureSignIn(listed, buildConnectUrl(this.serverUrl, setting, { resetPat: true }))
         : listed;
+    const reportedWarnings = new Set<string>();
     const selection = await selectRepos(
       {
         fetchPage: async (pageIndex, pageSize) => {
@@ -95,7 +96,15 @@ export class ServerBackend implements ImportBackend {
           for (const repository of page.repositories) {
             repositories.set(repository.id, repository);
           }
-          return { repositories: page.repositories.map(toDopRepository), total: page.total };
+          for (const warning of page.warnings ?? []) {
+            if (!reportedWarnings.has(warning)) console.warn(warning);
+            reportedWarnings.add(warning);
+          }
+          return {
+            repositories: page.repositories.map(toDopRepository),
+            total: page.total,
+            incomplete: (page.warnings?.length ?? 0) > 0,
+          };
         },
         scope: 'this DevOps platform',
         platformScope: 'this DevOps platform',
