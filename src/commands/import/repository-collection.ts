@@ -23,7 +23,7 @@ import { type DopRepository, ImportApiClient } from './import-api.ts';
 export type FetchPage = (
   pageIndex: number,
   pageSize: number,
-) => Promise<{ repositories: DopRepository[]; total: number }>;
+) => Promise<{ repositories: DopRepository[]; total: number; incomplete?: boolean }>;
 
 export interface OnlyPrivateProjects {
   enabled: boolean;
@@ -123,6 +123,7 @@ export class RepositoryCollection {
   private readonly alreadyImported: DopRepository[] = [];
   private readonly skipped: SkippedRepo[] = [];
   private exhausted = false;
+  private discoveryIncomplete = false;
   private serverTotal = 0;
   private nextPageIndex = 1;
 
@@ -167,6 +168,10 @@ export class RepositoryCollection {
     return !this.exhausted;
   }
 
+  get incomplete(): boolean {
+    return this.discoveryIncomplete;
+  }
+
   /** Server-reported total repo count for the org, known from the first page fetched. */
   get total(): number {
     return this.serverTotal;
@@ -197,6 +202,7 @@ export class RepositoryCollection {
     this.nextPageIndex++;
 
     this.serverTotal = page.total;
+    this.discoveryIncomplete ||= page.incomplete === true;
     if (page.repositories.length < ImportApiClient.DOP_REPOSITORIES_MAX_PAGE_SIZE) {
       this.exhausted = true;
     }
