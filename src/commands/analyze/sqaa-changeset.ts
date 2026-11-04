@@ -75,7 +75,7 @@ export function excludeIgnoredFiles(
  * runs from the repo root or a subdirectory. Returned paths are absolute.
  *
  * Modes:
- *   - Default (no options): `git diff HEAD` (staged + unstaged) + untracked non-ignored files
+ *   - Default (no options): `git diff HEAD` (or the unborn index) + untracked non-ignored files
  *   - staged=true:          `git diff --cached` (staged only)
  *   - base=<ref>:           `git diff <ref>` + untracked non-ignored files
  */
@@ -150,7 +150,8 @@ async function getDiffFiles(
   } else if (opts.base) {
     args.push(opts.base);
   } else {
-    args.push('HEAD');
+    const head = await runGit(['rev-parse', '--verify', '--quiet', 'HEAD'], cwd, [0, 1]);
+    args.push(head.trim() ? 'HEAD' : '--cached');
   }
 
   const result = await runGit(args, cwd);
@@ -164,7 +165,11 @@ async function getUntrackedNonIgnoredFiles(cwd: string): Promise<string[]> {
 
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
 
-async function runGit(args: string[], cwd: string): Promise<string> {
+async function runGit(
+  args: string[],
+  cwd: string,
+  acceptedExitCodes: number[] = [0],
+): Promise<string> {
   let result;
   try {
     result = await spawnProcessWithTimeout(
@@ -180,7 +185,7 @@ async function runGit(args: string[], cwd: string): Promise<string> {
         'Ensure git is installed and available on PATH, then retry from a git repository.',
     });
   }
-  if (result.exitCode !== 0) {
+  if (result.exitCode === null || !acceptedExitCodes.includes(result.exitCode)) {
     throw new CommandFailedError(
       `git ${args[0]} failed (exit ${result.exitCode}): ${result.stderr}`,
       {
