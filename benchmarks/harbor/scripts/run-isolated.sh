@@ -7,9 +7,9 @@ AGENT_HOME="${RUN_ROOT}/home"
 WORKDIR="${RUN_ROOT}/work"
 SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
-AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin"
+AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION,AGENT,CODEX_VERSION
-RUN_ENV=PORTKEY_API_KEY,OPENAI_API_KEY,AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
+RUN_ENV=PORTKEY_API_KEY,AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
 ROOT_DIR_NAMES=(app logs tests solution installed-agent)
 
 as_agent() {
@@ -121,7 +121,8 @@ run_benchmark() {
       expected_integration=codex
       prompt_hook=codex-prompt-submit
       file_hook=""
-      agent_options=(--agent-kwarg dangerously_bypass_hook_trust=true)
+      agent_options=(--agent-kwarg dangerously_bypass_hook_trust=true --agent-kwarg "config=${WORKDIR}/harbor/ci/codex-portkey.toml")
+      export OPENAI_API_KEY=placeholder-portkey-handles-auth
       ;;
     *)
       echo "Unknown agent '${AGENT}'" >&2
