@@ -20,22 +20,17 @@
 
 import { join } from 'node:path';
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { requireCloudOrganization, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import {
-  SHARED_PROJECT_CONFIG_FILE_NAME,
-  SONARCLOUD_URL,
-  SONARCLOUD_US_URL,
-} from '@/core/config-constants.ts';
-import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import {
-  resolveContainedPath,
-  type SharedProjectConfigEntry,
-  sharedProjectConfigRepository,
-} from '@/core/project-discovery/shared-project-config.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+  deriveEntry,
+  InvalidLinkPathError,
+  type LinkTarget,
+  resolveLinkTarget,
+  saveProjectLink,
+} from '@/core/project-discovery/link-target.ts';
 
 import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
 
@@ -44,44 +39,11 @@ export interface LinkOptions {
   monorepo?: boolean;
 }
 
-/** Fails when a Cloud connection has no organization, before any prompt or write. */
-function requireCloudOrganization({ orgKey }: ResolvedAuth): string {
-  if (!orgKey) {
-    throw new CommandFailedError(
-      'Could not determine the SonarQube Cloud organization for the active connection.',
-      { remediationHint: "Run 'sonar auth login' to re-authenticate." },
-    );
-  }
-  return orgKey;
-}
-
 function assertLinkableConnection(auth: ResolvedAuth): void {
   if (auth.connectionType === 'cloud') {
     requireCloudOrganization(auth);
   }
 }
-
-export function deriveEntry(
-  auth: ResolvedAuth,
-  projectKey: string,
-  path: string,
-): SharedProjectConfigEntry {
-  if (auth.connectionType !== 'cloud') {
-    return { projectKey, path, serverUrl: auth.serverUrl };
-  }
-
-  const organization = requireCloudOrganization(auth);
-
-  const region = cloudRegionFromUrl(auth.serverUrl);
-  const origin = region ? new URL(auth.serverUrl).origin : undefined;
-  if (!region || (origin !== SONARCLOUD_URL && origin !== SONARCLOUD_US_URL)) {
-    return { projectKey, path, serverUrl: auth.serverUrl, organization };
-  }
-  return { projectKey, path, region, organization };
-}
-
-/** Resolves to whether the written link takes effect (a shadowed link does not). */
-type WriteEntry = (dir: string, entry: SharedProjectConfigEntry) => Promise<boolean>;
 
 export function linkProject(
   projectKey: string | undefined,
@@ -99,15 +61,7 @@ function linkSingleProject(
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return runLink(projectKey, options, ctx, async (dir, entry) => {
-    const shadowed = await sharedProjectConfigRepository.set(dir, entry);
-    if (shadowed) {
-      ctx.console.warn(
-        `${join(dir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
-      );
-    }
-    return !shadowed;
-  });
+  return runLink(projectKey, options, ctx, false);
 }
 
 /** Monorepo link: adds or updates a mapping in the `projects` array. */
@@ -116,23 +70,7 @@ function linkMonorepoProject(
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
-  return runLink(
-    projectKey,
-    options,
-    ctx,
-    async (dir, entry) => {
-      await sharedProjectConfigRepository.addProject(dir, entry);
-      return true;
-    },
-    true,
-  );
-}
-
-interface LinkTarget {
-  /** Where `.sonar-config.json` lives: the git root, else the current directory. */
-  targetDir: string;
-  projectRoot: string;
-  inGitRepository: boolean;
+  return runLink(projectKey, options, ctx, true);
 }
 
 /** Fails before any prompt, server call or write when the request cannot be carried out. */
@@ -153,31 +91,29 @@ function assertLinkable(
   }
 }
 
-async function resolveLinkTarget(
+async function resolveTarget(
   path: string,
   { console }: CommandAuthenticatedInvocationContext,
 ): Promise<LinkTarget> {
-  const cwd = process.cwd();
-  const gitRoot = await resolveGitRepoRoot(cwd);
-  const targetDir = canonicalizePath(gitRoot ?? cwd);
-
-  // Validated — and any failure raised — before the no-git-repository warning below,
-  // so a rejected path never gets the misleading "writing to cwd instead" message.
-  const projectRoot = resolveContainedPath(targetDir, path);
-  if (projectRoot === null) {
-    throw new CommandFailedError(
-      `--path "${path}" must point to an existing directory inside ${targetDir}.`,
-      {
-        remediationHint:
-          'Use a path relative to the repository root, e.g. --path . or --path services/api.',
-      },
-    );
+  let target: LinkTarget;
+  try {
+    target = await resolveLinkTarget(process.cwd(), path);
+  } catch (error) {
+    if (!(error instanceof InvalidLinkPathError)) {
+      throw error;
+    }
+    throw new CommandFailedError(error.message, {
+      remediationHint:
+        'Use a path relative to the repository root, e.g. --path . or --path services/api.',
+    });
   }
 
-  if (!gitRoot) {
+  // Raised only after the path validated, so a rejected path never gets the
+  // misleading "writing to cwd instead" message.
+  if (!target.inGitRepository) {
     console.warn('No git repository found. Writing to the current directory instead.');
   }
-  return { targetDir, projectRoot, inGitRepository: gitRoot !== null };
+  return target;
 }
 
 function reportLinked(
@@ -201,11 +137,10 @@ async function runLink(
   givenKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
-  write: WriteEntry,
-  monorepo = false,
+  monorepo: boolean,
 ): Promise<void> {
   assertLinkable(givenKey, options, ctx);
-  const target = await resolveLinkTarget(options.path, ctx);
+  const target = await resolveTarget(options.path, ctx);
 
   const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, ctx));
   if (projectKey === null) {
@@ -213,7 +148,12 @@ async function runLink(
   }
 
   const entry = deriveEntry(ctx.auth, projectKey, options.path);
-  if (await write(target.targetDir, entry)) {
-    reportLinked(ctx.console, target, projectKey, monorepo);
+  const { shadowed } = await saveProjectLink(target.targetDir, entry, { monorepo });
+  if (shadowed) {
+    ctx.console.warn(
+      `${join(target.targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
+    );
+    return;
   }
+  reportLinked(ctx.console, target, projectKey, monorepo);
 }
