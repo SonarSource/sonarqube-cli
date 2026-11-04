@@ -2034,6 +2034,16 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
+        if (path === '/api/projects/create' && req.method === 'POST') {
+          const params = new URLSearchParams(body ?? '');
+          return new Response(
+            JSON.stringify({
+              project: { key: params.get('project'), name: params.get('name') },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
         if (path === '/api/alm_integration/provision_projects' && req.method === 'POST') {
           provisionConcurrency.current++;
           provisionConcurrency.peak = Math.max(
