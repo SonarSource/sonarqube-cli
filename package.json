@@ -3,9 +3,6 @@
   "type": "module",
   "version": "1.12.0",
   "description": "SonarQube CLI",
-  "bin": {
-    "sonar": "./dist/index.js"
-  },
   "scripts": {
     "build:binary": "bun build-scripts/build-binary.ts",
     "postbuild:binary": "bun build-scripts/codesign-local.ts",
