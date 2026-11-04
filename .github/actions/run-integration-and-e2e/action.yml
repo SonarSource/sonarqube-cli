@@ -11,14 +11,8 @@ inputs:
   binary-artifact:
     description: Artifact name uploaded by build-binaries
     required: true
-  integration-test-path:
-    description: >-
-      When set, run only this integration test file or directory instead of the full
-      ./tests/integration/ suite (pretest steps still run via setup-integration-resources).
-    required: false
-    default: ''
   skip-e2e:
-    description: Skip e2e tests (useful when narrowing integration scope for faster CI).
+    description: Skip e2e tests (sharded CI sets this on non-zero shards).
     required: false
     default: 'false'
   integration-shard-index:
@@ -105,7 +99,6 @@ runs:
       if: ${{ inputs.os == 'windows' }}
       shell: bash
       env:
-        INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
         INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}
@@ -116,7 +109,6 @@ runs:
       if: ${{ inputs.os == 'linux' }}
       shell: bash
       env:
-        INTEGRATION_TEST_PATH: ${{ inputs.integration-test-path }}
         INTEGRATION_SHARD_INDEX: ${{ inputs.integration-shard-index }}
         INTEGRATION_SHARD_TOTAL: ${{ inputs.integration-shard-total }}
         INTEGRATION_SHARDED: ${{ inputs.integration-sharded }}

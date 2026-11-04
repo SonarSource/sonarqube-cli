@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Shared integration scope runner for CI (full suite, narrowed file, or hash shard).
+# Shared integration scope runner for CI (full suite or hash shard).
 set -euo pipefail
 
 echo "run-integration-scope: cwd=$(pwd)"
-echo "run-integration-scope: INTEGRATION_TEST_PATH=${INTEGRATION_TEST_PATH:-<unset>}"
 echo "run-integration-scope: INTEGRATION_SHARD_INDEX=${INTEGRATION_SHARD_INDEX:-<unset>}"
 echo "run-integration-scope: INTEGRATION_SHARD_TOTAL=${INTEGRATION_SHARD_TOTAL:-<unset>}"
 echo "run-integration-scope: USE_COVERAGE=${USE_COVERAGE:-0}"
@@ -35,18 +34,6 @@ run_bun_test() {
 }
 
 run_once() {
-  if [ -n "${INTEGRATION_TEST_PATH:-}" ]; then
-    path="./${INTEGRATION_TEST_PATH#./}"
-    echo "Narrow integration scope: ${path}"
-    if [ ! -f "${path}" ] && [ ! -d "${path}" ]; then
-      echo "Integration test path not found: ${path}"
-      ls -la tests/integration/specs/integrate/ 2>/dev/null || true
-      exit 1
-    fi
-    run_bun_test "${path}"
-    return $?
-  fi
-
   if [ "${INTEGRATION_SHARDED:-false}" = 'true' ]; then
     if ! mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh); then
       echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
