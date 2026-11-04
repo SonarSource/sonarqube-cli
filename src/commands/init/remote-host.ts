@@ -18,44 +18,31 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
+
 // Public hosts of the platforms `sonar import` binds today: GitHub and Azure DevOps.
 const BINDABLE_HOSTS = new Set(['github.com', 'dev.azure.com', 'ssh.dev.azure.com']);
 const AZURE_LEGACY_HOST_SUFFIX = '.visualstudio.com';
-const SCP_LIKE_REMOTE = /^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)(.*)$/;
 // `<org>/<project>/_git/<repo>` on dev.azure.com, `[<collection>/]<project>/_git/<repo>` on the legacy
 // host, `v3/<org>/<project>/<repo>` over SSH. The short `<org>/_git/<repo>` form names no project.
 const AZURE_HTTPS_PATH = /^\/[^/]+\/([^/]+)\/_git\/([^/]+)$/;
 const AZURE_LEGACY_PATH = /^\/(?:[^/]+\/)?([^/]+)\/_git\/([^/]+)$/;
 const LEGACY_DEFAULT_COLLECTION = 'defaultcollection';
 const AZURE_SSH_PATH = /^\/v3\/[^/]+\/([^/]+)\/([^/]+)$/;
-const GIT_SUFFIX = /\.git$/;
 
-function isAzureHost(hostname: string): boolean {
+function isAzureHost(host: string): boolean {
   return (
-    hostname === 'dev.azure.com' ||
-    hostname === 'ssh.dev.azure.com' ||
-    hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX)
+    host === 'dev.azure.com' ||
+    host === 'ssh.dev.azure.com' ||
+    host.endsWith(AZURE_LEGACY_HOST_SUFFIX)
   );
-}
-
-function remoteHostname(remote: string): string | null {
-  const scpLike = SCP_LIKE_REMOTE.exec(remote);
-  if (scpLike) {
-    return scpLike[1].toLowerCase();
-  }
-  try {
-    return new URL(remote).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
 }
 
 /** Whether the remote is on a platform `sonar import` can bind. Self-hosted instances are not recognized. */
 export function isBindableRemote(remote: string): boolean {
-  const hostname = remoteHostname(remote);
+  const host = parseGitRemote(remote)?.host;
   return (
-    hostname !== null &&
-    (BINDABLE_HOSTS.has(hostname) || hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX))
+    host !== undefined && (BINDABLE_HOSTS.has(host) || host.endsWith(AZURE_LEGACY_HOST_SUFFIX))
   );
 }
 
@@ -64,22 +51,13 @@ export function isBindableRemote(remote: string): boolean {
  * Azure DevOps. Null when the remote is not a recognized bindable one.
  */
 export function remoteRepositorySlug(remote: string): string | null {
-  if (!isBindableRemote(remote)) {
+  const parsed = parseGitRemote(remote);
+  if (!parsed || !isBindableRemote(remote)) {
     return null;
   }
-  const scpLike = SCP_LIKE_REMOTE.exec(remote);
-  let path: string;
-  try {
-    path = scpLike ? `/${scpLike[2]}` : new URL(remote).pathname;
-  } catch {
-    return null;
-  }
-  path = path.replace(GIT_SUFFIX, '');
-  const hostname = remoteHostname(remote);
-  if (hostname !== null && isAzureHost(hostname)) {
-    const pattern = hostname.endsWith(AZURE_LEGACY_HOST_SUFFIX)
-      ? AZURE_LEGACY_PATH
-      : AZURE_HTTPS_PATH;
+  const { host, path } = parsed;
+  if (isAzureHost(host)) {
+    const pattern = host.endsWith(AZURE_LEGACY_HOST_SUFFIX) ? AZURE_LEGACY_PATH : AZURE_HTTPS_PATH;
     const match = pattern.exec(path) ?? AZURE_SSH_PATH.exec(path);
     if (!match || match[1].toLowerCase() === LEGACY_DEFAULT_COLLECTION) {
       return null;

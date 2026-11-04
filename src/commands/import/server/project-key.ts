@@ -18,7 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-const KEY_MAX_LENGTH = 400;
+import { PROJECT_KEY_MAX_LENGTH } from '@/core/project-key.ts';
+
 const INVALID_KEY_CHARACTERS = /[^A-Za-z0-9\-_.:]/g;
 
 /**
@@ -29,5 +30,5 @@ const INVALID_KEY_CHARACTERS = /[^A-Za-z0-9\-_.:]/g;
 export function deriveProjectKey(repositorySlug: string): string {
   const key = repositorySlug.replace(INVALID_KEY_CHARACTERS, '_');
   const nonNumeric = /^\d+$/.test(key) ? `repo_${key}` : key;
-  return nonNumeric.slice(0, KEY_MAX_LENGTH);
+  return nonNumeric.slice(0, PROJECT_KEY_MAX_LENGTH);
 }

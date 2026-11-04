@@ -46,6 +46,14 @@ describe('generateProjectProposal', () => {
     expect(https.projectKey).toMatch(/^org_my-repo-[0-9a-f]{12}$/);
   });
 
+  it('accepts an SCP-style remote without a user', () => {
+    const root = directory();
+
+    expect(generateProjectProposal(root, 'github.com:Example/My-Repo.git', 'org')).toEqual(
+      generateProjectProposal(root, 'https://github.com/Example/My-Repo.git', 'org'),
+    );
+  });
+
   it('does not depend on the checkout path', () => {
     const remote = 'https://github.com/example/repo.git';
 

@@ -23,14 +23,14 @@ import { basename, relative } from 'node:path';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
+import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
+import { isValidProjectKey } from '@/core/project-key.ts';
 import type { ProjectVisibility } from '@/core/server/projects.ts';
 
-const MAX_KEY_LENGTH = 400;
 const MAX_NAME_LENGTH = 255;
 const MAX_SEGMENT_LENGTH = 80;
 const HASH_LENGTH = 12;
-const KEY_CHARACTERS = /^[A-Za-z0-9_.:-]+$/;
 
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
@@ -39,34 +39,16 @@ interface RepositoryIdentity {
   identity: string;
 }
 
-/** HTTPS, SCP-style SSH and SSH URLs of one repository give the same identity. */
-function repositoryIdentity(remote: string): RepositoryIdentity | undefined {
-  let host: string;
-  let path: string;
-  try {
-    const url = new URL(remote);
-    if (!url.hostname) return undefined;
-    host = url.hostname.toLowerCase();
-    path = url.pathname;
-  } catch {
-    const scp = /^(?:[^@/:]+@)?([^/:]+):(.+)$/.exec(remote);
-    if (!scp || /^[a-zA-Z]:[\\/]/.test(remote)) return undefined;
-    host = scp[1].toLowerCase();
-    path = scp[2];
-  }
-  path = trimCharacters(path, '/')
-    .replace(/\.git$/, '')
-    .normalize('NFC');
-  const name = path.split('/').at(-1);
-  return name ? { name, identity: `git:${host}/${path}` } : undefined;
+function trimSlashes(value: string): string {
+  return value.replace(/^\/+|\/+$/g, '');
 }
 
-function trimCharacters(value: string, characters: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && characters.includes(value[start])) start++;
-  while (end > start && characters.includes(value[end - 1])) end--;
-  return value.slice(start, end);
+function repositoryIdentity(remote: string): RepositoryIdentity | undefined {
+  const parsed = parseGitRemote(remote);
+  if (!parsed) return undefined;
+  const path = trimSlashes(parsed.path).normalize('NFC');
+  const name = path.split('/').at(-1);
+  return name ? { name, identity: `git:${parsed.host}/${path}` } : undefined;
 }
 
 function keySegment(name: string): string {
@@ -75,7 +57,7 @@ function keySegment(name: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-');
-  return trimCharacters(slug, '._-').slice(0, MAX_SEGMENT_LENGTH) || 'project';
+  return slug.replace(/^[._-]+|[._-]+$/g, '').slice(0, MAX_SEGMENT_LENGTH) || 'project';
 }
 
 export interface ProjectProposal {
@@ -111,12 +93,7 @@ export function generateProjectProposal(
 
 export function validateProjectKey(key: string): string {
   const trimmed = key.trim();
-  if (
-    !trimmed ||
-    trimmed.length > MAX_KEY_LENGTH ||
-    !KEY_CHARACTERS.test(trimmed) ||
-    /^\d+$/.test(trimmed)
-  ) {
+  if (!isValidProjectKey(trimmed)) {
     throw new InvalidOptionError(
       '--project-key must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
     );
