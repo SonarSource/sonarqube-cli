@@ -55,8 +55,9 @@ export async function intendedDiagnostics(
             error instanceof Error
               ? [error.message, remediationHintFor(error)].filter((part) => part?.trim()).join(' ')
               : '';
+          const detail = reason ? ` (${reason})` : '';
           unavailable.push(
-            `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read${reason ? ` (${reason})` : ''}. Structural validation still applies.`,
+            `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read${detail}. Structural validation still applies.`,
           );
         }
       }),
