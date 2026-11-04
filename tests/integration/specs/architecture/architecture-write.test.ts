@@ -118,6 +118,23 @@ describe('sonar architecture intended set', () => {
   }
 
   describe('intended', () => {
+    it('preserves public discovery failure details in a write-free preview', async () => {
+      const server = await startWith((fake) =>
+        fake.withIntended(SAVED).withStatus('current-architectures', 200, '{}'),
+      );
+      const exported = await readSavedFile();
+      harness.cwd.writeFile('model.json', JSON.stringify({ ...exported, models: NEXT }));
+      const result = await harness.run(
+        `architecture intended set --project ${PROJECT} --file model.json --dry-run`,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'Invalid public current architecture response',
+      );
+      expect(result.stdout + result.stderr).toContain('Structural validation still applies.');
+      expect(writes(server)).toEqual([]);
+    });
+
     it('prints a quoted backup recovery preview after a successful replacement', async () => {
       const server = await startWith((fake) => fake.withIntended(SAVED));
       const exported = await readSavedFile();

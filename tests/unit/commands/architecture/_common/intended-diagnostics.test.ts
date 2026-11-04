@@ -26,6 +26,7 @@ import type {
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { intendedDiagnostics } from '@/commands/architecture/_common/intended-diagnostics.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 const graph: StructureGraph = {
   nodeCount: 5,
@@ -144,7 +145,11 @@ describe('intended discovery diagnostics', () => {
     backend.getCurrent = (language) =>
       language === 'java'
         ? Promise.resolve([{ ecosystem: 'java', graph }])
-        : Promise.reject(new Error('unavailable'));
+        : Promise.reject(
+            new CommandFailedError('Invalid public current architecture response.', {
+              remediationHint: 'Check the supported public Architecture API contract.',
+            }),
+          );
     const crowded: IntendedArchitecture = {
       ...model,
       groups: Array.from({ length: 13 }, (_, i) => ({
@@ -154,6 +159,8 @@ describe('intended discovery diagnostics', () => {
     };
     const warnings = await intendedDiagnostics(backend, [crowded, { ...model, language: 'ts' }]);
     expect(warnings[0]).toContain('ts: pattern and physical hierarchy checks unavailable');
+    expect(warnings[0]).toContain('Invalid public current architecture response.');
+    expect(warnings[0]).toContain('Check the supported public Architecture API contract.');
     expect(warnings.filter((warning) => warning.includes('names a container'))).toHaveLength(10);
     expect(warnings.at(-1)).toBe('3 additional discovery warning(s) omitted.');
     expect(warnings).toHaveLength(12);

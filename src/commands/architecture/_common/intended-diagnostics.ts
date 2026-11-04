@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { remediationHintFor } from '@/core/commands/command-error.ts';
+
 import type {
   ArchitectureApi,
   IntendedArchitecture,
@@ -48,9 +50,13 @@ export async function intendedDiagnostics(
           for (const model of models.filter((model) => model.language === language)) {
             inspectGroups(model.groups, graph, artifacts, warnings);
           }
-        } catch {
+        } catch (error) {
+          const reason =
+            error instanceof Error
+              ? [error.message, remediationHintFor(error)].filter((part) => part?.trim()).join(' ')
+              : '';
           unavailable.push(
-            `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read. Structural validation still applies.`,
+            `${language}: pattern and physical hierarchy checks unavailable; no complete discovery graph was read${reason ? ` (${reason})` : ''}. Structural validation still applies.`,
           );
         }
       }),
