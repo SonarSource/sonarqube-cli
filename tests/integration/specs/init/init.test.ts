@@ -33,6 +33,7 @@ const GITHUB_REMOTE = 'https://github.com/example/repository.git';
 const AZURE_REMOTE = 'https://dev.azure.com/example/project/_git/repository';
 const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
+const INTEGRATE_PROMPT = 'Set up your coding agents';
 
 describe('sonar init', () => {
   let harness: TestHarness;
@@ -440,6 +441,7 @@ describe('sonar init', () => {
       );
 
       const session = harness.runInteractive('init', { browserToken: TOKEN });
+      await session.decline(INTEGRATE_PROMPT);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -447,6 +449,76 @@ describe('sonar init', () => {
     },
     TIMEOUT,
   );
+
+  describe('sonar integrate prompt', () => {
+    async function startLinkedInit() {
+      harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+      const serverUrl = await signInToCloud(() => {});
+      initGitRepo(harness.cwd.path);
+      writeSonarConfig(serverUrl);
+      return harness.runInteractive('init');
+    }
+
+    it(
+      'succeeds without repeating the hint when the user declines',
+      async () => {
+        const session = await startLinkedInit();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain("Next, run 'sonar integrate'");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'runs sonar integrate when the user accepts, and still succeeds when it is abandoned',
+      async () => {
+        const session = await startLinkedInit();
+        await session.accept(INTEGRATE_PROMPT);
+        await session.waitText('Select the tool you want to integrate with');
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('Could not set up your coding agents');
+        expect(result.stdout + result.stderr).toContain("Run 'sonar integrate' to try again.");
+        expect(harness.cwd.file('.sonar-config.json').asText()).toContain('"mapped"');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'cancels onboarding on Ctrl+C at the prompt',
+      async () => {
+        const session = await startLinkedInit();
+        await session.waitText(INTEGRATE_PROMPT);
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('Onboarding cancelled.');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not ask without a terminal',
+      async () => {
+        const serverUrl = await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        writeSonarConfig(serverUrl);
+
+        const result = await harness.run('init');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain(INTEGRATE_PROMPT);
+        expect(result.stdout).toContain("Next, run 'sonar integrate'");
+      },
+      TIMEOUT,
+    );
+  });
 
   describe('sonar integrate suggestion', () => {
     it(
@@ -485,6 +557,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -512,6 +585,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -531,6 +605,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -547,6 +622,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -563,6 +639,7 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -589,6 +666,7 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
         await session.accept('Authorize it in the browser');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -628,6 +706,7 @@ describe('sonar init', () => {
         withRemote('https://github.com/example');
 
         const session = harness.runInteractive('init');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -646,6 +725,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -686,6 +766,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -705,6 +786,7 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
         await session.decline('Authorize it in the browser');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -722,6 +804,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.decline('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -742,6 +825,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -776,6 +860,7 @@ describe('sonar init', () => {
         session.write('other');
         await session.waitText('1 match');
         session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -800,6 +885,7 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.decline('Link this directory');
         await session.decline('another existing project');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -825,6 +911,7 @@ describe('sonar init', () => {
         session.keyCtrlC();
         await session.waitText('Abandon linking a project');
         session.write('y');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -851,6 +938,7 @@ describe('sonar init', () => {
         await session.decline('Abandon linking a project');
         await session.waitText('other_project');
         session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
@@ -870,6 +958,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
+        await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
