@@ -31,6 +31,9 @@ jobs:
           - { name: claude-code, provider: anthropic, model: claude-haiku-5-5 }
           - { name: codex, provider: openai, model: gpt-6.1-terra }
         attempt: [1, 2]
+        exclude:
+          - os: macos
+            agent: { name: codex, provider: openai, model: gpt-6.1-terra }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,7 +63,7 @@ jobs:
           HB_SONAR_API_URL: https://api.sc-staging.io
           ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && secrets.HB_PORTKEY_API_KEY || secrets.HB_CLAUDE_PORTKEY_API_KEY }}
+          PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && secrets.HB_OPENAI_PORTKEY_API_KEY || matrix.agent.name != 'codex' && secrets.HB_CLAUDE_PORTKEY_API_KEY || '' }}
         run: bash benchmarks/harbor/scripts/run-isolated.sh
 
       - name: Upload Harbor jobs
