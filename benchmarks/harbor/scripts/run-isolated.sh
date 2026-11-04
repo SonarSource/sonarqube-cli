@@ -118,6 +118,7 @@ run_benchmark() {
       export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
       ;;
     codex)
+      : "${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
       expected_integration=codex
       prompt_hook=codex-prompt-submit
       file_hook=""
