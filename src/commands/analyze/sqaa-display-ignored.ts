@@ -30,6 +30,7 @@ type IgnoredReason = IgnoredFile['reason'];
 const IGNORED_REASON_LABELS: Record<IgnoredReason, string> = {
   binary: 'binary file',
   oversized: 'file too large',
+  'git-lfs-pointer': 'Git LFS pointer',
   'outside-repository': 'outside the repository',
   'outside-project': 'not in a mapped project',
   'other-connection': 'project linked to another server or organization',
