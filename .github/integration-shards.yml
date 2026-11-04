@@ -1,4 +1,0 @@
-# Integration test shard counts for .github/workflows/build.yml
-# Prepare derives matrix indices [0 .. total - 1] for each OS.
-linux: 4
-windows: 4

@@ -20,6 +20,10 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  INTEGRATION_SHARD_TOTAL_LINUX: '4'
+  INTEGRATION_SHARD_TOTAL_WINDOWS: '4'
+
 jobs:
   prepare:
     name: Prepare Build
@@ -56,7 +60,31 @@ jobs:
 
       - name: Integration shard matrices
         id: integration_shards
-        run: bun build-scripts/integration-shard-matrix-outputs.ts
+        env:
+          TOTAL_LINUX: ${{ env.INTEGRATION_SHARD_TOTAL_LINUX }}
+          TOTAL_WINDOWS: ${{ env.INTEGRATION_SHARD_TOTAL_WINDOWS }}
+        run: |
+          set -euo pipefail
+          write_shard_outputs() {
+            local prefix="$1"
+            local total="$2"
+            if ! [[ "${total}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "INTEGRATION_SHARD_TOTAL_${prefix} must be a positive integer, got: ${total}" >&2
+              exit 1
+            fi
+            local matrix='['
+            for ((i = 0; i < total; i++)); do
+              if (( i > 0 )); then
+                matrix+=','
+              fi
+              matrix+="${i}"
+            done
+            matrix+=']'
+            echo "${prefix,,}_total=${total}" >> "$GITHUB_OUTPUT"
+            echo "${prefix,,}_matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          }
+          write_shard_outputs LINUX "${TOTAL_LINUX}"
+          write_shard_outputs WINDOWS "${TOTAL_WINDOWS}"
 
   build-binaries:
     name: Build All Binaries
