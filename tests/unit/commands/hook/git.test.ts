@@ -112,7 +112,7 @@ describe('gitPreCommit', () => {
     resolveAuthSpy = mocked.resolveAuthSpy;
     spawnProcessSpy = spyOn(processLib, 'spawnProcessWithTimeout').mockResolvedValue({
       exitCode: 0,
-      stdout: 'src/foo.ts\nsrc/bar.ts',
+      stdout: 'src/foo.ts\0src/bar.ts\0',
       stderr: '',
     });
     resolveSecretsBinaryPathSpy = spyOn(installSecrets, 'resolveSecretsBinaryPath').mockReturnValue(
