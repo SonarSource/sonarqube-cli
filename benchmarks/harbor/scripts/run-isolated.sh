@@ -7,10 +7,10 @@ AGENT_HOME="${RUN_ROOT}/home"
 WORKDIR="${RUN_ROOT}/work"
 SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
-AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin"
-INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION
-RUN_ENV=PORTKEY_API_KEY,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
-ROOT_DIR_NAMES=(app logs tests solution)
+AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION,AGENT,CODEX_VERSION
+RUN_ENV=PORTKEY_API_KEY,AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
+ROOT_DIR_NAMES=(app logs tests solution installed-agent)
 
 as_agent() {
   local preserved_env="$1"
@@ -33,7 +33,7 @@ create_root_dirs() {
       sudo chown "${AGENT_USER}" "/${name}"
     done
   fi
-  ls -ld /app /logs /tests /solution
+  ls -ld /app /logs /tests /solution /installed-agent
 }
 
 prepare() {
@@ -63,6 +63,33 @@ collect_results() {
   fi
 }
 
+install_codex() {
+  local triple
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64) triple=x86_64-unknown-linux-musl ;;
+    Linux-aarch64) triple=aarch64-unknown-linux-musl ;;
+    Darwin-arm64) triple=aarch64-apple-darwin ;;
+    *)
+      echo "No Codex binary for $(uname -s) $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  mkdir -p "${HOME}/.local/bin"
+  curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/openai/codex/releases/download/${CODEX_VERSION}/codex-${triple}.tar.gz" | tar -xz -C "${HOME}/.local/bin"
+  mv "${HOME}/.local/bin/codex-${triple}" "${HOME}/.local/bin/codex"
+}
+
+install_agent() {
+  case "${AGENT}" in
+    claude-code) curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash ;;
+    codex) install_codex ;;
+    *)
+      echo "Unknown agent '${AGENT}'" >&2
+      exit 2
+      ;;
+  esac
+}
+
 install_tools() {
   if [[ -n "${ARTIFACTORY_USER:-}" ]]; then
     export PIP_INDEX_URL="https://${ARTIFACTORY_USER}:${ARTIFACTORY_ACCESS_TOKEN}@repox.jfrog.io/artifactory/api/pypi/sonarsource-pypi/simple"
@@ -72,25 +99,47 @@ install_tools() {
   "${HOME}/uv-venv/bin/pip" install --quiet "uv==${UV_VERSION}"
   "${HOME}/uv-venv/bin/uv" tool install --python "${HARBOR_PYTHON_VERSION}" "harbor==${HARBOR_VERSION}"
   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
-  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.claude.ai/claude-code-releases/bootstrap.sh | bash
+  install_agent
   command -v jq >/dev/null || { echo "jq is required by the task verifiers" >&2; exit 1; }
   install -m 755 "${WORKDIR}/harbor/ci/sonar-wrapper.sh" "${HOME}/.local/bin/sonar"
   echo "sonar CLI: $("${HOME}/.local/share/sonarqube-cli/bin/sonar" --version | tail -n 1)"
 }
 
 run_benchmark() {
-  export ANTHROPIC_BASE_URL=https://api.portkey.ai
-  export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
-  export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
+  local expected_integration prompt_hook file_hook
+  local agent_options=()
+  case "${AGENT}" in
+    claude-code)
+      expected_integration=claude-code
+      prompt_hook=claude-prompt-submit
+      file_hook=claude-pre-tool-use
+      export ANTHROPIC_BASE_URL=https://api.portkey.ai
+      export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
+      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
+      ;;
+    codex)
+      : "${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
+      expected_integration=codex
+      prompt_hook=codex-prompt-submit
+      file_hook=""
+      agent_options=(--agent-kwarg dangerously_bypass_hook_trust=true --agent-kwarg "config=${WORKDIR}/harbor/ci/codex-portkey.toml")
+      export OPENAI_API_KEY=placeholder-portkey-handles-auth
+      ;;
+    *)
+      echo "Unknown agent '${AGENT}'" >&2
+      exit 2
+      ;;
+  esac
   export PYTHONPATH="${WORKDIR}/harbor/environments"
   cd "${WORKDIR}"
   harbor run \
     --yes \
     --path "${WORKDIR}/harbor/tasks/${TASK}" \
-    --ve EXPECTED_INTEGRATION=claude-code \
-    --ve PROMPT_HOOK=claude-prompt-submit \
-    --ve FILE_HOOK=claude-pre-tool-use \
-    --agent claude-code \
+    --ve "EXPECTED_INTEGRATION=${expected_integration}" \
+    --ve "PROMPT_HOOK=${prompt_hook}" \
+    --ve "FILE_HOOK=${file_hook}" \
+    --agent "${AGENT}" \
+    ${agent_options[@]+"${agent_options[@]}"} \
     --model "${MODEL}" \
     --jobs-dir "${WORKDIR}/harbor-jobs" \
     --job-name "${JOB_NAME}" \
