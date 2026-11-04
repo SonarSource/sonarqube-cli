@@ -18,17 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { relative, sep } from 'node:path';
-
-import { deriveEntry } from '@/commands/link/link-project.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { findGitRoot } from '@/core/host/git/discover.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
+import {
+  deriveEntry,
+  relativeProjectPath,
+  resolveConfigDir,
+  saveProjectLink,
+} from '@/core/project-discovery/link-target.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -61,22 +61,19 @@ export async function writeMapping(
   console: Console,
   origin: keyof typeof PROJECT_ORIGIN_LEAD,
 ): Promise<void> {
-  const { gitRoot, isGit } = findGitRoot(projectRoot);
-  const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
-  const path = relative(configDir, projectRoot).split(sep).join('/') || '.';
+  const { targetDir } = await resolveConfigDir(projectRoot);
+  const path = relativeProjectPath(targetDir, projectRoot);
   const entry = deriveEntry(auth, projectKey, path);
 
   try {
-    const mapped = await sharedProjectConfigRepository.load(configDir);
-    const replaced = mapped.find(
-      (mapping) => canonicalizePath(mapping.projectRoot) === canonicalizePath(projectRoot),
-    );
-    if (replaced) {
+    const { replacedProjectKey, shadowed } = await saveProjectLink(targetDir, entry, {
+      monorepo: false,
+    });
+    if (replacedProjectKey !== undefined) {
       console.warn(
-        `Replacing the mapping of this directory to '${replaced.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+        `Replacing the mapping of this directory to '${replacedProjectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
-    const shadowed = await sharedProjectConfigRepository.set(configDir, entry);
     if (shadowed) {
       console.warn(
         `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
@@ -84,9 +81,8 @@ export async function writeMapping(
     }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    const cwdRoot = findGitRoot(process.cwd());
-    const linkRoot = canonicalizePath(cwdRoot.isGit ? cwdRoot.gitRoot : process.cwd());
-    const runFrom = linkRoot === configDir ? undefined : configDir;
+    const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
+    const runFrom = linkRoot === targetDir ? undefined : targetDir;
     throw new MappingWriteError(
       `${PROJECT_ORIGIN_LEAD[origin]} project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
       `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
