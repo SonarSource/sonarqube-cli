@@ -2,6 +2,8 @@
 # Shared integration scope runner for CI (full suite or hash shard).
 set -euo pipefail
 
+action_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "run-integration-scope: cwd=$(pwd)"
 echo "run-integration-scope: INTEGRATION_SHARD_INDEX=${INTEGRATION_SHARD_INDEX:-<unset>}"
 echo "run-integration-scope: INTEGRATION_SHARD_TOTAL=${INTEGRATION_SHARD_TOTAL:-<unset>}"
@@ -35,7 +37,7 @@ run_bun_test() {
 
 run_once() {
   if [ "${INTEGRATION_SHARDED:-false}" = 'true' ]; then
-    if ! mapfile -t shard_paths < <(bash .github/scripts/integration-shard-paths.sh); then
+    if ! mapfile -t shard_paths < <(bash "${action_dir}/integration-shard-paths.sh"); then
       echo "integration-shard-paths.sh failed for shard ${INTEGRATION_SHARD_INDEX}/${INTEGRATION_SHARD_TOTAL}" >&2
       return 1
     fi
