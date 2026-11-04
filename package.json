@@ -19,6 +19,7 @@
     "test:coverage": "bun build:binary && bun build-scripts/build-coverage-binary.ts && bun build-scripts/setup-integration-resources.ts && bun build-scripts/clear-coverage-raw.ts && bun run test:coverage:unit && SONARQUBE_CLI_USE_COVERAGE=1 bun test ./tests/integration/ && bun build-scripts/report-coverage.ts",
     "lint": "eslint src/ tests/ build-scripts/",
     "lint:fix": "eslint src/ tests/ build-scripts/ --fix",
+    "lint:prune": "eslint src/ tests/ build-scripts/ --prune-suppressions",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"build-scripts/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"build-scripts/**/*.ts\"",
     "typecheck": "tsc --noEmit",

@@ -77,39 +77,15 @@ export default tseslint.config(
   // (CLI-1459). SonarCloud skips blank and comment lines, so this rule does too, and the two
   // report the same count. Checking it here fails the pull request itself: on 2026-11-03 four
   // stacked pull requests were each green and the file only crossed the limit on master.
+  // Files that were already over the limit are listed in eslint-suppressions.json (ESLint bulk
+  // suppressions). Do not add to it: split the file. When one is split, run
+  // `bun run lint:prune` to drop its entry; lint fails while a stale entry remains.
   {
     files: ['src/**/*.ts'],
     rules: {
       'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
     },
   },
-  // Files already over the limit. Each ceiling is the current size, so the file cannot grow.
-  // Remove the entry when the file is split under 500 lines; never raise a ceiling.
-  {
-    files: ['src/commands/architecture/_common/directives.ts'],
-    rules: { 'max-lines': ['error', { max: 507, skipBlankLines: true, skipComments: true }] },
-  },
-  {
-    files: ['src/commands/architecture/_common/sonar-architecture-api.ts'],
-    rules: { 'max-lines': ['error', { max: 502, skipBlankLines: true, skipComments: true }] },
-  },
-  {
-    files: ['src/commands/command-tree.ts'],
-    rules: { 'max-lines': ['error', { max: 1188, skipBlankLines: true, skipComments: true }] },
-  },
-  {
-    files: ['src/commands/system/status.ts'],
-    rules: { 'max-lines': ['error', { max: 830, skipBlankLines: true, skipComments: true }] },
-  },
-  {
-    files: ['src/core/commands/sonar-command.ts'],
-    rules: { 'max-lines': ['error', { max: 510, skipBlankLines: true, skipComments: true }] },
-  },
-  {
-    files: ['src/core/ui/terminal-console.ts'],
-    rules: { 'max-lines': ['error', { max: 582, skipBlankLines: true, skipComments: true }] },
-  },
-
   // Catches a Result that is built but never consumed. Two constraints shape this block.
   // Upstream `eslint-plugin-neverthrow` hard-crashes on ESLint 10 + typescript-eslint 8
   // (it reads the removed context.parserServices), hence the fork. And its handled-method

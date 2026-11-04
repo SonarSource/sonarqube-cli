@@ -1,0 +1,22 @@
+{
+  "src/commands/command-tree.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "src/commands/system/status.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "src/core/commands/sonar-command.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "src/core/ui/terminal-console.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  }
+}
