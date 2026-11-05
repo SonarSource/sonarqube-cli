@@ -125,7 +125,7 @@ async function resolveProxy(
     ...config,
     proxy: config.proxy ? { ...config.proxy, explicit: true } : null,
   });
-  return options.proxy;
+  return options.proxy || undefined;
 }
 
 /**
