@@ -20,13 +20,11 @@
 
 import { existsSync } from 'node:fs';
 
-import type { RunTally } from '@/commands/analyze/sqaa-analysis.ts';
 import {
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
   type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { prepareSqaaEditedFile } from '@/commands/analyze/sqaa-context.ts';
-import { executeSqaaRun, finishSqaaRun } from '@/commands/analyze/sqaa-run.ts';
+import { runSqaaAnalysis } from '@/commands/analyze/sqaa-run.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
@@ -45,29 +43,19 @@ export async function analyzeEditedSqaaFile(
   if (!existsSync(filePath)) return null;
   const connection = await ctx.resolveConnection();
   if (!connection) return null;
-  const prepared = await prepareSqaaEditedFile(filePath, connection, ctx.console);
-  if (!prepared) return null;
-  const options = {
+  const run = await runSqaaAnalysis({ editedFile: filePath, forcedDepth: 'STANDARD' }, connection, {
+    requireProject: false,
+    silentSkip: true,
+    noteFocusedProject: false,
+    onExecutionError: 'record-and-skip',
     telemetryCtx: ctx,
     telemetryCallerCommand: callerCommand,
     telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
     console: ctx.console,
-    format: 'json' as const,
-  };
-  const start = performance.now();
-  let tally: RunTally;
-  try {
-    ({ tally } = await executeSqaaRun(prepared, options));
-  } catch (err) {
-    finishSqaaRun(
-      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
-      Math.round(performance.now() - start),
-      connection,
-      options,
-    );
-    logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
-    return null;
-  }
+    format: 'json',
+  });
+  if (!run) return null;
+  const { tally } = run;
   if (tally.globalError instanceof SqaaForbiddenError) return { kind: 'forbidden', connection };
   const result = tally.allResults[0];
   if ('failure' in result) {

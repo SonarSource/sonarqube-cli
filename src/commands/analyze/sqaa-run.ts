@@ -21,6 +21,7 @@
 import { relative } from 'node:path';
 
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
+import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -33,6 +34,7 @@ import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry } from './sqaa-analysis-telemetry.ts';
 import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api.ts';
 import { resolveSqaaBranch } from './sqaa-changeset.ts';
+import { prepareSqaaRun } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   buildJsonReport,
@@ -48,7 +50,7 @@ import { isGlobalSqaaError } from './sqaa-errors.ts';
 import { soleFile, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
 import type {
-  AnalyzeSqaaRunOptions,
+  AnalyzeSqaaOptions,
   PreparedSqaaRun,
   SqaaPreparedRunOptions,
   SqaaProjectFiles,
@@ -142,33 +144,49 @@ async function fetchSingleFileTally(
   }
 }
 
-export function finishSqaaRun(
-  tally: RunTally,
-  durationMs: number,
+export async function runSqaaAnalysis(
+  options: AnalyzeSqaaOptions,
   connection: SonarConnection,
-  options: AnalyzeSqaaRunOptions,
-): void {
-  if (!options.telemetryCallerCommand || !options.telemetryCtx) return;
-  recordSqaaAnalysisTelemetry(
-    options.telemetryCtx,
-    connection.auth,
-    options.telemetryCallerCommand,
-    tally,
-    durationMs,
-    options.telemetryProcessExitCode ??
-      resolveSqaaCommandExitCode(
-        tally.totalIssues,
-        tally.totalFailures,
-        tally.globalError !== undefined,
-      ),
-  );
+  runOptions: SqaaPreparedRunOptions,
+): Promise<{ prepared: PreparedSqaaRun; tally: RunTally; durationMs: number } | null> {
+  const prepared = await prepareSqaaRun(options, connection, runOptions.console, runOptions);
+  if (!prepared) return null;
+  if (prepared.files.displayPaths.length === 0)
+    return { prepared, tally: mergeTallies([]), durationMs: 0 };
+  const start = performance.now();
+  let completed: { tally: RunTally; durationMs: number } | undefined;
+  try {
+    completed = await executeSqaaRun(prepared, runOptions);
+  } catch (err) {
+    if (runOptions.onExecutionError !== 'record-and-skip') throw err;
+    logger.debug(`Vortex analysis failed: ${(err as Error).message}`);
+  }
+  const { tally, durationMs } = completed ?? {
+    tally: { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
+    durationMs: Math.round(performance.now() - start),
+  };
+  if (runOptions.telemetryCallerCommand && runOptions.telemetryCtx) {
+    recordSqaaAnalysisTelemetry(
+      runOptions.telemetryCtx,
+      prepared.connection.auth,
+      runOptions.telemetryCallerCommand,
+      tally,
+      durationMs,
+      runOptions.telemetryProcessExitCode ??
+        resolveSqaaCommandExitCode(
+          tally.totalIssues,
+          tally.totalFailures,
+          tally.globalError !== undefined,
+        ),
+    );
+  }
+  return completed ? { prepared, tally, durationMs } : null;
 }
 
-export async function executeSqaaRun(
+async function executeSqaaRun(
   prepared: PreparedSqaaRun,
   options: SqaaPreparedRunOptions,
 ): Promise<{ tally: RunTally; durationMs: number }> {
-  if (prepared.files.displayPaths.length === 0) return { tally: mergeTallies([]), durationMs: 0 };
   const { connection, files, branch, wireDepth, displayDepth, mode } = prepared;
   let execute: () => Promise<RunTally>;
   if (mode === 'single-file' || mode === 'edited-file') {
@@ -210,7 +228,6 @@ export async function executeSqaaRun(
       });
   }
   const { result: tally, durationMs } = await timed(execute);
-  finishSqaaRun(tally, durationMs, connection, options);
   return { tally, durationMs };
 }
 

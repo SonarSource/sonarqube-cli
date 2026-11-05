@@ -55,9 +55,10 @@ import type {
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
 
-type SqaaPreparationPolicy = Pick<AnalyzeSqaaRunOptions, 'requireProject' | 'silentSkip'> & {
-  noteFocusedProject?: boolean;
-};
+type SqaaPreparationPolicy = Pick<
+  AnalyzeSqaaRunOptions,
+  'requireProject' | 'silentSkip' | 'noteFocusedProject'
+>;
 
 interface SqaaTarget {
   mode: SqaaInvocationMode;
@@ -173,16 +174,20 @@ function editedFileTarget(file: string): SqaaTarget | null {
   };
 }
 
-async function prepareRun(
-  createTarget: () => SqaaTarget | null | Promise<SqaaTarget | null>,
-  options: Pick<AnalyzeSqaaOptions, 'project' | 'depth' | 'forcedDepth' | 'force' | 'format'>,
+export async function prepareSqaaRun(
+  options: AnalyzeSqaaOptions,
   connection: SonarConnection,
   console: Console,
-  policy: SqaaPreparationPolicy,
+  policy: SqaaPreparationPolicy = {},
 ): Promise<PreparedSqaaRun | null> {
   const explicitDepth =
     options.depth === undefined ? undefined : parseSqaaDepthOption(options.depth);
-  const target = await createTarget();
+  let target: SqaaTarget | null;
+  if (options.editedFile === undefined) {
+    target = await (options.file?.length ? explicitFilesTarget(options) : changeSetTarget(options));
+  } else {
+    target = editedFileTarget(options.editedFile);
+  }
   if (!target) return null;
   const { files: inputFiles, check, ...run } = target;
   const wireDepth = resolveAnalysisDepth(explicitDepth, run.mode, options.forcedDepth);
@@ -220,33 +225,4 @@ async function prepareRun(
     ...(wireDepth === undefined ? {} : { wireDepth }),
     displayDepth: files.displayPaths.length === 0 ? 'STANDARD' : labelAnalysisDepth(wireDepth),
   };
-}
-
-export function prepareSqaaRun(
-  options: AnalyzeSqaaOptions,
-  connection: SonarConnection,
-  console: Console,
-  policy: SqaaPreparationPolicy = {},
-): Promise<PreparedSqaaRun | null> {
-  return prepareRun(
-    () => (options.file?.length ? explicitFilesTarget(options) : changeSetTarget(options)),
-    options,
-    connection,
-    console,
-    policy,
-  );
-}
-
-export function prepareSqaaEditedFile(
-  file: string,
-  connection: SonarConnection,
-  console: Console,
-): Promise<PreparedSqaaRun | null> {
-  return prepareRun(
-    () => editedFileTarget(file),
-    { forcedDepth: 'STANDARD' },
-    connection,
-    console,
-    { requireProject: false, silentSkip: true, noteFocusedProject: false },
-  );
 }

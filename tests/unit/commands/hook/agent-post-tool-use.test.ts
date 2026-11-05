@@ -451,6 +451,20 @@ describe('agentPostToolUse', () => {
     writeHookOutputSpy.mockRestore();
   });
 
+  it('does not retry completion as a failed analysis when recording completion throws', async () => {
+    emitSqaaAnalysisTelemetrySpy.mockImplementation(() => {
+      throw new Error('completion failed');
+    });
+
+    const error = await agentPostToolUse(ctx).catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ message: 'completion failed' });
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
+    expect(emitSqaaAnalysisTelemetrySpy.mock.calls[0][3]).toMatchObject({ totalFailures: 0 });
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
   it('includes errors in additionalContext when analysis returns errors', async () => {
     createAnalysisSpy.mockResolvedValue({
       id: 'analysis-id',

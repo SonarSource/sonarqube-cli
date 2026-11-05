@@ -35,6 +35,9 @@ export interface AnalyzeSqaaRunOptions {
   requireProject?: boolean;
   /** A missing project or organization skips without a console warning, for unattended hooks that run in every repository. */
   silentSkip?: boolean;
+  noteFocusedProject?: boolean;
+  /** Hooks record execution failures without failing the invocation. */
+  onExecutionError?: 'throw' | 'record-and-skip';
   telemetryCallerCommand?: SqaaTelemetryCallerCommand;
   /** Overrides computed CLI exit for telemetry only (e.g. non-blocking hooks always exit 0). */
   telemetryProcessExitCode?: number | null;
@@ -44,6 +47,8 @@ export interface AnalyzeSqaaRunOptions {
 
 export interface AnalyzeSqaaOptions {
   file?: string[];
+  /** Hook-supplied path uses silent ownership checks instead of CLI argument validation. */
+  editedFile?: string;
   staged?: boolean;
   base?: string;
   branch?: string;

@@ -26,9 +26,8 @@ import type {
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
-import { prepareSqaaRun } from './sqaa-context.ts';
 import { applyExitCode, type SqaaJsonReport } from './sqaa-display.ts';
-import { buildSqaaRunReport, executeSqaaRun, presentSqaaRun } from './sqaa-run.ts';
+import { buildSqaaRunReport, presentSqaaRun, runSqaaAnalysis } from './sqaa-run.ts';
 import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions } from './sqaa-types.ts';
 import { VALID_FORMATS } from './sqaa-types.ts';
 
@@ -50,11 +49,16 @@ export async function analyzeSqaa(
   }
   const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const { console } = telemetryCtx;
-  const prepared = await prepareSqaaRun({ ...options, format }, ctx.connection, console, {
+  const execution = {
     ...runOptions,
     requireProject: runOptions.requireProject ?? true,
-  });
-  if (!prepared) return;
+    format,
+    telemetryCtx,
+    console,
+  };
+  const run = await runSqaaAnalysis({ ...options, format }, ctx.connection, execution);
+  if (!run) return;
+  const { prepared, tally } = run;
   if (prepared.files.displayPaths.length === 0) {
     console.text(
       prepared.ignored.length === 0
@@ -63,8 +67,6 @@ export async function analyzeSqaa(
     );
     return;
   }
-  const execution = { ...runOptions, format, telemetryCtx, console };
-  const { tally } = await executeSqaaRun(prepared, execution);
   applyExitCode(tally.totalIssues, tally.totalFailures, tally.globalError !== undefined);
   await presentSqaaRun(prepared, tally, execution);
 }
@@ -75,11 +77,11 @@ export async function buildSqaaJsonReport(
   runOptions: AnalyzeSqaaRunOptions & { telemetryCtx: CommandInvocationContext },
 ): Promise<SqaaJsonReport | null> {
   const { console } = runOptions.telemetryCtx;
-  const prepared = await prepareSqaaRun(options, connection, console, {
+  const run = await runSqaaAnalysis(options, connection, {
+    ...runOptions,
     requireProject: false,
-    silentSkip: runOptions.silentSkip,
+    console,
+    format: 'json',
   });
-  if (!prepared) return null;
-  const { tally } = await executeSqaaRun(prepared, { ...runOptions, console, format: 'json' });
-  return buildSqaaRunReport(prepared, tally);
+  return run ? buildSqaaRunReport(run.prepared, run.tally) : null;
 }
