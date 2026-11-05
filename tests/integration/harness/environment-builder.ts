@@ -69,6 +69,12 @@ import { version as CURRENT_CLI_VERSION } from '../../../package.json';
 import { FakeConsole } from '../../_common/fake-console.ts';
 import { isLoopbackTestServerUrl } from './cloud-auth-url.js';
 import { IS_WINDOWS } from './platform';
+import {
+  installRecordingStub,
+  SCA_SCANNER_INVOCATIONS_FILE,
+  SECRETS_INVOCATIONS_FILE,
+  type StubResponse,
+} from './recording-stub.ts';
 
 function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
@@ -209,6 +215,9 @@ export class EnvironmentBuilder {
   private _cagStdoutLine?: string;
   private _cagStderrLine?: string;
   private _installScaScannerBinary = false;
+  private _recordSecretsInvocations = false;
+  private _secretsStubResponse?: StubResponse;
+  private _scaScannerStubManifests?: string[];
   private _rawStateJson?: string;
   private _cliVersion?: string;
   private _telemetryEnabled = false;
@@ -300,6 +309,26 @@ export class EnvironmentBuilder {
   }
 
   /**
+   * Like withSecretsBinaryInstalled(), but sonar-secrets is a recording stub that runs the real binary: every run's
+   * argv is appended to <cliHome>/secrets-invocations.jsonl, read back with `readSecretsScanArgvs()`.
+   */
+  withRecordedSecretsBinaryInstalled(): this {
+    this._installSecretsBinary = true;
+    this._recordSecretsInvocations = true;
+    return this;
+  }
+
+  /**
+   * Installs a recording stub as sonar-secrets that answers every scan with `response` instead of running the real
+   * binary, for outputs the real one cannot be made to produce (e.g. a crash). `--version` still succeeds.
+   */
+  withSecretsBinaryResponding(response: StubResponse): this {
+    this._installSecretsBinary = true;
+    this._secretsStubResponse = response;
+    return this;
+  }
+
+  /**
    * Installs the pre-compiled CAG stub binary (built by
    * `bun run pretest:integration`) into <cliHome>/bin so the `sonar context`
    * passthrough and the integrate-flow CAG step can run without a real CAG
@@ -342,6 +371,17 @@ export class EnvironmentBuilder {
    */
   withScaScannerBinaryInstalled(): this {
     this._installScaScannerBinary = true;
+    return this;
+  }
+
+  /**
+   * Installs a recording stub as sca-scanner-cli: `discover-manifests` reports `manifests`, and every other
+   * subcommand fails, so a run gets as far as the manifest secrets check without an SCA backend. Each argv is
+   * appended to <cliHome>/sca-scanner-invocations.jsonl.
+   */
+  withScaScannerStubDiscovering(manifests: string[]): this {
+    this._installScaScannerBinary = true;
+    this._scaScannerStubManifests = manifests;
     return this;
   }
 
@@ -693,18 +733,39 @@ export class EnvironmentBuilder {
     }
 
     if (this._installSecretsBinary) {
-      copyBinaryFixtureInto(
-        cliHome,
-        SECRETS_SPEC,
-        buildLocalBinaryName(SECRETS_SPEC, detectPlatform()),
-      );
+      const binaryName = buildLocalBinaryName(SECRETS_SPEC, detectPlatform());
+      if (this._secretsStubResponse) {
+        installRecordingStub(join(cliHome, 'bin', binaryName), {
+          invocationsFile: join(cliHome, SECRETS_INVOCATIONS_FILE),
+          responses: { '--version': { stdout: `sonar-secrets ${SECRETS_SPEC.version}\n` } },
+          fallback: this._secretsStubResponse,
+        });
+      } else if (this._recordSecretsInvocations) {
+        const realBinaryName = `recorded-${binaryName}`;
+        copyBinaryFixtureInto(cliHome, SECRETS_SPEC, realBinaryName);
+        installRecordingStub(join(cliHome, 'bin', binaryName), {
+          invocationsFile: join(cliHome, SECRETS_INVOCATIONS_FILE),
+          delegate: join(cliHome, 'bin', realBinaryName),
+        });
+      } else {
+        copyBinaryFixtureInto(cliHome, SECRETS_SPEC, binaryName);
+      }
     }
     if (this._installScaScannerBinary) {
-      copyBinaryFixtureInto(
-        cliHome,
-        SCA_SCANNER_SPEC,
-        buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform()),
-      );
+      const binaryName = buildLocalBinaryName(SCA_SCANNER_SPEC, detectPlatform());
+      if (this._scaScannerStubManifests) {
+        installRecordingStub(join(cliHome, 'bin', binaryName), {
+          invocationsFile: join(cliHome, SCA_SCANNER_INVOCATIONS_FILE),
+          responses: {
+            'discover-manifests': {
+              stdout: JSON.stringify({ files: this._scaScannerStubManifests }),
+            },
+          },
+          fallback: { exitCode: 1 },
+        });
+      } else {
+        copyBinaryFixtureInto(cliHome, SCA_SCANNER_SPEC, binaryName);
+      }
     }
 
     if (this._installCagBinary) {
