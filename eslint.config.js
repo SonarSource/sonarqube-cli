@@ -77,13 +77,38 @@ export default tseslint.config(
   // (CLI-1459). SonarCloud skips blank and comment lines, so this rule does too, and the two
   // report the same count. Checking it here fails the pull request itself: on 2026-11-03 four
   // stacked pull requests were each green and the file only crossed the limit on master.
-  // Files that were already over the limit are listed in eslint-suppressions.json (ESLint bulk
-  // suppressions). Do not add to it: split the file. When one is split, run
-  // `bun run lint:prune` to drop its entry; lint fails while a stale entry remains.
+  // Files that were already over the limit get a ceiling equal to their size on 2026-11-05, so
+  // they cannot grow: a change that adds code to one of them fails lint, and the author either
+  // splits the file or raises its number here, which a reviewer sees. Do not add a file to the
+  // list. When one is split under 500, delete its entry.
   {
     files: ['src/**/*.ts'],
     rules: {
       'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    files: ['src/commands/command-tree.ts'],
+    rules: {
+      'max-lines': ['error', { max: 1188, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    files: ['src/commands/system/status.ts'],
+    rules: {
+      'max-lines': ['error', { max: 830, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    files: ['src/core/commands/sonar-command.ts'],
+    rules: {
+      'max-lines': ['error', { max: 510, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    files: ['src/core/ui/terminal-console.ts'],
+    rules: {
+      'max-lines': ['error', { max: 582, skipBlankLines: true, skipComments: true }],
     },
   },
   // Catches a Result that is built but never consumed. Two constraints shape this block.
