@@ -113,3 +113,5 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 Architecture public response validation lives in `architecture/_common/public-architecture-response.ts`; directive node-key warnings live in `architecture/_common/directive-key-warnings.ts`. API routing and directive mutation planning remain in their existing modules.
 
 `analyze secrets` resolves file operands to absolute paths before starting sonar-secrets, so leading dashes cannot change scanner options. Inherited stdin uses a separate internal `--input` argument path.
+
+GitHub Server imports retain the 1,000-result search cap per organization. Truncated discovery prints a warning and bulk imports return a non-success result with subset counts. Explicit `--repo owner/repository` selections check the owner against the visible organizations, use the repository-name query filter, and require an exact full-name match. Filtered results are paged within the same 1,000-result cap.
