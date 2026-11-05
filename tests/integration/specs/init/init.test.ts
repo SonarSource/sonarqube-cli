@@ -558,7 +558,7 @@ describe('sonar init', () => {
         initGitRepo(harness.cwd.path);
 
         const result = await harness.run(
-          'init --non-interactive --project-key my-key --name "My Project"',
+          'init --non-interactive --project my-key --name "My Project"',
         );
 
         expect(result.exitCode).toBe(0);
@@ -633,12 +633,12 @@ describe('sonar init', () => {
     );
 
     it(
-      'refuses an explicit --project-key that is already taken',
+      'refuses an explicit --project that is already taken',
       async () => {
         const server = await startServer((s) => s.withProject('taken'));
         initGitRepo(harness.cwd.path);
 
-        const result = await harness.run('init --non-interactive --project-key taken');
+        const result = await harness.run('init --non-interactive --project taken');
 
         expect(result.exitCode).toBe(1);
         expect(result.stdout + result.stderr).toContain("Project 'taken' already exists");
@@ -648,7 +648,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'points to --project-key when the server rejects the key it cannot see (taken elsewhere)',
+      'points to --project when the server rejects the key it cannot see (taken elsewhere)',
       async () => {
         await startServer((s) =>
           s.withProjectCreateRejected(
@@ -659,12 +659,12 @@ describe('sonar init', () => {
         );
         initGitRepo(harness.cwd.path);
 
-        const result = await harness.run('init --non-interactive --project-key elsewhere');
+        const result = await harness.run('init --non-interactive --project elsewhere');
 
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain("Could not create project 'elsewhere'");
-        expect(output).toContain('choose another --project-key');
+        expect(output).toContain('choose another --project');
       },
       TIMEOUT,
     );

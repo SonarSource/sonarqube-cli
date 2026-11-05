@@ -57,7 +57,7 @@ async function askVisibility(console: Console): Promise<ProjectVisibility> {
 /**
  * Creates a project that is not bound to the repository and maps it in `.sonar-config.json`.
  * The key is deterministic, so a rerun after a failed mapping write finds the project it created
- * and only maps it. An explicit `--project-key` that is taken is never adopted.
+ * and only maps it. An explicit `--project` that is taken is never adopted.
  */
 export async function runUnboundNew(
   { projectRoot, remote }: UnboundNewOutcome,
@@ -75,7 +75,7 @@ export async function runUnboundNew(
   if (existing) {
     if (flags.projectKey !== undefined) {
       throw new CommandFailedError(`Project '${existing.key}' already exists.`, {
-        remediationHint: `Choose another --project-key, or map the existing project with 'sonar link ${existing.key}'.`,
+        remediationHint: `Choose another --project, or map the existing project with 'sonar link ${existing.key}'.`,
       });
     }
     console.warn(`Project '${existing.key}' already exists; mapping it instead of creating one.`);
@@ -115,7 +115,7 @@ export async function runUnboundNew(
               `Could not create project '${flags.projectKey}': ${error.message}`,
               {
                 remediationHint:
-                  'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another --project-key.',
+                  'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another --project.',
               },
             )
           : error,

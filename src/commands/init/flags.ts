@@ -37,7 +37,7 @@ export function validateProjectKey(key: string): string {
   const trimmed = key.trim();
   if (!isValidProjectKey(trimmed)) {
     throw new InvalidOptionError(
-      '--project-key must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
+      '--project must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
     );
   }
   return trimmed;
@@ -61,13 +61,12 @@ export function validateVisibility(visibility: string): ProjectVisibility {
 }
 
 export function validateUnboundNewFlags(options: {
-  projectKey?: string;
+  project?: string;
   name?: string;
   visibility?: string;
 }): UnboundNewFlags {
   return {
-    projectKey:
-      options.projectKey === undefined ? undefined : validateProjectKey(options.projectKey),
+    projectKey: options.project === undefined ? undefined : validateProjectKey(options.project),
     name: options.name === undefined ? undefined : validateProjectName(options.name),
     visibility:
       options.visibility === undefined ? undefined : validateVisibility(options.visibility),
@@ -76,13 +75,13 @@ export function validateUnboundNewFlags(options: {
 
 export function warnIgnoredUnboundNewFlags(flags: UnboundNewFlags, console: Console): void {
   const ignored = [
-    flags.projectKey === undefined ? null : '--project-key',
+    flags.projectKey === undefined ? null : '--project',
     flags.name === undefined ? null : '--name',
     flags.visibility === undefined ? null : '--visibility',
   ].filter((flag) => flag !== null);
   if (ignored.length > 0) {
     console.warn(
-      `${ignored.join(', ')} ignored: they only apply when a new project is created without repository binding.`,
+      `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,
     );
   }
 }

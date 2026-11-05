@@ -40,7 +40,7 @@ import { runUnboundNew } from './steps/unbound.ts';
 export interface InitOptions {
   path?: string;
   nonInteractive?: boolean;
-  projectKey?: string;
+  project?: string;
   name?: string;
   visibility?: string;
 }

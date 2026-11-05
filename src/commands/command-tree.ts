@@ -840,7 +840,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
-      '--project-key <key>',
+      '--project <key>',
       'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
     )
     .option(
