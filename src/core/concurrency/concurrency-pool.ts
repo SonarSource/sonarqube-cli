@@ -44,6 +44,8 @@ export async function runWithConcurrencyLimit<TItem, TValue>(
       if (index >= items.length) return;
       const item = items[index];
       try {
+        // Intentionally sequential per worker: concurrency is bounded by workerCount.
+        // eslint-disable-next-line no-await-in-loop
         const value = await task(item, index);
         results[index] = { item, status: 'fulfilled', value };
       } catch (reason) {

@@ -151,11 +151,13 @@ export class SqaaProgress {
       return;
     }
 
-    for (let remaining = totalSeconds; remaining > 0; remaining--) {
-      this.retryLabel = `retrying in ${remaining}s (${attempt}/${maxRetries})`;
-      this.renderLiveLine();
-      await sleep(COUNTDOWN_TICK_MS);
-    }
+    const countdownTicks = Array.from({ length: totalSeconds }, (_, elapsed) =>
+      sleep(elapsed * COUNTDOWN_TICK_MS).then(() => {
+        this.retryLabel = `retrying in ${totalSeconds - elapsed}s (${attempt}/${maxRetries})`;
+        this.renderLiveLine();
+      }),
+    );
+    await Promise.all([...countdownTicks, sleep(totalSeconds * COUNTDOWN_TICK_MS)]);
     this.retryLabel = undefined;
     this.runPhase = 'analyzing';
   }
