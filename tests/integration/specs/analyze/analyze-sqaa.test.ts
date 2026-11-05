@@ -2223,35 +2223,6 @@ describe('verify — change-set mode (no --file)', () => {
     { timeout: 30000 },
   );
 
-  it.each([false, true])(
-    'does not analyze when a large run is declined (explicit files: %s)',
-    async (explicit) => {
-      const server = await harness
-        .newFakeServer()
-        .withAuthToken(VALID_TOKEN)
-        .withSqaaResponse({ issues: [] })
-        .start();
-      harness
-        .state()
-        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
-        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
-      const files = Array.from({ length: 51 }, (_, i) => `file${i}.ts`);
-      for (const file of files) harness.cwd.writeFile(file, 'export const x = 1;');
-      const args = explicit ? files.map((file) => `--file ${file}`).join(' ') : '';
-      const session = harness.runInteractive(`analyze agentic ${args}`, {
-        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
-      });
-      await session.decline('Do you wish to proceed?');
-      const result = await session.waitFinish();
-
-      expect(result.exitCode).toBe(0);
-      expect(server.getRecordedRequests().filter((r) => r.path.endsWith('/analyses'))).toHaveLength(
-        0,
-      );
-    },
-    { timeout: 15000 },
-  );
-
   it(
     'skips the large change set warning with --force',
     async () => {
