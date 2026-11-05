@@ -26,6 +26,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -238,6 +239,56 @@ describe('integrate git (native hooks)', () => {
 
   afterEach(async () => {
     await harness.dispose();
+  });
+
+  describe.skipIf(IS_WINDOWS)('executable permission repair', () => {
+    for (const kind of ['native', 'husky'] as const) {
+      for (const changed of [false, true]) {
+        it(
+          `repairs ${kind} hook permissions with ${changed ? 'changed' : 'unchanged'} content`,
+          async () => {
+            await setupAuthenticated(harness, { withSecretsBinary: true });
+            initGitRepo(harness);
+            if (kind === 'husky') {
+              mkdirSync(join(harness.cwd.path, '.husky'), { recursive: true });
+              gitSpawn(['config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+            }
+            const command = 'integrate git --local --hook pre-commit --non-interactive';
+            expect((await harness.run(command)).exitCode).toBe(0);
+            const path = join(
+              harness.cwd.path,
+              kind === 'husky' ? '.husky' : '.git/hooks',
+              'pre-commit',
+            );
+            const original = readFileSync(path, 'utf-8');
+            if (changed) {
+              writeFileSync(
+                path,
+                original.replace('hook git-pre-commit', 'hook outdated-pre-commit'),
+              );
+            }
+            chmodSync(path, 0o640);
+
+            expect((await harness.run(command)).exitCode).toBe(0);
+            expect(statSync(path).mode & 0o777).toBe(0o751);
+            expect(readFileSync(path, 'utf-8')).toBe(original);
+
+            const { hookEnv } = setupSonarBinDir(harness);
+            setupGitUser(harness.cwd.path);
+            harness.cwd.writeFile('secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+            gitAdd(harness.cwd.path, 'secret.js');
+            const result = gitCommit(
+              harness.cwd.path,
+              hookEnv,
+              'blocked',
+              GIT_HOOK_REJECT_EXIT_CODE,
+            );
+            expect(gitSpawnOutput(result)).toContain('Secrets detected');
+          },
+          { timeout: 30000 },
+        );
+      }
+    }
   });
 
   it(

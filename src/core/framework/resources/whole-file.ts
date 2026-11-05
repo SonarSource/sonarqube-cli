@@ -26,6 +26,7 @@ import type { AppliedResource, IntegrationContext, MaybePromise } from '../featu
 import {
   type BaseResourceOptions,
   equalsIgnoringEol,
+  hasRequiredPermissions,
   type PathResolver,
   readTextFile,
   type RemovableResource,
@@ -90,7 +91,9 @@ export class WholeFileResource implements ResourceDeclaration {
     const path = await resolvePath(context, this.options.targetPath);
     const existing = await readTextFile(path);
     return (
-      existing !== undefined && equalsIgnoringEol(existing, await this.resolveContent(context))
+      existing !== undefined &&
+      equalsIgnoringEol(existing, await this.resolveContent(context)) &&
+      (await hasRequiredPermissions(path, this.options.executable))
     );
   }
 
