@@ -29,17 +29,25 @@ import {
   type StructureNode,
 } from './architecture-api.ts';
 
+function incompatibleResponse(message: string): CommandFailedError {
+  return new CommandFailedError(message, {
+    remediationHint:
+      "The response does not match this CLI's supported public Architecture API contract. " +
+      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
+  });
+}
+
 const MAX_PUBLIC_GROUPS = 50_000;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
 export const MODEL_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidPublicModel(): never {
-  throw new CommandFailedError(
+  throw incompatibleResponse(
     'Invalid public intended architecture response: invalid model field shape.',
   );
 }
 
-function objectField(value: unknown): Record<string, unknown> {
+export function objectField(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     return invalidPublicModel();
   return value as Record<string, unknown>;
