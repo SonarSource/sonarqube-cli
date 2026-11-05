@@ -19,7 +19,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { EOL } from 'node:os';
 import { dirname } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
@@ -27,6 +27,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { AppliedResource, IntegrationContext, MaybePromise } from '../features/types.ts';
 
 const EXECUTABLE_FILE_MODE = 0o755;
+const EXECUTE_BITS = 0o111;
 
 export type PathResolver = string | ((context: IntegrationContext) => MaybePromise<string>);
 
@@ -64,18 +65,24 @@ export async function writeFileIfChanged(
   content: string,
   executable?: boolean,
 ): Promise<void> {
-  const mode = executable ? EXECUTABLE_FILE_MODE : undefined;
-  if (existsSync(path)) {
-    const existing = await readFile(path, 'utf-8');
-    if (existing === content) {
-      if (mode !== undefined) {
-        await chmod(path, mode);
-      }
-      return;
+  const existing = await readTextFile(path);
+  if (existing !== content) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, content, executable ? { mode: EXECUTABLE_FILE_MODE } : undefined);
+  }
+  if (executable && process.platform !== 'win32') {
+    const { mode } = await stat(path);
+    if ((mode & EXECUTE_BITS) !== EXECUTE_BITS) {
+      await chmod(path, mode | EXECUTE_BITS);
     }
   }
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, content, mode === undefined ? undefined : { mode });
+}
+
+export async function hasRequiredPermissions(path: string, executable?: boolean): Promise<boolean> {
+  if (!executable || process.platform === 'win32') {
+    return true;
+  }
+  return ((await stat(path)).mode & EXECUTE_BITS) === EXECUTE_BITS;
 }
 
 export async function readTextFile(path: string): Promise<string | undefined> {

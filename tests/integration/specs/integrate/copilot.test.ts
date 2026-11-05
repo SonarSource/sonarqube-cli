@@ -22,6 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { shellQuote } from '@/core/host/shell-quote';
+
 import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
@@ -115,7 +117,7 @@ describe('integrate copilot', () => {
         expect(entry.timeoutSec).toBe(60);
         const command = normalizePath(String(entry[HOOK_FIELD] ?? ''));
         const homePathNorm = normalizePath(harness.userHome.path);
-        expect(command.startsWith(homePathNorm)).toBe(true);
+        expect(command).toContain(homePathNorm);
         expect(command).toContain('.copilot/hooks/sonar-secrets');
         expect(command).toContain('pretool-secrets');
         expect(json.hooks.userPromptTransformed).toHaveLength(1);
@@ -123,7 +125,7 @@ describe('integrate copilot', () => {
         expect(promptEntry?.type).toBe('command');
         expect(promptEntry?.timeoutSec).toBe(60);
         expect(normalizePath(promptEntry?.[HOOK_FIELD] ?? '')).toBe(
-          normalizePath(harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH).path),
+          `${HOOK_FIELD === 'powershell' ? '& ' : ''}${shellQuote(normalizePath(harness.userHome.file(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH).path))}`,
         );
       },
       { timeout: 30000 },

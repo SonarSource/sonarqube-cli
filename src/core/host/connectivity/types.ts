@@ -38,7 +38,7 @@ export interface TlsConfig {
 }
 
 export interface FetchNetworkOptions {
-  proxy?: string;
+  proxy?: string | false;
   tls?: TlsConfig;
 }
 
