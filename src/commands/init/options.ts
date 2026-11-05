@@ -38,11 +38,11 @@ export interface UnboundNewOptions {
   visibility?: ProjectVisibility;
 }
 
-export function validateProjectKey(key: string): string {
+export function validateProjectKey(key: string, label = '--project'): string {
   const trimmed = key.trim();
   if (!isValidProjectKey(trimmed)) {
     throw new InvalidOptionError(
-      '--project must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
+      `${label} must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.`,
     );
   }
   return trimmed;

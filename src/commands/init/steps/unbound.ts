@@ -20,7 +20,6 @@
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { BadRequestError } from '@/core/server/errors.ts';
 import { ProjectsClient, type ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -30,10 +29,11 @@ import type { InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import {
   type UnboundNewOptions,
+  validateProjectKey,
   validateProjectName,
-  warnIgnoredUnboundNewOptions,
 } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
+import { runLinkExisting } from './link-existing.ts';
 import { reportProjectCreated, writeMapping } from './mapping.ts';
 
 interface NewProject {
@@ -72,19 +72,6 @@ function rejectTakenKey(existingKey: string): never {
   });
 }
 
-async function mapExistingProject(
-  existingKey: string,
-  projectRoot: string,
-  { auth, console }: DetectDeps,
-  options: UnboundNewOptions,
-): Promise<InitOutcome> {
-  console.warn(`Project '${existingKey}' already exists; mapping it instead of creating one.`);
-  warnIgnoredUnboundNewOptions({ name: options.name, visibility: options.visibility }, console);
-  await writeMapping(auth, existingKey, projectRoot, console, 'found');
-  console.success(`Saved ${SHARED_PROJECT_CONFIG_FILE_NAME} for project '${existingKey}'.`);
-  return { kind: 'unbound', projectKey: existingKey };
-}
-
 async function chooseNewProject(
   proposal: { projectKey: string; projectName: string },
   options: UnboundNewOptions,
@@ -117,17 +104,17 @@ async function confirmCreation(
 
 async function createProject(
   { projectKey, projectName, visibility }: NewProject,
-  explicitKey: string | undefined,
+  chosenKey: string | undefined,
   { auth, http, console }: DetectDeps,
 ): Promise<string> {
   const { key } = await console.withSpinner('Creating the project', () =>
     new ProjectsClient(http)
       .createProject({ projectKey, name: projectName, visibility, organization: auth.orgKey })
       .mapErr((error) =>
-        explicitKey !== undefined && error instanceof BadRequestError
-          ? new CommandFailedError(`Could not create project '${explicitKey}': ${error.message}`, {
+        chosenKey !== undefined && error instanceof BadRequestError
+          ? new CommandFailedError(`Could not create project '${chosenKey}': ${error.message}`, {
               remediationHint:
-                'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another --project.',
+                'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another key, for example with --project.',
             })
           : error,
       )
@@ -146,10 +133,36 @@ async function mapCreatedProject(
   reportProjectCreated(console, projectKey);
 }
 
+/** Asks for the key of the new project after the generated one turned out to be taken. */
+async function askProjectKey(
+  console: Console,
+  projects: ProjectsClient,
+  organization: string | undefined,
+  takenKey: string,
+): Promise<string> {
+  for (let attempt = 2; ; attempt++) {
+    const suggestion = `${takenKey}-${attempt}`;
+    const answer = requireAnswer(await console.textPrompt(`Project key (default: ${suggestion})`));
+    let candidate: string;
+    try {
+      candidate = validateProjectKey(answer.trim() === '' ? suggestion : answer, 'Project key');
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    if (await projects.findProject(candidate, organization).orThrow()) {
+      console.warn(`Project '${candidate}' already exists.`);
+      continue;
+    }
+    return candidate;
+  }
+}
+
 /**
  * Creates a project that is not bound to the repository and maps it in `.sonar-config.json`.
- * The key is deterministic, so a rerun after a failed mapping write finds the project it created
- * and only maps it. An explicit `--project` that is taken is never adopted.
+ * When the generated key is already taken (an earlier run created it), nothing is mapped without
+ * the user's say: the `link-existing` step offers the project, and declining it asks for another
+ * key. An explicit `--project` that is taken is never adopted.
  */
 export async function runUnboundNew(
   path: UnboundNewPath,
@@ -159,25 +172,34 @@ export async function runUnboundNew(
   const { projectRoot, remote } = path;
   const { auth, http, console } = deps;
   const generated = generateProjectProposal(projectRoot, remote, auth.orgKey);
-  const proposal = {
-    projectKey: options.projectKey ?? generated.projectKey,
-    projectName: options.name ?? generated.projectName,
-  };
+  const projects = new ProjectsClient(http);
 
-  const existing = await new ProjectsClient(http)
-    .findProject(proposal.projectKey, auth.orgKey)
-    .orThrow();
+  let projectKey = options.projectKey ?? generated.projectKey;
+  const existing = await projects.findProject(projectKey, auth.orgKey).orThrow();
   if (existing) {
-    return options.projectKey === undefined
-      ? mapExistingProject(existing.key, projectRoot, deps, options)
-      : rejectTakenKey(existing.key);
+    if (options.projectKey !== undefined) {
+      rejectTakenKey(existing.key);
+    }
+    const linked = await runLinkExisting(
+      { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
+      deps,
+    );
+    if ('kind' in linked) {
+      return linked;
+    }
+    projectKey = await askProjectKey(console, projects, auth.orgKey, existing.key);
   }
 
-  const newProject = await chooseNewProject(proposal, options, deps);
+  const newProject = await chooseNewProject(
+    { projectKey, projectName: options.name ?? generated.projectName },
+    options,
+    deps,
+  );
   if (!(await confirmCreation(newProject, deps))) {
     return { kind: 'declined' };
   }
-  const projectKey = await createProject(newProject, options.projectKey, deps);
-  await mapCreatedProject(projectKey, projectRoot, auth, console);
-  return { kind: 'unbound', projectKey };
+  const chosenKey = projectKey === generated.projectKey ? undefined : projectKey;
+  const createdKey = await createProject(newProject, chosenKey, deps);
+  await mapCreatedProject(createdKey, projectRoot, auth, console);
+  return { kind: 'unbound', projectKey: createdKey };
 }
