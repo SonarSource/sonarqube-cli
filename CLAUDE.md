@@ -64,7 +64,9 @@ Every HTTP request the CLI issues itself must carry the proxy/TLS configuration 
 
 Call sites never pass proxy/TLS options: `buildRequest(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. Both wrappers resolve options **per hop**, so a followed redirect never reuses the proxy/TLS options computed for the original URL. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
 
-**Sentry** (`src/core/observability/sentry.ts`) uses a custom transport that sends envelopes through `fetchAuthenticated`. The wrapper resolves the `SONAR_*` proxy and TLS settings for each request and blocks unsafe redirects. Any future third-party SDK that reports outward must use the same path or an equivalent transport.
+**Sentry** (`src/core/observability/sentry.ts`) uses a custom transport that sends envelopes through `fetchAuthenticated`. The wrapper resolves the `SONAR_*` proxy and TLS settings for each request and blocks unsafe redirects. **LaunchDarkly** (`src/core/launch-darkly/index.ts`) retrieves client-side flag evaluations through `fetchAuthenticated`. It does not initialize the SDK, so flag refreshes create no event, diagnostic or streaming requests. The CLI decision cache and failure fallback remain in use.
+
+Any future third-party SDK that reports outward must use the same path or an equivalent transport.
 
 ## Error handling
 
@@ -84,7 +86,7 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 
 ## Agent benchmark (`benchmarks/harbor/`)
 
-Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker; `scripts/run-isolated.sh` runs the agent as the `nobody` user without `sudo`), `ci/` (fixture repo setup, the `sonar` call recorder and `enable-claude-hooks.sh`, which installs the Claude hooks for the secrets tasks; `HB_*` variables are for Harbor only, hidden from the agent, tasks map them to `SONARQUBE_CLI_*`) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch`, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
+Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, a report script (`report/summarize-job.ts`, pass/fail from the verifier reward, model from the trial `result.json`, tokens/cost/steps from the ATIF trajectory), `environments/host_environment.py` (Harbor environment that runs on the CI runner itself: macOS has no containers and the Linux runners have no Docker; `scripts/run-isolated.sh` runs the agent as the `nobody` user without `sudo`), `ci/` (fixture repo setup, the `sonar` call recorder and `enable-claude-hooks.sh`, which installs the Claude hooks for the secrets tasks; `HB_*` variables are for Harbor only, hidden from the agent, tasks map them to `SONARQUBE_CLI_*`) and the manual-only `.github/workflows/harbor-benchmark.yml` (`workflow_dispatch` with a `model` input, never triggered by pushes or PRs; Linux and macOS, both on the runner). See `benchmarks/harbor/README.md`.
 
 ## Docs site (`docs/`)
 
