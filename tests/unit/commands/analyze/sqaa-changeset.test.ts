@@ -131,6 +131,7 @@ describe('resolveChangeSet', () => {
 
       mockGitResponses({
         'rev-parse --show-toplevel': `${repoRoot}\n`,
+        'rev-parse --verify --quiet HEAD': 'abc123\n',
         'diff --name-only --diff-filter=ACMR -z HEAD': 'external.ts\0inside.ts\0',
         'ls-files -z --others --exclude-standard': '',
       });

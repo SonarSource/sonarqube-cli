@@ -75,7 +75,7 @@ describe('native git hook resource (wholeFile)', () => {
     writeFileSync(
       join(TEMP_DIR, 'pre-commit'),
       getHookScript('pre-commit', context()).replace(/\n/g, '\r\n'),
-      'utf-8',
+      { encoding: 'utf-8', mode: 0o755 },
     );
 
     expect(await nativeHookResource('pre-commit').isApplied(context())).toBe(true);

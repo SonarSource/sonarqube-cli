@@ -24,6 +24,7 @@
  */
 
 import * as fs from 'node:fs';
+import { resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -184,8 +185,8 @@ describe('secretCheckCommand: auth forwarding', () => {
       '--non-interactive',
       '--json',
       ...DEFAULT_SCAN_ARGS,
-      'src/index.ts',
-      'src/lib/auth.ts',
+      resolve('src/index.ts'),
+      resolve('src/lib/auth.ts'),
     ]);
   });
 });

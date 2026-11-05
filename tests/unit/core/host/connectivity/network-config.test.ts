@@ -458,10 +458,10 @@ describe('buildFetchNetworkOptions', () => {
       expect(opts.proxy).toBe('https://proxy:8080');
     });
 
-    it('does not set proxy for https URL when only proxyHttp is set', async () => {
+    it('disables proxy inheritance for https URL when only proxyHttp is set', async () => {
       const config = await makeConfig({ SONAR_HTTP_PROXY_URL: 'https://proxy:8080' });
       const opts = await buildFetchNetworkOptions('https://sonar.example.com/api', config);
-      expect(opts.proxy).toBeUndefined();
+      expect(opts.proxy).toBe(false);
     });
 
     it('does not set proxy when proxyHttps is generic-env (not explicit)', async () => {
@@ -493,7 +493,7 @@ describe('buildFetchNetworkOptions', () => {
         SONAR_NO_PROXY: noProxy,
       });
       const opts = await buildFetchNetworkOptions(url, config);
-      expect(opts.proxy).toBeUndefined();
+      expect(opts.proxy).toBe(false);
     });
 
     it('sets proxy when hostname does not match noProxy', async () => {
@@ -511,13 +511,11 @@ describe('buildFetchNetworkOptions', () => {
         SONAR_NO_PROXY: '.corp.com',
       });
       // root domain itself should match when entry has a leading dot
-      expect(
-        (await buildFetchNetworkOptions('https://corp.com/api', config)).proxy,
-      ).toBeUndefined();
+      expect((await buildFetchNetworkOptions('https://corp.com/api', config)).proxy).toBe(false);
       // subdomain should also match
-      expect(
-        (await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy,
-      ).toBeUndefined();
+      expect((await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy).toBe(
+        false,
+      );
     });
 
     it('enforces dot separator — corp.com does not match notcorp.com', async () => {
@@ -534,9 +532,9 @@ describe('buildFetchNetworkOptions', () => {
         SONAR_HTTPS_PROXY_URL: 'https://proxy:8080',
         SONAR_NO_PROXY: '*.corp.com',
       });
-      expect(
-        (await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy,
-      ).toBeUndefined();
+      expect((await buildFetchNetworkOptions('https://sonar.corp.com/api', config)).proxy).toBe(
+        false,
+      );
     });
 
     it('*.corp.com wildcard does not match the root domain corp.com', async () => {
@@ -561,7 +559,7 @@ describe('buildFetchNetworkOptions', () => {
       // port 9000 — should bypass
       expect(
         (await buildFetchNetworkOptions('https://sonar.corp.com:9000/api', config)).proxy,
-      ).toBeUndefined();
+      ).toBe(false);
     });
 
     it('matches IPv6 noProxy entries without treating colons as a port', async () => {
@@ -582,9 +580,7 @@ describe('buildFetchNetworkOptions', () => {
           SONAR_HTTPS_PROXY_URL: proxy,
           SONAR_NO_PROXY: noProxy,
         });
-        expect((await buildFetchNetworkOptions(url, config)).proxy).toBe(
-          bypass ? undefined : proxy,
-        );
+        expect((await buildFetchNetworkOptions(url, config)).proxy).toBe(bypass ? false : proxy);
       }
     });
 
