@@ -90,6 +90,37 @@ describe('parseSecretsJson', () => {
     expect(issues[1].file).toBe('b.ts');
   });
 
+  it('keeps the skippedFiles section with its paths', () => {
+    const stdout = JSON.stringify({
+      issues: [],
+      skippedFiles: { count: 2, paths: ['src/app.test.js', 'tests/fixture.js'] },
+    });
+
+    expect(parseSecretsJson(stdout).skippedFiles).toEqual({
+      count: 2,
+      paths: ['src/app.test.js', 'tests/fixture.js'],
+    });
+  });
+
+  it('keeps the skippedFiles count reported without --show-skipped-files', () => {
+    const stdout = JSON.stringify({ issues: [], skippedFiles: { count: 0 } });
+
+    expect(parseSecretsJson(stdout).skippedFiles).toEqual({ count: 0 });
+  });
+
+  it.each([
+    ['a negative count', { count: -1 }],
+    ['a fractional count', { count: 1.5 }],
+    ['a count that is not a number', { count: '2' }],
+    ['paths that are not all strings', { count: 1, paths: [1] }],
+    ['paths that are not an array', { count: 1, paths: 'tests/fixture.js' }],
+    ['a section that is not an object', 'tests/fixture.js'],
+  ])('drops a skippedFiles section with %s', (_, skippedFiles) => {
+    const stdout = JSON.stringify({ issues: [], skippedFiles });
+
+    expect(parseSecretsJson(stdout)).not.toHaveProperty('skippedFiles');
+  });
+
   it('returns errors field when present', () => {
     const stdout = JSON.stringify({ issues: [], errors: ['scan failed'] });
     const result = parseSecretsJson(stdout);
