@@ -169,12 +169,17 @@ async function resolveWindowsDistribution(command: string): Promise<ScannerInsta
   throw new CommandFailedError('Could not resolve the installed Windows scanner distribution.');
 }
 
-export async function discoverSonarScanner(): Promise<ScannerInstallation | null> {
+/** `Bun.which` reads the PATH from process start, so the one to search is passed in explicitly. */
+export async function discoverSonarScanner(
+  searchPath = process.env.PATH,
+): Promise<ScannerInstallation | null> {
   const names =
     process.platform === 'win32'
       ? ['sonar-scanner.bat', 'sonar-scanner.cmd', 'sonar-scanner.exe', 'sonar-scanner']
       : ['sonar-scanner'];
-  const command = names.map((name) => Bun.which(name)).find((path) => path !== null);
+  const command = names
+    .map((name) => Bun.which(name, { PATH: searchPath }))
+    .find((path) => path !== null);
   if (!command) return null;
   try {
     return ['.bat', '.cmd'].includes(extname(command).toLowerCase())

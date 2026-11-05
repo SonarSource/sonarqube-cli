@@ -24,7 +24,11 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { runScanner, type ScannerRun } from '@/commands/init/scan/run-scanner.ts';
+import {
+  runScanner,
+  type ScannerRun,
+  startScannerInBackground,
+} from '@/commands/init/scan/run-scanner.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
@@ -109,5 +113,159 @@ posixOnly('runScanner', () => {
     expect(error).toBeInstanceOf(CommandFailedError);
     expect((error as CommandFailedError).message).toContain('code 3');
     expect((error as CommandFailedError).remediationHint).toContain('sonar-scanner-');
+  });
+
+  /** A `java` running the given shell lines, for the scanner behaviours the main stub lacks. */
+  function scriptJava(...lines: string[]): string {
+    const path = join(directory, 'script-java');
+    writeFileSync(path, ['#!/bin/sh', ...lines].join('\n'));
+    chmodSync(path, 0o755);
+    return path;
+  }
+
+  async function failureOf(promise: Promise<unknown>): Promise<CommandFailedError> {
+    const error = await promise.catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(CommandFailedError);
+    return error as CommandFailedError;
+  }
+
+  describe('when the analysis task report is unusable', () => {
+    it('fails when the scanner wrote no report', async () => {
+      const error = await failureOf(runScanner(newRun(scriptJava('exit 0'))));
+
+      expect(error.message).toBe('SonarScanner did not produce an analysis task report.');
+      expect(error.remediationHint).toContain('sonar-scanner-');
+    });
+
+    it.each([
+      ['another project', "printf 'ceTaskId=task-1\\nprojectKey=other\\n'"],
+      ['no task id', "printf 'projectKey=my-key\\n'"],
+    ])('fails when the report names %s', async (_case, write) => {
+      const java = scriptJava(
+        'for arg in "$@"; do case "$arg" in -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";; esac; done',
+        `${write} > "$report"`,
+      );
+
+      const error = await failureOf(runScanner(newRun(java)));
+
+      expect(error.message).toBe('SonarScanner produced an invalid analysis task report.');
+    });
+  });
+
+  it('stops a scanner that outlives its budget and says so in the log', async () => {
+    const error = await failureOf(runScanner(newRun(scriptJava('sleep 5')), undefined, 200));
+
+    expect(error.message).toBe('SonarScanner timed out.');
+    expect(error.remediationHint).toContain('sonar-scanner-');
+  });
+
+  it('fails with a hint when the scanner cannot be started at all', async () => {
+    const error = await failureOf(runScanner(newRun(join(directory, 'no-such-java'))));
+
+    expect(error.remediationHint).toContain('sonar-scanner-');
+  });
+});
+
+posixOnly('startScannerInBackground', () => {
+  let directory: string;
+  let pid: number | undefined;
+  let logPath: string | undefined;
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), 'run-scanner-background-test-'));
+    pid = undefined;
+    logPath = undefined;
+  });
+
+  afterEach(() => {
+    if (pid !== undefined) {
+      try {
+        process.kill(pid);
+      } catch {
+        // The scanner has already exited.
+      }
+    }
+    if (logPath) rmSync(logPath, { force: true });
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  function runWith(javaPath: string): ScannerRun {
+    return {
+      scanner: { home: directory, javaPath, classPath: directory, version: '8.1.0.6389' },
+      projectRoot: directory,
+      projectKey: 'my-key',
+      auth: new ResolvedAuth({
+        token: TOKEN,
+        serverUrl: 'https://sonarcloud.io',
+        orgKey: 'my-org',
+        connectionType: 'cloud',
+        source: 'env',
+      }),
+      directory,
+      networkEnv: {},
+      scannerProperties: new Map(),
+    };
+  }
+
+  function scriptJava(...lines: string[]): string {
+    const path = join(directory, 'script-java');
+    writeFileSync(path, ['#!/bin/sh', ...lines].join('\n'));
+    chmodSync(path, 0o755);
+    return path;
+  }
+
+  it('returns the pid of a scanner that keeps running, with its output in the log', async () => {
+    const started = await startScannerInBackground(
+      runWith(scriptJava('echo "args: $*"', 'sleep 5')),
+    );
+    ({ pid, logPath } = started);
+
+    expect(started.pid).toBeGreaterThan(0);
+    const deadline = Date.now() + 5000;
+    let log = readFileSync(started.logPath, 'utf8');
+    while (!log.includes('args:') && Date.now() < deadline) {
+      await Bun.sleep(20);
+      log = readFileSync(started.logPath, 'utf8');
+    }
+    expect(log.startsWith('SonarScanner 8.1.0.6389\nProject: my-key\n')).toBe(true);
+    expect(log).toContain('-Dsonar.projectKey=my-key');
+  });
+
+  it('forces the scanner quiet, so a project file cannot make it echo its properties', async () => {
+    const started = await startScannerInBackground(
+      runWith(scriptJava('echo "args: $*"', 'sleep 5')),
+    );
+    ({ pid, logPath } = started);
+
+    const deadline = Date.now() + 5000;
+    let log = readFileSync(started.logPath, 'utf8');
+    while (!log.includes('args:') && Date.now() < deadline) {
+      await Bun.sleep(20);
+      log = readFileSync(started.logPath, 'utf8');
+    }
+    expect(log).toContain('-Dsonar.verbose=false');
+    expect(log).toContain('-Dsonar.log.level=INFO');
+  });
+
+  it('reports a scanner that dies at once instead of announcing it as started', async () => {
+    const error = await startScannerInBackground(runWith(scriptJava('exit 2'))).catch(
+      (cause: unknown) => cause,
+    );
+
+    expect(error).toBeInstanceOf(CommandFailedError);
+    expect((error as CommandFailedError).message).toBe(
+      'Could not start the SonarScanner in the background.',
+    );
+    expect((error as CommandFailedError).remediationHint).toContain('sonar-scanner-');
+  });
+
+  it('reports a scanner that cannot be started', async () => {
+    const error = await startScannerInBackground(runWith(join(directory, 'no-such-java'))).catch(
+      (cause: unknown) => cause,
+    );
+
+    expect((error as CommandFailedError).message).toBe(
+      'Could not start the SonarScanner in the background.',
+    );
   });
 });

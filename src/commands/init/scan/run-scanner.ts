@@ -37,6 +37,9 @@ import { spawnDetachedToLog, spawnProcessWithTimeout } from '@/core/process/proc
 /** Values shorter than this are left alone when redacting: they would garble unrelated output. */
 const MIN_REDACTED_VALUE_LENGTH = 4;
 
+/** Command-line properties beat every file, so a project cannot make a detached scanner verbose. */
+const QUIET_ARGUMENTS = ['-Dsonar.verbose=false', '-Dsonar.log.level=INFO'];
+
 export interface ScannerRun {
   scanner: ScannerInstallation;
   projectRoot: string;
@@ -215,9 +218,10 @@ export async function runScanner(
 
 /**
  * Starts the scanner in the background and returns at once. The log file receives the scanner's raw
- * output, unredacted: it echoes no property unless `sonar.verbose` or `sonar.log.level` is set,
- * and `validateScanFlags()` refuses those with `--detach`. Nothing watches the analysis, so no task
- * id is read.
+ * output, unredacted: it echoes no property unless `sonar.verbose` or `sonar.log.level` raises its
+ * verbosity. `validateScanFlags()` refuses those flags with `--detach`, and {@link QUIET_ARGUMENTS}
+ * overrides the same settings from `sonar-project.properties` or the global scanner configuration.
+ * Nothing watches the analysis, so no task id is read.
  */
 export async function startScannerInBackground(
   run: ScannerRun,
@@ -227,7 +231,7 @@ export async function startScannerInBackground(
   try {
     const pid = await spawnDetachedToLog(
       run.scanner.javaPath,
-      scannerArguments(run, join(run.directory, 'report-task.txt')),
+      [...scannerArguments(run, join(run.directory, 'report-task.txt')), ...QUIET_ARGUMENTS],
       { cwd: run.projectRoot, env: scannerEnvironment(run), logPath },
     );
     return { pid, logPath };
