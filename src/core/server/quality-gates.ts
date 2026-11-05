@@ -52,4 +52,11 @@ export class QualityGatesClient {
       .getOrNullIf404<ProjectStatusResponse>('/api/qualitygates/project_status', queryParams)
       .map((result) => result?.projectStatus ?? null);
   }
+
+  /** The quality gate verdict of one analysis, which stays correct when a newer one follows. */
+  getAnalysisStatus(analysisId: string): ResultAsync<ProjectStatus, HttpClientError> {
+    return this.client
+      .get<ProjectStatusResponse>('/api/qualitygates/project_status', { analysisId })
+      .map((result) => result.projectStatus);
+  }
 }
