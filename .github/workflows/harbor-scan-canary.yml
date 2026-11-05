@@ -1,0 +1,206 @@
+name: Harbor Scan Canary
+
+on:
+  push:
+    branches:
+      - tmp/kk/CLI-1482-scan-canary
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  canary:
+    name: Canary - ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos' && 'macos-latest-xlarge' || 'sonar-m' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, macos]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Cloudflare WARP
+        if: ${{ matrix.os == 'macos' }}
+        uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
+
+      - name: Generate the made-up values
+        shell: bash
+        run: |
+          python3 -I - <<'PY'
+          import hashlib, json, os
+          seed = "-".join(os.environ[name] for name in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "RUNNER_OS"))
+          alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+          def derive(label, length):
+              number = int.from_bytes(hashlib.sha256(f"{seed}:{label}".encode()).digest(), "big")
+              chars = []
+              while len(chars) < length:
+                  number, rest = divmod(number, 62)
+                  chars.append(alphabet[rest])
+              return "".join(chars)
+          values = {label: "ghp_" + derive(label, 36) for label in ("huge", "md", "html", "testsh", "xtest", "big", "cr")}
+          values["portkey"] = "pk-" + derive("portkey", 40)
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "canary-values.json"), "w") as out:
+              json.dump(values, out)
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("CANARY_PORTKEY_API_KEY=" + values["portkey"] + "\n")
+          print("::add-mask::" + values["portkey"])
+          PY
+
+      - name: Create the fake Harbor jobs tree
+        shell: bash
+        run: |
+          python3 -I - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          temp = Path(os.environ["RUNNER_TEMP"])
+          values = json.loads((temp / "canary-values.json").read_text())
+          known = [line for line in Path("benchmarks/harbor/ci/known-secrets.txt").read_text().splitlines() if line]
+          trial = Path("harbor-jobs/linux/auth--missing-org__x")
+          def write(relative, content):
+              path = trial / relative
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(content)
+          line = {"type": "user", "message": {"content": [{"type": "tool_result", "content": "env dump SONARQUBE_CLI_TOKEN=" + values["huge"] + " " + "word " * 300000}]}}
+          write("agent/claude-code.txt", json.dumps(line))
+          write("agent/portkey.txt", "ANTHROPIC_CUSTOM_HEADERS=x-portkey-api-key: " + values["portkey"] + "\n")
+          write("agent/known.txt", "".join(f"planted {value}\n" for value in known))
+          write("agent/clean.txt", "nothing to see here\n")
+          write("agent/notes.md", "note " + values["md"] + "\n")
+          write("agent/report.html", "<p>" + values["html"] + "</p>\n")
+          write("tests/test.sh", "echo " + values["testsh"] + "\n")
+          write("agent/x.test.txt", "note " + values["xtest"] + "\n")
+          write("agent/big.jsonl", ("a" * 99 + "\n") * 25000 + "x=" + values["big"] + "\n")
+          write("agent/cr-only.txt", "a\rb\rtoken=" + values["cr"] + "\r")
+          hashes = {name: hashlib.sha256((trial / name).read_bytes()).hexdigest() for name in ("agent/known.txt", "agent/clean.txt")}
+          (temp / "canary-hashes.json").write_text(json.dumps(hashes))
+          PY
+
+      - name: Install the SonarQube CLI for the secrets scan
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
+          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
+
+      - name: Scan Harbor jobs for secrets and redact them
+        id: scan
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
+          PORTKEY_API_KEY: ${{ env.CANARY_PORTKEY_API_KEY }}
+          SONARQUBE_CLI_ORG: sonarlint-it
+          SONARQUBE_CLI_SERVER: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
+        run: |
+          python3 -I benchmarks/harbor/ci/scan-secrets.py harbor-jobs
+
+      - name: Keep the scanned leak tree
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: mv harbor-jobs leak-result
+
+      - name: Create the clean tree with only the planted values
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          python3 -I - <<'PY'
+          from pathlib import Path
+          known = [line for line in Path("benchmarks/harbor/ci/known-secrets.txt").read_text().splitlines() if line]
+          trial = Path("harbor-jobs/linux/clean-trial/agent")
+          trial.mkdir(parents=True)
+          (trial / "known.txt").write_text("".join(f"planted {value}\n" for value in known))
+          (trial / "clean.txt").write_text("nothing to see here\n")
+          PY
+
+      - name: Scan Harbor jobs for secrets and redact them
+        id: scan_clean
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
+          PORTKEY_API_KEY: ${{ env.CANARY_PORTKEY_API_KEY }}
+          SONARQUBE_CLI_ORG: sonarlint-it
+          SONARQUBE_CLI_SERVER: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
+        run: |
+          python3 -I benchmarks/harbor/ci/scan-secrets.py harbor-jobs
+
+      - name: Print the tool versions
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          uname -sm
+          python3 --version
+          sonar --version | tail -n 1
+          ls "${HOME}/.sonar/sonarqube-cli/bin"
+
+      - name: Assert the scan results
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          LEAK_SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          CLEAN_SCAN_OUTCOME: ${{ steps.scan_clean.outcome }}
+        run: |
+          python3 -I - <<'PY'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          temp = Path(os.environ["RUNNER_TEMP"])
+          values = json.loads((temp / "canary-values.json").read_text())
+          hashes = json.loads((temp / "canary-hashes.json").read_text())
+          trial = Path("leak-result/linux/auth--missing-org__x")
+          marker_path = trial / "secrets-leak.json"
+          results = {}
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+          def redacted(relative, label):
+              path = trial / relative
+              if not path.exists():
+                  return False
+              text = path.read_text()
+              return values[label] not in text and "[REDACTED]" in text
+          results["leak_scan_step_failed"] = os.environ["LEAK_SCAN_OUTCOME"] == "failure"
+          results["clean_scan_step_succeeded"] = os.environ["CLEAN_SCAN_OUTCOME"] == "success"
+          results["claude_code_token_redacted"] = redacted("agent/claude-code.txt", "huge")
+          claude_code = trial / "agent/claude-code.txt"
+          try:
+              text = claude_code.read_text()
+              json.loads(text)
+              results["claude_code_still_one_json_line"] = "\n" not in text.strip("\n")
+          except (OSError, ValueError):
+              results["claude_code_still_one_json_line"] = False
+          portkey = trial / "agent/portkey.txt"
+          results["portkey_literal_removed"] = portkey.exists() and values["portkey"] not in portkey.read_text() and "[REDACTED]" in portkey.read_text()
+          results["planted_known_values_untouched"] = digest(trial / "agent/known.txt") == hashes["agent/known.txt"]
+          results["clean_file_identical"] = digest(trial / "agent/clean.txt") == hashes["agent/clean.txt"]
+          results["md_redacted"] = redacted("agent/notes.md", "md")
+          results["html_redacted"] = redacted("agent/report.html", "html")
+          results["tests_dir_file_redacted"] = redacted("tests/test.sh", "testsh")
+          results["test_named_file_redacted"] = redacted("agent/x.test.txt", "xtest")
+          results["big_jsonl_redacted"] = redacted("agent/big.jsonl", "big")
+          results["cr_only_file_removed"] = not (trial / "agent/cr-only.txt").exists()
+          marker = json.loads(marker_path.read_text()) if marker_path.exists() else {"files": []}
+          entries = {entry["path"]: entry for entry in marker["files"]}
+          results["marker_exists"] = marker_path.exists()
+          results["marker_has_rule_keys"] = any("secrets:S6689" in entry["rules"] for entry in entries.values()) and any("env:PORTKEY_API_KEY" in entry["rules"] for entry in entries.values())
+          results["marker_counts_are_positive"] = bool(entries) and all(count > 0 for entry in entries.values() for count in entry["rules"].values())
+          results["marker_cr_entry_not_redacted"] = entries.get("linux/auth--missing-org__x/agent/cr-only.txt", {}).get("redacted") is False
+          results["marker_has_no_value"] = marker_path.exists() and not any(value in marker_path.read_text() for value in values.values())
+          results["no_value_left_in_leak_tree"] = not any(value.encode() in path.read_bytes() for path in Path("leak-result").rglob("*") if path.is_file() for value in values.values())
+          clean_trial = Path("harbor-jobs/linux/clean-trial")
+          results["clean_tree_known_values_untouched"] = digest(clean_trial / "agent/known.txt") == hashes["agent/known.txt"]
+          results["clean_tree_clean_file_identical"] = digest(clean_trial / "agent/clean.txt") == hashes["agent/clean.txt"]
+          results["clean_tree_has_no_marker"] = not list(Path("harbor-jobs").rglob("secrets-leak.json"))
+          for name, ok in results.items():
+              print(f"{name}: {ok}")
+          sys.exit(0 if all(results.values()) else 1)
+          PY
