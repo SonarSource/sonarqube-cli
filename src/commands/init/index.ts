@@ -95,7 +95,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   }
 }
 
-/** Only a project this run created or found on the server unbound gets a first analysis. */
+/** Only a project this run created gets a first analysis; a linked or bound one already has results. */
 async function scanCreatedProject(
   outcome: InitOutcome,
   projectRoot: string,

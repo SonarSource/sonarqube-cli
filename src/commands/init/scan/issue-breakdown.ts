@@ -57,7 +57,7 @@ interface BreakdownQuery {
   organization: string | undefined;
 }
 
-async function readRow(
+function readRow(
   { issues, projectKey, organization }: BreakdownQuery,
   quality: SoftwareQuality,
 ): Promise<QualityRow | null> {

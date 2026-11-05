@@ -62,7 +62,7 @@ export type InitOutcome =
   | { kind: 'linked'; projectKey: string }
   /** A project bound to the repository was created and mapped. */
   | { kind: 'bound'; projectKey: string }
-  /** A project without repository binding was created, or found under its generated key, and mapped. */
+  /** A project without repository binding was created and mapped. */
   | { kind: 'unbound'; projectKey: string }
   /** The user declined the creation: nothing was created. */
   | { kind: 'declined' };
