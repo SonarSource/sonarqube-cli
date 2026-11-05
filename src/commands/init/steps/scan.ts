@@ -39,6 +39,11 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { DEFAULT_STATUSES } from '../../list/issues.ts';
 import { requireAnswer } from '../answer.ts';
+import {
+  formatIssueBreakdown,
+  type IssueBreakdown,
+  readIssueBreakdown,
+} from '../scan/issue-breakdown.ts';
 import { runScanner, startScannerInBackground } from '../scan/run-scanner.ts';
 import { assertScannerNetworkUsable, scannerNetworkEnv } from '../scan/scanner-network.ts';
 import type { DetectDeps } from './detect.ts';
@@ -65,6 +70,7 @@ export type ScanResult =
       logPath: string;
       qualityGate: QualityGateStatus | null;
       openIssues: number | null;
+      issueBreakdown: IssueBreakdown | null;
     };
 
 /** Without a terminal there is nobody to ask, so only a scan flag counts as the request. */
@@ -127,7 +133,11 @@ async function readResults(
   deps: DetectDeps,
   projectKey: string,
   analysisId: string,
-): Promise<{ qualityGate: QualityGateStatus | null; openIssues: number | null }> {
+): Promise<{
+  qualityGate: QualityGateStatus | null;
+  openIssues: number | null;
+  issueBreakdown: IssueBreakdown | null;
+}> {
   const { http, auth } = deps;
   const qualityGate = await new QualityGatesClient(http).getAnalysisStatus(analysisId).match(
     (status) => status.status,
@@ -136,7 +146,8 @@ async function readResults(
       return null;
     },
   );
-  const openIssues = await new IssuesClient(http)
+  const issues = new IssuesClient(http);
+  const openIssues = await issues
     .searchIssues({
       projects: projectKey,
       organization: auth.orgKey,
@@ -151,7 +162,11 @@ async function readResults(
         return null;
       },
     );
-  return { qualityGate, openIssues };
+  const issueBreakdown =
+    openIssues === null || openIssues === 0
+      ? null
+      : await readIssueBreakdown({ issues, projectKey, organization: auth.orgKey }, openIssues);
+  return { qualityGate, openIssues, issueBreakdown };
 }
 
 async function confirmScan(console: Console): Promise<boolean> {
@@ -266,4 +281,9 @@ export function reportScan(scan: ScanResult, projectKey: string, console: Consol
   console.print(
     scan.openIssues === null ? 'Open issues: not available.' : `Open issues: ${scan.openIssues}`,
   );
+  if (scan.issueBreakdown) {
+    for (const line of formatIssueBreakdown(scan.issueBreakdown)) {
+      console.print(line);
+    }
+  }
 }
