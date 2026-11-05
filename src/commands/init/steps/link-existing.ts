@@ -32,7 +32,8 @@ import type { DetectDeps } from './detect.ts';
 import { linkCommandFor, showAnalysisResults, writeMapping } from './mapping.ts';
 
 /**
- * Asks to link the directory to the project the server already binds to the repository. When the
+ * Asks to link the directory to the project that already exists for the repository: the one the
+ * server binds to it, or the one `unbound-new` found under its generated key. When the
  * user declines, they are asked whether to link another existing project, picked with the
  * `sonar link` picker. Declining that continues as `unbound-new`, and leaving the picker asks
  * whether to abandon linking (default no, which reopens the picker) before doing the same. The
