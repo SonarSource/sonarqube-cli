@@ -722,10 +722,12 @@ describe('sonar architecture intended set on the public API', () => {
       ...NEXT[0],
       language: 'cs',
       groups: [{ label: 'CsDomain', patterns: ['cs:**'] }],
+      constraints: [],
     };
     const javaFile: IntendedArchitecture = {
       ...JAVA_FILE,
       groups: [{ label: 'FileDomain', patterns: ['src/**'] }],
+      constraints: [],
     };
     const original = [INTENDED[0], cs, javaFile];
     const server = await harness
@@ -1068,7 +1070,11 @@ describe('sonar architecture intended set on the public API', () => {
   });
   it('preserves other perspectives when changing the second qualifier of one language', async () => {
     const server = await startWith((fake) => fake.withIntended([...INTENDED, JAVA_FILE]));
-    const desiredFile = { ...JAVA_FILE, groups: [{ label: 'Changed', patterns: [] }] };
+    const desiredFile = {
+      ...JAVA_FILE,
+      groups: [{ label: 'Changed', patterns: [] }],
+      constraints: [],
+    };
     const saved = await readSaved();
     const preview = await setFile({ ...saved, models: [...INTENDED, desiredFile] }, ' --dry-run');
     expect(preview.exitCode).toBe(0);

@@ -97,6 +97,10 @@ describe('parseIntendedFile', () => {
   it('accepts a glob as a constraint end', () => {
     const glob = { ...MODEL, constraints: [{ from: 'src/*', to: 'src/api' }] };
     expect(parseIntendedFile([glob]).models[0].constraints).toEqual(glob.constraints);
+    expect(
+      parseIntendedFile([{ ...MODEL, constraints: [{ from: 'src/*', to: 'src/*' }] }]).models[0]
+        .constraints,
+    ).toHaveLength(1);
   });
 
   it('accepts public-schema patterns without renderer semantics', () => {
@@ -108,10 +112,36 @@ describe('parseIntendedFile', () => {
         { label: 'A', patterns: ['src**'] },
         { label: 'B', patterns: ['src**'] },
       ],
-      constraints: [{ from: 'arbitrary pattern', to: 'anything**' }],
+      constraints: [{ from: 'A', to: 'anything**' }],
     };
     expect(parseIntendedFile([model]).models[0].constraints).toEqual(model.constraints);
     expect(parseIntendedFile([model]).models[0].groups[1].patterns).toEqual([]);
+  });
+
+  it('rejects missing, ambiguous and self-referential exact constraint endpoints', () => {
+    for (const constraints of [
+      [{ from: 'src/ui', to: 'missing' }],
+      [{ from: 'src/ui', to: 'src/ui' }],
+      [{ from: '', to: 'src/api' }],
+    ])
+      expect(problemsOf([{ ...MODEL, constraints }])).toContain('nothing was changed');
+    expect(problemsOf([{ ...MODEL, constraints: [{ from: 'src/ui', to: 'src/ui' }] }])).toContain(
+      'refers to itself',
+    );
+    const ambiguous = { ...MODEL, groups: [...MODEL.groups, { label: 'src/api' }] };
+    expect(problemsOf([ambiguous])).toContain('does not name a unique group');
+  });
+
+  it('preserves constraints below a server-resolved pattern import', () => {
+    const model = {
+      ...MODEL,
+      groups: [
+        { label: 'Shared', patternId: '11111111-1111-4111-8111-111111111111' },
+        ...MODEL.groups,
+      ],
+      constraints: [{ from: 'Shared/Hidden', to: 'src/ui' }],
+    };
+    expect(parseIntendedFile([model]).models[0].constraints).toEqual(model.constraints);
   });
 
   it('never drops an invalid supplied revision into an unchecked write', () => {
