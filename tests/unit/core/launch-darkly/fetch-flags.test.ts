@@ -18,42 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-
-import type { FeatureFlagIdentity } from '@/core/launch-darkly';
+import { NetworkConfigError } from '@/core/errors.ts';
+import { fetchFlagsFromLaunchDarkly } from '@/core/launch-darkly';
 import * as ldConstants from '@/core/launch-darkly/constants.ts';
-
-type LdClientLogger = {
-  debug: (message: string) => void;
-  info: (message: string) => void;
-  warn: (message: string) => void;
-  error: (message: string) => void;
-};
-
-const waitForInitialization = mock((_timeoutSeconds?: number) => Promise.resolve(undefined));
-const allFlags = mock((): Record<string, unknown> => ({
-  'cli.beta.private': true,
-  'cli.beta.other': false,
-  'cli.beta.stringy': 'yes',
-}));
-const close = mock(() => Promise.resolve(undefined));
-const initialize = mock((_clientSideId: string, _context: unknown, _options: unknown) => ({
-  waitForInitialization,
-  allFlags,
-  close,
-}));
-
-void mock.module('launchdarkly-node-client-sdk', () => ({
-  initialize,
-}));
-
-const { fetchFlagsFromLaunchDarkly } = await import('@/core/launch-darkly');
-const { getLaunchDarklyDir, LAUNCHDARKLY_INIT_TIMEOUT_SECONDS } =
-  await import('@/core/launch-darkly/constants.ts');
+import type { FeatureFlagIdentity } from '@/core/launch-darkly/types.ts';
+import logger from '@/core/observability/logger.ts';
+import * as network from '@/core/server/fetch.ts';
 
 const cloudIdentity: FeatureFlagIdentity = {
   connectionType: 'cloud',
@@ -64,112 +36,104 @@ const cloudIdentity: FeatureFlagIdentity = {
 };
 
 describe('fetchFlagsFromLaunchDarkly', () => {
-  let tempHome: string;
-  let previousUserHome: string | undefined;
-  let clientSideIdSpy: { mockRestore: () => void } | undefined;
+  let request: ReturnType<typeof spyOn<typeof network, 'fetchAuthenticated'>>;
 
   beforeEach(() => {
-    tempHome = mkdtempSync(join(tmpdir(), 'sqcli-ld-fetch-'));
-    previousUserHome = process.env.SONAR_USER_HOME;
-    process.env.SONAR_USER_HOME = tempHome;
-    waitForInitialization.mockClear();
-    waitForInitialization.mockImplementation(() => Promise.resolve(undefined));
-    allFlags.mockClear();
-    allFlags.mockImplementation(() => ({
-      'cli.beta.private': true,
-      'cli.beta.other': false,
-      'cli.beta.stringy': 'yes',
-    }));
-    close.mockClear();
-    close.mockImplementation(() => Promise.resolve(undefined));
-    initialize.mockClear();
-  });
-
-  afterEach(() => {
-    clientSideIdSpy?.mockRestore();
-    clientSideIdSpy = undefined;
-    if (previousUserHome === undefined) {
-      delete process.env.SONAR_USER_HOME;
-    } else {
-      process.env.SONAR_USER_HOME = previousUserHome;
-    }
-    rmSync(tempHome, { recursive: true, force: true });
-  });
-
-  it('initializes the SDK with local storage under the CLI LaunchDarkly dir', async () => {
-    const flags = await fetchFlagsFromLaunchDarkly(cloudIdentity);
-
-    expect(flags).toEqual({
-      'cli.beta.private': true,
-      'cli.beta.other': false,
-      'cli.beta.stringy': false,
-    });
-    expect(initialize).toHaveBeenCalledTimes(1);
-    const [, , options] = initialize.mock.calls[0] as [
-      string,
-      unknown,
-      { localStoragePath: string; logger: LdClientLogger },
-    ];
-    expect(options.localStoragePath).toBe(getLaunchDarklyDir());
-    expect(waitForInitialization).toHaveBeenCalledWith(LAUNCHDARKLY_INIT_TIMEOUT_SECONDS);
-    expect(close).toHaveBeenCalledTimes(1);
-
-    // Exercise the SDK logger adapters (debug/info/warn/error all map to logger.debug).
-    options.logger.debug('d');
-    options.logger.info('i');
-    options.logger.warn('w');
-    options.logger.error('e');
-  });
-
-  it('sends an enterprise context to LaunchDarkly when the UUID is known', async () => {
-    await fetchFlagsFromLaunchDarkly({
-      ...cloudIdentity,
-      enterpriseUuid: 'ent-1',
-    });
-
-    const [, context] = initialize.mock.calls[0];
-    expect(context).toEqual({
-      kind: 'multi',
-      user: { key: 'user-1' },
-      organization: { key: 'org-1' },
-      enterprise: { key: 'ent-1' },
-    });
-  });
-
-  it('returns null when SDK initialization fails', async () => {
-    waitForInitialization.mockImplementation(() => Promise.reject(new Error('timeout')));
-
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
-    expect(close).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns null when the client-side ID is missing', async () => {
-    clientSideIdSpy = spyOn(ldConstants, 'resolveLaunchDarklyClientSideId').mockReturnValue('');
-
-    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
-    expect(initialize).not.toHaveBeenCalled();
-  });
-
-  it('returns null when the identity cannot build an LD context', async () => {
-    expect(
-      await fetchFlagsFromLaunchDarkly({
-        connectionType: 'cloud',
-        userUuid: 'user-1',
-        organizationUuidV4: null,
-        enterpriseUuid: null,
-        sqsInstallationId: null,
+    request = spyOn(network, 'fetchAuthenticated').mockResolvedValue(
+      Response.json({
+        'cli.beta.private': { value: true, variation: 0 },
+        'cli.beta.other': { value: false, variation: 1 },
+        'cli.beta.stringy': { value: 'yes' },
       }),
-    ).toBeNull();
-    expect(initialize).not.toHaveBeenCalled();
+    );
   });
 
-  it('still returns flags when client.close rejects', async () => {
-    close.mockImplementation(() => Promise.reject(new Error('close failed')));
+  afterEach(() => request.mockRestore());
 
+  it('fetches evaluations through the canonical network wrapper with a bounded request', async () => {
     expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({
       'cli.beta.private': true,
       'cli.beta.other': false,
       'cli.beta.stringy': false,
     });
+    expect(request).toHaveBeenCalledTimes(1);
+    const [url, options] = request.mock.calls[0];
+    const endpoint = new URL(url);
+    expect(endpoint.origin).toBe('https://clientsdk.launchdarkly.com');
+    expect(endpoint.pathname).toStartWith(
+      `/sdk/evalx/${ldConstants.resolveLaunchDarklyClientSideId()}/contexts/`,
+    );
+    expect(
+      JSON.parse(Buffer.from(endpoint.pathname.split('/').at(-1)!, 'base64url').toString()),
+    ).toEqual({
+      kind: 'multi',
+      user: { key: 'user-1' },
+      organization: { key: 'org-1' },
+    });
+    expect(options.method).toBe('GET');
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('preserves the enterprise context', async () => {
+    await fetchFlagsFromLaunchDarkly({ ...cloudIdentity, enterpriseUuid: 'ent-1' });
+    const context = JSON.parse(
+      Buffer.from(
+        new URL(request.mock.calls[0][0]).pathname.split('/').at(-1)!,
+        'base64url',
+      ).toString(),
+    );
+    expect(context.enterprise).toEqual({ key: 'ent-1' });
+  });
+
+  it('accepts an empty successful evaluation without poisoning failures', async () => {
+    request.mockResolvedValue(Response.json({}));
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toEqual({});
+  });
+
+  for (const body of [null, [], 'invalid', { flag: null }, { flag: true }, { flag: {} }]) {
+    it(`rejects malformed flag payload ${JSON.stringify(body)}`, async () => {
+      request.mockResolvedValue(Response.json(body));
+      expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+    });
+  }
+
+  it('returns null for unsuccessful HTTP responses', async () => {
+    request.mockResolvedValue(new Response('', { status: 503 }));
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+  });
+
+  it('returns null for invalid JSON', async () => {
+    request.mockResolvedValue(new Response('invalid'));
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+  });
+
+  it('does not retry directly when the network policy rejects a request', async () => {
+    request.mockRejectedValue(
+      new NetworkConfigError('SONAR_HTTPS_PROXY_URL must be an HTTP(S) URL'),
+    );
+    const warning = spyOn(logger, 'warn').mockImplementation(() => undefined);
+    expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(warning).toHaveBeenCalledWith(
+      'LaunchDarkly flag refresh failed: SONAR_HTTPS_PROXY_URL must be an HTTP(S) URL',
+    );
+    warning.mockRestore();
+  });
+
+  it('returns null when the client-side ID is missing', async () => {
+    const id = spyOn(ldConstants, 'resolveLaunchDarklyClientSideId').mockReturnValue('');
+    try {
+      expect(await fetchFlagsFromLaunchDarkly(cloudIdentity)).toBeNull();
+      expect(request).not.toHaveBeenCalled();
+    } finally {
+      id.mockRestore();
+    }
+  });
+
+  it('returns null when the context is incomplete', async () => {
+    expect(
+      await fetchFlagsFromLaunchDarkly({ ...cloudIdentity, organizationUuidV4: null }),
+    ).toBeNull();
+    expect(request).not.toHaveBeenCalled();
   });
 });

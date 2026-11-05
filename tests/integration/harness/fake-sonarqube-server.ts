@@ -610,6 +610,7 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
   private sqaaStatusCode?: number;
+  private sqaaStatusSequence: number[] = [];
   private sqaaStatusBody?: string;
   private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
@@ -828,6 +829,11 @@ export class FakeSonarQubeServerBuilder {
   withProjectsSearchError(statusCode: number, body = ''): this {
     this.projectsSearchErrorStatusCode = statusCode;
     this.projectsSearchErrorBody = body;
+    return this;
+  }
+
+  withSqaaStatusSequence(statuses: number[]): this {
+    this.sqaaStatusSequence = [...statuses];
     return this;
   }
 
@@ -1136,6 +1142,7 @@ export class FakeSonarQubeServerBuilder {
       revokeTokenResponseBody,
       sqaaResponse,
       sqaaStatusCode,
+      sqaaStatusSequence,
       sqaaStatusBody,
       sqaaPayloadLimit,
       sqaaEntitlementOrgs,
@@ -2213,12 +2220,13 @@ export class FakeSonarQubeServerBuilder {
           (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
           req.method === 'POST'
         ) {
-          if (sqaaStatusCode !== undefined) {
+          const statusCode = sqaaStatusSequence.shift() ?? sqaaStatusCode;
+          if (statusCode !== undefined && statusCode !== 200) {
             if (sqaaStatusBody === '') {
-              return new Response('', { status: sqaaStatusCode });
+              return new Response('', { status: statusCode });
             }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
-              status: sqaaStatusCode,
+              status: statusCode,
               headers: { 'Content-Type': 'application/json' },
             });
           }
