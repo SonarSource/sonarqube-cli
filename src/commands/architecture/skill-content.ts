@@ -61,9 +61,23 @@ This current-graph cap does not apply to complete intended exports. Keep large i
 in local files rather than pasting them into the conversation. Never substitute a partial view
 when a complete export is required for a write.
 
+## File-managed intended architecture
+
+A repository file, \`sonar-architecture.json\`, \`.yml\` or \`.yaml\` in the project's base directory, can
+manage the intended model instead of SonarQube. The intended read reports this as source \`FILE\` and
+returns no models; a write through the CLI or MCP is then refused. Analyses use the file, not the
+model stored in SonarQube.
+
+When the source is \`FILE\`, or such a file is in the checkout, change the intended architecture by
+editing that file in the repository and proposing the change through a commit or pull request. The
+file holds \`{ "perspectives": [...] }\` with \`qualifiers\` per perspective, not the read's export
+shape. Never call the intended write to work around a file-managed model, and do not change the
+project's model location setting unless the user asks for it.
+
 ## Intended-model edits
 
-The write replaces the complete intended model; omitted content is removed.
+These steps apply when the source is not \`FILE\`. The write replaces the complete intended model;
+omitted content is removed.
 
 1. Obtain the complete intended export without component, depth or language filters. Retain all
    perspectives and the exported revision as the base for the edit.
@@ -74,7 +88,7 @@ The write replaces the complete intended model; omitted content is removed.
 4. Show the returned diff and warnings. Apply only after the user confirms that preview, using
    exactly the approved model and revision.
 5. Read the saved intended architecture to verify the result. It takes effect from the project's
-   next analysis.
+   next analysis, unless a file in the repository manages the model.
 
 Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
