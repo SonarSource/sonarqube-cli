@@ -19,26 +19,22 @@
  */
 
 /**
- * The onboarding path `sonar init` selected for the follow-up tickets to run.
+ * The onboarding path `sonar init` selected, before anything ran.
  * `projectRoot` is always the directory `init` was pointed at (`--path`, default the current one).
  * `remote` is the git origin URL without embedded credentials.
  */
-export type InitOutcome =
+export type InitPath =
   /**
    * Nothing to do: `.sonar-config.json` already links this directory to the active connection.
    * `projectKeys` is a list because `.sonar-config.json` can map several projects, for a monorepo.
    */
-  | { path: 'complete'; projectRoot: string; projectKeys: string[] }
-  /**
-   * The server already binds the git remote to a project of the active organization.
-   * `linked` is set once the user confirmed and `.sonar-config.json` maps it.
-   */
+  | { path: 'complete'; projectRoot: string; projectKeys: readonly string[] }
+  /** The server already binds the git remote to a project of the active organization. */
   | {
       path: 'link-existing';
       projectRoot: string;
       remote: string;
       projectKey: string;
-      linked?: true;
     }
   /** No project exists yet and the user agreed to bind the new one to the repository. */
   | {
@@ -47,23 +43,26 @@ export type InitOutcome =
       remote: string;
       /** What `sonar import --repo` expects for the remote: `owner/repo`, or `project/repo` on Azure DevOps. */
       repositorySlug: string;
-      projectKey?: string;
     }
   /**
    * No project exists yet and it will not be bound to the repository: there is no git remote
    * (`remote` absent), the platform cannot be bound, or the user declined or could not be asked.
-   * `sonar init` then creates the project unless the user declines (`declined`).
    */
-  | {
-      path: 'unbound-new';
-      projectRoot: string;
-      remote?: string;
-      /** Set once the project exists on the server and `.sonar-config.json` maps it. */
-      projectKey?: string;
-      /** The user declined the creation: nothing was created. */
-      declined?: true;
-    };
+  | { path: 'unbound-new'; projectRoot: string; remote?: string };
 
-export type LinkExistingOutcome = Extract<InitOutcome, { path: 'link-existing' }>;
-export type UnboundNewOutcome = Extract<InitOutcome, { path: 'unbound-new' }>;
-export type BoundNewOutcome = Extract<InitOutcome, { path: 'bound-new' }>;
+/** What `sonar init` ended with once the selected path ran. */
+export type InitOutcome =
+  /** `.sonar-config.json` already linked this directory to the active connection. */
+  | { kind: 'complete'; projectKeys: readonly string[] }
+  /** The directory was mapped to a project that already existed on the server. */
+  | { kind: 'linked'; projectKey: string }
+  /** A project bound to the repository was created and mapped. */
+  | { kind: 'bound'; projectKey: string }
+  /** A project without repository binding was created, or found under its generated key, and mapped. */
+  | { kind: 'unbound'; projectKey: string }
+  /** The user declined the creation: nothing was created. */
+  | { kind: 'declined' };
+
+export type LinkExistingPath = Extract<InitPath, { path: 'link-existing' }>;
+export type BoundNewPath = Extract<InitPath, { path: 'bound-new' }>;
+export type UnboundNewPath = Extract<InitPath, { path: 'unbound-new' }>;

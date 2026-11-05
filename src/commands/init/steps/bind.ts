@@ -28,7 +28,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { BoundNewOutcome, InitOutcome } from '../init-outcome.ts';
+import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   projectDashboardUrl,
@@ -130,9 +130,9 @@ async function importRepository(
  * platform authorization.
  */
 export async function runBoundNew(
-  { projectRoot, remote, repositorySlug }: BoundNewOutcome,
+  { projectRoot, remote, repositorySlug }: BoundNewPath,
   { auth, http, console }: DetectDeps,
-): Promise<InitOutcome> {
+): Promise<InitOutcome | UnboundNewPath> {
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const almKey =
@@ -156,5 +156,5 @@ export async function runBoundNew(
     console,
     'No analysis results yet: the first analysis of the new project is pending.',
   );
-  return { path: 'bound-new', projectRoot, remote, repositorySlug, projectKey };
+  return { kind: 'bound', projectKey };
 }

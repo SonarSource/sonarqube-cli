@@ -23,12 +23,12 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
+import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
-  type UnboundNewFlags,
-  validateUnboundNewFlags,
-  warnIgnoredUnboundNewFlags,
-} from './flags.ts';
-import type { InitOutcome } from './init-outcome.ts';
+  type UnboundNewOptions,
+  validateUnboundNewOptions,
+  warnIgnoredUnboundNewOptions,
+} from './options.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
 import { runBoundNew } from './steps/bind.ts';
@@ -54,13 +54,13 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
-  const flags = validateUnboundNewFlags(options);
+  const unboundNewOptions = validateUnboundNewOptions(options);
 
-  const { outcome, auth } = await run(projectRoot, ctx, interactive, flags);
-  if (outcome.path !== 'unbound-new') {
-    warnIgnoredUnboundNewFlags(flags, ctx.console);
+  const { outcome, auth } = await run(projectRoot, ctx, interactive, unboundNewOptions);
+  if (outcome.kind !== 'unbound' && outcome.kind !== 'declined') {
+    warnIgnoredUnboundNewOptions(unboundNewOptions, ctx.console);
   }
-  const declined = outcome.path === 'unbound-new' && outcome.declined === true;
+  const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
   renderInitOutcome(outcome, ctx.console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
@@ -74,13 +74,13 @@ async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   interactive: boolean,
-  flags: UnboundNewFlags,
+  unboundNewOptions: UnboundNewOptions,
 ): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
   const auth = await resolveInitAuth(ctx, interactive);
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
   const detected = await detectInitPath(projectRoot, deps);
-  return { outcome: await runDetectedPath(detected, deps, flags), auth };
+  return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth };
 }
 
 /**
@@ -88,26 +88,26 @@ async function run(
  * linking, so it continues into the project creation.
  */
 async function runDetectedPath(
-  outcome: InitOutcome,
+  detected: InitPath,
   deps: DetectDeps,
-  flags: UnboundNewFlags,
+  unboundNewOptions: UnboundNewOptions,
 ): Promise<InitOutcome> {
-  switch (outcome.path) {
+  switch (detected.path) {
     case 'bound-new':
-      return fallBack(await runBoundNew(outcome, deps), deps, flags);
+      return fallBack(await runBoundNew(detected, deps), deps, unboundNewOptions);
     case 'link-existing':
-      return fallBack(await runLinkExisting(outcome, deps), deps, flags);
+      return fallBack(await runLinkExisting(detected, deps), deps, unboundNewOptions);
     case 'unbound-new':
-      return runUnboundNew(outcome, deps, flags);
+      return runUnboundNew(detected, deps, unboundNewOptions);
     case 'complete':
-      return outcome;
+      return { kind: 'complete', projectKeys: detected.projectKeys };
   }
 }
 
 function fallBack(
-  outcome: InitOutcome,
+  result: InitOutcome | UnboundNewPath,
   deps: DetectDeps,
-  flags: UnboundNewFlags,
+  unboundNewOptions: UnboundNewOptions,
 ): InitOutcome | Promise<InitOutcome> {
-  return outcome.path === 'unbound-new' ? runUnboundNew(outcome, deps, flags) : outcome;
+  return 'kind' in result ? result : runUnboundNew(result, deps, unboundNewOptions);
 }

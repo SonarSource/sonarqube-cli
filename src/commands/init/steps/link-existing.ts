@@ -27,7 +27,7 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitOutcome, LinkExistingOutcome } from '../init-outcome.ts';
+import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   linkCommandFor,
@@ -47,9 +47,9 @@ import {
  * repository that already has one.
  */
 export async function runLinkExisting(
-  { projectRoot, remote, projectKey: detectedKey }: LinkExistingOutcome,
+  { projectRoot, remote, projectKey: detectedKey }: LinkExistingPath,
   { auth, http, console, interactive }: DetectDeps,
-): Promise<InitOutcome> {
+): Promise<InitOutcome | UnboundNewPath> {
   if (!interactive) {
     throw new CommandFailedError(
       `A Sonar project already exists for this repository: '${detectedKey}'. Linking it needs an answer, and none can be asked.`,
@@ -59,7 +59,7 @@ export async function runLinkExisting(
     );
   }
 
-  const unbound: InitOutcome = { path: 'unbound-new', projectRoot, remote };
+  const unbound: UnboundNewPath = { path: 'unbound-new', projectRoot, remote };
   const link = requireAnswer(
     await console.confirmPrompt(
       `A Sonar project already exists for this repository: '${detectedKey}'. Link this directory to it?`,
@@ -92,7 +92,7 @@ export async function runLinkExisting(
     console,
     'No analysis results on the server yet for this project.',
   );
-  return { path: 'link-existing', projectRoot, remote, projectKey, linked: true };
+  return { kind: 'linked', projectKey };
 }
 
 async function confirmAnotherProject(console: DetectDeps['console']): Promise<boolean> {

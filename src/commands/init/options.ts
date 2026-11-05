@@ -26,8 +26,8 @@ import type { Console } from '@/core/ui/console.ts';
 const MAX_NAME_LENGTH = 255;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
-/** The `sonar init` flags that only apply when a project is created without repository binding. */
-export interface UnboundNewFlags {
+/** The `sonar init` options that only apply when a project is created without repository binding. */
+export interface UnboundNewOptions {
   projectKey?: string;
   name?: string;
   visibility?: ProjectVisibility;
@@ -60,25 +60,26 @@ export function validateVisibility(visibility: string): ProjectVisibility {
   throw new InvalidOptionError('--visibility must be private or public.');
 }
 
-export function validateUnboundNewFlags(options: {
+export function validateUnboundNewOptions(rawOptions: {
   project?: string;
   name?: string;
   visibility?: string;
-}): UnboundNewFlags {
+}): UnboundNewOptions {
   return {
-    projectKey: options.project === undefined ? undefined : validateProjectKey(options.project),
-    name: options.name === undefined ? undefined : validateProjectName(options.name),
+    projectKey:
+      rawOptions.project === undefined ? undefined : validateProjectKey(rawOptions.project),
+    name: rawOptions.name === undefined ? undefined : validateProjectName(rawOptions.name),
     visibility:
-      options.visibility === undefined ? undefined : validateVisibility(options.visibility),
+      rawOptions.visibility === undefined ? undefined : validateVisibility(rawOptions.visibility),
   };
 }
 
-export function warnIgnoredUnboundNewFlags(flags: UnboundNewFlags, console: Console): void {
+export function warnIgnoredUnboundNewOptions(options: UnboundNewOptions, console: Console): void {
   const ignored = [
-    flags.projectKey === undefined ? null : '--project',
-    flags.name === undefined ? null : '--name',
-    flags.visibility === undefined ? null : '--visibility',
-  ].filter((flag) => flag !== null);
+    options.projectKey === undefined ? null : '--project',
+    options.name === undefined ? null : '--name',
+    options.visibility === undefined ? null : '--visibility',
+  ].filter((option) => option !== null);
   if (ignored.length > 0) {
     console.warn(
       `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,

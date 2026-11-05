@@ -24,7 +24,7 @@ import {
   validateProjectKey,
   validateProjectName,
   validateVisibility,
-} from '@/commands/init/flags.ts';
+} from '@/commands/init/options.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
 describe('validation', () => {

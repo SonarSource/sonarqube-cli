@@ -38,7 +38,7 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitOutcome } from '../init-outcome.ts';
+import type { InitPath } from '../init-outcome.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
@@ -83,7 +83,7 @@ function recordedOtherOrganization(
 }
 
 /** Inspects the directory and its git remote, then picks the onboarding path without running it. */
-export async function detectInitPath(projectRoot: string, deps: DetectDeps): Promise<InitOutcome> {
+export async function detectInitPath(projectRoot: string, deps: DetectDeps): Promise<InitPath> {
   const { auth } = deps;
   const { gitRoot, isGit } = findGitRoot(projectRoot);
 
@@ -101,7 +101,11 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
     (mapping) => mapping.contains && authMatchesRecordedConnection(auth, mapping),
   );
   if (linked.length > 0) {
-    return { path: 'complete', projectRoot, projectKeys: linked.map((p) => p.projectKey) };
+    return {
+      path: 'complete',
+      projectRoot,
+      projectKeys: linked.map((p) => p.projectKey),
+    };
   }
 
   const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
@@ -114,7 +118,12 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   const binding = await lookupRemoteBinding(deps, remote);
   switch (binding.kind) {
     case 'in-org':
-      return { path: 'link-existing', projectRoot, remote, projectKey: binding.projectKey };
+      return {
+        path: 'link-existing',
+        projectRoot,
+        remote,
+        projectKey: binding.projectKey,
+      };
     case 'other-org':
       throw otherOrganizationError(auth, recordedOtherOrganization(onPath, auth));
     case 'unknown':
@@ -163,7 +172,7 @@ async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
   { auth, console, interactive }: DetectDeps,
-): Promise<InitOutcome> {
+): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {

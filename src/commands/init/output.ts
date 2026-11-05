@@ -23,10 +23,8 @@ import type { Console } from '@/core/ui/console.ts';
 import type { InitOutcome } from './init-outcome.ts';
 
 const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
-const PATH_NOT_RUN_NOTE = 'This path is selected but not run yet.';
-
 function describe(outcome: InitOutcome): string[] {
-  switch (outcome.path) {
+  switch (outcome.kind) {
     case 'complete': {
       const noun = outcome.projectKeys.length === 1 ? 'project' : 'projects';
       const keys = outcome.projectKeys.map((key) => `'${key}'`).join(', ');
@@ -35,24 +33,11 @@ function describe(outcome: InitOutcome): string[] {
         'Nothing left to set up.',
       ];
     }
-    case 'link-existing':
-      if (outcome.linked) {
-        return [];
-      }
-      return [
-        `A Sonar project already exists for this repository: ${outcome.projectKey}.`,
-        'Selected path: link the existing project.',
-        PATH_NOT_RUN_NOTE,
-      ];
-    case 'bound-new':
-      if (outcome.projectKey) {
-        return [];
-      }
-      return ['Selected path: create a new project bound to the repository.', PATH_NOT_RUN_NOTE];
-    case 'unbound-new':
-      if (outcome.projectKey) {
-        return [];
-      }
+    case 'linked':
+    case 'bound':
+    case 'unbound':
+      return [];
+    case 'declined':
       return ['No project was created.'];
   }
 }
