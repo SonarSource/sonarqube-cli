@@ -18,13 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { beforeAll, describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import * as openpgp from 'openpgp';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { PlatformInfo } from '@/core/host/install/install-types.ts';
 import { SONAR_SCANNER_CLI_SIGNATURES } from '@/core/host/install/signatures.ts';
 import {
+  cleanupOldScannerVersions,
   scannerArchive,
   SONAR_SCANNER_VERSION,
   verifyScannerArchive,
@@ -129,5 +134,55 @@ describe('verifyScannerArchive', () => {
         publicKey,
       ),
     ).rejects.toThrow('No pinned signature available for SonarScanner on');
+  });
+});
+
+describe('cleanupOldScannerVersions', () => {
+  let binDir: string;
+  const CURRENT = 'sonar-scanner-8.1.0.6389-linux-x64';
+
+  beforeEach(() => {
+    binDir = mkdtempSync(join(tmpdir(), 'scanner-cleanup-'));
+  });
+
+  afterEach(() => {
+    rmSync(binDir, { recursive: true, force: true });
+  });
+
+  function make(name: string): void {
+    mkdirSync(join(binDir, name, 'lib'), { recursive: true });
+    writeFileSync(join(binDir, name, 'lib', 'x.jar'), 'jar');
+  }
+
+  it('removes older managed scanners with their contents and keeps the current one', () => {
+    make(CURRENT);
+    make('sonar-scanner-7.0.0.1111-linux-x64');
+    make('sonar-scanner-7.0.0.1111-macosx-aarch64');
+
+    cleanupOldScannerVersions(binDir, CURRENT);
+
+    expect(readdirSync(binDir)).toEqual([CURRENT]);
+  });
+
+  it('leaves staging directories and unrelated entries alone', () => {
+    const keep = [
+      '.sonar-scanner-abc123',
+      'sonar-secrets-2.53.1.13823-linux-x86-64',
+      'sonar-scanner-notes.txt',
+      'sonar-scanner-cli-8.1.0.6389-linux-x64',
+      'sonar-scanner-7.0.0.1111-linux-x64.bak',
+    ];
+    for (const name of keep) make(name);
+    make('sonar-scanner-7.0.0.1111-linux-x64');
+
+    cleanupOldScannerVersions(binDir, CURRENT);
+
+    expect(readdirSync(binDir).sort()).toEqual([...keep].sort());
+  });
+
+  it('does not throw when the directory does not exist', () => {
+    expect(() => {
+      cleanupOldScannerVersions(join(binDir, 'missing'), CURRENT);
+    }).not.toThrow();
   });
 });
