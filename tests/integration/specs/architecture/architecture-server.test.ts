@@ -84,15 +84,27 @@ describe('Server public architecture project lookup', () => {
     h.withAuth(server.baseUrl(), 'test-token');
     const original = await readIntended();
     expect(original.models).toEqual([]);
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(0);
     h.cwd.writeFile('model.json', JSON.stringify({ ...original, models: [model] }));
-    expect((await h.run('arch intended set -p shop --file model.json --dry-run')).exitCode).toBe(0);
+    const preview = await h.run('arch intended set -p shop --file model.json --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout + preview.stderr).toContain(
+      'java: pattern and physical hierarchy checks unavailable',
+    );
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(1);
     expect(server.getRecordedRequests().filter((r) => r.method === 'POST')).toHaveLength(0);
-    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
+    const applied = await h.run('arch intended set -p shop --file model.json');
+    expect(applied.exitCode).toBe(0);
+    expect(applied.stdout + applied.stderr).toContain('Structural validation still applies');
     const saved = await readIntended();
     expect(saved.models).toHaveLength(1);
     expect(saved.models[0]).toMatchObject(model);
     const requests = server.getRecordedRequests();
-    expect(requests.some((r) => r.path.includes('project_branches'))).toBe(false);
+    expect(requests.filter((r) => r.path.includes('project_branches'))).toHaveLength(2);
     const post = requests.find((r) => r.method === 'POST' && r.path.endsWith(INTENDED_RESOURCE));
     expect(JSON.parse(post!.body!).projectId).toBe('shop-project-id');
     expect(requests.some((r) => r.path === '/api/v2/components/projects')).toBe(true);
@@ -110,19 +122,34 @@ describe('Server public architecture project lookup', () => {
       .start();
     h.withAuth(server.baseUrl(), 'test-token');
     const saved = await readIntended();
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(0);
     h.cwd.writeFile(
       'model.json',
       JSON.stringify({ ...saved, models: [{ ...model, description: 'Changed' }] }),
     );
-    expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
+    const applied = await h.run('arch intended set -p shop --file model.json');
+    expect(applied.exitCode).toBe(0);
+    expect(applied.stdout + applied.stderr).toContain(
+      'java: pattern and physical hierarchy checks unavailable',
+    );
     const changed = await readIntended();
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(1);
     expect(changed.models[0].description).toBe('Changed');
     h.cwd.writeFile('model.json', JSON.stringify({ ...changed, models: [] }));
     expect((await h.run('arch intended set -p shop --file model.json')).exitCode).toBe(0);
     expect((await readIntended()).models).toEqual([]);
-    expect(server.getRecordedRequests().some((r) => r.path.includes('project_branches'))).toBe(
-      false,
-    );
+    expect(
+      server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
+    ).toHaveLength(1);
+    const writes = server.getRecordedRequests().filter((r) => r.method === 'PATCH');
+    expect(writes).toHaveLength(2);
+    expect(writes[0].path).toBe(writes[1].path);
+    expect(writes[0].path).toMatch(new RegExp(`/${INTENDED_RESOURCE}/[0-9a-f-]{36}$`));
+    expect(writes[0].path).not.toContain('shop-project-id');
   });
 
   it('previews and creates directives once on Server', async () => {
