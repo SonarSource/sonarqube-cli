@@ -558,7 +558,7 @@ describe('sonar architecture reads on the public API', () => {
     ).toBe(true);
   });
 
-  it('fails Server intended discovery without private requests, while current remains available', async () => {
+  it('uses public Server project lookup while current remains independent', async () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken(TOKEN)
@@ -570,22 +570,27 @@ describe('sonar architecture reads on the public API', () => {
     );
     expect(current.exitCode).toBe(0);
     expect(JSON.parse(current.stdout).languages[0]).not.toHaveProperty('graphId');
+    const currentRequests = server.getRecordedRequests();
+    expect(currentRequests.some(({ path }) => path === '/api/v2/components/projects')).toBe(false);
+    expect(
+      currentRequests.find(({ path }) => path.endsWith('/current-architectures'))?.query,
+    ).toMatchObject({ branchId: fakeMainBranchId(PROJECT), language: 'java' });
     const before = server.getRecordedRequests().length;
     const intended = await harness.run(
       `architecture intended get --project ${PROJECT} --format json`,
     );
-    expect(intended.exitCode).toBe(1);
-    expect(intended.stderr).toContain('confirmed public endpoint');
+    expect(intended.exitCode).toBe(0);
     expect(
       server
         .getRecordedRequests()
         .slice(before)
-        .filter(
-          ({ path }) =>
-            path.includes('/architecture/') ||
-            path.includes('search_projects') ||
-            path.includes('/navigation/'),
-        ),
+        .some(({ path }) => path === '/api/v2/components/projects'),
+    ).toBe(true);
+    expect(
+      server
+        .getRecordedRequests()
+        .slice(before)
+        .filter(({ path }) => path.includes('search_projects') || path.includes('/navigation/')),
     ).toEqual([]);
   });
 
@@ -717,10 +722,12 @@ describe('sonar architecture intended set on the public API', () => {
       ...NEXT[0],
       language: 'cs',
       groups: [{ label: 'CsDomain', patterns: ['cs:**'] }],
+      constraints: [],
     };
     const javaFile: IntendedArchitecture = {
       ...JAVA_FILE,
       groups: [{ label: 'FileDomain', patterns: ['src/**'] }],
+      constraints: [],
     };
     const original = [INTENDED[0], cs, javaFile];
     const server = await harness
@@ -1063,7 +1070,11 @@ describe('sonar architecture intended set on the public API', () => {
   });
   it('preserves other perspectives when changing the second qualifier of one language', async () => {
     const server = await startWith((fake) => fake.withIntended([...INTENDED, JAVA_FILE]));
-    const desiredFile = { ...JAVA_FILE, groups: [{ label: 'Changed', patterns: [] }] };
+    const desiredFile = {
+      ...JAVA_FILE,
+      groups: [{ label: 'Changed', patterns: [] }],
+      constraints: [],
+    };
     const saved = await readSaved();
     const preview = await setFile({ ...saved, models: [...INTENDED, desiredFile] }, ' --dry-run');
     expect(preview.exitCode).toBe(0);
