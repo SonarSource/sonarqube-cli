@@ -19,7 +19,11 @@
  */
 
 import type { ArchitectureApi } from './architecture-api.ts';
-import { DEFAULT_DIRECTIVE_PERSPECTIVE, type DirectiveInput } from './directives.ts';
+import {
+  DEFAULT_DIRECTIVE_PERSPECTIVE,
+  type DirectiveInput,
+  identityPerspective,
+} from './directives.ts';
 import { indexStructure } from './graph.ts';
 
 export async function warnDirectiveKeys(
@@ -47,8 +51,7 @@ export async function warnDirectiveKeys(
       const graphType = ['java', 'cs'].includes(language) ? 'namespace_graph' : 'file_graph';
       if (
         directive.graphType !== graphType ||
-        (directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE) !==
-          DEFAULT_DIRECTIVE_PERSPECTIVE
+        identityPerspective(directive.graphPerspective) !== DEFAULT_DIRECTIVE_PERSPECTIVE
       ) {
         warn(
           `Node keys were not checked for ${directive.graphType} perspective ${directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE}; the public current graph does not identify that view.`,
