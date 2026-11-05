@@ -20,6 +20,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import type { ProjectDirective } from '@/commands/architecture/_common/directives.ts';
+
 import { TestHarness } from '../../harness';
 import { INTENDED_RESOURCE } from '../../harness/fake-architecture';
 
@@ -33,6 +35,75 @@ describe('Architecture API compatibility diagnostics', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.each(['page', 'single', 'create', 'update'] as const)(
+    'keeps compatibility guidance for a malformed directive record in a %s response',
+    async (operation) => {
+      const directive: ProjectDirective = {
+        id: '11111111-1111-4111-8111-111111111111',
+        projectId: 'shop-branch-id',
+        type: 'REMOVE_EDGE',
+        ecosystem: 'java',
+        graphType: 'namespace_graph',
+        fromNodeKey: 'app:a',
+        toNodeKey: 'app:b',
+        origin: 'sonarqube-cli',
+      };
+      const method = operation === 'create' ? 'POST' : operation === 'update' ? 'PATCH' : 'GET';
+      const response =
+        operation === 'page'
+          ? { projectDirectives: [{}], page: { pageIndex: 1, pageSize: 50, total: 1 } }
+          : {};
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('test-token')
+        .withProject('shop', (project) =>
+          project.withArchitecture((architecture) =>
+            architecture
+              .withDirectives(operation === 'single' || operation === 'update' ? [directive] : [])
+              .withStatus(
+                'project-directives',
+                operation === 'create' ? 201 : 200,
+                JSON.stringify(response),
+                method,
+              ),
+          ),
+        )
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), 'test-token', 'my-org');
+      const changes =
+        operation === 'create'
+          ? {
+              create: [
+                {
+                  type: 'REMOVE_EDGE',
+                  ecosystem: 'java',
+                  graphType: 'namespace_graph',
+                  fromNodeKey: 'app:a',
+                  toNodeKey: 'app:b',
+                },
+              ],
+            }
+          : { update: [{ id: directive.id, description: 'Changed description' }] };
+      harness.cwd.writeFile('changes.json', JSON.stringify(changes));
+      const command =
+        operation === 'page'
+          ? 'directives get -p shop --format json'
+          : operation === 'single'
+            ? `directives get -p shop --id ${directive.id} --format json`
+            : 'directives set -p shop --file changes.json';
+      const result = await harness.run(`arch ${command}`);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(COMPATIBILITY);
+      const writes = server
+        .getRecordedRequests()
+        .filter((request) => ['POST', 'PATCH', 'DELETE'].includes(request.method));
+      expect(writes.map((request) => request.method)).toEqual(
+        operation === 'create' ? ['POST'] : operation === 'update' ? ['PATCH'] : [],
+      );
+    },
+  );
 
   for (const cloud of [false, true]) {
     for (const target of ['current', 'intended', 'directives'] as const) {
