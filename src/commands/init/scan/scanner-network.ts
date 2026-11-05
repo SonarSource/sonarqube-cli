@@ -94,6 +94,7 @@ export async function scannerNetworkEnv(
   serverUrl: string,
   javaPath: string,
   temporaryDirectory: string,
+  detached = false,
 ): Promise<NodeJS.ProcessEnv> {
   const config = await getNetworkConfigOrThrow();
   const env: NodeJS.ProcessEnv = {
@@ -140,6 +141,16 @@ export async function scannerNetworkEnv(
       env.SONAR_SCANNER_KEYSTORE_PATH = client.certPath;
       env.SONAR_SCANNER_KEYSTORE_PASSWORD = client.passphrase ?? '';
     } else {
+      if (detached && client.passphrase) {
+        // Nothing removes a detached scanner's directory, so the decrypted key would stay on disk.
+        throw new CommandFailedError(
+          'A passphrase-protected PEM client key cannot be used with --detach.',
+          {
+            remediationHint:
+              'Convert the client certificate to PKCS12, or run the analysis without --detach.',
+          },
+        );
+      }
       const path = join(temporaryDirectory, 'keystore.p12');
       const bytes = pemToPkcs12(client.resolvedCertPem, client.resolvedKeyPem, client.passphrase);
       writeFileSync(path, bytes, { mode: 0o600 });

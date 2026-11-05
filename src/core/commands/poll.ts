@@ -22,7 +22,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { CommandFailedError } from './command-error.ts';
 
-export const DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 300;
+export const DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 600;
 export const POLL_INTERVAL_MS = 3000;
 
 /** Polls sequentially: each attempt must observe the server state the previous one left. */
