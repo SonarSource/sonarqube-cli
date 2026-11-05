@@ -626,6 +626,7 @@ export class FakeSonarQubeServerBuilder {
   private organizationsSearchErrorCode?: number;
   private projectsSearchErrorStatusCode?: number;
   private projectsSearchErrorBody?: string;
+  private projectCreateErrorBody?: string;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -822,6 +823,12 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationsSearchError(statusCode: number): this {
     this.organizationsSearchErrorCode = statusCode;
+    return this;
+  }
+
+  /** Make POST /api/projects/create reject with a 400 and this body. */
+  withProjectCreateRejected(body: string): this {
+    this.projectCreateErrorBody = body;
     return this;
   }
 
@@ -1156,6 +1163,7 @@ export class FakeSonarQubeServerBuilder {
       organizationsSearchErrorCode,
       projectsSearchErrorStatusCode,
       projectsSearchErrorBody,
+      projectCreateErrorBody,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -2029,6 +2037,22 @@ export class FakeSonarQubeServerBuilder {
           return new Response(
             JSON.stringify({
               entitlements: allowed ? [{ allowedFeatures: ['privateProjects'] }] : [],
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        if (path === '/api/projects/create' && req.method === 'POST') {
+          if (projectCreateErrorBody !== undefined) {
+            return new Response(projectCreateErrorBody, {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const params = new URLSearchParams(body ?? '');
+          return new Response(
+            JSON.stringify({
+              project: { key: params.get('project'), name: params.get('name') },
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );

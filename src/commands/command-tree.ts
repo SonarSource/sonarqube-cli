@@ -839,6 +839,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Directory to onboard, relative or absolute (default: current directory)',
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
+    .option(
+      '--project <key>',
+      'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
+    )
+    .option(
+      '--name <name>',
+      'Name of the new project (default: the repository name); only used when the project is not bound to the repository',
+    )
+    .option(
+      '--visibility <visibility>',
+      'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
+    )
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .anonymousAction((ctx, options: InitOptions) => init(options, ctx));
 

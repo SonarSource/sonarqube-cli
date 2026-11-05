@@ -52,8 +52,18 @@ export type InitOutcome =
   /**
    * No project exists yet and it will not be bound to the repository: there is no git remote
    * (`remote` absent), the platform cannot be bound, or the user declined or could not be asked.
+   * `sonar init` then creates the project unless the user declines (`declined`).
    */
-  | { path: 'unbound-new'; projectRoot: string; remote?: string };
+  | {
+      path: 'unbound-new';
+      projectRoot: string;
+      remote?: string;
+      /** Set once the project exists on the server and `.sonar-config.json` maps it. */
+      projectKey?: string;
+      /** The user declined the creation: nothing was created. */
+      declined?: true;
+    };
 
 export type LinkExistingOutcome = Extract<InitOutcome, { path: 'link-existing' }>;
+export type UnboundNewOutcome = Extract<InitOutcome, { path: 'unbound-new' }>;
 export type BoundNewOutcome = Extract<InitOutcome, { path: 'bound-new' }>;
