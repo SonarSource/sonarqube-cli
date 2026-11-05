@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { OWNER_ONLY_FILE_MODE } from '@/core/config-constants.ts';
 import {
   buildFetchNetworkOptions,
   getNetworkConfigOrThrow,
@@ -70,6 +71,14 @@ async function importCertificate(
   }
 }
 
+function readCertificates(caPath: string): string[] {
+  const certificates = readFileSync(caPath, 'utf8').match(PEM_CERTIFICATE);
+  if (!certificates?.length) {
+    throw new CommandFailedError('The configured CA file contains no PEM certificates.');
+  }
+  return certificates;
+}
+
 /** Imports each certificate one after the other, since they all write the same keystore file. */
 async function importCertificates(
   caPath: string,
@@ -78,14 +87,10 @@ async function importCertificates(
   truststorePath: string,
   password: string,
 ): Promise<void> {
-  const certificates = readFileSync(caPath, 'utf8').match(PEM_CERTIFICATE);
-  if (!certificates?.length) {
-    throw new CommandFailedError('The configured CA file contains no PEM certificates.');
-  }
-  await certificates.reduce<Promise<void>>(async (previous, certificate, index) => {
+  await readCertificates(caPath).reduce<Promise<void>>(async (previous, certificate, index) => {
     await previous;
     const certPath = join(temporaryDirectory, `ca-${index}.pem`);
-    writeFileSync(certPath, certificate, { mode: 0o600 });
+    writeFileSync(certPath, certificate, { mode: OWNER_ONLY_FILE_MODE });
     await importCertificate(javaPath, certPath, `init-ca-${index}`, truststorePath, password);
   }, Promise.resolve());
 }
@@ -95,21 +100,47 @@ type ClientCertificate = NonNullable<
 >;
 
 function assertDetachable(client: ClientCertificate): void {
-  if (client.format !== 'pkcs12' && client.passphrase) {
-    throw new CommandFailedError(
-      'A passphrase-protected PEM client key cannot be used with --detach.',
-      {
-        remediationHint:
-          'Convert the client certificate to PKCS12, or run the analysis without --detach.',
-      },
-    );
+  if (client.format !== 'pkcs12') {
+    throw new CommandFailedError('A PEM client key cannot be used with --detach.', {
+      remediationHint:
+        'Convert the client certificate to PKCS12, or run the analysis without --detach.',
+    });
   }
 }
 
-/** Fails fast, so the user does not wait through a scanner download to learn --detach is refused. */
-export async function assertScanDetachable(): Promise<void> {
-  const { clientCert } = await getNetworkConfigOrThrow();
-  if (clientCert) assertDetachable(clientCert);
+function scannerProxyUrl(proxy: string): URL {
+  const url = new URL(proxy);
+  if (url.protocol !== 'http:') {
+    throw new CommandFailedError('The SonarScanner requires an HTTP proxy URL.');
+  }
+  return url;
+}
+
+async function resolveProxy(
+  serverUrl: string,
+  config: Awaited<ReturnType<typeof getNetworkConfigOrThrow>>,
+): Promise<string | undefined> {
+  // Bun reads generic proxies implicitly; Java needs an explicit proxy after NO_PROXY matching.
+  const options = await buildFetchNetworkOptions(serverUrl, {
+    ...config,
+    proxy: config.proxy ? { ...config.proxy, explicit: true } : null,
+  });
+  return options.proxy;
+}
+
+/**
+ * Rejects what the scanner cannot use before the scanner is downloaded, so the user does not wait
+ * through the download to learn that the proxy, the CA bundle or --detach is unsupported.
+ */
+export async function assertScannerNetworkUsable(
+  serverUrl: string,
+  detached: boolean,
+): Promise<void> {
+  const config = await getNetworkConfigOrThrow();
+  const proxy = await resolveProxy(serverUrl, config);
+  if (proxy) scannerProxyUrl(proxy);
+  if (config.caCert) readCertificates(config.caCert.path);
+  if (detached && config.clientCert) assertDetachable(config.clientCert);
 }
 
 export async function scannerNetworkEnv(
@@ -127,17 +158,11 @@ export async function scannerNetworkEnv(
     SONAR_SCANNER_PROXY_USER: undefined,
     SONAR_SCANNER_PROXY_PASSWORD: undefined,
   };
-  // Bun reads generic proxies implicitly; Java needs an explicit proxy after NO_PROXY matching.
-  const options = await buildFetchNetworkOptions(serverUrl, {
-    ...config,
-    proxy: config.proxy ? { ...config.proxy, explicit: true } : null,
-  });
-  const proxy = options.proxy;
+  const proxy = await resolveProxy(serverUrl, config);
   if (proxy) {
-    const url = new URL(proxy);
-    if (url.protocol !== 'http:')
-      throw new CommandFailedError('The SonarScanner requires an HTTP proxy URL.');
-    env.SONAR_SCANNER_PROXY_HOST = url.hostname;
+    const url = scannerProxyUrl(proxy);
+    // `hostname` keeps the brackets of an IPv6 literal, which Java cannot resolve.
+    env.SONAR_SCANNER_PROXY_HOST = url.hostname.replace(/^\[|]$/g, '');
     env.SONAR_SCANNER_PROXY_PORT = url.port || '80';
     env.SONAR_SCANNER_PROXY_USER = decodeURIComponent(url.username);
     env.SONAR_SCANNER_PROXY_PASSWORD = decodeURIComponent(url.password);
@@ -166,7 +191,7 @@ export async function scannerNetworkEnv(
       if (detached) assertDetachable(client);
       const path = join(temporaryDirectory, 'keystore.p12');
       const bytes = pemToPkcs12(client.resolvedCertPem, client.resolvedKeyPem, client.passphrase);
-      writeFileSync(path, bytes, { mode: 0o600 });
+      writeFileSync(path, bytes, { mode: OWNER_ONLY_FILE_MODE });
       env.SONAR_SCANNER_KEYSTORE_PATH = path;
       env.SONAR_SCANNER_KEYSTORE_PASSWORD = '';
     }
