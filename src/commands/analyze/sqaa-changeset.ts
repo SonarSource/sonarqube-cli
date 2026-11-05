@@ -27,7 +27,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { resolveCurrentGitBranch, resolveGitBranchAtRepoRoot } from '@/core/host/git/branch.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
-import { spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { spawnProcessCapturingBytes, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 /** Maximum byte size per file sent to SQAA. Files exceeding this are skipped. */
 export const SQAA_MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -42,12 +42,19 @@ export interface ChangeSetOptions {
 /** A file excluded from analysis with the reason it was skipped. */
 export interface IgnoredFile {
   path: string;
-  reason: 'binary' | 'oversized' | 'outside-repository' | 'outside-project' | 'other-connection';
+  reason:
+    | 'binary'
+    | 'oversized'
+    | 'git-lfs-pointer'
+    | 'outside-repository'
+    | 'outside-project'
+    | 'other-connection';
 }
 
 /** Result of resolving a change set: files to analyze and files silently ignored. */
 export interface ChangeSetResult {
   files: string[];
+  stagedContents?: ReadonlyMap<string, string>;
   ignored: IgnoredFile[];
   /** Repository root used to resolve git output. Useful for computing relative paths. */
   repoRoot: string;
@@ -88,7 +95,8 @@ export async function resolveChangeSet(
   const repoRoot = await resolveRepoRoot(cwd);
 
   const diffFiles = await getDiffFiles(repoRoot, { staged, base });
-  const untrackedFiles = staged ? [] : await getUntrackedNonIgnoredFiles(repoRoot);
+  if (staged) return resolveStagedContents(repoRoot, diffFiles);
+  const untrackedFiles = await getUntrackedNonIgnoredFiles(repoRoot);
   const absolute = [...diffFiles, ...untrackedFiles].map((f) => join(repoRoot, f));
   const inRepo: string[] = [];
   const outsideIgnored: IgnoredFile[] = [];
@@ -104,6 +112,105 @@ export async function resolveChangeSet(
   const { files, ignored: oversizedIgnored } = partitionBySize(nonBinary);
 
   return { files, ignored: [...outsideIgnored, ...binaryIgnored, ...oversizedIgnored], repoRoot };
+}
+
+async function resolveStagedContents(repoRoot: string, paths: string[]): Promise<ChangeSetResult> {
+  const stagedContents = new Map<string, string>();
+  const ignored: IgnoredFile[] = [];
+  const entries = await resolveStagedEntries(repoRoot, paths);
+  const concurrency = 8;
+  const captureBatch = async (offset: number): Promise<void> => {
+    const snapshots = await Promise.all(
+      entries
+        .slice(offset, offset + concurrency)
+        .map((entry) => readStagedContent(repoRoot, entry)),
+    );
+    for (const { path, content } of snapshots) {
+      if (!content) {
+        ignored.push({ path, reason: 'oversized' });
+      } else if (isGitLfsPointer(content)) {
+        ignored.push({ path, reason: 'git-lfs-pointer' });
+      } else if (content.subarray(0, 8192).includes(0)) {
+        ignored.push({ path, reason: 'binary' });
+      } else {
+        stagedContents.set(path, content.toString('utf8'));
+      }
+    }
+    if (offset + concurrency < entries.length) await captureBatch(offset + concurrency);
+  };
+  await captureBatch(0);
+  return { files: [...stagedContents.keys()], ignored, repoRoot, stagedContents };
+}
+
+function isGitLfsPointer(content: Buffer): boolean {
+  return (
+    content.length <= 1024 &&
+    /^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n(?:ext-[^\r\n]+\r?\n)*oid sha256:[0-9a-f]{64}\r?\nsize \d+\r?\n?$/.test(
+      content.toString('utf8'),
+    )
+  );
+}
+
+interface StagedEntry {
+  path: string;
+  objectId: string;
+  size: number;
+}
+
+async function resolveStagedEntries(repoRoot: string, paths: string[]): Promise<StagedEntry[]> {
+  const selected = new Set(paths);
+  const index = await runGit(['ls-files', '--stage', '-z'], repoRoot);
+  const entries = parseNulSeparated(index).flatMap((entry) => {
+    const separator = entry.indexOf('\t');
+    const [mode, objectId, stage] = entry.slice(0, separator).split(' ');
+    const path = entry.slice(separator + 1);
+    if (stage !== '0' || !selected.has(path) || (mode !== '100644' && mode !== '100755')) return [];
+    return [{ path, objectId }];
+  });
+  if (entries.length === 0) return [];
+  const output = await runGit(
+    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+    repoRoot,
+    [0],
+    entries.map(({ objectId }) => objectId).join('\n') + '\n',
+  );
+  const sizes = new Map(
+    output
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const [objectId, type, sizeText] = line.split(' ');
+        const size = Number(sizeText);
+        if (type !== 'blob' || !Number.isSafeInteger(size) || size < 0) {
+          throw new CommandFailedError('Could not inspect staged blob sizes.');
+        }
+        return [objectId, size] as const;
+      }),
+  );
+  return entries.map((entry) => {
+    const size = sizes.get(entry.objectId);
+    if (size === undefined) throw new CommandFailedError('Missing staged blob size.');
+    return { ...entry, size };
+  });
+}
+
+async function readStagedContent(
+  repoRoot: string,
+  entry: StagedEntry,
+): Promise<{ path: string; content?: Buffer }> {
+  const path = join(repoRoot, entry.path);
+  if (entry.size > SQAA_MAX_FILE_BYTES) return { path };
+  const result = await spawnProcessCapturingBytes(
+    'git',
+    ['cat-file', 'blob', entry.objectId],
+    { cwd: repoRoot },
+    GIT_COMMAND_TIMEOUT_MS,
+    'Reading staged content timed out',
+  );
+  if (result.exitCode !== 0) {
+    throw new CommandFailedError(`Could not read staged content for ${entry.path}.`);
+  }
+  return { path, content: result.stdout };
 }
 
 /** Explicit `--branch` wins; otherwise auto-detect from git when possible. */
@@ -169,13 +276,14 @@ async function runGit(
   args: string[],
   cwd: string,
   acceptedExitCodes: number[] = [0],
+  stdinData?: string,
 ): Promise<string> {
   let result;
   try {
     result = await spawnProcessWithTimeout(
       'git',
       args,
-      { cwd },
+      { cwd, stdin: stdinData === undefined ? 'ignore' : 'pipe', stdinData },
       GIT_COMMAND_TIMEOUT_MS,
       `git ${args[0] ?? 'command'} timed out`,
     );
