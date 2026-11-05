@@ -21,15 +21,7 @@ bun install
 
 ## Building
 
-### TypeScript build (for npm distribution)
-
-```bash
-bun run build
-```
-
-Output goes to `dist/`.
-
-### Self-contained binary (for releases)
+The supported build is a self-contained standalone executable:
 
 ```bash
 bun run build:binary
@@ -58,7 +50,7 @@ bun run typecheck
 # Unit tests
 bun run test:unit
 
-# Integration tests (require env vars — see below)
+# Integration tests (compiled binary against fake servers)
 bun run test:integration
 
 # Unit + integration
@@ -73,16 +65,9 @@ bun run test:coverage
 
 ### Integration tests
 
-Integration tests hit real external services and require environment variables. The CLI targets both **SonarQube Server** and **SonarQube Cloud**, so the token can come from either product:
+Integration tests run the compiled binary in isolated temporary environments with fake servers and a fake keychain. `bun run test:integration` performs the build/resource setup automatically. To iterate on one spec, run `bun run pretest:integration` once, then `bun test <file>`.
 
-```bash
-export SONAR_SECRETS_TOKEN="sqp_xxxxx"                # SonarQube Server or Cloud token for secret scanning
-export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io" # SonarQube Server or Cloud URL for onboard-agent tests
-```
-
-Obtain a token from your SonarQube instance: **My Account → Security → Generate token** (SonarQube Cloud at https://sonarcloud.io, or your self-hosted SonarQube Server).
-
-If the variables are not set, the relevant tests are skipped automatically — this is expected for local development.
+E2E tests exercise external systems where required. Follow each suite's prerequisites and environment-variable skip behavior. Read [test guidance](tests/AGENTS.md), including telemetry isolation, before adding tests.
 
 ## macOS code signing (optional)
 
@@ -107,8 +92,8 @@ After this, every build signs the binary automatically. On machines without the 
 
 ## Doc generation
 
-The docs site under `docs/` (`commands.json`, `llms.txt`, `sitemap.xml`) is generated from the source code. When adding or modifying a command, regenerate it with:
+The docs site outputs (`commands.json`, `llms.txt`, `sitemap.xml`) are generated from CLI source by post-release automation. Do not edit them by hand or regenerate them for routine command changes. When changing the generator itself, use `bun run gen:docs` for local validation and inspect the output without committing unrelated release-generated changes. See [docs guidance](docs/AGENTS.md).
 
-```bash
-bun run gen:docs
-```
+## Agent instructions
+
+Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules are canonical in `AGENTS.md` and its routed scoped sources; compatibility files contain references only.
