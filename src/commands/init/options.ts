@@ -28,6 +28,8 @@ import type { ScanOptions } from './steps/scan.ts';
 
 const MAX_NAME_LENGTH = 255;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+/** Make the scanner print its properties, which a detached run's unredacted log would keep. */
+const DETACH_FORBIDDEN_PROPERTIES = ['sonar.verbose', 'sonar.log.level'];
 
 /** The `sonar init` options that only apply when a project is created without repository binding. */
 export interface UnboundNewOptions {
@@ -100,8 +102,15 @@ export function validateScanOptions(options: {
       '--detach cannot be combined with --verbose: a background scanner writes to its log file only.',
     );
   }
+  const scannerProperties = parseScannerProperties(options.scannerProperty);
+  const verboseProperty = DETACH_FORBIDDEN_PROPERTIES.find((key) => scannerProperties.has(key));
+  if (options.detach && verboseProperty) {
+    throw new InvalidOptionError(
+      `--detach cannot be combined with --scanner-property ${verboseProperty}: a background scanner's log is not redacted.`,
+    );
+  }
   return {
-    scannerProperties: parseScannerProperties(options.scannerProperty),
+    scannerProperties,
     verbose: options.verbose === true,
     detach: options.detach === true,
   };

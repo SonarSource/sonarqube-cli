@@ -25,6 +25,8 @@ import { pollUntil } from '@/core/commands/poll.ts';
 
 import type { SonarHttpClient } from './http-client.ts';
 
+const MAX_CONSECUTIVE_FAILURES = 3;
+
 interface ComputeTask {
   id: string;
   componentKey?: string;
@@ -41,11 +43,21 @@ export class ComputeEngineClient {
    * Rejects when the task failed or was canceled, or when it is still running at `deadline`.
    */
   waitForAnalysis(taskId: string, projectKey: string, deadline: number): Promise<string> {
+    let consecutiveFailures = 0;
     return pollUntil(
       async () => {
-        const { task } = await this.client
-          .get<{ task: ComputeTask }>('/api/ce/task', { id: taskId })
-          .orThrow();
+        let task: ComputeTask;
+        try {
+          ({ task } = await this.client
+            .get<{ task: ComputeTask }>('/api/ce/task', { id: taskId })
+            .orThrow());
+        } catch (error) {
+          // The scanner already uploaded; one network blip should not discard that.
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) throw error;
+          return undefined;
+        }
+        consecutiveFailures = 0;
         if (task.id !== taskId || (task.componentKey && task.componentKey !== projectKey)) {
           throw new CommandFailedError('The analysis task does not match the project.');
         }
