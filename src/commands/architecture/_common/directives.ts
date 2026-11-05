@@ -173,19 +173,21 @@ function parseCreates(items: unknown[]): DirectiveInput[] {
     };
   });
 }
+export function identityPerspective(value: string | undefined): string {
+  const perspective = value?.trim() ?? '';
+  return !perspective || perspective.startsWith('transformed')
+    ? DEFAULT_DIRECTIVE_PERSPECTIVE
+    : perspective;
+}
+
 export function directiveKey(directive: DirectiveInput): string {
-  const perspective = directive.graphPerspective?.trim() ?? '';
-  const identityPerspective =
-    !perspective || perspective.startsWith('transformed')
-      ? DEFAULT_DIRECTIVE_PERSPECTIVE
-      : perspective;
   return JSON.stringify([
     directive.type,
     directive.ecosystem,
     directive.graphType,
     directive.fromNodeKey,
     directive.toNodeKey,
-    identityPerspective,
+    identityPerspective(directive.graphPerspective),
   ]);
 }
 export function isDefiniteRejection(error: unknown): boolean {
@@ -311,7 +313,12 @@ async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
       { ...before, ...update.changes },
       new Set(Object.keys(update.changes)),
     );
-    if (directiveKey(before) !== directiveKey(after) || before.description !== after.description)
+    if (
+      directiveKey(before) !== directiveKey(after) ||
+      before.description !== after.description ||
+      (update.changes.graphPerspective !== undefined &&
+        before.graphPerspective !== after.graphPerspective)
+    )
       changes.push({
         id: update.id,
         before,
