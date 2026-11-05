@@ -48,14 +48,16 @@ function formatView(projectKey: string, { language, slice, groups, drillDown }: 
   const names = groups.slice(0, MAX_GROUP_NAMES).map(label);
   if (groups.length > names.length) names.push(`… ${groups.length - names.length} more`);
   const where = slice.root ? `below ${slice.root}` : 'from the top level';
-  const cap = slice.capped ? `, capped by the ${slice.nodeLimit}-node limit` : '';
+  const cap =
+    slice.omittedLevel !== undefined ? `, capped by the ${slice.nodeLimit}-node limit` : '';
   const lines = [
     bold(
       `${projectKey} (${language}): ${groups.length} top-level group(s): ${names.join(', ')} — ` +
         `${slice.nodes.length} of ${slice.totalNodes} node(s) in view, ${slice.depth} level(s) ${where}${cap}`,
     ),
   ];
-  if (slice.capped) lines.push(formatSliceLimit(slice));
+  if (slice.message !== undefined) lines.push(slice.message);
+  if (slice.omittedLevel !== undefined) lines.push(formatSliceLimit(slice));
   if (base !== undefined) lines.push(dim(`Names are relative to ${base}`));
 
   lines.push(...formatDependencies(slice, label), ...formatFeedbackPairs(slice, label));
