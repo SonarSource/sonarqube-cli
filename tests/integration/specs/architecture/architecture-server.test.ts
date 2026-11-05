@@ -145,8 +145,10 @@ describe('Server public architecture project lookup', () => {
     expect(
       server.getRecordedRequests().filter((r) => r.path.includes('project_branches')),
     ).toHaveLength(1);
-    const writes = server.getRecordedRequests().filter((r) => r.method === 'PATCH');
-    expect(writes).toHaveLength(2);
+    const writes = server
+      .getRecordedRequests()
+      .filter((r) => ['PATCH', 'DELETE'].includes(r.method));
+    expect(writes.map((r) => r.method)).toEqual(['PATCH', 'DELETE']);
     expect(writes[0].path).toBe(writes[1].path);
     expect(writes[0].path).toMatch(new RegExp(`/${INTENDED_RESOURCE}/[0-9a-f-]{36}$`));
     expect(writes[0].path).not.toContain('shop-project-id');
