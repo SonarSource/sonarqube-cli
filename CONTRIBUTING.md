@@ -98,7 +98,7 @@ Run `bun run pretest:integration` before `bun run test:e2e` to build the CLI and
 
 E2E tests cover dependencies that the isolated integration harness does not replace. Requirements vary by suite: OS keychain access, network access for installers and binary downloads, real SonarQube services, or external tools. Check the relevant tests under `tests/e2e/` before running them. Suites can skip tests when their prerequisites are unavailable; a skipped test does not validate that behavior.
 
-The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/AGENTS.md), including telemetry isolation, for harness and coverage details.
+The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/AGENTS.md) for harness, coverage, and telemetry isolation requirements.
 
 ## macOS code signing (optional)
 
@@ -127,4 +127,4 @@ The docs site outputs (`commands.json`, `llms.txt`, `sitemap.xml`) are generated
 
 ## Agent instructions
 
-Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules are canonical in `AGENTS.md` and its routed scoped sources; compatibility files contain references only.
+Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules live in `AGENTS.md` and its routed scoped sources; use clients' native support instead of adding duplicate instruction files.
