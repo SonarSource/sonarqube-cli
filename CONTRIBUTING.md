@@ -96,4 +96,4 @@ The docs site outputs (`commands.json`, `llms.txt`, `sitemap.xml`) are generated
 
 ## Agent instructions
 
-Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules are canonical in `AGENTS.md` and its routed scoped sources; compatibility files contain references only.
+Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules live in `AGENTS.md` and its routed scoped sources; use clients' native support instead of adding duplicate instruction files.
