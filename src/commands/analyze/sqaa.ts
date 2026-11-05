@@ -268,6 +268,6 @@ async function analyzeSqaaChangeSet(params: {
 
 function printAllChangeSetFilesExcluded(console: Console): void {
   console.text(
-    'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
+    'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, Git LFS pointers, or outside the repository or project).',
   );
 }

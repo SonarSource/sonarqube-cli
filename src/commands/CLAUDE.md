@@ -113,3 +113,9 @@ When `sonar update` runs from source through Bun, it explains that only an insta
 Architecture public response validation lives in `architecture/_common/public-architecture-response.ts`; directive node-key warnings live in `architecture/_common/directive-key-warnings.ts`. API routing and directive mutation planning remain in their existing modules.
 
 `analyze secrets` resolves file operands to absolute paths before starting sonar-secrets, so leading dashes cannot change scanner options. Inherited stdin uses a separate internal `--input` argument path.
+
+`sonar analyze agentic --staged` filters and uploads a captured Git-index content snapshot. Unstaged content, including working-tree deletion, does not replace that snapshot. Staged deletions have no content to upload; staged renames upload the destination path. Default, `--base` and `--file` modes read working-tree content.
+
+Staged analysis reads only regular-file index entries (100644 and 100755). It skips symlinks and submodule gitlinks. It checks immutable blob sizes before reading contents, so oversized blobs are not buffered.
+
+Staged analysis reports Git LFS pointer blobs as ignored instead of uploading pointer text. It does not run smudge filters or read working-tree replacements for those entries.
