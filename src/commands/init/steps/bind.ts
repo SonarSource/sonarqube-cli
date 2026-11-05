@@ -31,7 +31,6 @@ import { requireAnswer } from '../answer.ts';
 import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
-  projectDashboardUrl,
   reportProjectCreated,
   serverBaseUrl,
   showAnalysisResults,
@@ -152,7 +151,6 @@ export async function runBoundNew(
   await showAnalysisResults(
     http,
     projectKey,
-    projectDashboardUrl(auth, projectKey),
     console,
     'No analysis results yet: the first analysis of the new project is pending.',
   );
