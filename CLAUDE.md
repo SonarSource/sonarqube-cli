@@ -64,7 +64,9 @@ Every HTTP request the CLI issues itself must carry the proxy/TLS configuration 
 
 Call sites never pass proxy/TLS options: `buildRequest(method, headers, timeoutMs, body)` deliberately cannot carry them, and both wrappers drop any `proxy`/`tls` keys found on `init` before spreading the resolved ones, so the configuration cannot be overridden locally. Both wrappers resolve options **per hop**, so a followed redirect never reuses the proxy/TLS options computed for the original URL. An unusable configuration surfaces as `NetworkConfigError` rather than a silent direct connection — `flushTelemetryEvents` aborts the batch on it and requeues every event instead of retrying per event.
 
-**Sentry** (`src/core/observability/sentry.ts`) uses a custom transport that sends envelopes through `fetchAuthenticated`. The wrapper resolves the `SONAR_*` proxy and TLS settings for each request and blocks unsafe redirects. Any future third-party SDK that reports outward must use the same path or an equivalent transport.
+**Sentry** (`src/core/observability/sentry.ts`) uses a custom transport that sends envelopes through `fetchAuthenticated`. The wrapper resolves the `SONAR_*` proxy and TLS settings for each request and blocks unsafe redirects. **LaunchDarkly** (`src/core/launch-darkly/index.ts`) retrieves client-side flag evaluations through `fetchAuthenticated`. It does not initialize the SDK, so flag refreshes create no event, diagnostic or streaming requests. The CLI decision cache and failure fallback remain in use.
+
+Any future third-party SDK that reports outward must use the same path or an equivalent transport.
 
 ## Error handling
 
