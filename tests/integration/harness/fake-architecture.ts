@@ -41,6 +41,8 @@ const RESOURCES = [
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
 
+export const INTENDED_RESOURCE = RESOURCES[1];
+
 /** The id the fake's `GET /api/project_branches/list` gives a project's main branch. */
 export function fakeMainBranchId(projectKey: string): string {
   return `${projectKey}-branch-id`;
