@@ -436,25 +436,35 @@ describe('buildSqaaJsonReport', () => {
     expect(report?.failures[0].message).toContain('Network error');
   });
 
-  it('throws InvalidOptionError for invalid --depth', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      buildSqaaJsonReport(
-        { file: ['src/index.ts'], depth: 'INVALID' },
-        FAKE_AUTHENTICATED_CONTEXT.connection,
-        { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
-      ),
-    ).rejects.toThrow(InvalidOptionError);
-  });
+  it.each([false, true])(
+    'rejects invalid --depth before Git access (explicit files: %s)',
+    async (explicit) => {
+      const file = explicit ? ['src/index.ts'] : undefined;
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        buildSqaaJsonReport({ file, depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT.connection, {
+          telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+        }),
+      ).rejects.toThrow(InvalidOptionError);
+      expect(spawnProcessSpy).not.toHaveBeenCalled();
+      expect(discoverProjectSpy).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('analyzeSqaa: depth option', () => {
-  it('throws InvalidOptionError for invalid --depth', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT),
-    ).rejects.toThrow(InvalidOptionError);
-  });
+  it.each([false, true])(
+    'rejects invalid --depth before Git access (explicit files: %s)',
+    async (explicit) => {
+      const file = explicit ? ['src/index.ts'] : undefined;
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        analyzeSqaa({ file, depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT),
+      ).rejects.toThrow(InvalidOptionError);
+      expect(spawnProcessSpy).not.toHaveBeenCalled();
+      expect(discoverProjectSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('sends DEEP on the wire when --depth DEEP is set for a single file', async () => {
     await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTHENTICATED_CONTEXT);
