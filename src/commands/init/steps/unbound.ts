@@ -34,7 +34,7 @@ import {
   warnIgnoredUnboundNewOptions,
 } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, reportProjectCreated, writeMapping } from './mapping.ts';
+import { reportProjectCreated, writeMapping } from './mapping.ts';
 
 interface NewProject {
   projectKey: string;
@@ -144,7 +144,6 @@ async function mapCreatedProject(
 ): Promise<void> {
   await writeMapping(auth, projectKey, projectRoot, console, 'created');
   reportProjectCreated(console, projectKey);
-  console.print(`Project dashboard: ${projectDashboardUrl(auth, projectKey)}`);
 }
 
 /**

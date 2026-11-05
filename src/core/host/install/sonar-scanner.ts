@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -28,6 +28,7 @@ import {
   SONARSOURCE_BINARIES_URL,
 } from '@/core/config-constants.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
+import logger from '@/core/observability/logger.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -121,6 +122,37 @@ async function unpackScanner(archivePath: string, destination: string): Promise<
     });
 }
 
+const MANAGED_SCANNER_DIRECTORY = /^sonar-scanner-\d+(?:\.\d+)+-(.+)$/;
+const SCANNER_PLATFORM_SUFFIXES = new Set<string>(Object.values(SONAR_SCANNER_PLATFORM_SUFFIXES));
+
+function isManagedScannerDirectory(name: string): boolean {
+  const suffix = MANAGED_SCANNER_DIRECTORY.exec(name)?.[1];
+  return suffix !== undefined && SCANNER_PLATFORM_SUFFIXES.has(suffix);
+}
+
+/**
+ * Removes the scanner directories an earlier CLI version installed, so only the pinned one stays.
+ * Only names this module creates match, which leaves staging directories and anything else alone.
+ */
+export function cleanupOldScannerVersions(binDir: string, currentDirectoryName: string): void {
+  let names: string[];
+  try {
+    names = readdirSync(binDir);
+  } catch (error) {
+    logger.debug(`Could not list ${binDir} to clean up old scanners: ${(error as Error).message}`);
+    return;
+  }
+  for (const name of names) {
+    if (name === currentDirectoryName || !isManagedScannerDirectory(name)) continue;
+    try {
+      rmSync(join(binDir, name), { recursive: true, force: true });
+      logger.debug(`Removed old SonarScanner: ${name}`);
+    } catch (error) {
+      logger.debug(`Could not remove old SonarScanner ${name}: ${(error as Error).message}`);
+    }
+  }
+}
+
 export async function installSonarScanner(console: Console): Promise<ScannerInstallation> {
   const existing = await discoverSonarScanner();
   if (existing) {
@@ -140,6 +172,7 @@ export async function installSonarScanner(console: Console): Promise<ScannerInst
       scannerHome,
       console,
     );
+    cleanupOldScannerVersions(binDir, archive.directoryName);
     console.info(`Using cached SonarScanner ${SONAR_SCANNER_VERSION} from ${scannerHome}.`);
     return scanner;
   }
@@ -164,6 +197,7 @@ export async function installSonarScanner(console: Console): Promise<ScannerInst
       scannerHome,
       console,
     );
+    cleanupOldScannerVersions(binDir, archive.directoryName);
     console.success(`SonarScanner installed at ${scannerHome}`);
     return scanner;
   } catch (cause) {
