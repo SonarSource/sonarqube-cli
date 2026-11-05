@@ -81,6 +81,72 @@ describe('public project directives', () => {
     expect(JSON.parse(posts[0].body!).origin).toBe('sonarqube-cli');
   });
 
+  it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])(
+    'skips equivalent stored and batch identities without rewriting %s',
+    async (graphPerspective) => {
+      const server = await configured((api) =>
+        api.withDirectives([
+          {
+            ...directive,
+            graphPerspective,
+            id: '00000000-0000-4000-8000-000000000001',
+            projectId: 'shop-branch-id',
+          },
+        ]),
+      );
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: [
+            directive,
+            { ...directive, fromNodeKey: 'app:new' },
+            { ...directive, fromNodeKey: 'app:new', graphPerspective },
+          ],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created 1 directives');
+      expect(result.stdout).toContain('Skipped 2 existing');
+      const posts = server
+        .getRecordedRequests()
+        .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+      expect(posts).toHaveLength(1);
+      expect(JSON.parse(posts[0].body!).graphPerspective).toBe('default_perspective');
+    },
+  );
+
+  it.each([' ', 'transformed_code_perspective', ' default_perspective '])(
+    'rejects an update collision with the default alias %s before writing',
+    async (graphPerspective) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await configured((api) =>
+        api.withDirectives([
+          { ...directive, fromNodeKey: 'app:first', id, projectId: 'shop-branch-id' },
+          {
+            ...directive,
+            graphPerspective,
+            id: '00000000-0000-4000-8000-000000000002',
+            projectId: 'shop-branch-id',
+          },
+        ]),
+      );
+      h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:a' }] }));
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('An update would duplicate another directive');
+      expect(
+        server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+    },
+  );
+
   it.each([false, true])(
     'rejects a full project before writing even with duplicate identities (dryRun=%s)',
     async (dryRun) => {
