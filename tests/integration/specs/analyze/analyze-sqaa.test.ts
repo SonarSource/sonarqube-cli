@@ -2766,6 +2766,37 @@ describe('analyze agentic — --format json', () => {
     { timeout: 15000 },
   );
 
+  it.each([false, true])(
+    'prepares the same explicit files for direct and combined reports (multiple files: %s)',
+    async (multiple) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('src/a.ts', 'const a = 1;');
+      harness.cwd.writeFile('src/b.ts', 'const b = 2;');
+      const args = `--file src/a.ts ${multiple ? '--file src/b.ts' : ''} --format json`;
+      const direct = await harness.run(`analyze agentic ${args}`);
+      const combined = await harness.run(`analyze ${args}`);
+      expect(direct.exitCode).toBe(0);
+      expect(combined.exitCode).toBe(0);
+      const report = JSON.parse(direct.stdout);
+      expect(JSON.parse(combined.stdout).agentic).toEqual(report);
+      expect(report.analysisDepth).toBe(multiple ? 'DEEP' : 'STANDARD');
+      expect(report.files.map((file: { path: string }) => file.path)).toEqual(
+        multiple ? ['src/a.ts', 'src/b.ts'] : ['src/a.ts'],
+      );
+      expect(report.files.every((file: { project: string }) => file.project === TEST_PROJECT)).toBe(
+        true,
+      );
+    },
+  );
+
   it(
     'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled',
     async () => {

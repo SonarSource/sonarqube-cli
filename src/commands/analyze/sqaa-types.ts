@@ -108,15 +108,19 @@ export interface SqaaBatchRunOptions {
   telemetryCtx?: CommandInvocationContext;
 }
 
-export interface SingleFileRunOptions {
+export interface PreparedSqaaRun {
   connection: SonarConnection;
-  console: Console;
+  files: SqaaRunFiles;
+  mode: 'single-file' | 'multi-file' | 'change-set' | 'edited-file';
+  ignored: IgnoredFile[];
+  displayBase: string;
+  repoRoot?: string;
   branch?: string;
-  explicitProject?: string;
-  format?: OutputFormat;
-  requireProject?: boolean;
   wireDepth?: SqaaDeepWireDepth;
-  displayDepth?: SqaaAnalysisDepth;
-  telemetryCallerCommand?: SqaaTelemetryCallerCommand;
-  telemetryCtx?: CommandInvocationContext;
+  displayDepth: SqaaAnalysisDepth;
 }
+
+export type SqaaPreparedRunOptions = Pick<
+  SqaaBatchRunOptions,
+  'console' | 'format' | 'telemetryCallerCommand' | 'telemetryCtx'
+>;

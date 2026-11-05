@@ -19,17 +19,30 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { resolveSqaaBranch } from './sqaa-changeset.ts';
 import {
   labelAnalysisDepth,
   parseSqaaDepthOption,
   resolveAnalysisDepth,
   type SqaaDeepWireDepth,
 } from './sqaa-depth.ts';
-import type { SqaaResolution } from './sqaa-resolution.ts';
-import { confirmLargeChangeset } from './sqaa-resolution.ts';
-import type { OutputFormat, SqaaResolvedRun } from './sqaa-types.ts';
+import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { assertExplicitFilesAnalyzable, resolveSqaaRunFiles } from './sqaa-paths.ts';
+import {
+  confirmLargeChangeset,
+  resolveSqaaConnectionAndProject,
+  type SqaaResolution,
+} from './sqaa-resolution.ts';
+import type {
+  AnalyzeSqaaOptions,
+  AnalyzeSqaaRunOptions,
+  OutputFormat,
+  PreparedSqaaRun,
+  SqaaResolvedRun,
+} from './sqaa-types.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
@@ -115,4 +128,41 @@ export async function confirmLargeRunIfNeeded(
     return await confirmLargeChangeset(fileCount, console);
   }
   return true;
+}
+
+export async function prepareSqaaExplicitFiles(
+  options: AnalyzeSqaaOptions,
+  connection: SonarConnection,
+  console: Console,
+  policy: Pick<AnalyzeSqaaRunOptions, 'requireProject' | 'silentSkip'>,
+): Promise<PreparedSqaaRun | null> {
+  const entries = resolveSqaaFileArgs(options.file ?? []);
+  const branch = await resolveSqaaBranch(options.branch, entries[0].absolutePath);
+  const mode = entries.length === 1 ? 'single-file' : 'multi-file';
+  const depth = resolveDepthForMode(options.depth, mode, options.forcedDepth);
+  const resolution = await resolveSqaaConnectionAndProject(
+    connection,
+    options.project,
+    console,
+    entries.map((entry) => entry.absolutePath),
+  );
+  const resolved = resolveSqaaContext(
+    resolution,
+    { ...policy, requireProject: policy.requireProject ?? false },
+    console,
+  );
+  if (!resolved) return null;
+  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
+  if (!(await confirmLargeRunIfNeeded(entries.length, console, options.force, options.format)))
+    return null;
+  const displayBase = process.cwd();
+  return {
+    connection: resolved.connection,
+    files: resolveSqaaRunFiles(resolved.groups, displayBase),
+    mode,
+    ignored: [],
+    displayBase,
+    branch,
+    ...depth,
+  };
 }
