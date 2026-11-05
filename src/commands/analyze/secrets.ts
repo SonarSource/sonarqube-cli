@@ -19,6 +19,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -135,15 +136,26 @@ export async function runSecretsBinary(
   stdin: StdioMode = 'pipe',
   exclusionsOverride: readonly string[] = [],
 ): Promise<SpawnResult> {
+  return runSecretsBinaryWithArgs(
+    binaryPath,
+    files.map((file) => resolve(file)),
+    auth,
+    stdin,
+    exclusionsOverride,
+  );
+}
+
+async function runSecretsBinaryWithArgs(
+  binaryPath: string,
+  args: string[],
+  auth: ResolvedAuth,
+  stdin: StdioMode,
+  exclusionsOverride: readonly string[] = [],
+): Promise<SpawnResult> {
   const settings = await loadSecretsScanSettings();
   return spawnProcessWithTimeout(
     binaryPath,
-    [
-      '--non-interactive',
-      '--json',
-      ...buildSecretsScanArgs(settings, exclusionsOverride),
-      ...files,
-    ],
+    ['--non-interactive', '--json', ...buildSecretsScanArgs(settings, exclusionsOverride), ...args],
     {
       stdin,
       stdout: 'pipe',
@@ -224,7 +236,7 @@ async function handleCheckCommand(
     const { result, parsed } = await scanAndEmitSecrets(
       callerCommand,
       auth,
-      () => runSecretsBinary(binaryPath, ['--input'], auth, 'inherit'),
+      () => runSecretsBinaryWithArgs(binaryPath, ['--input'], auth, 'inherit'),
       ctx,
       randomUUID(),
     );
