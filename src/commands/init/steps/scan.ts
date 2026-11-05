@@ -22,7 +22,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
 import {
   CLI_TMP_DIR,
@@ -110,16 +110,17 @@ function newWorkDirectory(detached: boolean): string {
 /** The project and its mapping exist by now, so a failure has to say they were kept. */
 function keepProjectNote(projectKey: string, error: unknown): CommandFailedError {
   const message = error instanceof Error ? error.message : 'unknown error';
-  const hint = error instanceof CliError ? error.remediationHint : undefined;
-  return new CommandFailedError(`The first analysis did not complete: ${message}`, {
-    cause: error,
+  const wrapped = new CommandFailedError(`The first analysis did not complete: ${message}`, {
     remediationHint: [
       `Project '${projectKey}' and ${SHARED_PROJECT_CONFIG_FILE_NAME} were kept, so the setup is intact.`,
-      hint,
+      remediationHintFor(error),
     ]
       .filter(Boolean)
       .join('\n'),
   });
+  // Passed as an option, the cause's own hint would replace the one above.
+  wrapped.cause = error;
+  return wrapped;
 }
 
 async function readResults(

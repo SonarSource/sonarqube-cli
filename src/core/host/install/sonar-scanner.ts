@@ -153,19 +153,22 @@ export function cleanupOldScannerVersions(binDir: string, currentDirectoryName: 
   }
 }
 
-/** A cached install that no longer verifies is deleted so the caller reinstalls instead of failing forever. */
-async function cachedScannerIsUsable(scanner: ScannerInstallation): Promise<boolean> {
-  if (!existsSync(scanner.javaPath)) return false;
+/** A cached directory that is incomplete or no longer verifies is deleted, so the caller reinstalls instead of failing forever. */
+export async function cachedScannerIsUsable(scanner: ScannerInstallation): Promise<boolean> {
+  if (!existsSync(scanner.home)) return false;
   try {
-    await verifyScanner(scanner);
-    return true;
+    if (existsSync(scanner.javaPath)) {
+      await verifyScanner(scanner);
+      return true;
+    }
+    logger.debug(`Cached SonarScanner at ${scanner.home} has no runtime, reinstalling.`);
   } catch (error) {
     logger.debug(
       `Cached SonarScanner at ${scanner.home} failed verification, reinstalling: ${(error as Error).message}`,
     );
-    rmSync(scanner.home, { recursive: true, force: true });
-    return false;
   }
+  rmSync(scanner.home, { recursive: true, force: true });
+  return false;
 }
 
 export async function installSonarScanner(console: Console): Promise<ScannerInstallation> {
