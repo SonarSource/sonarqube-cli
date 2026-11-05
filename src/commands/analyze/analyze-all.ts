@@ -33,6 +33,7 @@ import { analyzeSqaa, buildSqaaJsonReport } from './sqaa.ts';
 import { resolveChangeSet } from './sqaa-changeset.ts';
 import { applyExitCode, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { enrichForbiddenGlobalError } from './sqaa-run.ts';
 
 export interface AnalyzeAllOptions {
   file?: string[];
@@ -178,6 +179,7 @@ async function runSecretsAndAgentic(
         telemetryCtx: ctx,
       });
 
+  if (agentic) await enrichForbiddenGlobalError(agentic, ctx.connection);
   printCombinedReport(secrets?.report ?? null, agentic, ctx.console);
 
   if (secretsFailed) {
