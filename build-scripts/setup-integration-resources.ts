@@ -143,25 +143,29 @@ if (!existsSync(cagArchivePath) || !existsSync(cagAscPath)) {
   }
 }
 
-// CAG stub binary: compile a tiny TS fixture to a real native executable so
-// Windows can spawn it as a PE. The harness copies this into each test's
-// isolated <cliHome>/bin under the CAG-versioned filename; per-test exit codes
-// and the sentinel path are passed via env vars (see tests/integration/resources/cag-stub.ts).
-const cagStubSource = join(RESOURCES_DIR, 'cag-stub.ts');
-const cagStubOutfile = join(RESOURCES_DIR, platform.os === 'windows' ? 'cag-stub.exe' : 'cag-stub');
-const shouldCompileCagStub =
-  !existsSync(cagStubOutfile) || statSync(cagStubSource).mtimeMs > statSync(cagStubOutfile).mtimeMs;
-if (shouldCompileCagStub) {
-  console.log(`Compiling CAG stub fixture for ${platform.os}-${platform.arch}`);
+// Test stub binaries: compile tiny TS fixtures to real native executables so Windows can spawn them as PEs.
+// - cag-stub: copied into each test's isolated <cliHome>/bin under the CAG-versioned filename; per-test exit codes
+//   and the sentinel path are passed via env vars (see tests/integration/resources/cag-stub.ts).
+// - recording-stub: installed in place of sonar-secrets or sca-scanner-cli to record their argv
+//   (see tests/integration/harness/recording-stub.ts).
+for (const stubName of ['cag-stub', 'recording-stub']) {
+  compileStub(stubName);
+}
+
+function compileStub(stubName: string): void {
+  const source = join(RESOURCES_DIR, `${stubName}.ts`);
+  const outfile = join(RESOURCES_DIR, platform.os === 'windows' ? `${stubName}.exe` : stubName);
+  const shouldCompile =
+    !existsSync(outfile) || statSync(source).mtimeMs > statSync(outfile).mtimeMs;
+  if (!shouldCompile) return;
+  console.log(`Compiling ${stubName} fixture for ${platform.os}-${platform.arch}`);
   // Use process.execPath so we invoke the same bun runtime that's running this
   // script, rather than resolving `bun` through PATH (also satisfies S4036).
-  const result = spawnSync(
-    process.execPath,
-    ['build', '--compile', cagStubSource, '--outfile', cagStubOutfile],
-    { stdio: 'inherit' },
-  );
+  const result = spawnSync(process.execPath, ['build', '--compile', source, '--outfile', outfile], {
+    stdio: 'inherit',
+  });
   if (result.status !== 0) {
-    throw new Error(`Failed to compile CAG stub: bun build exited with ${result.status}`);
+    throw new Error(`Failed to compile ${stubName}: bun build exited with ${result.status}`);
   }
-  console.log(`  CAG stub ready at ${cagStubOutfile}`);
+  console.log(`  ${stubName} ready at ${outfile}`);
 }
