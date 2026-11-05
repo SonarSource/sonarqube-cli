@@ -42,7 +42,10 @@ describe('shellQuote', () => {
     expect(shellQuote("it's", 'linux')).toBe(String.raw`'it'\''s'`);
   });
 
-  it('doubles an embedded apostrophe for PowerShell', () => {
-    expect(shellQuote("it's", 'win32')).toBe("'it''s'");
+  it.each(["'", '‘', '’', '‚', '‛'])('doubles an embedded %s for PowerShell', (quote) => {
+    expect(shellQuote(`it${quote}s`, 'win32')).toBe(`'it${quote}${quote}s'`);
+    expect(shellQuote(`it${quote}s`, 'linux')).toBe(
+      quote === "'" ? String.raw`'it'\''s'` : `'it${quote}s'`,
+    );
   });
 });
