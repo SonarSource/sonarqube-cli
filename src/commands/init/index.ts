@@ -22,10 +22,13 @@ import { findInstalledIntegrationIds } from '@/commands/integrate/_common/instal
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import {
   type UnboundNewFlags,
+  validateScanFlags,
   validateUnboundNewFlags,
+  warnIgnoredScanFlags,
   warnIgnoredUnboundNewFlags,
 } from './flags.ts';
 import type { InitOutcome } from './init-outcome.ts';
@@ -35,6 +38,13 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import {
+  NOT_RUN,
+  reportScan,
+  runFirstScan,
+  type ScanFlags,
+  type ScanResult,
+} from './steps/scan.ts';
 import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
@@ -43,6 +53,9 @@ export interface InitOptions {
   project?: string;
   name?: string;
   visibility?: string;
+  scannerProperty?: string[];
+  verbose?: boolean;
+  detach?: boolean;
 }
 
 /**
@@ -52,17 +65,23 @@ export interface InitOptions {
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
+  const { console } = ctx;
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
   const flags = validateUnboundNewFlags(options);
+  const scanFlags = validateScanFlags(options);
 
-  const { outcome, auth } = await run(projectRoot, ctx, interactive, flags);
+  const { outcome, auth, deps } = await run(projectRoot, ctx, console, interactive, flags);
   if (outcome.path !== 'unbound-new') {
-    warnIgnoredUnboundNewFlags(flags, ctx.console);
+    warnIgnoredUnboundNewFlags(flags, console);
+  }
+  const scan = await scanCreatedProject(outcome, deps, scanFlags);
+  if (scan.status === 'not-run') {
+    warnIgnoredScanFlags(scanFlags, console);
   }
   const declined = outcome.path === 'unbound-new' && outcome.declined === true;
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, ctx.console, {
+  renderInitOutcome(outcome, console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
   if (suggestIntegrate && interactive && !declined) {
@@ -70,17 +89,32 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   }
 }
 
+/** Only a project this run created or found on the server unbound gets a first analysis. */
+async function scanCreatedProject(
+  outcome: InitOutcome,
+  deps: DetectDeps,
+  flags: ScanFlags,
+): Promise<ScanResult> {
+  if (outcome.path !== 'unbound-new' || !outcome.projectKey) {
+    return NOT_RUN;
+  }
+  const scan = await runFirstScan(outcome.projectRoot, outcome.projectKey, deps, flags);
+  reportScan(scan, outcome.projectKey, deps, deps.console);
+  return scan;
+}
+
 async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
+  console: Console,
   interactive: boolean,
   flags: UnboundNewFlags,
-): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
+): Promise<{ outcome: InitOutcome; auth: ResolvedAuth; deps: DetectDeps }> {
   const auth = await resolveInitAuth(ctx, interactive);
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
-  const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
+  const deps: DetectDeps = { auth, http, console, interactive };
   const detected = await detectInitPath(projectRoot, deps);
-  return { outcome: await runDetectedPath(detected, deps, flags), auth };
+  return { outcome: await runDetectedPath(detected, deps, flags), auth, deps };
 }
 
 /**

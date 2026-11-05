@@ -35,6 +35,7 @@ const AZURE_REMOTE = 'https://dev.azure.com/example/project/_git/repository';
 const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
 const INTEGRATE_PROMPT = 'Set up your coding agents';
+const SCAN_PROMPT = 'Run the first analysis with sonar-scanner now';
 
 describe('sonar init', () => {
   let harness: TestHarness;
@@ -80,6 +81,7 @@ describe('sonar init', () => {
     await session.waitText('Project visibility');
     session.keyEnter();
     await session.accept('Create this project');
+    await session.decline(SCAN_PROMPT);
   }
 
   it(
@@ -738,6 +740,67 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stderr).toContain('--name, --visibility ignored');
+      },
+      TIMEOUT,
+    );
+  });
+
+  describe('first analysis flags', () => {
+    it(
+      'rejects --detach together with --verbose before signing in',
+      async () => {
+        const result = await harness.run('init --non-interactive --detach --verbose');
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('--detach cannot be combined with --verbose');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'rejects a managed scanner property without echoing its value',
+      async () => {
+        const result = await harness.run(
+          'init --non-interactive --scanner-property sonar.token=hunter2-secret',
+        );
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain("'sonar.token' is managed by 'sonar init'");
+        expect(result.stderr).not.toContain('hunter2-secret');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'creates the project but runs no analysis without a terminal or a scan flag',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Analysis');
+        expect(result.stdout).toContain("'sonar integrate'");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns that scan flags are ignored when the directory is already set up',
+      async () => {
+        const serverUrl = await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        writeSonarConfig(serverUrl);
+
+        const result = await harness.run(
+          'init --non-interactive --detach --scanner-property sonar.exclusions=build/**',
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('--scanner-property, --detach ignored');
+        expect(result.stderr).not.toContain('build/**');
       },
       TIMEOUT,
     );
