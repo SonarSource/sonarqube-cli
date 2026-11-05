@@ -38,7 +38,8 @@ import {
 } from '../../../_common/stats-helpers.ts';
 import { readAnalysisEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
-import { commitFile, initGitRepo } from '../hook/git-test-helpers';
+import { readScaScannerInvocations, readSecretsScanArgvs } from '../../harness/recording-stub.ts';
+import { commitFile, initGitRepo, stageFile } from '../hook/git-test-helpers';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -447,6 +448,10 @@ describe('analyze secrets', () => {
       return logFile.exists() ? logFile.asText() : '';
     }
 
+    function outputWithoutTimings(result: { stdout: string; stderr: string }): string {
+      return (result.stdout + result.stderr).replaceAll(/\d+ms/g, '<duration>');
+    }
+
     beforeEach(() => {
       harness.state().withSecretsBinaryInstalled();
       harness.withAuth(FAKE_SERVER, 'fake-token');
@@ -700,6 +705,38 @@ describe('analyze secrets', () => {
     );
 
     it(
+      'prints the same masked report for a path scan with --dangerous-show-secrets as without it',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+        const withoutOption = await harness.run('analyze secrets secrets.js');
+
+        const result = await harness.run('analyze secrets secrets.js --dangerous-show-secrets');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain(GITHUB_TEST_TOKEN);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'prints the same masked report for a stdin scan with --dangerous-show-secrets as without it',
+      async () => {
+        const withoutOption = await harness.runWithStdin('analyze secrets --stdin', SECRET_CONTENT);
+
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --dangerous-show-secrets',
+          SECRET_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain(GITHUB_TEST_TOKEN);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
       'exits with code 2 when --exclude is combined with --stdin',
       async () => {
         const result = await harness.runWithStdin(
@@ -709,6 +746,191 @@ describe('analyze secrets', () => {
 
         expect(result.exitCode).toBe(2);
         expect(result.stdout + result.stderr).toContain('Cannot use --exclude with --stdin');
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  describe('sonar-secrets arguments', () => {
+    // Options only `analyze secrets` may pass: no hook or other scanner ever gets them.
+    const PER_RUN_ONLY_FLAGS = ['--dangerous-show-secrets'];
+    const SECRET_CONTENT = `const token = "${GITHUB_TEST_TOKEN}";`;
+    const GIT_NULL_OID = '0000000000000000000000000000000000000000';
+
+    function expectNoPerRunOnlyFlags(argvs: string[][]): void {
+      expect(argvs.length).toBeGreaterThan(0);
+      for (const argv of argvs) {
+        for (const flag of PER_RUN_ONLY_FLAGS) {
+          expect(argv).not.toContain(flag);
+        }
+      }
+    }
+
+    beforeEach(() => {
+      harness.state().withRecordedSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, 'fake-token');
+    });
+
+    it(
+      'passes --dangerous-show-secrets to sonar-secrets for a path scan given the option',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+
+        const result = await harness.run('analyze secrets secrets.js --dangerous-show-secrets');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        const argvs = readSecretsScanArgvs(harness);
+        expect(argvs).toHaveLength(1);
+        expect(argvs[0]).toContain('--dangerous-show-secrets');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes --dangerous-show-secrets to sonar-secrets for a stdin scan given the option',
+      async () => {
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --dangerous-show-secrets',
+          SECRET_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        const argvs = readSecretsScanArgvs(harness);
+        expect(argvs).toHaveLength(1);
+        expect(argvs[0]).toContain('--dangerous-show-secrets');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets for an analyze secrets run without them',
+      async () => {
+        harness.cwd.writeFile('secrets.js', SECRET_CONTENT);
+
+        await harness.run('analyze secrets secrets.js');
+        await harness.runWithStdin('analyze secrets --stdin', SECRET_CONTENT);
+
+        const argvs = readSecretsScanArgvs(harness);
+        expect(argvs).toHaveLength(2);
+        expectNoPerRunOnlyFlags(argvs);
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from the git pre-commit hook',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        stageFile(harness.cwd.path, 'secret.js', SECRET_CONTENT);
+
+        const result = await harness.run('hook git-pre-commit');
+
+        expect(result.exitCode).toBe(1);
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from the git pre-push hook',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        const sha = commitFile(harness.cwd.path, 'secret.js', SECRET_CONTENT);
+
+        const result = await harness.runWithStdin(
+          'hook git-pre-push',
+          `refs/heads/main ${sha} refs/heads/main ${GIT_NULL_OID}\n`,
+        );
+
+        expect(result.exitCode).toBe(1);
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from an agent file-read hook',
+      async () => {
+        harness.cwd.writeFile('secret.js', SECRET_CONTENT);
+        const payload = JSON.stringify({
+          tool_name: 'Read',
+          tool_input: { file_path: join(harness.cwd.path, 'secret.js') },
+        });
+
+        const result = await harness.runWithStdin('hook claude-pre-tool-use', payload);
+
+        expect(result.stdout).toContain('"deny"');
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from an agent prompt hook',
+      async () => {
+        const result = await harness.runWithStdin(
+          'hook claude-prompt-submit',
+          JSON.stringify({ prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+        );
+
+        expect(result.stdout).toContain('"block"');
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from a bare analyze run',
+      async () => {
+        initGitRepo(harness.cwd.path);
+        commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+        harness.cwd.writeFile('secret.js', SECRET_CONTENT);
+
+        const result = await harness.run('analyze');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes no per-run option to sonar-secrets from the dependency-risks manifest check',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken(VALID_TOKEN)
+          .withScaEnabled(true)
+          .withProject('demo')
+          .withProjectSettings('demo', [])
+          .start();
+        harness.state().withScaScannerStubDiscovering(['package.json']);
+        harness.withAuth(server.baseUrl(), VALID_TOKEN, 'my-org');
+        harness.cwd.writeFile(
+          'package.json',
+          `{ "name": "demo", "token": "${GITHUB_TEST_TOKEN}" }`,
+        );
+
+        const result = await harness.run('analyze dependency-risks --project demo');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain(
+          'Secrets detected in dependency manifest files',
+        );
+        expect(readScaScannerInvocations(harness)[0]?.argv[0]).toBe('discover-manifests');
+        expectNoPerRunOnlyFlags(readSecretsScanArgvs(harness));
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'keeps --dangerous-show-secrets out of the help until the CLI displays raw values',
+      async () => {
+        const result = await harness.run('analyze secrets --help');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('--exclude');
+        expect(result.stdout).not.toContain('--dangerous-show-secrets');
       },
       { timeout: 15000 },
     );

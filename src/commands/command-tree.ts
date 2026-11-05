@@ -701,12 +701,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key',
       collectExcludeOption,
     )
+    // Hidden until the CLI displays the raw values it receives.
+    .addOption(
+      new SonarOption(
+        '--dangerous-show-secrets',
+        'Ask sonar-secrets to report the raw value of each secret',
+      ).hideHelp(),
+    )
     .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
       analyzeSecrets(
         {
           paths: Array.isArray(paths) ? paths : [],
           stdin: options.stdin,
           exclude: options.exclude,
+          dangerousShowSecrets: options.dangerousShowSecrets,
         },
         ctx,
       ),
