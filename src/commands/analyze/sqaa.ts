@@ -30,16 +30,14 @@ import type { Console } from '@/core/ui/console.ts';
 import {
   excludeIgnoredFiles,
   resolveChangeSet,
-  resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
 } from './sqaa-changeset.ts';
 import {
   confirmLargeRunIfNeeded,
+  prepareSqaaExplicitFiles,
   resolveDepthForMode,
   resolveSqaaContext,
 } from './sqaa-context.ts';
-import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertExplicitFilesAnalyzable } from './sqaa-paths.ts';
 import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
 import {
   runSqaaAnalysis,
@@ -89,18 +87,21 @@ export async function analyzeSqaa(
   }
 
   if (rawFiles?.length) {
-    await analyzeSqaaExplicitFiles(rawFiles, {
+    const prepared = await prepareSqaaExplicitFiles(
+      { ...options, format },
       connection,
-      branch,
-      project,
-      force,
+      telemetryCtx.console,
+      { requireProject },
+    );
+    if (!prepared) return;
+    const execution = {
       format,
-      rawDepth,
-      forcedDepth,
-      requireProject,
       telemetryCallerCommand,
       telemetryCtx,
-    });
+      console: telemetryCtx.console,
+    };
+    if (prepared.mode === 'single-file') await runSqaaAnalysis(prepared, execution);
+    else await runSqaaAnalysisOnExplicitFiles(prepared, execution);
     return;
   }
 
@@ -117,79 +118,6 @@ export async function analyzeSqaa(
     requireProject,
     telemetryCallerCommand,
     telemetryCtx,
-  });
-}
-
-async function analyzeSqaaExplicitFiles(
-  rawFiles: string[],
-  params: {
-    connection: SonarConnection;
-    branch?: string;
-    project?: string;
-    force?: boolean;
-    format: OutputFormat;
-    rawDepth?: string;
-    forcedDepth?: SqaaAnalysisDepth;
-    requireProject: boolean;
-    telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
-    telemetryCtx: CommandInvocationContext;
-  },
-): Promise<void> {
-  const entries = resolveSqaaFileArgs(rawFiles);
-  const {
-    connection,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  } = params;
-  const { console } = telemetryCtx;
-  const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-
-  if (entries.length === 1) {
-    const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
-    await runSqaaAnalysis(entries[0].absolutePath, {
-      connection,
-      branch: resolvedBranch,
-      explicitProject: project,
-      format,
-      requireProject,
-      wireDepth,
-      displayDepth,
-      telemetryCallerCommand,
-      telemetryCtx,
-      console,
-    });
-    return;
-  }
-
-  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    entries.map((e) => e.absolutePath),
-  );
-  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
-  if (!resolved) return;
-
-  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
-  if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
-
-  await runSqaaAnalysisOnExplicitFiles({
-    resolved,
-    branch: resolvedBranch,
-    format,
-    wireDepth,
-    displayDepth,
-    telemetryCallerCommand,
-    telemetryCtx,
-    console,
   });
 }
 
