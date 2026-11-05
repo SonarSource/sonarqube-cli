@@ -31,6 +31,7 @@ import {
   scannerJavaArgs,
 } from '@/core/host/install/scanner-discovery.ts';
 import { parseProperties } from '@/core/io/properties.ts';
+import logger from '@/core/observability/logger.ts';
 import { spawnDetachedToLog, spawnProcessWithTimeout } from '@/core/process/process.ts';
 
 /** Values shorter than this are left alone when redacting: they would garble unrelated output. */
@@ -97,8 +98,9 @@ function scannerEnvironment(run: ScannerRun): NodeJS.ProcessEnv {
 }
 
 function redactor(run: ScannerRun): (text: string) => string {
+  // An empty string would make `replaceAll` insert the marker between every character.
   const secrets = [run.auth.token, ...run.scannerProperties.values()].filter(
-    (value, index) => index === 0 || value.length >= MIN_REDACTED_VALUE_LENGTH,
+    (value, index) => value.length >= (index === 0 ? 1 : MIN_REDACTED_VALUE_LENGTH),
   );
   return (text) => secrets.reduce((safe, secret) => safe.replaceAll(secret, '[REDACTED]'), text);
 }
@@ -156,7 +158,11 @@ export async function runScanner(run: ScannerRun, live?: ScannerOutputSink): Pro
   const redact = redactor(run);
   const emit = (source: 'stdout' | 'stderr') => (line: string) => {
     const safe = redact(line);
-    appendFileSync(logPath, `[${source}] ${safe}\n`);
+    try {
+      appendFileSync(logPath, `[${source}] ${safe}\n`);
+    } catch (error) {
+      logger.debug(`Could not write to the scanner log: ${(error as Error).message}`);
+    }
     live?.print(safe);
   };
   const stdout = lineEmitter(emit('stdout'));
