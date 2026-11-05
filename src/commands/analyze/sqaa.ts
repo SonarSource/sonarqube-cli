@@ -23,11 +23,8 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { resolveFormatOption } from '@/core/commands/params.ts';
 
 import { prepareSqaaRun } from './sqaa-context.ts';
-import {
-  runSqaaAnalysis,
-  runSqaaAnalysisOnExplicitFiles,
-  runSqaaAnalysisOnFiles,
-} from './sqaa-run.ts';
+import { applyExitCode } from './sqaa-display.ts';
+import { executeSqaaRun, presentSqaaRun } from './sqaa-run.ts';
 import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions } from './sqaa-types.ts';
 import { VALID_FORMATS } from './sqaa-types.ts';
 
@@ -63,14 +60,8 @@ export async function analyzeSqaa(
     );
     return;
   }
-  const execution = {
-    format,
-    telemetryCallerCommand: runOptions.telemetryCallerCommand,
-    telemetryCtx,
-    console,
-  };
-  if (prepared.mode === 'single-file') await runSqaaAnalysis(prepared, execution);
-  else if (prepared.mode === 'multi-file')
-    await runSqaaAnalysisOnExplicitFiles(prepared, execution);
-  else await runSqaaAnalysisOnFiles(prepared, execution);
+  const execution = { ...runOptions, format, telemetryCtx, console };
+  const { tally } = await executeSqaaRun(prepared, execution);
+  applyExitCode(tally.totalIssues, tally.totalFailures, tally.globalError !== undefined);
+  await presentSqaaRun(prepared, tally, execution);
 }
