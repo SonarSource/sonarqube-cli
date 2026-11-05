@@ -640,7 +640,6 @@ export class FakeSonarQubeServerBuilder {
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
   private projectBindingsStatusCode = 200;
-  private boundProjectsPutStatusCode?: number;
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
@@ -1098,12 +1097,6 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /** Makes `PUT` on bound-projects answer with this status (405 on a server older than 2025.6); `POST` keeps working. */
-  withoutBoundProjectsPut(statusCode = 405): this {
-    this.boundProjectsPutStatusCode = statusCode;
-    return this;
-  }
-
   withAnalyzedProjects(projectKeys: string[]): this {
     for (const key of projectKeys) {
       this.analyzedProjectKeys.add(key);
@@ -1169,7 +1162,6 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       projectBindingsStatusCode,
-      boundProjectsPutStatusCode,
       dopSettingsStatusCode,
       patResponses,
       gitlabRepos,
@@ -2487,18 +2479,12 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (
-          path === '/api/v2/dop-translation/bound-projects' &&
-          (req.method === 'POST' || req.method === 'PUT')
-        ) {
+        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
           if (boundProjectsStatusCode !== undefined) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
               status: boundProjectsStatusCode,
               headers: { 'Content-Type': 'application/json' },
             });
-          }
-          if (req.method === 'PUT' && boundProjectsPutStatusCode !== undefined) {
-            return new Response('', { status: boundProjectsPutStatusCode });
           }
           const payload = JSON.parse(body ?? '{}') as {
             projectKey: string;
@@ -2512,23 +2498,24 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          const existed = projectBindings.some((b) => b.projectKey === payload.projectKey);
-          if (!existed || req.method === 'POST') {
+          const existed =
+            projects.has(payload.projectKey) ||
+            projectBindings.some((b) => b.projectKey === payload.projectKey);
+          if (existed) {
+            return new Response(
+              JSON.stringify({ message: `Project '${payload.projectKey}' already exists` }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          if (!existed) {
             projectBindings.push({
               projectKey: payload.projectKey,
               repository: payload.repositoryIdentifier,
               dopSettingId: payload.devOpsPlatformSettingId,
             });
-          }
-          if (req.method === 'PUT') {
-            return new Response(
-              JSON.stringify({
-                projectId: `project-${payload.projectKey}`,
-                bindingId: `binding-${payload.projectKey}`,
-                newProjectCreated: !existed,
-              }),
-              { status: 200, headers: { 'Content-Type': 'application/json' } },
-            );
           }
           return new Response(JSON.stringify({}), {
             status: 201,
