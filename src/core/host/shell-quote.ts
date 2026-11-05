@@ -19,7 +19,9 @@
  */
 
 export function shellQuote(value: string, platform: NodeJS.Platform = process.platform): string {
-  const apostrophe = platform === 'win32' ? "''" : String.raw`'\''`;
-  const escaped = value.replaceAll("'", apostrophe);
+  const escaped =
+    platform === 'win32'
+      ? value.replaceAll(/['\u2018-\u201b]/g, '$&$&')
+      : value.replaceAll("'", String.raw`'\''`);
   return /^[\w.:/@-]+$/.test(value) ? value : `'${escaped}'`;
 }
