@@ -33,6 +33,21 @@ function warnings(console: FakeConsole): string {
     .join('\n');
 }
 
+describe('validateScanFlags with --detach', () => {
+  it.each(['sonar.verbose=true', 'sonar.log.level=DEBUG'])(
+    'rejects %s, since a background log is not redacted',
+    (property) => {
+      expect(() => validateScanFlags({ detach: true, scannerProperty: [property] })).toThrow(
+        InvalidOptionError,
+      );
+    },
+  );
+
+  it('allows the same properties for a foreground scan', () => {
+    expect(() => validateScanFlags({ scannerProperty: ['sonar.verbose=true'] })).not.toThrow();
+  });
+});
+
 describe('parseScannerProperties', () => {
   it('keeps the value after the first equals sign and lets the last duplicate win', () => {
     const properties = parseScannerProperties(['sonar.exclusions=a=b', 'sonar.exclusions=c']);
@@ -48,6 +63,14 @@ describe('parseScannerProperties', () => {
     const attempt = () => parseScannerProperties(['sonar.x=secret\nvalue']);
     expect(attempt).toThrow(InvalidOptionError);
     expect(attempt).not.toThrow(/secret/);
+  });
+
+  it.each([
+    'sonar.scanner.apiBaseUrl',
+    'sonar.scanner.sonarcloudUrl',
+    'sonar.scanner.internal.dumpToFile',
+  ])('rejects the token-redirecting key %s', (key) => {
+    expect(() => parseScannerProperties([`${key}=x`])).toThrow(/managed by 'sonar init'/);
   });
 
   it.each(['sonar.token', 'sonar.host.url', 'sonar.projectKey', 'sonar.scanner.proxyPassword'])(

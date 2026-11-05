@@ -90,6 +90,28 @@ async function importCertificates(
   }, Promise.resolve());
 }
 
+type ClientCertificate = NonNullable<
+  Awaited<ReturnType<typeof getNetworkConfigOrThrow>>['clientCert']
+>;
+
+function assertDetachable(client: ClientCertificate): void {
+  if (client.format !== 'pkcs12' && client.passphrase) {
+    throw new CommandFailedError(
+      'A passphrase-protected PEM client key cannot be used with --detach.',
+      {
+        remediationHint:
+          'Convert the client certificate to PKCS12, or run the analysis without --detach.',
+      },
+    );
+  }
+}
+
+/** Fails fast, so the user does not wait through a scanner download to learn --detach is refused. */
+export async function assertScanDetachable(): Promise<void> {
+  const { clientCert } = await getNetworkConfigOrThrow();
+  if (clientCert) assertDetachable(clientCert);
+}
+
 export async function scannerNetworkEnv(
   serverUrl: string,
   javaPath: string,
@@ -141,16 +163,7 @@ export async function scannerNetworkEnv(
       env.SONAR_SCANNER_KEYSTORE_PATH = client.certPath;
       env.SONAR_SCANNER_KEYSTORE_PASSWORD = client.passphrase ?? '';
     } else {
-      if (detached && client.passphrase) {
-        // Nothing removes a detached scanner's directory, so the decrypted key would stay on disk.
-        throw new CommandFailedError(
-          'A passphrase-protected PEM client key cannot be used with --detach.',
-          {
-            remediationHint:
-              'Convert the client certificate to PKCS12, or run the analysis without --detach.',
-          },
-        );
-      }
+      if (detached) assertDetachable(client);
       const path = join(temporaryDirectory, 'keystore.p12');
       const bytes = pemToPkcs12(client.resolvedCertPem, client.resolvedKeyPem, client.passphrase);
       writeFileSync(path, bytes, { mode: 0o600 });

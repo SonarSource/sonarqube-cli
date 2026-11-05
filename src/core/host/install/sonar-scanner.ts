@@ -153,6 +153,21 @@ export function cleanupOldScannerVersions(binDir: string, currentDirectoryName: 
   }
 }
 
+/** A cached install that no longer verifies is deleted so the caller reinstalls instead of failing forever. */
+async function cachedScannerIsUsable(scanner: ScannerInstallation): Promise<boolean> {
+  if (!existsSync(scanner.javaPath)) return false;
+  try {
+    await verifyScanner(scanner);
+    return true;
+  } catch (error) {
+    logger.debug(
+      `Cached SonarScanner at ${scanner.home} failed verification, reinstalling: ${(error as Error).message}`,
+    );
+    rmSync(scanner.home, { recursive: true, force: true });
+    return false;
+  }
+}
+
 export async function installSonarScanner(console: Console): Promise<ScannerInstallation> {
   const existing = await discoverSonarScanner();
   if (existing) {
@@ -164,8 +179,7 @@ export async function installSonarScanner(console: Console): Promise<ScannerInst
   const binDir = ensureBinDirectory();
   const scannerHome = join(BIN_DIR, archive.directoryName);
   const scanner = managedScanner(scannerHome);
-  if (existsSync(scanner.javaPath)) {
-    await verifyScanner(scanner);
+  if (await cachedScannerIsUsable(scanner)) {
     recordInstalledDependency(
       SONAR_SCANNER_BINARY_NAME,
       SONAR_SCANNER_VERSION,

@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -36,7 +36,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { DEFAULT_STATUSES } from '../../list/issues.ts';
 import { requireAnswer } from '../answer.ts';
 import { runScanner, startScannerInBackground } from '../scan/run-scanner.ts';
-import { scannerNetworkEnv } from '../scan/scanner-network.ts';
+import { assertScanDetachable, scannerNetworkEnv } from '../scan/scanner-network.ts';
 import type { DetectDeps } from './detect.ts';
 
 /** What the user asked of the scan; validated before the login. */
@@ -70,13 +70,37 @@ function scanRequested(flags: ScanFlags): boolean {
 
 export const NOT_RUN: ScanResult = { status: 'not-run' };
 
+const DETACHED_DIRECTORY_PREFIX = 'init-';
+const STALE_WORK_DIRECTORY_MS = 24 * 60 * 60 * 1000;
+
+/** Nothing removes a detached scanner's directory, so earlier runs' leftovers go on the next run. */
+function pruneStaleWorkDirectories(): void {
+  let names: string[];
+  try {
+    names = readdirSync(CLI_TMP_DIR);
+  } catch {
+    return;
+  }
+  for (const name of names.filter((entry) => entry.startsWith(DETACHED_DIRECTORY_PREFIX))) {
+    const path = join(CLI_TMP_DIR, name);
+    try {
+      if (Date.now() - statSync(path).mtimeMs > STALE_WORK_DIRECTORY_MS) {
+        rmSync(path, { recursive: true, force: true });
+      }
+    } catch (error) {
+      logger.debug(`Could not remove stale scanner directory ${path}: ${(error as Error).message}`);
+    }
+  }
+}
+
 function newWorkDirectory(detached: boolean): string {
   if (!detached) {
     return mkdtempSync(join(tmpdir(), 'sonar-init-'));
   }
   // A background scanner keeps using this directory after `sonar init` has exited.
   mkdirSync(CLI_TMP_DIR, { recursive: true, mode: 0o700 });
-  return mkdtempSync(join(CLI_TMP_DIR, 'init-'));
+  pruneStaleWorkDirectories();
+  return mkdtempSync(join(CLI_TMP_DIR, DETACHED_DIRECTORY_PREFIX));
 }
 
 /** The project and its mapping exist by now, so a failure has to say they were kept. */
@@ -150,6 +174,7 @@ export async function runFirstScan(
   let directory: string | undefined;
   let handedOff = false;
   try {
+    if (flags.detach) await assertScanDetachable();
     const scanner = await installSonarScanner(console);
     directory = newWorkDirectory(flags.detach);
     const run = {
