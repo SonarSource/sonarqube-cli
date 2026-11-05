@@ -147,17 +147,23 @@ export async function runFirstScan(
     return NOT_RUN;
   }
 
-  const scanner = await installSonarScanner(console);
-  const directory = newWorkDirectory(flags.detach);
+  let directory: string | undefined;
   let handedOff = false;
   try {
+    const scanner = await installSonarScanner(console);
+    directory = newWorkDirectory(flags.detach);
     const run = {
       scanner,
       projectRoot,
       projectKey,
       auth,
       directory,
-      networkEnv: await scannerNetworkEnv(auth.serverUrl, scanner.javaPath, directory),
+      networkEnv: await scannerNetworkEnv(
+        auth.serverUrl,
+        scanner.javaPath,
+        directory,
+        flags.detach,
+      ),
       scannerProperties: flags.scannerProperties,
     };
 
@@ -193,7 +199,7 @@ export async function runFirstScan(
   } catch (error) {
     throw keepProjectNote(projectKey, error);
   } finally {
-    if (!handedOff) {
+    if (directory && !handedOff) {
       rmSync(directory, { recursive: true, force: true });
     }
   }
