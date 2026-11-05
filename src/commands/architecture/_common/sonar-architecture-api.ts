@@ -23,7 +23,7 @@ import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
-import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
+import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 
@@ -426,6 +426,12 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .getProjectsByKey(this.projectKey)
       .orThrow()
       .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_FORBIDDEN) {
+          throw new CommandFailedError(
+            `The public project lookup refused access to '${this.projectKey}' (HTTP 403).`,
+            { cause: error, remediationHint: 'Check the project key and Browse permission.' },
+          );
+        }
         if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
           throw new CommandFailedError(
             'This Server does not expose the public project lookup required for intended architecture and directives.',

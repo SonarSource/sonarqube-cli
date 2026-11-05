@@ -24,6 +24,7 @@ import type { IntendedArchitecture } from '@/commands/architecture/_common/archi
 import type { ProjectDirective } from '@/commands/architecture/_common/directives.ts';
 
 import { TestHarness } from '../../harness';
+import { INTENDED_RESOURCE } from '../../harness/fake-architecture';
 
 const input = {
   type: 'REMOVE_EDGE',
@@ -92,9 +93,7 @@ describe('Server public architecture project lookup', () => {
     expect(saved.models[0]).toMatchObject(model);
     const requests = server.getRecordedRequests();
     expect(requests.some((r) => r.path.includes('project_branches'))).toBe(false);
-    const post = requests.find(
-      (r) => r.method === 'POST' && r.path.endsWith('intended-architectures'),
-    );
+    const post = requests.find((r) => r.method === 'POST' && r.path.endsWith(INTENDED_RESOURCE));
     expect(JSON.parse(post!.body!).projectId).toBe('shop-project-id');
     expect(requests.some((r) => r.path === '/api/v2/components/projects')).toBe(true);
   });
@@ -200,7 +199,7 @@ describe('Server public architecture project lookup', () => {
     );
   });
 
-  it.each(['intended-architectures', 'project-directives'] as const)(
+  it.each([INTENDED_RESOURCE, 'project-directives'] as const)(
     'explains unavailable public Architecture APIs on Server (%s)',
     async (resource) => {
       const server = await h
@@ -213,7 +212,7 @@ describe('Server public architecture project lookup', () => {
         )
         .start();
       h.withAuth(server.baseUrl(), 'test-token');
-      const target = resource === 'intended-architectures' ? 'intended' : 'directives';
+      const target = resource === INTENDED_RESOURCE ? 'intended' : 'directives';
       const result = await h.run(`arch ${target} get -p shop --format json`);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('older Server versions');
@@ -225,7 +224,7 @@ describe('Server public architecture project lookup', () => {
   it.each([
     [404, {}, 'public project lookup'],
     [401, {}, '401'],
-    [403, {}, 'permissions'],
+    [403, {}, 'public project lookup'],
     [200, {}, 'resolve project'],
     [200, { projects: [], page: { total: 0 } }, 'resolve project'],
     [200, { projects: [{ id: 'opaque', key: 'other' }], page: { total: 1 } }, 'resolve project'],
@@ -248,6 +247,34 @@ describe('Server public architecture project lookup', () => {
       server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
     ).toHaveLength(0);
   });
+
+  it.each([
+    'intended get -p shop --format json',
+    'directives set -p shop --file changes.json --dry-run',
+  ])(
+    'attributes a denied project lookup to the lookup, before any Architecture call (%s)',
+    async (command) => {
+      const server = await h
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('shop')
+        .withProjectsLookupResponse(403, { message: 'Lookup forbidden' })
+        .start();
+      h.withAuth(server.baseUrl(), 'test-token');
+      h.cwd.writeFile('changes.json', JSON.stringify({ create: [input] }));
+      const result = await h.run(`arch ${command}`);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        "The public project lookup refused access to 'shop' (HTTP 403).",
+      );
+      expect(result.stderr).toContain('Browse permission');
+      expect(result.stderr).not.toContain('The Architecture API refused');
+      expect(result.stderr).not.toContain('Team or Enterprise');
+      expect(
+        server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
+      ).toHaveLength(0);
+    },
+  );
 
   it('reports confirmed creations and stops after a rejected update on Server', async () => {
     const id = '00000000-0000-4000-8000-000000000099';
@@ -286,7 +313,7 @@ describe('Server public architecture project lookup', () => {
         .withAuthToken('test-token')
         .withProject('shop', (p) =>
           p.withArchitecture((a) =>
-            a.withStatus('intended-architectures', 404, '{"message":"Missing endpoint"}', 'GET'),
+            a.withStatus(INTENDED_RESOURCE, 404, '{"message":"Missing endpoint"}', 'GET'),
           ),
         );
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
@@ -342,8 +369,7 @@ describe('Server public architecture project lookup', () => {
       'shop:api-v2',
     );
     expect(
-      requests.find((r) => r.path === '/api/v2/architecture/intended-architectures')?.query
-        .projectId,
+      requests.find((r) => r.path === `/api/v2/architecture/${INTENDED_RESOURCE}`)?.query.projectId,
     ).toBe('shop:api-v2-project-id');
   });
 
@@ -353,12 +379,7 @@ describe('Server public architecture project lookup', () => {
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p.withArchitecture((a) =>
-          a.withStatus(
-            'intended-architectures',
-            200,
-            '{"id":null,"intendedArchitectures":[]}',
-            'GET',
-          ),
+          a.withStatus(INTENDED_RESOURCE, 200, '{"id":null,"intendedArchitectures":[]}', 'GET'),
         ),
       )
       .start();
