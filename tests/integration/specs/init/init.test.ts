@@ -35,6 +35,7 @@ const AZURE_REMOTE = 'https://dev.azure.com/example/project/_git/repository';
 const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
 const INTEGRATE_PROMPT = 'Set up your coding agents';
+const SCAN_PROMPT = 'Run the first analysis with sonar-scanner now';
 
 describe('sonar init', () => {
   let harness: TestHarness;
@@ -74,12 +75,25 @@ describe('sonar init', () => {
 
   const UNBOUND = 'Created project';
 
+  /** Every successful run prints the dashboard link exactly once, before any integrate offer. */
+  function expectDashboardBefore(stdout: string, id: string, integrateMarker: string) {
+    expect(stdout.match(/Project dashboard:/g)).toHaveLength(1);
+    const dashboardAt = stdout.indexOf(
+      `Project dashboard: https://sonarcloud.io/project/overview?id=${id}`,
+    );
+    expect(dashboardAt).toBeGreaterThan(-1);
+    const markerAt = stdout.indexOf(integrateMarker);
+    expect(markerAt).toBeGreaterThan(-1);
+    expect(dashboardAt).toBeLessThan(markerAt);
+  }
+
   async function createProject(session: ReturnType<typeof harness.runInteractive>) {
     await session.waitText('Project name');
     session.keyEnter();
     await session.waitText('Project visibility');
     session.keyEnter();
     await session.accept('Create this project');
+    await session.decline(SCAN_PROMPT);
   }
 
   it(
@@ -119,6 +133,7 @@ describe('sonar init', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
       expect(result.stdout).toContain("'sonar integrate'");
+      expectDashboardBefore(result.stdout, 'mapped', "'sonar integrate'");
     },
     TIMEOUT,
   );
@@ -743,6 +758,68 @@ describe('sonar init', () => {
     );
   });
 
+  describe('first analysis flags', () => {
+    it(
+      'rejects --detach together with --verbose before signing in',
+      async () => {
+        const result = await harness.run('init --non-interactive --detach --verbose');
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('--detach cannot be combined with --verbose');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'rejects a managed scanner property without echoing its value',
+      async () => {
+        const result = await harness.run(
+          'init --non-interactive --scanner-property sonar.token=hunter2-secret',
+        );
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain("'sonar.token' is managed by 'sonar init'");
+        expect(result.stderr).not.toContain('hunter2-secret');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'creates the project but runs no analysis without a terminal or a scan flag',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Analysis');
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+        expect(result.stdout).toContain("'sonar integrate'");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns that scan flags are ignored when the directory is already set up',
+      async () => {
+        const serverUrl = await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        writeSonarConfig(serverUrl);
+
+        const result = await harness.run(
+          'init --non-interactive --detach --scanner-property sonar.exclusions=build/**',
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain('--scanner-property, --detach ignored');
+        expect(result.stderr).not.toContain('build/**');
+      },
+      TIMEOUT,
+    );
+  });
+
   describe('sonar integrate suggestion', () => {
     it(
       'is skipped once anything is integrated',
@@ -788,6 +865,10 @@ describe('sonar init', () => {
         expect(result.stdout).not.toContain('The repository is bound');
         expect(result.stdout).toContain(
           'Project dashboard: https://sonarcloud.io/project/overview?id=',
+        );
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+        expect(result.stdout.indexOf('Project dashboard:')).toBeLessThan(
+          result.stdout.indexOf(INTEGRATE_PROMPT),
         );
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey"');
@@ -850,6 +931,29 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Created project');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'prints the project dashboard once, between the first-analysis and integrate prompts',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+
+        const session = harness.runInteractive('init');
+        await createProject(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+        const dashboardAt = result.stdout.indexOf('Project dashboard:');
+        const scanPromptAt = result.stdout.indexOf(SCAN_PROMPT);
+        const integratePromptAt = result.stdout.indexOf(INTEGRATE_PROMPT);
+        expect(scanPromptAt).toBeGreaterThan(-1);
+        expect(dashboardAt).toBeGreaterThan(scanPromptAt);
+        expect(integratePromptAt).toBeGreaterThan(dashboardAt);
       },
       TIMEOUT,
     );
@@ -1059,9 +1163,7 @@ describe('sonar init', () => {
         expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
         expect(result.stdout).toContain('not a result for your uncommitted local changes');
         expect(result.stdout).toContain('Quality gate: passed');
-        expect(result.stdout).toContain(
-          'Project dashboard: https://sonarcloud.io/project/overview?id=bound_project',
-        );
+        expectDashboardBefore(result.stdout, 'bound_project', INTEGRATE_PROMPT);
         expect(result.stdout).not.toContain(UNBOUND);
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey": "bound_project"');
