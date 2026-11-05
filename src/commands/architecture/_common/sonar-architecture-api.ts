@@ -46,6 +46,7 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
+import { collectionFailure } from './errors.ts';
 import { MODEL_ID, objectField, publicGraph, toIntended } from './public-architecture-response.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
@@ -139,7 +140,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
           branchId,
           language: ecosystem,
         })
-        .orThrow();
+        .orThrow()
+        .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
       if (!Array.isArray(response?.currentArchitectures)) {
         throw new CommandFailedError(
           'Invalid public current architecture response: currentArchitectures must be an array.',
@@ -159,7 +161,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
       .get<IntendedArchitecturesDto | null>(this.path('project-intended-architectures'), {
         projectId,
       })
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
     if (!Array.isArray(response?.intendedArchitectures)) {
       throw incompatibleResponse(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
