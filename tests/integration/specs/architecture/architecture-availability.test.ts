@@ -63,3 +63,35 @@ it.each(['current', 'intended'] as const)(
     }
   },
 );
+
+it.each([null, {}, { currentArchitectures: null }, { currentArchitectures: {} }])(
+  'adds compatibility guidance for a malformed current collection envelope (%j)',
+  async (body) => {
+    const h = await TestHarness.create();
+    try {
+      const server = await h
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken('test-token')
+        .withProject('shop', (project) =>
+          project.withArchitecture((architecture) =>
+            architecture.withStatus('current-architectures', 200, JSON.stringify(body), 'GET'),
+          ),
+        )
+        .start();
+      h.withAuth(server.recordedAuthServerUrl(), 'test-token', 'my-org');
+      const result = await h.run('arch current get -p shop --language java --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('currentArchitectures must be an array');
+      expect(result.stderr).toContain('support the same Architecture API');
+      expect(result.stdout).toBe('');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => ['POST', 'PATCH', 'DELETE'].includes(request.method)),
+      ).toHaveLength(0);
+    } finally {
+      await h.dispose();
+    }
+  },
+);

@@ -134,7 +134,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
         .orThrow()
         .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
       if (!Array.isArray(response?.currentArchitectures)) {
-        throw new CommandFailedError(
+        throw incompatibleResponse(
           'Invalid public current architecture response: currentArchitectures must be an array.',
         );
       }
