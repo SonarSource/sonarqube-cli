@@ -13,7 +13,8 @@ CI_ENV_VAR = "GITHUB_ACTIONS"
 SCRATCH_ROOTS = ("/app", "/tests", "/solution", "/logs")
 LOG_DIRS = ("/logs/agent", "/logs/verifier", "/logs/artifacts")
 DEFAULT_CWD = "/app"
-RUNNER_ENV_PREFIXES = ("ACTIONS_", "GITHUB_", "RUNNER_")
+RUNNER_ENV_PREFIXES = ("ACTIONS_", "GITHUB_", "RUNNER_", "HB_")
+SETUP_SCRIPT = "setup-host.sh"
 
 
 class HostEnvironment(BaseEnvironment):
@@ -37,6 +38,23 @@ class HostEnvironment(BaseEnvironment):
             self._reset_dir(Path(root))
         for log_dir in LOG_DIRS:
             Path(log_dir).mkdir(parents=True, exist_ok=True)
+        await self._run_setup_script()
+
+    async def _run_setup_script(self) -> None:
+        script = Path(self.environment_dir) / SETUP_SCRIPT
+        if not script.exists():
+            return
+        process = await asyncio.create_subprocess_exec(
+            "bash",
+            str(script),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        output, _ = await process.communicate()
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"{script} exited with {process.returncode}:\n{output.decode(errors='replace')}"
+            )
 
     async def stop(self, delete: bool) -> None:
         return None
