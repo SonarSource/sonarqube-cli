@@ -80,6 +80,11 @@ export function getConfigFile(): string {
 export const LOG_DIR = join(CLI_DIR, 'logs');
 export const LOG_FILE = join(LOG_DIR, `${APP_NAME}.log`);
 
+/** Permission bits for a file only the current user may read: keys, tokens, logs. */
+export const OWNER_ONLY_FILE_MODE = 0o600;
+/** Permission bits for a directory only the current user may enter. */
+export const OWNER_ONLY_DIRECTORY_MODE = 0o700;
+
 /** Temporary directory for CLI-generated files (e.g. converted keystores). */
 export const CLI_TMP_DIR = join(CLI_DIR, 'cli-tmp');
 

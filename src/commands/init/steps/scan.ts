@@ -24,7 +24,11 @@ import { join } from 'node:path';
 
 import { CliError, CommandFailedError } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
-import { CLI_TMP_DIR, SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
+import {
+  CLI_TMP_DIR,
+  OWNER_ONLY_DIRECTORY_MODE,
+  SHARED_PROJECT_CONFIG_FILE_NAME,
+} from '@/core/config-constants.ts';
 import { installSonarScanner } from '@/core/host/install/sonar-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 import { ComputeEngineClient } from '@/core/server/compute-engine.ts';
@@ -36,7 +40,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { DEFAULT_STATUSES } from '../../list/issues.ts';
 import { requireAnswer } from '../answer.ts';
 import { runScanner, startScannerInBackground } from '../scan/run-scanner.ts';
-import { assertScanDetachable, scannerNetworkEnv } from '../scan/scanner-network.ts';
+import { assertScannerNetworkUsable, scannerNetworkEnv } from '../scan/scanner-network.ts';
 import type { DetectDeps } from './detect.ts';
 
 /** What the user asked of the scan; validated before the login. */
@@ -98,7 +102,7 @@ function newWorkDirectory(detached: boolean): string {
     return mkdtempSync(join(tmpdir(), 'sonar-init-'));
   }
   // A background scanner keeps using this directory after `sonar init` has exited.
-  mkdirSync(CLI_TMP_DIR, { recursive: true, mode: 0o700 });
+  mkdirSync(CLI_TMP_DIR, { recursive: true, mode: OWNER_ONLY_DIRECTORY_MODE });
   pruneStaleWorkDirectories();
   return mkdtempSync(join(CLI_TMP_DIR, DETACHED_DIRECTORY_PREFIX));
 }
@@ -174,7 +178,7 @@ export async function runFirstScan(
   let directory: string | undefined;
   let handedOff = false;
   try {
-    if (flags.detach) await assertScanDetachable();
+    await assertScannerNetworkUsable(auth.serverUrl, flags.detach);
     const scanner = await installSonarScanner(console);
     directory = newWorkDirectory(flags.detach);
     const run = {
@@ -205,11 +209,13 @@ export async function runFirstScan(
           },
         }
       : undefined;
-    const analyze = () => runScanner(run, live);
+    const startedAt = Date.now();
+    const budgetMs = DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000;
+    const analyze = () => runScanner(run, live, budgetMs);
     const { taskId, logPath } = live
       ? await analyze()
       : await console.withSpinner('Analyzing source code', analyze);
-    const deadline = Date.now() + DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000;
+    const deadline = startedAt + budgetMs;
     const analysisId = await console.withSpinner(
       'Waiting for the server to process the analysis',
       () => new ComputeEngineClient(deps.http).waitForAnalysis(taskId, projectKey, deadline),

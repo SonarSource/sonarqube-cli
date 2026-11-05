@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
-import { LOG_DIR } from '@/core/config-constants.ts';
+import { LOG_DIR, OWNER_ONLY_FILE_MODE } from '@/core/config-constants.ts';
 import {
   type ScannerInstallation,
   scannerJavaArgs,
@@ -65,7 +65,7 @@ function newLogPath(): string {
 
 function writeLogHeader(logPath: string, run: ScannerRun): void {
   writeFileSync(logPath, `SonarScanner ${run.scanner.version}\nProject: ${run.projectKey}\n\n`, {
-    mode: 0o600,
+    mode: OWNER_ONLY_FILE_MODE,
   });
 }
 
@@ -97,11 +97,18 @@ function scannerEnvironment(run: ScannerRun): NodeJS.ProcessEnv {
   };
 }
 
+/** The scanner may echo a value JSON-escaped or URL-encoded, so those forms are redacted too. */
+function secretForms(value: string): string[] {
+  return [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value)];
+}
+
 function redactor(run: ScannerRun): (text: string) => string {
-  // An empty string would make `replaceAll` insert the marker between every character.
-  const secrets = [run.auth.token, ...run.scannerProperties.values()].filter(
-    (value, index) => value.length >= (index === 0 ? 1 : MIN_REDACTED_VALUE_LENGTH),
-  );
+  const token = secretForms(run.auth.token).filter((form) => form.length > 0);
+  const properties = [...run.scannerProperties.values()]
+    .filter((value) => value.length >= MIN_REDACTED_VALUE_LENGTH)
+    .flatMap(secretForms);
+  // Longest first, so a form that contains another is replaced whole.
+  const secrets = [...new Set([...token, ...properties])].sort((a, b) => b.length - a.length);
   return (text) => secrets.reduce((safe, secret) => safe.replaceAll(secret, '[REDACTED]'), text);
 }
 
@@ -151,7 +158,11 @@ function readTaskId(reportPath: string, projectKey: string, logPath: string): st
  * the `--scanner-property` values redacted, and to `live` when given. Resolves to the id of the
  * server-side task that processes the upload.
  */
-export async function runScanner(run: ScannerRun, live?: ScannerOutputSink): Promise<ScanOutcome> {
+export async function runScanner(
+  run: ScannerRun,
+  live?: ScannerOutputSink,
+  timeoutMs = DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000,
+): Promise<ScanOutcome> {
   const reportPath = join(run.directory, 'report-task.txt');
   const logPath = newLogPath();
   writeLogHeader(logPath, run);
@@ -183,7 +194,7 @@ export async function runScanner(run: ScannerRun, live?: ScannerOutputSink): Pro
           stderr.write(text);
         },
       },
-      DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000,
+      timeoutMs,
       'SonarScanner timed out.',
     ));
   } catch (cause) {
@@ -204,8 +215,9 @@ export async function runScanner(run: ScannerRun, live?: ScannerOutputSink): Pro
 
 /**
  * Starts the scanner in the background and returns at once. The log file receives the scanner's raw
- * output, which does not echo the token or the property values. Nothing watches the analysis, so
- * no task id is read.
+ * output, unredacted: it echoes no property unless `sonar.verbose` or `sonar.log.level` is set,
+ * and `validateScanFlags()` refuses those with `--detach`. Nothing watches the analysis, so no task
+ * id is read.
  */
 export async function startScannerInBackground(
   run: ScannerRun,
