@@ -21,6 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { TestHarness } from '../../harness';
+import { INTENDED_RESOURCE } from '../../harness/fake-architecture';
 
 const COMPATIBILITY = 'supported public Architecture API contract';
 
@@ -45,7 +46,7 @@ describe('Architecture API compatibility diagnostics', () => {
                 target === 'current'
                   ? 'current-architectures'
                   : target === 'intended'
-                    ? 'intended-architectures'
+                    ? INTENDED_RESOURCE
                     : 'project-directives',
                 200,
                 '{}',
@@ -145,7 +146,7 @@ describe('Architecture API compatibility diagnostics', () => {
         .withAuthToken('test-token')
         .withProject('shop', (project) =>
           project.withArchitecture((architecture) =>
-            architecture.withStatus('intended-architectures', 201, '{}', 'POST'),
+            architecture.withStatus(INTENDED_RESOURCE, 201, '{}', 'POST'),
           ),
         );
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
