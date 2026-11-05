@@ -256,7 +256,7 @@ describe('fetchAnonymous', () => {
       expect(res.status).toBe(200);
       expect(captured[0]?.proxy).toBe('https://https-proxy:8443');
       expect(fetchSpy.mock.calls[1]?.[0]).toBe('https://direct.example.com/file');
-      expect(captured[1]?.proxy).toBeUndefined();
+      expect(captured[1]?.proxy).toBe(false);
     } finally {
       fetchSpy.mockRestore();
       delete process.env.SONAR_NO_PROXY;
@@ -474,5 +474,114 @@ describe('fetchAuthenticated — redirect semantics', () => {
     await expect(fetchAuthenticated(`${SERVER_URL}/loop`, {})).rejects.toThrow(
       'too many redirects',
     );
+  });
+});
+
+describe('explicit direct routing — real Bun proxy behavior', () => {
+  const envKeys = [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'NO_PROXY',
+    'no_proxy',
+    'SONAR_HTTP_PROXY_URL',
+    'SONAR_HTTPS_PROXY_URL',
+    'SONAR_NO_PROXY',
+  ];
+  let savedEnv: Record<string, string | undefined>;
+  let origin: ReturnType<typeof Bun.serve>;
+  let proxy: ReturnType<typeof Bun.serve>;
+  let proxyRequests: string[];
+  let originHeaders: Array<string | null>;
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+    for (const key of envKeys) delete process.env[key];
+    proxyRequests = [];
+    originHeaders = [];
+    origin = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(req) {
+        originHeaders.push(req.headers.get('authorization'));
+        return new Response('direct');
+      },
+    });
+    proxy = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(req) {
+        proxyRequests.push(req.url);
+        if (new URL(req.url).pathname === '/redirect') {
+          return new Response(null, {
+            status: 302,
+            headers: { Location: `http://127.0.0.1:${origin.port}/target` },
+          });
+        }
+        return new Response('proxied');
+      },
+    });
+    for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']) {
+      process.env[key] = proxy.url.href;
+    }
+    clearNetworkConfigCache();
+  });
+
+  afterEach(async () => {
+    for (const key of envKeys) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+    clearNetworkConfigCache();
+    await Promise.all([origin.stop(true), proxy.stop(true)]);
+  });
+
+  it.each(['exclusion', 'missing scheme proxy'])(
+    'keeps a credentialed %s request off the generic proxy',
+    async (route) => {
+      process.env.SONAR_HTTPS_PROXY_URL = proxy.url.href;
+      if (route === 'exclusion') {
+        process.env.SONAR_HTTP_PROXY_URL = proxy.url.href;
+        process.env.SONAR_NO_PROXY = '127.0.0.1';
+      }
+      clearNetworkConfigCache();
+
+      const response = await fetchAuthenticated(origin.url.href, {
+        headers: { Authorization: 'Bearer synthetic-test-value' },
+      });
+      expect(await response.text()).toBe('direct');
+      expect(originHeaders).toEqual(['Bearer synthetic-test-value']);
+      expect(proxyRequests).toHaveLength(0);
+    },
+  );
+
+  it('uses the explicit proxy for a non-excluded request', async () => {
+    process.env.SONAR_HTTP_PROXY_URL = proxy.url.href;
+    process.env.SONAR_NO_PROXY = 'other.example.com';
+    clearNetworkConfigCache();
+
+    const response = await fetchAuthenticated(origin.url.href, {});
+    expect(await response.text()).toBe('proxied');
+    expect(proxyRequests).toHaveLength(1);
+    expect(originHeaders).toHaveLength(0);
+  });
+
+  it('preserves generic proxy inheritance without an explicit tier', async () => {
+    const response = await fetchAnonymous(origin.url.href);
+    expect(await response.text()).toBe('proxied');
+    expect(proxyRequests).toHaveLength(1);
+    expect(originHeaders).toHaveLength(0);
+  });
+
+  it('switches from the proxy to a direct route on a redirect hop', async () => {
+    process.env.SONAR_HTTP_PROXY_URL = proxy.url.href;
+    process.env.SONAR_NO_PROXY = '127.0.0.1';
+    clearNetworkConfigCache();
+
+    const response = await fetchAnonymous(`http://localhost:${origin.port}/redirect`);
+    expect(await response.text()).toBe('direct');
+    expect(proxyRequests).toHaveLength(1);
+    expect(originHeaders).toEqual([null]);
   });
 });
