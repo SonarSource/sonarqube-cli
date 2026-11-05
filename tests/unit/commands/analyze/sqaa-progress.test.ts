@@ -182,6 +182,22 @@ describe('SqaaProgress — TTY', () => {
     expect(output).not.toContain('in progress');
   });
 
+  it('redraws analysis after a retry without starting animation', async () => {
+    const progress = new SqaaProgress({
+      files: ['src/a.ts'],
+      isTTY: true,
+      console: new TerminalConsole(),
+    });
+
+    const output = await captureStdoutAsync(() => progress.retryingChunk(0, 1, 3, 1000));
+    captureStdout(() => progress.finish());
+
+    expect(output).toContain('retrying in 1s (1/3)');
+    const lastLine = output.trim().split('\n').at(-1);
+    expect(lastLine).toContain('Analyzing 1 file.');
+    expect(lastLine).not.toContain('retrying');
+  });
+
   it('warnPayloadSplit writes to stderr only', () => {
     const progress = new SqaaProgress({
       files: FILES,

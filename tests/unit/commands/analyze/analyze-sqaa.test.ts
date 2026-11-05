@@ -28,6 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { analyzeSqaa, buildSqaaJsonReport } from '@/commands/analyze/sqaa.ts';
 import { SqaaAnalysisClient } from '@/commands/analyze/sqaa-analysis-client.ts';
+import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -229,6 +230,17 @@ describe('analyzeSqaa: auth resolution', () => {
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
+  it('finishes single-file progress before presenting a request failure', async () => {
+    const finish = spyOn(SqaaProgress.prototype, 'finish');
+    try {
+      createAnalysisSpy.mockRejectedValue(new Error('request failed'));
+      await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
+      expect(finish).toHaveBeenCalledTimes(1);
+    } finally {
+      finish.mockRestore();
+    }
+  });
+
   it('calls client.createAnalysis with correct parameters', async () => {
     await analyzeSqaa({ file: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
 
