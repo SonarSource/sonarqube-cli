@@ -39,6 +39,7 @@ function slice(overrides: Partial<GraphSlice>): GraphSlice {
     nodeLimit: 150,
     levels: [{ depth: 1, nodes: 0 }],
     totalNodes: 10,
+    nodesInScope: 0,
     nodes: [],
     edges: [],
     feedbackPairs: { total: 0, heaviest: [] },
@@ -141,12 +142,12 @@ describe('formatCurrentText', () => {
     ]);
     const lines = text.split('\n');
     expect(lines[0]).toBe(
-      'p (ts): 0 top-level group(s):  — 0 of 10 node(s) in view, 1 level(s) below src, capped by the 150-node limit',
+      'p (ts): 0 top-level group(s):  — 0 of 10 node(s) in view, 1 level(s) below src',
     );
-    expect(lines[1]).toBe('Levels 1 (0) shown, 0 nodes.');
-    expect(lines[2]).toBe('25 dependencies, heaviest 20:');
-    expect(lines[23]).toBe('  … 5 more');
-    expect(lines[24]).toBe('8 feedback pair(s), heaviest 5:');
+    expect(lines[1]).toBe('25 dependencies, heaviest 20:');
+    expect(lines[22]).toBe('  … 5 more');
+    expect(lines[23]).toBe('8 feedback pair(s), heaviest 5:');
+    expect(text).not.toContain('node limit');
     expect(lines.at(-1)).toBe('  … 3 more pair(s)');
   });
 

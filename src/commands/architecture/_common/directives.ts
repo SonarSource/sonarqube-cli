@@ -174,13 +174,18 @@ function parseCreates(items: unknown[]): DirectiveInput[] {
   });
 }
 export function directiveKey(directive: DirectiveInput): string {
+  const perspective = directive.graphPerspective?.trim() ?? '';
+  const identityPerspective =
+    !perspective || perspective.startsWith('transformed')
+      ? DEFAULT_DIRECTIVE_PERSPECTIVE
+      : perspective;
   return JSON.stringify([
     directive.type,
     directive.ecosystem,
     directive.graphType,
     directive.fromNodeKey,
     directive.toNodeKey,
-    directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
+    identityPerspective,
   ]);
 }
 export function isDefiniteRejection(error: unknown): boolean {

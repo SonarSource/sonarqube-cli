@@ -112,6 +112,54 @@ describe('analyze secrets', () => {
     { timeout: 30000 },
   );
 
+  for (const filename of ['--help', '--input', '-h']) {
+    it(
+      `scans the clean file operand ${filename} without interpreting it as an option`,
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, 'fake-token');
+        harness.cwd.writeFile(filename, CLEAN_CONTENT);
+
+        const result = await harness.run(`analyze secrets -- ${filename}`);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain('No secrets found');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      `detects secrets beside the file operand ${filename}`,
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, 'fake-token');
+        harness.cwd.writeFile(filename, CLEAN_CONTENT);
+        harness.cwd.writeFile('secrets.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.run(`analyze secrets -- secrets.js ${filename}`);
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(result.stdout + result.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      `detects secrets inside the file operand ${filename}`,
+      async () => {
+        harness.state().withSecretsBinaryInstalled();
+        harness.withAuth(FAKE_SERVER, 'fake-token');
+        harness.cwd.writeFile(filename, `const token = "${GITHUB_TEST_TOKEN}";`);
+
+        const result = await harness.run(`analyze secrets -- ${filename}`);
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(result.stdout + result.stderr).toContain('GitHub Token');
+      },
+      { timeout: 30000 },
+    );
+  }
+
   it(
     'exits with code 0 for clean content via --stdin when binary is installed',
     async () => {

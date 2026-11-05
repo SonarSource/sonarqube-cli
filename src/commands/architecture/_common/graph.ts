@@ -73,6 +73,8 @@ export interface GraphSlice {
   levels: Array<{ depth: number; nodes: number }>;
   omittedLevel?: { depth: number; nodes: number };
   totalNodes: number;
+  nodesInScope: number;
+  message?: string;
   nodes: SliceNode[];
   /** The heaviest dependencies between visible nodes, at most `maxEdges`. */
   edges: SliceEdge[];
@@ -168,8 +170,10 @@ export function sliceGraph(
   }
 
   const visible: number[] = [];
-  let frontier = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
+  const firstLevel = rootId === undefined ? graph.roots : (graph.children.get(rootId) ?? []);
+  let frontier = firstLevel;
   let capped = false;
+  const nodesInScope = countNodesInScope(graph, firstLevel, depth);
   const levels: GraphSlice['levels'] = [];
   let omittedLevel: GraphSlice['omittedLevel'];
   for (let level = 1; level <= depth && frontier.length > 0; level++) {
@@ -192,6 +196,7 @@ export function sliceGraph(
   const totalBelow =
     below ?? graph.roots.reduce((sum, id) => sum + 1 + descendantsOf(graph, id), 0);
 
+  const pairs = feedbackPairs(edges);
   return {
     root: component ?? '',
     depth: levels.at(-1)?.depth ?? 0,
@@ -200,12 +205,16 @@ export function sliceGraph(
     levels,
     ...(omittedLevel === undefined ? {} : { omittedLevel }),
     totalNodes: totalBelow,
+    nodesInScope,
+    ...(component !== undefined && totalBelow === 0
+      ? { message: `Component '${component}' is a leaf; there are no children below it.` }
+      : {}),
     nodes,
     edges: edges.slice(0, maxEdges),
-    feedbackPairs: feedbackPairs(edges),
+    feedbackPairs: pairs,
     outsideViewWeight,
-    capped,
-    omittedNodes: totalBelow - nodes.length,
+    capped: capped || edges.length > maxEdges || pairs.total > MAX_FEEDBACK_PAIRS,
+    omittedNodes: nodesInScope - nodes.length,
     omittedEdges: Math.max(0, edges.length - maxEdges),
     drillDown: nodes
       .filter((node) => node.truncated)
@@ -213,6 +222,16 @@ export function sliceGraph(
       .slice(0, MAX_DRILL_DOWN_HINTS)
       .map((node) => node.key),
   };
+}
+
+function countNodesInScope(graph: IndexedGraph, firstLevel: number[], depth: number): number {
+  let frontier = firstLevel;
+  let count = 0;
+  for (let level = 1; level <= depth && frontier.length > 0; level++) {
+    count += frontier.length;
+    frontier = frontier.flatMap((id) => graph.children.get(id) ?? []);
+  }
+  return count;
 }
 
 function descendantsOf(graph: IndexedGraph, id: number): number {
