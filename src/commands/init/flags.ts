@@ -23,6 +23,9 @@ import { isValidProjectKey } from '@/core/project-key.ts';
 import type { ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { parseScannerProperties } from './scan/scanner-property.ts';
+import type { ScanFlags } from './steps/scan.ts';
+
 const MAX_NAME_LENGTH = 255;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
 
@@ -83,5 +86,33 @@ export function warnIgnoredUnboundNewFlags(flags: UnboundNewFlags, console: Cons
     console.warn(
       `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,
     );
+  }
+}
+
+export function validateScanFlags(options: {
+  scannerProperty?: string[];
+  verbose?: boolean;
+  detach?: boolean;
+}): ScanFlags {
+  if (options.detach && options.verbose) {
+    throw new InvalidOptionError(
+      '--detach cannot be combined with --verbose: a background scanner writes to its log file only.',
+    );
+  }
+  return {
+    scannerProperties: parseScannerProperties(options.scannerProperty),
+    verbose: options.verbose === true,
+    detach: options.detach === true,
+  };
+}
+
+/** Warns when scan-only flags were given but no scan ran. Never names a property value. */
+export function warnIgnoredScanFlags(flags: ScanFlags, console: Console): void {
+  const ignored = [
+    flags.scannerProperties.size === 0 ? null : '--scanner-property',
+    flags.detach ? '--detach' : null,
+  ].filter((flag) => flag !== null);
+  if (ignored.length > 0) {
+    console.warn(`${ignored.join(', ')} ignored: only applicable when the first analysis runs.`);
   }
 }
