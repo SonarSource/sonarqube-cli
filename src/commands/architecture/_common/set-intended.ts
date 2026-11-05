@@ -71,6 +71,7 @@ export interface SetIntendedOptions {
   projectKey: string;
   dryRun: boolean;
   backupDir: string;
+  onValidation?: () => Promise<void>;
   onReplacement?: (current: IntendedArchitecture[]) => void;
 }
 
@@ -87,6 +88,7 @@ export async function setIntended(
   }
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
+  if (!isEmptyDiff(diff)) await options.onValidation?.();
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
   if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
