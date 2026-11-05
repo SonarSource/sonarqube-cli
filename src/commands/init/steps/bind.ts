@@ -18,27 +18,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { relative, sep } from 'node:path';
-
 import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
 import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
-import { deriveEntry } from '@/commands/link/link-project.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { findGitRoot } from '@/core/host/git/discover.ts';
-import { shellQuote } from '@/core/host/shell-quote.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import type { BoundNewOutcome, InitOutcome } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
+import { projectDashboardUrl, showAnalysisResults, writeMapping } from './mapping.ts';
 
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
 const AUTHORIZATION_TIMEOUT_MS = 300_000;
@@ -101,82 +94,6 @@ async function waitForAlmKey(
   return waitForAlmKey(api, orgKey, deadline);
 }
 
-export function linkCommand(projectKey: string, path: string, runFrom: string | undefined): string {
-  const link =
-    path === '.'
-      ? `sonar link ${shellQuote(projectKey)}`
-      : `sonar link ${shellQuote(projectKey)} --path ${shellQuote(path)}`;
-  // Windows PowerShell 5.1, the default shell there, has no `&&`.
-  const separator = process.platform === 'win32' ? '; ' : ' && ';
-  return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
-}
-
-/** The project already exists on the server by now, so a failure here has to say how to finish. */
-async function writeMapping(
-  auth: ResolvedAuth,
-  projectKey: string,
-  projectRoot: string,
-  console: Console,
-): Promise<void> {
-  const { gitRoot, isGit } = findGitRoot(projectRoot);
-  const configDir = canonicalizePath(isGit ? gitRoot : projectRoot);
-  const path = relative(configDir, projectRoot).split(sep).join('/') || '.';
-  const entry = deriveEntry(auth, projectKey, path);
-
-  try {
-    const mapped = await sharedProjectConfigRepository.load(configDir);
-    const replaced = mapped.find(
-      (mapping) => canonicalizePath(mapping.projectRoot) === canonicalizePath(projectRoot),
-    );
-    if (replaced) {
-      console.warn(
-        `Replacing the mapping of this directory to '${replaced.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-      );
-    }
-    const shadowed = await sharedProjectConfigRepository.set(configDir, entry);
-    if (shadowed) {
-      console.warn(
-        `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
-      );
-    }
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    const cwdRoot = findGitRoot(process.cwd());
-    const linkRoot = canonicalizePath(cwdRoot.isGit ? cwdRoot.gitRoot : process.cwd());
-    const runFrom = linkRoot === configDir ? undefined : configDir;
-    throw new CommandFailedError(
-      `Created project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
-      {
-        remediationHint: `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
-      },
-    );
-  }
-}
-
-function projectDashboardUrl(auth: ResolvedAuth, projectKey: string): string {
-  return `${auth.serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
-}
-
-async function showAnalysisResults(
-  api: SonarHttpClient,
-  projectKey: string,
-  dashboardUrl: string,
-  console: Console,
-): Promise<void> {
-  const status = await new QualityGatesClient(api).getProjectStatus({ projectKey }).match(
-    (value) => value?.status ?? 'NONE',
-    () => 'NONE' as const,
-  );
-  if (status === 'NONE') {
-    console.print('No analysis results yet: the first analysis of the new project is pending.');
-  } else {
-    console.print(
-      `Quality gate: ${status === 'OK' ? 'passed' : 'failed'}. See: sonar quality-gate status -p ${projectKey}`,
-    );
-  }
-  console.print(`Project dashboard: ${dashboardUrl}`);
-}
-
 /** Provisions the project for one repository through `sonar import`'s plan, and returns its key. */
 async function importRepository(
   api: ImportApiClient,
@@ -227,8 +144,14 @@ export async function runBoundNew(
     importRepository(api, auth, repositorySlug, { ...org, almKey }, new QuietConsole(console)),
   );
 
-  await writeMapping(auth, projectKey, projectRoot, console);
+  await writeMapping(auth, projectKey, projectRoot, console, 'created');
   console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
-  await showAnalysisResults(http, projectKey, projectDashboardUrl(auth, projectKey), console);
+  await showAnalysisResults(
+    http,
+    projectKey,
+    projectDashboardUrl(auth, projectKey),
+    console,
+    'No analysis results yet: the first analysis of the new project is pending.',
+  );
   return { path: 'bound-new', projectRoot, remote, repositorySlug, projectKey };
 }

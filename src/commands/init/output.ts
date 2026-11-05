@@ -36,6 +36,9 @@ function describe(outcome: InitOutcome): string[] {
       ];
     }
     case 'link-existing':
+      if (outcome.linked) {
+        return [];
+      }
       return [
         `A Sonar project already exists for this repository: ${outcome.projectKey}.`,
         'Selected path: link the existing project.',

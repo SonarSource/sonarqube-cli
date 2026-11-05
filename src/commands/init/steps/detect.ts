@@ -111,7 +111,7 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   const binding = await lookupRemoteBinding(auth, remote);
   switch (binding.kind) {
     case 'in-org':
-      return { path: 'link-existing', projectRoot, projectKey: binding.projectKey };
+      return { path: 'link-existing', projectRoot, remote, projectKey: binding.projectKey };
     case 'other-org':
       throw otherOrganizationError(auth, recordedOtherOrganization(onPath, auth));
     case 'unknown':
