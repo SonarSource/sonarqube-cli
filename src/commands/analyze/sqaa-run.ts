@@ -20,6 +20,7 @@
 
 import { relative } from 'node:path';
 
+import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -30,7 +31,7 @@ import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 import type { RunTally } from './sqaa-analysis.ts';
 import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry, tallyFromSqaaJsonReport } from './sqaa-analysis-telemetry.ts';
-import { fetchWithRetry, readSqaaFileContent } from './sqaa-api.ts';
+import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api.ts';
 import type { ChangeSetResult, IgnoredFile } from './sqaa-changeset.ts';
 import { resolveSqaaContext } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
@@ -213,6 +214,7 @@ export async function fetchSingleFileReport(
   branch?: string,
   wireDepth?: SqaaDeepWireDepth,
   displayDepth: SqaaAnalysisDepth = 'STANDARD',
+  onRetry?: (attempt: number) => Promise<void>,
 ): Promise<{ report: SqaaJsonReport; error?: Error }> {
   try {
     const response = await fetchWithRetry(
@@ -222,6 +224,7 @@ export async function fetchSingleFileReport(
       branch,
       {
         analysisDepth: wireDepth,
+        onRetry,
       },
     );
     return {
@@ -280,6 +283,11 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
   const { auth } = connection;
   const fileContent = readSqaaFileContent(file);
 
+  const progress = new SqaaProgress({
+    files: [path.displayPath],
+    console,
+    silent: format === 'json',
+  });
   const { result: fetchResult, durationMs } = await timed(() =>
     fetchSingleFileReport(
       connection,
@@ -289,7 +297,18 @@ export async function runSqaaAnalysis(file: string, options: SingleFileRunOption
       branch,
       wireDepth,
       displayDepth,
-    ),
+      format === 'text'
+        ? (attempt) =>
+            progress.retryingChunk(
+              0,
+              attempt,
+              MAX_503_RETRIES,
+              getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
+            )
+        : undefined,
+    ).finally(() => {
+      progress.finish();
+    }),
   );
   const { report, error } = fetchResult;
 

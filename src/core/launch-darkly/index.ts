@@ -19,10 +19,12 @@
  */
 
 import type { LDContext } from 'launchdarkly-node-client-sdk';
-import { initialize } from 'launchdarkly-node-client-sdk';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { NetworkConfigError } from '@/core/errors.ts';
 import logger from '@/core/observability/logger.ts';
+import { buildRequest, fetchAuthenticated } from '@/core/server/fetch.ts';
 import { getActiveConnection, tryLoadState } from '@/core/state/state-manager.ts';
 import {
   activeConnectionForIdentitySeed,
@@ -33,11 +35,7 @@ import {
 } from '@/core/telemetry/identity-fetch.ts';
 
 import { readFreshFlagDecisions, writeFlagDecisions } from './cache.ts';
-import {
-  getLaunchDarklyDir,
-  LAUNCHDARKLY_INIT_TIMEOUT_SECONDS,
-  resolveLaunchDarklyClientSideId,
-} from './constants.ts';
+import { LAUNCHDARKLY_INIT_TIMEOUT_SECONDS, resolveLaunchDarklyClientSideId } from './constants.ts';
 import type { FeatureFlagFetcher, FeatureFlagIdentity } from './types.ts';
 
 export type { LaunchDarklyEnvironment } from './constants.ts';
@@ -91,59 +89,52 @@ export function buildLaunchDarklyContext(identity: FeatureFlagIdentity): LDConte
   };
 }
 
-function toBooleanFlagMap(allFlags: Record<string, unknown>): Record<string, boolean> {
+function toBooleanFlagMap(allFlags: unknown): Record<string, boolean> {
+  if (!allFlags || typeof allFlags !== 'object' || Array.isArray(allFlags)) {
+    throw new CommandFailedError('LaunchDarkly returned an invalid flag response');
+  }
   const decisions: Record<string, boolean> = {};
-  for (const [key, value] of Object.entries(allFlags)) {
-    decisions[key] = value === true;
+  for (const [key, flag] of Object.entries(allFlags as Record<string, unknown>)) {
+    if (!flag || typeof flag !== 'object' || !('value' in flag)) {
+      throw new CommandFailedError('LaunchDarkly returned an invalid flag evaluation');
+    }
+    Object.defineProperty(decisions, key, { value: flag.value === true, enumerable: true });
   }
   return decisions;
 }
 
-/**
- * Fetches Private Beta flag values via the LaunchDarkly client-side SDK.
- * Returns `null` on failure (missing client-side ID, unusable context, or SDK error)
- * so callers do not cache a poisoned all-false decision. A successful empty map means
- * LaunchDarkly returned no true flags.
- */
+/** Returns null on refresh failure so callers do not cache failed evaluations. */
 export const fetchFlagsFromLaunchDarkly: FeatureFlagFetcher = async (identity) => {
   const clientSideId = resolveLaunchDarklyClientSideId();
-  if (!clientSideId) {
-    return null;
-  }
-
   const context = buildLaunchDarklyContext(identity);
-  if (!context) {
+  if (!clientSideId || !context) {
     return null;
   }
 
-  const client = initialize(clientSideId, context, {
-    streaming: false,
-    sendEventsOnlyForVariation: true,
-    localStoragePath: getLaunchDarklyDir(),
-    logger: {
-      debug: (message) => {
-        logger.debug(message);
-      },
-      info: (message) => {
-        logger.debug(message);
-      },
-      warn: (message) => {
-        logger.debug(message);
-      },
-      error: (message) => {
-        logger.debug(message);
-      },
-    },
-  });
-
+  const encodedContext = Buffer.from(JSON.stringify(context)).toString('base64url');
+  const url = `https://clientsdk.launchdarkly.com/sdk/evalx/${encodeURIComponent(clientSideId)}/contexts/${encodedContext}`;
   try {
-    await client.waitForInitialization(LAUNCHDARKLY_INIT_TIMEOUT_SECONDS);
-    return toBooleanFlagMap(client.allFlags());
+    const response = await fetchAuthenticated(
+      url,
+      buildRequest(
+        'GET',
+        { Accept: 'application/json' },
+        LAUNCHDARKLY_INIT_TIMEOUT_SECONDS * 1000,
+        undefined,
+      ),
+    );
+    if (!response.ok) {
+      throw new CommandFailedError(`LaunchDarkly flag refresh returned HTTP ${response.status}`);
+    }
+    return toBooleanFlagMap(await response.json());
   } catch (err) {
-    logger.debug(`LaunchDarkly flag refresh failed: ${(err as Error).message}`);
+    const message = `LaunchDarkly flag refresh failed: ${(err as Error).message}`;
+    if (err instanceof NetworkConfigError) {
+      logger.warn(message);
+    } else {
+      logger.debug(message);
+    }
     return null;
-  } finally {
-    await client.close().catch(() => undefined);
   }
 };
 
