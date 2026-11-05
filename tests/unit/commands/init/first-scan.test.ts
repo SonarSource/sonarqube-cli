@@ -90,6 +90,7 @@ function auth(serverUrl = 'https://sonar.example'): ResolvedAuth {
 }
 
 type Routes = Record<string, unknown>;
+type Params = Record<string, unknown> | undefined;
 
 function httpAnswering(overrides: Routes = {}): SonarHttpClient {
   const routes: Routes = {
@@ -101,8 +102,10 @@ function httpAnswering(overrides: Routes = {}): SonarHttpClient {
     ...overrides,
   };
   return {
-    get: (path: string) => {
-      const answer = routes[path];
+    get: (path: string, params?: Params) => {
+      const route = routes[path];
+      const answer =
+        typeof route === 'function' ? (route as (p?: Params) => unknown)(params) : route;
       return answer instanceof Error || answer === undefined
         ? errAsync(answer ?? new Error(`unexpected request to ${path}`))
         : okAsync(answer);
@@ -319,6 +322,55 @@ posixOnly('runFirstScan in the foreground', () => {
     expect(result.openIssues).toBe(7);
   });
 
+  it('reads the issues per quality and severity for the table', async () => {
+    installScanner();
+    const facet = (counts: Record<string, number>) => ({
+      property: 'impactSeverities',
+      values: Object.entries(counts).map(([val, count]) => ({ val, count })),
+    });
+    const byQuality: Record<string, unknown> = {
+      SECURITY: { total: 4, facets: [facet({ HIGH: 4 })] },
+      RELIABILITY: { total: 2, facets: [facet({ LOW: 2 })] },
+      MAINTAINABILITY: { total: 1, facets: [facet({ INFO: 1 })] },
+    };
+
+    const result = await scan({
+      '/api/issues/search': (params?: Params) =>
+        params?.impactSoftwareQualities === undefined
+          ? { total: 7 }
+          : byQuality[params.impactSoftwareQualities as string],
+    });
+
+    expect(result.openIssues).toBe(7);
+    expect(result.issueBreakdown?.distinctIssues).toBe(7);
+    expect(result.issueBreakdown?.rows.map((row) => row.total)).toEqual([4, 2, 1]);
+  });
+
+  it('has no issue table when the server returns no severity facets', async () => {
+    installScanner();
+
+    const result = await scan();
+
+    expect(result.openIssues).toBe(7);
+    expect(result.issueBreakdown).toBeNull();
+  });
+
+  it('has no issue table, and asks for none, when the analysis found no open issues', async () => {
+    installScanner();
+    const requests: Params[] = [];
+
+    const result = await scan({
+      '/api/issues/search': (params?: Params) => {
+        requests.push(params);
+        return { total: 0 };
+      },
+    });
+
+    expect(result.openIssues).toBe(0);
+    expect(result.issueBreakdown).toBeNull();
+    expect(requests).toHaveLength(1);
+  });
+
   it('reports a missing issue count as unknown, never as zero', async () => {
     installScanner();
 
@@ -338,6 +390,7 @@ describe('reportScan', () => {
       logPath: '/log',
       qualityGate: 'OK',
       openIssues: 3,
+      issueBreakdown: null,
       ...overrides,
     }) as ScanResult;
 
@@ -376,6 +429,35 @@ describe('reportScan', () => {
       `Quality gate: ${text}. See: sonar quality-gate status -p my-key`,
       'Open issues: 3',
     ]);
+  });
+
+  it('prints the issue table after the issue count', () => {
+    const console = new FakeConsole();
+    const bySeverity = { BLOCKER: 0, HIGH: 1, MEDIUM: 0, LOW: 0, INFO: 0 };
+
+    reportScan(
+      completed({
+        openIssues: 2,
+        issueBreakdown: {
+          distinctIssues: 2,
+          rows: [
+            { quality: 'SECURITY', bySeverity, total: 1 },
+            { quality: 'RELIABILITY', bySeverity: { ...bySeverity, HIGH: 0, LOW: 1 }, total: 1 },
+            { quality: 'MAINTAINABILITY', bySeverity: { ...bySeverity, HIGH: 0 }, total: 0 },
+          ],
+        },
+      }),
+      'my-key',
+      console,
+    );
+
+    const lines = printed(console);
+    expect(lines.slice(0, 2)).toEqual([
+      'Quality gate: passed. See: sonar quality-gate status -p my-key',
+      'Open issues: 2',
+    ]);
+    expect(lines[3]).toContain('QUALITY');
+    expect(lines[4]).toContain('Security');
   });
 
   it('says so when the quality gate or the issue count could not be read', () => {
