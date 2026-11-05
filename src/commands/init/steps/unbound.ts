@@ -19,17 +19,17 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { BadRequestError } from '@/core/server/errors.ts';
 import { ProjectsClient, type ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import { type UnboundNewFlags, validateProjectName, warnIgnoredUnboundNewFlags } from '../flags.ts';
+import { type UnboundNewFlags, validateProjectKey, validateProjectName } from '../flags.ts';
 import type { InitOutcome, UnboundNewOutcome } from '../init-outcome.ts';
-import { generateProjectProposal, type ProjectProposal } from '../key-proposal.ts';
+import { generateProjectProposal } from '../key-proposal.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, reportProjectCreated, writeMapping } from './mapping.ts';
+import { runLinkExisting } from './link-existing.ts';
+import { reportProjectCreated, writeMapping } from './mapping.ts';
 
 async function askName(console: Console, fallback: string): Promise<string> {
   for (;;) {
@@ -54,45 +54,72 @@ async function askVisibility(console: Console): Promise<ProjectVisibility> {
   );
 }
 
+/** Asks for the key of the new project after the generated one turned out to be taken. */
+async function askProjectKey(
+  console: Console,
+  projects: ProjectsClient,
+  organization: string | undefined,
+  takenKey: string,
+): Promise<string> {
+  for (let attempt = 2; ; attempt++) {
+    const suggestion = `${takenKey}-${attempt}`;
+    const answer = requireAnswer(await console.textPrompt(`Project key (default: ${suggestion})`));
+    let candidate: string;
+    try {
+      candidate = validateProjectKey(answer.trim() === '' ? suggestion : answer, 'Project key');
+    } catch (error) {
+      console.warn(error instanceof Error ? error.message : String(error));
+      continue;
+    }
+    if (await projects.findProject(candidate, organization).orThrow()) {
+      console.warn(`Project '${candidate}' already exists.`);
+      continue;
+    }
+    return candidate;
+  }
+}
+
 /**
  * Creates a project that is not bound to the repository and maps it in `.sonar-config.json`.
- * The key is deterministic, so a rerun after a failed mapping write finds the project it created
- * and only maps it. An explicit `--project` that is taken is never adopted.
+ * When the generated key is already taken (an earlier run created it), nothing is mapped without
+ * the user's say: the `link-existing` step offers the project, and declining it asks for another
+ * key. An explicit `--project` that is taken is never adopted.
  */
 export async function runUnboundNew(
   { projectRoot, remote }: UnboundNewOutcome,
-  { auth, http, console, interactive }: DetectDeps,
+  deps: DetectDeps,
   flags: UnboundNewFlags,
 ): Promise<InitOutcome> {
+  const { auth, http, console, interactive } = deps;
   const generated = generateProjectProposal(projectRoot, remote, auth.orgKey);
-  const proposal: ProjectProposal = {
-    projectKey: flags.projectKey ?? generated.projectKey,
-    projectName: flags.name ?? generated.projectName,
-  };
   const projects = new ProjectsClient(http);
 
-  const existing = await projects.findProject(proposal.projectKey, auth.orgKey).orThrow();
+  let projectKey = flags.projectKey ?? generated.projectKey;
+  const existing = await projects.findProject(projectKey, auth.orgKey).orThrow();
   if (existing) {
     if (flags.projectKey !== undefined) {
       throw new CommandFailedError(`Project '${existing.key}' already exists.`, {
         remediationHint: `Choose another --project, or map the existing project with 'sonar link ${existing.key}'.`,
       });
     }
-    console.warn(`Project '${existing.key}' already exists; mapping it instead of creating one.`);
-    warnIgnoredUnboundNewFlags({ name: flags.name, visibility: flags.visibility }, console);
-    await writeMapping(auth, existing.key, projectRoot, console, 'found');
-    console.success(`Saved ${SHARED_PROJECT_CONFIG_FILE_NAME} for project '${existing.key}'.`);
-    return { path: 'unbound-new', projectRoot, remote, projectKey: existing.key };
+    const linked = await runLinkExisting(
+      { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
+      deps,
+    );
+    if (linked.path === 'link-existing') {
+      return linked;
+    }
+    projectKey = await askProjectKey(console, projects, auth.orgKey, existing.key);
   }
 
-  let { projectName } = proposal;
+  let projectName = flags.name ?? generated.projectName;
   let visibility: ProjectVisibility = flags.visibility ?? 'private';
   if (interactive) {
     projectName = flags.name ?? (await askName(console, projectName));
     visibility = flags.visibility ?? (await askVisibility(console));
   }
   console.print(`Proposed project: ${projectName}`);
-  console.print(`Project key: ${proposal.projectKey}`);
+  console.print(`Project key: ${projectKey}`);
   console.print(`Visibility: ${visibility}`);
   if (interactive) {
     const confirmed = requireAnswer(await console.confirmPrompt('Create this project?', true));
@@ -104,26 +131,22 @@ export async function runUnboundNew(
   const { key } = await console.withSpinner('Creating the project', () =>
     projects
       .createProject({
-        projectKey: proposal.projectKey,
+        projectKey,
         name: projectName,
         visibility,
         organization: auth.orgKey,
       })
       .mapErr((error) =>
-        flags.projectKey !== undefined && error instanceof BadRequestError
-          ? new CommandFailedError(
-              `Could not create project '${flags.projectKey}': ${error.message}`,
-              {
-                remediationHint:
-                  'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another --project.',
-              },
-            )
+        projectKey !== generated.projectKey && error instanceof BadRequestError
+          ? new CommandFailedError(`Could not create project '${projectKey}': ${error.message}`, {
+              remediationHint:
+                'If the key is already taken (on SonarQube Cloud, keys are unique across organizations), choose another key, for example with --project.',
+            })
           : error,
       )
       .orThrow(),
   );
   await writeMapping(auth, key, projectRoot, console, 'created');
   reportProjectCreated(console, key);
-  console.print(`Project dashboard: ${projectDashboardUrl(auth, key)}`);
   return { path: 'unbound-new', projectRoot, remote, projectKey: key };
 }
