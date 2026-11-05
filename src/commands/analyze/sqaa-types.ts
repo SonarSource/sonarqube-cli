@@ -25,7 +25,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { SqaaTelemetryCallerCommand } from './sqaa-analysis-telemetry.ts';
 import type { IgnoredFile } from './sqaa-changeset.ts';
-import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
+import type { SqaaDeepWireDepth, SqaaInvocationMode } from './sqaa-depth.ts';
 import type { SqaaPath } from './sqaa-paths.ts';
 import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
@@ -111,7 +111,7 @@ export interface SqaaBatchRunOptions {
 export interface PreparedSqaaRun {
   connection: SonarConnection;
   files: SqaaRunFiles;
-  mode: 'single-file' | 'multi-file' | 'change-set' | 'edited-file';
+  mode: SqaaInvocationMode;
   ignored: IgnoredFile[];
   displayBase: string;
   repoRoot?: string;

@@ -53,19 +53,6 @@ export interface ChangeSetResult {
   repoRoot: string;
 }
 
-/** SQAA paths are relative to a project root, so a file no project of the connection owns cannot be analyzed. */
-export function excludeIgnoredFiles(
-  changeSet: ChangeSetResult,
-  ignored: IgnoredFile[],
-): ChangeSetResult {
-  const excluded = new Set(ignored.map(({ path }) => path));
-  return {
-    ...changeSet,
-    files: changeSet.files.filter((file) => !excluded.has(file)),
-    ignored: [...changeSet.ignored, ...ignored],
-  };
-}
-
 /**
  * Resolves the list of absolute file paths that belong to the local change set,
  * filtering out git-ignored paths and binary files, capped at SQAA_MAX_FILE_BYTES per file.
