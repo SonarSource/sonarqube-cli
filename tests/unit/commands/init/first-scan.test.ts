@@ -29,7 +29,7 @@ import {
   NOT_RUN,
   reportScan,
   runFirstScan,
-  type ScanFlags,
+  type ScanOptions,
   type ScanResult,
 } from '@/commands/init/steps/scan.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
@@ -125,7 +125,7 @@ function depsFor(
   };
 }
 
-function flags(overrides: Partial<ScanFlags> = {}): ScanFlags {
+function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
   return {
     scannerProperties: new Map([['sonar.sources', '.']]),
     verbose: false,

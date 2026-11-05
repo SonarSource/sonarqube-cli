@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { validateScanOptions, warnIgnoredScanOptions } from '@/commands/init/flags.ts';
+import { validateScanOptions, warnIgnoredScanOptions } from '@/commands/init/options.ts';
 import { parseScannerProperties } from '@/commands/init/scan/scanner-property.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
@@ -33,18 +33,18 @@ function warnings(console: FakeConsole): string {
     .join('\n');
 }
 
-describe('validateScanFlags with --detach', () => {
+describe('validateScanOptions with --detach', () => {
   it.each(['sonar.verbose=true', 'sonar.log.level=DEBUG'])(
     'rejects %s, since a background log is not redacted',
     (property) => {
-      expect(() => validateScanFlags({ detach: true, scannerProperty: [property] })).toThrow(
+      expect(() => validateScanOptions({ detach: true, scannerProperty: [property] })).toThrow(
         InvalidOptionError,
       );
     },
   );
 
   it('allows the same properties for a foreground scan', () => {
-    expect(() => validateScanFlags({ scannerProperty: ['sonar.verbose=true'] })).not.toThrow();
+    expect(() => validateScanOptions({ scannerProperty: ['sonar.verbose=true'] })).not.toThrow();
   });
 });
 

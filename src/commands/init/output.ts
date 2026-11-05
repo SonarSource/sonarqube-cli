@@ -63,15 +63,16 @@ export function renderInitOutcome(
   }
 }
 
-function mappedProjectKeys(outcome: InitOutcome): string[] {
-  switch (outcome.path) {
+function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
+  switch (outcome.kind) {
     case 'complete':
       return outcome.projectKeys;
-    case 'link-existing':
-      return outcome.linked ? [outcome.projectKey] : [];
-    case 'bound-new':
-    case 'unbound-new':
-      return outcome.projectKey ? [outcome.projectKey] : [];
+    case 'linked':
+    case 'bound':
+    case 'unbound':
+      return [outcome.projectKey];
+    case 'declined':
+      return [];
   }
 }
 

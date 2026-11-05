@@ -27,7 +27,6 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
 const AUTH = { serverUrl: 'https://sonarcloud.io/' } as ResolvedAuth;
-const ROOT = '/repo';
 const URL = (key: string) => `https://sonarcloud.io/project/overview?id=${key}`;
 
 function render(outcome: InitOutcome): string[] {
@@ -40,49 +39,35 @@ describe('renderProjectDashboards', () => {
   it.each<[string, InitOutcome, string[]]>([
     [
       'an already set up directory',
-      { path: 'complete', projectRoot: ROOT, projectKeys: ['k'] },
+      { kind: 'complete', projectKeys: ['k'] },
       [`Project dashboard: ${URL('k')}`],
     ],
     [
       'a monorepo with several projects',
-      { path: 'complete', projectRoot: ROOT, projectKeys: ['a', 'b'] },
+      { kind: 'complete', projectKeys: ['a', 'b'] },
       [`Project dashboard (a): ${URL('a')}`, `Project dashboard (b): ${URL('b')}`],
     ],
     [
       'a linked existing project',
-      { path: 'link-existing', projectRoot: ROOT, remote: 'r', projectKey: 'k', linked: true },
+      { kind: 'linked', projectKey: 'k' },
       [`Project dashboard: ${URL('k')}`],
     ],
-    [
-      'a bound new project',
-      { path: 'bound-new', projectRoot: ROOT, remote: 'r', repositorySlug: 'o/r', projectKey: 'k' },
-      [`Project dashboard: ${URL('k')}`],
-    ],
+    ['a bound new project', { kind: 'bound', projectKey: 'k' }, [`Project dashboard: ${URL('k')}`]],
     [
       'a created or mapped unbound project',
-      { path: 'unbound-new', projectRoot: ROOT, projectKey: 'k' },
+      { kind: 'unbound', projectKey: 'k' },
       [`Project dashboard: ${URL('k')}`],
     ],
     [
       'a project key that needs escaping',
-      { path: 'unbound-new', projectRoot: ROOT, projectKey: 'a b' },
+      { kind: 'unbound', projectKey: 'a b' },
       [`Project dashboard: ${URL('a%20b')}`],
     ],
   ])('prints the link for %s', (_name, outcome, expected) => {
     expect(render(outcome)).toEqual(expected);
   });
 
-  it.each<[string, InitOutcome]>([
-    ['a declined creation', { path: 'unbound-new', projectRoot: ROOT, declined: true }],
-    [
-      'a link that was selected but not run',
-      { path: 'link-existing', projectRoot: ROOT, remote: 'r', projectKey: 'k' },
-    ],
-    [
-      'a binding that was selected but not run',
-      { path: 'bound-new', projectRoot: ROOT, remote: 'r', repositorySlug: 'o/r' },
-    ],
-  ])('prints nothing for %s', (_name, outcome) => {
-    expect(render(outcome)).toEqual([]);
+  it('prints nothing for a declined creation', () => {
+    expect(render({ kind: 'declined' })).toEqual([]);
   });
 });

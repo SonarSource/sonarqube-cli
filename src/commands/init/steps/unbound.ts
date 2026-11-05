@@ -27,11 +27,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { requireAnswer } from '../answer.ts';
 import type { InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
-import {
-  type UnboundNewOptions,
-  validateProjectKey,
-  validateProjectName,
-} from '../options.ts';
+import { type UnboundNewOptions, validateProjectKey, validateProjectName } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
 import { runLinkExisting } from './link-existing.ts';
 import { reportProjectCreated, writeMapping } from './mapping.ts';
