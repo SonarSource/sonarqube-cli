@@ -42,6 +42,15 @@ const MANAGED_PROPERTIES = new Set([
   'sonar.scanner.truststorePassword',
   'sonar.scanner.keystorePath',
   'sonar.scanner.keystorePassword',
+  // These redirect where the token is sent, or change what the scanner runs.
+  'sonar.scanner.sonarcloudUrl',
+  'sonar.scanner.apiBaseUrl',
+  'sonar.scanner.internal.dumpToFile',
+  'sonar.scanner.javaExePath',
+  'sonar.scanner.skipJreProvisioning',
+  'sonar.scanner.javaOpts',
+  'sonar.scanner.os',
+  'sonar.scanner.arch',
 ]);
 
 const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
