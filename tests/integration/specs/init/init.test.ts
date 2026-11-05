@@ -606,9 +606,8 @@ describe('sonar init', () => {
       TIMEOUT,
     );
 
-    it(
-      'maps the project it already created instead of creating it again',
-      async () => {
+    describe('when the generated key already exists', () => {
+      async function startWithExistingProject() {
         const { projectKey } = generateProjectProposal(
           harness.cwd.path,
           'https://gitlab.com/example/repository.git',
@@ -616,36 +615,113 @@ describe('sonar init', () => {
         );
         const server = await startServer((s) => s.withProject(projectKey));
         withRemote(GITLAB_REMOTE);
+        harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+        return { projectKey, server };
+      }
 
-        const result = await harness.run('init --non-interactive');
+      /** Declines linking the project, and linking another one, which leads to the key prompt. */
+      async function declineLinking(session: ReturnType<typeof harness.runInteractive>) {
+        await session.decline('Link this directory');
+        await session.decline('another existing project');
+      }
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('already exists');
-        expect(created(server)).toHaveLength(0);
-        expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
-      },
-      TIMEOUT,
-    );
+      async function finishCreation(session: ReturnType<typeof harness.runInteractive>) {
+        await session.waitText('Project name');
+        session.keyEnter();
+        await session.waitText('Project visibility');
+        session.keyEnter();
+        await session.accept('Create this project');
+        await session.decline(SCAN_PROMPT);
+        await session.decline(INTEGRATE_PROMPT);
+        return session.waitFinish();
+      }
 
-    it(
-      'warns that --name and --visibility are ignored when it maps an existing project',
-      async () => {
-        const { projectKey } = generateProjectProposal(
-          harness.cwd.path,
-          'https://gitlab.com/example/repository.git',
-          ORG,
-        );
-        const server = await startServer((s) => s.withProject(projectKey));
-        withRemote(GITLAB_REMOTE);
+      it(
+        'fails with a sonar link hint instead of mapping it when nothing can be asked',
+        async () => {
+          const { projectKey, server } = await startWithExistingProject();
 
-        const result = await harness.run('init --non-interactive --name Foo --visibility public');
+          const result = await harness.run('init --non-interactive');
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('--name, --visibility ignored');
-        expect(created(server)).toHaveLength(0);
-      },
-      TIMEOUT,
-    );
+          expect(result.exitCode).toBe(1);
+          const output = result.stdout + result.stderr;
+          expect(output).toContain(
+            `A Sonar project already exists for this repository: '${projectKey}'`,
+          );
+          expect(output).toContain(`sonar link ${projectKey}`);
+          expect(created(server)).toHaveLength(0);
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'maps it only when the user accepts, without offering a first analysis',
+        async () => {
+          const { projectKey, server } = await startWithExistingProject();
+
+          const session = harness.runInteractive('init --name Foo --visibility public');
+          await session.accept('Link this directory');
+          await session.decline(INTEGRATE_PROMPT);
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain(`Linked this directory to project '${projectKey}'`);
+          expect(result.stdout).not.toContain(SCAN_PROMPT);
+          expect(result.stdout).not.toContain('Created project');
+          expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+          expect(result.stderr).toContain('--name, --visibility ignored');
+          expect(created(server)).toHaveLength(0);
+          expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'creates a project under the key the user chooses when linking is declined',
+        async () => {
+          const { projectKey, server } = await startWithExistingProject();
+
+          const session = harness.runInteractive('init');
+          await declineLinking(session);
+          await session.waitText('Project key');
+          session.write(projectKey);
+          session.keyEnter();
+          await session.waitText(`default: ${projectKey}-3`);
+          session.write('my-chosen-key');
+          session.keyEnter();
+          const result = await finishCreation(session);
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('Project key: my-chosen-key');
+          expect(result.stderr).toContain(`Project '${projectKey}' already exists.`);
+          const [request] = created(server);
+          expect(new URLSearchParams(request.body).get('project')).toBe('my-chosen-key');
+          const config = harness.cwd.file('.sonar-config.json').asText();
+          expect(config).toContain('my-chosen-key');
+          expect(config).not.toContain(`"${projectKey}"`);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'suggests the generated key with a numeric suffix as the default',
+        async () => {
+          const { projectKey, server } = await startWithExistingProject();
+
+          const session = harness.runInteractive('init');
+          await declineLinking(session);
+          await session.waitText(`default: ${projectKey}-2`);
+          session.keyEnter();
+          const result = await finishCreation(session);
+
+          expect(result.exitCode).toBe(0);
+          const [request] = created(server);
+          expect(new URLSearchParams(request.body).get('project')).toBe(`${projectKey}-2`);
+        },
+        TIMEOUT,
+      );
+    });
 
     it(
       'refuses an explicit --project that is already taken',
@@ -679,7 +755,7 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(1);
         const output = result.stdout + result.stderr;
         expect(output).toContain("Could not create project 'elsewhere'");
-        expect(output).toContain('choose another --project');
+        expect(output).toContain('choose another key');
       },
       TIMEOUT,
     );
