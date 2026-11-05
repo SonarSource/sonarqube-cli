@@ -29,7 +29,7 @@ import { type UnboundNewFlags, validateProjectName, warnIgnoredUnboundNewFlags }
 import type { InitOutcome, UnboundNewOutcome } from '../init-outcome.ts';
 import { generateProjectProposal, type ProjectProposal } from '../key-proposal.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, reportProjectCreated, writeMapping } from './mapping.ts';
+import { reportProjectCreated, writeMapping } from './mapping.ts';
 
 async function askName(console: Console, fallback: string): Promise<string> {
   for (;;) {
@@ -124,6 +124,5 @@ export async function runUnboundNew(
   );
   await writeMapping(auth, key, projectRoot, console, 'created');
   reportProjectCreated(console, key);
-  console.print(`Project dashboard: ${projectDashboardUrl(auth, key)}`);
   return { path: 'unbound-new', projectRoot, remote, projectKey: key };
 }
