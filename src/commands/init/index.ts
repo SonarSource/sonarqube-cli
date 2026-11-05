@@ -87,7 +87,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   }
   const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, console, {
+  renderInitOutcome(outcome, auth, console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
   if (suggestIntegrate && interactive && !declined) {
@@ -106,7 +106,7 @@ async function scanCreatedProject(
     return NOT_RUN;
   }
   const scan = await runFirstScan(projectRoot, outcome.projectKey, deps, options);
-  reportScan(scan, outcome.projectKey, deps, deps.console);
+  reportScan(scan, outcome.projectKey, deps.console);
   return scan;
 }
 

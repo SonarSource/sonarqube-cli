@@ -75,6 +75,18 @@ describe('sonar init', () => {
 
   const UNBOUND = 'Created project';
 
+  /** Every successful run prints the dashboard link exactly once, before any integrate offer. */
+  function expectDashboardBefore(stdout: string, id: string, integrateMarker: string) {
+    expect(stdout.match(/Project dashboard:/g)).toHaveLength(1);
+    const dashboardAt = stdout.indexOf(
+      `Project dashboard: https://sonarcloud.io/project/overview?id=${id}`,
+    );
+    expect(dashboardAt).toBeGreaterThan(-1);
+    const markerAt = stdout.indexOf(integrateMarker);
+    expect(markerAt).toBeGreaterThan(-1);
+    expect(dashboardAt).toBeLessThan(markerAt);
+  }
+
   async function createProject(session: ReturnType<typeof harness.runInteractive>) {
     await session.waitText('Project name');
     session.keyEnter();
@@ -121,6 +133,7 @@ describe('sonar init', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
       expect(result.stdout).toContain("'sonar integrate'");
+      expectDashboardBefore(result.stdout, 'mapped', "'sonar integrate'");
     },
     TIMEOUT,
   );
@@ -782,6 +795,7 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(UNBOUND);
         expect(result.stdout).not.toContain('Analysis');
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
         expect(result.stdout).toContain("'sonar integrate'");
       },
       TIMEOUT,
@@ -852,6 +866,10 @@ describe('sonar init', () => {
         expect(result.stdout).toContain(
           'Project dashboard: https://sonarcloud.io/project/overview?id=',
         );
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+        expect(result.stdout.indexOf('Project dashboard:')).toBeLessThan(
+          result.stdout.indexOf(INTEGRATE_PROMPT),
+        );
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey"');
         expect(config).not.toContain(TOKEN);
@@ -913,6 +931,29 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Created project');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'prints the project dashboard once, between the first-analysis and integrate prompts',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+
+        const session = harness.runInteractive('init');
+        await createProject(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+        const dashboardAt = result.stdout.indexOf('Project dashboard:');
+        const scanPromptAt = result.stdout.indexOf(SCAN_PROMPT);
+        const integratePromptAt = result.stdout.indexOf(INTEGRATE_PROMPT);
+        expect(scanPromptAt).toBeGreaterThan(-1);
+        expect(dashboardAt).toBeGreaterThan(scanPromptAt);
+        expect(integratePromptAt).toBeGreaterThan(dashboardAt);
       },
       TIMEOUT,
     );
@@ -1122,9 +1163,7 @@ describe('sonar init', () => {
         expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
         expect(result.stdout).toContain('not a result for your uncommitted local changes');
         expect(result.stdout).toContain('Quality gate: passed');
-        expect(result.stdout).toContain(
-          'Project dashboard: https://sonarcloud.io/project/overview?id=bound_project',
-        );
+        expectDashboardBefore(result.stdout, 'bound_project', INTEGRATE_PROMPT);
         expect(result.stdout).not.toContain(UNBOUND);
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey": "bound_project"');

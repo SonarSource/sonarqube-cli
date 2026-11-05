@@ -38,7 +38,6 @@ import { requireAnswer } from '../answer.ts';
 import { runScanner, startScannerInBackground } from '../scan/run-scanner.ts';
 import { scannerNetworkEnv } from '../scan/scanner-network.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl } from './mapping.ts';
 
 /** What the user asked of the scan; validated before the login. */
 export interface ScanOptions {
@@ -207,12 +206,7 @@ const GATE_TEXT: Record<QualityGateStatus, string> = {
   NONE: 'not configured for this project',
 };
 
-export function reportScan(
-  scan: ScanResult,
-  projectKey: string,
-  deps: DetectDeps,
-  console: Console,
-): void {
+export function reportScan(scan: ScanResult, projectKey: string, console: Console): void {
   if (scan.status === 'started') {
     console.print(
       `Analysis started in the background (process ${scan.pid}); the results are not known yet.`,
@@ -234,5 +228,4 @@ export function reportScan(
   console.print(
     scan.openIssues === null ? 'Open issues: not available.' : `Open issues: ${scan.openIssues}`,
   );
-  console.print(`Project dashboard: ${projectDashboardUrl(deps.auth, projectKey)}`);
 }
