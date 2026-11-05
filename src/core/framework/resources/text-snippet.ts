@@ -24,6 +24,7 @@ import type { AppliedResource, IntegrationContext, MaybePromise } from '../featu
 import {
   type BaseResourceOptions,
   detectEol,
+  hasRequiredPermissions,
   includesIgnoringEol,
   type PathResolver,
   readTextFile,
@@ -87,7 +88,10 @@ export class TextSnippet implements ResourceDeclaration {
     }
     const content = await this.resolveContent(context);
     const renderedContent = this.renderManagedBlock(content, detectEol(existing));
-    return includesIgnoringEol(existing, renderedContent);
+    return (
+      includesIgnoringEol(existing, renderedContent) &&
+      (await hasRequiredPermissions(path, this.options.executable))
+    );
   }
 
   async remove(context: IntegrationContext): Promise<void> {

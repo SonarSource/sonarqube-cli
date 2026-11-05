@@ -20,6 +20,8 @@ All agent handlers use `finalizeAgentInstall` for Vortex resolution, installatio
 
 # Agent secrets hooks
 
+Copilot hook commands quote script paths for the host shell. PowerShell commands use the call operator (`&`) so quoted paths execute. Integration remains global.
+
 **Copilot file reads** use `sonar hook copilot-pre-tool-use` on `preToolUse`. The handler scans the `view` tool target, accepts `toolArgs` as either an object or a JSON-encoded string, and resolves relative file paths against the payload’s `cwd` (falling back to the hook process working directory). Findings deny the read; shell reads and searches are not covered by this handler.
 
 **Copilot** uses `sonar hook agent-secrets-masking --agent copilot` on `userPromptTransformed` to redact secrets or replace unsafe prompts with a blocking notice via `modifiedTransformedPrompt`. Invalid input passes through silently. The `agent-secrets-masking --agent codex|copilot` command uses `hook/agent-secrets-masking/`, with agent adapters for payload parsing and output formatting. The entry point resolves the adapter, parses input and emits the handler's result; unknown agents, unparseable input and clean scans produce no output. The `secrets-detection` feature replaces `pre-tool-use-hook`, `prompt-secrets-hook` and `prompt-secrets-instructions` and removes the old snippet; Antigravity retains the instructions in `integrate/antigravity/rules.ts`.

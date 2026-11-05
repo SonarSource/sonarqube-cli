@@ -323,7 +323,7 @@ export async function buildFetchNetworkOptions(
 function buildProxyOption(
   url: string,
   config: ResolvedNetworkConfig,
-): { proxy: string } | Record<string, never> {
+): { proxy: string | false } | Record<string, never> {
   if (!config.proxy?.explicit) {
     return {};
   }
@@ -334,13 +334,13 @@ function buildProxyOption(
   const proxyCandidate =
     parsed.protocol === 'https:' ? config.proxy.proxyHttps : config.proxy.proxyHttp;
   if (!proxyCandidate) {
-    return {};
+    return { proxy: false };
   }
   const defaultPort = parsed.protocol === 'https:' ? DEFAULT_PORT_HTTPS : DEFAULT_PORT_HTTP;
   const port = Number.parseInt(parsed.port) || defaultPort;
   const bypass =
     config.proxy.noProxy !== null && matchesNoProxy(parsed.hostname, port, config.proxy.noProxy);
-  return bypass ? {} : { proxy: proxyCandidate.getUrlWithCredentials() };
+  return { proxy: bypass ? false : proxyCandidate.getUrlWithCredentials() };
 }
 
 function buildTlsOption(config: ResolvedNetworkConfig) {

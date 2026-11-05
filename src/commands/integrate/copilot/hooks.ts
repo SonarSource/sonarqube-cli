@@ -21,6 +21,7 @@
 import { join, relative } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
+import { shellQuote } from '@/core/host/shell-quote';
 
 import { SONAR_SECRETS_MARKER } from '../_common/hooks.ts';
 
@@ -64,9 +65,9 @@ export function buildCopilotHookEntry(commandPath: string): HookCommandEntry {
     ? {
         type: 'command',
         timeoutSec: HOOK_TIMEOUT_SEC,
-        powershell: commandPath.replaceAll('\\', '/'),
+        powershell: `& ${shellQuote(commandPath.replaceAll('\\', '/'), 'win32')}`,
       }
-    : { type: 'command', timeoutSec: HOOK_TIMEOUT_SEC, bash: commandPath };
+    : { type: 'command', timeoutSec: HOOK_TIMEOUT_SEC, bash: shellQuote(commandPath) };
 }
 
 /** Idempotent: replaces any existing entries owned by the same marker. */
