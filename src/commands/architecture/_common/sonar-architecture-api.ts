@@ -46,7 +46,7 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
-import { collectionFailure } from './errors.ts';
+import { collectionFailure, incompatibleResponse } from './errors.ts';
 import { MODEL_ID, objectField, publicGraph, toIntended } from './public-architecture-response.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
@@ -54,15 +54,6 @@ const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 const MAX_PUBLIC_PERSPECTIVES = 50;
 const FIRST_SUCCESS_STATUS = 200;
 const FIRST_REDIRECT_STATUS = 300;
-
-function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
-  return new CommandFailedError(message, {
-    cause,
-    remediationHint:
-      "The response does not match this CLI's supported public Architecture API contract. " +
-      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
-  });
-}
 
 function intendedWriteError(error: Error): Error {
   if (

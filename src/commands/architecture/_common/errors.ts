@@ -25,6 +25,15 @@ import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http
 const PLAN_HINT =
   'Architecture needs SonarQube Cloud Team or Enterprise, or the Architecture feature on SonarQube Server.';
 
+export function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
+  return new CommandFailedError(message, {
+    cause,
+    remediationHint:
+      "The response does not match this CLI's supported public Architecture API contract. " +
+      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
+  });
+}
+
 export function collectionFailure(error: unknown, isCloud: boolean): never {
   if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
     throw new CommandFailedError('The public Architecture API endpoint was not found (HTTP 404).', {

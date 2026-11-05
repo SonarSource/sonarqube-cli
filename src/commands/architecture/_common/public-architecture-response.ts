@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
-
 import {
   type Ecosystem,
   ECOSYSTEMS,
@@ -28,14 +26,7 @@ import {
   type StructureGraph,
   type StructureNode,
 } from './architecture-api.ts';
-
-function incompatibleResponse(message: string): CommandFailedError {
-  return new CommandFailedError(message, {
-    remediationHint:
-      "The response does not match this CLI's supported public Architecture API contract. " +
-      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
-  });
-}
+import { incompatibleResponse } from './errors.ts';
 
 const MAX_PUBLIC_GROUPS = 50_000;
 const MAX_PUBLIC_GROUP_DEPTH = 64;
@@ -131,7 +122,7 @@ function normalizeOptionalGroupFields(raw: Record<string, unknown>): Record<stri
 }
 
 function invalidPublicGraph(): never {
-  throw new CommandFailedError(
+  throw incompatibleResponse(
     'Invalid public current architecture response: invalid graph field shape.',
   );
 }
