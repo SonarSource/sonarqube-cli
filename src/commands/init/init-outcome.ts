@@ -29,11 +29,15 @@ export type InitPath =
    * `projectKeys` is a list because `.sonar-config.json` can map several projects, for a monorepo.
    */
   | { path: 'complete'; projectRoot: string; projectKeys: readonly string[] }
-  /** The server already binds the git remote to a project of the active organization. */
+  /**
+   * A project of the active organization already exists for this repository: the server binds the
+   * git remote to it, or it is the project an earlier run generated the key of (then `remote` may
+   * be absent).
+   */
   | {
       path: 'link-existing';
       projectRoot: string;
-      remote: string;
+      remote?: string;
       projectKey: string;
     }
   /** No project exists yet and the user agreed to bind the new one to the repository. */

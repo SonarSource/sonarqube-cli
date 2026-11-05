@@ -38,6 +38,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import * as openpgp from 'openpgp';
 
 import { SONARSOURCE_BINARIES_URL } from '@/core/config-constants.ts';
+import { SONAR_SCANNER_PLATFORM_SUFFIXES } from '@/core/host/install/install-types.ts';
 import { SONARSOURCE_PUBLIC_KEY } from '@/core/host/install/signatures.ts';
 import type { DependencyExtension } from '@/core/host/install/sonarsource-releases.ts';
 
@@ -47,7 +48,7 @@ interface Platform {
   extension: DependencyExtension;
 }
 
-type ArchiveFormat = 'tar.gz';
+type ArchiveFormat = 'tar.gz' | 'zip';
 type PlatformNamingScheme = 'x64';
 
 interface ExternalBinary {
@@ -150,6 +151,14 @@ function urlPlatformKey(platform: Platform, binary: ExternalBinary): string {
 function buildAscUrl(platform: Platform, binary: ExternalBinary): string {
   const platKey = urlPlatformKey(platform, binary);
   const binaryName = binary.binaryPath.split('/').at(-1);
+  if (binary.archive === 'zip') {
+    // e.g. Distribution/sonar-scanner-cli/sonar-scanner-cli-8.1.0.6389-linux-x64.zip.asc
+    const suffix = SONAR_SCANNER_PLATFORM_SUFFIXES[platKey];
+    if (!suffix) {
+      throw new Error(`No archive platform suffix known for '${platKey}'.`);
+    }
+    return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}/${binaryName}-${binary.version}-${suffix}.${platform.extension}.asc`;
+  }
   if (binary.archive === 'tar.gz') {
     // e.g. Distribution/sonar-context-augmentation-linux-x64/sonar-context-augmentation-linux-x64-0.10.0.1024.tar.gz.asc
     return `${SONARSOURCE_BINARIES_URL}/${binary.binaryPath}-${platKey}/${binaryName}-${platKey}-${binary.version}.${platform.extension}.asc`;
