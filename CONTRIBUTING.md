@@ -98,7 +98,7 @@ Run `bun run pretest:integration` before `bun run test:e2e` to build the CLI and
 
 E2E tests cover dependencies that the isolated integration harness does not replace. Requirements vary by suite: OS keychain access, network access for installers and binary downloads, real SonarQube services, or external tools. Check the relevant tests under `tests/e2e/` before running them. Suites can skip tests when their prerequisites are unavailable; a skipped test does not validate that behavior.
 
-The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/CLAUDE.md) for harness and coverage details.
+The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/AGENTS.md), including telemetry isolation, for harness and coverage details.
 
 ## macOS code signing (optional)
 
@@ -123,8 +123,8 @@ After this, every build signs the binary automatically. On machines without the 
 
 ## Doc generation
 
-The docs site under `docs/` (`commands.json`, `llms.txt`, `sitemap.xml`) is generated from the source code. When adding or modifying a command, regenerate it with:
+The docs site outputs (`commands.json`, `llms.txt`, `sitemap.xml`) are generated from CLI source by post-release automation. Do not edit them by hand or regenerate them for routine command changes. When changing the generator itself, use `bun run gen:docs` for local validation and inspect the output without committing unrelated release-generated changes. See [docs guidance](docs/AGENTS.md).
 
-```bash
-bun run gen:docs
-```
+## Agent instructions
+
+Follow [the instruction maintenance policy](docs/development/agent-instructions.md). Ordinary feature work does not require instruction updates; change guidance when it becomes incorrect, a durable convention changes, or a demonstrated recurring mistake needs addressing. Engineering rules are canonical in `AGENTS.md` and its routed scoped sources; compatibility files contain references only.
