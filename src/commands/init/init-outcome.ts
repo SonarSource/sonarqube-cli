@@ -30,13 +30,14 @@ export type InitOutcome =
    */
   | { path: 'complete'; projectRoot: string; projectKeys: string[] }
   /**
-   * The server already binds the git remote to a project of the active organization.
-   * `linked` is set once the user confirmed and `.sonar-config.json` maps it.
+   * A project of the active organization already exists for this repository: the server binds the
+   * git remote to it, or it is the project an earlier run generated the key of (then `remote` may
+   * be absent). `linked` is set once the user confirmed and `.sonar-config.json` maps it.
    */
   | {
       path: 'link-existing';
       projectRoot: string;
-      remote: string;
+      remote?: string;
       projectKey: string;
       linked?: true;
     }
