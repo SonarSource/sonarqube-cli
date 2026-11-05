@@ -152,6 +152,23 @@ describe('sonar hook git-pre-commit', () => {
     { timeout: 30000 },
   );
 
+  it.each(['--help', '--version', '--input', '-h', '--'])(
+    'blocks secrets when an option-like file named %s is staged',
+    async (filename) => {
+      initGitRepo(harness.cwd.path);
+      harness.state().withSecretsBinaryInstalled();
+      harness.withAuth(FAKE_SERVER, VALID_TOKEN);
+      stageFile(harness.cwd.path, `./${filename}`, CLEAN_CONTENT);
+      stageFile(harness.cwd.path, 'secret.js', `const token = "${GITHUB_TEST_TOKEN}";`);
+
+      const result = await harness.run('hook git-pre-commit');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Secrets detected in staged files.');
+    },
+    { timeout: 30000 },
+  );
+
   it(
     'records the stats event with run_trigger "hooks", unlike a manual `analyze secrets` run',
     async () => {
