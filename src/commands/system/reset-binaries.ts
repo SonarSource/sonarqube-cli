@@ -117,7 +117,7 @@ async function tryRemoveBinaryAtPath(plan: PathRemovalPlan): Promise<BinaryRemov
   try {
     const fileRemoved = existsSync(safePath);
     if (fileRemoved) {
-      rmSync(safePath, { force: true });
+      rmSync(safePath, { force: true, recursive: true });
     }
     return {
       status: 'cleaned',
