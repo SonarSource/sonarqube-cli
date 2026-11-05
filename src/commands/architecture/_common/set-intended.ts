@@ -65,6 +65,8 @@ export interface SetIntendedResult {
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
+  /** The preview includes deletion of the stored intended resource. */
+  clearsResource?: boolean;
 }
 
 export interface SetIntendedOptions {
@@ -79,7 +81,8 @@ export async function setIntended(
   file: IntendedFile,
   options: SetIntendedOptions,
 ): Promise<SetIntendedResult> {
-  const current = await api.getIntended();
+  const stored = await api.getIntendedState();
+  const current = stored.models;
   const next = file.language === undefined ? file.models : withLanguage(current, file);
   const unchecked = file.revision === undefined;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
@@ -88,14 +91,22 @@ export async function setIntended(
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
-  if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
-  if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
-  if (current.length === 0) {
+  if (options.dryRun)
+    return {
+      mode: 'dry-run',
+      diff,
+      unchecked,
+      clearsResource: stored.id !== undefined && next.length === 0,
+    };
+  if (isEmptyDiff(diff) && !(stored.id !== undefined && next.length === 0))
+    return { mode: 'unchanged', diff, unchecked };
+  if (stored.id === undefined) {
     await writeModel(api, next, 'create', options.projectKey);
     return { mode: 'created', diff, unchecked };
   }
   const backupPath = await writeBackup(options.backupDir, options.projectKey, current);
-  if (revisionOf(await api.getIntended()) !== revisionOf(current))
+  const actual = await api.getIntendedState();
+  if (actual.id !== stored.id || revisionOf(actual.models) !== revisionOf(current))
     throw staleError(options.projectKey);
   const operation = next.length === 0 ? 'clear' : 'update';
   await writeModel(api, next, operation, options.projectKey, backupPath);
@@ -121,7 +132,7 @@ async function writeModel(
     if (isRejectedWrite(error))
       throw writeFailure(projectKey, writeError, backupPath, undefined, 'rejected');
   }
-  await verifyWrite(api, next, projectKey, backupPath, writeError);
+  await verifyWrite(api, next, projectKey, backupPath, writeError, operation);
 }
 
 async function verifyWrite(
@@ -130,13 +141,17 @@ async function verifyWrite(
   projectKey: string,
   backupPath: string | undefined,
   writeError: unknown,
+  operation: 'create' | 'update' | 'clear',
 ): Promise<void> {
   const expectedRevision = writableRevisionOf(next);
   let readError: unknown;
   for (const delay of VERIFICATION_DELAYS_MS) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     try {
-      if (writableRevisionOf(await api.getIntended()) === expectedRevision) return;
+      const actual = await api.getIntendedState();
+      const cleared =
+        operation !== 'clear' || (writeError === undefined && actual.id === undefined);
+      if (cleared && writableRevisionOf(actual.models) === expectedRevision) return;
       readError = undefined;
     } catch (error) {
       readError = error;
@@ -172,7 +187,7 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), { cause: error });
+  return new CommandFailedError(lines.join('\n'), { cause: error ?? readError });
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
