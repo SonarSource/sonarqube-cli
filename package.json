@@ -108,6 +108,38 @@
           "extension": "tar.gz"
         }
       ]
+    },
+    "sonar-scanner-cli": {
+      "version": "8.1.0.6389",
+      "binaryPath": "Distribution/sonar-scanner-cli",
+      "archive": "zip",
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86-64",
+          "extension": "zip"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64",
+          "extension": "zip"
+        },
+        {
+          "os": "macos",
+          "arch": "x86-64",
+          "extension": "zip"
+        },
+        {
+          "os": "macos",
+          "arch": "arm64",
+          "extension": "zip"
+        },
+        {
+          "os": "windows",
+          "arch": "x86-64",
+          "extension": "zip"
+        }
+      ]
     }
   },
   "dependencies": {
