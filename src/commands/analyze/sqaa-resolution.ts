@@ -138,14 +138,14 @@ export async function resolveSqaaConnectionAndProject(
     return { kind: 'no-project' };
   }
 
-  // `project_uuid` holds one project, so a run spanning several leaves it unset rather than
-  // attributing the whole run to one of them.
-  const keys =
-    groups.length > 0 || !noteFocusedProject
-      ? groups.map(({ mapping }) => mapping.projectKey)
-      : focused.projects.filter(onActiveConnection).map((mapping) => mapping.projectKey);
-  const [firstKey] = keys;
-  if (keys.length > 0 && keys.every((key) => key === firstKey)) noteProject(auth, firstKey);
+  for (const { mapping } of groups) noteProject(auth, mapping.projectKey);
+  if (groups.length === 0 && noteFocusedProject) {
+    // From a monorepo root, the focus would otherwise be every linked project.
+    const focusedKeys = new Set(
+      focused.projects.filter(onActiveConnection).map((mapping) => mapping.projectKey),
+    );
+    if (focusedKeys.size === 1) noteProject(auth, [...focusedKeys][0]);
+  }
 
   return {
     kind: 'resolved',

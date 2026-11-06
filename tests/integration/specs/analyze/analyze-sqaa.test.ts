@@ -38,7 +38,11 @@ import {
 } from '../../../_common/agent-hint-assertions.js';
 import { readStatsEvents, readStatsRuleDescriptions } from '../../../_common/stats-helpers.ts';
 import type { StoredAnalysisCompletedEvent } from '../../../_common/telemetry-helpers';
-import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
+import {
+  readAnalysisEvents,
+  readCommandEvents,
+  readTargetProjectResolvedEvents,
+} from '../../../_common/telemetry-helpers';
 import { type CliResult, TestHarness } from '../../harness';
 import type { SqaaIssueConfig } from '../../harness/fake-sonarqube-server';
 import { commitFile, git, initGitRepo, stageFile } from '../hook/git-test-helpers';
@@ -1290,6 +1294,15 @@ describe('analyze agentic — analysis telemetry', () => {
         analysisEvent.event_payload.invocation_id,
       );
       expect(commandEvent.event_payload.project_uuid).toBe(`AY${TEST_PROJECT}legacy`);
+      expect(commandEvent.event_payload.target_project_count).toBe(1);
+      expect(commandEvent.event_payload.connection_type).not.toBeNull();
+      const targetProjects = readTargetProjectResolvedEvents(harness.sonarUserHome.path);
+      expect(
+        targetProjects.map((targetProject) => targetProject.event_payload.project_uuid),
+      ).toEqual([`AY${TEST_PROJECT}legacy`]);
+      expect(targetProjects[0].event_payload.invocation_id).toBe(
+        commandEvent.event_payload.invocation_id,
+      );
     },
     { timeout: 15000 },
   );
@@ -3343,6 +3356,8 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
       .newFakeServer()
       .withAuthToken(VALID_TOKEN)
       .withSqaaResponse({ issues: [] })
+      .withProject(PROJECT_A)
+      .withProject(PROJECT_B)
       .start();
     harness.state().withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
     commitFile(
@@ -3454,6 +3469,41 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         [PROJECT_A]: ['src/x.ts'],
         [PROJECT_B]: ['lib/y.ts'],
       });
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'records one CliTargetProjectResolved per analyzed project alongside a single CliCommandExecuted',
+    async () => {
+      await startMonorepoServer();
+      harness.state().withTelemetryEnabled();
+
+      const result = await harness.run(
+        'analyze agentic --file packages/a/src/x.ts --file packages/b/lib/y.ts',
+      );
+
+      expect(result.exitCode).toBe(0);
+      const commands = readCommandEvents(harness.sonarUserHome.path);
+      expect(commands).toHaveLength(1);
+      const [command] = commands;
+      expect(command.event_payload.target_project_count).toBe(2);
+      expect(command.event_payload.project_uuid).toBeNull();
+      expect(command.event_payload.connection_type).toBeNull();
+      expect(command.event_payload.organization_uuid_v4).toBeNull();
+      expect(command.event_payload.sqs_installation_id).toBeNull();
+      expect(command.event_payload.user_uuid).toBeNull();
+
+      const targetProjects = readTargetProjectResolvedEvents(harness.sonarUserHome.path);
+      expect(
+        targetProjects.map((targetProject) => targetProject.event_payload.project_uuid),
+      ).toEqual([`AY${PROJECT_A}legacy`, `AY${PROJECT_B}legacy`]);
+      for (const { event_payload: targetProject } of targetProjects) {
+        expect(targetProject.invocation_id).toBe(command.event_payload.invocation_id);
+        expect(targetProject.command).toBe('analyze');
+        expect(targetProject.subcommand).toBe('agentic');
+        expect(targetProject.connection_type).not.toBeNull();
+      }
     },
     { timeout: 15000 },
   );
