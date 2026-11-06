@@ -28,6 +28,7 @@ import {
   type IntendedArchitecture,
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import { revisionOf } from '@/commands/architecture/_common/intended-model.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import type { RecordedRequest } from '../../harness';
@@ -1115,6 +1116,27 @@ describe('sonar architecture intended set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
   });
+  it.each([false, true])(
+    'gives truthful clear-preview instructions (revision=%s)',
+    async (withRevision) => {
+      const server = await startWith((fake) => fake.withIntended(INTENDED));
+      const file = { ...(withRevision ? await readSaved() : {}), models: [] };
+      const preview = await setFile(file, ' --dry-run');
+      expect(preview.exitCode).toBe(0);
+      expect(writes(server)).toEqual([]);
+      if (withRevision) {
+        expect(preview.stdout).toContain('Run without --dry-run to apply.');
+      } else {
+        expect(preview.stdout).toContain('requires its exported revision');
+        expect(preview.stdout).toContain(
+          'sonar architecture intended get --project shop --format json',
+        );
+        expect(preview.stdout).toContain('Add that revision to the change file and preview again');
+        expect(preview.stdout).not.toContain('Run without --dry-run to apply.');
+      }
+    },
+  );
+
   for (const method of ['POST', 'DELETE'] as const) {
     it(`reports a rejected ${method} without verification reads`, async () => {
       const server = await startWith((fake) => {
@@ -1126,7 +1148,10 @@ describe('sonar architecture intended set on the public API', () => {
           method,
         );
       });
-      const result = await setFile({ models: method === 'POST' ? NEXT : [] });
+      const result = await setFile({
+        models: method === 'POST' ? NEXT : [],
+        ...(method === 'DELETE' ? { revision: revisionOf(publicModels(INTENDED)) } : {}),
+      });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('server rejected the architecture write');
       expect(result.stderr).toContain('Invalid model');
