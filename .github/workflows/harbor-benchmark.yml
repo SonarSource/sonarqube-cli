@@ -45,19 +45,23 @@ jobs:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/devex-harbor-claude API_KEY | HB_CLAUDE_API_KEY;
+            development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
+            development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
+            development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
 
       - name: Run benchmark as an unprivileged user
         env:
           MODEL: anthropic/${{ matrix.model }}
           JOB_NAME: ${{ matrix.os }}
           TASK: ${{ matrix.task }}
-          HB_SONAR_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
-          HB_SONAR_ORG: sonarlint-it
-          HB_SONAR_SERVER: https://sc-staging.io
+          HB_SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
+          HB_SONAR_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
+          HB_SONAR_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           HB_SONAR_API_URL: https://api.sc-staging.io
           ARTIFACTORY_USER: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           ARTIFACTORY_ACCESS_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
-          PORTKEY_API_KEY: ${{ secrets.HB_CLAUDE_PORTKEY_API_KEY }}
+          PORTKEY_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).HB_CLAUDE_API_KEY }}
         run: bash benchmarks/harbor/scripts/run-isolated.sh
 
       - name: Install the SonarQube CLI for the secrets scan
@@ -72,11 +76,11 @@ jobs:
         shell: bash
         env:
           DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
-          PORTKEY_API_KEY: ${{ secrets.HB_CLAUDE_PORTKEY_API_KEY }}
-          SONARQUBE_CLI_ORG: sonarlint-it
-          SONARQUBE_CLI_SERVER: https://sc-staging.io
-          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
+          PORTKEY_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).HB_CLAUDE_API_KEY }}
+          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
+          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
+          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
         run: |
           python3 -I benchmarks/harbor/ci/scan-secrets.py harbor-jobs
@@ -104,6 +108,9 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+            development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
+            development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
+            development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -142,10 +149,10 @@ jobs:
         shell: bash
         env:
           DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
-          SONARQUBE_CLI_ORG: sonarlint-it
-          SONARQUBE_CLI_SERVER: https://sc-staging.io
-          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
+          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
+          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
+          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
         run: |
           python3 -I benchmarks/harbor/ci/scan-secrets.py report.txt
