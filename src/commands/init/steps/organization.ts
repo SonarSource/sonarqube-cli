@@ -379,7 +379,7 @@ export function createOrganizationHook(console: Console, interactive: boolean): 
     await ensureFreeSubscription(client, organization, console);
     console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
     console.info(
-      `Organization created on the Free plan. For branch analysis, private project analysis and more, upgrade your plan here: ${billingUrl(client.baseUrl, organization.key)}`,
+      `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
     );
     return organization.key;
   };

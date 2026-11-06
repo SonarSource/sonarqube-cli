@@ -412,7 +412,7 @@ describe('sonar init', () => {
   );
 
   describe('organization creation for an account without organizations', () => {
-    const CREATE_PROMPT = 'Create a SonarQube Cloud organization now?';
+    const CREATE_PROMPT = 'Create an organization now?';
     const NEW_ORG = 'brand-new-org';
 
     async function startOrglessServer(
@@ -454,8 +454,14 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('No organization was created.');
-        expect(result.stdout).toContain('workspace that holds your projects');
+        expect(result.stdout).toContain('An organization holds your projects');
+        expect(result.stdout).toContain(
+          "A project needs an organization. Secrets scanning doesn't.",
+        );
         expect(result.stdout).toContain("Next, run 'sonar integrate'");
+        expect(result.stdout.indexOf('A project needs an organization.')).toBeLessThan(
+          result.stdout.indexOf("Next, run 'sonar integrate'"),
+        );
         expect(calls(server, 'POST', '/api/organizations/create')).toHaveLength(0);
         expect(calls(server, 'POST', '/billing/subscriptions')).toHaveLength(0);
       },
@@ -477,7 +483,8 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Organization created on the Free plan');
+        expect(result.stdout).toContain(`Created organization 'Brand New Org' (key: ${NEW_ORG})`);
+        expect(result.stdout).toContain("It's on the Free plan");
         expect(result.stdout).toContain(`/organizations/${NEW_ORG}/billing`);
         const [creation] = calls(server, 'POST', '/api/organizations/create');
         const form = new URLSearchParams(creation.body);
