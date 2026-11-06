@@ -24,6 +24,11 @@ import { resolveFormatOption } from '@/core/commands/params.ts';
 import { createArchitectureApi } from '../../_common/architecture-api.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import { assertGroupExists, revisionOf, viewIntended } from '../../_common/intended-model.ts';
+import {
+  describeFileSource,
+  resolveIntendedSource,
+  toSourcePayload,
+} from '../../_common/model-source.ts';
 import { resolveProject } from '../../_common/project.ts';
 import {
   type ArchitectureReadOptions,
@@ -41,6 +46,18 @@ export async function getIntended(
   const depth = resolveDepth(options, Number.POSITIVE_INFINITY);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const projectKey = await resolveProject(options, ctx);
+  const intendedSource = await resolveIntendedSource(ctx, projectKey);
+  const source = toSourcePayload(intendedSource);
+  if (intendedSource.type === 'FILE') {
+    const message = `The intended architecture of '${projectKey}' is managed by ${describeFileSource(intendedSource)}; analyses don't use the model stored in SonarQube.`;
+    if (format === 'text') {
+      ctx.console.print(message);
+      return;
+    }
+    ctx.console.warn(message);
+    printPayload(ctx, format, { project: projectKey, source, models: [] });
+    return;
+  }
   const all = await createArchitectureApi(ctx.connection, projectKey)
     .getIntended()
     .catch((error: unknown) => {
@@ -63,12 +80,19 @@ export async function getIntended(
     return;
   }
   if (partial) {
-    printPayload(ctx, format, { project: projectKey, revision, partial: true, models: views });
+    printPayload(ctx, format, {
+      project: projectKey,
+      revision,
+      source,
+      partial: true,
+      models: views,
+    });
     return;
   }
   printPayload(ctx, format, {
     project: projectKey,
     revision,
+    source,
     ...(language ? { language } : {}),
     models,
   });
