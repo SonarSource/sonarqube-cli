@@ -37,6 +37,8 @@ export interface SecretsScanRunOptions {
   exclusionsOverride?: readonly string[];
   /** Makes sonar-secrets add the raw value to each issue as `secret`. */
   dangerousShowSecrets?: boolean;
+  /** Makes sonar-secrets list the paths it skipped as test files in `skippedFiles.paths`. */
+  showSkippedFiles?: boolean;
 }
 
 export function buildSecretsScanArgs(
@@ -58,5 +60,6 @@ export function buildSecretsScanArgs(
   if (settings.disableKnownFakeSecretFilter) args.push('--disable-known-fake-secret-filter');
   if (settings.demoMode) args.push('--demo-mode');
   if (runOptions.dangerousShowSecrets) args.push('--dangerous-show-secrets');
+  if (runOptions.showSkippedFiles) args.push('--show-skipped-files');
   return args;
 }
