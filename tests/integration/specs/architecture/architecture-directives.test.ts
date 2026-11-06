@@ -81,6 +81,139 @@ describe('public project directives', () => {
     expect(JSON.parse(posts[0].body!).origin).toBe('sonarqube-cli');
   });
 
+  it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])(
+    'skips equivalent stored and batch identities without rewriting %s',
+    async (graphPerspective) => {
+      const server = await configured((api) =>
+        api.withDirectives([
+          {
+            ...directive,
+            graphPerspective,
+            id: '00000000-0000-4000-8000-000000000001',
+            projectId: 'shop-branch-id',
+          },
+        ]),
+      );
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: [
+            directive,
+            { ...directive, fromNodeKey: 'app:new' },
+            { ...directive, fromNodeKey: 'app:new', graphPerspective },
+          ],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created 1 directives');
+      expect(result.stdout).toContain('Skipped 2 existing');
+      const posts = server
+        .getRecordedRequests()
+        .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+      expect(posts).toHaveLength(1);
+      expect(JSON.parse(posts[0].body!).graphPerspective).toBe('default_perspective');
+    },
+  );
+
+  it.each([
+    ['transformed_code_perspective', 'default_perspective'],
+    [' default_perspective ', 'default_perspective'],
+    [' custom_view ', 'custom_view'],
+    ['default_perspective', 'transformed_model_perspective'],
+  ])('preserves an explicit perspective change from %s to %s', async (before, after) => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const server = await configured((api) =>
+      api.withDirectives([
+        {
+          ...directive,
+          id,
+          projectId: 'shop-branch-id',
+          graphPerspective: before,
+          origin: 'ui',
+          description: 'keep description',
+        },
+      ]),
+    );
+    h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, graphPerspective: after }] }));
+    const command = 'arch directives set -p shop --file changes.json';
+    const preview = await h.run(command + ' --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain(after);
+    expect(
+      server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+    ).toHaveLength(0);
+    const applied = await h.run(command);
+    expect(applied.exitCode).toBe(0);
+    const patches = server.getRecordedRequests().filter((r) => r.method === 'PATCH');
+    expect(patches).toHaveLength(1);
+    const body = JSON.parse(patches[0].body!);
+    expect(body.graphPerspective).toBe(after);
+    expect(body.origin).toBe('ui');
+    expect(body).not.toHaveProperty('description');
+    expect((await h.run(command)).exitCode).toBe(0);
+    expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])('checks node keys for default alias %s without rewriting it', async (graphPerspective) => {
+    const server = await configured((api) =>
+      api.withStructure('java', [
+        { nodeCount: 1, edgeCount: 0, nodes: [{ id: 1, name: 'app', kind: 'module', edges: [] }] },
+      ]),
+    );
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({ create: [{ ...directive, graphPerspective }] }),
+    );
+    const result = await h.run('arch directives set -p shop --file changes.json');
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("node 'app:a' was not found");
+    expect(result.stderr).toContain("node 'app:b' was not found");
+    expect(result.stderr).not.toContain('Node keys were not checked for');
+    const posts = server
+      .getRecordedRequests()
+      .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0].body!).graphPerspective).toBe(graphPerspective);
+  });
+
+  it.each([' ', 'transformed_code_perspective', ' default_perspective '])(
+    'rejects an update collision with the default alias %s before writing',
+    async (graphPerspective) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await configured((api) =>
+        api.withDirectives([
+          { ...directive, fromNodeKey: 'app:first', id, projectId: 'shop-branch-id' },
+          {
+            ...directive,
+            graphPerspective,
+            id: '00000000-0000-4000-8000-000000000002',
+            projectId: 'shop-branch-id',
+          },
+        ]),
+      );
+      h.cwd.writeFile('changes.json', JSON.stringify({ update: [{ id, fromNodeKey: 'app:a' }] }));
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('An update would duplicate another directive');
+      expect(
+        server.getRecordedRequests().filter((r) => ['POST', 'PATCH', 'DELETE'].includes(r.method)),
+      ).toHaveLength(0);
+    },
+  );
+
   it.each([false, true])(
     'rejects a full project before writing even with duplicate identities (dryRun=%s)',
     async (dryRun) => {
