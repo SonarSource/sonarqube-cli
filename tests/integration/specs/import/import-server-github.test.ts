@@ -110,7 +110,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(result.stdout + result.stderr).toContain(
       'Imported 1000 repositories from the discovered subset',
     );
-    expect(putPayloads(server)).toHaveLength(1000);
+    expect(postPayloads(server)).toHaveLength(1000);
     const pages = server
       .getRecordedRequests()
       .filter((request) => request.path === '/api/alm_integrations/list_github_repositories')
@@ -135,7 +135,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(result.stdout + result.stderr).toContain(
       'Imported 1 repository from the discovered subset',
     );
-    expect(putPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
       'octo/api',
     ]);
   });
@@ -151,7 +151,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     const result = await harness.run('import --repo acme/repo-1499');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
       'acme/repo-1499',
     ]);
     const requests = server
@@ -171,7 +171,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     const result = await harness.run('import --repo org100/api');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
       'org100/api',
     ]);
     expect(
@@ -194,7 +194,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('not found');
-    expect(putPayloads(server)).toEqual([]);
+    expect(postPayloads(server)).toEqual([]);
     expect(
       server
         .getRecordedRequests()
@@ -213,7 +213,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(
-      putPayloads(server)
+      postPayloads(server)
         .map((payload) => payload.repositoryIdentifier)
         .sort(),
     ).toEqual(['org0/api', 'org100/api', 'org100/web']);
@@ -246,7 +246,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
       const result = await harness.run('import --repo acme/api');
 
       expect(result.exitCode).toBe(succeeds ? 0 : 1);
-      expect(putPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual(
+      expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual(
         succeeds ? ['acme/api'] : [],
       );
       if (!succeeds) {
@@ -278,7 +278,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('not found');
-    expect(putPayloads(server)).toEqual([]);
+    expect(postPayloads(server)).toEqual([]);
   });
 
   it('sends the full name as repositoryIdentifier and derives the project key from it', async () => {
