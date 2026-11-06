@@ -23,6 +23,7 @@ import type { Console } from '@/core/ui/console.ts';
 import type { InitOutcome } from './init-outcome.ts';
 
 const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
+const NO_ORGANIZATION_NOTE = "A project needs an organization. Secrets scanning doesn't.";
 function describe(outcome: InitOutcome): string[] {
   switch (outcome.kind) {
     case 'complete': {
@@ -39,6 +40,8 @@ function describe(outcome: InitOutcome): string[] {
       return [];
     case 'declined':
       return ['No project was created.'];
+    case 'no-organization':
+      return ['No organization was created.'];
   }
 }
 
@@ -51,6 +54,9 @@ export function renderInitOutcome(
     console.print(line);
   }
   if (suggestIntegrate) {
+    if (outcome.kind === 'no-organization') {
+      console.info(NO_ORGANIZATION_NOTE);
+    }
     console.print(INTEGRATE_SUGGESTION);
   }
 }
