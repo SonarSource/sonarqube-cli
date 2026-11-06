@@ -23,33 +23,18 @@ import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import { readSqaaFileContent } from './sqaa-api.ts';
-import {
-  type ChangeSetResult,
-  excludeIgnoredFiles,
-  resolveChangeSet,
-  resolveSqaaBranchAtRepoRoot,
-} from './sqaa-changeset.ts';
-import {
-  confirmLargeRunIfNeeded,
-  prepareSqaaExplicitFiles,
-  resolveDepthForMode,
-  resolveSqaaContext,
-} from './sqaa-context.ts';
+import { prepareSqaaRun } from './sqaa-context.ts';
 import {
   buildJsonReport,
   ignoredReportPath,
   makeReport,
   type SqaaJsonReport,
 } from './sqaa-display.ts';
-import { resolveSqaaRunFiles, soleFile } from './sqaa-paths.ts';
-import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
+import { soleFile } from './sqaa-paths.ts';
 import { fetchSingleFileReport, finishSqaaTelemetryFromReport, runSqaaGroups } from './sqaa-run.ts';
 import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions, PreparedSqaaRun } from './sqaa-types.ts';
-import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
-type JsonReportRunOptions = AnalyzeSqaaRunOptions & {
-  telemetryCtx: CommandInvocationContext;
-};
+type JsonReportRunOptions = AnalyzeSqaaRunOptions & { telemetryCtx: CommandInvocationContext };
 
 async function buildSqaaJsonReportFromEntries(
   prepared: PreparedSqaaRun,
@@ -76,7 +61,7 @@ async function buildSqaaJsonReportFromEntries(
   );
   const report = buildJsonReport(
     tally,
-    [],
+    prepared.ignored,
     files.displayPaths,
     displayBase,
     displayDepth,
@@ -86,113 +71,28 @@ async function buildSqaaJsonReportFromEntries(
   return report;
 }
 
-async function buildSqaaJsonReportFromChangeSet(
-  options: AnalyzeSqaaOptions,
-  connection: SonarConnection,
-  rawDepth: string | undefined,
-  forcedDepth: SqaaAnalysisDepth | undefined,
-  runOptions: JsonReportRunOptions,
-): Promise<SqaaJsonReport | null> {
-  const { staged, base, branch, project, force } = options;
-  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
-
-  const fullChangeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, fullChangeSet.repoRoot);
-  if (fullChangeSet.files.length === 0) {
-    return allExcludedReport(fullChangeSet);
-  }
-
-  const { console } = runOptions.telemetryCtx;
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    fullChangeSet.files,
-  );
-  const resolved = resolveSqaaContext(
-    resolution,
-    { requireProject: false, silentSkip: runOptions.silentSkip },
-    console,
-  );
-  if (!resolved) return null;
-
-  const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
-  if (changeSet.files.length === 0) {
-    return allExcludedReport(changeSet);
-  }
-
-  if (
-    !(await confirmLargeRunIfNeeded(
-      changeSet.files.length,
-      console,
-      force,
-      options.format ?? 'text',
-    ))
-  ) {
-    return null;
-  }
-
-  const { ignored, repoRoot } = changeSet;
-  const files = resolveSqaaRunFiles(resolved.groups, repoRoot);
-  const { result: tally, durationMs } = await timed(() =>
-    runSqaaGroups(files.projects, resolved.connection, {
-      branch: resolvedBranch,
-      wireDepth,
-      displayDepth,
-      console,
-      silent: true,
-    }),
-  );
-  const report = buildJsonReport(
-    tally,
-    ignored,
-    files.displayPaths,
-    repoRoot,
-    displayDepth,
-    files.displayProjects,
-  );
-  finishSqaaTelemetryFromReport(report, runOptions, durationMs);
-  return report;
-}
-
-function allExcludedReport(changeSet: ChangeSetResult): SqaaJsonReport {
-  return makeReport(
-    [],
-    [],
-    changeSet.ignored.map((f) => ({
-      path: ignoredReportPath(f.path, changeSet.repoRoot),
-      reason: f.reason,
-    })),
-  );
-}
-
-/**
- * Run SQAA and return the JSON report without printing it.
- * Returns null when SQAA is not available (non-Cloud connection or no project configured).
- * Used by `analyzeAll` to build a combined JSON report.
- */
 export async function buildSqaaJsonReport(
   options: AnalyzeSqaaOptions,
   connection: SonarConnection,
   runOptions: JsonReportRunOptions,
 ): Promise<SqaaJsonReport | null> {
-  const telemetryOptions = { ...runOptions, auth: connection.auth };
-  const { file: rawFiles, depth: rawDepth, forcedDepth } = options;
-  if (rawFiles?.length) {
-    const prepared = await prepareSqaaExplicitFiles(
-      options,
-      connection,
-      runOptions.telemetryCtx.console,
-      { requireProject: false, silentSkip: runOptions.silentSkip },
+  const prepared = await prepareSqaaRun(options, connection, runOptions.telemetryCtx.console, {
+    requireProject: false,
+    silentSkip: runOptions.silentSkip,
+  });
+  if (!prepared) return null;
+  if (prepared.files.displayPaths.length === 0) {
+    return makeReport(
+      [],
+      [],
+      prepared.ignored.map((file) => ({
+        path: ignoredReportPath(file.path, prepared.displayBase),
+        reason: file.reason,
+      })),
     );
-    return prepared ? buildSqaaJsonReportFromEntries(prepared, telemetryOptions) : null;
   }
-
-  return buildSqaaJsonReportFromChangeSet(
-    options,
-    connection,
-    rawDepth,
-    forcedDepth,
-    telemetryOptions,
-  );
+  return buildSqaaJsonReportFromEntries(prepared, {
+    ...runOptions,
+    auth: prepared.connection.auth,
+  });
 }

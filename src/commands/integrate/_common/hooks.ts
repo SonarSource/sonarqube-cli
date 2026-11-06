@@ -27,6 +27,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
+import { PROJECT_KEY_SAFE_PATTERN } from '@/core/project-key.ts';
 
 import type { HookCommand, HookConfig, HooksDocument, ManagedHookEntry } from './types.ts';
 
@@ -79,15 +80,12 @@ export async function readOrInitJson<T>(path: string, defaultValue: T): Promise<
 export const HOOK_TIMEOUT_SEC = 60;
 export const HOOKS_DIR = 'hooks';
 
-/** SonarQube project keys allowed when using a key into a generated hook shell script. */
-export const SONAR_PROJECT_KEY_SAFE_PATTERN = /^[A-Za-z0-9_.:-]+$/;
-
 /**
  * Reject project keys that cannot be safely embedded in hook scripts (command
  * substitution, quotes, spaces, etc.).
  */
 export function assertSafeSonarProjectKeyForHookScript(projectKey: string): void {
-  if (!SONAR_PROJECT_KEY_SAFE_PATTERN.test(projectKey)) {
+  if (!PROJECT_KEY_SAFE_PATTERN.test(projectKey)) {
     throw new Error(
       `SonarQube project key "${projectKey}" cannot be embedded in a hook script. Use only letters, digits, and _ . : -`,
     );

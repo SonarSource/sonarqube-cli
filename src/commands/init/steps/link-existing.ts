@@ -24,13 +24,13 @@ import {
 } from '@/commands/link/choose-project.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 
-import type { InitOutcome, LinkExistingOutcome } from '../init-outcome.ts';
+import { requireAnswer } from '../answer.ts';
+import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
 import {
-  MappingWriteError,
+  linkCommandFor,
   projectDashboardUrl,
   showAnalysisResults,
   writeMapping,
@@ -41,34 +41,35 @@ import {
  * user declines, they are asked whether to link another existing project, picked with the
  * `sonar link` picker. Declining that continues as `unbound-new`, and leaving the picker asks
  * whether to abandon linking (default no, which reopens the picker) before doing the same. The
- * chosen project is mapped in `.sonar-config.json` and its existing results are shown. A missing
- * answer or a failed write continue as `unbound-new`, leaving the onboarding incomplete.
+ * chosen project is mapped in `.sonar-config.json` and its existing results are shown. Only the
+ * user's own decision continues as `unbound-new`: when no answer can be asked, or the mapping
+ * cannot be written, it fails with a `sonar link` hint, so no second project is created for a
+ * repository that already has one.
  */
 export async function runLinkExisting(
-  { projectRoot, remote, projectKey: detectedKey }: LinkExistingOutcome,
-  { auth, console, interactive }: DetectDeps,
-): Promise<InitOutcome> {
-  const unbound: InitOutcome = { path: 'unbound-new', projectRoot, remote };
+  { projectRoot, remote, projectKey: detectedKey }: LinkExistingPath,
+  { auth, http, console, interactive }: DetectDeps,
+): Promise<InitOutcome | UnboundNewPath> {
   if (!interactive) {
-    console.info(
-      `Not linking the existing project '${detectedKey}': this needs an answer, and none can be asked.`,
-      'stderr',
+    throw new CommandFailedError(
+      `A Sonar project already exists for this repository: '${detectedKey}'. Linking it needs an answer, and none can be asked.`,
+      {
+        remediationHint: `Map it by running:\n  ${await linkCommandFor(detectedKey, projectRoot)}`,
+      },
     );
-    return unbound;
   }
 
-  const link = await console.confirmPrompt(
-    `A Sonar project already exists for this repository: '${detectedKey}'. Link this directory to it?`,
-    true,
+  const unbound: UnboundNewPath = { path: 'unbound-new', projectRoot, remote };
+  const link = requireAnswer(
+    await console.confirmPrompt(
+      `A Sonar project already exists for this repository: '${detectedKey}'. Link this directory to it?`,
+      true,
+    ),
   );
-  if (link === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
   if (!link && !(await confirmAnotherProject(console))) {
     return unbound;
   }
 
-  const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const projectKey = link
     ? detectedKey
     : await pickProject(new ProjectsClient(http), { auth, console });
@@ -76,16 +77,7 @@ export async function runLinkExisting(
     return unbound;
   }
 
-  try {
-    await writeMapping(auth, projectKey, projectRoot, console, 'found');
-  } catch (error) {
-    if (!(error instanceof MappingWriteError)) {
-      throw error;
-    }
-    console.warn(error.message);
-    console.print(`  → ${error.remediationHint}`, 'stderr');
-    return unbound;
-  }
+  await writeMapping(auth, projectKey, projectRoot, console, 'found');
 
   console.success(
     `Linked this directory to project '${projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
@@ -100,18 +92,13 @@ export async function runLinkExisting(
     console,
     'No analysis results on the server yet for this project.',
   );
-  return { path: 'link-existing', projectRoot, remote, projectKey, linked: true };
+  return { kind: 'linked', projectKey };
 }
 
 async function confirmAnotherProject(console: DetectDeps['console']): Promise<boolean> {
-  const another = await console.confirmPrompt(
-    'Link this directory to another existing project instead?',
-    true,
+  return requireAnswer(
+    await console.confirmPrompt('Link this directory to another existing project instead?', true),
   );
-  if (another === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
-  return another;
 }
 
 /** Leaving the picker asks whether to give up linking; declining reopens it. */
@@ -127,13 +114,12 @@ async function pickProject(
         throw error;
       }
     }
-    const abandon = await ctx.console.confirmPrompt(
-      'Abandon linking a project and create a new project without repository binding instead?',
-      false,
+    const abandon = requireAnswer(
+      await ctx.console.confirmPrompt(
+        'Abandon linking a project and create a new project without repository binding instead?',
+        false,
+      ),
     );
-    if (abandon === null) {
-      throw new CommandFailedError('Onboarding cancelled.');
-    }
     if (abandon) {
       return null;
     }
