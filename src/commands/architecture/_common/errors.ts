@@ -27,6 +27,9 @@ import {
 } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 
+const HTTP_SUCCESS_MIN_STATUS = 200;
+const HTTP_REDIRECTION_MIN_STATUS = 300;
+
 const PLAN_HINT =
   'Architecture needs SonarQube Cloud Team or Enterprise, or the Architecture feature on SonarQube Server.';
 
@@ -38,27 +41,26 @@ export function incompatibleResponse(message: string, cause?: Error): CommandFai
 }
 
 export function collectionFailure(error: unknown, isCloud: boolean): never {
-  if (error instanceof UnexpectedApiError && error.status >= 200 && error.status < 300) {
+  if (
+    error instanceof UnexpectedApiError &&
+    error.status >= HTTP_SUCCESS_MIN_STATUS &&
+    error.status < HTTP_REDIRECTION_MIN_STATUS
+  ) {
     throw incompatibleResponse(
       'The public Architecture API returned an unreadable response.',
       error,
     );
   }
-  if (error instanceof AccessDeniedError) {
-    if (error.status === HTTP_STATUS_NOT_FOUND) {
-      throw new CommandFailedError(
-        'The public Architecture API endpoint was not found (HTTP 404).',
-        {
-          cause: error,
-          remediationHint:
-            'Check feature availability, Browse permission and API routing. ' +
-            UPDATE_HINT +
-            (isCloud
-              ? ''
-              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
-        },
-      );
-    }
+  if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+    throw new CommandFailedError('The public Architecture API endpoint was not found (HTTP 404).', {
+      cause: error,
+      remediationHint:
+        'Check feature availability, Browse permission and API routing. ' +
+        UPDATE_HINT +
+        (isCloud
+          ? ''
+          : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+    });
   }
   throw error;
 }
