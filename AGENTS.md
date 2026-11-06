@@ -1,7 +1,5 @@
 # Repository instructions
 
-`sonar` is a Bun/TypeScript CLI for SonarQube Server and Cloud. Commands live in `src/commands/`; `createCommandTree()` registers them in `src/commands/command-tree.ts`. The entry point is `src/index.ts`.
-
 ## Working and validation
 
 - Use the Bun version pinned in `mise.toml`: run `mise trust`, `mise install`, then `bun install --frozen-lockfile` from the repository root.
@@ -13,7 +11,7 @@
 ## Repository-wide boundaries
 
 - Only `src/core/server/fetch.ts` may call runtime `fetch`. Use `fetchAuthenticated` for credentials and `fetchAnonymous` for credential-free CDN requests. Both resolve proxy/TLS/NO_PROXY per redirect hop; authenticated redirects must never leak credentials across origins. Do not override transport options at call sites. Outward SDK traffic must use this transport or equivalent protection. Read the API guidance below before changing network code.
-- Production errors use `src/core/commands/command-error.ts`: `InvalidOptionError` exits 2; `CommandFailedError` exits 1 by default or its explicit code; other errors exit 1. Preserve `CliError.remediationHint` rendering. Test mocks may throw `Error`.
+- Use `InvalidOptionError` and `CommandFailedError` from `src/core/commands/command-error.ts` for production errors. Preserve `CliError.remediationHint` rendering. Test mocks may throw `Error`.
 - Maintain instructions under [the instruction policy](docs/development/agent-instructions.md). Ordinary feature work does not require an instruction update.
 
 ## Read before editing the relevant area

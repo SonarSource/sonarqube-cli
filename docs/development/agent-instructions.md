@@ -8,7 +8,7 @@ Change agent instructions only when this change makes existing guidance incorrec
 - Cross-cutting rules live in `agent-guidance/` and are routed explicitly from the root. Keep one source for each rule; do not duplicate it in client-specific directories.
 - Root-started agents must follow routes explicitly; nested discovery and editor support vary by client. Check both root and nested workflows after changing routes.
 - Use native `AGENTS.md` loading. [Claude Code](https://code.claude.com/docs/en/memory#agents-md) supports it from v2.1.277; [Cursor](https://cursor.com/docs/rules#agentsmd) supports root and nested files. Claude's default loads `AGENTS.md` only when no project/ancestor `CLAUDE.md`, `.claude/CLAUDE.md`, or `CLAUDE.local.md` takes precedence. If personal project instructions suppress loading, select `claude-md-and-agents-md` in Claude's Project instructions setting. Do not add compatibility files without a demonstrated need in a client the team uses.
-- Keep actionable conventions, unusual prerequisites, safety boundaries, and brief reasons. Remove feature catalogs, ticket history, copied code descriptions, and facts readily recovered from source/tests. Extract only unique design rationale into focused references.
+- Keep team decisions, actionable conventions, unusual prerequisites, safety boundaries, and costly recurring discoveries. If an agent can readily discover a fact from code/tests and would naturally inspect them for the task, omit it. Remove feature catalogs, ticket history, and implementation narration. Put unique design rationale beside the relevant code or in focused references.
 
 ## Review budgets
 
