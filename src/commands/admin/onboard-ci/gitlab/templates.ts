@@ -20,8 +20,8 @@
 
 import * as yaml from 'js-yaml';
 
-import { SONAR_PROJECT_KEY_SAFE_PATTERN } from '@/commands/integrate/_common/hooks.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { PROJECT_KEY_SAFE_PATTERN } from '@/core/project-key.ts';
 
 import type { OnboardCiGitlabOptions } from './types.ts';
 import { GITLAB_DEFAULT_STAGES, TriggerOn } from './types.ts';
@@ -177,7 +177,7 @@ export function validateJobTemplate(template: string): void {
 }
 
 export function renderJobTemplate(template: string, projectKey: string): string {
-  if (!SONAR_PROJECT_KEY_SAFE_PATTERN.test(projectKey)) {
+  if (!PROJECT_KEY_SAFE_PATTERN.test(projectKey)) {
     throw new CommandFailedError(
       `Cannot substitute ${JOB_TEMPLATE_PROJECT_KEY_PLACEHOLDER}: project key '${projectKey}' contains characters unsafe to embed in the job template.`,
     );
