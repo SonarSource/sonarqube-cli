@@ -34,7 +34,7 @@ import {
 } from '@/core/server/errors.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
-import type { ArchitectureApi, IntendedArchitecture } from './architecture-api.ts';
+import type { ArchitectureApi, IntendedArchitecture, IntendedState } from './architecture-api.ts';
 import { toArchitectureError } from './errors.ts';
 import { diffIntended, type IntendedDiff, isEmptyDiff } from './intended-diff.ts';
 import {
@@ -89,6 +89,15 @@ export async function setIntended(
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
+  if (
+    !options.dryRun &&
+    stored.id !== undefined &&
+    next.length === 0 &&
+    file.revision === undefined
+  )
+    throw new CommandFailedError(
+      'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
+    );
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (!isEmptyDiff(diff)) await options.onValidation?.();
@@ -108,7 +117,7 @@ export async function setIntended(
   }
   const backupPath = await writeBackup(options.backupDir, options.projectKey, current);
   const actual = await api.getIntendedState();
-  if (actual.id !== stored.id || revisionOf(actual.models) !== revisionOf(current))
+  if (actual.id === undefined || revisionOf(actual.models) !== revisionOf(current))
     throw staleError(options.projectKey);
   const operation = next.length === 0 ? 'clear' : 'update';
   await writeModel(api, next, operation, options.projectKey, backupPath);
@@ -149,16 +158,19 @@ async function verifyWrite(
   let readError: unknown;
   for (const delay of VERIFICATION_DELAYS_MS) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    let actual: IntendedState;
     try {
-      const actual = await api.getIntendedState();
-      const cleared =
-        operation !== 'clear' || (writeError === undefined && actual.id === undefined);
-      if (cleared && writableRevisionOf(actual.models) === expectedRevision) return;
-      readError = undefined;
+      actual = await api.getIntendedState();
     } catch (error) {
       readError = error;
       if (error instanceof IntendedModelIdentityError) break;
+      continue;
     }
+    if (operation === 'clear' && writeError !== undefined && actual.id === undefined)
+      throw writeFailure(projectKey, writeError, backupPath, undefined, 'clear-unconfirmed');
+    const cleared = operation !== 'clear' || actual.id === undefined;
+    if (cleared && writableRevisionOf(actual.models) === expectedRevision) return;
+    readError = undefined;
   }
   throw writeFailure(projectKey, writeError, backupPath, readError);
 }
@@ -168,9 +180,11 @@ function writeFailure(
   error: unknown,
   backupPath?: string,
   readError?: unknown,
-  outcome: 'unconfirmed' | 'rejected' | 'identity-changed' = 'unconfirmed',
+  outcome: 'unconfirmed' | 'rejected' | 'identity-changed' | 'clear-unconfirmed' = 'unconfirmed',
 ): CommandFailedError {
   const messages = {
+    'clear-unconfirmed':
+      'The verification read found no visible intended architecture, but the failed DELETE response prevents confirming deletion. Inspect the current server state before restoring. No automatic rollback was attempted.',
     unconfirmed:
       'The architecture write could not be confirmed; inspect the current server state before restoring. No automatic rollback was attempted.',
     rejected: 'The server rejected the architecture write. No automatic rollback was attempted.',
