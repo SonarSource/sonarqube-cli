@@ -25,6 +25,7 @@ import type { InitOutcome } from './init-outcome.ts';
 import { projectDashboardUrl } from './steps/mapping.ts';
 
 const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
+const NO_ORGANIZATION_NOTE = "A project needs an organization. Secrets scanning doesn't.";
 function describe(outcome: InitOutcome): string[] {
   switch (outcome.kind) {
     case 'complete': {
@@ -41,6 +42,8 @@ function describe(outcome: InitOutcome): string[] {
       return [];
     case 'declined':
       return ['No project was created.'];
+    case 'no-organization':
+      return ['No organization was created.'];
   }
 }
 
@@ -50,15 +53,20 @@ function describe(outcome: InitOutcome): string[] {
  */
 export function renderInitOutcome(
   outcome: InitOutcome,
-  auth: ResolvedAuth,
+  auth: ResolvedAuth | undefined,
   console: Console,
   { suggestIntegrate }: { suggestIntegrate: boolean },
 ): void {
   for (const line of describe(outcome)) {
     console.print(line);
   }
-  renderProjectDashboards(outcome, auth, console);
+  if (auth) {
+    renderProjectDashboards(outcome, auth, console);
+  }
   if (suggestIntegrate) {
+    if (outcome.kind === 'no-organization') {
+      console.info(NO_ORGANIZATION_NOTE);
+    }
     console.print(INTEGRATE_SUGGESTION);
   }
 }
@@ -72,6 +80,7 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'unbound':
       return [outcome.projectKey];
     case 'declined':
+    case 'no-organization':
       return [];
   }
 }
