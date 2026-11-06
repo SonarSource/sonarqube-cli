@@ -35,6 +35,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { OrganizationCreationStopped } from './steps/organization.ts';
 import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
@@ -57,15 +58,15 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const unboundNewOptions = validateUnboundNewOptions(options);
 
   const { outcome, auth } = await run(projectRoot, ctx, interactive, unboundNewOptions);
-  if (outcome.kind !== 'unbound' && outcome.kind !== 'declined') {
+  const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
+  if (outcome.kind !== 'unbound' && !declined) {
     warnIgnoredUnboundNewOptions(unboundNewOptions, ctx.console);
   }
-  const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
   renderInitOutcome(outcome, ctx.console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
-  if (suggestIntegrate && interactive && !declined) {
+  if (suggestIntegrate && interactive && !declined && auth) {
     await offerIntegrate(ctx, auth);
   }
 }
@@ -75,8 +76,16 @@ async function run(
   ctx: CommandInvocationContext,
   interactive: boolean,
   unboundNewOptions: UnboundNewOptions,
-): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
-  const auth = await resolveInitAuth(ctx, interactive);
+): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth }> {
+  let auth: ResolvedAuth;
+  try {
+    auth = await resolveInitAuth(ctx, interactive);
+  } catch (error) {
+    if (error instanceof OrganizationCreationStopped) {
+      return { outcome: { kind: 'no-organization', reason: error.reason } };
+    }
+    throw error;
+  }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
   const detected = await detectInitPath(projectRoot, deps);

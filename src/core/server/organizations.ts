@@ -42,6 +42,17 @@ export interface OrganizationRecord {
   uuidV4: string;
 }
 
+/** One price point of a billing plan; only the amounts matter for picking the zero-cost plan. */
+export interface BillingPlan {
+  name: string;
+  tiers: { priceId: string; currencyOptions: { unitAmount: number }[] }[];
+}
+
+export interface BillingSubscription {
+  planKey: string;
+  status?: string;
+}
+
 /** Result of checking whether the current token has membership in an organization. */
 export type OrganizationMembership =
   { status: 'member' } | { status: 'not_member' } | { status: 'check_failed'; reason: string };
@@ -88,6 +99,69 @@ export class OrganizationsClient {
       this.orgInfoCache.set(organizationKey, pending);
     }
     return pending;
+  }
+
+  /**
+   * The organization's uuidV4 straight from the server, bypassing the cache. A freshly created
+   * organization is not visible to Cloud at once, and a cached `null` would hide it once it is.
+   */
+  getUncachedOrganizationId(organizationKey: string): ResultAsync<string | null, HttpClientError> {
+    return this.fetchOrganizationRecord(organizationKey).map((info) => info?.uuidV4 ?? null);
+  }
+
+  /**
+   * Create an organization (`POST /api/organizations/create`, SonarQube Cloud only). A taken key
+   * resolves to `UnexpectedApiError` with status 409; a caller without permission gets 403.
+   */
+  createOrganization(
+    key: string,
+    name: string,
+  ): ResultAsync<{ organization: { key: string; name: string } }, HttpClientError> {
+    return this.client.postFormJson<{ organization: { key: string; name: string } }>(
+      '/api/organizations/create',
+      { key, name },
+    );
+  }
+
+  /** `GET /billing/plans`: every plan Cloud offers. */
+  listBillingPlans(): ResultAsync<BillingPlan[], HttpClientError> {
+    return this.client.get<BillingPlan[]>('/billing/plans', { product: 'SonarCloud' });
+  }
+
+  /** `GET /billing/subscriptions` for an organization's uuidV4. */
+  listSubscriptions(organizationUuid: string): ResultAsync<BillingSubscription[], HttpClientError> {
+    return this.client
+      .get<{ subscriptions: BillingSubscription[] }>('/billing/subscriptions', {
+        resourceId: organizationUuid,
+        resourceType: 'organization',
+      })
+      .map((result) => result.subscriptions);
+  }
+
+  /** The billing contact for a new subscription; `''` when the account has no email. */
+  getCurrentUserEmail(): ResultAsync<string, HttpClientError> {
+    return this.client
+      .get<{ email?: string }>('/api/users/current')
+      .map((result) => result.email ?? '');
+  }
+
+  /**
+   * `POST /billing/subscriptions`: subscribe an organization to the plan priced `priceId`.
+   * The endpoint rejects a null `email`, so callers pass `''` when the account has none.
+   */
+  createSubscription(
+    organizationUuid: string,
+    organizationName: string,
+    priceId: string,
+    email: string,
+  ): ResultAsync<unknown, HttpClientError> {
+    return this.client.post('/billing/subscriptions', {
+      customerName: organizationName,
+      entityId: organizationUuid,
+      entityType: 'organization',
+      email,
+      priceId,
+    });
   }
 
   /**
