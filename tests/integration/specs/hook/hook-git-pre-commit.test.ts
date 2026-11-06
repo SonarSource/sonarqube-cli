@@ -33,7 +33,7 @@ import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import { readStatsEvents } from '../../../_common/stats-helpers.ts';
-import { readCommandEvents } from '../../../_common/telemetry-helpers.ts';
+import { readCommandEvents, readCommandTargetEvents } from '../../../_common/telemetry-helpers.ts';
 import { TestHarness } from '../../harness';
 import { initGitRepo, stageFile } from './git-test-helpers';
 
@@ -463,9 +463,10 @@ describe('sonar hook git-pre-commit', () => {
       }
 
       it(
-        'scans each project with a changed manifest and reports progress',
+        'scans each project with a changed manifest, reports progress and records each as a target',
         async () => {
           const server = await startScaServer('api', 'web');
+          harness.state().withTelemetryEnabled();
           linkProjects(server.baseUrl(), [
             { projectKey: 'api', path: 'services/api' },
             { projectKey: 'web', path: 'apps/web' },
@@ -485,6 +486,15 @@ describe('sonar hook git-pre-commit', () => {
           expect(result.stderr).toContain(
             'Dependency-risks scan failed for web; commit not blocked.',
           );
+          const [command] = readCommandEvents(harness.sonarUserHome.path);
+          expect(command.event_payload.target_count).toBe(2);
+          expect(command.event_payload.project_uuid).toBeNull();
+          expect(command.event_payload.connection_type).toBeNull();
+          const targets = readCommandTargetEvents(harness.sonarUserHome.path);
+          expect(targets.map((target) => target.event_payload.project_uuid)).toEqual([
+            'AYapilegacy',
+            'AYweblegacy',
+          ]);
         },
         { timeout: 120000 },
       );
