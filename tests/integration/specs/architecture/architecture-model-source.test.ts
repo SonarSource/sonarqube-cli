@@ -128,8 +128,23 @@ describe('sonar architecture intended source', () => {
       expect(set.stderr).toContain(
         `The intended architecture of '${PROJECT}' is managed by a file in its repository (the Architecture model location is FILE); nothing was changed.`,
       );
+      expect(set.stderr).toContain(
+        "Edit the sonar-architecture file in the project's repository and commit it",
+      );
+      expect(set.stderr).not.toContain('Add a sonar-architecture.json');
       expect(set.stderr).toContain('model location to SERVER');
     }
+    expect(writes(server)).toEqual([]);
+  });
+
+  it('suggests adding a file only when the project checkout has no architecture file', async () => {
+    const server = await start('FILE');
+    await linkCheckout();
+    const set = await writeNext(undefined);
+    expect(set.exitCode).toBe(1);
+    expect(set.stderr).toContain(
+      'Add a sonar-architecture.json file to the repository and commit it',
+    );
     expect(writes(server)).toEqual([]);
   });
 

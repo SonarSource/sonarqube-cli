@@ -137,9 +137,11 @@ export async function setIntended(
 
 function fileManagedError(projectKey: string, source: IntendedSource): CommandFailedError {
   const edit =
-    source.file === undefined
-      ? 'Add a sonar-architecture.json file to the repository and commit it'
-      : `Edit ${source.file} and commit it`;
+    source.file !== undefined
+      ? `Edit ${source.file} and commit it`
+      : source.hasCheckout
+        ? 'Add a sonar-architecture.json file to the repository and commit it'
+        : "Edit the sonar-architecture file in the project's repository and commit it";
   return new CommandFailedError(
     `The intended architecture of '${projectKey}' is managed by ${describeFileSource(source)}; nothing was changed.`,
     {
