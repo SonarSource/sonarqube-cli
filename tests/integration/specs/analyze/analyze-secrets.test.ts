@@ -737,6 +737,38 @@ describe('analyze secrets', () => {
     );
 
     it(
+      'prints the same report with --show-skipped-files as without it',
+      async () => {
+        harness.cwd.writeFile('src/app.js', SECRET_CONTENT);
+        harness.cwd.writeFile('tests/fixture.js', SECRET_CONTENT);
+        const withoutOption = await harness.run('analyze secrets .');
+
+        const result = await harness.run('analyze secrets . --show-skipped-files');
+
+        expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
+        expect(outputWithoutTimings(result)).toBe(outputWithoutTimings(withoutOption));
+        expect(result.stdout + result.stderr).not.toContain('tests/fixture.js');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'exits with code 2 when --show-skipped-files is combined with --stdin',
+      async () => {
+        const result = await harness.runWithStdin(
+          'analyze secrets --stdin --show-skipped-files',
+          CLEAN_CONTENT,
+        );
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stdout + result.stderr).toContain(
+          'Cannot use --show-skipped-files with --stdin',
+        );
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'exits with code 2 when --exclude is combined with --stdin',
       async () => {
         const result = await harness.runWithStdin(
@@ -800,7 +832,7 @@ describe('analyze secrets', () => {
   });
 
   describe('sonar-secrets arguments', () => {
-    const PER_RUN_ONLY_FLAGS = ['--dangerous-show-secrets'];
+    const PER_RUN_ONLY_FLAGS = ['--dangerous-show-secrets', '--show-skipped-files'];
     const SECRET_CONTENT = `const token = "${GITHUB_TEST_TOKEN}";`;
     const GIT_NULL_OID = '0000000000000000000000000000000000000000';
 
@@ -845,6 +877,21 @@ describe('analyze secrets', () => {
         const argvs = readSecretsScanArgvs(harness);
         expect(argvs).toHaveLength(1);
         expect(argvs[0]).toContain('--dangerous-show-secrets');
+      },
+      { timeout: 30000 },
+    );
+
+    it(
+      'passes --show-skipped-files to sonar-secrets for a path scan given the option',
+      async () => {
+        harness.cwd.writeFile('tests/fixture.js', SECRET_CONTENT);
+
+        const result = await harness.run('analyze secrets . --show-skipped-files');
+
+        expect(result.exitCode).toBe(0);
+        const argvs = readSecretsScanArgvs(harness);
+        expect(argvs).toHaveLength(1);
+        expect(argvs[0]).toContain('--show-skipped-files');
       },
       { timeout: 30000 },
     );
@@ -1013,13 +1060,14 @@ describe('analyze secrets', () => {
     );
 
     it(
-      'keeps --dangerous-show-secrets out of the help until the CLI displays raw values',
+      'keeps the per-run options out of the help until the CLI displays what they return',
       async () => {
         const result = await harness.run('analyze secrets --help');
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('--exclude');
         expect(result.stdout).not.toContain('--dangerous-show-secrets');
+        expect(result.stdout).not.toContain('--show-skipped-files');
       },
       { timeout: 15000 },
     );

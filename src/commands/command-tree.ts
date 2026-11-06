@@ -707,6 +707,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
         'Ask sonar-secrets to report the raw value of each secret',
       ).hideHelp(),
     )
+    .addOption(
+      new SonarOption(
+        '--show-skipped-files',
+        'Ask sonar-secrets to list the files it skipped as test files',
+      ).hideHelp(),
+    )
     .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
       analyzeSecrets(
         {
@@ -714,6 +720,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
           stdin: options.stdin,
           exclude: options.exclude,
           dangerousShowSecrets: options.dangerousShowSecrets,
+          showSkippedFiles: options.showSkippedFiles,
         },
         ctx,
       ),
