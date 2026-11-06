@@ -24,6 +24,7 @@ import { basename, relative } from 'node:path';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
+import { trimChars } from '@/core/io/strings.ts';
 
 const MAX_SEGMENT_LENGTH = 80;
 const HASH_LENGTH = 12;
@@ -31,14 +32,6 @@ const HASH_LENGTH = 12;
 interface RepositoryIdentity {
   name: string;
   identity: string;
-}
-
-function trimChars(value: string, chars: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && chars.includes(value[start])) start++;
-  while (end > start && chars.includes(value[end - 1])) end--;
-  return value.slice(start, end);
 }
 
 function repositoryIdentity(remote: string): RepositoryIdentity | undefined {
