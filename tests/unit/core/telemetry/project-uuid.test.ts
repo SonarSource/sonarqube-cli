@@ -35,10 +35,11 @@ import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import {
-  currentProjectUuid,
   noteProject,
   resetProjectUuidContextForTests,
   resolveProjectUuid,
+  resolveTelemetryTargets,
+  type TelemetryTarget,
 } from '@/core/telemetry/project-uuid.ts';
 
 import { disableTelemetryInConfigFile } from '../../../_common/telemetry-helpers.ts';
@@ -324,13 +325,17 @@ describe('resolveProjectUuid()', () => {
   });
 });
 
-// ─── Ambient per-invocation context ─────────────────────────────────────────
+// ─── Ambient per-invocation targets ─────────────────────────────────────────
 
-describe('noteProject() / currentProjectUuid()', () => {
-  it('resolves null when no project was noted', async () => {
+function projectUuids(targets: TelemetryTarget[]): (string | null)[] {
+  return targets.map((target) => target.projectUuid);
+}
+
+describe('noteProject() / resolveTelemetryTargets()', () => {
+  it('resolves no targets when no project was noted', async () => {
     const getSafeSpy = mockProjectUuidGetSafe();
 
-    expect(await currentProjectUuid()).toBeNull();
+    expect(await resolveTelemetryTargets()).toEqual([]);
     expect(getSafeSpy).not.toHaveBeenCalled();
 
     getSafeSpy.mockRestore();
@@ -338,10 +343,12 @@ describe('noteProject() / currentProjectUuid()', () => {
 
   it('resolves the noted project via the API', async () => {
     const getSafeSpy = mockProjectUuidGetSafe({ component: [{ ok: true, id: 'AV-noted' }] });
+    const noted = auth();
 
-    noteProject(auth(), 'proj-noted');
+    noteProject(noted, 'proj-noted');
 
-    expect(await currentProjectUuid()).toBe('AV-noted');
+    const [target] = await resolveTelemetryTargets();
+    expect(target).toEqual({ auth: noted, projectKey: 'proj-noted', projectUuid: 'AV-noted' });
     getSafeSpy.mockRestore();
   });
 
@@ -350,48 +357,97 @@ describe('noteProject() / currentProjectUuid()', () => {
 
     noteProject(auth(), 'proj-memoized');
 
-    expect(await currentProjectUuid()).toBe('AV-memo');
-    expect(await currentProjectUuid()).toBe('AV-memo');
-    expect(await currentProjectUuid()).toBe('AV-memo');
+    expect(projectUuids(await resolveTelemetryTargets())).toEqual(['AV-memo']);
+    expect(projectUuids(await resolveTelemetryTargets())).toEqual(['AV-memo']);
     expect(getSafeSpy).toHaveBeenCalledTimes(1);
 
     getSafeSpy.mockRestore();
   });
 
-  it('ignores an empty or missing project key, leaving the report null', async () => {
+  it('ignores an empty or missing project key', async () => {
     const getSafeSpy = mockProjectUuidGetSafe();
 
     noteProject(auth(), undefined);
     noteProject(auth(), null);
     noteProject(auth(), '');
 
-    expect(await currentProjectUuid()).toBeNull();
+    expect(await resolveTelemetryTargets()).toEqual([]);
     expect(getSafeSpy).not.toHaveBeenCalled();
 
     getSafeSpy.mockRestore();
   });
 
-  it('lets a later note supersede an earlier one instead of being shadowed by its memo', async () => {
-    const getSafeSpy = mockProjectUuidGetSafe({ component: [{ ok: true, id: 'AV-second' }] });
+  it('keeps every distinct project in noting order and records a repeated one once', async () => {
+    const getSafeSpy = mockProjectUuidGetSafe({
+      idByProjectKey: { 'proj-a': 'AV-a', 'proj-b': 'AV-b' },
+    });
 
-    noteProject(auth(), 'proj-first');
-    noteProject(auth(), 'proj-second');
+    noteProject(auth(), 'proj-a');
+    noteProject(auth(), 'proj-b');
+    noteProject(auth(), 'proj-a');
 
-    expect(await currentProjectUuid()).toBe('AV-second');
-    // Only the superseding key was ever fetched.
-    expect(getSafeSpy).toHaveBeenCalledTimes(1);
+    const targets = await resolveTelemetryTargets();
+    expect(targets.map((target) => target.projectKey)).toEqual(['proj-a', 'proj-b']);
+    expect(projectUuids(targets)).toEqual(['AV-a', 'AV-b']);
+    expect(getSafeSpy).toHaveBeenCalledTimes(2);
 
     getSafeSpy.mockRestore();
   });
 
-  it('never rejects when resolution fails, so CliCommandExecuted cannot be broken by it', async () => {
+  it('treats the same project key on another server as a separate target', async () => {
+    const getSafeSpy = mockProjectUuidGetSafe({ idByProjectKey: { 'proj-shared': 'AV-shared' } });
+    const server = auth({ serverUrl: 'https://sq.example.com', orgKey: undefined });
+
+    noteProject(auth(), 'proj-shared');
+    noteProject(server, 'proj-shared');
+
+    const targets = await resolveTelemetryTargets();
+    expect(targets.map((target) => target.auth.serverUrl)).toEqual([
+      'https://sonarcloud.io',
+      'https://sq.example.com',
+    ]);
+
+    getSafeSpy.mockRestore();
+  });
+
+  it('caches every project resolved in one batch', async () => {
+    const getSafeSpy = mockProjectUuidGetSafe({
+      idByProjectKey: { 'proj-batch-a': 'AV-batch-a', 'proj-batch-b': 'AV-batch-b' },
+    });
+
+    noteProject(auth(), 'proj-batch-a');
+    noteProject(auth(), 'proj-batch-b');
+    await resolveTelemetryTargets();
+
+    expect(await resolveProjectUuid(auth(), 'proj-batch-a')).toBe('AV-batch-a');
+    expect(await resolveProjectUuid(auth(), 'proj-batch-b')).toBe('AV-batch-b');
+    expect(getSafeSpy).toHaveBeenCalledTimes(2);
+
+    getSafeSpy.mockRestore();
+  });
+
+  it('re-resolves when a project is noted after an earlier read', async () => {
+    const getSafeSpy = mockProjectUuidGetSafe({
+      idByProjectKey: { 'proj-early': 'AV-early', 'proj-late': 'AV-late' },
+    });
+
+    noteProject(auth(), 'proj-early');
+    expect(projectUuids(await resolveTelemetryTargets())).toEqual(['AV-early']);
+    noteProject(auth(), 'proj-late');
+
+    expect(projectUuids(await resolveTelemetryTargets())).toEqual(['AV-early', 'AV-late']);
+
+    getSafeSpy.mockRestore();
+  });
+
+  it('never rejects when resolution fails, so command telemetry cannot be broken by it', async () => {
     const getSafeSpy = mockProjectUuidGetSafe({
       component: [{ ok: false, throws: true }],
     });
 
     noteProject(auth(), 'proj-explodes');
 
-    expect(await currentProjectUuid()).toBeNull();
+    expect(projectUuids(await resolveTelemetryTargets())).toEqual([null]);
     getSafeSpy.mockRestore();
   });
 });

@@ -22,9 +22,11 @@ import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import type { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
 
-import { currentProjectUuid } from './project-uuid.ts';
+import { resolveTelemetryTargets } from './project-uuid.ts';
 
 export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
+
+export const CLI_TARGET_RESOLVED = 'CliTargetResolved';
 
 /** Domain payload for CliCommandExecuted (identity is filled at drain time). */
 export type CommandExecutedPayload = {
@@ -33,29 +35,52 @@ export type CommandExecutedPayload = {
   result: 'success' | 'failure';
   distribution: Distribution;
   project_uuid: string | null;
+  target_count: number;
   arguments: string | null;
+} & Partial<typeof MULTI_TARGET_CONNECTION_FIELDS>;
+
+/** Overrides the merged identity, so a multi-target run is never attributed to one connection. */
+const MULTI_TARGET_CONNECTION_FIELDS = {
+  connection_type: null,
+  organization_uuid_v4: null,
+  sqs_installation_id: null,
+} as const;
+
+export type TargetResolvedPayload = {
+  command: string | undefined;
+  subcommand: string | null;
+  project_uuid: string | null;
 };
 
 /**
- * Build a CliCommandExecuted fact for a finished command.
+ * Build the CliCommandExecuted fact plus one CliTargetResolved fact per noted target.
  *
  * `result` is derived from `process.exitCode` (`success` when 0 or unset). An intentional block
  * that exits non-zero (git secrets hooks, Cursor file-read denies) therefore reports `failure`;
  * the `CliAnalysisCompleted` fact on the same invocation tells a secrets block apart from an error.
- * `project_uuid` is resolved here (async, never rejects). Identity is applied at commit.
  * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
  * `arguments` comes from {@link SonarCommand.describeInvocationArguments}.
  */
-export async function buildCommandExecutedFact(
-  command: SonarCommand,
-): Promise<TelemetryFact<CommandExecutedPayload>> {
+export async function buildCommandFacts(command: SonarCommand): Promise<TelemetryFact[]> {
   const { command: commandName, subcommand } = command.commandAndSubcommand();
-  return new TelemetryFact(CLI_COMMAND_EXECUTED, {
+  const targets = await resolveTelemetryTargets();
+  const executed = new TelemetryFact<CommandExecutedPayload>(CLI_COMMAND_EXECUTED, {
     command: commandName,
     subcommand,
     result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
     distribution: DISTRIBUTION,
-    project_uuid: await currentProjectUuid(),
+    project_uuid: targets.length === 1 ? targets[0].projectUuid : null,
+    target_count: targets.length,
     arguments: command.describeInvocationArguments(),
+    ...(targets.length > 1 ? MULTI_TARGET_CONNECTION_FIELDS : {}),
   });
+  const targetFacts = targets.map(
+    ({ auth, projectUuid }) =>
+      new TelemetryFact<TargetResolvedPayload>(
+        CLI_TARGET_RESOLVED,
+        { command: commandName, subcommand, project_uuid: projectUuid },
+        { auth },
+      ),
+  );
+  return [executed, ...targetFacts];
 }
