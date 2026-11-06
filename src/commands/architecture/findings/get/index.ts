@@ -57,7 +57,7 @@ export async function getFindings(
       options.pageSize ?? DEFAULT_FINDINGS_PAGE_SIZE,
     )
     .catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
+      throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
     });
   if (format !== 'text') {
     printPayload(ctx, format, {

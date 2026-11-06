@@ -261,7 +261,7 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Invalid public finding response');
-    expect(result.stderr).toContain('supported public Architecture API contract');
+    expect(result.stderr).toContain('sonar update');
   });
   it.each([
     { findings: [] },
@@ -275,7 +275,7 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('Invalid public findings page');
-    expect(result.stderr).toContain('supported public Architecture API contract');
+    expect(result.stderr).toContain('sonar update');
   });
   it('rejects findings that do not match the requested filter', async () => {
     await configured(true, (api) =>
@@ -289,7 +289,7 @@ describe('public architecture findings contract', () => {
     const result = await h.run('arch findings get -p shop --category smell');
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('outside the requested filters');
-    expect(result.stderr).toContain('supported public Architecture API contract');
+    expect(result.stderr).toContain('sonar update');
   });
   for (const cloud of [true, false]) {
     it(`explains malformed findings pages on ${cloud ? 'Cloud' : 'Server'}`, async () => {
@@ -300,8 +300,8 @@ describe('public architecture findings contract', () => {
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('Invalid public findings page');
-      expect(result.stderr).toContain('supported public Architecture API contract');
-      expect(result.stderr).toContain('same Architecture API');
+      expect(result.stderr).toContain('sonar update');
+      expect(result.stderr).toContain('same public Architecture API');
     });
 
     it(`explains unreadable successful findings responses on ${cloud ? 'Cloud' : 'Server'}`, async () => {
@@ -341,9 +341,10 @@ describe('public architecture findings contract', () => {
     if (status === 403) {
       expect(result.stderr).toContain("The Architecture API refused access to 'shop' (HTTP 403)");
       expect(result.stderr).toContain('Check project permissions');
+      expect(result.stderr).toContain('A Cloud gateway can also return 403');
+      expect(result.stderr).toContain('sonar update');
     }
-    if (status === 401 || status === 403)
-      expect(result.stderr).not.toContain('supported public Architecture API contract');
+    if (status === 401) expect(result.stderr).not.toContain('sonar update');
     expect(requests(server).every((r) => r.path === '/architecture/project-findings')).toBe(true);
     expect(
       server

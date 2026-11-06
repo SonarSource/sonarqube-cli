@@ -30,8 +30,9 @@ import type {
   IntendedArchitecture,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { setIntended } from '@/commands/architecture/_common/set-intended.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
-import { ForbiddenApiError } from '@/core/server/errors.ts';
+import { ForbiddenApiError, ServerError, TransportError } from '@/core/server/errors.ts';
 
 const MODEL: IntendedArchitecture = {
   type: 'namespace',
@@ -132,6 +133,40 @@ describe('intended backup safety', () => {
     expect(JSON.parse(await readFile(backup!, 'utf8')).models).toEqual([MODEL]);
     expect(deleted).toBe(false);
   });
+  it.each([undefined, new ServerError(502, 'Bad gateway'), new TransportError('Timed out')])(
+    'preserves readback guidance after an uncertain write (%s) without replay',
+    async (writeError) => {
+      const backend = api();
+      const readFailure = new CommandFailedError('Invalid public intended architecture response.', {
+        remediationHint:
+          'Check that the CLI and connected SonarQube deployment support the same Architecture API.',
+      });
+      let reads = 0;
+      let writes = 0;
+      backend.getIntended = () => {
+        reads++;
+        return reads <= 2 ? Promise.resolve([MODEL]) : Promise.reject(readFailure);
+      };
+      backend.updateIntended = () => {
+        writes++;
+        return writeError === undefined ? Promise.resolve() : Promise.reject(writeError);
+      };
+      const failure: unknown = await setIntended(
+        backend,
+        { models: [{ ...MODEL, label: 'Changed' }] },
+        { projectKey: 'test', dryRun: false, backupDir: root },
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(CommandFailedError);
+      if (!(failure instanceof CommandFailedError))
+        throw new Error('Expected an unconfirmed write failure');
+      expect(failure.cause).toBe(writeError ?? readFailure);
+      expect(failure.remediationHint).toBe(readFailure.remediationHint);
+      expect(failure.message).toContain('write could not be confirmed');
+      expect(writes).toBe(1);
+      expect(deleted).toBe(false);
+    },
+  );
+
   it('quotes Windows and POSIX paths with spaces and apostrophes for their shells', () => {
     expect(shellQuote('C:\\Users\\John Smith\\backup.json', 'win32')).toBe(
       "'C:\\Users\\John Smith\\backup.json'",
