@@ -22,8 +22,10 @@
 // All functions use an absolute git binary path to avoid PATH-based resolution (S4036).
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { timeSync } from '../../../_common/ci-timing.js';
 
 // Resolve git binary once at module load — avoids PATH reliance in execFileSync calls.
 export const GIT_BIN = Bun.which('git') ?? '/usr/bin/git';
@@ -49,11 +51,13 @@ export function git(args: string[], cwd: string): string {
   for (let attempt = 1; ; attempt++) {
     try {
       // stderr is piped (not ignored) so a real failure carries git's message.
-      return execFileSync(GIT_BIN, args, {
-        cwd,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }).trim();
+      return timeSync('git', () =>
+        execFileSync(GIT_BIN, args, {
+          cwd,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }).trim(),
+      );
     } catch (error) {
       if (attempt >= maxAttempts || !isTransientWindowsGitError(error)) {
         throw error;
@@ -66,7 +70,10 @@ export function git(args: string[], cwd: string): string {
 /** Initialise a new git repo in cwd (creates the directory if needed). */
 export function initGitRepo(cwd: string): void {
   mkdirSync(cwd, { recursive: true });
-  git(['init'], cwd);
+  const reinitializing = existsSync(join(cwd, '.git'));
+  git(['init', `--template=${join(import.meta.dir, 'git-template')}`], cwd);
+  // Git only copies template config for fresh repositories.
+  if (!reinitializing) return;
   git(['config', 'user.email', 'test@example.com'], cwd);
   git(['config', 'user.name', 'Test User'], cwd);
   // A developer-global core.hooksPath would otherwise fire real hooks on commit/push.

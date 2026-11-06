@@ -78,11 +78,15 @@ runs:
     - name: Run integration tests (Windows)
       if: ${{ inputs.os == 'windows' }}
       shell: bash
+      env:
+        CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/integration
       run: bun run test:integration
 
     - name: Run integration tests with coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       shell: bash
+      env:
+        CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/integration
       run: SONARQUBE_CLI_USE_COVERAGE=1 bun run test:integration
 
     # Workaround for CAG-933: CAG deduces the fake SonarQube Cloud API endpoint
@@ -109,6 +113,7 @@ runs:
       if: ${{ inputs.os == 'windows' }}
       shell: bash
       env:
+        CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/e2e
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
         SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
@@ -118,6 +123,7 @@ runs:
       if: ${{ inputs.os == 'linux' }}
       shell: bash
       env:
+        CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/e2e
         CLAUDE_CODE_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CLAUDE_CODE_API_KEY }}
         SONARCLOUD_IT_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN }}
         SONARCLOUD_IT_TOKEN_US: ${{ fromJSON(steps.secrets.outputs.vault).SONARCLOUD_IT_TOKEN_US }}
@@ -126,11 +132,21 @@ runs:
     - name: Merge coverage reports (Linux)
       if: ${{ inputs.os == 'linux' }}
       shell: bash
-      run: bun build-scripts/report-coverage.ts
+      env:
+        CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/coverage
+      run: bun build-scripts/report-coverage.ts --lcov-only
 
     - name: Upload integration coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage
-        path: tests/coverage/reports/integration/
+        path: tests/coverage/reports/integration/lcov.info
+
+    - name: Upload test timings
+      if: ${{ always() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: test-timings-${{ inputs.os }}
+        path: tests/coverage/reports/timings/
+        if-no-files-found: ignore
