@@ -146,6 +146,7 @@ export interface ProjectStatusResponse {
 }
 
 export interface ProjectBranch {
+  analysisDate?: string | null;
   name: string;
   isMain: boolean;
   type: string;
