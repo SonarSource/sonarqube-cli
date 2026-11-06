@@ -28,7 +28,7 @@ import { createOrganizationHook } from './organization.ts';
 /**
  * Reuses the current login, or signs the user in through the browser. On SonarQube Cloud the
  * login also settles the organization. An account with none is offered the creation of one, and
- * `OrganizationCreationStopped` ends the run when that is declined or unavailable.
+ * `OrganizationCreationDeclined` ends the run when the user says no.
  */
 export async function resolveInitAuth(
   ctx: CommandInvocationContext,

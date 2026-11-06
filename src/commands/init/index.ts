@@ -35,7 +35,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
-import { OrganizationCreationStopped } from './steps/organization.ts';
+import { OrganizationCreationDeclined } from './steps/organization.ts';
 import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
@@ -81,8 +81,8 @@ async function run(
   try {
     auth = await resolveInitAuth(ctx, interactive);
   } catch (error) {
-    if (error instanceof OrganizationCreationStopped) {
-      return { outcome: { kind: 'no-organization', reason: error.reason } };
+    if (error instanceof OrganizationCreationDeclined) {
+      return { outcome: { kind: 'no-organization' } };
     }
     throw error;
   }

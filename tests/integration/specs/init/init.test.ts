@@ -545,7 +545,7 @@ describe('sonar init', () => {
     );
 
     it.each([403, 404])(
-      'stops and suggests sonar integrate when creation answers %d',
+      'fails and names sonar integrate when creation answers %d',
       async (status) => {
         const server = await startOrglessServer((builder) =>
           builder.withOrganizationCreateRejected(status),
@@ -557,9 +557,10 @@ describe('sonar init', () => {
         await nameTheOrganization(session);
         const result = await session.waitFinish();
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Organization creation is not available');
-        expect(result.stdout).toContain("Next, run 'sonar integrate'");
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('Organization creation is not available');
+        expect(output).toContain("run 'sonar integrate'");
         expect(calls(server, 'POST', '/billing/subscriptions')).toHaveLength(0);
       },
       TIMEOUT,
