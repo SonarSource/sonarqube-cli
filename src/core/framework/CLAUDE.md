@@ -11,3 +11,5 @@ Features and subfeatures declare `isAvailable` (`{ available, unavailableReason?
 `installIntegration` previews `resolveRecommendedFeatures` (never prompts); `customizeFeatureSelection` refines it through prompts when the user picks **Customize**.
 
 Executable whole-file and text-snippet resources require all POSIX execute bits. Apply adds missing execute bits after content writes and preserves other permission bits. Windows does not use POSIX permission checks. Resources without `executable: true` preserve existing file modes.
+
+YAML patches treat missing and blank files as empty documents. Malformed YAML and read failures raise a typed error without source contents. Apply, inspection and removal preserve the original file on these errors.
