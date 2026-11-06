@@ -70,7 +70,7 @@ sonar-secrets is never handed user-supplied arguments verbatim, and the `secrets
 
 ## Architecture
 
-> **Pending Architecture work:** This section describes the combined target of the PRs below, not every individual feature branch. Before those PRs land, `master` still uses `intended-architectures` and `{projectId, intendedArchitectures}`; Server intended/directive commands are unavailable. Check a build's command help and implementation before relying on a pending option or wire contract. Do not change working code just to match a feature documented here whose implementation PR is absent.
+> **Pending Architecture work:** This section describes the combined target of the PRs below, not every individual feature branch. Before those PRs land, `master` still uses `intended-architectures` and `{projectId, intendedArchitectures}`; Server intended/directive commands are unavailable. Check a build's command help and implementation before relying on a pending option or wire contract. Do not change working code just to match a feature documented here whose implementation PR is absent. Cleanup is tracked in SONARCH-3548: remove each row and its corresponding caveat when its implementation PR merges (including the `intended-architectures` caveat after #1178); remove this banner and table when all listed PRs have merged.
 
 | Pending capability                                                                     | Implementation PR                                               |
 | -------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
