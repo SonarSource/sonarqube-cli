@@ -20,6 +20,7 @@
 
 import {
   assertOrganizationMember,
+  type OnNoMemberships,
   organizationMembershipError,
   validateOrSelectOrganization,
 } from '@/commands/components/organization/select.ts';
@@ -69,6 +70,7 @@ type LoginStep =
 export async function authLogin(
   options: AuthLoginOptions,
   ctx: CommandInvocationContext,
+  hooks?: AuthLoginHooks,
 ): Promise<void> {
   const { console } = ctx;
   validateLoginOptions(options);
@@ -99,7 +101,15 @@ export async function authLogin(
     }
 
     const step = await resolveLoginStep(server, storedLogin, orgOption, console);
-    await executeLoginStep(step, server, isCloud, orgOption, console, invocationAuth?.orgKey);
+    await executeLoginStep(
+      step,
+      server,
+      isCloud,
+      orgOption,
+      console,
+      invocationAuth?.orgKey,
+      hooks?.onNoMemberships,
+    );
 
     if (step.tokenSaved && invocationAuth?.comesFromEnv()) {
       console.warn(
@@ -182,13 +192,28 @@ async function executeLoginStep(
   orgOption: string | undefined,
   console: Console,
   invocationOrgKey: string | undefined,
+  onNoMemberships: OnNoMemberships | undefined,
 ): Promise<void> {
   switch (step.kind) {
     case 'new_login':
-      await loginWithNewToken(server, isCloud, orgOption, console, invocationOrgKey);
+      await loginWithNewToken(
+        server,
+        isCloud,
+        orgOption,
+        console,
+        invocationOrgKey,
+        onNoMemberships,
+      );
       break;
     case 'stored_login':
-      await loginWithStoredToken(server, isCloud, step.auth, console, invocationOrgKey);
+      await loginWithStoredToken(
+        server,
+        isCloud,
+        step.auth,
+        console,
+        invocationOrgKey,
+        onNoMemberships,
+      );
       break;
     case 'switch_organization':
       await switchStoredLoginOrganization(server, step.org, step.auth, console);
@@ -225,8 +250,17 @@ async function loginWithStoredToken(
   auth: BrowserAuthResult,
   console: Console,
   activeOrgKey: string | undefined,
+  onNoMemberships: OnNoMemberships | undefined,
 ): Promise<void> {
-  const org = await resolveOrganization(server, isCloud, undefined, auth, console, activeOrgKey);
+  const org = await resolveOrganization(
+    server,
+    isCloud,
+    undefined,
+    auth,
+    console,
+    activeOrgKey,
+    onNoMemberships,
+  );
   await completeLogin(server, isCloud, org, auth, console);
 }
 
@@ -242,12 +276,21 @@ async function loginWithNewToken(
   orgOption: string | undefined,
   console: Console,
   activeOrgKey: string | undefined,
+  onNoMemberships: OnNoMemberships | undefined,
 ): Promise<void> {
   const auth = await generateToken(server, console);
 
   let org: string | undefined;
   try {
-    org = await resolveOrganization(server, isCloud, orgOption, auth, console, activeOrgKey);
+    org = await resolveOrganization(
+      server,
+      isCloud,
+      orgOption,
+      auth,
+      console,
+      activeOrgKey,
+      onNoMemberships,
+    );
   } catch (error) {
     await discardGeneratedToken(server, auth.token, auth.tokenName, console);
     throw error;
@@ -372,6 +415,7 @@ async function resolveOrganization(
   auth: BrowserAuthResult,
   console: Console,
   activeOrgKey: string | undefined,
+  onNoMemberships: OnNoMemberships | undefined,
 ): Promise<string | undefined> {
   if (!isCloud) {
     return undefined;
@@ -382,6 +426,7 @@ async function resolveOrganization(
     orgOption,
     console,
     activeOrgKey,
+    onNoMemberships,
   );
 }
 
@@ -464,6 +509,12 @@ function validateLoginOptions(options: AuthLoginOptions): void {
       'Use --org <organization-key>.',
     );
   }
+}
+
+/** Callbacks a caller such as `sonar init` passes to `authLogin`; never a Commander option. */
+export interface AuthLoginHooks {
+  /** Supplies an organization key when the account has no membership; a throw aborts the login. */
+  onNoMemberships?: OnNoMemberships;
 }
 
 export interface AuthLoginOptions {
