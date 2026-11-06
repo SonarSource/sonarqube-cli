@@ -158,14 +158,15 @@ async function verifyWrite(
   let readError: unknown;
   for (const delay of VERIFICATION_DELAYS_MS) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-    let actual: IntendedState;
+    let actual: IntendedState | undefined;
     try {
       actual = await api.getIntendedState();
     } catch (error) {
       readError = error;
-      if (error instanceof IntendedModelIdentityError) break;
-      continue;
+      if (error instanceof IntendedModelIdentityError)
+        throw writeFailure(projectKey, writeError, backupPath, error);
     }
+    if (actual === undefined) continue;
     if (operation === 'clear' && writeError !== undefined && actual.id === undefined)
       throw writeFailure(projectKey, writeError, backupPath, undefined, 'clear-unconfirmed');
     const cleared = operation !== 'clear' || actual.id === undefined;
