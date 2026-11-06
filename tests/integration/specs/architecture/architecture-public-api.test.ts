@@ -1142,6 +1142,27 @@ describe('sonar architecture intended set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
   });
+  it.each([false, true])(
+    'gives truthful clear-preview instructions (revision=%s)',
+    async (withRevision) => {
+      const server = await startWith((fake) => fake.withIntended(INTENDED));
+      const file = { ...(withRevision ? await readSaved() : {}), models: [] };
+      const preview = await setFile(file, ' --dry-run');
+      expect(preview.exitCode).toBe(0);
+      expect(writes(server)).toEqual([]);
+      if (withRevision) {
+        expect(preview.stdout).toContain('Run without --dry-run to apply.');
+      } else {
+        expect(preview.stdout).toContain('requires its exported revision');
+        expect(preview.stdout).toContain(
+          'sonar architecture intended get --project shop --format json',
+        );
+        expect(preview.stdout).toContain('Add that revision to the change file and preview again');
+        expect(preview.stdout).not.toContain('Run without --dry-run to apply.');
+      }
+    },
+  );
+
   for (const method of ['POST', 'DELETE'] as const) {
     it(`reports a rejected ${method} without verification reads`, async () => {
       const server = await startWith((fake) => {
@@ -1245,7 +1266,11 @@ describe('sonar architecture intended set on the public API', () => {
     const server = await startWith((fake) => fake.withIntended([]));
     const preview = await setFile({ models: [] }, ' --dry-run');
     expect(preview.exitCode).toBe(0);
-    expect(preview.stdout).toContain('resource will be deleted');
+    expect(preview.stdout).toContain(
+      'preview would delete the stored intended architecture resource',
+    );
+    expect(preview.stdout).toContain('requires its exported revision');
+    expect(preview.stdout).not.toContain('Run without --dry-run to apply.');
     expect(writes(server)).toEqual([]);
     const result = await setFile({ ...(await readSaved()), models: [] });
     expect(result.exitCode).toBe(0);

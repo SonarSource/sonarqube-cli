@@ -65,6 +65,7 @@ export interface SetIntendedResult {
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
+  requiresRevisionForClear?: boolean;
   /** The preview includes deletion of the stored intended resource. */
   clearsResource?: boolean;
 }
@@ -86,6 +87,7 @@ export async function setIntended(
   const current = stored.models;
   const next = file.language === undefined ? file.models : withLanguage(current, file);
   const unchecked = file.revision === undefined;
+  const requiresRevisionForClear = unchecked && stored.id !== undefined && next.length === 0;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
@@ -107,6 +109,7 @@ export async function setIntended(
       mode: 'dry-run',
       diff,
       unchecked,
+      requiresRevisionForClear,
       clearsResource: stored.id !== undefined && next.length === 0,
     };
   if (isEmptyDiff(diff) && !(stored.id !== undefined && next.length === 0))
