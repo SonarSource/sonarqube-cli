@@ -149,39 +149,6 @@ describe('public project directives', () => {
   );
 
   it.each([
-    '',
-    ' ',
-    ' default_perspective ',
-    'transformed_code_perspective',
-    'transformed_model_perspective',
-  ])(
-    'checks current node keys for the default perspective alias %s without rewriting it',
-    async (graphPerspective) => {
-      const server = await configured((api) =>
-        api.withStructure('java', [
-          {
-            nodeCount: 1,
-            edgeCount: 0,
-            nodes: [{ id: 1, name: 'app', kind: 'module', edges: [] }],
-          },
-        ]),
-      );
-      h.cwd.writeFile(
-        'changes.json',
-        JSON.stringify({ create: [{ ...directive, graphPerspective }] }),
-      );
-      const result = await h.run('arch directives set -p shop --file changes.json');
-      expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain("node 'app:a' was not found");
-      expect(result.stderr).toContain("node 'app:b' was not found");
-      expect(result.stderr).not.toContain('the public current graph does not identify that view');
-      const posts = server.getRecordedRequests().filter((r) => r.method === 'POST');
-      expect(posts).toHaveLength(1);
-      expect(JSON.parse(posts[0].body!).graphPerspective).toBe(graphPerspective);
-    },
-  );
-
-  it.each([
     ['transformed_code_perspective', 'default_perspective'],
     [' default_perspective ', 'default_perspective'],
     [' custom_view ', 'custom_view'],
@@ -218,6 +185,34 @@ describe('public project directives', () => {
     expect(body).not.toHaveProperty('description');
     expect((await h.run(command)).exitCode).toBe(0);
     expect(server.getRecordedRequests().filter((r) => r.method === 'PATCH')).toHaveLength(1);
+  });
+
+  it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])('checks node keys for default alias %s without rewriting it', async (graphPerspective) => {
+    const server = await configured((api) =>
+      api.withStructure('java', [
+        { nodeCount: 1, edgeCount: 0, nodes: [{ id: 1, name: 'app', kind: 'module', edges: [] }] },
+      ]),
+    );
+    h.cwd.writeFile(
+      'changes.json',
+      JSON.stringify({ create: [{ ...directive, graphPerspective }] }),
+    );
+    const result = await h.run('arch directives set -p shop --file changes.json');
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("node 'app:a' was not found");
+    expect(result.stderr).toContain("node 'app:b' was not found");
+    expect(result.stderr).not.toContain('Node keys were not checked for');
+    const posts = server
+      .getRecordedRequests()
+      .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(posts[0].body!).graphPerspective).toBe(graphPerspective);
   });
 
   it.each([' ', 'transformed_code_perspective', ' default_perspective '])(

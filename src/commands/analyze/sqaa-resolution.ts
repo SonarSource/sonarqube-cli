@@ -87,7 +87,7 @@ export async function resolveSqaaConnectionAndProject(
   explicitProject: string | undefined,
   console: Console,
   files: string[],
-  startDir?: string,
+  { startDir, noteFocusedProject = true }: { startDir?: string; noteFocusedProject?: boolean } = {},
 ): Promise<SqaaResolution> {
   const { auth } = connection;
   if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
@@ -141,7 +141,7 @@ export async function resolveSqaaConnectionAndProject(
   // `project_uuid` holds one project, so a run spanning several leaves it unset rather than
   // attributing the whole run to one of them.
   const keys =
-    groups.length > 0
+    groups.length > 0 || !noteFocusedProject
       ? groups.map(({ mapping }) => mapping.projectKey)
       : focused.projects.filter(onActiveConnection).map((mapping) => mapping.projectKey);
   const [firstKey] = keys;

@@ -19,25 +19,54 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
+import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import {
+  type IgnoredFile,
+  resolveChangeSet,
+  resolveSqaaBranch,
+  resolveSqaaBranchAtRepoRoot,
+} from './sqaa-changeset.ts';
 import {
   labelAnalysisDepth,
   parseSqaaDepthOption,
   resolveAnalysisDepth,
-  type SqaaDeepWireDepth,
+  type SqaaInvocationMode,
 } from './sqaa-depth.ts';
-import type { SqaaResolution } from './sqaa-resolution.ts';
-import { confirmLargeChangeset } from './sqaa-resolution.ts';
-import type { OutputFormat, SqaaResolvedRun } from './sqaa-types.ts';
-import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
+import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
+import { assertExplicitFilesAnalyzable, resolveSqaaRunFiles } from './sqaa-paths.ts';
+import {
+  confirmLargeChangeset,
+  resolveSqaaConnectionAndProject,
+  type SqaaResolution,
+} from './sqaa-resolution.ts';
+import type {
+  AnalyzeSqaaOptions,
+  AnalyzeSqaaRunOptions,
+  OutputFormat,
+  PreparedSqaaRun,
+  SqaaProjectGroup,
+  SqaaResolvedRun,
+} from './sqaa-types.ts';
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
 
-interface SqaaDepthResolution {
-  wireDepth: SqaaDeepWireDepth | undefined;
-  displayDepth: SqaaAnalysisDepth;
+type SqaaPreparationPolicy = Pick<
+  AnalyzeSqaaRunOptions,
+  'requireProject' | 'silentSkip' | 'noteFocusedProject'
+>;
+
+interface SqaaTarget {
+  mode: SqaaInvocationMode;
+  files: string[];
+  repoRoot?: string;
+  branch?: string;
+  ignored: IgnoredFile[];
+  check: (resolved: SqaaResolvedRun) => boolean;
 }
 
 /**
@@ -95,16 +124,6 @@ export function resolveSqaaContext(
   }
 }
 
-export function resolveDepthForMode(
-  rawDepth: string | undefined,
-  mode: 'single-file' | 'multi-file' | 'change-set',
-  forcedDepth?: SqaaAnalysisDepth,
-): SqaaDepthResolution {
-  const explicitDepth = rawDepth === undefined ? undefined : parseSqaaDepthOption(rawDepth);
-  const wireDepth = resolveAnalysisDepth(explicitDepth, mode, forcedDepth);
-  return { wireDepth, displayDepth: labelAnalysisDepth(wireDepth) };
-}
-
 export async function confirmLargeRunIfNeeded(
   fileCount: number,
   console: Console,
@@ -115,4 +134,95 @@ export async function confirmLargeRunIfNeeded(
     return await confirmLargeChangeset(fileCount, console);
   }
   return true;
+}
+
+async function explicitFilesTarget(options: AnalyzeSqaaOptions): Promise<SqaaTarget> {
+  const entries = resolveSqaaFileArgs(options.file ?? []);
+  return {
+    mode: entries.length === 1 ? 'single-file' : 'multi-file',
+    files: entries.map((entry) => entry.absolutePath),
+    branch: await resolveSqaaBranch(options.branch, entries[0].absolutePath),
+    ignored: [],
+    check: (resolved) => {
+      assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
+      return true;
+    },
+  };
+}
+
+async function changeSetTarget(options: AnalyzeSqaaOptions): Promise<SqaaTarget> {
+  const changeSet = await resolveChangeSet(process.cwd(), options);
+  return {
+    ...changeSet,
+    mode: 'change-set',
+    branch: await resolveSqaaBranchAtRepoRoot(options.branch, changeSet.repoRoot),
+    check: () => true,
+  };
+}
+
+function editedFileTarget(file: string): SqaaTarget | null {
+  const canonicalPath = canonicalizePath(file);
+  if (toRelativePosixPath(canonicalPath) === null) {
+    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${file}`);
+    return null;
+  }
+  return {
+    mode: 'edited-file',
+    files: [canonicalPath],
+    ignored: [],
+    check: (resolved) => resolved.groups.length > 0,
+  };
+}
+
+export async function prepareSqaaRun(
+  options: AnalyzeSqaaOptions,
+  connection: SonarConnection,
+  console: Console,
+  policy: SqaaPreparationPolicy = {},
+): Promise<PreparedSqaaRun | null> {
+  const explicitDepth =
+    options.depth === undefined ? undefined : parseSqaaDepthOption(options.depth);
+  let target: SqaaTarget | null;
+  if (options.editedFile === undefined) {
+    target = await (options.file?.length ? explicitFilesTarget(options) : changeSetTarget(options));
+  } else {
+    target = editedFileTarget(options.editedFile);
+  }
+  if (!target) return null;
+  const { files: inputFiles, check, ...run } = target;
+  const wireDepth = resolveAnalysisDepth(explicitDepth, run.mode, options.forcedDepth);
+  const displayBase = run.repoRoot ?? process.cwd();
+  let groups: SqaaProjectGroup[] = [];
+  let ignored = run.ignored;
+  if (inputFiles.length > 0) {
+    const resolution = await resolveSqaaConnectionAndProject(
+      connection,
+      options.project,
+      console,
+      inputFiles,
+      { noteFocusedProject: policy.noteFocusedProject },
+    );
+    const resolved = resolveSqaaContext(
+      resolution,
+      { ...policy, requireProject: policy.requireProject ?? false },
+      console,
+    );
+    if (!resolved || !check(resolved)) return null;
+    connection = resolved.connection;
+    groups = resolved.groups;
+    ignored = [...ignored, ...resolved.ignored];
+    const fileCount = groups.reduce((count, group) => count + group.files.length, 0);
+    if (!(await confirmLargeRunIfNeeded(fileCount, console, options.force, options.format)))
+      return null;
+  }
+  const files = resolveSqaaRunFiles(groups, displayBase);
+  return {
+    ...run,
+    connection,
+    files,
+    ignored,
+    displayBase,
+    ...(wireDepth === undefined ? {} : { wireDepth }),
+    displayDepth: files.displayPaths.length === 0 ? 'STANDARD' : labelAnalysisDepth(wireDepth),
+  };
 }

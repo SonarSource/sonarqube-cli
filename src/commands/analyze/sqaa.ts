@@ -25,37 +25,12 @@ import type {
 } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import type { Console } from '@/core/ui/console.ts';
 
-import {
-  excludeIgnoredFiles,
-  resolveChangeSet,
-  resolveSqaaBranch,
-  resolveSqaaBranchAtRepoRoot,
-} from './sqaa-changeset.ts';
-import {
-  confirmLargeRunIfNeeded,
-  resolveDepthForMode,
-  resolveSqaaContext,
-} from './sqaa-context.ts';
-import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
-import { assertExplicitFilesAnalyzable } from './sqaa-paths.ts';
-import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
-import {
-  runSqaaAnalysis,
-  runSqaaAnalysisOnExplicitFiles,
-  runSqaaAnalysisOnFiles,
-} from './sqaa-run.ts';
-import type {
-  AnalyzeSqaaOptions,
-  AnalyzeSqaaRunOptions,
-  OutputFormat,
-  SqaaBatchRunOptions,
-} from './sqaa-types.ts';
+import { applyExitCode, type SqaaJsonReport } from './sqaa-display.ts';
+import { buildSqaaRunReport, presentSqaaRun, runSqaaAnalysis } from './sqaa-run.ts';
+import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions } from './sqaa-types.ts';
 import { VALID_FORMATS } from './sqaa-types.ts';
-import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
-export { buildSqaaJsonReport } from './sqaa-json-report.ts';
 export {
   type AnalyzeSqaaOptions,
   type AnalyzeSqaaRunOptions,
@@ -68,206 +43,45 @@ export async function analyzeSqaa(
   ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
-  const { connection } = ctx;
-  const { requireProject = true, telemetryCallerCommand } = runOptions;
-  const telemetryCtx = runOptions.telemetryCtx ?? ctx;
-  const {
-    file: rawFiles,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format: rawFormat,
-    depth: rawDepth,
-    forcedDepth,
-  } = options;
-  const format = resolveFormatOption(rawFormat, VALID_FORMATS, 'text');
-
-  if (staged && base !== undefined) {
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'text');
+  if (options.staged && options.base !== undefined) {
     throw new InvalidOptionError('--staged and --base cannot be used together');
   }
-
-  if (rawFiles?.length) {
-    await analyzeSqaaExplicitFiles(rawFiles, {
-      connection,
-      branch,
-      project,
-      force,
-      format,
-      rawDepth,
-      forcedDepth,
-      requireProject,
-      telemetryCallerCommand,
-      telemetryCtx,
-    });
-    return;
-  }
-
-  await analyzeSqaaChangeSet({
-    connection,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  });
-}
-
-async function analyzeSqaaExplicitFiles(
-  rawFiles: string[],
-  params: {
-    connection: SonarConnection;
-    branch?: string;
-    project?: string;
-    force?: boolean;
-    format: OutputFormat;
-    rawDepth?: string;
-    forcedDepth?: SqaaAnalysisDepth;
-    requireProject: boolean;
-    telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
-    telemetryCtx: CommandInvocationContext;
-  },
-): Promise<void> {
-  const entries = resolveSqaaFileArgs(rawFiles);
-  const {
-    connection,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  } = params;
+  const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const { console } = telemetryCtx;
-  const resolvedBranch = await resolveSqaaBranch(branch, entries[0].absolutePath);
-
-  if (entries.length === 1) {
-    const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'single-file', forcedDepth);
-    await runSqaaAnalysis(entries[0].absolutePath, {
-      connection,
-      branch: resolvedBranch,
-      explicitProject: project,
-      format,
-      requireProject,
-      wireDepth,
-      displayDepth,
-      telemetryCallerCommand,
-      telemetryCtx,
-      console,
-    });
-    return;
-  }
-
-  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'multi-file', forcedDepth);
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    entries.map((e) => e.absolutePath),
-  );
-  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
-  if (!resolved) return;
-
-  assertExplicitFilesAnalyzable(resolved.ignored, resolved.projectRoots);
-  if (!(await confirmLargeRunIfNeeded(entries.length, console, force, format))) return;
-
-  await runSqaaAnalysisOnExplicitFiles({
-    resolved,
-    branch: resolvedBranch,
+  const execution = {
+    ...runOptions,
+    requireProject: runOptions.requireProject ?? true,
     format,
-    wireDepth,
-    displayDepth,
-    telemetryCallerCommand,
     telemetryCtx,
     console,
-  });
+  };
+  const run = await runSqaaAnalysis({ ...options, format }, ctx.connection, execution);
+  if (!run) return;
+  const { prepared, tally } = run;
+  if (prepared.files.displayPaths.length === 0) {
+    console.text(
+      prepared.ignored.length === 0
+        ? 'Vortex analysis: no files in the change set to analyze.'
+        : 'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
+    );
+    return;
+  }
+  applyExitCode(tally.totalIssues, tally.totalFailures, tally.globalError !== undefined);
+  await presentSqaaRun(prepared, tally, execution);
 }
 
-async function analyzeSqaaChangeSet(params: {
-  connection: SonarConnection;
-  staged?: boolean;
-  base?: string;
-  branch?: string;
-  project?: string;
-  force?: boolean;
-  format: OutputFormat;
-  rawDepth?: string;
-  forcedDepth?: SqaaAnalysisDepth;
-  requireProject: boolean;
-  telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
-  telemetryCtx: CommandInvocationContext;
-}): Promise<void> {
-  const {
-    connection,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  } = params;
-  const { console } = telemetryCtx;
-  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
-
-  const fullChangeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, fullChangeSet.repoRoot);
-
-  if (fullChangeSet.files.length === 0 && fullChangeSet.ignored.length === 0) {
-    console.text('Vortex analysis: no files in the change set to analyze.');
-    return;
-  }
-
-  if (fullChangeSet.files.length === 0) {
-    printAllChangeSetFilesExcluded(console);
-    return;
-  }
-
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
+export async function buildSqaaJsonReport(
+  options: AnalyzeSqaaOptions,
+  connection: SonarConnection,
+  runOptions: AnalyzeSqaaRunOptions & { telemetryCtx: CommandInvocationContext },
+): Promise<SqaaJsonReport | null> {
+  const { console } = runOptions.telemetryCtx;
+  const run = await runSqaaAnalysis(options, connection, {
+    ...runOptions,
+    requireProject: false,
     console,
-    fullChangeSet.files,
-  );
-  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
-  if (!resolved) return;
-
-  const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
-  if (changeSet.files.length === 0) {
-    printAllChangeSetFilesExcluded(console);
-    return;
-  }
-
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, console, force, format))) return;
-
-  await runSqaaAnalysisOnFiles(changeSet, {
-    resolved,
-    branch: resolvedBranch,
-    format,
-    wireDepth,
-    displayDepth,
-    telemetryCallerCommand,
-    telemetryCtx,
-    console,
+    format: 'json',
   });
-}
-
-function printAllChangeSetFilesExcluded(console: Console): void {
-  console.text(
-    'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
-  );
+  return run ? buildSqaaRunReport(run.prepared, run.tally) : null;
 }

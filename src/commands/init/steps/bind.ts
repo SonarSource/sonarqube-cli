@@ -24,20 +24,25 @@ import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/r
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
-import type { BoundNewOutcome, InitOutcome } from '../init-outcome.ts';
+import { requireAnswer } from '../answer.ts';
+import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
-import { projectDashboardUrl, showAnalysisResults, writeMapping } from './mapping.ts';
+import {
+  projectDashboardUrl,
+  reportProjectCreated,
+  serverBaseUrl,
+  showAnalysisResults,
+  writeMapping,
+} from './mapping.ts';
 
 const AUTHORIZATION_POLL_INTERVAL_MS = 3000;
 const AUTHORIZATION_TIMEOUT_MS = 300_000;
 
 function devOpsBindingUrl(auth: ResolvedAuth, orgKey: string): string {
-  return `${auth.serverUrl.replace(/\/$/, '')}/organizations/${orgKey}/edit?category=binding`;
+  return `${serverBaseUrl(auth)}/organizations/${orgKey}/edit?category=binding`;
 }
 
 function pause(ms: number): Promise<void> {
@@ -55,13 +60,12 @@ async function authorizeOrganization(
   orgKey: string,
   console: Console,
 ): Promise<string | undefined> {
-  const consent = await console.confirmPrompt(
-    `Organization '${orgKey}' is not linked to your DevOps platform. Authorize it in the browser now?`,
-    true,
+  const consent = requireAnswer(
+    await console.confirmPrompt(
+      `Organization '${orgKey}' is not linked to your DevOps platform. Authorize it in the browser now?`,
+      true,
+    ),
   );
-  if (consent === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
   if (!consent) {
     return undefined;
   }
@@ -126,10 +130,9 @@ async function importRepository(
  * platform authorization.
  */
 export async function runBoundNew(
-  { projectRoot, remote, repositorySlug }: BoundNewOutcome,
-  { auth, console }: DetectDeps,
-): Promise<InitOutcome> {
-  const http = new SonarHttpClient(auth.serverUrl, auth.token);
+  { projectRoot, remote, repositorySlug }: BoundNewPath,
+  { auth, http, console }: DetectDeps,
+): Promise<InitOutcome | UnboundNewPath> {
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const almKey =
@@ -145,7 +148,7 @@ export async function runBoundNew(
   );
 
   await writeMapping(auth, projectKey, projectRoot, console, 'created');
-  console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
+  reportProjectCreated(console, projectKey);
   await showAnalysisResults(
     http,
     projectKey,
@@ -153,5 +156,5 @@ export async function runBoundNew(
     console,
     'No analysis results yet: the first analysis of the new project is pending.',
   );
-  return { path: 'bound-new', projectRoot, remote, repositorySlug, projectKey };
+  return { kind: 'bound', projectKey };
 }
