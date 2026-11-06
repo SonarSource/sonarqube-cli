@@ -123,6 +123,32 @@ describe('public project directives', () => {
   );
 
   it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])(
+    'applies an explicit perspective change from the equivalent alias %s',
+    async (graphPerspective) => {
+      const id = '00000000-0000-4000-8000-000000000001';
+      const server = await configured((api) =>
+        api.withDirectives([{ ...directive, graphPerspective, id, projectId: 'shop-branch-id' }]),
+      );
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({ update: [{ id, graphPerspective: 'default_perspective' }] }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(0);
+      const patches = server.getRecordedRequests().filter((r) => r.method === 'PATCH');
+      expect(patches).toHaveLength(1);
+      expect(JSON.parse(patches[0].body!).graphPerspective).toBe('default_perspective');
+      expect(result.stdout).toContain('Updated 1 directives');
+    },
+  );
+
+  it.each([
     ['transformed_code_perspective', 'default_perspective'],
     [' default_perspective ', 'default_perspective'],
     [' custom_view ', 'custom_view'],
