@@ -594,7 +594,7 @@ describe('sonar architecture reads', () => {
         language: 'java',
       });
       const intendedCall = requests.find(
-        (request) => request.path === '/architecture/intended-architectures',
+        (request) => request.path === '/architecture/project-intended-architectures',
       );
       expect(intendedCall?.query).toEqual({ projectId: fakeMainBranchId(PROJECT) });
     },
@@ -619,7 +619,7 @@ describe('sonar architecture reads', () => {
       expect(payload.revision).toMatch(/^[0-9a-f]{64}$/);
       const intendedCall = server
         .getRecordedRequests()
-        .find((request) => request.path === '/architecture/intended-architectures');
+        .find((request) => request.path === '/architecture/project-intended-architectures');
       expect(intendedCall?.query).toEqual({ projectId: fakeMainBranchId(PROJECT) });
 
       expect(python.exitCode).toBe(0);

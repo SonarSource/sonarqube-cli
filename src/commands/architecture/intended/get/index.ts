@@ -44,7 +44,7 @@ export async function getIntended(
   const all = await createArchitectureApi(ctx.connection, projectKey)
     .getIntended()
     .catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
+      throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
     });
   // The revision covers every stored language, so intended set can check a filtered file too.
   const revision = revisionOf(all);
