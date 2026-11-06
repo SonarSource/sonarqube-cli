@@ -29,6 +29,7 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   SQAA_HOOK_TELEMETRY_EXIT_CODE,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import * as sqaaChangeset from '@/commands/analyze/sqaa-changeset.ts';
 import { agentPostToolUse } from '@/commands/hook/agent-post-tool-use.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -377,6 +378,28 @@ describe('agentPostToolUse', () => {
     );
   });
 
+  it('records one failure after project resolution when branch detection throws', async () => {
+    const branch = spyOn(sqaaChangeset, 'resolveSqaaBranch').mockRejectedValue(
+      new Error('branch failed'),
+    );
+    try {
+      await agentPostToolUse(ctx);
+      expect(createAnalysisSpy).not.toHaveBeenCalled();
+      expect(stdoutSpy).not.toHaveBeenCalled();
+      expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
+      expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
+        ctx,
+        FAKE_AUTH,
+        SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
+        expect.objectContaining({ totalFailures: 1 }),
+        expect.any(Number),
+        0,
+      );
+    } finally {
+      branch.mockRestore();
+    }
+  });
+
   it('emits failure telemetry when readFileSync throws', async () => {
     readFileSyncSpy.mockImplementation(() => {
       throw new Error('EACCES');
@@ -384,6 +407,7 @@ describe('agentPostToolUse', () => {
 
     await agentPostToolUse(ctx);
 
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
     expect(createAnalysisSpy).not.toHaveBeenCalled();
     expect(stdoutSpy).not.toHaveBeenCalled();
     expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledWith(
@@ -425,6 +449,20 @@ describe('agentPostToolUse', () => {
     expect(stdoutSpy).not.toHaveBeenCalled();
 
     writeHookOutputSpy.mockRestore();
+  });
+
+  it('does not retry completion as a failed analysis when recording completion throws', async () => {
+    emitSqaaAnalysisTelemetrySpy.mockImplementation(() => {
+      throw new Error('completion failed');
+    });
+
+    const error = await agentPostToolUse(ctx).catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ message: 'completion failed' });
+    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
+    expect(emitSqaaAnalysisTelemetrySpy).toHaveBeenCalledTimes(1);
+    expect(emitSqaaAnalysisTelemetrySpy.mock.calls[0][3]).toMatchObject({ totalFailures: 0 });
+    expect(stdoutSpy).not.toHaveBeenCalled();
   });
 
   it('includes errors in additionalContext when analysis returns errors', async () => {

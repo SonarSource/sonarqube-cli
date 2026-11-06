@@ -230,6 +230,31 @@ describe('analyzeSqaa: auth resolution', () => {
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
+  it.each(['command', 'report'] as const)(
+    'propagates file-read failures without recording an analysis for the %s caller',
+    async (caller) => {
+      readFileSpy.mockImplementation(() => {
+        throw new Error('EACCES');
+      });
+      const options = { file: ['src/index.ts'] };
+      const runOptions = {
+        telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+        telemetryCallerCommand: 'analyze agentic' as const,
+      };
+      const run =
+        caller === 'command'
+          ? analyzeSqaa(options, FAKE_AUTHENTICATED_CONTEXT, runOptions)
+          : buildSqaaJsonReport(options, FAKE_AUTHENTICATED_CONTEXT.connection, runOptions);
+
+      const error = await run.catch((err: unknown) => err);
+      expect(error).toBeInstanceOf(CommandFailedError);
+      expect(error).toMatchObject({ message: 'Failed to read file: EACCES' });
+      expect(createAnalysisSpy).not.toHaveBeenCalled();
+      expect(FAKE_AUTHENTICATED_CONTEXT.telemetryFacts()).toHaveLength(0);
+      expect(FAKE_AUTHENTICATED_CONTEXT.statsFacts()).toHaveLength(0);
+    },
+  );
+
   it('records completion once before JSON presentation fails', async () => {
     const output = spyOn(fake, 'print').mockImplementation(() => {
       throw new Error('output failed');
@@ -399,9 +424,9 @@ describe('buildSqaaJsonReport', () => {
     expect(process.exitCode).toBe(51);
   });
 
-  it('returns a single-file JSON report with forcedDepth STANDARD', async () => {
+  it('honors forced STANDARD depth even when DEEP is explicitly requested', async () => {
     const report = await buildSqaaJsonReport(
-      { file: ['src/index.ts'], forcedDepth: 'STANDARD' },
+      { file: ['src/index.ts'], depth: 'DEEP', forcedDepth: 'STANDARD' },
       FAKE_AUTHENTICATED_CONTEXT.connection,
       { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
     );
