@@ -53,11 +53,13 @@ import {
 import {
   CONTEXT_AUGMENTATION_BINARY_NAME,
   SCA_SCANNER_BINARY_NAME,
+  SONAR_SCANNER_BINARY_NAME,
 } from '@/core/host/install/install-types.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import {
   SCA_SCANNER_CLI_VERSION,
   SONAR_CONTEXT_AUGMENTATION_VERSION,
+  SONAR_SCANNER_CLI_VERSION,
 } from '@/core/host/install/signatures.ts';
 import { mcpLoopbackAdvice, readMcpContainerSettings } from '@/core/host/mcp/mcp-network.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
@@ -121,12 +123,14 @@ const PINNED_VERSIONS: Partial<Record<string, string>> = {
   [SECRETS_SPEC.name]: SECRETS_SPEC.version,
   [CONTEXT_AUGMENTATION_BINARY_NAME]: SONAR_CONTEXT_AUGMENTATION_VERSION,
   [SCA_SCANNER_BINARY_NAME]: SCA_SCANNER_CLI_VERSION,
+  [SONAR_SCANNER_BINARY_NAME]: SONAR_SCANNER_CLI_VERSION,
 };
 
 const BINARY_DISPLAY_NAMES: Record<string, string> = {
   'sonar-secrets': 'Secrets Detection',
   'sonar-context-augmentation': 'Vortex Context',
   'sca-scanner-cli': 'Dependency Risks Scanner',
+  'sonar-scanner': 'SonarScanner',
 };
 
 export const VALID_FORMATS = ['text', 'json'] as const;

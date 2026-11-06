@@ -865,6 +865,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--visibility <visibility>',
       'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
     )
+    .option(
+      '--scanner-property <key=value>',
+      'Extra property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable; the value is never logged)',
+      collectScannerProperty,
+    )
+    .option('--verbose', 'Stream the scanner logs while the first analysis runs')
+    .option(
+      '--detach',
+      'Run the first analysis in the background and return without waiting for the results',
+    )
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .anonymousAction((ctx, options: InitOptions) => init(options, ctx));
 
