@@ -1,8 +1,0 @@
-{
-  "project": {
-    "projectKey": "SonarSource_sonarqube-cli",
-    "path": ".",
-    "region": "eu",
-    "organization": "sonarsource"
-  }
-}
