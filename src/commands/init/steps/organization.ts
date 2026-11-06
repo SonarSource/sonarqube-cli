@@ -23,7 +23,7 @@ import { randomBytes } from 'node:crypto';
 import type { OnNoMemberships } from '@/commands/components/organization/select.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
-import type { Result } from '@/core/result.ts';
+import { errAsync, okAsync, type Result } from '@/core/result.ts';
 import {
   AccessDeniedError,
   ForbiddenApiError,
@@ -34,7 +34,11 @@ import {
   TransportError,
   UnexpectedApiError,
 } from '@/core/server/errors.ts';
-import type { BillingPlan, OrganizationsClient } from '@/core/server/organizations.ts';
+import type {
+  BillingPlan,
+  BillingSubscription,
+  OrganizationsClient,
+} from '@/core/server/organizations.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
@@ -66,15 +70,6 @@ export class OrganizationCreationDeclined extends Error {
   }
 }
 
-function creationNotPossibleWithoutPrompt(): CommandFailedError {
-  return new CommandFailedError(
-    'Your account is not a member of any SonarQube Cloud organization.',
-    {
-      remediationHint: `Run 'sonar init' in a terminal to create one. ${INTEGRATE_FALLBACK}`,
-    },
-  );
-}
-
 function creationUnavailable(): CommandFailedError {
   return new CommandFailedError('Organization creation is not available for this account.', {
     remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
@@ -92,16 +87,15 @@ function trimDashes(value: string): string {
 /** A key SonarQube Cloud accepts, derived from the display name. */
 export function deriveOrganizationKey(name: string): string {
   const slug = trimDashes(
-    trimDashes(
-      name
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '-')
-        .split('-')
-        .filter(Boolean)
-        .join('-'),
-    ).slice(0, MAX_KEY_LENGTH),
+    name
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .split('-')
+      .filter(Boolean)
+      .join('-')
+      .slice(0, MAX_KEY_LENGTH),
   );
   if (!slug) {
     return 'organization';
@@ -299,14 +293,26 @@ async function subscribeToFree(
 ): Promise<void> {
   const { key } = organization;
   // Idempotent: a subscription Cloud already attached is left alone. Before the first one exists
-  // the read can answer 403/404, which counts as "none yet".
-  const existing = await client.listSubscriptions(uuid);
-  if (existing.isErr()) {
-    const { error } = existing;
-    if (!(error instanceof AccessDeniedError)) {
-      throw subscriptionFailed(key, error.message);
-    }
-  } else if (existing.value.length > 0) {
+  // the read can answer 403/404, which counts as "none yet"; other transient failures are retried
+  // rather than read as "none", so a blip can neither skip the plan nor subscribe twice.
+  const existing = await waitFor(
+    key,
+    {
+      failed: 'could not check for an existing subscription',
+      timedOut: 'Cloud did not answer in time',
+    },
+    () =>
+      client
+        .listSubscriptions(uuid)
+        .orElse((error) =>
+          error instanceof AccessDeniedError
+            ? okAsync<BillingSubscription[], HttpClientError>([])
+            : errAsync(error),
+        )
+        .map((subscriptions): BillingSubscription[] | undefined => subscriptions),
+    pollOptions,
+  );
+  if (existing.length > 0) {
     return;
   }
 
@@ -352,15 +358,12 @@ function billingUrl(baseUrl: string, organizationKey: string): string {
  * The `authLogin` hook for an account with no organization: asks, creates the organization and
  * subscribes it to the Free plan, and returns its key so the login can save the connection.
  *
- * It never creates anything unasked. A decline throws `OrganizationCreationDeclined`; a run that
- * cannot ask fails like any other error. Anything it throws ends the login, which revokes the
- * token the login just minted.
+ * It never creates anything unasked, and only runs interactively (`resolveInitAuth` rejects a run
+ * that cannot prompt before the login). A decline throws `OrganizationCreationDeclined`. Anything
+ * it throws ends the login, which revokes the token the login just minted.
  */
-export function createOrganizationHook(console: Console, interactive: boolean): OnNoMemberships {
+export function createOrganizationHook(console: Console): OnNoMemberships {
   return async (client) => {
-    if (!interactive) {
-      throw creationNotPossibleWithoutPrompt();
-    }
     console.info("You're not in a SonarQube Cloud organization yet.");
     console.print(
       "An organization holds your projects and the people you work with. Most teams have one, and it's free.",

@@ -20,11 +20,7 @@
 
 import { describe, expect, it, mock } from 'bun:test';
 
-import {
-  createOrganizationHook,
-  ensureFreeSubscription,
-} from '@/commands/init/steps/organization.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { ensureFreeSubscription } from '@/commands/init/steps/organization.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 import {
   AccessDeniedError,
@@ -106,6 +102,36 @@ describe('ensureFreeSubscription', () => {
     expect(console.findCall('spinner', 'Setting up the Free plan')).toBeDefined();
   });
 
+  it('retries a transient failure on the first subscription read instead of giving up', async () => {
+    const { client, calls } = stubClient({
+      getUncachedOrganizationId: [okAsync('org-uuid')],
+      listSubscriptions: [
+        errAsync(new ServerError(503, 'unavailable')),
+        okAsync([]),
+        okAsync(subscribed),
+      ],
+      listBillingPlans: [okAsync(FREE_PLANS)],
+      getCurrentUserEmail: [okAsync('me@example.com')],
+      createSubscription: [okAsync({})],
+    });
+
+    await ensureFreeSubscription(client, ORGANIZATION, new FakeConsole(), FAST_POLL);
+
+    expect(calls('createSubscription')).toBe(1);
+  });
+
+  it('does not subscribe again when the retried read shows one already exists', async () => {
+    const { client, calls } = stubClient({
+      getUncachedOrganizationId: [okAsync('org-uuid')],
+      listSubscriptions: [errAsync(new TransportError('connection reset')), okAsync(subscribed)],
+      createSubscription: [okAsync({})],
+    });
+
+    await ensureFreeSubscription(client, ORGANIZATION, new FakeConsole(), FAST_POLL);
+
+    expect(calls('createSubscription')).toBe(0);
+  });
+
   it('leaves an organization that already has a subscription alone', async () => {
     const { client, calls } = stubClient({
       getUncachedOrganizationId: [okAsync('org-uuid')],
@@ -157,19 +183,5 @@ describe('ensureFreeSubscription', () => {
     await expect(
       ensureFreeSubscription(client, ORGANIZATION, new FakeConsole(), FAST_POLL),
     ).rejects.toThrow('Cloud did not confirm it in time (last error: Access denied');
-  });
-});
-
-describe('createOrganizationHook', () => {
-  it('fails without prompting when the run cannot ask', async () => {
-    const console = new FakeConsole();
-    const { client } = stubClient({});
-
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
-    await expect(createOrganizationHook(console, false)(client)).rejects.toBeInstanceOf(
-      CommandFailedError,
-    );
-
-    expect(console.calls.filter((call) => call.method.endsWith('Prompt'))).toHaveLength(0);
   });
 });

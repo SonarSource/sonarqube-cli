@@ -50,7 +50,7 @@ export async function resolveInitAuth(
   }
 
   await authLogin({}, ctx, {
-    onNoMemberships: createOrganizationHook(ctx.console, interactive),
+    onNoMemberships: createOrganizationHook(ctx.console),
   });
   return resolveFreshAuth();
 }
