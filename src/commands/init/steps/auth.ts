@@ -23,9 +23,12 @@ import { AuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
+import { createOrganizationHook } from './organization.ts';
+
 /**
  * Reuses the current login, or signs the user in through the browser. On SonarQube Cloud the
- * login also settles the organization, and fails when the account belongs to none.
+ * login also settles the organization. An account with none is offered the creation of one, and
+ * `OrganizationCreationStopped` ends the run when that is declined or unavailable.
  */
 export async function resolveInitAuth(
   ctx: CommandInvocationContext,
@@ -46,7 +49,9 @@ export async function resolveInitAuth(
     });
   }
 
-  await authLogin({}, ctx);
+  await authLogin({}, ctx, {
+    onNoMemberships: createOrganizationHook(ctx.console, interactive),
+  });
   return resolveFreshAuth();
 }
 

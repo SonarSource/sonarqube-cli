@@ -41,6 +41,12 @@ function describe(outcome: InitOutcome): string[] {
       return [];
     case 'declined':
       return ['No project was created.'];
+    case 'no-organization':
+      return [
+        outcome.reason === 'unavailable'
+          ? 'Organization creation is not available for this account.'
+          : 'No organization was created.',
+      ];
   }
 }
 
@@ -50,14 +56,16 @@ function describe(outcome: InitOutcome): string[] {
  */
 export function renderInitOutcome(
   outcome: InitOutcome,
-  auth: ResolvedAuth,
+  auth: ResolvedAuth | undefined,
   console: Console,
   { suggestIntegrate }: { suggestIntegrate: boolean },
 ): void {
   for (const line of describe(outcome)) {
     console.print(line);
   }
-  renderProjectDashboards(outcome, auth, console);
+  if (auth) {
+    renderProjectDashboards(outcome, auth, console);
+  }
   if (suggestIntegrate) {
     console.print(INTEGRATE_SUGGESTION);
   }
@@ -72,6 +80,7 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'unbound':
       return [outcome.projectKey];
     case 'declined':
+    case 'no-organization':
       return [];
   }
 }
