@@ -32,6 +32,21 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
     await server?.stop();
   });
 
+  it.each([undefined, null, '2026-01-01T00:00:00+0000'])(
+    'preserves main branch analysis metadata: %s',
+    async (analysisDate) => {
+      server = await new FakeSonarQubeServerBuilder()
+        .withProject('shop', (project) => project.withMainBranchAnalysisDate(analysisDate))
+        .start();
+      const response = await fetch(`${server.baseUrl()}/api/project_branches/list?project=shop`);
+      const { branches } = (await response.json()) as {
+        branches: { isMain: boolean; analysisDate?: string | null }[];
+      };
+      expect(branches[0].isMain).toBe(true);
+      expect(branches[0].analysisDate).toBe(analysisDate);
+    },
+  );
+
   it('preserves an explicit null public project lookup response', async () => {
     server = await new FakeSonarQubeServerBuilder().withProjectsLookupResponse(200, null).start();
 
