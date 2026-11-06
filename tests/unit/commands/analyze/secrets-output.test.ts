@@ -75,6 +75,35 @@ describe('parseSecretsJson', () => {
     expect(issues[0].maskedSecret).toBeUndefined();
   });
 
+  it('keeps the raw secret that --dangerous-show-secrets adds to an issue', () => {
+    const stdout = JSON.stringify({
+      issues: [
+        {
+          ruleKey: 'secrets:S6689',
+          description: 'GitHub Token',
+          maskedSecret: 'ghp****',
+          secret: 'ghp_invented',
+        },
+      ],
+    });
+
+    const { issues } = parseSecretsJson(stdout);
+
+    expect(issues[0].secret).toBe('ghp_invented');
+    expect(issues[0].maskedSecret).toBe('ghp****');
+  });
+
+  it('keeps an issue but drops a secret that is not a string', () => {
+    const stdout = JSON.stringify({
+      issues: [{ ruleKey: 'secrets:S6689', description: 'GitHub Token', secret: { value: 1 } }],
+    });
+
+    const { issues } = parseSecretsJson(stdout);
+
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).not.toHaveProperty('secret');
+  });
+
   it('parses multiple issues', () => {
     const stdout = JSON.stringify({
       issues: [
@@ -88,6 +117,37 @@ describe('parseSecretsJson', () => {
     expect(issues).toHaveLength(2);
     expect(issues[0].file).toBe('a.ts');
     expect(issues[1].file).toBe('b.ts');
+  });
+
+  it('keeps the skippedFiles section with its paths', () => {
+    const stdout = JSON.stringify({
+      issues: [],
+      skippedFiles: { count: 2, paths: ['src/app.test.js', 'tests/fixture.js'] },
+    });
+
+    expect(parseSecretsJson(stdout).skippedFiles).toEqual({
+      count: 2,
+      paths: ['src/app.test.js', 'tests/fixture.js'],
+    });
+  });
+
+  it('keeps the skippedFiles count reported without --show-skipped-files', () => {
+    const stdout = JSON.stringify({ issues: [], skippedFiles: { count: 0 } });
+
+    expect(parseSecretsJson(stdout).skippedFiles).toEqual({ count: 0 });
+  });
+
+  it.each([
+    ['a negative count', { count: -1 }],
+    ['a fractional count', { count: 1.5 }],
+    ['a count that is not a number', { count: '2' }],
+    ['paths that are not all strings', { count: 1, paths: [1] }],
+    ['paths that are not an array', { count: 1, paths: 'tests/fixture.js' }],
+    ['a section that is not an object', 'tests/fixture.js'],
+  ])('drops a skippedFiles section with %s', (_, skippedFiles) => {
+    const stdout = JSON.stringify({ issues: [], skippedFiles });
+
+    expect(parseSecretsJson(stdout)).not.toHaveProperty('skippedFiles');
   });
 
   it('returns errors field when present', () => {

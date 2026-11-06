@@ -26,6 +26,7 @@ import type {
   IntendedArchitecture,
   StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import type { DependencyPage } from '@/commands/architecture/_common/dependency-query.ts';
 
 import {
   SYNTHETIC_GRAPH,
@@ -124,6 +125,106 @@ describe('sonar architecture reads', () => {
     harness.withAuth(server.recordedAuthServerUrl(), TOKEN, 'my-org');
     return server;
   }
+
+  it('queries dependencies through the public API with pagination and text output', async () => {
+    await serverWith((project) =>
+      project.withArchitecture((architecture) => architecture.withStructure('java', SMALL_GRAPH)),
+    );
+    const command = `architecture current get -p ${PROJECT} --from app --to core --language java`;
+    const json = await harness.run(`${command} --format json --page-size 1`);
+    expect(json.exitCode).toBe(0);
+    const result = JSON.parse(json.stdout) as DependencyPage;
+    expect(result.dependencies).toEqual([
+      { from: 'app:com.example.web', to: 'core:com.example.domain', weight: 4 },
+    ]);
+    expect(result.page.total).toBe(1);
+    const next = await harness.run(`${command} --format json --page 2 --page-size 1`);
+    const nextPage = JSON.parse(next.stdout) as DependencyPage;
+    expect(nextPage.dependencies).toEqual([]);
+    expect(nextPage.revision).toBe(result.revision);
+    const text = await harness.run(`${command} --format text`);
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain('app:com.example.web → core:com.example.domain: 4');
+    expect(text.stdout).toContain('Compare revisions');
+  });
+
+  it('rejects invalid dependency arguments before Architecture requests', async () => {
+    const server = await serverWith();
+    for (const [argumentsText, message] of [
+      ['--from app', 'Use both --from and --to'],
+      ['--page 2', 'Dependency pagination requires both'],
+      ['--from app --to core --component app', 'Use both --from and --to'],
+      ['--from app --to core --page-size 21', '--page-size must'],
+      ['--from app --to core --page 0', '--page must'],
+      ['--from app --to core --page abc', 'whole decimal integers'],
+      ['--from app --to core --page 1.5', 'whole decimal integers'],
+      ['--from app --to core --page-size 1junk', 'whole decimal integers'],
+      ['--from app --to core --page 1e2', 'whole decimal integers'],
+      ["--from ' app' --to core", 'surrounding whitespace'],
+    ]) {
+      const result = await harness.run(`architecture current get -p ${PROJECT} ${argumentsText}`);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(message);
+      expect(result.stderr).not.toContain(' at ');
+      expect(result.stderr).not.toContain('bun:wrap');
+    }
+    expect(
+      server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
+    ).toHaveLength(0);
+  });
+
+  it.each(['abc', '1.5', '1e2'])(
+    'formats a malformed dependency page %s as a usage error',
+    async (page) => {
+      const server = await serverWith();
+      const result = await harness.run(
+        `architecture current get -p ${PROJECT} --from app --to core --page ${page}`,
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('whole decimal integers');
+      expect(result.stderr).not.toContain(' at ');
+      expect(result.stderr).not.toContain('bun:wrap');
+      expect(
+        server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
+      ).toHaveLength(0);
+    },
+  );
+
+  it('reports unavailable current architecture before validating selected endpoints', async () => {
+    await serverWith((project) =>
+      project.withArchitecture((architecture) => architecture.withStructure('java', [])),
+    );
+    const result = await harness.run(
+      `architecture current get -p ${PROJECT} --language java --from app --to core --format json`,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('No current architecture was returned');
+    expect(result.stderr).not.toContain('Both dependency endpoints');
+    expect(result.stdout).toBe('');
+  });
+
+  it('prints an executable next-page command only while more dependencies exist', async () => {
+    const graph = structuredClone(SMALL_GRAPH);
+    graph[0].nodes[0].nodes!.push({
+      id: 99,
+      name: 'second',
+      kind: 'package',
+      edges: [{ toId: 3, weight: 2 }],
+    });
+    await serverWith((project) =>
+      project.withArchitecture((architecture) => architecture.withStructure('java', graph)),
+    );
+    const command = `architecture current get -p ${PROJECT} --language java --from app --to core --depth 1 --page-size 1 --format text`;
+    const first = await harness.run(command);
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toContain('Next page: sonar architecture current get');
+    expect(first.stdout).toContain(
+      '--from app --to core --depth 1 --page 2 --page-size 1 --format text',
+    );
+    const second = await harness.run(`${command} --page 2`);
+    expect(second.exitCode).toBe(0);
+    expect(second.stdout).not.toContain('Next page:');
+  });
 
   it('explains a leaf in JSON, TOON and text without claiming missing data', async () => {
     await serverWith((p) => p.withArchitecture((a) => a.withStructure('java', SMALL_GRAPH)));
