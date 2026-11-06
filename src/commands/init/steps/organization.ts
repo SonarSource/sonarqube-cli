@@ -22,6 +22,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { OnNoMemberships } from '@/commands/components/organization/select.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { trimChars } from '@/core/io/strings.ts';
 import logger from '@/core/observability/logger.ts';
 import { errAsync, okAsync, type Result } from '@/core/result.ts';
 import {
@@ -76,17 +77,9 @@ function creationUnavailable(): CommandFailedError {
   });
 }
 
-function trimDashes(value: string): string {
-  let start = 0;
-  let end = value.length;
-  while (start < end && value[start] === '-') start++;
-  while (end > start && value[end - 1] === '-') end--;
-  return value.slice(start, end);
-}
-
 /** A key SonarQube Cloud accepts, derived from the display name. */
 export function deriveOrganizationKey(name: string): string {
-  const slug = trimDashes(
+  const slug = trimChars(
     name
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -96,6 +89,7 @@ export function deriveOrganizationKey(name: string): string {
       .filter(Boolean)
       .join('-')
       .slice(0, MAX_KEY_LENGTH),
+    '-',
   );
   if (!slug) {
     return 'organization';
@@ -104,7 +98,7 @@ export function deriveOrganizationKey(name: string): string {
 }
 
 function withRandomSuffix(base: string): string {
-  const trimmed = trimDashes(base.slice(0, MAX_KEY_LENGTH - KEY_SUFFIX_BYTES * 2 - 1));
+  const trimmed = trimChars(base.slice(0, MAX_KEY_LENGTH - KEY_SUFFIX_BYTES * 2 - 1), '-');
   return `${trimmed}-${randomBytes(KEY_SUFFIX_BYTES).toString('hex')}`;
 }
 
@@ -171,7 +165,7 @@ export interface PollOptions {
   intervalMs?: number;
 }
 
-export async function pollUntil<T>(
+async function pollUntil<T>(
   attempt: () => Promise<T | undefined>,
   { timeoutMs = SETUP_TIMEOUT_MS, intervalMs = POLL_INTERVAL_MS }: PollOptions = {},
 ): Promise<T | undefined> {
