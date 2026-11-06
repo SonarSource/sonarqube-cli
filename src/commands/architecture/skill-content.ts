@@ -105,6 +105,7 @@ Constraint endpoints name full intended group keys, not discovery component keys
 endpoints against the same perspective. Self-references and nonexistent or ambiguous exact keys
 are rejected. Public wildcard selectors and descendants of imported patterns remain server-resolved.
 
+Clearing a stored intended resource requires its exported revision; preview it before applying.
 Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
 a new preview and confirmation.

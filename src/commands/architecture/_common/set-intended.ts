@@ -86,6 +86,10 @@ export async function setIntended(
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
+  if (!options.dryRun && current.length > 0 && next.length === 0 && file.revision === undefined)
+    throw new CommandFailedError(
+      'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
+    );
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (!isEmptyDiff(diff)) await options.onValidation?.();
