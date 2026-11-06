@@ -27,10 +27,20 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
 
-import { IS_WINDOWS, type RunInteractiveOptions, TestHarness } from '../../harness';
+import {
+  type InteractiveSession,
+  IS_WINDOWS,
+  type RunInteractiveOptions,
+  TestHarness,
+} from '../../harness';
 
 const CALLBACK_VALIDATION_TIMEOUT_MS = 5000;
 const CALLBACK_POLL_INTERVAL_MS = 10;
+
+async function acceptServerTrust(session: InteractiveSession): Promise<void> {
+  await session.waitText('Connect to:');
+  session.write('y');
+}
 
 async function confirmTrust(
   harness: TestHarness,
@@ -38,7 +48,7 @@ async function confirmTrust(
   options?: RunInteractiveOptions,
 ) {
   const session = harness.runInteractive(command, options);
-  await session.accept('Connect to:');
+  await acceptServerTrust(session);
   return session.waitFinish();
 }
 
@@ -190,7 +200,7 @@ describe('auth login', () => {
         browserToken: 'invalid-browser-token',
       });
 
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       await session.waitText('Waiting for authorization');
       const callbackDeadline = Date.now() + CALLBACK_VALIDATION_TIMEOUT_MS;
       while (
@@ -826,6 +836,24 @@ describe('auth login', () => {
   );
 
   it(
+    'cancels login when the --server trust confirmation keeps its default',
+    async () => {
+      const server = await harness.newFakeServer().start();
+
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`);
+      await session.waitText('Connect to:');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expect(result.stderr).toContain('Login cancelled');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with error when user declines the server-specific trust confirmation for --server',
     async () => {
       const server = await harness.newFakeServer().start();
@@ -854,7 +882,7 @@ describe('auth login', () => {
       });
       await session.waitText('Log in anyway');
       session.write('y');
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1828,7 +1856,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1882,7 +1910,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1911,7 +1939,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1946,7 +1974,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Please enter a valid URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -1987,7 +2015,7 @@ describe('auth login — server selection', () => {
       await session.waitText('Enter server URL');
       session.write(`${server.baseUrl()}`);
       session.keyEnter();
-      await session.accept('Connect to:');
+      await acceptServerTrust(session);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
@@ -2033,6 +2061,25 @@ describe('auth login — server selection', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
       expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'cancels login when the server discovered from sonar-project.properties keeps the trust default',
+    async () => {
+      const server = await harness.newFakeServer().start();
+      harness.cwd.writeFile('sonar-project.properties', `sonar.host.url=${server.baseUrl()}\n`);
+
+      const session = harness.runInteractive('auth login');
+      await session.waitText('Connect to:');
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
+      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
   );
