@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import {
   AccessDeniedError,
@@ -65,6 +65,7 @@ export interface SetIntendedResult {
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
+  requiresRevisionForClear?: boolean;
 }
 
 export interface SetIntendedOptions {
@@ -83,14 +84,19 @@ export async function setIntended(
   const current = await api.getIntended();
   const next = file.language === undefined ? file.models : withLanguage(current, file);
   const unchecked = file.revision === undefined;
+  const requiresRevisionForClear = unchecked && current.length > 0 && next.length === 0;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
+  if (!options.dryRun && requiresRevisionForClear)
+    throw new CommandFailedError(
+      'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
+    );
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (!isEmptyDiff(diff)) await options.onValidation?.();
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
-  if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
+  if (options.dryRun) return { mode: 'dry-run', diff, unchecked, requiresRevisionForClear };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
   if (current.length === 0) {
     await writeModel(api, next, 'create', options.projectKey);
@@ -174,7 +180,16 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), { cause: error });
+  return new ArchitectureWriteFailure(lines.join('\n'), error, readError);
+}
+
+class ArchitectureWriteFailure extends CommandFailedError {
+  override readonly remediationHint?: string;
+
+  constructor(message: string, writeError: unknown, readError: unknown) {
+    super(message, { cause: writeError ?? readError });
+    this.remediationHint = remediationHintFor(readError) ?? remediationHintFor(writeError);
+  }
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */

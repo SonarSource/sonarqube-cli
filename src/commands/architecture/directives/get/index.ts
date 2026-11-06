@@ -51,7 +51,7 @@ export async function getDirectives(
     const directive = await createDirectivesApi(ctx.connection, projectKey)
       .getDirective(options.id)
       .catch((error: unknown) => {
-        throw toArchitectureError(error, projectKey);
+        throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
       });
     if (format === 'text')
       ctx.console.info(
@@ -63,7 +63,7 @@ export async function getDirectives(
   const { directives, page } = await createDirectivesApi(ctx.connection, projectKey)
     .getDirectivesPage(options.page ?? 1, options.pageSize ?? DEFAULT_DIRECTIVES_PAGE_SIZE)
     .catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
+      throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
     });
   if (format !== 'text') {
     printPayload(ctx, format, { project: projectKey, directives, page });

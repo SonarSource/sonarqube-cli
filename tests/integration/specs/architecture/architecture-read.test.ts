@@ -148,30 +148,31 @@ describe('sonar architecture reads', () => {
     expect(text.stdout).toContain('Compare revisions');
   });
 
-  it('rejects invalid dependency arguments before Architecture requests', async () => {
-    const server = await serverWith();
-    for (const [argumentsText, message] of [
-      ['--from app', 'Use both --from and --to'],
-      ['--page 2', 'Dependency pagination requires both'],
-      ['--from app --to core --component app', 'Use both --from and --to'],
-      ['--from app --to core --page-size 21', '--page-size must'],
-      ['--from app --to core --page 0', '--page must'],
-      ['--from app --to core --page abc', 'whole decimal integers'],
-      ['--from app --to core --page 1.5', 'whole decimal integers'],
-      ['--from app --to core --page-size 1junk', 'whole decimal integers'],
-      ['--from app --to core --page 1e2', 'whole decimal integers'],
-      ["--from ' app' --to core", 'surrounding whitespace'],
-    ]) {
+  it.each([
+    ['--from app', 'Use both --from and --to'],
+    ['--page 2', 'Dependency pagination requires both'],
+    ['--from app --to core --component app', 'Use both --from and --to'],
+    ['--from app --to core --page-size 21', '--page-size must'],
+    ['--from app --to core --page 0', '--page must'],
+    ['--from app --to core --page abc', 'whole decimal integers'],
+    ['--from app --to core --page 1.5', 'whole decimal integers'],
+    ['--from app --to core --page-size 1junk', 'whole decimal integers'],
+    ['--from app --to core --page 1e2', 'whole decimal integers'],
+    ["--from ' app' --to core", 'surrounding whitespace'],
+  ])(
+    'rejects invalid dependency arguments %s before Architecture requests',
+    async (argumentsText, message) => {
+      const server = await serverWith();
       const result = await harness.run(`architecture current get -p ${PROJECT} ${argumentsText}`);
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(message);
       expect(result.stderr).not.toContain(' at ');
       expect(result.stderr).not.toContain('bun:wrap');
-    }
-    expect(
-      server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
-    ).toHaveLength(0);
-  });
+      expect(
+        server.getRecordedRequests().filter((request) => request.path.includes('/architecture/')),
+      ).toHaveLength(0);
+    },
+  );
 
   it.each(['abc', '1.5', '1e2'])(
     'formats a malformed dependency page %s as a usage error',
