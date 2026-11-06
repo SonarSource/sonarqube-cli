@@ -92,7 +92,9 @@ function withRandomSuffix(base: string): string {
 
 async function askOrganizationName(console: Console): Promise<string> {
   for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
-    const answer = requireAnswer(await console.textPrompt('Organization name'));
+    const answer = requireAnswer(
+      await console.textPrompt('Organization name (for example your team or company)'),
+    );
     try {
       return validateProjectName(answer, 'Organization name');
     } catch (error) {
@@ -256,6 +258,10 @@ async function ensureFreeSubscription(
   }
 }
 
+function billingUrl(baseUrl: string, organizationKey: string): string {
+  return `${baseUrl}/organizations/${encodeURIComponent(organizationKey)}/billing`;
+}
+
 /**
  * The `authLogin` hook for an account with no organization: asks, creates the organization and
  * subscribes it to the Free plan, and returns its key so the login can save the connection.
@@ -269,6 +275,9 @@ export function createOrganizationHook(console: Console, interactive: boolean): 
       throw new OrganizationCreationStopped('non-interactive');
     }
     console.print('Your account is not a member of any SonarQube Cloud organization.');
+    console.print(
+      'An organization is the workspace that holds your projects, members and plan, usually one per team or company. Creating one is free.',
+    );
     const accepted = requireAnswer(
       await console.confirmPrompt('Create a SonarQube Cloud organization now?', true),
     );
@@ -283,6 +292,9 @@ export function createOrganizationHook(console: Console, interactive: boolean): 
       return created;
     });
     console.success(`Created organization '${organization.name}' (${organization.key}).`);
+    console.print(
+      `Organization created on the Free plan. For branch analysis, private project analysis and more, upgrade your plan here: ${billingUrl(client.baseUrl, organization.key)}`,
+    );
     return organization.key;
   };
 }

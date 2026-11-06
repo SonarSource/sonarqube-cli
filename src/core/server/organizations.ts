@@ -68,6 +68,11 @@ export class OrganizationsClient {
     this.client = client;
   }
 
+  /** The connection URL this client talks to, for links shown to the user. */
+  get baseUrl(): string {
+    return this.client.baseUrl;
+  }
+
   /**
    * Get an organization by key and return its server-side UUID (uuidV4).
    * Uses the region-specific Cloud API host (SonarQube Cloud only).
