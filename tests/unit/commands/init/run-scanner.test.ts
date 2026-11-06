@@ -67,7 +67,7 @@ posixOnly('runScanner', () => {
 
   function newRun(javaPath: string): ScannerRun {
     return {
-      scanner: { home: directory, javaPath, classPath: directory, version: '8.1.0.6389' },
+      scanner: { home: directory, javaPath, classPath: directory, version: '8.3.1.16491' },
       projectRoot: directory,
       projectKey: 'my-key',
       auth: new ResolvedAuth({
@@ -191,7 +191,7 @@ posixOnly('startScannerInBackground', () => {
 
   function runWith(javaPath: string): ScannerRun {
     return {
-      scanner: { home: directory, javaPath, classPath: directory, version: '8.1.0.6389' },
+      scanner: { home: directory, javaPath, classPath: directory, version: '8.3.1.16491' },
       projectRoot: directory,
       projectKey: 'my-key',
       auth: new ResolvedAuth({
@@ -227,7 +227,7 @@ posixOnly('startScannerInBackground', () => {
       await Bun.sleep(20);
       log = readFileSync(started.logPath, 'utf8');
     }
-    expect(log.startsWith('SonarScanner 8.1.0.6389\nProject: my-key\n')).toBe(true);
+    expect(log.startsWith('SonarScanner 8.3.1.16491\nProject: my-key\n')).toBe(true);
     expect(log).toContain('-Dsonar.projectKey=my-key');
   });
 

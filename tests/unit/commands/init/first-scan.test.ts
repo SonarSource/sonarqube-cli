@@ -140,7 +140,7 @@ function installScanner(exitCode = 0): void {
   writeExecutable(launcher.javaPath, [
     '#!/bin/sh',
     'for arg in "$@"; do case "$arg" in',
-    '  --version) echo "SonarScanner CLI 8.1.0.6389"; exit 0;;',
+    '  --version) echo "SonarScanner CLI 8.3.1.16491"; exit 0;;',
     '  -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";;',
     'esac; done',
     'echo "scanner says hello, token $SONAR_TOKEN"',

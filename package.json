@@ -110,7 +110,7 @@
       ]
     },
     "sonar-scanner-cli": {
-      "version": "8.1.0.6389",
+      "version": "8.3.1.16491",
       "binaryPath": "Distribution/sonar-scanner-cli",
       "archive": "zip",
       "platforms": [

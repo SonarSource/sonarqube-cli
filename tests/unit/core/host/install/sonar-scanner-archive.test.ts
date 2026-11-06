@@ -139,7 +139,7 @@ describe('verifyScannerArchive', () => {
 
 describe('cleanupOldScannerVersions', () => {
   let binDir: string;
-  const CURRENT = 'sonar-scanner-8.1.0.6389-linux-x64';
+  const CURRENT = 'sonar-scanner-8.3.1.16491-linux-x64';
 
   beforeEach(() => {
     binDir = mkdtempSync(join(tmpdir(), 'scanner-cleanup-'));
@@ -169,7 +169,7 @@ describe('cleanupOldScannerVersions', () => {
       '.sonar-scanner-abc123',
       'sonar-secrets-2.53.1.13823-linux-x86-64',
       'sonar-scanner-notes.txt',
-      'sonar-scanner-cli-8.1.0.6389-linux-x64',
+      'sonar-scanner-cli-8.3.1.16491-linux-x64',
       'sonar-scanner-7.0.0.1111-linux-x64.bak',
     ];
     for (const name of keep) make(name);
