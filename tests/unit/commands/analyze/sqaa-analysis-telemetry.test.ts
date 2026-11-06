@@ -31,9 +31,7 @@ import {
   SQAA_ANALYZE_AGENTIC_CALLER_COMMAND,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   type SqaaTelemetryCallerCommand,
-  tallyFromSqaaJsonReport,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import type { SqaaJsonReport } from '@/commands/analyze/sqaa-display-json.ts';
 import type { SqaaIssue } from '@/commands/analyze/sqaa-wire-types.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -139,31 +137,6 @@ describe('collectRuleCounts()', () => {
       rule_keys: ['sqaa:S1234', 'sqaa:S5678'],
       counts_by_rule: { 'sqaa:S1234': 2, 'sqaa:S5678': 1 },
     });
-  });
-});
-
-describe('tallyFromSqaaJsonReport()', () => {
-  it('builds a RunTally from a JSON report', () => {
-    const report: SqaaJsonReport = {
-      files: [
-        {
-          path: 'src/a.ts',
-          issues: [makeIssue('sqaa:S1234', 'a'), makeIssue('sqaa:S1234', 'b')],
-          errors: [{ code: 'E1', message: 'warn' }],
-        },
-      ],
-      ignored: [],
-      failures: [{ path: 'src/b.ts', message: 'HTTP 500' }],
-      skipped: [],
-      summary: { totalIssues: 2, totalFailures: 1, totalSkipped: 0 },
-      analysisDepth: 'STANDARD',
-    };
-
-    const tally = tallyFromSqaaJsonReport(report);
-    expect(tally.totalIssues).toBe(2);
-    expect(tally.totalErrors).toBe(1);
-    expect(tally.totalFailures).toBe(1);
-    expect(tally.allResults).toHaveLength(2);
   });
 });
 

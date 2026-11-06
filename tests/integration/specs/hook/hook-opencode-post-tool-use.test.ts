@@ -97,6 +97,29 @@ describe('sonar hook opencode-post-tool-use', () => {
     { timeout: 15000 },
   );
 
+  it.each([false, true])(
+    'keeps the hook JSON envelope valid during retries (exhausted: %s)',
+    async (exhausted) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaStatusSequence(exhausted ? [503, 503, 503, 503] : [503, 200])
+        .start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      const result = await harness.runWithStdin(
+        'hook opencode-post-tool-use',
+        toolPayload(editedFilePath),
+      );
+      expect(result.exitCode).toBe(0);
+      const output = JSON.parse(result.stdout);
+      if (exhausted) expect(output).toEqual({});
+      else expect(output.context).toContain('No issues found');
+      expect(result.stdout).not.toContain('Server busy');
+      expect(sqaaCalls(server)).toHaveLength(exhausted ? 4 : 2);
+    },
+  );
+
   it(
     'analyzes files written with the write tool',
     async () => {
