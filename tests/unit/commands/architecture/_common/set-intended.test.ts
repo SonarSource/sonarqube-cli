@@ -32,7 +32,13 @@ import type {
 import { setIntended } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
-import { ForbiddenApiError, ServerError, TransportError } from '@/core/server/errors.ts';
+import {
+  ForbiddenApiError,
+  RateLimitError,
+  ServerError,
+  ServiceUnavailableError,
+  TransportError,
+} from '@/core/server/errors.ts';
 
 const MODEL: IntendedArchitecture = {
   type: 'namespace',
@@ -141,7 +147,13 @@ describe('intended backup safety', () => {
     expect(JSON.parse(await readFile(backup!, 'utf8')).models).toEqual([MODEL]);
     expect(deleted).toBe(false);
   });
-  it.each([undefined, new ServerError(502, 'Bad gateway'), new TransportError('Timed out')])(
+  it.each([
+    undefined,
+    new ServerError(502, 'Bad gateway'),
+    new TransportError('Timed out'),
+    new ServiceUnavailableError(),
+    new RateLimitError(),
+  ])(
     'preserves readback guidance after an uncertain write (%s) without replay',
     async (writeError) => {
       const backend = api();
