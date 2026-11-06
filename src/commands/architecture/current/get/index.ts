@@ -60,7 +60,7 @@ export async function getCurrent(
   const graphs = await createArchitectureApi(ctx.connection, projectKey)
     .getCurrent(options.language)
     .catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
+      throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
     });
 
   if (graphs.length === 0) {

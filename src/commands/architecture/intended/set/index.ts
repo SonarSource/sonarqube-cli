@@ -66,7 +66,7 @@ export async function setIntended(
       );
     },
   }).catch((error: unknown) => {
-    throw toArchitectureError(error, projectKey);
+    throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
   });
 
   printDiff(ctx, result.diff);
