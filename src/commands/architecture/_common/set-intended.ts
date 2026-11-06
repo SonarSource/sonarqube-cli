@@ -174,10 +174,16 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), {
-    cause: error ?? readError,
-    remediationHint: remediationHintFor(readError),
-  });
+  return new ArchitectureWriteFailure(lines.join('\n'), error, readError);
+}
+
+class ArchitectureWriteFailure extends CommandFailedError {
+  override readonly remediationHint?: string;
+
+  constructor(message: string, writeError: unknown, readError: unknown) {
+    super(message, { cause: writeError ?? readError });
+    this.remediationHint = remediationHintFor(readError) ?? remediationHintFor(writeError);
+  }
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */
