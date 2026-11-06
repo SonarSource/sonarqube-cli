@@ -304,6 +304,19 @@ describe('public architecture findings contract', () => {
       expect(result.stderr).toContain('same Architecture API');
     });
 
+    it(`explains unreadable successful findings responses on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      const server = await configured(cloud, (api) =>
+        api.withStatus('project-findings', 200, '<html>Unexpected gateway page</html>', 'GET'),
+      );
+      const result = await h.run('arch findings get -p shop --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('public Architecture API returned an unreadable response');
+      expect(result.stderr).toContain('sonar update');
+      expect(result.stderr).not.toContain('<html>');
+      expect(requests(server)).toHaveLength(1);
+    });
+
     it(`explains an unavailable public findings endpoint on ${cloud ? 'Cloud' : 'Server'}`, async () => {
       const server = await configured(cloud, (api) =>
         api.withStatus('project-findings', 404, '{"message":"Missing endpoint"}', 'GET'),
