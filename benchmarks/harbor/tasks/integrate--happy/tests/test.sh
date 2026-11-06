@@ -1,4 +1,5 @@
 #!/bin/bash
+: "${EXPECTED_INTEGRATION:?EXPECTED_INTEGRATION is required}"
 mkdir -p /logs/verifier
 status=$("$HOME/.local/share/sonarqube-cli/bin/sonar" system status --format json 2>/dev/null | sed -n '/^{/,$p')
 installed=$(jq -r '.integrations[].id' <<< "$status" 2>/dev/null)
