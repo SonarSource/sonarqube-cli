@@ -281,16 +281,16 @@ export class ProjectBuilder {
     return this;
   }
 
-  /**
-   * Name of the branch `GET /api/project_branches/list` flags `isMain: true` for this project.
-   * Defaults to `main`, but real servers use whatever name the repo's default branch has
-   * (`master`, `trunk`, ...) — override this to prove callers don't assume a fixed name.
-   */
   withMainBranchAnalysisDate(value: string | null | undefined): this {
     this.mainBranchAnalysisDate = value;
     return this;
   }
 
+  /**
+   * Name of the branch `GET /api/project_branches/list` flags `isMain: true` for this project.
+   * Defaults to `main`, but real servers use whatever name the repo's default branch has
+   * (`master`, `trunk`, ...) — override this to prove callers don't assume a fixed name.
+   */
   withDefaultBranchName(name: string): this {
     this.defaultBranchName = name;
     return this;
