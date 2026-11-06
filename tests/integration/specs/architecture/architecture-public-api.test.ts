@@ -28,6 +28,7 @@ import {
   type IntendedArchitecture,
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import { revisionOf } from '@/commands/architecture/_common/intended-model.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import type { RecordedRequest } from '../../harness';
@@ -1126,7 +1127,10 @@ describe('sonar architecture intended set on the public API', () => {
           method,
         );
       });
-      const result = await setFile({ models: method === 'POST' ? NEXT : [] });
+      const result = await setFile({
+        models: method === 'POST' ? NEXT : [],
+        ...(method === 'DELETE' ? { revision: revisionOf(publicModels(INTENDED)) } : {}),
+      });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('server rejected the architecture write');
       expect(result.stderr).toContain('Invalid model');

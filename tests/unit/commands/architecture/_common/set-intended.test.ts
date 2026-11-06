@@ -29,6 +29,7 @@ import type {
   ArchitectureApi,
   IntendedArchitecture,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import { revisionOf } from '@/commands/architecture/_common/intended-model.ts';
 import { setIntended } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
@@ -79,7 +80,11 @@ describe('intended backup safety', () => {
     await rm(root, { recursive: true, force: true });
   });
   function clear(backupDir: string) {
-    return setIntended(api(), { models: [] }, { projectKey: 'test', dryRun: false, backupDir });
+    return setIntended(
+      api(),
+      { models: [], revision: revisionOf([MODEL]) },
+      { projectKey: 'test', dryRun: false, backupDir },
+    );
   }
   for (const dryRun of [false, true]) {
     it(`warns before replacing an existing model (dryRun=${dryRun})`, async () => {
@@ -175,6 +180,27 @@ describe('intended backup safety', () => {
       expect(failure.remediationHint).toBe(readFailure.remediationHint);
       expect(failure.message).toContain('write could not be confirmed');
       expect(writes).toBe(1);
+      expect(deleted).toBe(false);
+    },
+  );
+
+  it.each([undefined, 'java'] as const)(
+    'requires an exported revision for a clear scoped to %s',
+    async (language) => {
+      const result = await setIntended(
+        api(),
+        { models: [], ...(language ? { language } : {}) },
+        { projectKey: 'test', dryRun: false, backupDir: root },
+      ).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(CommandFailedError);
+      expect((result as Error).message).toContain('requires its exported revision');
+      expect(deleted).toBe(false);
+      const preview = await setIntended(
+        api(),
+        { models: [], ...(language ? { language } : {}) },
+        { projectKey: 'test', dryRun: true, backupDir: root },
+      );
+      expect(preview.mode).toBe('dry-run');
       expect(deleted).toBe(false);
     },
   );
