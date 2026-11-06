@@ -477,4 +477,56 @@ describe('public architecture findings contract', () => {
     expect(result.stdout).not.toContain('No findings');
     expect(result.stdout).not.toContain('past the last page');
   });
+  for (const cloud of [true, false]) {
+    it.each([
+      ['--type structuralDeviation', { ...findings[0], type: 'futureType' }],
+      ['--language java', { ...findings[0], language: 'futureLanguage' }],
+      ['--category flaw', { ...findings[0], type: 'futureType' }],
+      ['--type structuralDeviation', { ...findings[2], details: { reason: 'futureReason' } }],
+    ])(
+      `rejects raw filter mismatches before skipping unsupported rows on Cloud=${cloud}: %s`,
+      async (filters, row) => {
+        const server = await configured(cloud, (api) =>
+          api.withStatus(
+            'project-findings',
+            200,
+            JSON.stringify({ findings: [row], page: { pageIndex: 1, pageSize: 50, total: 1 } }),
+            'GET',
+          ),
+        );
+        const result = await h.run(`arch findings get -p shop ${filters} --format json`);
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toBe('');
+        expect(result.stderr).toContain('outside the requested filters');
+        expect(requests(server)).toHaveLength(1);
+      },
+    );
+
+    it.each([
+      ['--category deviation --language java', { ...findings[0], type: 'futureType' }],
+      [
+        '--type structuralDeviation --language java',
+        { ...findings[0], details: { reason: 'futureReason' } },
+      ],
+    ])(
+      `keeps future-value skipping when raw fields match active filters on Cloud=${cloud}: %s`,
+      async (filters, row) => {
+        await configured(cloud, (api) =>
+          api.withStatus(
+            'project-findings',
+            200,
+            JSON.stringify({ findings: [row], page: { pageIndex: 1, pageSize: 50, total: 1 } }),
+            'GET',
+          ),
+        );
+        const result = await h.run(`arch findings get -p shop ${filters} --format json`);
+        expect(result.exitCode).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          findings: [],
+          skippedFindings: 1,
+          page: { pageIndex: 1, pageSize: 50, total: 1 },
+        });
+      },
+    );
+  }
 });

@@ -171,21 +171,23 @@ export function parseFindingPage(
     result.findings.length > pageSize
   )
     throw incompatibleResponse('Invalid public findings page; no complete page was read.');
-  const parsed = result.findings.map(parseProjectFinding);
-  const findings = parsed.filter((finding) => finding !== undefined);
-  const skippedFindings = parsed.length - findings.length;
-  if (
-    findings.some(
-      (item) =>
-        (filters.category && item.category !== filters.category) ||
-        (filters.type && item.type !== filters.type) ||
-        (filters.language && item.language !== filters.language),
-    )
-  )
+  if (result.findings.some((value) => !matchesFindingFilters(value, filters)))
     throw incompatibleResponse(
       'The public findings page returned a finding outside the requested filters.',
     );
+  const parsed = result.findings.map(parseProjectFinding);
+  const findings = parsed.filter((finding) => finding !== undefined);
+  const skippedFindings = parsed.length - findings.length;
   return { findings, page, ...(skippedFindings > 0 ? { skippedFindings } : {}) };
+}
+
+function matchesFindingFilters(value: unknown, filters: FindingFilters): boolean {
+  const row = objectOf(value);
+  return (
+    (filters.category === undefined || row.category === filters.category) &&
+    (filters.type === undefined || row.type === filters.type) &&
+    (filters.language === undefined || row.language === filters.language)
+  );
 }
 
 export function parseProjectFinding(value: unknown): ProjectFinding | undefined {
