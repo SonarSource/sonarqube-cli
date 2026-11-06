@@ -7,7 +7,7 @@
 - Visible top-level commands declare `rootHelp({ category })`; declaration order controls display order. Reuse the existing help renderer and shared console components.
 - Record facts on the invocation context; let `postAction` commit telemetry and stats. Domain payloads belong beside producers. See [telemetry](../core/telemetry/AGENTS.md) and [stats](../core/stats/AGENTS.md) before changing their lifecycle.
 - Read [updates](../core/update/AGENTS.md) before changing root startup hooks; initialization depends on migrated consent.
-- Use the production error classes and exit codes specified in the root instructions. Use `remediationHint` for separate actionable recovery guidance.
+- Follow the root error-handling conventions. Use `remediationHint` for separate actionable recovery guidance.
 - Read [integration guidance](integrate/AGENTS.md) for `integrate/`, `hook/`, `context/`, and `analyze/`; [components](components/AGENTS.md) for shared UI; [quality gates](quality-gate/AGENTS.md) for status scoping. Read the root's state/auth and API routes for those concerns.
 - Repository imports are create-only. Treat an existing project as a no-op only after its binding matches the selected setting and repository; never upsert on creation conflicts. Report truncated discovery as incomplete rather than claiming success or not found.
 - Onboarding must not create a second project when linking an existing one cannot prompt or persist its mapping.
