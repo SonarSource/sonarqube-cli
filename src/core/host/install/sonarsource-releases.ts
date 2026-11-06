@@ -36,7 +36,7 @@ import { buildCagPlatformSuffix, type PlatformInfo } from './install-types.ts';
 const DOWNLOAD_TIMEOUT_MS = 60000;
 
 /** CDN filename extension for a dependency binary's pinned version on a given platform. */
-export type DependencyExtension = 'bin' | 'exe' | 'tar.gz';
+export type DependencyExtension = 'bin' | 'exe' | 'tar.gz' | 'zip';
 
 /**
  * Build the CDN filename for dependency binaries installed via `buildDownloadUrl`
