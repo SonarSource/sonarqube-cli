@@ -19,21 +19,63 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { AccessDeniedError, BadRequestError, ForbiddenApiError } from '@/core/server/errors.ts';
-import { HTTP_STATUS_FORBIDDEN } from '@/core/server/http-constants.ts';
+import {
+  AccessDeniedError,
+  BadRequestError,
+  ForbiddenApiError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
+import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 
 const PLAN_HINT =
   'Architecture needs SonarQube Cloud Team or Enterprise, or the Architecture feature on SonarQube Server.';
 
+const UPDATE_HINT =
+  'Update the CLI with `sonar update`, or check that the connected SonarQube deployment supports the same public Architecture API.';
+
+export function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
+  return new CommandFailedError(message, { cause, remediationHint: UPDATE_HINT });
+}
+
+export function collectionFailure(error: unknown, isCloud: boolean): never {
+  if (error instanceof UnexpectedApiError && error.status >= 200 && error.status < 300) {
+    throw incompatibleResponse(
+      'The public Architecture API returned an unreadable response.',
+      error,
+    );
+  }
+  if (error instanceof AccessDeniedError) {
+    if (error.status === HTTP_STATUS_NOT_FOUND) {
+      throw new CommandFailedError(
+        'The public Architecture API endpoint was not found (HTTP 404).',
+        {
+          cause: error,
+          remediationHint:
+            'Check feature availability, Browse permission and API routing. ' +
+            UPDATE_HINT +
+            (isCloud
+              ? ''
+              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+        },
+      );
+    }
+  }
+  throw error;
+}
+
 /** Translates an HTTP failure of an architecture call into a message that says what to do. */
-export function toArchitectureError(error: unknown, projectKey: string): unknown {
+export function toArchitectureError(error: unknown, projectKey: string, isCloud = false): unknown {
   if (error instanceof AccessDeniedError) {
     if (error.status === HTTP_STATUS_FORBIDDEN) {
       return new CommandFailedError(
         `The Architecture API refused access to '${projectKey}' (HTTP 403).`,
         {
           cause: error,
-          remediationHint: `Check project permissions, feature availability and API routing for this environment. ${PLAN_HINT}`,
+          remediationHint:
+            `Check project permissions, feature availability and API routing for this environment. ${PLAN_HINT}` +
+            (isCloud
+              ? ' A Cloud gateway can also return 403 for an unavailable route. ' + UPDATE_HINT
+              : ''),
         },
       );
     }
