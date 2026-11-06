@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
@@ -36,7 +37,7 @@ import { isTelemetryEnabled } from './enabled.ts';
 const CACHE_FILENAME = 'project-uuid-cache.json';
 
 /**
- * Transport-level budget for the one resolution per process, passed to
+ * Transport-level budget for each project's resolution, passed to
  * `ComponentsClient.getComponentId()`. Deliberately far below the default GET timeout (30s):
  * this runs in the `postAction` hook, after the command has already printed its result, so a
  * slow server would otherwise look like the CLI hanging at exit (worst for
@@ -46,6 +47,8 @@ const CACHE_FILENAME = 'project-uuid-cache.json';
  * project; every later run hits the permanent disk cache.
  */
 const RESOLVE_BUDGET_MS = 3_000;
+
+const RESOLVE_CONCURRENCY = 8;
 
 /**
  * The cache file is user-writable JSON, so entry *values* are as untrusted as the envelope:
@@ -121,87 +124,95 @@ export async function resolveProjectUuid(
   auth: ResolvedAuth,
   projectKey: string,
 ): Promise<string | null> {
+  const [uuid] = await resolveProjectUuids([{ auth, projectKey }]);
+  return uuid;
+}
+
+/** One cache read and write per batch, so concurrent misses cannot drop each other's entries. */
+export async function resolveProjectUuids(
+  projects: readonly NotedProject[],
+): Promise<(string | null)[]> {
   try {
-    if (!isTelemetryEnabled()) return null;
+    if (!isTelemetryEnabled()) return projects.map(() => null);
 
-    const entryKey = cacheKey(auth.serverUrl, projectKey);
     const diskCache = readDiskCache();
-    const cached = readCachedUuid(diskCache.entries, entryKey);
-    if (cached.hit) {
-      return cached.value;
-    }
+    const uuids = projects.map(({ auth, projectKey }) => {
+      const cached = readCachedUuid(diskCache.entries, cacheKey(auth.serverUrl, projectKey));
+      return cached.hit ? cached.value : undefined;
+    });
+    const missingIndices = uuids.flatMap((uuid, index) => (uuid === undefined ? [index] : []));
+    if (missingIndices.length === 0) return uuids.map((uuid) => uuid ?? null);
 
-    const client = new SonarHttpClient(auth.serverUrl, auth.token);
-    const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
-    // Only a resolved id is cached. `Ok(null)` is a 404: the project doesn't exist *yet*, and
-    // a later analysis commonly provisions it. So it retries on the next command instead of
-    // pinning `null` into the permanent, TTL-less cache, same as every other failure. Each
-    // attempt is bounded by RESOLVE_BUDGET_MS, so a persistently hanging server costs that
-    // budget once per project-resolving command rather than once ever. That is accepted
-    // instead of adding a negative TTL: every noteProject site already makes its own server
-    // calls under the 30s GET budget (SQAA, SCA, entitlement checks), so in any state where
-    // this hangs, the command is already paying an order of magnitude more. A TTL would trade
-    // telemetry completeness (null for the whole TTL after the network recovers) for a latency
-    // win that is noise next to that. Revisit if it shows up in practice.
-    if (result.isOk() && result.value !== null) {
-      diskCache.entries[entryKey] = result.value;
-      writeDiskCache(diskCache);
+    const fetched = await runWithConcurrencyLimit(missingIndices, RESOLVE_CONCURRENCY, (index) =>
+      fetchProjectUuid(projects[index]),
+    );
+    let cacheChanged = false;
+    for (const { item: index, value } of fetched) {
+      const uuid = value ?? null;
+      uuids[index] = uuid;
+      // Only a resolved id is cached. `Ok(null)` is a 404: the project doesn't exist *yet*, and
+      // a later analysis commonly provisions it. So it retries on the next command instead of
+      // pinning `null` into the permanent, TTL-less cache, same as every other failure. Each
+      // attempt is bounded by RESOLVE_BUDGET_MS, so a persistently hanging server costs that
+      // budget once per project-resolving command rather than once ever. That is accepted
+      // instead of adding a negative TTL: every noteProject site already makes its own server
+      // calls under the 30s GET budget (SQAA, SCA, entitlement checks), so in any state where
+      // this hangs, the command is already paying an order of magnitude more. A TTL would trade
+      // telemetry completeness (null for the whole TTL after the network recovers) for a
+      // latency win that is noise next to that. Revisit if it shows up in practice.
+      if (uuid !== null) {
+        const { auth, projectKey } = projects[index];
+        diskCache.entries[cacheKey(auth.serverUrl, projectKey)] = uuid;
+        cacheChanged = true;
+      }
     }
-    return result.isOk() ? result.value : null;
+    if (cacheChanged) writeDiskCache(diskCache);
+    return uuids.map((uuid) => uuid ?? null);
   } catch {
-    return null;
+    return projects.map(() => null);
   }
 }
 
-// --- Ambient per-invocation project context -----------------------------------------------
-//
-// `project_uuid` is an ambient per-invocation fact: other events join to it on the shared
-// `invocation_id` that `buildIdentityBase` stamps on every event. That makes the project a
-// per-process fact, so it is held here rather than threaded through call signatures (which
-// previously required forwarding the Commander `Command` down ~12 function signatures purely
-// to key a map that only ever held one entry). Same shape as `INVOCATION_ID` in
-// invocation-id.ts: one value per CLI process.
-//
-// Commands that resolve a project key call `noteProject`; command-executed telemetry reads
-// `currentProjectUuid` once at `postAction`. Writes are synchronous and do no I/O, so noting
-// never adds latency to the command's own work.
+async function fetchProjectUuid({ auth, projectKey }: NotedProject): Promise<string | null> {
+  const client = new SonarHttpClient(auth.serverUrl, auth.token);
+  const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
+  return result.isOk() ? result.value : null;
+}
 
-interface NotedProject {
+// --- Ambient per-invocation targets --------------------------------------------------------
+
+export interface NotedProject {
   auth: ResolvedAuth;
   projectKey: string;
 }
 
-let notedProject: NotedProject | null = null;
-let pendingResolution: Promise<string | null> | null = null;
-
-/**
- * Record the project this invocation is about, for `project_uuid` on command-executed telemetry.
- *
- * Synchronous and I/O-free — the API call happens later, once, in {@link currentProjectUuid}.
- * Call it at the point where both a project key and {@link ResolvedAuth} are known (auth is
- * needed for the server URL, and in the anonymous hook commands it is resolved inside the
- * handler, not before it). No-ops for a missing or empty key, so callers can pass an
- * unresolved value directly — that leaves `project_uuid: null`, which is the correct report
- * for `--global` installs and project-less commands.
- */
-export function noteProject(auth: ResolvedAuth, projectKey: string | null | undefined): void {
-  if (!projectKey) return;
-  notedProject = { auth, projectKey };
-  // Drop any memo from an earlier note so a superseding project key is not shadowed by it.
-  pendingResolution = null;
+export interface TelemetryTarget extends NotedProject {
+  projectUuid: string | null;
 }
 
-/**
- * The `project_uuid` for this invocation, or `null` when no project was noted.
- *
- * Memoized: at most one resolution (and therefore at most one API call and one disk-cache
- * read) per process, however many times this is called.
- */
-export function currentProjectUuid(): Promise<string | null> {
-  const project = notedProject;
-  if (!project) return Promise.resolve(null);
-  pendingResolution ??= resolveProjectUuid(project.auth, project.projectKey);
-  return pendingResolution;
+const notedProjects = new Map<string, NotedProject>();
+let pendingTargets: Promise<TelemetryTarget[]> | null = null;
+
+function targetKey(auth: ResolvedAuth, projectKey: string): string {
+  return `${auth.serverUrl}::${auth.orgKey ?? ''}::${projectKey}`;
+}
+
+export function noteProject(auth: ResolvedAuth, projectKey: string | null | undefined): void {
+  if (!projectKey) return;
+  const key = targetKey(auth, projectKey);
+  if (notedProjects.has(key)) return;
+  notedProjects.set(key, { auth, projectKey });
+  pendingTargets = null;
+}
+
+export function resolveTelemetryTargets(): Promise<TelemetryTarget[]> {
+  pendingTargets ??= resolveTargets([...notedProjects.values()]);
+  return pendingTargets;
+}
+
+async function resolveTargets(projects: NotedProject[]): Promise<TelemetryTarget[]> {
+  const uuids = await resolveProjectUuids(projects);
+  return projects.map((project, index) => ({ ...project, projectUuid: uuids[index] }));
 }
 
 /**
@@ -210,6 +221,6 @@ export function currentProjectUuid(): Promise<string | null> {
  * make a later assertion pass for the wrong reason.
  */
 export function resetProjectUuidContextForTests(): void {
-  notedProject = null;
-  pendingResolution = null;
+  notedProjects.clear();
+  pendingTargets = null;
 }
