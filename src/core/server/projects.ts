@@ -41,6 +41,15 @@ export interface PublicProjectsResponse {
   page?: { total?: number };
 }
 
+export type ProjectVisibility = 'private' | 'public';
+
+export interface CreateProjectParams {
+  projectKey: string;
+  name: string;
+  visibility: ProjectVisibility;
+  organization?: string;
+}
+
 export class ProjectsClient {
   private readonly client: SonarHttpClient;
 
@@ -106,5 +115,17 @@ export class ProjectsClient {
           ? { key: component.key, name: component.name ?? component.key }
           : null;
       });
+  }
+
+  /** Creates an empty project that is not bound to any repository. */
+  createProject(params: CreateProjectParams): ResultAsync<SonarQubeProject, HttpClientError> {
+    return this.client
+      .postFormJson<{ project: { key: string; name: string } }>('/api/projects/create', {
+        project: params.projectKey,
+        name: params.name,
+        visibility: params.visibility,
+        ...(params.organization ? { organization: params.organization } : {}),
+      })
+      .map(({ project }) => ({ key: project.key, name: project.name }));
   }
 }

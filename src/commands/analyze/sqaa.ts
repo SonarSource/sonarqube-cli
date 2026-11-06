@@ -19,39 +19,14 @@
  */
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import type {
-  CommandAuthenticatedInvocationContext,
-  CommandInvocationContext,
-} from '@/core/commands/invocation-context.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
-import type { SonarConnection } from '@/core/server/connection.ts';
-import type { Console } from '@/core/ui/console.ts';
 
-import {
-  excludeIgnoredFiles,
-  resolveChangeSet,
-  resolveSqaaBranchAtRepoRoot,
-} from './sqaa-changeset.ts';
-import {
-  confirmLargeRunIfNeeded,
-  prepareSqaaExplicitFiles,
-  resolveDepthForMode,
-  resolveSqaaContext,
-} from './sqaa-context.ts';
-import { resolveSqaaConnectionAndProject } from './sqaa-resolution.ts';
-import {
-  runSqaaAnalysis,
-  runSqaaAnalysisOnExplicitFiles,
-  runSqaaAnalysisOnFiles,
-} from './sqaa-run.ts';
-import type {
-  AnalyzeSqaaOptions,
-  AnalyzeSqaaRunOptions,
-  OutputFormat,
-  SqaaBatchRunOptions,
-} from './sqaa-types.ts';
+import { prepareSqaaRun } from './sqaa-context.ts';
+import { applyExitCode } from './sqaa-display.ts';
+import { executeSqaaRun, presentSqaaRun } from './sqaa-run.ts';
+import type { AnalyzeSqaaOptions, AnalyzeSqaaRunOptions } from './sqaa-types.ts';
 import { VALID_FORMATS } from './sqaa-types.ts';
-import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export { buildSqaaJsonReport } from './sqaa-json-report.ts';
 export {
@@ -66,136 +41,27 @@ export async function analyzeSqaa(
   ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
-  const { connection } = ctx;
-  const { requireProject = true, telemetryCallerCommand } = runOptions;
-  const telemetryCtx = runOptions.telemetryCtx ?? ctx;
-  const {
-    file: rawFiles,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format: rawFormat,
-    depth: rawDepth,
-    forcedDepth,
-  } = options;
-  const format = resolveFormatOption(rawFormat, VALID_FORMATS, 'text');
-
-  if (staged && base !== undefined) {
+  const format = resolveFormatOption(options.format, VALID_FORMATS, 'text');
+  if (options.staged && options.base !== undefined) {
     throw new InvalidOptionError('--staged and --base cannot be used together');
   }
-
-  if (rawFiles?.length) {
-    const prepared = await prepareSqaaExplicitFiles(
-      { ...options, format },
-      connection,
-      telemetryCtx.console,
-      { requireProject },
-    );
-    if (!prepared) return;
-    const execution = {
-      format,
-      telemetryCallerCommand,
-      telemetryCtx,
-      console: telemetryCtx.console,
-    };
-    if (prepared.mode === 'single-file') await runSqaaAnalysis(prepared, execution);
-    else await runSqaaAnalysisOnExplicitFiles(prepared, execution);
-    return;
-  }
-
-  await analyzeSqaaChangeSet({
-    connection,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  });
-}
-
-async function analyzeSqaaChangeSet(params: {
-  connection: SonarConnection;
-  staged?: boolean;
-  base?: string;
-  branch?: string;
-  project?: string;
-  force?: boolean;
-  format: OutputFormat;
-  rawDepth?: string;
-  forcedDepth?: SqaaAnalysisDepth;
-  requireProject: boolean;
-  telemetryCallerCommand: SqaaBatchRunOptions['telemetryCallerCommand'];
-  telemetryCtx: CommandInvocationContext;
-}): Promise<void> {
-  const {
-    connection,
-    staged,
-    base,
-    branch,
-    project,
-    force,
-    format,
-    rawDepth,
-    forcedDepth,
-    requireProject,
-    telemetryCallerCommand,
-    telemetryCtx,
-  } = params;
+  const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const { console } = telemetryCtx;
-  const { wireDepth, displayDepth } = resolveDepthForMode(rawDepth, 'change-set', forcedDepth);
-
-  const fullChangeSet = await resolveChangeSet(process.cwd(), { staged, base });
-  const resolvedBranch = await resolveSqaaBranchAtRepoRoot(branch, fullChangeSet.repoRoot);
-
-  if (fullChangeSet.files.length === 0 && fullChangeSet.ignored.length === 0) {
-    console.text('Vortex analysis: no files in the change set to analyze.');
-    return;
-  }
-
-  if (fullChangeSet.files.length === 0) {
-    printAllChangeSetFilesExcluded(console);
-    return;
-  }
-
-  const resolution = await resolveSqaaConnectionAndProject(
-    connection,
-    project,
-    console,
-    fullChangeSet.files,
-  );
-  const resolved = resolveSqaaContext(resolution, { requireProject }, console);
-  if (!resolved) return;
-
-  const changeSet = excludeIgnoredFiles(fullChangeSet, resolved.ignored);
-  if (changeSet.files.length === 0) {
-    printAllChangeSetFilesExcluded(console);
-    return;
-  }
-
-  if (!(await confirmLargeRunIfNeeded(changeSet.files.length, console, force, format))) return;
-
-  await runSqaaAnalysisOnFiles(changeSet, {
-    resolved,
-    branch: resolvedBranch,
-    format,
-    wireDepth,
-    displayDepth,
-    telemetryCallerCommand,
-    telemetryCtx,
-    console,
+  const prepared = await prepareSqaaRun({ ...options, format }, ctx.connection, console, {
+    ...runOptions,
+    requireProject: runOptions.requireProject ?? true,
   });
-}
-
-function printAllChangeSetFilesExcluded(console: Console): void {
-  console.text(
-    'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
-  );
+  if (!prepared) return;
+  if (prepared.files.displayPaths.length === 0) {
+    console.text(
+      prepared.ignored.length === 0
+        ? 'Vortex analysis: no files in the change set to analyze.'
+        : 'Vortex analysis: no files to analyze. All change set files were excluded (binary, oversized, or outside the repository or project).',
+    );
+    return;
+  }
+  const execution = { ...runOptions, format, telemetryCtx, console };
+  const { tally } = await executeSqaaRun(prepared, execution);
+  applyExitCode(tally.totalIssues, tally.totalFailures, tally.globalError !== undefined);
+  await presentSqaaRun(prepared, tally, execution);
 }

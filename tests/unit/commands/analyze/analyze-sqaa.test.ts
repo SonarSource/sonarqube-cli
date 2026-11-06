@@ -230,6 +230,24 @@ describe('analyzeSqaa: auth resolution', () => {
 // and tests/unit/core/host/recorded-feature-resolver.test.ts for that coverage.
 
 describe('analyzeSqaa: API call and result display', () => {
+  it('records completion once before JSON presentation fails', async () => {
+    const output = spyOn(fake, 'print').mockImplementation(() => {
+      throw new Error('output failed');
+    });
+    try {
+      const error = await analyzeSqaa(
+        { file: ['src/index.ts'], format: 'json' },
+        FAKE_AUTHENTICATED_CONTEXT,
+        { telemetryCallerCommand: 'analyze agentic' },
+      ).catch((err: unknown) => err);
+      expect(error).toMatchObject({ message: 'output failed' });
+      expect(FAKE_AUTHENTICATED_CONTEXT.telemetryFacts()).toHaveLength(1);
+      expect(FAKE_AUTHENTICATED_CONTEXT.statsFacts()).toHaveLength(1);
+    } finally {
+      output.mockRestore();
+    }
+  });
+
   it('finishes single-file progress before presenting a request failure', async () => {
     const finish = spyOn(SqaaProgress.prototype, 'finish');
     try {
@@ -436,25 +454,35 @@ describe('buildSqaaJsonReport', () => {
     expect(report?.failures[0].message).toContain('Network error');
   });
 
-  it('throws InvalidOptionError for invalid --depth', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      buildSqaaJsonReport(
-        { file: ['src/index.ts'], depth: 'INVALID' },
-        FAKE_AUTHENTICATED_CONTEXT.connection,
-        { telemetryCtx: FAKE_AUTHENTICATED_CONTEXT },
-      ),
-    ).rejects.toThrow(InvalidOptionError);
-  });
+  it.each([false, true])(
+    'rejects invalid --depth before Git access (explicit files: %s)',
+    async (explicit) => {
+      const file = explicit ? ['src/index.ts'] : undefined;
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        buildSqaaJsonReport({ file, depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT.connection, {
+          telemetryCtx: FAKE_AUTHENTICATED_CONTEXT,
+        }),
+      ).rejects.toThrow(InvalidOptionError);
+      expect(spawnProcessSpy).not.toHaveBeenCalled();
+      expect(discoverProjectSpy).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('analyzeSqaa: depth option', () => {
-  it('throws InvalidOptionError for invalid --depth', async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable
-    await expect(
-      analyzeSqaa({ file: ['src/index.ts'], depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT),
-    ).rejects.toThrow(InvalidOptionError);
-  });
+  it.each([false, true])(
+    'rejects invalid --depth before Git access (explicit files: %s)',
+    async (explicit) => {
+      const file = explicit ? ['src/index.ts'] : undefined;
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await expect(
+        analyzeSqaa({ file, depth: 'INVALID' }, FAKE_AUTHENTICATED_CONTEXT),
+      ).rejects.toThrow(InvalidOptionError);
+      expect(spawnProcessSpy).not.toHaveBeenCalled();
+      expect(discoverProjectSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('sends DEEP on the wire when --depth DEEP is set for a single file', async () => {
     await analyzeSqaa({ file: ['src/index.ts'], depth: 'DEEP' }, FAKE_AUTHENTICATED_CONTEXT);
