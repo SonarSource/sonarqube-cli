@@ -18,10 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 import * as yaml from 'js-yaml';
+
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 
 import {
   PatchResource,
@@ -67,13 +68,24 @@ export class YamlPatch<TDoc = unknown> extends PatchResource<YamlPatchOptions<TD
 }
 
 async function readYaml(path: string): Promise<unknown> {
-  if (!existsSync(path)) {
+  let content: string;
+  try {
+    content = await readFile(path, 'utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {};
+    }
+    throw new CommandFailedError(
+      `Cannot read YAML file ${path}. Check its permissions and try again.`,
+    );
+  }
+  if (!content.trim()) {
     return {};
   }
   try {
-    return yaml.load(await readFile(path, 'utf-8')) ?? {};
+    return yaml.load(content) ?? {};
   } catch {
-    return {};
+    throw new CommandFailedError(`${path} contains invalid YAML. Fix it and try again.`);
   }
 }
 
