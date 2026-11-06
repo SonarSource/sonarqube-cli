@@ -83,7 +83,7 @@ it.each([null, {}, { currentArchitectures: null }, { currentArchitectures: {} }]
       const result = await h.run('arch current get -p shop --language java --format json');
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('currentArchitectures must be an array');
-      expect(result.stderr).toContain('support the same Architecture API');
+      expect(result.stderr).toContain('supports the same public Architecture API');
       expect(result.stdout).toBe('');
       expect(
         server

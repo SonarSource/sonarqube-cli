@@ -1265,7 +1265,7 @@ describe('sonar architecture intended set on the public API', () => {
       const result = await setFile({ models: NEXT });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('intendedArchitectures must be an array');
-      expect(result.stderr).toContain('supported public Architecture API contract');
+      expect(result.stderr).toContain('sonar update');
       expect(result.stderr).not.toContain('expected at most one resource');
       expect(writes(server)).toEqual([]);
     });
@@ -1444,7 +1444,7 @@ describe('sonar architecture intended set on the public API', () => {
         expect(result.exitCode).toBe(committed ? 0 : 1);
         if (!committed) {
           expect(result.stderr).toContain('write could not be confirmed');
-          expect(result.stderr).toContain('supported public Architecture API contract');
+          expect(result.stderr).toContain('sonar update');
         }
         expect(writes(server).map(({ method }) => method)).toEqual([create ? 'POST' : 'PATCH']);
       });
