@@ -92,7 +92,13 @@ export async function setIntended(
   });
 
   if (result.mode === 'dry-run') {
-    ctx.console.info('Dry run: nothing was written. Run without --dry-run to apply.');
+    ctx.console.info(
+      result.requiresRevisionForClear
+        ? 'Dry run: nothing was written. Clearing the stored intended architecture requires its exported revision. ' +
+            `Read the complete export with: sonar architecture intended get --project ${shellQuote(projectKey)} --format json. ` +
+            'Add that revision to the change file and preview again before applying.'
+        : 'Dry run: nothing was written. Run without --dry-run to apply.',
+    );
     return;
   }
   if (result.mode === 'unchanged') {
