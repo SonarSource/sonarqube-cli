@@ -216,7 +216,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       page.total < 0 ||
       result.projectDirectives.length > pageSize
     )
-      throw new CommandFailedError('Invalid public directives page; no complete page was read.');
+      throw new CommandFailedError('The public directives page did not match the requested page.');
     const directives = result.projectDirectives.map((item) => parseProjectDirective(item));
     if (new Set(directives.map((item) => item.id.toLowerCase())).size !== directives.length)
       throw new CommandFailedError('The public directives page returned duplicate ids.');
@@ -258,9 +258,14 @@ export class SonarArchitectureApi implements ArchitectureApi {
         if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND)
           throw new DirectiveNotFoundError(
             `Directive ${id} was not found or is not accessible in the selected project.`,
-            { cause: error },
+            {
+              cause: error,
+              remediationHint: this.http.isCloud
+                ? undefined
+                : 'If this Server does not expose the public Architecture APIs, update to a Server build that does. Otherwise check the directive id and Browse permission.',
+            },
           );
-        throw error;
+        return collectionFailure(error, this.http.isCloud);
       });
     const directive = parseProjectDirective(result);
     if (directive.id.toLowerCase() !== directiveId(id) || directive.projectId !== projectId)

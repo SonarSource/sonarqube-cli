@@ -25,7 +25,7 @@ import type { ProjectDirective } from '@/commands/architecture/_common/directive
 import { TestHarness } from '../../harness';
 import { INTENDED_RESOURCE } from '../../harness/fake-architecture';
 
-const COMPATIBILITY = 'supported public Architecture API contract';
+const COMPATIBILITY = 'supports the same public Architecture API';
 
 describe('Architecture API compatibility diagnostics', () => {
   let harness: TestHarness;
@@ -96,6 +96,7 @@ describe('Architecture API compatibility diagnostics', () => {
       const result = await harness.run(`arch ${command}`);
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(COMPATIBILITY);
+      expect(result.stderr).toContain('sonar update');
       const writes = server
         .getRecordedRequests()
         .filter((request) => ['POST', 'PATCH', 'DELETE'].includes(request.method));
@@ -106,6 +107,49 @@ describe('Architecture API compatibility diagnostics', () => {
   );
 
   for (const cloud of [false, true]) {
+    for (const target of ['current', 'intended', 'directives'] as const) {
+      it(`offers an update for a non-JSON ${target} response on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+        const builder = harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withProject('shop', (project) =>
+            project.withArchitecture((architecture) =>
+              architecture.withStatus(
+                target === 'current'
+                  ? 'current-architectures'
+                  : target === 'intended'
+                    ? INTENDED_RESOURCE
+                    : 'project-directives',
+                200,
+                '<html>Gateway response</html>',
+                'GET',
+              ),
+            ),
+          );
+        const server = await (cloud ? builder.asSonarCloud() : builder).start();
+        harness.withAuth(
+          cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
+          'test-token',
+          cloud ? 'my-org' : undefined,
+        );
+        const result = await harness.run(
+          `arch ${target} get -p shop --format json${target === 'current' ? ' --language java' : ''}`,
+        );
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('sonar update');
+        expect(result.stderr).toContain('Architecture API');
+        expect(
+          server
+            .getRecordedRequests()
+            .filter(
+              (request) =>
+                ['POST', 'PATCH', 'DELETE'].includes(request.method) &&
+                request.path.includes('/architecture/'),
+            ),
+        ).toEqual([]);
+      });
+    }
+
     for (const target of ['current', 'intended', 'directives'] as const) {
       it(`explains an incompatible ${target} envelope on ${cloud ? 'Cloud' : 'Server'} without writing`, async () => {
         const builder = harness
@@ -136,6 +180,7 @@ describe('Architecture API compatibility diagnostics', () => {
         );
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(COMPATIBILITY);
+        expect(result.stderr).toContain('sonar update');
         expect(result.stdout).not.toContain(COMPATIBILITY);
         expect(
           server
@@ -176,9 +221,44 @@ describe('Architecture API compatibility diagnostics', () => {
         );
         const result = await harness.run('arch directives get -p shop --format json');
         expect(result.exitCode).toBe(1);
-        if (compatibleShape) expect(result.stderr).not.toContain(COMPATIBILITY);
-        else expect(result.stderr).toContain(COMPATIBILITY);
+        if (compatibleShape) {
+          expect(result.stderr).not.toContain(COMPATIBILITY);
+          expect(result.stderr).toContain('did not match the requested page');
+          expect(result.stderr).not.toContain('sonar update');
+        } else {
+          expect(result.stderr).toContain(COMPATIBILITY);
+          expect(result.stderr).toContain('sonar update');
+        }
       }
+    });
+
+    it(`keeps an explicit directive 404 distinct while explaining Server availability on ${cloud ? 'Cloud' : 'Server'}`, async () => {
+      const builder = harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withProject('shop', (project) => project.withArchitecture(() => {}));
+      const server = await (cloud ? builder.asSonarCloud() : builder).start();
+      harness.withAuth(
+        cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
+        'test-token',
+        cloud ? 'my-org' : undefined,
+      );
+      const result = await harness.run(
+        'arch directives get -p shop --id 11111111-1111-4111-8111-111111111111 --format json',
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('was not found or is not accessible');
+      if (cloud) expect(result.stderr).not.toContain('Server build');
+      else expect(result.stderr).toContain('Server build');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter(
+            (request) =>
+              ['POST', 'PATCH', 'DELETE'].includes(request.method) &&
+              request.path.includes('/architecture/'),
+          ),
+      ).toEqual([]);
     });
 
     it(`keeps valid empty results and invalid input separate from compatibility on ${cloud ? 'Cloud' : 'Server'}`, async () => {
@@ -242,6 +322,7 @@ describe('Architecture API compatibility diagnostics', () => {
       const result = await harness.run('arch intended set -p shop --file model.json');
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(COMPATIBILITY);
+      expect(result.stderr).toContain('sonar update');
       expect(result.stderr).toContain('write could not be confirmed');
       expect(result.stderr).toContain('No automatic rollback');
       expect(
@@ -279,7 +360,13 @@ describe('Architecture API compatibility diagnostics', () => {
         );
         const result = await harness.run('arch current get -p shop --language java --format json');
         expect(result.exitCode).toBe(1);
-        expect(result.stderr).not.toContain(COMPATIBILITY);
+        if (status === 404 || (cloud && status === 403))
+          expect(result.stderr).toContain(COMPATIBILITY);
+        else expect(result.stderr).not.toContain(COMPATIBILITY);
+        if (cloud && status === 403) {
+          expect(result.stderr).toContain('sonar update');
+          expect(result.stderr).toContain('permission');
+        } else if (status !== 404) expect(result.stderr).not.toContain('sonar update');
       });
     }
   }

@@ -19,31 +19,54 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { AccessDeniedError, BadRequestError, ForbiddenApiError } from '@/core/server/errors.ts';
+import {
+  AccessDeniedError,
+  BadRequestError,
+  ForbiddenApiError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 
 const PLAN_HINT =
   'Architecture needs SonarQube Cloud Team or Enterprise, or the Architecture feature on SonarQube Server.';
 
+const UPDATE_HINT =
+  'Update the CLI with `sonar update`, or check that the connected SonarQube deployment supports the same public Architecture API.';
+
 export function incompatibleResponse(message: string, cause?: Error): CommandFailedError {
-  return new CommandFailedError(message, {
-    cause,
-    remediationHint:
-      "The response does not match this CLI's supported public Architecture API contract. " +
-      'Check that the CLI and the connected SonarQube deployment support the same Architecture API.',
-  });
+  return new CommandFailedError(message, { cause, remediationHint: UPDATE_HINT });
 }
 
 export function collectionFailure(error: unknown, isCloud: boolean): never {
-  if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
-    throw new CommandFailedError('The public Architecture API endpoint was not found (HTTP 404).', {
-      cause: error,
-      remediationHint:
-        'Check feature availability, Browse permission and API routing.' +
-        (isCloud
-          ? ''
-          : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
-    });
+  if (error instanceof UnexpectedApiError && error.status >= 200 && error.status < 300) {
+    throw incompatibleResponse(
+      'The public Architecture API returned an unreadable response.',
+      error,
+    );
+  }
+  if (error instanceof AccessDeniedError) {
+    if (error.status === HTTP_STATUS_NOT_FOUND) {
+      throw new CommandFailedError(
+        'The public Architecture API endpoint was not found (HTTP 404).',
+        {
+          cause: error,
+          remediationHint:
+            'Check feature availability, Browse permission and API routing. ' +
+            UPDATE_HINT +
+            (isCloud
+              ? ''
+              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+        },
+      );
+    }
+    if (isCloud && error.status === HTTP_STATUS_FORBIDDEN) {
+      throw new CommandFailedError('The public Architecture API refused access (HTTP 403).', {
+        cause: error,
+        remediationHint:
+          'Check project permissions, feature availability and API routing. A Cloud gateway can also return 403 for an unavailable route. ' +
+          UPDATE_HINT,
+      });
+    }
   }
   throw error;
 }
