@@ -39,7 +39,9 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
         .withProject('shop', (project) => project.withMainBranchAnalysisDate(analysisDate))
         .start();
       const response = await fetch(`${server.baseUrl()}/api/project_branches/list?project=shop`);
-      const { branches } = await response.json();
+      const { branches } = (await response.json()) as {
+        branches: { isMain: boolean; analysisDate?: string | null }[];
+      };
       expect(branches[0].isMain).toBe(true);
       expect(branches[0].analysisDate).toBe(analysisDate);
     },
