@@ -26,7 +26,6 @@ import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
-const DASHBOARD = 'https://sonarcloud.io/project/overview?id=k';
 const NO_RESULTS = 'No analysis results on the server yet.';
 
 function printed(console: FakeConsole): string[] {
@@ -36,7 +35,7 @@ function printed(console: FakeConsole): string[] {
 async function show(response: ResultAsync<unknown, unknown>) {
   const console = new FakeConsole();
   const http = { getOrNullIf404: () => response } as unknown as SonarHttpClient;
-  await showAnalysisResults(http, 'k', DASHBOARD, console, NO_RESULTS);
+  await showAnalysisResults(http, 'k', console, NO_RESULTS);
   return printed(console);
 }
 
@@ -48,15 +47,12 @@ describe('showAnalysisResults', () => {
   });
 
   it('uses the caller note when the project has no analysis', async () => {
-    expect(await show(okAsync(null))).toEqual([NO_RESULTS, `Project dashboard: ${DASHBOARD}`]);
+    expect(await show(okAsync(null))).toEqual([NO_RESULTS]);
   });
 
   it('does not report a failed lookup as missing results', async () => {
     const lines = await show(errAsync(new Error('403 Forbidden')));
 
-    expect(lines).toEqual([
-      'Could not fetch the analysis results.',
-      `Project dashboard: ${DASHBOARD}`,
-    ]);
+    expect(lines).toEqual(['Could not fetch the analysis results.']);
   });
 });
