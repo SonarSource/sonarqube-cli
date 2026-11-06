@@ -287,7 +287,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     pageSize: number,
   ): Promise<FindingPage> {
     validateFindingPagination(pageIndex, pageSize);
-    const { organizationId, branchId } = await this.ids();
+    const { organizationId, branchId } = await this.resolveIds(true);
     return fetchFindingsPage(
       this.http,
       this.path('project-findings'),
@@ -409,10 +409,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return this.idsPromise;
   }
 
-  private async resolveIds(): Promise<ArchitectureIds> {
+  private async resolveIds(requireAnalysis = false): Promise<ArchitectureIds> {
     const branches = await new BranchesClient(this.http).listBranches(this.projectKey).orThrow();
-    const branchId = branches.find((branch) => branch.isMain)?.branchId;
-    if (!branchId) {
+    const mainBranch = branches.find((branch) => branch.isMain);
+    const branchId = mainBranch?.branchId;
+    if (!branchId || (requireAnalysis && !mainBranch?.analysisDate)) {
       throw new CommandFailedError(`Project '${this.projectKey}' has no analyzed main branch.`, {
         remediationHint: 'Run an analysis of the main branch first.',
       });
