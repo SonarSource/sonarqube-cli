@@ -34,6 +34,7 @@ import {
 } from '@/core/server/http-constants.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { incompatibleResponse } from './errors.ts';
 
 const MAX_DIRECTIVE_ENUM_LENGTH = 30;
 const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
@@ -130,18 +131,23 @@ export function parseDirective(value: unknown, inputFields?: Set<string>): Direc
   return directive;
 }
 export function parseProjectDirective(value: unknown): ProjectDirective {
-  const object = record(value);
-  const id = stringField(object, 'id', DIRECTIVE_UUID_LENGTH);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
-    throw new CommandFailedError('Public directive response has an invalid id.');
-  if (object.origin != null && typeof object.origin !== 'string')
-    throw new CommandFailedError('Public directive origin must be a string.');
-  return {
-    ...parseDirective(object, new Set()),
-    id,
-    projectId: stringField(object, 'projectId', 1000),
-    ...(object.origin == null ? {} : { origin: object.origin }),
-  };
+  try {
+    const object = record(value);
+    const id = stringField(object, 'id', DIRECTIVE_UUID_LENGTH);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      throw new CommandFailedError('Public directive response has an invalid id.');
+    if (object.origin != null && typeof object.origin !== 'string')
+      throw new CommandFailedError('Public directive origin must be a string.');
+    return {
+      ...parseDirective(object, new Set()),
+      id,
+      projectId: stringField(object, 'projectId', 1000),
+      ...(object.origin == null ? {} : { origin: object.origin }),
+    };
+  } catch (error: unknown) {
+    if (error instanceof CommandFailedError) throw incompatibleResponse(error.message, error);
+    throw error;
+  }
 }
 function parseCreates(items: unknown[]): DirectiveInput[] {
   return items.map((item) => {
