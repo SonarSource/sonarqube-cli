@@ -24,7 +24,7 @@ import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export const SQAA_DEPTH_CHOICES = ['STANDARD', 'DEEP'] as const;
 
-export type SqaaInvocationMode = 'single-file' | 'multi-file' | 'change-set';
+export type SqaaInvocationMode = 'single-file' | 'multi-file' | 'change-set' | 'edited-file';
 
 /** Wire value sent to SQAA when DEEP analysis is requested (STANDARD omits the field). */
 export type SqaaDeepWireDepth = 'DEEP';

@@ -51,6 +51,20 @@ export class MappingWriteError extends CommandFailedError {
   }
 }
 
+/**
+ * The `sonar link` command that maps `projectKey` the way `sonar init` would, prefixed with a `cd`
+ * when it has to run from another repository than the current directory's.
+ */
+export async function linkCommandFor(projectKey: string, projectRoot: string): Promise<string> {
+  const { targetDir } = await resolveProjectTarget(projectRoot);
+  const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
+  return linkCommand(
+    projectKey,
+    relativeProjectPath(targetDir, projectRoot),
+    linkRoot === targetDir ? undefined : targetDir,
+  );
+}
+
 const PROJECT_ORIGIN_LEAD = { created: 'Created', found: 'Found' } as const;
 
 /** The project already exists on the server by now, so a failure here has to say how to finish. */
@@ -62,8 +76,6 @@ export async function writeMapping(
   origin: keyof typeof PROJECT_ORIGIN_LEAD,
 ): Promise<void> {
   const target = await resolveProjectTarget(projectRoot);
-  const { targetDir } = target;
-  const path = relativeProjectPath(targetDir, projectRoot);
 
   try {
     const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
@@ -84,17 +96,23 @@ export async function writeMapping(
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
-    const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
-    const runFrom = linkRoot === targetDir ? undefined : targetDir;
     throw new MappingWriteError(
       `${PROJECT_ORIGIN_LEAD[origin]} project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
-      `Fix the file, then map the project by running:\n  ${linkCommand(projectKey, path, runFrom)}`,
+      `Fix the file, then map the project by running:\n  ${await linkCommandFor(projectKey, projectRoot)}`,
     );
   }
 }
 
+export function reportProjectCreated(console: Console, projectKey: string): void {
+  console.success(`Created project '${projectKey}' and saved ${SHARED_PROJECT_CONFIG_FILE_NAME}.`);
+}
+
+export function serverBaseUrl(auth: ResolvedAuth): string {
+  return auth.serverUrl.replace(/\/$/, '');
+}
+
 export function projectDashboardUrl(auth: ResolvedAuth, projectKey: string): string {
-  return `${auth.serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
+  return `${serverBaseUrl(auth)}/project/overview?id=${encodeURIComponent(projectKey)}`;
 }
 
 export async function showAnalysisResults(

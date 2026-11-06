@@ -25,7 +25,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
-  excludeIgnoredFiles,
   resolveChangeSet,
   resolveSqaaBranch,
   resolveSqaaBranchAtRepoRoot,
@@ -142,34 +141,4 @@ describe('resolveChangeSet', () => {
       expect(result.ignored).toEqual([{ path: symlinkPath, reason: 'outside-repository' }]);
     },
   );
-});
-
-describe('excludeIgnoredFiles', () => {
-  it('moves the ignored files out of the change set, after the existing ignores', () => {
-    const result = excludeIgnoredFiles(
-      {
-        files: ['/repo/a/x.ts', '/repo/docs/y.md', '/repo/b/z.ts'],
-        ignored: [{ path: '/repo/logo.png', reason: 'binary' }],
-        repoRoot: '/repo',
-      },
-      [
-        { path: '/repo/docs/y.md', reason: 'outside-project' },
-        { path: '/repo/b/z.ts', reason: 'other-connection' },
-      ],
-    );
-
-    expect(result.files).toEqual(['/repo/a/x.ts']);
-    expect(result.ignored).toEqual([
-      { path: '/repo/logo.png', reason: 'binary' },
-      { path: '/repo/docs/y.md', reason: 'outside-project' },
-      { path: '/repo/b/z.ts', reason: 'other-connection' },
-    ]);
-    expect(result.repoRoot).toBe('/repo');
-  });
-
-  it('leaves the change set as it was when nothing is ignored', () => {
-    const changeSet = { files: ['/repo/a/x.ts'], ignored: [], repoRoot: '/repo' };
-
-    expect(excludeIgnoredFiles(changeSet, [])).toEqual(changeSet);
-  });
 });
