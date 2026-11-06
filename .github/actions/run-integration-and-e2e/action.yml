@@ -134,14 +134,14 @@ runs:
       shell: bash
       env:
         CI_TEST_TIMINGS_DIR: tests/coverage/reports/timings/coverage
-      run: bun build-scripts/report-coverage.ts
+      run: bun build-scripts/report-coverage.ts --lcov-only
 
     - name: Upload integration coverage (Linux)
       if: ${{ inputs.os == 'linux' }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: integration-coverage
-        path: tests/coverage/reports/integration/
+        path: tests/coverage/reports/integration/lcov.info
 
     - name: Upload test timings
       if: ${{ always() }}
@@ -150,3 +150,4 @@ runs:
         name: test-timings-${{ inputs.os }}
         path: tests/coverage/reports/timings/
         if-no-files-found: ignore
+

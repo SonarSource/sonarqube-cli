@@ -18,12 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, expect, it } from 'bun:test';
+import { createInstrumenter } from 'istanbul-lib-instrument';
 
+import { processRawDir } from '../../../build-scripts/report-coverage.js';
 import { flushTimings, timeAsync, timeSync } from '../../_common/ci-timing.js';
 
 const previous = process.env.CI_TEST_TIMINGS_DIR;
@@ -62,4 +72,33 @@ it('is opt-in and preserves results and failures while aggregating only counts a
     git: { count: 2, durationMs: expect.any(Number) },
     cleanup: { count: 1, durationMs: expect.any(Number) },
   });
+});
+
+it('keeps merged LCOV records equivalent while preserving local HTML reports', () => {
+  const raw = join(dir, 'raw');
+  mkdirSync(raw, { recursive: true });
+  const source = join(dir, 'source.js');
+  const text = 'function choose(x) { return x ? 1 : 0; }\n';
+  writeFileSync(source, text);
+  const instrumenter = createInstrumenter();
+  instrumenter.instrumentSync(text, source);
+  const data = instrumenter.lastFileCoverage();
+  for (const key of Object.keys(data.s)) data.s[key] = 2;
+  for (const key of Object.keys(data.f)) data.f[key] = 2;
+  for (const key of Object.keys(data.b)) data.b[key] = [2, 1];
+  for (const shard of ['one', 'two']) {
+    writeFileSync(join(raw, `${shard}.json`), JSON.stringify({ [source]: data }));
+  }
+  const local = join(dir, 'local');
+  const ci = join(dir, 'ci');
+  expect(processRawDir(raw, local, 'fixture')).toBe(true);
+  expect(processRawDir(raw, ci, 'fixture', true)).toBe(true);
+  const lcov = readFileSync(join(ci, 'lcov.info'), 'utf8').replaceAll('\r\n', '\n');
+  expect(lcov).toBe(readFileSync(join(local, 'lcov.info'), 'utf8').replaceAll('\r\n', '\n'));
+  expect(lcov).toContain('DA:1,4');
+  expect(lcov).toContain('FNDA:4,choose');
+  expect(lcov).toContain('BRDA:1,0,0,4');
+  expect(lcov).toContain('BRDA:1,0,1,2');
+  expect(existsSync(join(local, 'lcov-report', 'index.html'))).toBe(true);
+  expect(existsSync(join(ci, 'lcov-report'))).toBe(false);
 });
