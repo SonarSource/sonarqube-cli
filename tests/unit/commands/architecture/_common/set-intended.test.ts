@@ -258,6 +258,27 @@ describe('intended backup safety', () => {
     expect(read).toHaveBeenCalledTimes(3);
   });
 
+  it.each([undefined, 'java'] as const)(
+    'requires an exported revision for a clear scoped to %s',
+    async (language) => {
+      const result = await setIntended(
+        api(),
+        { models: [], ...(language ? { language } : {}) },
+        { projectKey: 'test', dryRun: false, backupDir: root },
+      ).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(CommandFailedError);
+      expect((result as Error).message).toContain('requires its exported revision');
+      expect(deleted).toBe(false);
+      const preview = await setIntended(
+        api(),
+        { models: [], ...(language ? { language } : {}) },
+        { projectKey: 'test', dryRun: true, backupDir: root },
+      );
+      expect(preview.mode).toBe('dry-run');
+      expect(deleted).toBe(false);
+    },
+  );
+
   it('quotes Windows and POSIX paths with spaces and apostrophes for their shells', () => {
     expect(shellQuote('C:\\Users\\John Smith\\backup.json', 'win32')).toBe(
       "'C:\\Users\\John Smith\\backup.json'",
