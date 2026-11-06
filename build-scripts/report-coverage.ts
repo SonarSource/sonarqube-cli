@@ -44,7 +44,6 @@ import { type CoverageMapData, createCoverageMap } from 'istanbul-lib-coverage';
 import { createContext } from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
 
-import { flushTimings, timeSync } from '../tests/_common/ci-timing.js';
 import {
   COVERAGE_INTEGRATION_REPORT_DIR,
   COVERAGE_RAW_DIR,
@@ -52,12 +51,7 @@ import {
   COVERAGE_UNIT_REPORT_DIR,
 } from '../tests/coverage/paths.js';
 
-export function processRawDir(
-  rawDir: string,
-  reportDir: string,
-  label: string,
-  lcovOnly = false,
-): boolean {
+function processRawDir(rawDir: string, reportDir: string, label: string): boolean {
   if (!existsSync(rawDir)) {
     console.log(`No ${label} raw coverage dir found at ${rawDir}, skipping.`);
     return false;
@@ -70,37 +64,23 @@ export function processRawDir(
   console.log(`Processing ${jsonFiles.length} ${label} coverage file(s)...`);
   const coverageMap = createCoverageMap({});
   for (const file of jsonFiles) {
-    const data = timeSync(
-      'coverage-read',
-      () => JSON.parse(readFileSync(join(rawDir, file), 'utf-8')) as CoverageMapData,
-    );
-    timeSync('coverage-merge', () => coverageMap.merge(data));
+    const data = JSON.parse(readFileSync(join(rawDir, file), 'utf-8')) as CoverageMapData;
+    coverageMap.merge(data);
   }
   const ctx = createContext({ coverageMap, dir: reportDir });
-  timeSync('coverage-render', () => reports.create(lcovOnly ? 'lcovonly' : 'lcov').execute(ctx));
+  reports.create('lcov').execute(ctx);
   console.log(`${label} lcov written to ${reportDir}/lcov.info`);
   return true;
 }
 
-if (import.meta.main) {
-  const lcovOnly = process.argv.includes('--lcov-only');
-  const wroteIntegration = processRawDir(
-    COVERAGE_RAW_DIR,
-    COVERAGE_INTEGRATION_REPORT_DIR,
-    'integration',
-    lcovOnly,
-  );
-  const wroteUnit = processRawDir(
-    COVERAGE_UNIT_RAW_DIR,
-    COVERAGE_UNIT_REPORT_DIR,
-    'unit',
-    lcovOnly,
-  );
+const wroteIntegration = processRawDir(
+  COVERAGE_RAW_DIR,
+  COVERAGE_INTEGRATION_REPORT_DIR,
+  'integration',
+);
+const wroteUnit = processRawDir(COVERAGE_UNIT_RAW_DIR, COVERAGE_UNIT_REPORT_DIR, 'unit');
 
-  if (!wroteIntegration && !wroteUnit) {
-    console.error('No coverage data found in either raw dir. Run tests with coverage first.');
-    process.exit(1);
-  }
-
-  flushTimings();
+if (!wroteIntegration && !wroteUnit) {
+  console.error('No coverage data found in either raw dir. Run tests with coverage first.');
+  process.exit(1);
 }

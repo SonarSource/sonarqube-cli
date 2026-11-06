@@ -18,8 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { timeSync } from '../../../_common/ci-timing.js';
-
 /** Central git subprocess helper for `integrate/git.test.ts`. */
 
 export type GitSpawnResult = ReturnType<typeof Bun.spawnSync>;
@@ -72,14 +70,12 @@ function gitFailureMessage(
 
 /** Run `git` with centralized exit-code checking; throws with stdout/stderr when the exit code is unexpected. */
 export function gitSpawn(args: string[], options: GitSpawnOptions): GitSpawnResult {
-  const result = timeSync('git', () =>
-    Bun.spawnSync(['git', ...args], {
-      cwd: options.cwd,
-      env: options.env,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    }),
-  );
+  const result = Bun.spawnSync(['git', ...args], {
+    cwd: options.cwd,
+    env: options.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const exitCode = result.exitCode;
   const expected = options.expectedExitCode ?? 0;
   if (exitCode === null || exitCode !== expected) {

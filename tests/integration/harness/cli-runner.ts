@@ -23,7 +23,6 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { recordTiming } from '../../_common/ci-timing.js';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { COVERAGE_BINARY, COVERAGE_RAW_DIR } from '../../coverage/paths.js';
 import { IS_WINDOWS } from './platform';
@@ -92,7 +91,6 @@ export function spawnCliProcess(
     }),
   );
 
-  void proc.exited.then(() => recordTiming('cli', Date.now() - startedAt));
   return { proc, timeoutMs, startedAt };
 }
 
@@ -162,7 +160,6 @@ export async function runCliWithRealTty(
   clearTimeout(timer);
   if (isSessionStdin(proc.stdin)) void proc.stdin.end();
 
-  recordTiming('cli', Date.now() - startedAt);
   return { exitCode, stdout, stderr, durationMs: Date.now() - startedAt };
 }
 

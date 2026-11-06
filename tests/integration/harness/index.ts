@@ -29,7 +29,6 @@ import { ENV_ORG, ENV_SERVER, ENV_TOKEN } from '@/core/auth/auth-resolver.ts';
 import { ENV_DO_NOT_TRACK, ENV_SQAA_RETRY_BASE_DELAY_MS } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
-import { timeAsync, timeSync } from '../../_common/ci-timing.js';
 import { applyIsolatedSpawnEnv } from '../../_common/isolated-cli-env.js';
 import { getCliBinaryPath, runCliWithRealTty, type TtyResponse } from './cli-runner.js';
 import { applyLoopbackSonarCloudEnvOverrides, inferRecordedCloudRegion } from './cloud-auth-url.js';
@@ -131,7 +130,7 @@ export class TestHarness {
     const pathBinDir = join(this.userHome.path, '.local', 'bin');
     mkdirSync(pathBinDir, { recursive: true });
     const sonarAlias = join(pathBinDir, IS_WINDOWS ? 'sonar.exe' : 'sonar');
-    timeSync('binary-copy', () => copyFileSync(getCliBinaryPath(), sonarAlias));
+    copyFileSync(getCliBinaryPath(), sonarAlias);
     if (!IS_WINDOWS) {
       chmodSync(sonarAlias, 0o755);
     }
@@ -148,7 +147,7 @@ export class TestHarness {
       : this.userHome.dir('.local', 'share', 'sonarqube-cli', 'bin');
     mkdirSync(installDir.path, { recursive: true });
     const binaryPath = installDir.file(IS_WINDOWS ? 'sonar.exe' : 'sonar').path;
-    timeSync('binary-copy', () => copyFileSync(getCliBinaryPath(), binaryPath));
+    copyFileSync(getCliBinaryPath(), binaryPath);
     if (!IS_WINDOWS) {
       chmodSync(binaryPath, 0o755);
     }
@@ -394,7 +393,7 @@ export class TestHarness {
     );
     await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
 
-    await timeAsync('cleanup', () => this.removeTempDir());
+    await this.removeTempDir();
   }
 
   // Windows DeleteFile on a just-run CAG/secrets PE can block 6–8s, past Bun's 5s
