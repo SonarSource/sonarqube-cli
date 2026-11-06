@@ -22,11 +22,14 @@ import { findInstalledIntegrationIds } from '@/commands/integrate/_common/instal
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
   type UnboundNewOptions,
+  validateScanOptions,
   validateUnboundNewOptions,
+  warnIgnoredScanOptions,
   warnIgnoredUnboundNewOptions,
 } from './options.ts';
 import { renderInitOutcome } from './output.ts';
@@ -35,6 +38,13 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import {
+  NOT_RUN,
+  reportScan,
+  runFirstScan,
+  type ScanOptions,
+  type ScanResult,
+} from './steps/scan.ts';
 import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
@@ -43,6 +53,9 @@ export interface InitOptions {
   project?: string;
   name?: string;
   visibility?: string;
+  scannerProperty?: string[];
+  verbose?: boolean;
+  detach?: boolean;
 }
 
 /**
@@ -52,17 +65,29 @@ export interface InitOptions {
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
+  const { console } = ctx;
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
   const unboundNewOptions = validateUnboundNewOptions(options);
+  const scanOptions = validateScanOptions(options);
 
-  const { outcome, auth } = await run(projectRoot, ctx, interactive, unboundNewOptions);
+  const { outcome, auth, deps } = await run(
+    projectRoot,
+    ctx,
+    console,
+    interactive,
+    unboundNewOptions,
+  );
   if (outcome.kind !== 'unbound' && outcome.kind !== 'declined') {
-    warnIgnoredUnboundNewOptions(unboundNewOptions, ctx.console);
+    warnIgnoredUnboundNewOptions(unboundNewOptions, console);
+  }
+  const scan = await scanCreatedProject(outcome, projectRoot, deps, scanOptions);
+  if (scan.status === 'not-run') {
+    warnIgnoredScanOptions(scanOptions, console);
   }
   const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, ctx.console, {
+  renderInitOutcome(outcome, auth, console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
   if (suggestIntegrate && interactive && !declined) {
@@ -70,17 +95,33 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   }
 }
 
+/** Only a project this run created gets a first analysis; a linked or bound one already has results. */
+async function scanCreatedProject(
+  outcome: InitOutcome,
+  projectRoot: string,
+  deps: DetectDeps,
+  options: ScanOptions,
+): Promise<ScanResult> {
+  if (outcome.kind !== 'unbound') {
+    return NOT_RUN;
+  }
+  const scan = await runFirstScan(projectRoot, outcome.projectKey, deps, options);
+  reportScan(scan, outcome.projectKey, deps.console);
+  return scan;
+}
+
 async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
+  console: Console,
   interactive: boolean,
   unboundNewOptions: UnboundNewOptions,
-): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
+): Promise<{ outcome: InitOutcome; auth: ResolvedAuth; deps: DetectDeps }> {
   const auth = await resolveInitAuth(ctx, interactive);
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
-  const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
+  const deps: DetectDeps = { auth, http, console, interactive };
   const detected = await detectInitPath(projectRoot, deps);
-  return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth };
+  return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth, deps };
 }
 
 /**
