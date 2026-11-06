@@ -610,6 +610,7 @@ export class FakeSonarQubeServerBuilder {
   private revokeTokenResponseBody = '';
   private sqaaResponse?: SqaaResponseConfig;
   private sqaaStatusCode?: number;
+  private sqaaStatusSequence: number[] = [];
   private sqaaStatusBody?: string;
   private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
@@ -626,6 +627,7 @@ export class FakeSonarQubeServerBuilder {
   private organizationsSearchErrorCode?: number;
   private projectsSearchErrorStatusCode?: number;
   private projectsSearchErrorBody?: string;
+  private projectCreateErrorBody?: string;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -640,7 +642,6 @@ export class FakeSonarQubeServerBuilder {
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
   private projectBindingsStatusCode = 200;
-  private boundProjectsPutStatusCode?: number;
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
@@ -825,9 +826,20 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Make POST /api/projects/create reject with a 400 and this body. */
+  withProjectCreateRejected(body: string): this {
+    this.projectCreateErrorBody = body;
+    return this;
+  }
+
   withProjectsSearchError(statusCode: number, body = ''): this {
     this.projectsSearchErrorStatusCode = statusCode;
     this.projectsSearchErrorBody = body;
+    return this;
+  }
+
+  withSqaaStatusSequence(statuses: number[]): this {
+    this.sqaaStatusSequence = [...statuses];
     return this;
   }
 
@@ -1005,6 +1017,13 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  private projectsLookupResponse?: { status: number; body: unknown };
+
+  withProjectsLookupResponse(status: number, body: unknown): this {
+    this.projectsLookupResponse = { status, body };
+    return this;
+  }
+
   withProjectBindingsStatus(statusCode: number): this {
     this.projectBindingsStatusCode = statusCode;
     return this;
@@ -1098,12 +1117,6 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
-  /** Makes `PUT` on bound-projects answer with this status (405 on a server older than 2025.6); `POST` keeps working. */
-  withoutBoundProjectsPut(statusCode = 405): this {
-    this.boundProjectsPutStatusCode = statusCode;
-    return this;
-  }
-
   withAnalyzedProjects(projectKeys: string[]): this {
     for (const key of projectKeys) {
       this.analyzedProjectKeys.add(key);
@@ -1112,6 +1125,7 @@ export class FakeSonarQubeServerBuilder {
   }
 
   start(): Promise<FakeSonarQubeServer> {
+    const projectsLookupResponse = this.projectsLookupResponse;
     const projects = new Map([...this.projectBuilders.entries()].map(([k, v]) => [k, v.getData()]));
     [...projects.values()].forEach(({ architecture }, index) =>
       architecture?.assignProjectIndex(index),
@@ -1136,6 +1150,7 @@ export class FakeSonarQubeServerBuilder {
       revokeTokenResponseBody,
       sqaaResponse,
       sqaaStatusCode,
+      sqaaStatusSequence,
       sqaaStatusBody,
       sqaaPayloadLimit,
       sqaaEntitlementOrgs,
@@ -1156,6 +1171,7 @@ export class FakeSonarQubeServerBuilder {
       organizationsSearchErrorCode,
       projectsSearchErrorStatusCode,
       projectsSearchErrorBody,
+      projectCreateErrorBody,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -1169,7 +1185,6 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       projectBindingsStatusCode,
-      boundProjectsPutStatusCode,
       dopSettingsStatusCode,
       patResponses,
       gitlabRepos,
@@ -1605,6 +1620,21 @@ export class FakeSonarQubeServerBuilder {
           return architectureResponse;
         }
 
+        if (path === '/api/v2/components/projects') {
+          const matches = [...projects.values()]
+            .filter(({ key }) => key === query.keys)
+            .map(({ key }) => ({ id: `${key}-project-id`, key }));
+          return Response.json(
+            projectsLookupResponse
+              ? projectsLookupResponse.body
+              : {
+                  projects: matches,
+                  page: { pageIndex: 1, pageSize: 1, total: matches.length },
+                },
+            { status: projectsLookupResponse?.status ?? 200 },
+          );
+        }
+
         if (path === '/api/project_branches/list') {
           const projectKey = query.project;
           const projectData = projectKey ? projects.get(projectKey) : undefined;
@@ -2034,6 +2064,22 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
+        if (path === '/api/projects/create' && req.method === 'POST') {
+          if (projectCreateErrorBody !== undefined) {
+            return new Response(projectCreateErrorBody, {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          const params = new URLSearchParams(body ?? '');
+          return new Response(
+            JSON.stringify({
+              project: { key: params.get('project'), name: params.get('name') },
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
         if (path === '/api/alm_integration/provision_projects' && req.method === 'POST') {
           provisionConcurrency.current++;
           provisionConcurrency.peak = Math.max(
@@ -2213,12 +2259,13 @@ export class FakeSonarQubeServerBuilder {
           (path === '/a3s-analysis/analyses' || path === '/api/v2/a3s/analyses') &&
           req.method === 'POST'
         ) {
-          if (sqaaStatusCode !== undefined) {
+          const statusCode = sqaaStatusSequence.shift() ?? sqaaStatusCode;
+          if (statusCode !== undefined && statusCode !== 200) {
             if (sqaaStatusBody === '') {
-              return new Response('', { status: sqaaStatusCode });
+              return new Response('', { status: statusCode });
             }
             return new Response(JSON.stringify({ message: sqaaStatusBody ?? 'simulated error' }), {
-              status: sqaaStatusCode,
+              status: statusCode,
               headers: { 'Content-Type': 'application/json' },
             });
           }
@@ -2431,7 +2478,9 @@ export class FakeSonarQubeServerBuilder {
           const organization = (githubOrganizations.get(query.almSetting ?? '') ?? []).find(
             (o) => o.key === query.organization,
           );
-          const repos = organization?.repos ?? [];
+          const repos = (organization?.repos ?? []).filter(
+            (repo) => !query.q || repo.name.toLowerCase().includes(query.q.toLowerCase()),
+          );
           const pageIndex = Number.parseInt(query.p ?? '1', 10);
           const pageSize = Number.parseInt(query.ps ?? '100', 10);
           const start = (pageIndex - 1) * pageSize;
@@ -2487,18 +2536,12 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (
-          path === '/api/v2/dop-translation/bound-projects' &&
-          (req.method === 'POST' || req.method === 'PUT')
-        ) {
+        if (path === '/api/v2/dop-translation/bound-projects' && req.method === 'POST') {
           if (boundProjectsStatusCode !== undefined) {
             return new Response(JSON.stringify({ errors: [{ msg: 'Bound project error' }] }), {
               status: boundProjectsStatusCode,
               headers: { 'Content-Type': 'application/json' },
             });
-          }
-          if (req.method === 'PUT' && boundProjectsPutStatusCode !== undefined) {
-            return new Response('', { status: boundProjectsPutStatusCode });
           }
           const payload = JSON.parse(body ?? '{}') as {
             projectKey: string;
@@ -2512,23 +2555,24 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          const existed = projectBindings.some((b) => b.projectKey === payload.projectKey);
-          if (!existed || req.method === 'POST') {
+          const existed =
+            projects.has(payload.projectKey) ||
+            projectBindings.some((b) => b.projectKey === payload.projectKey);
+          if (existed) {
+            return new Response(
+              JSON.stringify({ message: `Project '${payload.projectKey}' already exists` }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          if (!existed) {
             projectBindings.push({
               projectKey: payload.projectKey,
               repository: payload.repositoryIdentifier,
               dopSettingId: payload.devOpsPlatformSettingId,
             });
-          }
-          if (req.method === 'PUT') {
-            return new Response(
-              JSON.stringify({
-                projectId: `project-${payload.projectKey}`,
-                bindingId: `binding-${payload.projectKey}`,
-                newProjectCreated: !existed,
-              }),
-              { status: 200, headers: { 'Content-Type': 'application/json' } },
-            );
           }
           return new Response(JSON.stringify({}), {
             status: 201,

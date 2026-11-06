@@ -21,7 +21,7 @@
 // Generic install/resolve pipeline for SonarSource CLI binaries.sonarsource.com dependencies.
 // Per-binary modules wrap this with a fixed `BinarySpec`.
 
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, linkSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
@@ -34,6 +34,7 @@ import {
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
+import logger from '@/core/observability/logger.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import type { Console, OutputChannel } from '@/core/ui/console.ts';
 
@@ -141,35 +142,64 @@ async function downloadAndInstall(
     platform,
     downloadExtension,
   );
-  await console.withSpinner(
-    `Downloading ${spec.name} ${spec.version}`,
-    () => downloadBinary(downloadUrl, binaryPath),
-    channel,
-  );
-
+  const stagingDir = mkdtempSync(join(resolvedBinDir, '.install-'));
+  const stagedPath = join(stagingDir, binaryName);
+  let published: boolean;
   try {
     await console.withSpinner(
-      'Verifying signature',
-      () => verifyBinarySignature(spec.name, binaryPath, platform, spec.signatures, spec.publicKey),
+      `Downloading ${spec.name} ${spec.version}`,
+      () => downloadBinary(downloadUrl, stagedPath),
       channel,
     );
-  } catch (err) {
-    rmSync(binaryPath, { force: true });
-    throw err;
+    await console.withSpinner(
+      'Verifying signature',
+      () => verifyBinarySignature(spec.name, stagedPath, platform, spec.signatures, spec.publicKey),
+      channel,
+    );
+    if (platform.os !== 'windows') {
+      await makeExecutable(stagedPath);
+    }
+    await console.withSpinner(
+      'Verifying installation',
+      () => verifyInstallation(stagedPath),
+      channel,
+    );
+    published = publishBinary(stagedPath, binaryPath, options.force ?? false);
+  } finally {
+    cleanupStagingDirectory(stagingDir);
   }
-
-  if (platform.os !== 'windows') {
-    await makeExecutable(binaryPath);
+  if (!published) {
+    return { skipped: true, binaryPath };
   }
-
-  await console.withSpinner(
-    'Verifying installation',
-    () => verifyInstallation(binaryPath),
-    channel,
-  );
 
   recordInstalledDependency(spec.name, spec.version, binaryPath, console);
   cleanupOldVersionBinaries(resolvedBinDir, spec.name, binaryName);
 
   return { skipped: false, binaryPath };
+}
+
+function cleanupStagingDirectory(stagingDir: string): void {
+  try {
+    rmSync(stagingDir, { recursive: true, force: true });
+  } catch (err) {
+    logger.debug(`Failed to remove staging directory ${stagingDir}: ${(err as Error).message}`);
+  }
+}
+
+function publishBinary(stagedPath: string, binaryPath: string, force: boolean): boolean {
+  if (force) {
+    // Never unlink the destination: a failed Windows replacement must preserve it.
+    renameSync(stagedPath, binaryPath);
+    return true;
+  }
+  try {
+    // An atomic link lets concurrent processes keep the first verified installation.
+    linkSync(stagedPath, binaryPath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      return false;
+    }
+    throw err;
+  }
 }

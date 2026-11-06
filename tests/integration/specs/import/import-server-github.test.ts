@@ -40,10 +40,10 @@ interface BoundProjectPayload {
   monorepo: boolean;
 }
 
-function putPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
+function postPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
   return server
     .getRecordedRequests()
-    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'PUT')
+    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'POST')
     .map((r) => JSON.parse(r.body ?? '{}') as BoundProjectPayload);
 }
 
@@ -93,6 +93,194 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(repositoryCalls.every((r) => r.query.almSetting === 'my-github')).toBe(true);
   });
 
+  it('reports truncated discovery and imports only the bounded subset', async () => {
+    const repositories = Array.from({ length: 1500 }, (_, i) =>
+      githubRepo(i + 1, `acme/repo-${i}`),
+    );
+    const server = await startServer((s) =>
+      s.withGithubOrganizations('my-github', [{ key: 'acme', repos: repositories }]),
+    );
+
+    const result = await harness.run('import --all');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      "discovery is incomplete for organization 'acme'",
+    );
+    expect(result.stdout + result.stderr).toContain(
+      'Imported 1000 repositories from the discovered subset',
+    );
+    expect(postPayloads(server)).toHaveLength(1000);
+    const pages = server
+      .getRecordedRequests()
+      .filter((request) => request.path === '/api/alm_integrations/list_github_repositories')
+      .map((request) => Number(request.query.p));
+    expect(pages).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it('continues into later organizations after truncation and retains the incomplete outcome', async () => {
+    const repositories = Array.from({ length: 1500 }, (_, i) =>
+      githubRepo(i + 1, `acme/repo-${i}`, { sqProjectKey: `acme_${i}` }),
+    );
+    const server = await startServer((s) =>
+      s.withGithubOrganizations('my-github', [
+        { key: 'acme', repos: repositories },
+        { key: 'octo', repos: [githubRepo(2000, 'octo/api')] },
+      ]),
+    );
+
+    const result = await harness.run('import --all');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain(
+      'Imported 1 repository from the discovered subset',
+    );
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+      'octo/api',
+    ]);
+  });
+
+  it('finds an explicit repository beyond the listing cap with a filtered request', async () => {
+    const repositories = Array.from({ length: 1500 }, (_, i) =>
+      githubRepo(i + 1, `acme/repo-${i}`),
+    );
+    const server = await startServer((s) =>
+      s.withGithubOrganizations('my-github', [{ key: 'acme', repos: repositories }]),
+    );
+
+    const result = await harness.run('import --repo acme/repo-1499');
+
+    expect(result.exitCode).toBe(0);
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+      'acme/repo-1499',
+    ]);
+    const requests = server
+      .getRecordedRequests()
+      .filter((request) => request.path === '/api/alm_integrations/list_github_repositories');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].query).toMatchObject({ organization: 'acme', q: 'repo-1499', p: '1' });
+  });
+
+  it('finds an explicit owner on a later organization page', async () => {
+    const organizations = Array.from({ length: 101 }, (_, i) => ({
+      key: `org${i}`,
+      repos: [githubRepo(i + 1, `org${i}/api`)],
+    }));
+    const server = await startServer((s) => s.withGithubOrganizations('my-github', organizations));
+
+    const result = await harness.run('import --repo org100/api');
+
+    expect(result.exitCode).toBe(0);
+    expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual([
+      'org100/api',
+    ]);
+    expect(
+      server
+        .getRecordedRequests()
+        .some(
+          (request) =>
+            request.path === '/api/alm_integrations/list_github_organizations' &&
+            request.query.p === '2',
+        ),
+    ).toBe(true);
+  });
+
+  it('does not query repositories for an owner outside the visible organizations', async () => {
+    const server = await startServer((s) =>
+      s.withGithubOrganizations('my-github', [{ key: 'acme', repos: [githubRepo(1, 'acme/api')] }]),
+    );
+
+    const result = await harness.run('import --repo other/api');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('not found');
+    expect(postPayloads(server)).toEqual([]);
+    expect(
+      server
+        .getRecordedRequests()
+        .filter((request) => request.path === '/api/alm_integrations/list_github_repositories'),
+    ).toEqual([]);
+  });
+
+  it('shares organization pages across several explicit repository selections', async () => {
+    const organizations = Array.from({ length: 101 }, (_, i) => ({
+      key: `org${i}`,
+      repos: [githubRepo(i * 2 + 1, `org${i}/api`), githubRepo(i * 2 + 2, `org${i}/web`)],
+    }));
+    const server = await startServer((s) => s.withGithubOrganizations('my-github', organizations));
+
+    const result = await harness.run('import --repo org0/api --repo org100/api --repo org100/web');
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      postPayloads(server)
+        .map((payload) => payload.repositoryIdentifier)
+        .sort(),
+    ).toEqual(['org0/api', 'org100/api', 'org100/web']);
+    const pages = server
+      .getRecordedRequests()
+      .filter(
+        (request) =>
+          request.path === '/api/alm_integrations/list_github_organizations' && request.query.p,
+      )
+      .map((request) => Number(request.query.p));
+    expect(pages).toEqual([1, 2]);
+  });
+
+  it.each([
+    { count: 150, exactIndex: 120, pages: [1, 2], succeeds: true },
+    { count: 150, exactIndex: -1, pages: [1, 2], succeeds: false },
+    { count: 100, exactIndex: -1, pages: [1], succeeds: false },
+    { count: 1500, exactIndex: 999, pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], succeeds: true },
+    { count: 1500, exactIndex: 1499, pages: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], succeeds: false },
+  ])(
+    'bounds filtered lookup with $count matches and exact index $exactIndex',
+    async ({ count, exactIndex, pages, succeeds }) => {
+      const repositories = Array.from({ length: count }, (_, i) =>
+        githubRepo(i + 1, i === exactIndex ? 'acme/api' : `acme/api-${i}`),
+      );
+      const server = await startServer((s) =>
+        s.withGithubOrganizations('my-github', [{ key: 'acme', repos: repositories }]),
+      );
+
+      const result = await harness.run('import --repo acme/api');
+
+      expect(result.exitCode).toBe(succeeds ? 0 : 1);
+      expect(postPayloads(server).map((payload) => payload.repositoryIdentifier)).toEqual(
+        succeeds ? ['acme/api'] : [],
+      );
+      if (!succeeds) {
+        const output = result.stdout + result.stderr;
+        if (count > 1000) {
+          expect(output).toContain("GitHub repository lookup is incomplete for 'acme/api'");
+          expect(output).toContain('The repository may exist beyond this limit.');
+          expect(output).not.toContain('not found');
+        } else {
+          expect(output).toContain('not found');
+        }
+      }
+      const requests = server
+        .getRecordedRequests()
+        .filter((request) => request.path === '/api/alm_integrations/list_github_repositories');
+      expect(requests.map((request) => Number(request.query.p))).toEqual([...pages]);
+      expect(requests.every((request) => request.query.q === 'api')).toBe(true);
+    },
+  );
+
+  it('rejects a search result whose full name does not exactly match the explicit selection', async () => {
+    const server = await startServer((s) =>
+      s.withGithubOrganizations('my-github', [
+        { key: 'acme', repos: [githubRepo(1, 'acme/api-extra')] },
+      ]),
+    );
+
+    const result = await harness.run('import --repo acme/api');
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout + result.stderr).toContain('not found');
+    expect(postPayloads(server)).toEqual([]);
+  });
+
   it('sends the full name as repositoryIdentifier and derives the project key from it', async () => {
     const server = await startServer((s) =>
       s.withGithubOrganizations('my-github', [
@@ -103,7 +291,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     const result = await harness.run('import --all');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server)).toEqual([
+    expect(postPayloads(server)).toEqual([
       {
         projectKey: 'acme_api.v2',
         projectName: 'api.v2',
@@ -125,7 +313,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     const result = await harness.run('import --repo octo/api');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['octo/api']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['octo/api']);
   });
 
   it('pages through the repositories of several organizations', async () => {
@@ -142,7 +330,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 150 repositories');
-    expect(putPayloads(server)).toHaveLength(150);
+    expect(postPayloads(server)).toHaveLength(150);
     const acmeCalls = server
       .getRecordedRequests()
       .filter(
@@ -171,7 +359,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 1 repository');
     expect(result.stdout).toContain('already imported');
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['acme/web']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['acme/web']);
   });
 
   it('fails when no organization has a repository', async () => {
@@ -185,7 +373,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
     expect(result.stdout + result.stderr).toContain(
       'No repositories found for this DevOps platform.',
     );
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 
   it('fails with the connect URL when GitHub returns no organizations for the token', async () => {
@@ -203,7 +391,7 @@ describe('sonar import: GitHub on SonarQube Server', () => {
         .getRecordedRequests()
         .some((r) => r.path === '/api/alm_integrations/list_github_repositories'),
     ).toBe(false);
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 
   it('prints the connect URL with dopSetting when no token is connected, and lists nothing', async () => {
@@ -229,6 +417,6 @@ describe('sonar import: GitHub on SonarQube Server', () => {
         .getRecordedRequests()
         .some((r) => r.path === '/api/alm_integrations/list_github_repositories'),
     ).toBe(false);
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 });

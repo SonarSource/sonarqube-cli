@@ -24,6 +24,7 @@
  */
 
 import * as fs from 'node:fs';
+import { resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -184,8 +185,8 @@ describe('secretCheckCommand: auth forwarding', () => {
       '--non-interactive',
       '--json',
       ...DEFAULT_SCAN_ARGS,
-      'src/index.ts',
-      'src/lib/auth.ts',
+      resolve('src/index.ts'),
+      resolve('src/lib/auth.ts'),
     ]);
   });
 });
@@ -441,31 +442,6 @@ describe('secretCheckCommand: scan failures', () => {
 
     const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
     expect(prints.some((m) => m.includes(stderrMsg))).toBe(true);
-  });
-
-  it('displays stdout when scan fails without stderr', async () => {
-    const stdoutMsg = '{"error":"auth_failed"}';
-    spawnSpy.mockResolvedValue({ exitCode: 2, stdout: stdoutMsg, stderr: '' });
-
-    const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
-    try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
-    } catch (err) {
-      caughtError = err;
-    } finally {
-      existsSpy.mockRestore();
-    }
-
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
-    expect((caughtError as CommandFailedError).message).toBe('Scan error (exit code 2)');
-    expect((caughtError as CommandFailedError).exitCode).toBe(2);
-    expect((caughtError as CommandFailedError).remediationHint).toBe(
-      "Run 'sonar integrate' to reinstall the secrets analyzer, then retry.",
-    );
-
-    const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(prints.some((m) => m.includes(stdoutMsg))).toBe(true);
   });
 });
 

@@ -21,34 +21,51 @@
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 
-import type { InitOutcome } from './init-outcome.ts';
+import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
+import {
+  type UnboundNewOptions,
+  validateUnboundNewOptions,
+  warnIgnoredUnboundNewOptions,
+} from './options.ts';
 import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
 import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { runUnboundNew } from './steps/unbound.ts';
 
 export interface InitOptions {
   path?: string;
   nonInteractive?: boolean;
+  project?: string;
+  name?: string;
+  visibility?: string;
 }
 
 /**
  * Signs in, resolves the organization, detects the project and selects the onboarding path.
- * It runs `bound-new` and `link-existing` and only reports the other paths. It keeps everything it completed:
+ * It runs `bound-new`, `link-existing` and `unbound-new`. It keeps everything it completed:
  * running it again resumes from whatever is already in place.
  */
 export async function init(options: InitOptions, ctx: CommandInvocationContext): Promise<void> {
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
+  const unboundNewOptions = validateUnboundNewOptions(options);
 
-  const { outcome, auth } = await run(projectRoot, ctx, interactive);
+  const { outcome, auth } = await run(projectRoot, ctx, interactive, unboundNewOptions);
+  if (outcome.kind !== 'unbound' && outcome.kind !== 'declined') {
+    warnIgnoredUnboundNewOptions(unboundNewOptions, ctx.console);
+  }
+  const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, ctx.console, { suggestIntegrate: suggestIntegrate && !interactive });
-  if (suggestIntegrate && interactive) {
+  renderInitOutcome(outcome, ctx.console, {
+    suggestIntegrate: suggestIntegrate && (declined || !interactive),
+  });
+  if (suggestIntegrate && interactive && !declined) {
     await offerIntegrate(ctx, auth);
   }
 }
@@ -57,20 +74,40 @@ async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   interactive: boolean,
+  unboundNewOptions: UnboundNewOptions,
 ): Promise<{ outcome: InitOutcome; auth: ResolvedAuth }> {
   const auth = await resolveInitAuth(ctx, interactive);
-  const deps = { auth, console: ctx.console, interactive };
-  return { outcome: await runDetectedPath(await detectInitPath(projectRoot, deps), deps), auth };
+  const http = new SonarHttpClient(auth.serverUrl, auth.token);
+  const deps: DetectDeps = { auth, http, console: ctx.console, interactive };
+  const detected = await detectInitPath(projectRoot, deps);
+  return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth };
 }
 
-function runDetectedPath(outcome: InitOutcome, deps: DetectDeps): Promise<InitOutcome> {
-  switch (outcome.path) {
+/**
+ * `bound-new` and `link-existing` hand back `unbound-new` only when the user declined binding or
+ * linking, so it continues into the project creation.
+ */
+async function runDetectedPath(
+  detected: InitPath,
+  deps: DetectDeps,
+  unboundNewOptions: UnboundNewOptions,
+): Promise<InitOutcome> {
+  switch (detected.path) {
     case 'bound-new':
-      return runBoundNew(outcome, deps);
+      return fallBack(await runBoundNew(detected, deps), deps, unboundNewOptions);
     case 'link-existing':
-      return runLinkExisting(outcome, deps);
-    case 'complete':
+      return fallBack(await runLinkExisting(detected, deps), deps, unboundNewOptions);
     case 'unbound-new':
-      return Promise.resolve(outcome);
+      return runUnboundNew(detected, deps, unboundNewOptions);
+    case 'complete':
+      return { kind: 'complete', projectKeys: detected.projectKeys };
   }
+}
+
+function fallBack(
+  result: InitOutcome | UnboundNewPath,
+  deps: DetectDeps,
+  unboundNewOptions: UnboundNewOptions,
+): InitOutcome | Promise<InitOutcome> {
+  return 'kind' in result ? result : runUnboundNew(result, deps, unboundNewOptions);
 }

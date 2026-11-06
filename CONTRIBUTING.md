@@ -11,25 +11,30 @@
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) 1.3.9+ — required for running tests and building binaries
+- [mise](https://mise.jdx.dev/getting-started.html) — install it and activate it in your shell.
+- [Bun](https://bun.sh/) — use the version pinned in `mise.toml`. The setup below installs it.
 
 ## Setup
 
+From the repository root, install the pinned toolchain and dependencies:
+
 ```bash
-bun install
+mise trust
+mise install
+bun install --frozen-lockfile
 ```
 
 ## Building
 
-### TypeScript build (for npm distribution)
+The supported distribution is a standalone executable. There is no npm distribution build.
+
+To run the CLI from source during development:
 
 ```bash
-bun run build
+bun run dev --help
 ```
 
-Output goes to `dist/`.
-
-### Self-contained binary (for releases)
+### Self-contained binary
 
 ```bash
 bun run build:binary
@@ -42,6 +47,9 @@ Produces `dist/sonarqube-cli` using Bun's single-file compiler. To use it locall
 Run these to validate your local build:
 
 ```bash
+# Check formatting
+bun run format:check
+
 # Lint (ESLint + TypeScript-aware rules)
 bun run lint
 
@@ -58,7 +66,7 @@ bun run typecheck
 # Unit tests
 bun run test:unit
 
-# Integration tests (require env vars — see below)
+# Integration tests (isolated harness; setup runs automatically)
 bun run test:integration
 
 # Unit + integration
@@ -73,16 +81,24 @@ bun run test:coverage
 
 ### Integration tests
 
-Integration tests hit real external services and require environment variables. The CLI targets both **SonarQube Server** and **SonarQube Cloud**, so the token can come from either product:
+Integration tests run the compiled binary against fake servers in isolated temporary environments. They do not require real SonarQube Server or Cloud tokens.
+
+`bun run test:integration` automatically runs `pretest:integration` to build the binary and prepare test resources. To run one integration test file, prepare the resources first:
 
 ```bash
-export SONAR_SECRETS_TOKEN="sqp_xxxxx"                # SonarQube Server or Cloud token for secret scanning
-export SONAR_SECRETS_AUTH_URL="https://sonarcloud.io" # SonarQube Server or Cloud URL for onboard-agent tests
+bun run pretest:integration
+bun test tests/integration/specs/<command>/<file>.test.ts
 ```
 
-Obtain a token from your SonarQube instance: **My Account → Security → Generate token** (SonarQube Cloud at https://sonarcloud.io, or your self-hosted SonarQube Server).
+Repeat the setup after changes to the CLI source or test resources.
 
-If the variables are not set, the relevant tests are skipped automatically — this is expected for local development.
+### End-to-end tests
+
+Run `bun run pretest:integration` before `bun run test:e2e` to build the CLI and prepare the shared binary fixtures.
+
+E2E tests cover dependencies that the isolated integration harness does not replace. Requirements vary by suite: OS keychain access, network access for installers and binary downloads, real SonarQube services, or external tools. Check the relevant tests under `tests/e2e/` before running them. Suites can skip tests when their prerequisites are unavailable; a skipped test does not validate that behavior.
+
+The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/CLAUDE.md) for harness and coverage details.
 
 ## macOS code signing (optional)
 

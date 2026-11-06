@@ -1625,6 +1625,35 @@ describe('analyze agentic — change-set mode (no --file)', () => {
     { timeout: 30000 },
   );
 
+  it.each([false, true])(
+    'does not analyze when a large run is declined (explicit files: %s)',
+    async (explicit) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      const files = Array.from({ length: 51 }, (_, i) => `file${i}.ts`);
+      for (const file of files) harness.cwd.writeFile(file, 'export const x = 1;');
+      const args = explicit ? files.map((file) => `--file ${file}`).join(' ') : '';
+      const session = harness.runInteractive(`analyze agentic ${args}`, {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+      await session.decline('Do you wish to proceed?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(server.getRecordedRequests().filter((r) => r.path.endsWith('/analyses'))).toHaveLength(
+        0,
+      );
+    },
+    { timeout: 15000 },
+  );
+
   it(
     'skips the large change set warning with --force',
     async () => {
@@ -2282,6 +2311,7 @@ describe('analyze agentic — API error codes', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('still unavailable');
+      expect(result.stdout).toContain('Server busy');
       expect(result.stdout + result.stderr).toContain(
         '  → Check your network connection and try again later.',
       );
@@ -2293,6 +2323,62 @@ describe('analyze agentic — API error codes', () => {
     },
     { timeout: 15000 },
   );
+
+  it.each([false, true])(
+    'keeps single-file JSON parseable after retries (exhausted: %s)',
+    async (exhausted) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .withSqaaStatusSequence(exhausted ? [503, 503, 503, 503] : [503, 200])
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('src/index.ts', 'const x = 1;');
+      const result = await harness.run('analyze agentic --file src/index.ts --format json');
+      const report = JSON.parse(result.stdout);
+      expect(result.exitCode).toBe(exhausted ? 1 : 0);
+      expect(report.summary.totalFailures).toBe(exhausted ? 1 : 0);
+      expect(result.stdout).not.toContain('Server busy');
+      expect(server.getRecordedRequests().filter((r) => r.path.endsWith('/analyses'))).toHaveLength(
+        exhausted ? 4 : 2,
+      );
+    },
+  );
+
+  it('preserves single-file failures and one-file changeset skips on a global outage', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaStatusCode(503)
+      .start();
+    harness
+      .state()
+      .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+      .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+    initGitRepo(harness.cwd.path);
+    commitFile(harness.cwd.path, '.gitignore', '.claude/\n');
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    const single = await harness.run('analyze agentic --file a.ts --format json');
+    const changeset = await harness.run('analyze agentic --format json');
+    expect(single.exitCode).toBe(1);
+    expect(changeset.exitCode).toBe(1);
+    expect(JSON.parse(single.stdout).summary).toEqual({
+      totalIssues: 0,
+      totalFailures: 1,
+      totalSkipped: 0,
+    });
+    expect(JSON.parse(changeset.stdout).summary).toEqual({
+      totalIssues: 0,
+      totalFailures: 0,
+      totalSkipped: 1,
+    });
+    expect(JSON.parse(single.stdout).globalError.kind).toBe('unavailable');
+    expect(JSON.parse(changeset.stdout).globalError.kind).toBe('unavailable');
+  });
 
   it(
     'retries 503 per chunk in change-set mode',
@@ -2740,6 +2826,60 @@ describe('analyze agentic — --format json', () => {
     { timeout: 15000 },
   );
 
+  it('prepares the same changeset and exclusions for direct and combined reports', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken(VALID_TOKEN)
+      .withSqaaResponse({ issues: [] })
+      .start();
+    harness
+      .state()
+      .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+      .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+    harness.cwd.writeFile('src/a.ts', 'const a = 1;');
+    harness.cwd.writeFile('image.bin', '\0binary');
+    const direct = await harness.run('analyze agentic --format json');
+    const combined = await harness.run('analyze --format json');
+    expect(direct.exitCode).toBe(0);
+    expect(combined.exitCode).toBe(0);
+    const report = JSON.parse(direct.stdout);
+    expect(JSON.parse(combined.stdout).agentic).toEqual(report);
+    expect(report.analysisDepth).toBe('DEEP');
+    expect(report.ignored).toEqual([{ path: 'image.bin', reason: 'binary' }]);
+    expect(report.files.map((file: { path: string }) => file.path)).toEqual(['src/a.ts']);
+  });
+
+  it.each([false, true])(
+    'prepares the same explicit files for direct and combined reports (multiple files: %s)',
+    async (multiple) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaResponse({ issues: [] })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('src/a.ts', 'const a = 1;');
+      harness.cwd.writeFile('src/b.ts', 'const b = 2;');
+      const args = `--file src/a.ts ${multiple ? '--file src/b.ts' : ''} --format json`;
+      const direct = await harness.run(`analyze agentic ${args}`);
+      const combined = await harness.run(`analyze ${args}`);
+      expect(direct.exitCode).toBe(0);
+      expect(combined.exitCode).toBe(0);
+      const report = JSON.parse(direct.stdout);
+      expect(JSON.parse(combined.stdout).agentic).toEqual(report);
+      expect(report.analysisDepth).toBe(multiple ? 'DEEP' : 'STANDARD');
+      expect(report.files.map((file: { path: string }) => file.path)).toEqual(
+        multiple ? ['src/a.ts', 'src/b.ts'] : ['src/a.ts'],
+      );
+      expect(report.files.every((file: { project: string }) => file.project === TEST_PROJECT)).toBe(
+        true,
+      );
+    },
+  );
+
   it(
     'reports globalError with the resolved entitlement-loss message when the 403 re-checks to not_entitled',
     async () => {
@@ -2831,6 +2971,38 @@ describe('analyze agentic — --format json', () => {
       expect(report.globalError?.message).toContain('usage limit');
     },
     { timeout: 15000 },
+  );
+
+  it.each([false, true])(
+    'resolves the same 403 explanation in direct and combined JSON (multiple files: %s)',
+    async (multiple) => {
+      const server = await harness
+        .newFakeServer()
+        .asSonarCloud()
+        .withAuthToken(VALID_TOKEN)
+        .withSqaaStatusCode(403)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID, { allowed: false, hasEntitlement: true })
+        .start();
+      harness
+        .state()
+        .withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG)
+        .withSqaaFeature(harness.cwd.path, TEST_PROJECT, TEST_ORG, server.baseUrl());
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      harness.cwd.writeFile('b.ts', 'const b = 2;');
+      const args = `--file a.ts ${multiple ? '--file b.ts' : ''} --format json`;
+      const direct = await harness.run(`analyze agentic ${args}`);
+      const combined = await harness.run(`analyze ${args}`);
+      expect(direct.exitCode).toBe(1);
+      expect(combined.exitCode).toBe(1);
+      expect(JSON.parse(combined.stdout).agentic.globalError).toEqual(
+        JSON.parse(direct.stdout).globalError,
+      );
+      expect(JSON.parse(combined.stdout).agentic.globalError.message).toContain('usage limit');
+      const entitlementCalls = server
+        .getRecordedRequests()
+        .filter((r) => r.path.includes('/org-entitlement/'));
+      expect(entitlementCalls).toHaveLength(2);
+    },
   );
 
   it(
@@ -3233,20 +3405,23 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
     { timeout: 15000 },
   );
 
-  it(
-    'splits the change set per project and ignores files owned by none',
-    async () => {
+  it.each(['analyze agentic', 'analyze'])(
+    '%s combines exclusions from file collection and project resolution',
+    async (command) => {
       const server = await startMonorepoServer();
+      harness.state().withSecretsBinaryInstalled();
       harness.cwd.writeFile('docs/readme.md', '# docs');
+      harness.cwd.writeFile('image.bin', '\0binary');
 
-      const result = await harness.run('analyze agentic --format json');
+      const result = await harness.run(`${command} --format json`);
 
       expect(result.exitCode).toBe(0);
       expect(sentPathsByProject(server)).toEqual({
         [PROJECT_A]: ['src/x.ts'],
         [PROJECT_B]: ['lib/y.ts'],
       });
-      const report = JSON.parse(result.stdout) as {
+      const output = JSON.parse(result.stdout);
+      const report = (command === 'analyze' ? output.agentic : output) as {
         files: { path: string }[];
         ignored: { path: string; reason: string }[];
       };
@@ -3254,7 +3429,31 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
         'packages/a/src/x.ts',
         'packages/b/lib/y.ts',
       ]);
-      expect(report.ignored).toEqual([{ path: 'docs/readme.md', reason: 'outside-project' }]);
+      expect(report.ignored).toEqual([
+        { path: 'image.bin', reason: 'binary' },
+        { path: 'docs/readme.md', reason: 'outside-project' },
+      ]);
+    },
+    { timeout: 15000 },
+  );
+
+  it.each(['analyze agentic', 'analyze'])(
+    '%s counts only files in resolved groups for the large-run prompt',
+    async (command) => {
+      const server = await startMonorepoServer();
+      harness.state().withSecretsBinaryInstalled();
+      for (let i = 0; i < 51; i++) harness.cwd.writeFile(`docs/file${i}.ts`, 'export const x = 1;');
+
+      const result = await harness.run(command, {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain('large number of files');
+      expect(sentPathsByProject(server)).toEqual({
+        [PROJECT_A]: ['src/x.ts'],
+        [PROJECT_B]: ['lib/y.ts'],
+      });
     },
     { timeout: 15000 },
   );

@@ -18,9 +18,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
 
-import { type GithubRepositoryResponse, ServerImportApiClient } from './server-import-api.ts';
+import {
+  type DopSetting,
+  type GithubRepositoryResponse,
+  ServerImportApiClient,
+} from './server-import-api.ts';
 import type {
   FetchServerRepositories,
   PlatformSupport,
@@ -41,13 +46,82 @@ function toRepository(repo: GithubRepositoryResponse): ServerRepository {
   };
 }
 
+async function listVisibleOrganizations(
+  api: ServerImportApiClient,
+  setting: DopSetting,
+  pageIndex = 1,
+  organizations = new Set<string>(),
+): Promise<Set<string>> {
+  const page = await api.listGithubOrganizations(setting.key, pageIndex, SERVER_PAGE_SIZE);
+  page.organizations.forEach((entry) => organizations.add(entry.key));
+  if (
+    page.organizations.length < SERVER_PAGE_SIZE ||
+    (page.total !== undefined && pageIndex * SERVER_PAGE_SIZE >= page.total)
+  )
+    return organizations;
+  return listVisibleOrganizations(api, setting, pageIndex + 1, organizations);
+}
+
+async function findExplicitRepository(
+  api: ServerImportApiClient,
+  setting: DopSetting,
+  slug: string,
+  pageIndex = 1,
+): Promise<ServerRepository[]> {
+  const parts = slug.split('/');
+  const [organization, name] = parts;
+  if (parts.length !== 2 || !organization || !name) return [];
+  const page = await api.listGithubRepositories(
+    setting.key,
+    organization,
+    pageIndex,
+    SERVER_PAGE_SIZE,
+    name,
+  );
+  const match = page.repositories.find((repository) => repository.key === slug);
+  if (match) return [toRepository(match)];
+  const fetched = pageIndex * SERVER_PAGE_SIZE;
+  if (fetched >= GITHUB_SEARCH_RESULT_CAP && (page.total === undefined || page.total > fetched)) {
+    throw new CommandFailedError(
+      `GitHub repository lookup is incomplete for '${slug}': only the first ${GITHUB_SEARCH_RESULT_CAP} filtered search results can be listed. The repository may exist beyond this limit.`,
+    );
+  }
+  if (
+    page.repositories.length < SERVER_PAGE_SIZE ||
+    (page.total !== undefined && fetched >= page.total) ||
+    fetched >= GITHUB_SEARCH_RESULT_CAP
+  )
+    return [];
+  return findExplicitRepository(api, setting, slug, pageIndex + 1);
+}
+
 /**
  * GitHub lists organizations, then the repositories of each one. This walks them in order and
  * serves the result as flat pages. Fetched repositories wait in `buffer` until a page is
  * returned, so a failed request leaves everything fetched so far in place for the retry.
  */
 export const githubSupport: PlatformSupport = {
-  listRepositories(api, setting): FetchServerRepositories {
+  listRepositories(api, setting, slugs): FetchServerRepositories {
+    if (slugs?.length) {
+      let resolved: Promise<ServerRepository[]> | undefined;
+      return async (pageIndex, pageSize) => {
+        resolved ??= listVisibleOrganizations(api, setting).then(async (organizations) => {
+          const matches = await Promise.all(
+            slugs
+              .filter((slug) => organizations.has(slug.split('/')[0]))
+              .map((slug) => findExplicitRepository(api, setting, slug)),
+          );
+          return matches.flat();
+        });
+        const repositories = await resolved;
+        const start = (pageIndex - 1) * pageSize;
+        return {
+          repositories: repositories.slice(start, start + pageSize),
+          total: repositories.length,
+        };
+      };
+    }
+    const warnings: string[] = [];
     const organizations: string[] = [];
     let nextOrganizationsPage = 1;
     let organizationsDone = false;
@@ -90,12 +164,11 @@ export const githubSupport: PlatformSupport = {
         repositoriesFetchedInOrganization >= GITHUB_SEARCH_RESULT_CAP;
       if (
         repositoriesFetchedInOrganization >= GITHUB_SEARCH_RESULT_CAP &&
-        page.total !== undefined &&
-        page.total > repositoriesFetchedInOrganization
+        (page.total === undefined || page.total > repositoriesFetchedInOrganization)
       ) {
-        logger.warn(
-          `GitHub organization ${organization} has ${page.total} repositories; only the first ${GITHUB_SEARCH_RESULT_CAP} can be listed`,
-        );
+        const warning = `GitHub repository discovery is incomplete for organization '${organization}': only the first ${GITHUB_SEARCH_RESULT_CAP} search results can be listed. Use --repo owner/repository to select a repository directly.`;
+        warnings.push(warning);
+        logger.warn(warning);
       }
       if (organizationDone) {
         organizationIndex++;
@@ -120,7 +193,11 @@ export const githubSupport: PlatformSupport = {
       await fill(pageSize);
       const repositories = buffer.splice(0, pageSize);
       // The server has no count across organizations: this is what has been listed so far.
-      return { repositories, total: listed };
+      return {
+        repositories,
+        total: listed,
+        ...(warnings.length ? { warnings: [...warnings] } : {}),
+      };
     };
   },
 };

@@ -57,6 +57,18 @@ Do not bypass those limits by fetching raw current-graph endpoints, requesting a
 graph, or assembling all slices into the agent context. Use a specific bounded slice when more
 detail is needed. Reported dependencies are static references, not runtime calls.
 
+To inspect a dependency between two known components, use current get with both --from and
+--to. Use MCP only when its installed architecture_get definition lists from, to, pageIndex and
+pageSize; otherwise use the CLI. These are exact keys including descendants; do not combine
+with component. Depth 1 groups by the endpoints' direct children and preserves leaf endpoints;
+increase depth or select a returned pair for detail. Ancestor/descendant aggregate rows are omitted;
+increase depth to inspect their internal dependencies. Results are directional static dependencies,
+not runtime calls. Use --page/--page-size (MCP: pageIndex/pageSize, when documented by the installed
+tool) to continue the selected query,
+with at most 20 rows per page. Compare revision across pages and restart if it changes. Specify
+language if the pair is ambiguous. Only retrieve pages relevant to the user's question, not the
+whole project graph. Container-level relationship graphs are explicitly unsupported by this mode.
+
 This current-graph cap does not apply to complete intended exports. Keep large intended exports
 in local files rather than pasting them into the conversation. Never substitute a partial view
 when a complete export is required for a write.
@@ -89,6 +101,23 @@ omitted content is removed.
    exactly the approved model and revision.
 5. Read the saved intended architecture to verify the result. It takes effect from the project's
    next analysis, unless a file in the repository manages the model.
+
+When the user asks to reproduce a physical package or folder hierarchy, first inspect bounded
+current slices to obtain the real artifact keys, separators and intermediate parents. Keep the
+complete ancestor chain, and follow a single-child chain to its branching point as the UI does.
+For example, under \`gctoolkit-parser\`, put \`jvm\` and \`unified\` inside the shared
+\`com.microsoft.gctoolkit.parser\` group, rather than adding full package names as flat siblings.
+Use the artifact's child separator followed by \`**\` to select a container's descendants
+(e.g. \`gctoolkit-parser:com.microsoft.gctoolkit.parser.**\`). Exact leaf patterns are valid;
+never append \`**\` blindly. Preserve discovery-binding patterns alongside renamed/moved
+intended patterns. Keep user-requested logical groupings; do not normalize them into a physical
+tree. If a physical mapping is ambiguous or the necessary artifacts are unavailable, ask before
+constructing it. The clients report discovery-backed warnings without moving groups or rewriting
+patterns. An unavailable discovery check is not proof that a pattern matches.
+
+Constraint endpoints name full intended group keys, not discovery component keys. Check both
+endpoints against the same perspective. Self-references and nonexistent or ambiguous exact keys
+are rejected. Public wildcard selectors and descendants of imported patterns remain server-resolved.
 
 Never use partial or truncated input, discard perspectives to fit the API, or remove a revision
 to bypass a conflict. On a stale revision, read again and reapply only the specified edits before
@@ -145,7 +174,8 @@ never repeat a write or roll back automatically.
 
 ## Availability
 
-Intended and directive operations on SonarQube Server await public project UUID resolution. Deviations,
+Intended and directive operations on SonarQube Server require the public project lookup
+(/api/v2/components/projects) and public Architecture APIs. Deviations,
 structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 `;

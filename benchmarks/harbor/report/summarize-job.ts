@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 interface TrialResult {
   task_name: string;
+  agent_info: { model_info?: { name?: string } } | null;
   started_at: string | null;
   finished_at: string | null;
   exception_info: { exception_type?: string } | null;
@@ -18,11 +19,14 @@ interface FinalMetrics {
   total_steps?: number;
 }
 
-type Status = 'PASS' | 'FAIL' | 'ERROR';
+type Status = 'PASS' | 'FAIL' | 'ERROR' | 'LEAK';
+
+const LEAK_MARKER_FILE = 'secrets-leak.json';
 
 interface Row {
   label: string;
   task: string;
+  model: string | null;
   status: Status;
   agentSeconds: number | null;
   steps: number | null;
@@ -50,10 +54,15 @@ function statusOf(trial: TrialResult): Status {
   return reward >= 1 ? 'PASS' : 'FAIL';
 }
 
-function errorRow(label: string, task: string): Row {
+function lastSegment(value: string): string {
+  return value.slice(value.lastIndexOf('/') + 1);
+}
+
+function errorRow(label: string, task: string, model: string | null): Row {
   return {
     label,
     task,
+    model,
     status: 'ERROR',
     agentSeconds: null,
     steps: null,
@@ -64,16 +73,30 @@ function errorRow(label: string, task: string): Row {
   };
 }
 
+function crashedTrialRow(label: string, trialDir: string, trialName: string): Row {
+  const config = readJson<{ agent?: { model_name?: string | null } }>(
+    join(trialDir, 'config.json'),
+  );
+  const modelName = config?.agent?.model_name;
+  const suffixStart = trialName.lastIndexOf('__');
+  return errorRow(
+    label,
+    suffixStart > 0 ? trialName.slice(0, suffixStart) : trialName,
+    modelName ? lastSegment(modelName) : null,
+  );
+}
+
 function rowFor(label: string, trialDir: string, trialName: string): Row {
   const trial = readJson<TrialResult>(join(trialDir, 'result.json'));
-  if (!trial?.task_name) return errorRow(label, trialName);
+  if (!trial?.task_name) return crashedTrialRow(label, trialDir, trialName);
   const trajectory = readJson<{ final_metrics?: FinalMetrics }>(
     join(trialDir, 'agent', 'trajectory.json'),
   );
   const metrics = trajectory?.final_metrics;
   return {
     label,
-    task: trial.task_name,
+    task: lastSegment(trial.task_name),
+    model: trial.agent_info?.model_info?.name ?? null,
     status: statusOf(trial),
     agentSeconds: secondsBetween(
       trial.agent_execution?.started_at,
@@ -87,21 +110,32 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   };
 }
 
+function leakedRow(row: Row): Row {
+  return { ...row, status: 'LEAK' };
+}
+
 function rowsFor(label: string, jobDir: string): Row[] {
   const rows = readdirSync(jobDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => rowFor(label, join(jobDir, entry.name), entry.name));
-  return rows.length > 0 ? rows : [errorRow(label, 'no trials')];
+    .map((entry) => {
+      const trialDir = join(jobDir, entry.name);
+      const row = rowFor(label, trialDir, entry.name);
+      return existsSync(join(trialDir, LEAK_MARKER_FILE)) ? leakedRow(row) : row;
+    });
+  if (existsSync(join(jobDir, LEAK_MARKER_FILE)))
+    rows.push(leakedRow(errorRow(label, 'job files', null)));
+  return rows.length > 0 ? rows : [errorRow(label, 'no trials', null)];
 }
 
 function cell(value: number | null, format: (n: number) => string = String): string {
   return value === null ? '-' : format(value);
 }
 
-function renderRow(row: Row): string {
+function renderTrial(row: Row): string[] {
   return [
     row.label,
     row.task,
+    row.model ?? '-',
     row.status,
     cell(row.agentSeconds, (n) => `${n.toFixed(0)}s`),
     cell(row.steps),
@@ -109,14 +143,57 @@ function renderRow(row: Row): string {
     cell(row.completionTokens),
     cell(row.cachedTokens),
     cell(row.costUsd, (n) => `$${n.toFixed(4)}`),
-  ].join(' | ');
+  ];
+}
+
+function total(values: (number | null)[]): number | null {
+  const present = values.filter((value): value is number => value !== null);
+  if (present.length === 0) return null;
+  return present.reduce((sum, value) => sum + value, 0);
+}
+
+function average(values: (number | null)[]): number | null {
+  const count = values.filter((value) => value !== null).length;
+  const sum = total(values);
+  return sum === null ? null : sum / count;
+}
+
+function groupTrials(rows: Row[]): Row[][] {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = [row.task, row.model ?? '-', row.label].join('|');
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
+}
+
+function renderGroup(group: Row[]): string[] {
+  const [first] = group;
+  const passed = group.filter((row) => row.status === 'PASS').length;
+  return [
+    first.label,
+    first.task,
+    first.model ?? '-',
+    `${passed}/${group.length}`,
+    cell(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)}s`),
+    cell(average(group.map((row) => row.steps)), (n) => n.toFixed(1)),
+    cell(average(group.map((row) => row.promptTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.completionTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.cachedTokens)), (n) => n.toFixed(0)),
+    cell(average(group.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`),
+  ];
+}
+
+function renderTable(header: string[], lines: string[][]): string[] {
+  return [
+    `| ${header.join(' | ')} |`,
+    `|${header.map(() => '---').join('|')}|`,
+    ...lines.map((line) => `| ${line.join(' | ')} |`),
+  ];
 }
 
 function renderReport(rows: Row[]): string {
-  const header = [
-    'OS',
-    'Task',
-    'Status',
+  const metrics = [
     'Agent time',
     'Steps',
     'Prompt tokens',
@@ -127,9 +204,24 @@ function renderReport(rows: Row[]): string {
   const lines = [
     '## Harbor benchmark',
     '',
-    `| ${header.join(' | ')} |`,
-    `|${header.map(() => '---').join('|')}|`,
-    ...rows.map((row) => `| ${renderRow(row)} |`),
+    'Averages over the trials of each task, model and OS.',
+    '',
+    ...renderTable(
+      ['OS', 'Task', 'Model', 'Passed', ...metrics],
+      groupTrials(rows).map(renderGroup),
+    ),
+    '',
+    `Total cost of the ${rows.filter((row) => row.costUsd !== null).length} trials with a cost: ${cell(
+      total(rows.map((row) => row.costUsd)),
+      (n) => `$${n.toFixed(4)}`,
+    )}`,
+    '',
+    '<details>',
+    '<summary>Trials</summary>',
+    '',
+    ...renderTable(['OS', 'Task', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
+    '',
+    '</details>',
   ];
   return lines.join('\n') + '\n';
 }

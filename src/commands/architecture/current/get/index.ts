@@ -18,11 +18,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import { createArchitectureApi, type CurrentGraph } from '../../_common/architecture-api.ts';
+import {
+  type CurrentReadOptions,
+  dependencySelection,
+  queryDependencies,
+} from '../../_common/dependency-query.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import {
   DEFAULT_MAX_EDGES,
@@ -36,7 +42,6 @@ import {
 } from '../../_common/graph.ts';
 import { resolveProject } from '../../_common/project.ts';
 import {
-  type ArchitectureReadOptions,
   defaultTextFormat,
   printPayload,
   resolveDepth,
@@ -45,22 +50,38 @@ import {
 import { formatCurrentText, formatSliceLimit } from './current-text.ts';
 
 export async function getCurrent(
-  options: ArchitectureReadOptions,
+  options: CurrentReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  const selection = dependencySelection(options);
   const depth = resolveDepth(options, 1);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const projectKey = await resolveProject(options, ctx);
   const graphs = await createArchitectureApi(ctx.connection, projectKey)
     .getCurrent(options.language)
     .catch((error: unknown) => {
-      throw toArchitectureError(error, projectKey);
+      throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
     });
 
   if (graphs.length === 0) {
-    ctx.console.warn(
-      `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`,
-    );
+    const message = `No current architecture was returned for '${projectKey}'. The response does not indicate whether analysis is missing or architecture data is unavailable.`;
+    if (selection) throw new CommandFailedError(message);
+    ctx.console.warn(message);
+  }
+  if (selection) {
+    const result = queryDependencies(graphs, selection, depth);
+    if (format === 'text') {
+      ctx.console.print(
+        [
+          `${result.language}: ${result.from} → ${result.to} (depth ${depth})`,
+          `Page ${result.page.pageIndex}, ${result.dependencies.length} of ${result.page.total} dependencies`,
+          ...result.dependencies.map((edge) => `${edge.from} → ${edge.to}: ${edge.weight}`),
+          `Revision: ${result.revision}. Compare revisions before combining pages; restart if changed.`,
+          ...(result.page.hasNextPage ? [nextDependencyPageCommand(result, projectKey)] : []),
+        ].join('\n'),
+      );
+    } else printPayload(ctx, format, { project: projectKey, ...result });
+    return;
   }
   const indexed = graphs.map((current) => ({ current, index: indexStructure(current.graph) }));
   const { component } = options;
@@ -96,6 +117,13 @@ export async function getCurrent(
   printPayload(ctx, format, { project: projectKey, languages });
 }
 
+function nextDependencyPageCommand(
+  result: ReturnType<typeof queryDependencies>,
+  projectKey: string,
+): string {
+  return `Next page: sonar architecture current get --project ${shellQuote(projectKey)} --language ${result.language} --from ${shellQuote(result.from)} --to ${shellQuote(result.to)} --depth ${result.depth} --page ${result.page.pageIndex + 1} --page-size ${result.page.pageSize} --format text`;
+}
+
 function drillDownCommands(
   current: CurrentGraph,
   slice: GraphSlice,
@@ -111,7 +139,8 @@ function drillDownCommands(
 
 function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string, unknown> {
   const where = slice.root ? `below '${slice.root}'` : 'from the top level';
-  const cap = slice.capped ? ` ${formatSliceLimit(slice)}` : '';
+  const cap = slice.omittedLevel !== undefined ? ` ${formatSliceLimit(slice)}` : '';
+  const message = slice.message === undefined ? '' : ' ' + slice.message;
   let edgeCap = '';
   if (slice.omittedEdges > 0) {
     edgeCap =
@@ -121,7 +150,7 @@ function describeSlice(current: CurrentGraph, slice: GraphSlice): Record<string,
   }
   return {
     language: current.ecosystem,
-    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
+    summary: `Showing ${slice.nodes.length} of ${slice.totalNodes} nodes, ${slice.depth} level(s) ${where}.${message}${cap}${edgeCap}${slice.feedbackPairs.total > 0 && slice.feedbackPairs.heaviest.length === 0 ? ' No feedback pairs shown within the shared response budget.' : ''}`,
     ...slice,
   };
 }
@@ -140,6 +169,8 @@ function limitResponseEdges(slices: GraphSlice[]): void {
     slice.omittedEdges += slice.edges.length - shown.length;
     slice.edges = shown;
     slice.feedbackPairs.heaviest = slice.feedbackPairs.heaviest.filter((pair) => pairs.has(pair));
+    slice.capped ||=
+      slice.omittedEdges > 0 || slice.feedbackPairs.heaviest.length < slice.feedbackPairs.total;
   }
 }
 
