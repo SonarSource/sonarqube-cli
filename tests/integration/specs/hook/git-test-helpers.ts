@@ -25,8 +25,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { timeSync } from '../../../_common/ci-timing.js';
-
 // Resolve git binary once at module load — avoids PATH reliance in execFileSync calls.
 export const GIT_BIN = Bun.which('git') ?? '/usr/bin/git';
 
@@ -51,13 +49,11 @@ export function git(args: string[], cwd: string): string {
   for (let attempt = 1; ; attempt++) {
     try {
       // stderr is piped (not ignored) so a real failure carries git's message.
-      return timeSync('git', () =>
-        execFileSync(GIT_BIN, args, {
-          cwd,
-          encoding: 'utf-8',
-          stdio: ['ignore', 'pipe', 'pipe'],
-        }).trim(),
-      );
+      return execFileSync(GIT_BIN, args, {
+        cwd,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
     } catch (error) {
       if (attempt >= maxAttempts || !isTransientWindowsGitError(error)) {
         throw error;
