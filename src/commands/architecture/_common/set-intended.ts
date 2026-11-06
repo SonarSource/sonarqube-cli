@@ -87,19 +87,9 @@ export async function setIntended(
   const current = stored.models;
   const next = file.language === undefined ? file.models : withLanguage(current, file);
   const unchecked = file.revision === undefined;
-  const requiresRevisionForClear = unchecked && stored.id !== undefined && next.length === 0;
-  if (file.revision !== undefined && file.revision !== revisionOf(current)) {
-    throw staleError(options.projectKey);
-  }
-  if (
-    !options.dryRun &&
-    stored.id !== undefined &&
-    next.length === 0 &&
-    file.revision === undefined
-  )
-    throw new CommandFailedError(
-      'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
-    );
+  const clearsResource = stored.id !== undefined && next.length === 0;
+  const requiresRevisionForClear = unchecked && clearsResource;
+  validateRevision(file, current, requiresRevisionForClear, options);
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
   if (!isEmptyDiff(diff)) await options.onValidation?.();
@@ -110,10 +100,9 @@ export async function setIntended(
       diff,
       unchecked,
       requiresRevisionForClear,
-      clearsResource: stored.id !== undefined && next.length === 0,
+      clearsResource,
     };
-  if (isEmptyDiff(diff) && !(stored.id !== undefined && next.length === 0))
-    return { mode: 'unchanged', diff, unchecked };
+  if (isEmptyDiff(diff) && !clearsResource) return { mode: 'unchanged', diff, unchecked };
   if (stored.id === undefined) {
     await writeModel(api, next, 'create', options.projectKey);
     return { mode: 'created', diff, unchecked };
@@ -125,6 +114,21 @@ export async function setIntended(
   const operation = next.length === 0 ? 'clear' : 'update';
   await writeModel(api, next, operation, options.projectKey, backupPath);
   return { mode: operation === 'clear' ? 'cleared' : 'updated', diff, backupPath, unchecked };
+}
+
+function validateRevision(
+  file: IntendedFile,
+  current: IntendedArchitecture[],
+  requiresRevisionForClear: boolean,
+  options: SetIntendedOptions,
+): void {
+  if (file.revision !== undefined && file.revision !== revisionOf(current)) {
+    throw staleError(options.projectKey);
+  }
+  if (!options.dryRun && requiresRevisionForClear)
+    throw new CommandFailedError(
+      'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
+    );
 }
 
 async function writeModel(
@@ -170,13 +174,23 @@ async function verifyWrite(
         throw writeFailure(projectKey, writeError, backupPath, error);
     }
     if (actual === undefined) continue;
-    if (operation === 'clear' && writeError !== undefined && actual.id === undefined)
-      throw writeFailure(projectKey, writeError, backupPath, undefined, 'clear-unconfirmed');
+    rejectAmbiguousClear(operation, writeError, actual, projectKey, backupPath);
     const cleared = operation !== 'clear' || actual.id === undefined;
     if (cleared && writableRevisionOf(actual.models) === expectedRevision) return;
     readError = undefined;
   }
   throw writeFailure(projectKey, writeError, backupPath, readError);
+}
+
+function rejectAmbiguousClear(
+  operation: 'create' | 'update' | 'clear',
+  writeError: unknown,
+  actual: IntendedState,
+  projectKey: string,
+  backupPath?: string,
+): void {
+  if (operation === 'clear' && writeError !== undefined && actual.id === undefined)
+    throw writeFailure(projectKey, writeError, backupPath, undefined, 'clear-unconfirmed');
 }
 
 function writeFailure(
