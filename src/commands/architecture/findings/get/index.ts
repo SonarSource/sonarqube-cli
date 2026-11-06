@@ -27,6 +27,7 @@ import {
   DEFAULT_FINDINGS_PAGE_SIZE,
   type FindingFilters,
   type ProjectFinding,
+  validateFindingFilters,
 } from '../../_common/findings.ts';
 import { resolveProject } from '../../_common/project.ts';
 import {
@@ -45,10 +46,11 @@ export async function getFindings(
   options: FindingsReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  validateFindingFilters(options);
   const projectKey = await resolveProject(options, ctx);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const api = createFindingsApi(ctx.connection, projectKey);
-  const { findings, page } = await api
+  const { findings, page, skippedFindings } = await api
     .getFindingsPage(
       { category: options.category, type: options.type, language: options.language },
       options.page ?? 1,
@@ -58,13 +60,41 @@ export async function getFindings(
       throw toArchitectureError(error, projectKey);
     });
   if (format !== 'text') {
-    printPayload(ctx, format, { project: projectKey, findings, page });
+    printPayload(ctx, format, {
+      project: projectKey,
+      findings,
+      page,
+      ...(skippedFindings ? { skippedFindings } : {}),
+    });
     return;
   }
-  if (findings.length === 0 && page.total === 0)
+  const filters = [
+    options.category && `category=${options.category}`,
+    options.type && `type=${options.type}`,
+    options.language && `language=${options.language}`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  if (skippedFindings)
     ctx.console.info(
-      'No findings are visible. Check project access and whether the project has been analyzed.',
+      `Skipped ${skippedFindings} finding(s) with unsupported type, language or reason; backend total is unchanged.`,
     );
+  if (page.total === 0)
+    ctx.console.info(
+      filters
+        ? `No findings match ${filters}.`
+        : 'No findings are visible. Check project access and whether the project has been analyzed.',
+    );
+  if (
+    page.total > 0 &&
+    page.pageSize > 0 &&
+    page.pageIndex > Math.ceil(page.total / page.pageSize)
+  ) {
+    const last = Math.ceil(page.total / page.pageSize);
+    ctx.console.info(
+      `Requested page ${page.pageIndex} is past the last page (${last}). Use --page ${last}.`,
+    );
+  }
   let more = '';
   if (page.pageSize === 0) more = ' Use --page-size greater than 0 to read findings.';
   else if (page.pageIndex * page.pageSize < page.total) more = ' Use --page to continue.';
@@ -74,6 +104,34 @@ export async function getFindings(
 
 function printFindingDetails(ctx: CommandAuthenticatedInvocationContext, finding: ProjectFinding) {
   ctx.console.info(`${finding.category}: ${finding.type} (${finding.language})`);
-  ctx.console.info(`  details: ${JSON.stringify(finding.details)}`);
-  ctx.console.info(`  files: ${JSON.stringify(finding.files)}`);
+  ctx.console.info(`  ${findingDescription(finding)}`);
+  if (finding.files.length) ctx.console.info(`  files: ${finding.files.join(', ')}`);
+}
+
+function findingDescription(finding: ProjectFinding): string {
+  const d = finding.details;
+  switch (finding.type) {
+    case 'structuralDeviation':
+      return `${d.nodeKey} (${d.reason}${countText(d.misplacedComponentCount, 'component')})`;
+    case 'relationshipDeviation':
+      return `${d.fromNodeKey} -> ${d.toNodeKey} (${d.reason}${countText(d.dependencyCount, 'dependency', 'dependencies')})`;
+    case 'tangle':
+    case 'weakTangle':
+      return `${d.nodeKeys?.join(', ')} (${d.nodeCount} ${d.nodeCount === 1 ? 'node' : 'nodes'})`;
+    case 'oversizedComponent':
+    case 'splitResponsibility': {
+      const counts = [
+        countText(d.leafArtifactCount, 'leaf artifact'),
+        countText(d.fragmentCount, 'fragment'),
+      ]
+        .filter(Boolean)
+        .map((text) => text.slice(2))
+        .join(', ');
+      return counts ? `${d.nodeKey} (${counts})` : `${d.nodeKey}`;
+    }
+  }
+}
+
+function countText(count: number | undefined, singular: string, plural = `${singular}s`): string {
+  return count === undefined ? '' : `, ${count} ${count === 1 ? singular : plural}`;
 }

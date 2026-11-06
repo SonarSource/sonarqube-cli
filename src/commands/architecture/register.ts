@@ -22,7 +22,13 @@ import { parseInteger } from '@/core/commands/params.ts';
 import { type SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 
 import { ECOSYSTEMS } from './_common/architecture-api.ts';
-import { FINDING_CATEGORIES, FINDING_TYPES } from './_common/findings.ts';
+import { type CurrentReadOptions, parseDependencyPageNumber } from './_common/dependency-query.ts';
+import {
+  FINDING_CATEGORIES,
+  FINDING_TYPES,
+  parseFindingPageIndex,
+  parseFindingPageSize,
+} from './_common/findings.ts';
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
 import { getCurrent } from './current/get/index.ts';
@@ -66,9 +72,21 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('-p, --project <project>', 'Project key')
     .option('--component <key>', 'Node key to start below, from a previous current get')
     .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
+    .option('--from <key>', 'Dependency source key, including descendants; requires --to')
+    .option('--to <key>', 'Dependency destination key, including descendants; requires --from')
+    .option(
+      '--page <n>',
+      'Dependency page (default 1; requires --from/--to)',
+      parseDependencyPageNumber,
+    )
+    .option(
+      '--page-size <n>',
+      'Dependencies per page (default/maximum 20)',
+      parseDependencyPageNumber,
+    )
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) => getCurrent(options, ctx));
+    .authenticatedAction((ctx, options: CurrentReadOptions) => getCurrent(options, ctx));
   intendedArchitecture
     .command('get')
     .description(
@@ -130,11 +148,11 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .addOption(new SonarOption('--type <type>', 'Only this finding type').choices(FINDING_TYPES))
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .option('--page <n>', 'Page number (default 1)', parseInteger)
+    .option('--page <n>', 'Page number (default 1)', parseFindingPageIndex)
     .option(
       '--page-size <n>',
       'Items per page (default 50, 0 counts only, maximum 1000)',
-      parseInteger,
+      parseFindingPageSize,
     )
     .authenticatedAction((ctx, options: FindingsReadOptions) => getFindings(options, ctx));
 

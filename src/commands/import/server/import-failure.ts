@@ -57,7 +57,7 @@ const MALFORMED_NAME = /component name length/i;
 const UNKNOWN_SETTING = /devopsplatformsettingid value not found/i;
 
 /**
- * A short, actionable reason for a failed `PUT /api/v2/dop-translation/bound-projects`.
+ * A short, actionable reason for a failed `POST /api/v2/dop-translation/bound-projects`.
  * Errors it does not recognise keep their original message.
  */
 export function explainImportFailure(error: unknown, context: ImportFailureContext): string {

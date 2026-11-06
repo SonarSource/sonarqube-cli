@@ -23,8 +23,9 @@ import { BranchesClient } from '@/core/server/branches.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { AccessDeniedError, UnexpectedApiError } from '@/core/server/errors.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
-import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
+import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
 
 import {
   type ArchitectureApi,
@@ -45,8 +46,12 @@ import {
   parseProjectDirective,
   type ProjectDirective,
 } from './directives.ts';
-import { collectionFailure, incompatibleResponse } from './errors.ts';
-import { type FindingFilters, type FindingPage, parseProjectFinding } from './findings.ts';
+import {
+  fetchFindingsPage,
+  type FindingFilters,
+  type FindingPage,
+  validateFindingPagination,
+} from './findings.ts';
 import { MODEL_ID, publicGraph, toIntended } from './public-architecture-response.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
@@ -55,8 +60,6 @@ const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
 interface ArchitectureIds {
   organizationId: string;
   branchId: string;
-  /** The project UUID used by the intended architecture endpoint. */
-  projectId: string;
 }
 
 interface IntendedModelExportDto extends Omit<IntendedArchitecture, 'type'> {
@@ -93,6 +96,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   private readonly http: SonarHttpClient;
   private idsPromise?: Promise<ArchitectureIds>;
   private intendedModelId?: string;
+  private serverProjectIdPromise?: Promise<string>;
 
   constructor(
     private readonly connection: SonarConnection,
@@ -110,7 +114,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
           branchId,
           language: ecosystem,
         })
-        .orThrow();
+        .orThrow()
+        .catch((error: unknown) => this.collectionFailure(error));
       if (!Array.isArray(response?.currentArchitectures)) {
         throw new CommandFailedError(
           'Invalid public current architecture response: currentArchitectures must be an array.',
@@ -124,7 +129,8 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const projectId = await this.projectId();
     const response = await this.http
       .get<IntendedArchitecturesDto | null>(this.path('intended-architectures'), { projectId })
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => this.collectionFailure(error));
     if (!Array.isArray(response?.intendedArchitectures)) {
       throw new CommandFailedError(
         'Invalid public intended architecture response: intendedArchitectures must be an array.',
@@ -191,13 +197,14 @@ export class SonarArchitectureApi implements ArchitectureApi {
       throw new CommandFailedError(
         'Directive page must be >= 1 and page size must be between 1 and 1000.',
       );
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .get<{
         projectDirectives?: unknown[];
         page?: { pageIndex: number; pageSize: number; total: number };
       } | null>(this.path('project-directives'), { projectId, pageIndex, pageSize })
-      .orThrow();
+      .orThrow()
+      .catch((error: unknown) => this.collectionFailure(error));
     const page = result?.page;
     if (
       !Array.isArray(result?.projectDirectives) ||
@@ -217,7 +224,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async createDirective(directive: DirectiveInput): Promise<ProjectDirective> {
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .post<unknown>(this.path('project-directives'), {
         ...directive,
@@ -241,7 +248,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
   }
 
   async getDirective(id: string): Promise<ProjectDirective> {
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     const result = await this.http
       .get<unknown>(this.directivePath(id))
       .orThrow()
@@ -266,55 +273,16 @@ export class SonarArchitectureApi implements ArchitectureApi {
     pageIndex: number,
     pageSize: number,
   ): Promise<FindingPage> {
-    if (
-      !Number.isSafeInteger(pageIndex) ||
-      pageIndex < 1 ||
-      !Number.isSafeInteger(pageSize) ||
-      pageSize < 0 ||
-      pageSize > 1000
-    )
-      throw new CommandFailedError(
-        'Finding page must be >= 1 and page size must be between 0 and 1000.',
-      );
+    validateFindingPagination(pageIndex, pageSize);
     const { organizationId, branchId } = await this.ids();
-    const result = await this.http
-      .get<{ findings?: unknown[]; page?: FindingPage['page'] } | null>(
-        this.path('project-findings'),
-        {
-          organizationId,
-          branchId,
-          ...(filters.category === undefined ? {} : { category: filters.category }),
-          ...(filters.type === undefined ? {} : { type: filters.type }),
-          ...(filters.language === undefined ? {} : { language: filters.language }),
-          pageIndex,
-          pageSize,
-        },
-      )
-      .orThrow()
-      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
-    const page = result?.page;
-    if (
-      !Array.isArray(result?.findings) ||
-      page?.pageIndex !== pageIndex ||
-      page.pageSize !== pageSize ||
-      !Number.isSafeInteger(page.total) ||
-      page.total < 0 ||
-      result.findings.length > pageSize
-    )
-      throw incompatibleResponse('Invalid public findings page; no complete page was read.');
-    const findings = result.findings.map(parseProjectFinding);
-    if (
-      findings.some(
-        (item) =>
-          (filters.category && item.category !== filters.category) ||
-          (filters.type && item.type !== filters.type) ||
-          (filters.language && item.language !== filters.language),
-      )
-    )
-      throw incompatibleResponse(
-        'The public findings page returned a finding outside the requested filters.',
-      );
-    return { findings, page };
+    return fetchFindingsPage(
+      this.http,
+      this.path('project-findings'),
+      { organizationId, branchId },
+      filters,
+      pageIndex,
+      pageSize,
+    );
   }
 
   private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
@@ -335,7 +303,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     };
     const response = await this.http.patch<unknown>(this.directivePath(id), payload).orThrow();
     const updated = parseProjectDirective(response);
-    const projectId = await this.projectId('Project directives');
+    const projectId = await this.projectId();
     if (
       updated.id.toLowerCase() !== directiveId(id) ||
       updated.projectId !== projectId ||
@@ -438,12 +406,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
     }
     if (this.http.isCloud) {
       // On SonarQube Cloud the architecture endpoints key a project by its main branch id.
-      return { organizationId: await this.cloudOrganizationId(), branchId, projectId: branchId };
+      return { organizationId: await this.cloudOrganizationId(), branchId };
     }
     return {
       organizationId: SERVER_ORGANIZATION_ID,
       branchId,
-      projectId: branchId,
     };
   }
 
@@ -463,12 +430,65 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return organizationId;
   }
 
-  private async projectId(resource = 'Intended architecture'): Promise<string> {
-    if (!this.http.isCloud) {
+  private async projectId(): Promise<string> {
+    if (this.http.isCloud) return (await this.ids()).branchId;
+    this.serverProjectIdPromise ??= this.resolveServerProjectId();
+    return this.serverProjectIdPromise;
+  }
+
+  private collectionFailure(error: unknown): never {
+    if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
       throw new CommandFailedError(
-        `${resource} is not available yet on SonarQube Server: the public API requires a project UUID that cannot be discovered through a confirmed public endpoint.`,
+        'The public Architecture API endpoint was not found (HTTP 404).',
+        {
+          cause: error,
+          remediationHint:
+            'Check feature availability, Browse permission and API routing.' +
+            (this.http.isCloud
+              ? ''
+              : ' On older Server versions, use a Server build that exposes the public Architecture APIs.'),
+        },
       );
     }
-    return (await this.ids()).projectId;
+    throw error;
+  }
+
+  private async resolveServerProjectId(): Promise<string> {
+    const response = await new ProjectsClient(this.http)
+      .getProjectsByKey(this.projectKey)
+      .orThrow()
+      .catch((error: unknown) => {
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_FORBIDDEN) {
+          throw new CommandFailedError(
+            `The public project lookup refused access to '${this.projectKey}' (HTTP 403).`,
+            { cause: error, remediationHint: 'Check the project key and Browse permission.' },
+          );
+        }
+        if (error instanceof AccessDeniedError && error.status === HTTP_STATUS_NOT_FOUND) {
+          throw new CommandFailedError(
+            'This Server does not expose the public project lookup required for intended architecture and directives.',
+            {
+              cause: error,
+              remediationHint:
+                'Use a Server build with GET /api/v2/components/projects and the public Architecture APIs.',
+            },
+          );
+        }
+        throw error;
+      });
+    const project = response?.projects?.[0];
+    if (
+      !Array.isArray(response?.projects) ||
+      response.projects.length !== 1 ||
+      response.page?.total !== 1 ||
+      project?.key !== this.projectKey ||
+      typeof project.id !== 'string' ||
+      project.id.trim().length === 0
+    ) {
+      throw new CommandFailedError(`Could not resolve project '${this.projectKey}'.`, {
+        remediationHint: 'Check the project key and Browse permission.',
+      });
+    }
+    return project.id;
   }
 }

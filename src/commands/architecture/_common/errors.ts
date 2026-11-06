@@ -63,7 +63,7 @@ export function toArchitectureError(error: unknown, projectKey: string): unknown
       `Project '${projectKey}' or its architecture was not found on this server.`,
       {
         cause: error,
-        remediationHint: `Check the project key with 'sonar list projects'. ${PLAN_HINT}`,
+        remediationHint: `Check the project key and Browse permission with 'sonar list projects'. ${PLAN_HINT}`,
       },
     );
   }

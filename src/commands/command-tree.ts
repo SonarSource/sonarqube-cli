@@ -701,12 +701,26 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key',
       collectExcludeOption,
     )
+    .addOption(
+      new SonarOption(
+        '--dangerous-show-secrets',
+        'Ask sonar-secrets to report the raw value of each secret',
+      ).hideHelp(),
+    )
+    .addOption(
+      new SonarOption(
+        '--show-skipped-files',
+        'Ask sonar-secrets to list the files it skipped as test files',
+      ).hideHelp(),
+    )
     .authenticatedAction((ctx, paths: string[], options: AnalyzeSecretsOptions) =>
       analyzeSecrets(
         {
           paths: Array.isArray(paths) ? paths : [],
           stdin: options.stdin,
           exclude: options.exclude,
+          dangerousShowSecrets: options.dangerousShowSecrets,
+          showSkippedFiles: options.showSkippedFiles,
         },
         ctx,
       ),
@@ -839,6 +853,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Directory to onboard, relative or absolute (default: current directory)',
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
+    .option(
+      '--project <key>',
+      'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
+    )
+    .option(
+      '--name <name>',
+      'Name of the new project (default: the repository name); only used when the project is not bound to the repository',
+    )
+    .option(
+      '--visibility <visibility>',
+      'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
+    )
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .anonymousAction((ctx, options: InitOptions) => init(options, ctx));
 

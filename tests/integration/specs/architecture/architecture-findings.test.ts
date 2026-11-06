@@ -168,7 +168,9 @@ describe('public architecture findings contract', () => {
     const none = await h.run(
       'arch findings get -p shop --type relationshipDeviation --category smell --format json',
     );
-    expect(JSON.parse(none.stdout).page.total).toBe(0);
+    expect(none.exitCode).toBe(2);
+    expect(none.stderr).toContain('type relationshipDeviation belongs to category deviation');
+    expect(requests(server)).toHaveLength(1);
   });
   it('pages without requiring IDs or deduplicating identical findings', async () => {
     await configured(true, (api) => api.withFindings([findings[0], findings[0], findings[1]]));
@@ -234,13 +236,15 @@ describe('public architecture findings contract', () => {
     expect(requests(server)).toHaveLength(0);
   });
   const invalidFindings = [
-    { ...findings[0], type: 'unknown' },
+    { ...findings[0], details: { reason: 'interfaceViolation', nodeKey: 'a' } },
+    { ...findings[2], details: { reason: 'misplacedComponent', fromNodeKey: 'a', toNodeKey: 'b' } },
+    { ...findings[0], type: '' },
+    { ...findings[0], language: '' },
+    { ...findings[0], details: { reason: '', nodeKey: 'a' } },
     { ...findings[0], category: 'DEVIATION' },
     { ...findings[0], category: 'flaw' },
-    { ...findings[0], language: 'unknown' },
     { ...findings[0], details: null },
     { ...findings[0], files: [null] },
-    { ...findings[0], details: { reason: 'unknown', nodeKey: 'a' } },
     { ...findings[2], details: { reason: 'disallowedDependency', fromNodeKey: 'a' } },
     { ...findings[4], details: { nodeKeys: ['a'], nodeCount: -1 } },
     { ...findings[5], details: { nodeKey: 'a', leafArtifactCount: '40' } },
@@ -319,7 +323,14 @@ describe('public architecture findings contract', () => {
       api.withStatus('project-findings', status, '{"message":"Unavailable"}', 'GET'),
     );
     const result = await h.run('arch findings get -p shop');
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(1);
+    if (status === 401) expect(result.stderr).toContain('SonarQube API error: 401');
+    if (status === 403) {
+      expect(result.stderr).toContain("The Architecture API refused access to 'shop' (HTTP 403)");
+      expect(result.stderr).toContain('Check project permissions');
+    }
+    if (status === 401 || status === 403)
+      expect(result.stderr).not.toContain('supported public Architecture API contract');
     expect(requests(server).every((r) => r.path === '/architecture/project-findings')).toBe(true);
     expect(
       server
@@ -329,5 +340,103 @@ describe('public architecture findings contract', () => {
             r.path.includes('/architecture/structure') || r.path.includes('/architecture/graphs'),
         ),
     ).toBe(false);
+  });
+  it.each([
+    '--page 1.5',
+    '--page 1junk',
+    '--page 1e2',
+    '--page 0',
+    '--page 9007199254740992',
+    '--page-size 1.5',
+    '--page-size -1',
+    '--page-size 1001',
+  ])('rejects strict pagination %s with exit 2 before any request', async (args) => {
+    const server = await configured();
+    const result = await h.run(`arch findings get -p shop ${args}`);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('Finding');
+    expect(result.stderr).not.toContain('at parse');
+    expect(server.getRecordedRequests()).toHaveLength(0);
+  });
+
+  it('identifies active filters for a genuinely empty result', async () => {
+    await configured(true, (api) => api.withFindings([]));
+    const result = await h.run(
+      'arch findings get -p shop --category smell --type weakTangle --language java --format text',
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('category=smell, type=weakTangle, language=java');
+    expect(result.stdout).toContain('No findings match');
+    expect(result.stdout).not.toContain('Check project access');
+  });
+
+  it('explains pages past the end with the last page number', async () => {
+    await configured();
+    const result = await h.run('arch findings get -p shop --page 4 --page-size 3 --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('past the last page (3)');
+    expect(result.stdout).toContain('--page 3');
+  });
+
+  it('renders readable typed details instead of raw JSON', async () => {
+    await configured();
+    const result = await h.run('arch findings get -p shop --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('app:web -> app:db (disallowedDependency, 4 dependencies)');
+    expect(result.stdout).toContain('app:web (misplacedComponent, 3 components)');
+    expect(result.stdout).toContain('a, b (2 nodes)');
+    expect(result.stdout).toContain('large (40 leaf artifacts)');
+    expect(result.stdout).toContain('util (3 fragments)');
+    expect(result.stdout).not.toContain('details: {');
+  });
+
+  it.each([true, false])(
+    'skips future values but preserves backend totals on Cloud=%s',
+    async (cloud) => {
+      await configured(cloud, (api) =>
+        api.withStatus(
+          'project-findings',
+          200,
+          JSON.stringify({
+            findings: [
+              findings[0],
+              { ...findings[0], type: 'futureFinding' },
+              { ...findings[0], language: 'futureLanguage' },
+              { ...findings[0], details: { reason: 'futureReason', nodeKey: 'app:web' } },
+            ],
+            page: { pageIndex: 1, pageSize: 50, total: 4 },
+          }),
+          'GET',
+        ),
+      );
+      const result = await h.run('arch findings get -p shop --format json');
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        project: 'shop',
+        findings: [findings[0]],
+        page: { pageIndex: 1, pageSize: 50, total: 4 },
+        skippedFindings: 3,
+      });
+    },
+  );
+
+  it('reports unsupported rows without claiming the project has no findings', async () => {
+    await configured(true, (api) =>
+      api.withStatus(
+        'project-findings',
+        200,
+        JSON.stringify({
+          findings: [{ ...findings[0], type: 'futureFinding' }],
+          page: { pageIndex: 1, pageSize: 50, total: 1 },
+        }),
+        'GET',
+      ),
+    );
+    const result = await h.run('arch findings get -p shop --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Skipped 1 finding');
+    expect(result.stdout).toContain('unsupported type, language or reason');
+    expect(result.stdout).not.toContain('No findings');
+    expect(result.stdout).not.toContain('past the last page');
   });
 });

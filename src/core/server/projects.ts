@@ -36,11 +36,31 @@ import type {
  */
 export const MAX_PAGE_SIZE = 500;
 
+export interface PublicProjectsResponse {
+  projects?: ({ id?: unknown; key?: unknown } | null)[];
+  page?: { total?: number };
+}
+
+export type ProjectVisibility = 'private' | 'public';
+
+export interface CreateProjectParams {
+  projectKey: string;
+  name: string;
+  visibility: ProjectVisibility;
+  organization?: string;
+}
+
 export class ProjectsClient {
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
+  }
+
+  getProjectsByKey(
+    key: string,
+  ): ResultAsync<PublicProjectsResponse | null | undefined, HttpClientError> {
+    return this.client.get('/api/v2/components/projects', { keys: key, pageSize: 1 });
   }
 
   /**
@@ -95,5 +115,17 @@ export class ProjectsClient {
           ? { key: component.key, name: component.name ?? component.key }
           : null;
       });
+  }
+
+  /** Creates an empty project that is not bound to any repository. */
+  createProject(params: CreateProjectParams): ResultAsync<SonarQubeProject, HttpClientError> {
+    return this.client
+      .postFormJson<{ project: { key: string; name: string } }>('/api/projects/create', {
+        project: params.projectKey,
+        name: params.name,
+        visibility: params.visibility,
+        ...(params.organization ? { organization: params.organization } : {}),
+      })
+      .map(({ project }) => ({ key: project.key, name: project.name }));
   }
 }

@@ -68,14 +68,14 @@ const refusal = {
 describe('assertProjectKeyUsable', () => {
   it('lets the import go ahead when no project has the key, without looking at bindings', async () => {
     const api = apiWith('missing');
-    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
+    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBe(false);
     expect(api.lookupProject).toHaveBeenCalledWith(KEY);
     expect(api.findProjectBinding).not.toHaveBeenCalled();
   });
 
   it('lets a project bound to this repository on this setting go ahead', async () => {
     const api = apiWith('found', [binding()]);
-    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBeUndefined();
+    expect(await assertProjectKeyUsable(api, GITLAB, repository(), KEY)).toBe(true);
     expect(api.findProjectBinding).toHaveBeenCalledWith('gl-id', '42', expect.any(Function));
   });
 
@@ -115,7 +115,7 @@ describe('assertProjectKeyUsable', () => {
         repository({ repositoryIdentifier: 'acme/repo' }),
         KEY,
       ),
-    ).toBeUndefined();
+    ).toBe(true);
   });
 
   describe('platforms that bind two identifiers', () => {
@@ -129,7 +129,7 @@ describe('assertProjectKeyUsable', () => {
           azureRepo,
           KEY,
         ),
-      ).toBeUndefined();
+      ).toBe(true);
       expect(
         await failureOf(
           apiWith('found', [binding({ repository: 'repo', slug: 'Other' })]),
@@ -150,7 +150,7 @@ describe('assertProjectKeyUsable', () => {
           bbRepo,
           KEY,
         ),
-      ).toBeUndefined();
+      ).toBe(true);
       expect(
         await failureOf(
           apiWith('found', [binding({ repository: 'my-repo', slug: 'PRJ' })]),

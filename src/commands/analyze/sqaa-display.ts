@@ -503,7 +503,6 @@ export function printSqaaTextReport(options: PrintSqaaTextReportOptions, console
 
   console.text('');
   console.text(formatSqaaRunSummaryColored(stats));
-  applyExitCode(stats);
 }
 
 /** Single `--file` failure: same ✗ row + summary footer as change-set analysis. */
@@ -526,6 +525,16 @@ export function printVortexUnavailable(status: VortexEntitlementStatus, console:
   console.text(vortexUnavailableCommandMessage(status));
 }
 
+export function resolveSqaaCommandExitCode(
+  totalIssues: number,
+  totalFailures: number,
+  hasGlobalError = false,
+): number {
+  if (totalFailures > 0 || hasGlobalError) return 1;
+  if (totalIssues > 0) return EXIT_CODE_ISSUES_FOUND;
+  return 0;
+}
+
 export function applyExitCode(stats: SqaaRunSummaryStats): void;
 export function applyExitCode(
   totalIssues: number,
@@ -540,11 +549,8 @@ export function applyExitCode(
   const failures = typeof statsOrIssues === 'number' ? totalFailures : statsOrIssues.totalFailures;
   const issues = typeof statsOrIssues === 'number' ? statsOrIssues : statsOrIssues.totalIssues;
 
-  if (failures > 0 || hasGlobalError) {
-    process.exitCode = 1;
-  } else if (issues > 0) {
-    process.exitCode = EXIT_CODE_ISSUES_FOUND;
-  }
+  const exitCode = resolveSqaaCommandExitCode(issues, failures, hasGlobalError);
+  if (exitCode !== 0) process.exitCode = exitCode;
 }
 
 export function displaySqaaResults(
@@ -586,16 +592,9 @@ export function displaySqaaResults(
 
   console.text('');
   console.text(formatSqaaRunSummaryColored(stats));
-  applyExitCode(stats);
 
   return issues.length;
 }
 
 export type { SqaaJsonReport } from './sqaa-display-json.ts';
-export {
-  buildJsonReport,
-  ignoredReportPath,
-  makeReport,
-  singleFileFailureReport,
-  singleFileSuccessReport,
-} from './sqaa-display-json.ts';
+export { buildJsonReport, ignoredReportPath, makeReport } from './sqaa-display-json.ts';
