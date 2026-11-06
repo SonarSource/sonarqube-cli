@@ -57,7 +57,7 @@ export async function setProjectDirectives(
         },
       ),
   ).catch((error: unknown) => {
-    throw toArchitectureError(error, projectKey);
+    throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
   });
   recordSet(ctx, {
     target: 'directives',

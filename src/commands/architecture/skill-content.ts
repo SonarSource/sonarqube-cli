@@ -23,13 +23,13 @@ export const ARCHITECTURE_SKILL_MARKER = '<!-- sonar:architecture-skill -->';
 
 export const ARCHITECTURE_SKILL = `---
 name: sonar-architecture
-description: Read current or intended architecture and project directives; apply specified intended edits or create, update and delete specified directives through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
+description: Read current or intended architecture, project directives, deviations, flaws and smells; apply specified intended edits or create, update and delete specified directives through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
 ---
 ${ARCHITECTURE_SKILL_MARKER}
 
 # Architecture data operations
 
-Read requested architecture data, apply explicitly specified intended-model edits, or create, update and delete explicitly specified project directives. Return the
+Read requested architecture data, including read-only findings (deviations, flaws and smells), apply explicitly specified intended-model edits, or create, update and delete explicitly specified project directives. Return the
 requested data, operation result and any reported limits or errors. Architectural diagnosis,
 model design, refactoring recommendations and code navigation belong outside this core skill.
 Do not infer groups or constraints, choose a dependency to remove, or orchestrate other analysis
@@ -161,7 +161,19 @@ never repeat a write or roll back automatically.
 ## Availability
 
 Intended and directive operations on SonarQube Server require the public project lookup
-(/api/v2/components/projects) and public Architecture APIs. Deviations,
-structural flaws and architecture coverage are not exposed by these adapters in this iteration. Do not call
+(/api/v2/components/projects) and public Architecture APIs.
+Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
+
+## Findings
+
+Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
+optionally \`--category deviation|flaw|smell\`, \`--type <type>\` or \`--language <language>\`.
+Every row includes its category, type, language, details and files; findings have no IDs or separate detail lookup.
+Findings use the analyzed main branch on Cloud and Server and are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
+To read findings, use a positive page size. Retain \`pageIndex\`, \`pageSize\` and \`total\` from each response.
+Keep the same filters and page size, and increment \`--page\` while \`pageIndex * pageSize < total\`.
+A zero total means no findings match the active filters or are visible; it does not establish project access or a clean architecture.
+Unsupported future types, languages and deviation reasons are omitted with an explicit skipped count; backend totals and pagination stay unchanged.
+Malformed known findings remain errors. Use the last-page hint when the requested page is beyond the end.
 `;
