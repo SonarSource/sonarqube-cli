@@ -709,6 +709,7 @@ describe('sonar architecture reads', () => {
       expect(topView).toEqual({
         project: PROJECT,
         revision: topView.revision,
+        source: { type: 'SERVER', setting: 'DYNAMIC' },
         partial: true,
         models: [
           {
