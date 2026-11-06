@@ -79,7 +79,7 @@ jobs:
         env:
           DO_NOT_TRACK: "1"
           SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
-          PORTKEY_API_KEY: ${{ secrets.HB_CLAUDE_PORTKEY_API_KEY }}
+          PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && secrets.HB_OPENAI_PORTKEY_API_KEY || matrix.agent.name != 'codex' && secrets.HB_CLAUDE_PORTKEY_API_KEY || '' }}
           SONARQUBE_CLI_ORG: sonarlint-it
           SONARQUBE_CLI_SERVER: https://sc-staging.io
           SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io

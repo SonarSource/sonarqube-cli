@@ -90,7 +90,7 @@ When adding, removing, or changing commands, scripts, or project structure, upda
 
 Harbor tasks (`tasks/<name>/`) that measure how coding agents use the CLI, `report/summarize-job.ts` (report per task, agent, model and OS), `environments/host_environment.py` (Harbor environment on the CI runner itself; `scripts/run-isolated.sh` runs the agent as `nobody` without `sudo`), `ci/` (fixture repo, `sonar` call recorder, agent hooks; `HB_*` variables only hide the names from the agent, tasks map them to `SONARQUBE_CLI_*`, and the agent can read them, so the scope and expiry of the credentials are the protection) and the manual `.github/workflows/harbor-benchmark.yml` (one job per OS, task, agent, model and attempt, from `strategy.matrix.agent`). See `benchmarks/harbor/README.md`.
 
-Before anything is uploaded or written to the run summary, `benchmarks/harbor/ci/scan-secrets.py` scans it, redacts leaks and rescans (`benchmarks/harbor/ci/known-secrets.txt` lists the public fake secrets that the `secrets-context--*` tasks plant on purpose). A leak fails the job and the report shows the trial as `LEAK`. See `benchmarks/harbor/README.md`.
+Before anything is uploaded or written to the run summary, `benchmarks/harbor/ci/scan-secrets.py` scans it, redacts leaks and rescans (`benchmarks/harbor/ci/known-secrets.txt` lists the public fake secrets that the `secrets-context--*` tasks plant on purpose). The scan step of each benchmark job receives the Portkey key of its matrix agent, like the run step, so every new agent key must be passed to it too. A leak fails the job and the report shows the trial as `LEAK`. See `benchmarks/harbor/README.md`.
 
 ## Docs site (`docs/`)
 
