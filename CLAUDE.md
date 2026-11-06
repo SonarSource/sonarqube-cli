@@ -7,6 +7,8 @@ Compiled binaries are produced via `build-scripts/build-binary.ts`, which inject
 
 Dependency executables installed by `src/core/host/install/binary.ts` are downloaded into a private staging directory beside the cache. Signature verification, permissions and the version probe complete before publication. Normal installs use an atomic hard link so concurrent publishers keep the first verified installation. Forced refreshes use atomic rename and preserve the existing executable if replacement fails, including Windows sharing violations. Do not add an unlink-before-rename fallback.
 
+All stable and prerelease installers show PATH setup instructions only when the install directory is absent from the current process PATH. Completion and installation location remain visible after every successful installation.
+
 # Running checks
 
 Use the Bun version pinned in `mise.toml`. Install and activate mise, then run `mise trust`, `mise install`, and `bun install --frozen-lockfile` from the repository root. Use `bun run dev --help` to run from source or `bun run build:binary` to build the standalone executable in `dist/sonarqube-cli`. There is no npm distribution build or package executable entry.
