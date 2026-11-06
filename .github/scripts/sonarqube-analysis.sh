@@ -23,9 +23,39 @@ if [[ "${SONAR_HOST_URL}" == *"sonarqube.us"* ]]; then
   export SONAR_REGION="US"
 fi
 
+build_javascript_lcov_report_paths() {
+  local -a paths=()
+  local unit_lcov='tests/coverage/reports/unit/lcov.info'
+  local shard_lcov
+  local has_integration_shards=false
+
+  if [[ -f "${unit_lcov}" ]]; then
+    paths+=("${unit_lcov}")
+  fi
+
+  while IFS= read -r -d '' shard_lcov; do
+    paths+=("${shard_lcov}")
+    has_integration_shards=true
+  done < <(find tests/coverage/reports -maxdepth 1 -name 'lcov.integration-shard-*.info' -print0 | sort -z)
+
+  if [[ "${has_integration_shards}" != true ]] && [[ -f tests/coverage/reports/integration/lcov.info ]]; then
+    paths+=('tests/coverage/reports/integration/lcov.info')
+  fi
+
+  if ((${#paths[@]} == 0)); then
+    return 0
+  fi
+
+  local joined
+  joined=$(IFS=,; echo "${paths[*]}")
+  echo "-Dsonar.javascript.lcov.reportPaths=${joined}"
+}
+
 sonar_scanner_implementation() {
   local additional_params=("$@")
   local scanner_args=()
+  local lcov_paths_param
+
   scanner_args+=("-Dsonar.host.url=${SONAR_HOST_URL}")
   scanner_args+=("-Dsonar.token=${SONAR_TOKEN}")
   scanner_args+=("-Dsonar.analysis.buildNumber=${BUILD_NUMBER}")
@@ -35,6 +65,10 @@ sonar_scanner_implementation() {
 
   if [[ -n "${SONAR_REGION:-}" ]]; then
     scanner_args+=("-Dsonar.region=${SONAR_REGION}")
+  fi
+  lcov_paths_param=$(build_javascript_lcov_report_paths || true)
+  if [[ -n "${lcov_paths_param}" ]]; then
+    scanner_args+=("${lcov_paths_param}")
   fi
   scanner_args+=("${additional_params[@]+${additional_params[@]}}")
 
