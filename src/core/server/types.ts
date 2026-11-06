@@ -64,6 +64,7 @@ export interface IssuesSearchParams {
   organization?: string;
   severities?: string;
   impactSeverities?: string;
+  impactSoftwareQualities?: string;
   types?: string;
   issueStatuses?: string;
   rules?: string;
@@ -72,6 +73,7 @@ export interface IssuesSearchParams {
   pullRequest?: string;
   resolved?: boolean;
   fixableByAgent?: boolean;
+  facets?: string;
   sinceLeakPeriod?: boolean;
   s?: string;
   asc?: boolean;
@@ -85,6 +87,7 @@ export interface IssuesSearchResponse {
   ps: number;
   paging: Paging;
   issues: SonarQubeIssue[];
+  facets?: Array<{ property: string; values: Array<{ val: string; count: number }> }>;
   components?: Array<{
     key: string;
     name: string;
