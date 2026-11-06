@@ -42,11 +42,7 @@ function describe(outcome: InitOutcome): string[] {
     case 'declined':
       return ['No project was created.'];
     case 'no-organization':
-      return [
-        outcome.reason === 'unavailable'
-          ? 'Organization creation is not available for this account.'
-          : 'No organization was created.',
-      ];
+      return ['No organization was created.'];
   }
 }
 

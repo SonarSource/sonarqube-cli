@@ -23,7 +23,17 @@ import { randomBytes } from 'node:crypto';
 import type { OnNoMemberships } from '@/commands/components/organization/select.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import logger from '@/core/observability/logger.ts';
-import { AccessDeniedError, ForbiddenApiError, UnexpectedApiError } from '@/core/server/errors.ts';
+import type { Result } from '@/core/result.ts';
+import {
+  AccessDeniedError,
+  ForbiddenApiError,
+  type HttpClientError,
+  RateLimitError,
+  ServerError,
+  ServiceUnavailableError,
+  TransportError,
+  UnexpectedApiError,
+} from '@/core/server/errors.ts';
 import type { BillingPlan, OrganizationsClient } from '@/core/server/organizations.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -41,20 +51,34 @@ const FREE_PLAN_NAME = 'free_v2';
 const SETUP_TIMEOUT_MS = 60_000;
 const POLL_INTERVAL_MS = 1_000;
 
-export type OrganizationCreationStop = 'declined' | 'non-interactive' | 'unavailable';
+const INTEGRATE_FALLBACK =
+  "Or run 'sonar integrate' to set up your coding agents without an organization.";
 
 /**
- * Thrown from the no-membership hook when `init` must end without an organization. It is not an
- * error for the user: `init` turns it into an outcome that suggests `sonar integrate`.
+ * Thrown from the no-membership hook when the user declines to create an organization. It is not
+ * a failure: `init` turns it into an outcome that suggests `sonar integrate` and exits 0. Every
+ * other way the creation can stop is a `CommandFailedError`, so scripts see a non-zero exit.
  */
-export class OrganizationCreationStopped extends Error {
-  readonly reason: OrganizationCreationStop;
-
-  constructor(reason: OrganizationCreationStop) {
-    super(`Organization creation stopped: ${reason}`);
-    this.name = 'OrganizationCreationStopped';
-    this.reason = reason;
+export class OrganizationCreationDeclined extends Error {
+  constructor() {
+    super('Organization creation declined');
+    this.name = 'OrganizationCreationDeclined';
   }
+}
+
+function creationNotPossibleWithoutPrompt(): CommandFailedError {
+  return new CommandFailedError(
+    'Your account is not a member of any SonarQube Cloud organization.',
+    {
+      remediationHint: `Run 'sonar init' in a terminal to create one. ${INTEGRATE_FALLBACK}`,
+    },
+  );
+}
+
+function creationUnavailable(): CommandFailedError {
+  return new CommandFailedError('Organization creation is not available for this account.', {
+    remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
+  });
 }
 
 function trimDashes(value: string): string {
@@ -139,7 +163,7 @@ async function createWithAvailableKey(
       (error instanceof UnexpectedApiError && error.status === HTTP_NOT_FOUND)
     ) {
       logger.debug(`Organization creation unavailable: ${error.name}: ${error.message}`);
-      throw new OrganizationCreationStopped('unavailable');
+      throw creationUnavailable();
     }
     throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`);
   }
@@ -148,18 +172,70 @@ async function createWithAvailableKey(
   });
 }
 
-async function pollUntil<T>(attempt: () => Promise<T | undefined>): Promise<T | undefined> {
-  const deadline = Date.now() + SETUP_TIMEOUT_MS;
-  for (;;) {
+export interface PollOptions {
+  timeoutMs?: number;
+  intervalMs?: number;
+}
+
+export async function pollUntil<T>(
+  attempt: () => Promise<T | undefined>,
+  { timeoutMs = SETUP_TIMEOUT_MS, intervalMs = POLL_INTERVAL_MS }: PollOptions = {},
+): Promise<T | undefined> {
+  const deadline = Date.now() + timeoutMs;
+  const poll = async (): Promise<T | undefined> => {
     const value = await attempt();
     if (value !== undefined) {
       return value;
     }
-    if (Date.now() + POLL_INTERVAL_MS > deadline) {
+    if (Date.now() + intervalMs > deadline) {
       return undefined;
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    return poll();
+  };
+  return poll();
+}
+
+/** Failures that say "not yet" or "try again", as opposed to a rejection that will not change. */
+function isTransient(error: HttpClientError): boolean {
+  return (
+    error instanceof AccessDeniedError ||
+    error instanceof TransportError ||
+    error instanceof RateLimitError ||
+    error instanceof ServiceUnavailableError ||
+    error instanceof ServerError
+  );
+}
+
+/**
+ * Poll `read` until it yields a value. A transient failure counts as "not yet" and is named in the
+ * timeout message; any other failure ends the wait at once.
+ */
+async function waitFor<T>(
+  organizationKey: string,
+  step: { failed: string; timedOut: string },
+  read: () => PromiseLike<Result<T | undefined, HttpClientError>>,
+  options?: PollOptions,
+): Promise<T> {
+  let lastError: string | undefined;
+  const value = await pollUntil(async () => {
+    const result = await read();
+    if (result.isOk()) {
+      return result.value;
+    }
+    if (!isTransient(result.error)) {
+      throw subscriptionFailed(organizationKey, `${step.failed} (${result.error.message})`);
+    }
+    lastError = result.error.message;
+    return undefined;
+  }, options);
+  if (value === undefined) {
+    throw subscriptionFailed(
+      organizationKey,
+      lastError ? `${step.timedOut} (last error: ${lastError})` : step.timedOut,
+    );
   }
+  return value;
 }
 
 function subscriptionFailed(organizationKey: string, reason: string): CommandFailedError {
@@ -191,26 +267,37 @@ function freePriceId(plans: BillingPlan[]): string | undefined {
  * Give a freshly created organization its Free subscription. Only called for an organization
  * this run created, so no billing call ever touches one the user already had.
  */
-async function ensureFreeSubscription(
+export async function ensureFreeSubscription(
   client: OrganizationsClient,
   organization: CreatedOrganization,
+  console: Console,
+  pollOptions?: PollOptions,
 ): Promise<void> {
   const { key } = organization;
   // Cloud exposes a new organization a moment after creating it, and answers 403/404 until then.
-  const uuid = await pollUntil(async () => {
-    const result = await client.getUncachedOrganizationId(key);
-    if (result.isErr()) {
-      if (result.error instanceof AccessDeniedError) {
-        return undefined;
-      }
-      throw subscriptionFailed(key, `could not look up the organization (${result.error.message})`);
-    }
-    return result.value ?? undefined;
-  });
-  if (!uuid) {
-    throw subscriptionFailed(key, 'Cloud did not expose the new organization in time');
-  }
+  const uuid = await console.withSpinner('Waiting for SonarQube Cloud to register it', () =>
+    waitFor(
+      key,
+      {
+        failed: 'could not look up the organization',
+        timedOut: 'Cloud did not expose the new organization in time',
+      },
+      () => client.getUncachedOrganizationId(key).map((id) => id ?? undefined),
+      pollOptions,
+    ),
+  );
+  await console.withSpinner('Setting up the Free plan', () =>
+    subscribeToFree(client, organization, uuid, pollOptions),
+  );
+}
 
+async function subscribeToFree(
+  client: OrganizationsClient,
+  organization: CreatedOrganization,
+  uuid: string,
+  pollOptions: PollOptions | undefined,
+): Promise<void> {
+  const { key } = organization;
   // Idempotent: a subscription Cloud already attached is left alone. Before the first one exists
   // the read can answer 403/404, which counts as "none yet".
   const existing = await client.listSubscriptions(uuid);
@@ -246,16 +333,15 @@ async function ensureFreeSubscription(
     throw subscriptionFailed(key, created.error.message);
   }
 
-  const confirmed = await pollUntil(async () => {
-    const result = await client.listSubscriptions(uuid);
-    if (result.isErr()) {
-      throw subscriptionFailed(key, `could not verify it (${result.error.message})`);
-    }
-    return result.value.length > 0 ? true : undefined;
-  });
-  if (!confirmed) {
-    throw subscriptionFailed(key, 'Cloud did not confirm it in time');
-  }
+  await waitFor(
+    key,
+    { failed: 'could not verify it', timedOut: 'Cloud did not confirm it in time' },
+    () =>
+      client
+        .listSubscriptions(uuid)
+        .map((subscriptions) => (subscriptions.length > 0 ? true : undefined)),
+    pollOptions,
+  );
 }
 
 function billingUrl(baseUrl: string, organizationKey: string): string {
@@ -266,33 +352,33 @@ function billingUrl(baseUrl: string, organizationKey: string): string {
  * The `authLogin` hook for an account with no organization: asks, creates the organization and
  * subscribes it to the Free plan, and returns its key so the login can save the connection.
  *
- * It never creates anything unasked, and a run that cannot ask stops as if the user had declined.
- * Anything it throws ends the login, which revokes the token the login just minted.
+ * It never creates anything unasked. A decline throws `OrganizationCreationDeclined`; a run that
+ * cannot ask fails like any other error. Anything it throws ends the login, which revokes the
+ * token the login just minted.
  */
 export function createOrganizationHook(console: Console, interactive: boolean): OnNoMemberships {
   return async (client) => {
     if (!interactive) {
-      throw new OrganizationCreationStopped('non-interactive');
+      throw creationNotPossibleWithoutPrompt();
     }
-    console.print('Your account is not a member of any SonarQube Cloud organization.');
+    console.info("You're not in a SonarQube Cloud organization yet.");
     console.print(
-      'An organization is the workspace that holds your projects, members and plan, usually one per team or company. Creating one is free.',
+      "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
     );
     const accepted = requireAnswer(
-      await console.confirmPrompt('Create a SonarQube Cloud organization now?', true),
+      await console.confirmPrompt('Create an organization now?', true),
     );
     if (!accepted) {
-      throw new OrganizationCreationStopped('declined');
+      throw new OrganizationCreationDeclined();
     }
 
     const name = await askOrganizationName(console);
-    const organization = await console.withSpinner('Creating the organization', async () => {
-      const created = await createWithAvailableKey(client, name);
-      await ensureFreeSubscription(client, created);
-      return created;
-    });
-    console.success(`Created organization '${organization.name}' (${organization.key}).`);
-    console.print(
+    const organization = await console.withSpinner('Creating the organization', () =>
+      createWithAvailableKey(client, name),
+    );
+    await ensureFreeSubscription(client, organization, console);
+    console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
+    console.info(
       `Organization created on the Free plan. For branch analysis, private project analysis and more, upgrade your plan here: ${billingUrl(client.baseUrl, organization.key)}`,
     );
     return organization.key;
