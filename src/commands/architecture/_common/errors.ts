@@ -59,27 +59,23 @@ export function collectionFailure(error: unknown, isCloud: boolean): never {
         },
       );
     }
-    if (isCloud && error.status === HTTP_STATUS_FORBIDDEN) {
-      throw new CommandFailedError('The public Architecture API refused access (HTTP 403).', {
-        cause: error,
-        remediationHint:
-          'Check project permissions, feature availability and API routing. A Cloud gateway can also return 403 for an unavailable route. ' +
-          UPDATE_HINT,
-      });
-    }
   }
   throw error;
 }
 
 /** Translates an HTTP failure of an architecture call into a message that says what to do. */
-export function toArchitectureError(error: unknown, projectKey: string): unknown {
+export function toArchitectureError(error: unknown, projectKey: string, isCloud = false): unknown {
   if (error instanceof AccessDeniedError) {
     if (error.status === HTTP_STATUS_FORBIDDEN) {
       return new CommandFailedError(
         `The Architecture API refused access to '${projectKey}' (HTTP 403).`,
         {
           cause: error,
-          remediationHint: `Check project permissions, feature availability and API routing for this environment. ${PLAN_HINT}`,
+          remediationHint:
+            `Check project permissions, feature availability and API routing for this environment. ${PLAN_HINT}` +
+            (isCloud
+              ? ' A Cloud gateway can also return 403 for an unavailable route. ' + UPDATE_HINT
+              : ''),
         },
       );
     }
