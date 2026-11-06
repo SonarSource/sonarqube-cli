@@ -27,6 +27,7 @@ import { PI_EXTENSION_HELPERS } from './extension-helpers.ts';
 
 export const PI_EXTENSION_MANAGED_MARKER = 'Managed by `sonar integrate pi`';
 
+// Pi lets the original message through if message_end throws, so scan failures must replace its content.
 export const PI_SECRETS_EXTENSION_CONTENT = String.raw`// ${PI_EXTENSION_MANAGED_MARKER} — do not edit by hand.
 import { existsSync } from 'node:fs';
 
