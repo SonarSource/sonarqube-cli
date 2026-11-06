@@ -65,6 +65,7 @@ export interface SetIntendedResult {
   backupPath?: string;
   /** True when the file had no revision, so no stale check could be made. */
   unchecked: boolean;
+  requiresRevisionForClear?: boolean;
 }
 
 export interface SetIntendedOptions {
@@ -83,10 +84,11 @@ export async function setIntended(
   const current = await api.getIntended();
   const next = file.language === undefined ? file.models : withLanguage(current, file);
   const unchecked = file.revision === undefined;
+  const requiresRevisionForClear = unchecked && current.length > 0 && next.length === 0;
   if (file.revision !== undefined && file.revision !== revisionOf(current)) {
     throw staleError(options.projectKey);
   }
-  if (!options.dryRun && current.length > 0 && next.length === 0 && file.revision === undefined)
+  if (!options.dryRun && requiresRevisionForClear)
     throw new CommandFailedError(
       'Clearing the stored intended architecture requires its exported revision; read the complete intended architecture and preview the clear again.',
     );
@@ -94,7 +96,7 @@ export async function setIntended(
   const diff = diffIntended(current, next);
   if (!isEmptyDiff(diff)) await options.onValidation?.();
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
-  if (options.dryRun) return { mode: 'dry-run', diff, unchecked };
+  if (options.dryRun) return { mode: 'dry-run', diff, unchecked, requiresRevisionForClear };
   if (isEmptyDiff(diff)) return { mode: 'unchanged', diff, unchecked };
   if (current.length === 0) {
     await writeModel(api, next, 'create', options.projectKey);
