@@ -413,7 +413,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
     const branches = await new BranchesClient(this.http).listBranches(this.projectKey).orThrow();
     const mainBranch = branches.find((branch) => branch.isMain);
     const branchId = mainBranch?.branchId;
-    if (!branchId || (requireAnalysis && !mainBranch?.analysisDate)) {
+    if (!branchId || (requireAnalysis && !mainBranch.analysisDate)) {
       throw new CommandFailedError(`Project '${this.projectKey}' has no analyzed main branch.`, {
         remediationHint: 'Run an analysis of the main branch first.',
       });
