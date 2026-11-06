@@ -66,10 +66,15 @@ export async function setIntended(
       );
     },
   }).catch((error: unknown) => {
-    throw toArchitectureError(error, projectKey);
+    throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
   });
 
   printDiff(ctx, result.diff);
+  if (result.clearsResource) {
+    ctx.console.info(
+      'The stored intended architecture resource will be deleted when this change is applied.',
+    );
+  }
   if (result.unchecked) {
     ctx.console.warn(
       'The file has no revision, so changes made in SonarQube since it was written could not be detected.',
