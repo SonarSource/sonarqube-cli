@@ -68,25 +68,6 @@ export function makeReport(
   };
 }
 
-export function singleFileSuccessReport(
-  filePath: string,
-  issues: SqaaIssue[],
-  errors?: Array<{ code: string; message: string }> | null,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-  project?: string,
-): SqaaJsonReport {
-  return makeReport([{ path: filePath, issues, errors, project }], [], [], analysisDepth);
-}
-
-export function singleFileFailureReport(
-  filePath: string,
-  message: string,
-  analysisDepth: SqaaAnalysisDepth = 'STANDARD',
-  project?: string,
-): SqaaJsonReport {
-  return makeReport([], [{ path: filePath, message, project }], [], analysisDepth);
-}
-
 /** Relative to `base` (the repository root); a file outside it (`outside-repository`) keeps its absolute path. */
 export function ignoredReportPath(path: string, base?: string): string {
   return toRelativePosixPathOrNull(path, base) ?? normalizePath(path);

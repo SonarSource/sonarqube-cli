@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import {
   AccessDeniedError,
@@ -73,6 +73,7 @@ export interface SetIntendedOptions {
   projectKey: string;
   dryRun: boolean;
   backupDir: string;
+  onValidation?: () => Promise<void>;
   onReplacement?: (current: IntendedArchitecture[]) => void;
 }
 
@@ -90,6 +91,7 @@ export async function setIntended(
   }
   assertImportedGroupsUnchanged(current, next);
   const diff = diffIntended(current, next);
+  if (!isEmptyDiff(diff)) await options.onValidation?.();
   if (current.length > 0 && !isEmptyDiff(diff)) options.onReplacement?.(current);
   if (options.dryRun)
     return {
@@ -187,7 +189,10 @@ function writeFailure(
       `After inspecting the current state, restore it with: sonar architecture intended set --project ${shellQuote(projectKey)} --file ${shellQuote(backupPath)}`,
     );
   }
-  return new CommandFailedError(lines.join('\n'), { cause: error ?? readError });
+  return new CommandFailedError(lines.join('\n'), {
+    cause: error ?? readError,
+    remediationHint: remediationHintFor(readError),
+  });
 }
 
 /** The saved models with the file's language replaced by the file's model (or removed). */

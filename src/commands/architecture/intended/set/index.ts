@@ -28,12 +28,14 @@ import {
   type IntendedGroup,
 } from '@/commands/architecture/_common/architecture-api.ts';
 import { toArchitectureError } from '@/commands/architecture/_common/errors.ts';
+import { intendedDiagnostics } from '@/commands/architecture/_common/intended-diagnostics.ts';
 import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff.ts';
 import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
 import { setIntended as setIntendedModel } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { CLI_DIR } from '@/core/config-constants.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { green, red, yellow } from '@/core/ui/colors.ts';
 
 import { resolveProject } from '../../_common/project.ts';
@@ -49,7 +51,11 @@ export async function setIntended(
   const file = parseIntendedFile(await readJsonFile(options.file));
   const projectKey = await resolveProject(options, ctx);
   const dryRun = options.dryRun === true;
-  const result = await setIntendedModel(createArchitectureApi(ctx.connection, projectKey), file, {
+  const api = createArchitectureApi(ctx.connection, projectKey);
+  const result = await setIntendedModel(api, file, {
+    onValidation: async () => {
+      for (const warning of await intendedDiagnostics(api, file.models)) ctx.console.warn(warning);
+    },
     projectKey,
     dryRun,
     backupDir: BACKUP_DIR,
@@ -60,7 +66,7 @@ export async function setIntended(
       );
     },
   }).catch((error: unknown) => {
-    throw toArchitectureError(error, projectKey);
+    throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
   });
 
   printDiff(ctx, result.diff);
@@ -105,6 +111,14 @@ export async function setIntended(
   ctx.console.success(`${verb} the intended architecture of '${projectKey}'.`);
   if (result.backupPath !== undefined) {
     ctx.console.info(`The previous one is backed up in ${result.backupPath}`);
+    const restore =
+      `sonar architecture intended set --project ${shellQuote(projectKey)}` +
+      ` --file ${shellQuote(result.backupPath)}`;
+    ctx.console.info(`Preview restoring this backup: ${restore} --dry-run`);
+    ctx.console.info(
+      'Inspect the current model and the preview before restoring. ' +
+        'To apply, run the same command without --dry-run.',
+    );
   }
   ctx.console.info('SonarQube applies it from the next analysis.');
 }

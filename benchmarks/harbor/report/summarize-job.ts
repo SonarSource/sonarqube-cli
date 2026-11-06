@@ -19,7 +19,9 @@ interface FinalMetrics {
   total_steps?: number;
 }
 
-type Status = 'PASS' | 'FAIL' | 'ERROR';
+type Status = 'PASS' | 'FAIL' | 'ERROR' | 'LEAK';
+
+const LEAK_MARKER_FILE = 'secrets-leak.json';
 
 interface Row {
   label: string;
@@ -108,10 +110,20 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   };
 }
 
+function leakedRow(row: Row): Row {
+  return { ...row, status: 'LEAK' };
+}
+
 function rowsFor(label: string, jobDir: string): Row[] {
   const rows = readdirSync(jobDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => rowFor(label, join(jobDir, entry.name), entry.name));
+    .map((entry) => {
+      const trialDir = join(jobDir, entry.name);
+      const row = rowFor(label, trialDir, entry.name);
+      return existsSync(join(trialDir, LEAK_MARKER_FILE)) ? leakedRow(row) : row;
+    });
+  if (existsSync(join(jobDir, LEAK_MARKER_FILE)))
+    rows.push(leakedRow(errorRow(label, 'job files', null)));
   return rows.length > 0 ? rows : [errorRow(label, 'no trials', null)];
 }
 

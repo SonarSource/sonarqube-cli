@@ -34,6 +34,7 @@ import {
 } from '@/core/server/http-constants.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { incompatibleResponse } from './errors.ts';
 
 const MAX_DIRECTIVE_ENUM_LENGTH = 30;
 const MAX_DIRECTIVE_PERSPECTIVE_LENGTH = 255;
@@ -130,18 +131,23 @@ export function parseDirective(value: unknown, inputFields?: Set<string>): Direc
   return directive;
 }
 export function parseProjectDirective(value: unknown): ProjectDirective {
-  const object = record(value);
-  const id = stringField(object, 'id', DIRECTIVE_UUID_LENGTH);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
-    throw new CommandFailedError('Public directive response has an invalid id.');
-  if (object.origin != null && typeof object.origin !== 'string')
-    throw new CommandFailedError('Public directive origin must be a string.');
-  return {
-    ...parseDirective(object, new Set()),
-    id,
-    projectId: stringField(object, 'projectId', 1000),
-    ...(object.origin == null ? {} : { origin: object.origin }),
-  };
+  try {
+    const object = record(value);
+    const id = stringField(object, 'id', DIRECTIVE_UUID_LENGTH);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      throw new CommandFailedError('Public directive response has an invalid id.');
+    if (object.origin != null && typeof object.origin !== 'string')
+      throw new CommandFailedError('Public directive origin must be a string.');
+    return {
+      ...parseDirective(object, new Set()),
+      id,
+      projectId: stringField(object, 'projectId', 1000),
+      ...(object.origin == null ? {} : { origin: object.origin }),
+    };
+  } catch (error: unknown) {
+    if (error instanceof CommandFailedError) throw incompatibleResponse(error.message, error);
+    throw error;
+  }
 }
 function parseCreates(items: unknown[]): DirectiveInput[] {
   return items.map((item) => {
@@ -173,6 +179,12 @@ function parseCreates(items: unknown[]): DirectiveInput[] {
     };
   });
 }
+export function identityPerspective(value?: string): string {
+  const perspective = value?.trim() ?? '';
+  return !perspective || perspective.startsWith('transformed')
+    ? DEFAULT_DIRECTIVE_PERSPECTIVE
+    : perspective;
+}
 export function directiveKey(directive: DirectiveInput): string {
   return JSON.stringify([
     directive.type,
@@ -180,7 +192,7 @@ export function directiveKey(directive: DirectiveInput): string {
     directive.graphType,
     directive.fromNodeKey,
     directive.toNodeKey,
-    directive.graphPerspective ?? DEFAULT_DIRECTIVE_PERSPECTIVE,
+    identityPerspective(directive.graphPerspective),
   ]);
 }
 export function isDefiniteRejection(error: unknown): boolean {
@@ -306,7 +318,12 @@ async function planUpdates(api: DirectivesApi, updates: DirectiveUpdate[]) {
       { ...before, ...update.changes },
       new Set(Object.keys(update.changes)),
     );
-    if (directiveKey(before) !== directiveKey(after) || before.description !== after.description)
+    if (
+      directiveKey(before) !== directiveKey(after) ||
+      before.description !== after.description ||
+      (update.changes.graphPerspective !== undefined &&
+        before.graphPerspective !== after.graphPerspective)
+    )
       changes.push({
         id: update.id,
         before,

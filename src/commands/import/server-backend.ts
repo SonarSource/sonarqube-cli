@@ -25,7 +25,7 @@ import {
   InvalidOptionError,
 } from '@/core/commands/command-error.ts';
 import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/config-constants.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
+import { AccessDeniedError, BadRequestError, UnexpectedApiError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -53,6 +53,8 @@ import type { ImportOptions } from './types';
 
 /** Every repository is selectable: SonarQube Server has no per-organization visibility rule. */
 const NO_VISIBILITY_RESTRICTION: OnlyPrivateProjects = { enabled: false, available: true };
+
+const CREATION_CONFLICT_STATUS = 409;
 
 const NETWORK_HINT = 'Check your network connection and authentication, then retry.';
 
@@ -83,11 +85,12 @@ export class ServerBackend implements ImportBackend {
 
     const repositories = new Map<string, ServerRepository>();
     const claimedKeys = new Map<string, string>();
-    const listed = support.listRepositories(this.api, setting);
+    const listed = support.listRepositories(this.api, setting, options.repo);
     const fetchServerPage =
       setting.type === 'azure'
         ? guardAzureSignIn(listed, buildConnectUrl(this.serverUrl, setting, { resetPat: true }))
         : listed;
+    const reportedWarnings = new Set<string>();
     const selection = await selectRepos(
       {
         fetchPage: async (pageIndex, pageSize) => {
@@ -95,7 +98,15 @@ export class ServerBackend implements ImportBackend {
           for (const repository of page.repositories) {
             repositories.set(repository.id, repository);
           }
-          return { repositories: page.repositories.map(toDopRepository), total: page.total };
+          for (const warning of page.warnings ?? []) {
+            if (!reportedWarnings.has(warning)) console.warn(warning);
+            reportedWarnings.add(warning);
+          }
+          return {
+            repositories: page.repositories.map(toDopRepository),
+            total: page.total,
+            incomplete: (page.warnings?.length ?? 0) > 0,
+          };
         },
         scope: 'this DevOps platform',
         platformScope: 'this DevOps platform',
@@ -139,19 +150,28 @@ export class ServerBackend implements ImportBackend {
       );
     }
     claimedKeys.set(projectKey, repository.id);
-    await assertProjectKeyUsable(this.api, setting, repository, projectKey);
-    const { newProjectCreated } = await this.api
-      .putBoundProject({
+    if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
+      return { detail: 'project already exists with matching binding' };
+    }
+    try {
+      await this.api.createBoundProject({
         projectKey,
         projectName: repository.name,
         devOpsPlatformSettingId: setting.id,
         repositoryIdentifier: repository.repositoryIdentifier,
         projectIdentifier: repository.projectIdentifier,
-      })
-      .catch((error: unknown) => {
-        throw this.explainedImportFailure(error, setting, projectKey);
       });
-    return newProjectCreated ? undefined : { detail: 'project already existed, binding updated' };
+    } catch (error) {
+      if (
+        (error instanceof BadRequestError ||
+          (error instanceof UnexpectedApiError && error.status === CREATION_CONFLICT_STATUS)) &&
+        (await assertProjectKeyUsable(this.api, setting, repository, projectKey))
+      ) {
+        return { detail: 'project already exists with matching binding' };
+      }
+      throw this.explainedImportFailure(error, setting, projectKey);
+    }
+    return undefined;
   }
 
   private explainedImportFailure(error: unknown, setting: DopSetting, projectKey: string): unknown {
