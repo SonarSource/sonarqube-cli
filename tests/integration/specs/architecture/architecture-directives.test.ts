@@ -123,6 +123,9 @@ describe('public project directives', () => {
   );
 
   it.each([
+    ['', 'default_perspective'],
+    [' ', 'default_perspective'],
+    ['transformed_model_perspective', 'default_perspective'],
     ['transformed_code_perspective', 'default_perspective'],
     [' default_perspective ', 'default_perspective'],
     [' custom_view ', 'custom_view'],
