@@ -65,6 +65,13 @@ export async function assertOrganizationMember(
 }
 
 /**
+ * Supplies an organization key for an account that belongs to none, for example by creating one.
+ * It receives the client bound to the token this login is using, since nothing else is saved yet.
+ * It may throw to abort the login.
+ */
+export type OnNoMemberships = (client: OrganizationsClient) => Promise<string>;
+
+/**
  * Validate organization or get from list
  */
 export async function validateOrSelectOrganization(
@@ -72,6 +79,7 @@ export async function validateOrSelectOrganization(
   org: string | undefined,
   console: Console,
   activeOrgKey: string | undefined,
+  onNoMemberships?: OnNoMemberships,
 ): Promise<string> {
   if (org) {
     await assertOrganizationMember(client, org);
@@ -96,7 +104,7 @@ export async function validateOrSelectOrganization(
     console.warn(`You are not a member of organization '${configOrg}' from project config.`);
   }
 
-  return await getUserSelectedOrganization(client, console, activeOrgKey);
+  return await getUserSelectedOrganization(client, console, activeOrgKey, onNoMemberships);
 }
 
 function organizationRequiredError(): CommandFailedError {
@@ -177,6 +185,7 @@ export async function getUserSelectedOrganization(
   client: OrganizationsClient,
   console: Console,
   activeOrgKey: string | undefined,
+  onNoMemberships?: OnNoMemberships,
 ): Promise<string> {
   // Deduce organization from API: if user is member of exactly one org, use it
   const {
@@ -190,6 +199,9 @@ export async function getUserSelectedOrganization(
   }
 
   if (memberOrgs.length === 0) {
+    if (onNoMemberships) {
+      return onNoMemberships(client);
+    }
     throw new CommandFailedError('You are not a member of any organization.', {
       remediationHint: 'Join a SonarQube Cloud organization, then try again.',
     });

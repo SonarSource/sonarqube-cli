@@ -65,7 +65,9 @@ export type InitOutcome =
   /** A project without repository binding was created and mapped. */
   | { kind: 'unbound'; projectKey: string }
   /** The user declined the creation: nothing was created. */
-  | { kind: 'declined' };
+  | { kind: 'declined' }
+  /** The account has no organization and the user declined to create one: nothing was created. */
+  | { kind: 'no-organization' };
 
 export type LinkExistingPath = Extract<InitPath, { path: 'link-existing' }>;
 export type BoundNewPath = Extract<InitPath, { path: 'bound-new' }>;

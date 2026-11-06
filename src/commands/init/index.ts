@@ -38,6 +38,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
   NOT_RUN,
   reportScan,
@@ -78,19 +79,19 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     interactive,
     unboundNewOptions,
   );
-  if (outcome.kind !== 'unbound' && outcome.kind !== 'declined') {
+  const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
+  if (outcome.kind !== 'unbound' && !declined) {
     warnIgnoredUnboundNewOptions(unboundNewOptions, console);
   }
   const scan = await scanCreatedProject(outcome, projectRoot, deps, scanOptions);
   if (scan.status === 'not-run') {
     warnIgnoredScanOptions(scanOptions, console);
   }
-  const declined = outcome.kind === 'declined';
   const suggestIntegrate = findInstalledIntegrationIds().length === 0;
   renderInitOutcome(outcome, auth, console, {
     suggestIntegrate: suggestIntegrate && (declined || !interactive),
   });
-  if (suggestIntegrate && interactive && !declined) {
+  if (suggestIntegrate && interactive && !declined && auth) {
     await offerIntegrate(ctx, auth);
   }
 }
@@ -99,10 +100,10 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
 async function scanCreatedProject(
   outcome: InitOutcome,
   projectRoot: string,
-  deps: DetectDeps,
+  deps: DetectDeps | undefined,
   options: ScanOptions,
 ): Promise<ScanResult> {
-  if (outcome.kind !== 'unbound') {
+  if (outcome.kind !== 'unbound' || !deps) {
     return NOT_RUN;
   }
   const scan = await runFirstScan(projectRoot, outcome.projectKey, deps, options);
@@ -116,8 +117,16 @@ async function run(
   console: Console,
   interactive: boolean,
   unboundNewOptions: UnboundNewOptions,
-): Promise<{ outcome: InitOutcome; auth: ResolvedAuth; deps: DetectDeps }> {
-  const auth = await resolveInitAuth(ctx, interactive);
+): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
+  let auth: ResolvedAuth;
+  try {
+    auth = await resolveInitAuth(ctx, interactive);
+  } catch (error) {
+    if (error instanceof OrganizationCreationDeclined) {
+      return { outcome: { kind: 'no-organization' } };
+    }
+    throw error;
+  }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
   const detected = await detectInitPath(projectRoot, deps);
