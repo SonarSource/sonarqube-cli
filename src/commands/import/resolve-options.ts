@@ -418,6 +418,14 @@ async function createRepositoryCollectionOrThrow(
  * has been fully scanned.
  */
 function handleNoEligibleRepos(collection: RepositoryCollection, scope: string): never {
+  if (collection.incomplete) {
+    throw new CommandFailedError(
+      'Repository discovery was incomplete. No discovered repositories are eligible for import.',
+      {
+        remediationHint: 'Use --repo owner/repository to select a repository directly.',
+      },
+    );
+  }
   const reason = collection.skippedRepos.every((repo) => repo.reason === 'already imported')
     ? `All repositories for ${scope} have already been imported into SonarQube.`
     : "No repositories match this organization's project visibility settings.";
@@ -574,7 +582,7 @@ async function resolveStreamingImport(
 
   if (collection.eligibleRepos.length === 0) {
     throw new CommandFailedError(
-      `No repositories are eligible for import (${collection.skippedRepos.length} skipped: already imported, or excluded by project visibility settings).`,
+      `No ${collection.incomplete ? 'discovered ' : ''}repositories are eligible for import (${collection.skippedRepos.length} skipped: already imported, or excluded by project visibility settings).`,
     );
   }
 

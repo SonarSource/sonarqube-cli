@@ -35,7 +35,11 @@ export interface ServerRepository {
   boundProjectKey?: string;
 }
 
-export type ServerRepositoryPage = { repositories: ServerRepository[]; total: number };
+export type ServerRepositoryPage = {
+  repositories: ServerRepository[];
+  total: number;
+  warnings?: string[];
+};
 
 /**
  * Fetches one page of repositories (`pageIndex` starts at 1). Called with consecutive indices,
@@ -47,7 +51,11 @@ export type FetchServerRepositories = (
 ) => Promise<ServerRepositoryPage>;
 
 export interface PlatformSupport {
-  listRepositories(api: ServerImportApiClient, setting: DopSetting): FetchServerRepositories;
+  listRepositories(
+    api: ServerImportApiClient,
+    setting: DopSetting,
+    slugs?: string[],
+  ): FetchServerRepositories;
 }
 
 export type SupportedPlatforms = Partial<Record<DopPlatform, PlatformSupport>>;

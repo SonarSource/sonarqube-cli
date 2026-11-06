@@ -20,8 +20,9 @@
 
 import { integrateBare } from '@/commands/integrate/integrate-bare.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+
+import { requireAnswer } from '../answer.ts';
 
 /**
  * Asks whether to set up coding agents now and runs `sonar integrate` when accepted. Onboarding has already succeeded by then, so a failure or an abort
@@ -32,13 +33,9 @@ export async function offerIntegrate(
   auth: ResolvedAuth,
 ): Promise<void> {
   const { console } = ctx;
-  const accepted = await console.confirmPrompt(
-    "Set up your coding agents with 'sonar integrate' now?",
-    true,
+  const accepted = requireAnswer(
+    await console.confirmPrompt("Set up your coding agents with 'sonar integrate' now?", true),
   );
-  if (accepted === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
-  }
   if (!accepted) {
     return;
   }
