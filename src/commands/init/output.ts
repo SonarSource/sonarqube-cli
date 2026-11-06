@@ -25,6 +25,7 @@ import type { InitOutcome } from './init-outcome.ts';
 import { projectDashboardUrl } from './steps/mapping.ts';
 
 const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
+const NO_ORGANIZATION_NOTE = "A project needs an organization. Secrets scanning doesn't.";
 function describe(outcome: InitOutcome): string[] {
   switch (outcome.kind) {
     case 'complete': {
@@ -63,6 +64,9 @@ export function renderInitOutcome(
     renderProjectDashboards(outcome, auth, console);
   }
   if (suggestIntegrate) {
+    if (outcome.kind === 'no-organization') {
+      console.info(NO_ORGANIZATION_NOTE);
+    }
     console.print(INTEGRATE_SUGGESTION);
   }
 }
