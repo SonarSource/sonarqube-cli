@@ -49,10 +49,10 @@ interface BoundProjectPayload {
   monorepo: boolean;
 }
 
-function putPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
+function postPayloads(server: FakeSonarQubeServer): BoundProjectPayload[] {
   return server
     .getRecordedRequests()
-    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'PUT')
+    .filter((r) => r.path === '/api/v2/dop-translation/bound-projects' && r.method === 'POST')
     .map((r) => JSON.parse(r.body ?? '{}') as BoundProjectPayload);
 }
 
@@ -87,7 +87,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 2 repositories');
     expect(result.stdout).toContain(`Dashboard: ${server.baseUrl()}/admin/project-coverage`);
-    const payloads = putPayloads(server);
+    const payloads = postPayloads(server);
     expect(payloads).toHaveLength(2);
     expect(payloads).toContainEqual({
       projectKey: 'group_sub_repo-a',
@@ -111,7 +111,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     const result = await harness.run('import --repo group/repo-b');
 
     expect(result.exitCode).toBe(0);
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['12']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['12']);
   });
 
   it('fails when a --repo path is not found, without importing anything', async () => {
@@ -123,7 +123,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('group/missing');
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 
   it('imports only the repositories whose name matches --regex', async () => {
@@ -139,7 +139,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(
-      putPayloads(server)
+      postPayloads(server)
         .map((p) => p.repositoryIdentifier)
         .sort(),
     ).toEqual(['11', '13']);
@@ -158,7 +158,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 1 repository');
     expect(result.stdout).toContain('already imported');
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['12']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['12']);
   });
 
   it('refuses to --repo a repository that is already bound', async () => {
@@ -172,7 +172,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout + result.stderr).toContain('has already been imported');
-    expect(putPayloads(server)).toHaveLength(0);
+    expect(postPayloads(server)).toHaveLength(0);
   });
 
   it('reports a project that already existed as imported instead of failing', async () => {
@@ -188,7 +188,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 1 repository');
-    expect(result.stdout).toContain('project already existed, binding updated');
+    expect(result.stdout).toContain('project already exists with matching binding');
   });
 
   it('does not rebind an existing project that is not bound to the repository', async () => {
@@ -213,7 +213,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     expect(output).toContain(
       "A project with key 'group_repo-a' already exists and is not bound to group/repo-a; the CLI did not change it.",
     );
-    expect(putPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['13']);
+    expect(postPayloads(server).map((p) => p.repositoryIdentifier)).toEqual(['13']);
   });
 
   it('keeps importing the others and exits 1 when one repository fails', async () => {
@@ -232,7 +232,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     const output = result.stdout + result.stderr;
     expect(output).toContain('Imported 1 of 2 repositories (1 failed)');
     expect(output).toContain('group/repo-a');
-    expect(putPayloads(server)).toHaveLength(2);
+    expect(postPayloads(server)).toHaveLength(2);
   });
 
   it('reports a missing token during the import as that repository failing, with the way to connect it', async () => {
@@ -292,26 +292,6 @@ describe('sonar import: GitLab on SonarQube Server', () => {
     );
   });
 
-  it('falls back to POST when the server has no PUT on bound-projects', async () => {
-    const server = await startServer((s) =>
-      s
-        .withGitlabRepos('my-gitlab', [
-          gitlabRepo(11, 'group/repo-a'),
-          gitlabRepo(12, 'group/repo-b'),
-        ])
-        .withoutBoundProjectsPut(405),
-    );
-
-    const result = await harness.run('import --all');
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('Imported 2 repositories');
-    const requests = server
-      .getRecordedRequests()
-      .filter((r) => r.path === '/api/v2/dop-translation/bound-projects');
-    expect(requests.filter((r) => r.method === 'POST')).toHaveLength(2);
-  });
-
   it('pages through every repository', async () => {
     const repos = Array.from({ length: 120 }, (_, i) => gitlabRepo(1000 + i, `group/repo-${i}`));
     const server = await startServer((s) => s.withGitlabRepos('my-gitlab', repos));
@@ -320,7 +300,7 @@ describe('sonar import: GitLab on SonarQube Server', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Imported 120 repositories');
-    expect(putPayloads(server)).toHaveLength(120);
+    expect(postPayloads(server)).toHaveLength(120);
     const searches = server
       .getRecordedRequests()
       .filter((r) => r.path === '/api/alm_integrations/search_gitlab_repos');

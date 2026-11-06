@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
 
+import { readStatsEvents } from '../../../_common/stats-helpers.ts';
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
 import { parseSqaaRequestBody, sqaaRequestFirstFilePath } from '../analyze/sqaa-request-helpers';
@@ -287,6 +288,113 @@ describe('sonar hook claude-post-tool-use', () => {
       expect(logFile.asText()).toContain(
         `PostToolUse SQAA skipped: file outside cwd: ${outsidePath}`,
       );
+    },
+    { timeout: 15000 },
+  );
+
+  it.each([
+    ['claude', 'outside-project'],
+    ['claude', 'other-connection'],
+    ['opencode', 'outside-project'],
+    ['opencode', 'other-connection'],
+  ] as const)(
+    'keeps project_uuid null for %s edits skipped as %s',
+    async (agent, reason) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT)
+        .start();
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('pkg/other/.keep', '');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            {
+              serverUrl: server.baseUrl(),
+              organization: TEST_ORG,
+              projectKey: TEST_PROJECT,
+              path: 'pkg',
+            },
+            {
+              serverUrl: server.baseUrl(),
+              organization: 'other-org',
+              projectKey: 'other-project',
+              path: 'pkg/other',
+            },
+          ],
+        }),
+      );
+      const file = reason === 'outside-project' ? 'unowned.ts' : 'pkg/other/main.ts';
+      harness.cwd.writeFile(file, 'const x = 1;');
+      const filePath = join(harness.cwd.path, file);
+      const payload =
+        agent === 'claude'
+          ? postToolUseStdin(filePath)
+          : JSON.stringify({ tool: 'edit', filePath, sessionID: 'ses_test' });
+
+      const result = await harness.runWithStdin(`hook ${agent}-post-tool-use`, payload);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe(agent === 'claude' ? '' : '{}');
+      expect(readAnalysisEvents(harness.sonarUserHome.path)).toHaveLength(0);
+      expect(readStatsEvents(harness.sonarUserHome.path)).toHaveLength(0);
+      const commands = readCommandEvents(harness.sonarUserHome.path);
+      expect(commands).toHaveLength(1);
+      expect(commands[0].event_payload.project_uuid).toBeNull();
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/navigation/component'),
+      ).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it.each(['claude', 'opencode'] as const)(
+    'records one analysis and stats event when the %s edited path cannot be read as a file',
+    async (agent) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withProject(TEST_PROJECT)
+        .start();
+      harness.state().withTelemetryEnabled();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      harness.cwd.writeFile('src/main.ts', 'const x = 1;');
+      const filePath = join(harness.cwd.path, 'src');
+      const payload =
+        agent === 'claude'
+          ? postToolUseStdin(filePath)
+          : JSON.stringify({ tool: 'edit', filePath, sessionID: 'ses_test' });
+
+      const result = await harness.runWithStdin(`hook ${agent}-post-tool-use`, payload);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe(agent === 'claude' ? '' : '{}');
+      expect(result.stderr).toBe('');
+      expect(
+        server.getRecordedRequests().filter((request) => request.path.endsWith('/analyses')),
+      ).toHaveLength(0);
+      const events = readAnalysisEvents(harness.sonarUserHome.path);
+      expect(events).toHaveLength(1);
+      expect(events[0].event_payload).toMatchObject({
+        analyzer: 'sqaa',
+        caller_command: `${agent}-post-tool-use`,
+        exit_code: 0,
+        failures_count: 1,
+        findings_count: 0,
+      });
+      const stats = readStatsEvents(harness.sonarUserHome.path);
+      expect(stats).toHaveLength(1);
+      expect(stats[0]).toMatchObject({
+        caller_command: `${agent}-post-tool-use`,
+        exit_code: 0,
+        run_trigger: 'hooks',
+        parsedDetails: { analyzer: 'sqaa', findingsCount: 0 },
+      });
     },
     { timeout: 15000 },
   );

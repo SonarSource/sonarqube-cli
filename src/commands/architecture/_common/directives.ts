@@ -173,13 +173,12 @@ function parseCreates(items: unknown[]): DirectiveInput[] {
     };
   });
 }
-export function identityPerspective(value: string | undefined): string {
+export function identityPerspective(value?: string): string {
   const perspective = value?.trim() ?? '';
   return !perspective || perspective.startsWith('transformed')
     ? DEFAULT_DIRECTIVE_PERSPECTIVE
     : perspective;
 }
-
 export function directiveKey(directive: DirectiveInput): string {
   return JSON.stringify([
     directive.type,

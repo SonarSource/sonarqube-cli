@@ -28,15 +28,25 @@ export function collectExcludeOption(value: string, previous: string[] = []): st
   return [...previous, value];
 }
 
-/**
- * `exclusionsOverride` comes from the command line: when non-empty it replaces the configured exclusions, resolving
- * against the cwd and canonicalized like them, since sonar-secrets only matches canonical paths.
- */
+/** Options of a single `analyze secrets` run; hooks and the other scanners never set them. */
+export interface SecretsScanRunOptions {
+  /**
+   * When non-empty, replaces the configured exclusions, resolving against the cwd and canonicalized like them, since
+   * sonar-secrets only matches canonical paths.
+   */
+  exclusionsOverride?: readonly string[];
+  /** Makes sonar-secrets add the raw value to each issue as `secret`. */
+  dangerousShowSecrets?: boolean;
+  /** Makes sonar-secrets list the paths it skipped as test files in `skippedFiles.paths`. */
+  showSkippedFiles?: boolean;
+}
+
 export function buildSecretsScanArgs(
   settings: SecretsScanSettings,
-  exclusionsOverride: readonly string[] = [],
+  runOptions: SecretsScanRunOptions = {},
 ): string[] {
   const args = ['--max-file-size', String(settings.maxFileSize)];
+  const exclusionsOverride = runOptions.exclusionsOverride ?? [];
   const exclusions =
     exclusionsOverride.length > 0
       ? exclusionsOverride.map((path) => canonicalizePath(resolve(process.cwd(), path)))
@@ -49,5 +59,7 @@ export function buildSecretsScanArgs(
   if (settings.disableEntropyFilter) args.push('--disable-entropy-filter');
   if (settings.disableKnownFakeSecretFilter) args.push('--disable-known-fake-secret-filter');
   if (settings.demoMode) args.push('--demo-mode');
+  if (runOptions.dangerousShowSecrets) args.push('--dangerous-show-secrets');
+  if (runOptions.showSkippedFiles) args.push('--show-skipped-files');
   return args;
 }

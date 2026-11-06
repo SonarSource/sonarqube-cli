@@ -3,9 +3,6 @@
   "type": "module",
   "version": "1.12.0",
   "description": "SonarQube CLI",
-  "bin": {
-    "sonar": "./dist/index.js"
-  },
   "scripts": {
     "build:binary": "bun build-scripts/build-binary.ts",
     "postbuild:binary": "bun build-scripts/codesign-local.ts",
@@ -30,7 +27,7 @@
   },
   "externalBinaries": {
     "sonar-secrets": {
-      "version": "2.53.1.13823",
+      "version": "2.54.0.13918",
       "binaryPath": "CommercialDistribution/sonar-secrets",
       "platforms": [
         {
@@ -135,7 +132,7 @@
     "@types/node-forge": "1.3.14",
     "@types/picomatch": "4.0.3",
     "bun-types": "1.4.4",
-    "eslint": "10.13.0",
+    "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-headers": "1.3.5",
     "eslint-plugin-simple-import-sort": "14.0.0",

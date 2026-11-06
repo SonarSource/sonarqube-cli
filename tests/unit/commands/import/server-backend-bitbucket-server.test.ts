@@ -25,8 +25,8 @@ import { ServerBackend } from '@/commands/import/server-backend.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 describe('ServerBackend importing a Bitbucket Server repository', () => {
-  it('puts the bound project with the repository slug and the Bitbucket project key', async () => {
-    const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
+  it('creates the bound project with the repository slug and the Bitbucket project key', async () => {
+    const createBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
     const api = {
       requireSupportedVersion: () => Promise.resolve(),
       listDopSettings: () =>
@@ -38,7 +38,7 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
           nextStart: undefined,
         }),
       lookupProject: () => Promise.resolve('missing' as const),
-      putBoundProject,
+      createBoundProject,
     } as unknown as ServerImportApiClient;
     const backend = new ServerBackend(api, 'https://sonarqube.example.com');
 
@@ -48,7 +48,7 @@ describe('ServerBackend importing a Bitbucket Server repository', () => {
     if (plan.selection.kind !== 'batch') throw new Error('expected a batch selection');
     await plan.importRepo(plan.selection.repos[0]);
 
-    expect(putBoundProject).toHaveBeenCalledWith({
+    expect(createBoundProject).toHaveBeenCalledWith({
       projectKey: 'PRJ_my-repo',
       projectName: 'My Repo',
       devOpsPlatformSettingId: 'bb-id',

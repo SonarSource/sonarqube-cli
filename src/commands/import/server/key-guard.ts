@@ -29,26 +29,29 @@ import type { ServerRepository } from './server-repository.ts';
 
 type KeyGuardApi = Pick<ServerImportApiClient, 'lookupProject' | 'findProjectBinding'>;
 
-/**
- * `PUT bound-projects` overwrites the binding of an existing project with the same key, so the
- * import may only go ahead when the key is free or already belongs to this repository.
- */
+enum ProjectKeyState {
+  Missing = 'missing',
+  Matching = 'matching',
+  Conflicting = 'conflicting',
+}
+
+/** Returns whether the existing project is already bound to this repository. */
 export async function assertProjectKeyUsable(
   api: KeyGuardApi,
   setting: DopSetting,
   repository: ServerRepository,
   projectKey: string,
-): Promise<void> {
-  let takenByAnother: boolean;
+): Promise<boolean> {
+  let state: ProjectKeyState;
   try {
-    takenByAnother = await isTakenByAnother(api, setting, repository, projectKey);
+    state = await projectKeyState(api, setting, repository, projectKey);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new CommandFailedError(
       `Could not check whether a project with key '${projectKey}' already exists: ${reason}`,
     );
   }
-  if (takenByAnother) {
+  if (state === ProjectKeyState.Conflicting) {
     throw new CommandFailedError(
       `A project with key '${projectKey}' already exists and is not bound to ${repository.slug}; the CLI did not change it.`,
       {
@@ -57,17 +60,18 @@ export async function assertProjectKeyUsable(
       },
     );
   }
+  return state === ProjectKeyState.Matching;
 }
 
-async function isTakenByAnother(
+async function projectKeyState(
   api: KeyGuardApi,
   setting: DopSetting,
   repository: ServerRepository,
   projectKey: string,
-): Promise<boolean> {
+): Promise<ProjectKeyState> {
   const found = await api.lookupProject(projectKey);
   if (found !== 'found') {
-    return found === 'hidden';
+    return found === 'hidden' ? ProjectKeyState.Conflicting : ProjectKeyState.Missing;
   }
   const binding = await api.findProjectBinding(
     setting.id,
@@ -77,7 +81,7 @@ async function isTakenByAnother(
       candidate.devOpsPlatformSettingId === setting.id &&
       bindsRepository(candidate, setting, repository),
   );
-  return binding === undefined;
+  return binding === undefined ? ProjectKeyState.Conflicting : ProjectKeyState.Matching;
 }
 
 function bindsRepository(
