@@ -151,3 +151,10 @@ runs:
         path: tests/coverage/reports/timings/
         if-no-files-found: ignore
 
+    - name: Repeat organization picker auth test (Windows)
+      if: ${{ inputs.os == 'windows' }}
+      shell: bash
+      run: >-
+        bun test ./tests/integration/specs/auth/auth.test.ts
+        --test-name-pattern 'lets user select an organization from a list when user is a member of multiple organizations'
+        --rerun-each=20
