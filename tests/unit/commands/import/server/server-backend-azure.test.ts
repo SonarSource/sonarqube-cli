@@ -29,7 +29,7 @@ import { FakeConsole } from '../../../../_common/fake-console.ts';
 
 describe('ServerBackend importing from Azure DevOps', () => {
   it('sends the repository name and its Azure DevOps project name to the server', async () => {
-    const putBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
+    const createBoundProject = mock(() => Promise.resolve({ newProjectCreated: true }));
     const api = {
       requireSupportedVersion: () => Promise.resolve(),
       listDopSettings: () =>
@@ -37,7 +37,7 @@ describe('ServerBackend importing from Azure DevOps', () => {
       checkPat: () => Promise.resolve('valid' as const),
       searchAzureRepos: () => Promise.resolve([{ name: 'web-app', projectName: 'My Project' }]),
       lookupProject: () => Promise.resolve('missing' as const),
-      putBoundProject,
+      createBoundProject,
     } as unknown as ServerImportApiClient;
 
     const plan = await new ServerBackend(api, 'https://sonarqube.example.com').plan(
@@ -48,7 +48,7 @@ describe('ServerBackend importing from Azure DevOps', () => {
     const [listed] = plan.selection.collection.eligibleRepos;
     await plan.importRepo(plan.toResolvedRepo(listed));
 
-    expect(putBoundProject).toHaveBeenCalledWith({
+    expect(createBoundProject).toHaveBeenCalledWith({
       projectKey: 'My_Project_web-app',
       projectName: 'web-app',
       devOpsPlatformSettingId: 'az-id',

@@ -19,6 +19,8 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
+import logger from '@/core/observability/logger.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -52,6 +54,11 @@ import type {
 
 /** Change-set size above which the user is prompted to confirm before proceeding. */
 const SQAA_LARGE_CHANGESET_THRESHOLD = 50;
+
+type SqaaPreparationPolicy = Pick<
+  AnalyzeSqaaRunOptions,
+  'requireProject' | 'silentSkip' | 'noteFocusedProject'
+>;
 
 interface SqaaTarget {
   mode: SqaaInvocationMode;
@@ -153,16 +160,34 @@ async function changeSetTarget(options: AnalyzeSqaaOptions): Promise<SqaaTarget>
   };
 }
 
-async function prepareRun(
-  createTarget: () => SqaaTarget | null | Promise<SqaaTarget | null>,
-  options: Pick<AnalyzeSqaaOptions, 'project' | 'depth' | 'forcedDepth' | 'force' | 'format'>,
+function editedFileTarget(file: string): SqaaTarget | null {
+  const canonicalPath = canonicalizePath(file);
+  if (toRelativePosixPath(canonicalPath) === null) {
+    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${file}`);
+    return null;
+  }
+  return {
+    mode: 'edited-file',
+    files: [canonicalPath],
+    ignored: [],
+    check: (resolved) => resolved.groups.length > 0,
+  };
+}
+
+export async function prepareSqaaRun(
+  options: AnalyzeSqaaOptions,
   connection: SonarConnection,
   console: Console,
-  policy: Pick<AnalyzeSqaaRunOptions, 'requireProject' | 'silentSkip'>,
+  policy: SqaaPreparationPolicy = {},
 ): Promise<PreparedSqaaRun | null> {
   const explicitDepth =
     options.depth === undefined ? undefined : parseSqaaDepthOption(options.depth);
-  const target = await createTarget();
+  let target: SqaaTarget | null;
+  if (options.editedFile === undefined) {
+    target = await (options.file?.length ? explicitFilesTarget(options) : changeSetTarget(options));
+  } else {
+    target = editedFileTarget(options.editedFile);
+  }
   if (!target) return null;
   const { files: inputFiles, check, ...run } = target;
   const wireDepth = resolveAnalysisDepth(explicitDepth, run.mode, options.forcedDepth);
@@ -175,6 +200,7 @@ async function prepareRun(
       options.project,
       console,
       inputFiles,
+      { noteFocusedProject: policy.noteFocusedProject },
     );
     const resolved = resolveSqaaContext(
       resolution,
@@ -199,19 +225,4 @@ async function prepareRun(
     ...(wireDepth === undefined ? {} : { wireDepth }),
     displayDepth: files.displayPaths.length === 0 ? 'STANDARD' : labelAnalysisDepth(wireDepth),
   };
-}
-
-export function prepareSqaaRun(
-  options: AnalyzeSqaaOptions,
-  connection: SonarConnection,
-  console: Console,
-  policy: Pick<AnalyzeSqaaRunOptions, 'requireProject' | 'silentSkip'> = {},
-): Promise<PreparedSqaaRun | null> {
-  return prepareRun(
-    () => (options.file?.length ? explicitFilesTarget(options) : changeSetTarget(options)),
-    options,
-    connection,
-    console,
-    policy,
-  );
 }

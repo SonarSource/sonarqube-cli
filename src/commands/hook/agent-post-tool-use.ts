@@ -21,24 +21,12 @@
 // PostToolUse callback handler — runs SQAA analysis after the agent edits or writes a file.
 // Registered as a subscriber on the shared PostToolUse dispatcher (claude-hook-dispatch.ts).
 
-import { existsSync, readFileSync } from 'node:fs';
-
 import {
-  recordSqaaAnalysisTelemetry,
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
-  SQAA_HOOK_TELEMETRY_EXIT_CODE,
   type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { canonicalizePath, toRelativePosixPath } from '@/core/io/fs-utils.ts';
-import logger from '@/core/observability/logger.ts';
-import { timed } from '@/core/observability/timed.ts';
-import { SqaaForbiddenError } from '@/core/server/errors.ts';
 
-import { resolveSqaaBranch } from '../analyze/sqaa-changeset.ts';
-import { resolveSqaaPath } from '../analyze/sqaa-paths.ts';
-import { fetchSingleFileReport, finishSqaaTelemetryFromReport } from '../analyze/sqaa-run.ts';
 import type {
   ClaudePostToolUsePayload,
   ClaudePostToolUseResult,
@@ -46,9 +34,8 @@ import type {
 } from './claude-hook-dispatch.ts';
 import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
 import { createContextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
-import { formatSqaaIssuesForHook } from './format-sqaa-hook-context.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
-import { resolveHookProject } from './sqaa-hook-project.ts';
+import { analyzeEditedSqaaFile } from './sqaa-edited-file.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
 
@@ -58,94 +45,14 @@ export async function handleSqaaPostToolUse(
   callerCommand: SqaaTelemetryCallerCommand,
 ): Promise<ClaudePostToolUseResult> {
   const filePath = payload.tool_input?.file_path;
-  if (!filePath || !existsSync(filePath)) {
-    return { decision: 'none' };
+  if (!filePath) return { decision: 'none' };
+  const result = await analyzeEditedSqaaFile(filePath, ctx, callerCommand);
+  if (!result) return { decision: 'none' };
+  if (result.kind === 'forbidden') {
+    const wrote = await emitVortexUnavailableHookNotice(result.connection);
+    return { decision: wrote ? 'handled' : 'none' };
   }
-
-  const connection = await ctx.resolveConnection();
-  if (!connection) {
-    return { decision: 'none' };
-  }
-  const { auth } = connection;
-
-  // Cloud addresses an organization; Server has none and resolves it from the instance.
-  if (isSonarQubeCloud(auth.serverUrl) && !auth.orgKey) {
-    return { decision: 'none' };
-  }
-
-  const canonicalPath = canonicalizePath(filePath);
-  const normalizedPath = toRelativePosixPath(canonicalPath);
-  if (normalizedPath == null) {
-    logger.debug(`PostToolUse SQAA skipped: file outside cwd: ${filePath}`);
-    return { decision: 'none' };
-  }
-
-  const project = await resolveHookProject(auth, ctx.console, canonicalPath);
-  if (!project) {
-    logger.debug(`PostToolUse SQAA skipped: no project owns ${filePath}`);
-    return { decision: 'none' };
-  }
-  const { projectKey, projectRoot } = project;
-
-  const runStart = performance.now();
-  let fetchResult: Awaited<ReturnType<typeof fetchSingleFileReport>>;
-  try {
-    const fileContent = readFileSync(canonicalPath, 'utf-8');
-    const branch = await resolveSqaaBranch(undefined, canonicalPath);
-
-    const timedFetch = await timed(() =>
-      fetchSingleFileReport(
-        connection,
-        projectKey,
-        resolveSqaaPath(canonicalPath, projectRoot),
-        fileContent,
-        branch,
-        undefined,
-        'STANDARD',
-      ),
-    );
-    fetchResult = timedFetch.result;
-
-    finishSqaaTelemetryFromReport(
-      fetchResult.report,
-      {
-        telemetryCallerCommand: callerCommand,
-        telemetryProcessExitCode: SQAA_HOOK_TELEMETRY_EXIT_CODE,
-        telemetryCtx: ctx,
-        auth,
-      },
-      timedFetch.durationMs,
-    );
-  } catch (err) {
-    recordSqaaAnalysisTelemetry(
-      ctx,
-      auth,
-      callerCommand,
-      { allResults: [], totalIssues: 0, totalErrors: 0, totalFailures: 1 },
-      Math.round(performance.now() - runStart),
-      SQAA_HOOK_TELEMETRY_EXIT_CODE,
-    );
-    logger.debug(`PostToolUse SQAA analysis failed: ${(err as Error).message}`);
-    return { decision: 'none' };
-  }
-
-  if (fetchResult.error) {
-    if (fetchResult.error instanceof SqaaForbiddenError) {
-      const wrote = await emitVortexUnavailableHookNotice(connection);
-      return { decision: wrote ? 'handled' : 'none' };
-    }
-    logger.debug(`PostToolUse SQAA analysis failed: ${fetchResult.error.message}`);
-    return { decision: 'none' };
-  }
-
-  try {
-    const file = fetchResult.report.files[0];
-    const text = formatSqaaIssuesForHook(file.issues, file.errors, normalizedPath);
-    return { decision: 'context', additionalContext: text };
-  } catch (err) {
-    logger.debug(`PostToolUse SQAA hook output failed: ${(err as Error).message}`);
-    return { decision: 'none' };
-  }
+  return { decision: 'context', additionalContext: result.context };
 }
 
 function createSqaaPostToolUseSubscriber(
