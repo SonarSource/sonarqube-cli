@@ -44,6 +44,8 @@ import {
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import { resolveMcpContainerNetworking } from '@/core/host/mcp/mcp-network.ts';
+import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 
 const ON_PREMISE_AUTH = new ResolvedAuth({
@@ -68,6 +70,135 @@ const CLOUD_US_AUTH = new ResolvedAuth({
 });
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
+
+describe('automatic MCP networking with a proxy', () => {
+  const proxyUrl = createRedactedUrl('http://proxy.example:8080');
+  const loopbackAuth = new ResolvedAuth({ ...ON_PREMISE_AUTH, serverUrl: 'http://localhost:9000' });
+
+  function proxyNetwork(noProxy: string | null): ResolvedNetworkConfig {
+    return {
+      ...NO_NETWORK,
+      proxy: {
+        source: 'stored-config',
+        explicit: true,
+        proxyHttp: proxyUrl,
+        proxyHttps: proxyUrl,
+        noProxy,
+      },
+    };
+  }
+
+  it.each([
+    ['docker', false, 'host.docker.internal'],
+    ['podman', false, 'host.containers.internal'],
+    ['docker', true, 'host.docker.internal'],
+    ['podman', true, 'host.containers.internal'],
+  ] as const)('preserves bypass entries for %s (WSL=%s)', (runtime, viaWsl, alias) => {
+    const detection = { runtime, viaWsl };
+    const container = resolveMcpContainerNetworking(
+      loopbackAuth,
+      detection,
+      { autoNetwork: true },
+      viaWsl ? 'win32' : 'darwin',
+    );
+    const network = proxyNetwork('localhost,127.*, .corp.example');
+    const config = resolveMcpContainerCommand(
+      loopbackAuth,
+      detection,
+      { withFsMount: false },
+      {
+        containerServerUrl: container.serverUrl,
+        containerProxyBypassHost: container.proxyBypassHost,
+      },
+      network,
+    );
+
+    expect(config.env.SONARQUBE_URL).toBe(`http://${alias}:9000/`);
+    expect(config.env.JAVA_OPTS).toContain(
+      `-Dhttp.nonProxyHosts=localhost|127.*|*.corp.example|${alias}`,
+    );
+    expect(config.env.JAVA_OPTS).toContain('-Dhttp.proxyHost=proxy.example');
+    expect(config.env.JAVA_OPTS).toContain('-Dhttps.proxyHost=proxy.example');
+    expect(network.proxy?.noProxy).toBe('localhost,127.*, .corp.example');
+    if (viaWsl) {
+      expect(config.env.WSLENV).toContain('JAVA_OPTS/u');
+    }
+  });
+
+  it.each([
+    ['localhost', null, 'host.docker.internal'],
+    ['127.2.3.4', 'corp.example', 'corp.example|host.docker.internal'],
+    ['[::1]', null, 'host.docker.internal'],
+    ['api.localhost', '.localhost', '*.localhost|host.docker.internal'],
+    ['api.localhost', '*LOCALHOST*', '*LOCALHOST*|host.docker.internal'],
+    ['api.localhost', 'api.*', 'api.*|host.docker.internal'],
+    ['api.localhost', null, undefined],
+    ['api.localhost', 'corp.example', 'corp.example'],
+    ['api.localhost', '*', '*'],
+    ['localhost', 'host.docker.internal', 'host.docker.internal'],
+    ['localhost', '*.internal', '*.internal'],
+    ['localhost', '   ', ''],
+  ])('preserves Java bypass behavior for %s with %s', (hostname, noProxy, expected) => {
+    const auth = new ResolvedAuth({ ...loopbackAuth, serverUrl: `http://${hostname}:9000` });
+    const container = resolveMcpContainerNetworking(
+      auth,
+      { runtime: 'docker', viaWsl: false },
+      { autoNetwork: true },
+      'darwin',
+    );
+    const config = getMcpContainerCommand(
+      auth,
+      'docker',
+      { withFsMount: false },
+      {
+        containerServerUrl: container.serverUrl,
+        containerProxyBypassHost: container.proxyBypassHost,
+      },
+      proxyNetwork(noProxy),
+    );
+
+    const bypassOption = config.env.JAVA_OPTS?.split(' ').find((option) =>
+      option.startsWith('-Dhttp.nonProxyHosts='),
+    );
+    expect(bypassOption).toBe(
+      expected !== undefined ? `-Dhttp.nonProxyHosts=${expected}` : undefined,
+    );
+  });
+
+  it.each([
+    ['default', loopbackAuth, {}, 'darwin'],
+    ['native Linux', loopbackAuth, { autoNetwork: true }, 'linux'],
+    [
+      'explicit URL',
+      loopbackAuth,
+      { autoNetwork: true, serverUrl: 'http://sonarqube:9000' },
+      'darwin',
+    ],
+    ['explicit network', loopbackAuth, { autoNetwork: true, network: 'sonar-net' }, 'darwin'],
+    ['Cloud', CLOUD_AUTH, { autoNetwork: true }, 'darwin'],
+  ] as const)('leaves proxy bypass unchanged for %s', (_name, auth, settings, platform) => {
+    const container = resolveMcpContainerNetworking(
+      auth,
+      { runtime: 'docker', viaWsl: false },
+      settings,
+      platform,
+    );
+    const config = getMcpContainerCommand(
+      auth,
+      'docker',
+      { withFsMount: false },
+      {
+        containerServerUrl: container.serverUrl,
+        containerNetwork: container.network,
+        containerProxyBypassHost: container.proxyBypassHost,
+      },
+      proxyNetwork('localhost,127.*'),
+    );
+
+    expect(config.env.JAVA_OPTS).toContain('-Dhttp.nonProxyHosts=localhost|127.*');
+    expect(config.env.JAVA_OPTS).not.toContain('host.docker.internal');
+  });
+});
 
 function withCaCertificate(
   assertMount: (
