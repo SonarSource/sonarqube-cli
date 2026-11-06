@@ -194,7 +194,7 @@ describe('intended backup safety', () => {
   it.each([{ models: [MODEL] }, { models: [] }])(
     'refuses a full-resource clear without a revision (%j)',
     async ({ models }) => {
-      const backend = api(models);
+      const backend = api([...models]);
       const failure = await setIntended(
         backend,
         { models: [] },
