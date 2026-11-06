@@ -66,6 +66,7 @@ import { getDefaultState } from '@/core/state/state.ts';
 
 import { DEPENDENCY_ARTIFACTS_DIR } from '../../../build-scripts/dependency-artifacts-path.js';
 import { version as CURRENT_CLI_VERSION } from '../../../package.json';
+import { timeSync } from '../../_common/ci-timing.js';
 import { FakeConsole } from '../../_common/fake-console.ts';
 import { isLoopbackTestServerUrl } from './cloud-auth-url.js';
 import { IS_WINDOWS } from './platform';
@@ -832,7 +833,7 @@ export class EnvironmentBuilder {
           `Run 'bun run pretest:integration' to compile it.`,
       );
     }
-    copyFileSync(source, destPath);
+    timeSync('binary-copy', () => copyFileSync(source, destPath));
     if (!IS_WINDOWS) {
       chmodSync(destPath, EXECUTABLE_PERMS);
     }
@@ -870,6 +871,6 @@ function copyBinaryFixtureInto(cliHome: string, fixture: BinarySpec, versionedNa
         `Run 'bun run pretest:integration' to download it.`,
     );
   }
-  copyFileSync(source, destPath);
+  timeSync('binary-copy', () => copyFileSync(source, destPath));
   chmodSync(destPath, 0o755);
 }

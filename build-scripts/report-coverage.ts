@@ -44,6 +44,7 @@ import { type CoverageMapData, createCoverageMap } from 'istanbul-lib-coverage';
 import { createContext } from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
 
+import { flushTimings, timeSync } from '../tests/_common/ci-timing.js';
 import {
   COVERAGE_INTEGRATION_REPORT_DIR,
   COVERAGE_RAW_DIR,
@@ -64,11 +65,14 @@ function processRawDir(rawDir: string, reportDir: string, label: string): boolea
   console.log(`Processing ${jsonFiles.length} ${label} coverage file(s)...`);
   const coverageMap = createCoverageMap({});
   for (const file of jsonFiles) {
-    const data = JSON.parse(readFileSync(join(rawDir, file), 'utf-8')) as CoverageMapData;
-    coverageMap.merge(data);
+    const data = timeSync(
+      'coverage-read',
+      () => JSON.parse(readFileSync(join(rawDir, file), 'utf-8')) as CoverageMapData,
+    );
+    timeSync('coverage-merge', () => coverageMap.merge(data));
   }
   const ctx = createContext({ coverageMap, dir: reportDir });
-  reports.create('lcov').execute(ctx);
+  timeSync('coverage-render', () => reports.create('lcov').execute(ctx));
   console.log(`${label} lcov written to ${reportDir}/lcov.info`);
   return true;
 }
@@ -84,3 +88,5 @@ if (!wroteIntegration && !wroteUnit) {
   console.error('No coverage data found in either raw dir. Run tests with coverage first.');
   process.exit(1);
 }
+
+flushTimings();

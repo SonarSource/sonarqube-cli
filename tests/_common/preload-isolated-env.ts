@@ -20,6 +20,9 @@
 
 /** Bun test preload: opt out of telemetry/Sentry in the test runner unless overridden. */
 
+import { afterAll } from 'bun:test';
+
+import { flushTimings } from './ci-timing.js';
 import { ISOLATED_CLI_SPAWN_ENV } from './isolated-cli-env.js';
 
 for (const [key, value] of Object.entries(ISOLATED_CLI_SPAWN_ENV)) {
@@ -27,3 +30,5 @@ for (const [key, value] of Object.entries(ISOLATED_CLI_SPAWN_ENV)) {
     process.env[key] = value;
   }
 }
+
+afterAll(flushTimings);
