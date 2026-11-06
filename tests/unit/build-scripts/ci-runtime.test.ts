@@ -35,6 +35,7 @@ import { createInstrumenter } from 'istanbul-lib-instrument';
 
 import { processRawDir } from '../../../build-scripts/report-coverage.js';
 import { flushTimings, timeAsync, timeSync } from '../../_common/ci-timing.js';
+import { gitSpawn } from '../../integration/specs/integrate/git-spawn.js';
 
 const previous = process.env.CI_TEST_TIMINGS_DIR;
 const dir = mkdtempSync(join(tmpdir(), 'ci-timing-'));
@@ -47,6 +48,7 @@ afterEach(() => {
 it('is opt-in and preserves results and failures while aggregating only counts and durations', async () => {
   delete process.env.CI_TEST_TIMINGS_DIR;
   expect(timeSync('git', () => 'unchanged')).toBe('unchanged');
+  expect(gitSpawn(['--version'], { cwd: dir }).exitCode).toBe(0);
   flushTimings();
   expect(readdirSync(dir)).toEqual([]);
   process.env.CI_TEST_TIMINGS_DIR = dir;
@@ -63,13 +65,14 @@ it('is opt-in and preserves results and failures while aggregating only counts a
     (error: unknown) => error,
   );
   expect(rejected).toBe(failure);
+  expect(gitSpawn(['--version'], { cwd: dir }).exitCode).toBe(0);
   flushTimings();
   flushTimings();
   const files = readdirSync(dir);
   expect(files).toHaveLength(1);
   const data = JSON.parse(readFileSync(join(dir, files[0]), 'utf-8'));
   expect(data).toEqual({
-    git: { count: 2, durationMs: expect.any(Number) },
+    git: { count: 3, durationMs: expect.any(Number) },
     cleanup: { count: 1, durationMs: expect.any(Number) },
   });
 });
