@@ -36,6 +36,11 @@ import type {
  */
 export const MAX_PAGE_SIZE = 500;
 
+export interface PublicProjectsResponse {
+  projects?: ({ id?: unknown; key?: unknown } | null)[];
+  page?: { total?: number };
+}
+
 export type ProjectVisibility = 'private' | 'public';
 
 export interface CreateProjectParams {
@@ -50,6 +55,12 @@ export class ProjectsClient {
 
   constructor(client: SonarHttpClient) {
     this.client = client;
+  }
+
+  getProjectsByKey(
+    key: string,
+  ): ResultAsync<PublicProjectsResponse | null | undefined, HttpClientError> {
+    return this.client.get('/api/v2/components/projects', { keys: key, pageSize: 1 });
   }
 
   /**

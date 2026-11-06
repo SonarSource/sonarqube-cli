@@ -18,12 +18,65 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { okAsync } from '@/core/result.ts';
-import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { ComponentShowResponse } from '@/core/server/types.ts';
+
+import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
+
+const SERVER_URL = 'https://sonarqube.example.com';
+
+describe('ProjectsClient public project lookup', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  it('uses an authenticated public lookup and preserves the returned opaque id', async () => {
+    const body = { projects: [{ id: 'opaque-project-id', key: 'shop:api' }], page: { total: 1 } };
+    fetchSpy = mockFetch(body);
+    const client = new ProjectsClient(new SonarHttpClient(SERVER_URL, 'test-token'));
+
+    expect(await client.getProjectsByKey('shop:api').orThrow()).toEqual(body);
+    const url = new URL(lastFetchUrl(fetchSpy));
+    expect(url.origin).toBe(SERVER_URL);
+    expect(url.pathname).toBe('/api/v2/components/projects');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ keys: 'shop:api', pageSize: '1' });
+    expect(new Headers(lastFetchInit(fetchSpy).headers).get('Authorization')).toBe(
+      'Bearer test-token',
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an empty public result without inventing a project id', async () => {
+    const body = { projects: [], page: { total: 0 } };
+    fetchSpy = mockFetch(body);
+    const client = new ProjectsClient(new SonarHttpClient(SERVER_URL, 'test-token'));
+
+    expect(await client.getProjectsByKey('missing').orThrow()).toEqual(body);
+  });
+
+  it('returns undefined when the public lookup response has no body', async () => {
+    fetchSpy = mockFetch(undefined, { status: 204 });
+    const client = new ProjectsClient(new SonarHttpClient(SERVER_URL, 'test-token'));
+
+    expect(await client.getProjectsByKey('missing').orThrow()).toBeUndefined();
+  });
+
+  it.each([401, 403, 404])('propagates HTTP %s without trying another endpoint', async (status) => {
+    fetchSpy = mockFetch({}, { status, ok: false });
+    const client = new ProjectsClient(new SonarHttpClient(SERVER_URL, 'test-token'));
+    const result = await client.getProjectsByKey('shop');
+
+    expect(result.isErr()).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(new URL(lastFetchUrl(fetchSpy)).pathname).toBe('/api/v2/components/projects');
+  });
+});
 
 function clientReturning(response: ComponentShowResponse | null): ProjectsClient {
   const http = { getOrNullIf404: () => okAsync(response) } as unknown as SonarHttpClient;
