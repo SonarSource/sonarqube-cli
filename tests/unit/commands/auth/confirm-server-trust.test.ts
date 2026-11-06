@@ -47,6 +47,10 @@ describe('confirmServerTrust', () => {
     console.queueResponse(true);
 
     await confirmServerTrust('https://sonarqube.example.com', console);
+
+    expect(
+      console.findCall('confirmPrompt', 'Connect to: https://sonarqube.example.com?')?.args[1],
+    ).toBe(true);
   });
 
   it('skips the confirmation for SonarQube Cloud', async () => {
