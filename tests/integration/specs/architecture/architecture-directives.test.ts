@@ -82,6 +82,47 @@ describe('public project directives', () => {
   });
 
   it.each([
+    '',
+    ' ',
+    ' default_perspective ',
+    'transformed_code_perspective',
+    'transformed_model_perspective',
+  ])(
+    'skips equivalent stored and batch identities without rewriting %s',
+    async (graphPerspective) => {
+      const server = await configured((api) =>
+        api.withDirectives([
+          {
+            ...directive,
+            graphPerspective,
+            id: '00000000-0000-4000-8000-000000000001',
+            projectId: 'shop-branch-id',
+          },
+        ]),
+      );
+      h.cwd.writeFile(
+        'changes.json',
+        JSON.stringify({
+          create: [
+            directive,
+            { ...directive, fromNodeKey: 'app:new' },
+            { ...directive, fromNodeKey: 'app:new', graphPerspective },
+          ],
+        }),
+      );
+      const result = await h.run('arch directives set -p shop --file changes.json');
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created 1 directives');
+      expect(result.stdout).toContain('Skipped 2 existing');
+      const posts = server
+        .getRecordedRequests()
+        .filter((r) => r.method === 'POST' && r.path.includes('project-directives'));
+      expect(posts).toHaveLength(1);
+      expect(JSON.parse(posts[0].body!).graphPerspective).toBe('default_perspective');
+    },
+  );
+
+  it.each([
     ['', 'default_perspective'],
     [' ', 'default_perspective'],
     ['transformed_model_perspective', 'default_perspective'],
