@@ -178,6 +178,7 @@ interface ProjectData {
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
+  mainBranchAnalysisDate?: string | null;
   branchNames: string[];
   unanalyzedBranch?: string;
   componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]>;
@@ -215,6 +216,7 @@ export class ProjectBuilder {
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
+  private mainBranchAnalysisDate: string | null | undefined = '2026-01-01T00:00:00+0000';
   private readonly branchNames: string[] = [];
   private unanalyzedBranch?: string;
   private readonly componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]> = new Map();
@@ -284,6 +286,11 @@ export class ProjectBuilder {
    * Defaults to `main`, but real servers use whatever name the repo's default branch has
    * (`master`, `trunk`, ...) — override this to prove callers don't assume a fixed name.
    */
+  withMainBranchAnalysisDate(value: string | null | undefined): this {
+    this.mainBranchAnalysisDate = value;
+    return this;
+  }
+
   withDefaultBranchName(name: string): this {
     this.defaultBranchName = name;
     return this;
@@ -431,6 +438,7 @@ export class ProjectBuilder {
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
+      mainBranchAnalysisDate: this.mainBranchAnalysisDate,
       branchNames: this.branchNames,
       unanalyzedBranch: this.unanalyzedBranch,
       componentTreeFilesByMetric: this.componentTreeFilesByMetric,
@@ -1652,6 +1660,7 @@ export class FakeSonarQubeServerBuilder {
                       {
                         name: projectData.defaultBranchName,
                         branchId: fakeMainBranchId(projectData.key),
+                        analysisDate: projectData.mainBranchAnalysisDate,
                         isMain: true,
                         type: 'LONG',
                         status: { qualityGateStatus: 'OK' },
