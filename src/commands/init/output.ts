@@ -39,6 +39,8 @@ function describe(outcome: InitOutcome): string[] {
       return [];
     case 'declined':
       return ['No project was created.'];
+    case 'no-organization':
+      return ['No organization was created.'];
   }
 }
 

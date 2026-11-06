@@ -34,14 +34,16 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { authLogin } from '@/commands/auth/login.ts';
 import * as tokenModule from '@/core/auth/token.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
-import { okAsync } from '@/core/result.ts';
+import { errAsync, okAsync } from '@/core/result.ts';
+import { TransportError } from '@/core/server/errors.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
 import { UsersClient } from '@/core/server/users.ts';
 
@@ -230,6 +232,65 @@ describe('authLogin organization prompt', () => {
     ).rejects.toThrow("You are not a member of organization 'typo-org'.");
 
     expect(textPrompts()).toHaveLength(1);
+  });
+
+  describe('onNoMemberships hook', () => {
+    const noMemberships = () =>
+      okAsync({ organizations: [], paging: { pageIndex: 1, pageSize: 10, total: 0 } });
+
+    it('persists the key the hook returns and keeps the token', async () => {
+      listOrgsSpy.mockReturnValueOnce(noMemberships());
+      const hook = mock(() => Promise.resolve('new-org'));
+
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+        onNoMemberships: hook,
+      });
+
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(revokeSpy).not.toHaveBeenCalled();
+      expect(fake.findCall('success', 'new-org')).toBeDefined();
+    });
+
+    it('revokes the minted token when the hook throws', async () => {
+      listOrgsSpy.mockReturnValueOnce(noMemberships());
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+          onNoMemberships: () => Promise.reject(new CommandFailedError('declined')),
+        }),
+      ).rejects.toThrow('declined');
+
+      expect(revokeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('is not called for a nonmember --org', async () => {
+      checkMembershipSpy.mockResolvedValue({ status: 'not_member' });
+      const hook = mock(() => Promise.resolve('new-org'));
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        authLogin({ server: SONARCLOUD_URL, org: 'typo' }, new CommandInvocationContext(fake), {
+          onNoMemberships: hook,
+        }),
+      ).rejects.toThrow("You are not a member of organization 'typo'.");
+
+      expect(hook).not.toHaveBeenCalled();
+    });
+
+    it('is not called when the membership list cannot be fetched', async () => {
+      listOrgsSpy.mockReturnValueOnce(errAsync(new TransportError('connection refused')));
+      const hook = mock(() => Promise.resolve('new-org'));
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+          onNoMemberships: hook,
+        }),
+      ).rejects.toThrow('Could not list your organizations');
+
+      expect(hook).not.toHaveBeenCalled();
+    });
   });
 
   it('rejects a multiline server discovered from project configuration before token generation', async () => {
