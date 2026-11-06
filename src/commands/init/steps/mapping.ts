@@ -118,7 +118,6 @@ export function projectDashboardUrl(auth: ResolvedAuth, projectKey: string): str
 export async function showAnalysisResults(
   api: SonarHttpClient,
   projectKey: string,
-  dashboardUrl: string,
   console: Console,
   noResultsNote: string,
 ): Promise<void> {
@@ -138,5 +137,4 @@ export async function showAnalysisResults(
       `Quality gate: ${status === 'OK' ? 'passed' : 'failed'}. See: sonar quality-gate status -p ${projectKey}`,
     );
   }
-  console.print(`Project dashboard: ${dashboardUrl}`);
 }

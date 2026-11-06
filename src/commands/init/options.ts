@@ -23,8 +23,13 @@ import { isValidProjectKey } from '@/core/project-key.ts';
 import type { ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { parseScannerProperties } from './scan/scanner-property.ts';
+import type { ScanOptions } from './steps/scan.ts';
+
 const MAX_NAME_LENGTH = 255;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
+/** Make the scanner print its properties, which a detached run's unredacted log would keep. */
+const DETACH_FORBIDDEN_PROPERTIES = ['sonar.verbose', 'sonar.log.level'];
 
 /** The `sonar init` options that only apply when a project is created without repository binding. */
 export interface UnboundNewOptions {
@@ -33,11 +38,11 @@ export interface UnboundNewOptions {
   visibility?: ProjectVisibility;
 }
 
-export function validateProjectKey(key: string): string {
+export function validateProjectKey(key: string, label = '--project'): string {
   const trimmed = key.trim();
   if (!isValidProjectKey(trimmed)) {
     throw new InvalidOptionError(
-      '--project must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.',
+      `${label} must contain only letters, digits, "-", "_", "." and ":", with at least one non-digit.`,
     );
   }
   return trimmed;
@@ -84,5 +89,40 @@ export function warnIgnoredUnboundNewOptions(options: UnboundNewOptions, console
     console.warn(
       `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,
     );
+  }
+}
+
+export function validateScanOptions(options: {
+  scannerProperty?: string[];
+  verbose?: boolean;
+  detach?: boolean;
+}): ScanOptions {
+  if (options.detach && options.verbose) {
+    throw new InvalidOptionError(
+      '--detach cannot be combined with --verbose: a background scanner writes to its log file only.',
+    );
+  }
+  const scannerProperties = parseScannerProperties(options.scannerProperty);
+  const verboseProperty = DETACH_FORBIDDEN_PROPERTIES.find((key) => scannerProperties.has(key));
+  if (options.detach && verboseProperty) {
+    throw new InvalidOptionError(
+      `--detach cannot be combined with --scanner-property ${verboseProperty}: a background scanner's log is not redacted.`,
+    );
+  }
+  return {
+    scannerProperties,
+    verbose: options.verbose === true,
+    detach: options.detach === true,
+  };
+}
+
+/** Warns when scan-only flags were given but no scan ran. Never names a property value. */
+export function warnIgnoredScanOptions(flags: ScanOptions, console: Console): void {
+  const ignored = [
+    flags.scannerProperties.size === 0 ? null : '--scanner-property',
+    flags.detach ? '--detach' : null,
+  ].filter((flag) => flag !== null);
+  if (ignored.length > 0) {
+    console.warn(`${ignored.join(', ')} ignored: only applicable when the first analysis runs.`);
   }
 }
