@@ -52,7 +52,12 @@ import {
   COVERAGE_UNIT_REPORT_DIR,
 } from '../tests/coverage/paths.js';
 
-function processRawDir(rawDir: string, reportDir: string, label: string): boolean {
+export function processRawDir(
+  rawDir: string,
+  reportDir: string,
+  label: string,
+  lcovOnly = false,
+): boolean {
   if (!existsSync(rawDir)) {
     console.log(`No ${label} raw coverage dir found at ${rawDir}, skipping.`);
     return false;
@@ -72,21 +77,30 @@ function processRawDir(rawDir: string, reportDir: string, label: string): boolea
     timeSync('coverage-merge', () => coverageMap.merge(data));
   }
   const ctx = createContext({ coverageMap, dir: reportDir });
-  timeSync('coverage-render', () => reports.create('lcov').execute(ctx));
+  timeSync('coverage-render', () => reports.create(lcovOnly ? 'lcovonly' : 'lcov').execute(ctx));
   console.log(`${label} lcov written to ${reportDir}/lcov.info`);
   return true;
 }
 
-const wroteIntegration = processRawDir(
-  COVERAGE_RAW_DIR,
-  COVERAGE_INTEGRATION_REPORT_DIR,
-  'integration',
-);
-const wroteUnit = processRawDir(COVERAGE_UNIT_RAW_DIR, COVERAGE_UNIT_REPORT_DIR, 'unit');
+if (import.meta.main) {
+  const lcovOnly = process.argv.includes('--lcov-only');
+  const wroteIntegration = processRawDir(
+    COVERAGE_RAW_DIR,
+    COVERAGE_INTEGRATION_REPORT_DIR,
+    'integration',
+    lcovOnly,
+  );
+  const wroteUnit = processRawDir(
+    COVERAGE_UNIT_RAW_DIR,
+    COVERAGE_UNIT_REPORT_DIR,
+    'unit',
+    lcovOnly,
+  );
 
-if (!wroteIntegration && !wroteUnit) {
-  console.error('No coverage data found in either raw dir. Run tests with coverage first.');
-  process.exit(1);
+  if (!wroteIntegration && !wroteUnit) {
+    console.error('No coverage data found in either raw dir. Run tests with coverage first.');
+    process.exit(1);
+  }
+
+  flushTimings();
 }
-
-flushTimings();
