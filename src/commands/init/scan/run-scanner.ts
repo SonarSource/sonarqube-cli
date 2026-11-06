@@ -25,7 +25,12 @@ import { join } from 'node:path';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
-import { LOG_DIR, OWNER_ONLY_FILE_MODE } from '@/core/config-constants.ts';
+import {
+  LOG_DIR,
+  OWNER_ONLY_FILE_MODE,
+  SONARCLOUD_API_URL,
+  SONARCLOUD_URL,
+} from '@/core/config-constants.ts';
 import {
   type ScannerInstallation,
   scannerJavaArgs,
@@ -33,6 +38,7 @@ import {
 import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
 import { spawnDetachedToLog, spawnProcessWithTimeout } from '@/core/process/process.ts';
+import { isSonarQubeCloud, resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
 /** Values shorter than this are left alone when redacting: they would garble unrelated output. */
 const MIN_REDACTED_VALUE_LENGTH = 4;
@@ -72,12 +78,28 @@ function writeLogHeader(logPath: string, run: ScannerRun): void {
   });
 }
 
+/**
+ * The scanner sends the token to these hosts, and `sonar-project.properties` could otherwise set
+ * them. It runs in Cloud mode when `sonarcloudUrl` equals the host URL, so a server is pinned to
+ * the stock Cloud URLs, which it can never equal.
+ */
+function endpointArguments(serverUrl: string): string[] {
+  const cloud = isSonarQubeCloud(serverUrl);
+  const sonarcloudUrl = cloud ? new URL(serverUrl).origin : SONARCLOUD_URL;
+  const apiBaseUrl = cloud ? resolveFromEndpoint(serverUrl, '/sca') : SONARCLOUD_API_URL;
+  return [
+    `-Dsonar.scanner.sonarcloudUrl=${sonarcloudUrl}`,
+    `-Dsonar.scanner.apiBaseUrl=${apiBaseUrl}`,
+  ];
+}
+
 /** The command line carries no secret and no user-supplied value; those travel in the environment. */
 function scannerArguments(run: ScannerRun, reportPath: string): string[] {
   const { auth } = run;
   const args = [
     ...scannerJavaArgs(run.scanner, run.projectRoot),
     `-Dsonar.host.url=${auth.serverUrl}`,
+    ...endpointArguments(auth.serverUrl),
     `-Dsonar.projectKey=${run.projectKey}`,
     `-Dsonar.projectBaseDir=${run.projectRoot}`,
     `-Dsonar.working.directory=${join(run.directory, 'work')}`,

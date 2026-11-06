@@ -65,16 +65,21 @@ posixOnly('runScanner', () => {
     return path;
   }
 
-  function newRun(javaPath: string): ScannerRun {
+  function newRun(
+    javaPath: string,
+    connection: { serverUrl: string; connectionType: 'cloud' | 'on-premise' } = {
+      serverUrl: 'https://sonarcloud.io',
+      connectionType: 'cloud',
+    },
+  ): ScannerRun {
     return {
       scanner: { home: directory, javaPath, classPath: directory, version: '8.3.1.16491' },
       projectRoot: directory,
       projectKey: 'my-key',
       auth: new ResolvedAuth({
         token: TOKEN,
-        serverUrl: 'https://sonarcloud.io',
+        ...connection,
         orgKey: 'my-org',
-        connectionType: 'cloud',
         source: 'env',
       }),
       directory,
@@ -97,6 +102,35 @@ posixOnly('runScanner', () => {
       expect(text).not.toContain(PROPERTY_VALUE);
     }
     rmSync(logPath);
+  });
+
+  async function scannerArgs(run: ScannerRun): Promise<string[]> {
+    const live: string[] = [];
+    const { logPath } = await runScanner(run, { print: (line) => live.push(line) });
+    rmSync(logPath);
+    return (live.find((line) => line.startsWith('args:')) ?? '').split(' ');
+  }
+
+  it.each([
+    ['https://sonarcloud.io', 'https://sonarcloud.io', 'https://api.sonarcloud.io'],
+    ['https://sonarqube.us', 'https://sonarqube.us', 'https://api.sonarqube.us'],
+  ])(
+    'pins the endpoints of the Cloud host %s so a repository cannot redirect the token',
+    async (serverUrl, sonarcloudUrl, apiBaseUrl) => {
+      const args = await scannerArgs(newRun(stubJava(0), { serverUrl, connectionType: 'cloud' }));
+      expect(args).toContain(`-Dsonar.scanner.sonarcloudUrl=${sonarcloudUrl}`);
+      expect(args).toContain(`-Dsonar.scanner.apiBaseUrl=${apiBaseUrl}`);
+    },
+  );
+
+  it('pins a server to the stock Cloud URLs, so it is never taken for Cloud', async () => {
+    const serverUrl = 'https://sonar.example.com';
+    const args = await scannerArgs(
+      newRun(stubJava(0), { serverUrl, connectionType: 'on-premise' }),
+    );
+    expect(args).toContain(`-Dsonar.host.url=${serverUrl}`);
+    expect(args).toContain('-Dsonar.scanner.sonarcloudUrl=https://sonarcloud.io');
+    expect(args).toContain('-Dsonar.scanner.apiBaseUrl=https://api.sonarcloud.io');
   });
 
   it('passes no property value or token on the command line', async () => {
