@@ -33,6 +33,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit/index.ts';
 import type { CliState } from '@/core/state/state.ts';
 
 import {
@@ -290,6 +291,71 @@ describe('integrate git (native hooks)', () => {
       }
     }
   });
+
+  it.each(['invalid: [yaml', 'private-setting: hidden-value\nrepos: [broken'])(
+    'preserves malformed pre-commit YAML %j and reports a safe error',
+    async (original) => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+      harness.cwd.writeFile('.pre-commit-config.yaml', original);
+
+      const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain('contains invalid YAML');
+      expect(result.stdout + result.stderr).not.toContain(original);
+      expect(result.stdout + result.stderr).not.toContain('hidden-value');
+      expect(harness.cwd.file('.pre-commit-config.yaml').asText()).toBe(original);
+    },
+  );
+
+  it.each(['', '  \n'])(
+    'initializes blank pre-commit YAML %j before framework activation',
+    async (original) => {
+      await setupAuthenticated(harness, { withSecretsBinary: true });
+      initGitRepo(harness);
+      harness.cwd.writeFile('.pre-commit-config.yaml', original);
+
+      const result = await harness.run('integrate git --local --hook pre-commit --non-interactive');
+
+      const written = harness.cwd.file('.pre-commit-config.yaml').asText();
+      expect(written).toContain('id: sonar-pre-commit');
+      expect(written).toContain('hook git-pre-commit');
+      // YAML initialization precedes activation of the optional external framework.
+      if (result.exitCode !== 0) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain(
+          'Updated .pre-commit-config.yaml but pre-commit commands failed.',
+        );
+      }
+    },
+  );
+
+  it.each([undefined, '', '  \n', 'private-setting: hidden-value\nrepos: [broken'])(
+    'preserves missing, blank or malformed pre-commit YAML %j during reset',
+    async (original) => {
+      harness
+        .state()
+        .withInstalledIntegrationFeature(
+          preCommitIntegration,
+          'pre-commit-hook',
+          'project',
+          harness.cwd.path,
+        );
+      if (original !== undefined) harness.cwd.writeFile('.pre-commit-config.yaml', original);
+
+      const result = await harness.run('system reset --force');
+
+      if (original?.includes('[broken')) {
+        expect(result.stdout + result.stderr).toContain('contains invalid YAML');
+        expect(result.stdout + result.stderr).not.toContain('hidden-value');
+        expect(harness.cwd.file('.pre-commit-config.yaml').asText()).toBe(original);
+      } else {
+        expect(result.exitCode).toBe(0);
+        expect(harness.cwd.exists('.pre-commit-config.yaml')).toBe(false);
+      }
+    },
+  );
 
   it(
     'exits with error when user is not authenticated',
