@@ -31,6 +31,11 @@ import { toArchitectureError } from '@/commands/architecture/_common/errors.ts';
 import { intendedDiagnostics } from '@/commands/architecture/_common/intended-diagnostics.ts';
 import type { IntendedDiff } from '@/commands/architecture/_common/intended-diff.ts';
 import { parseIntendedFile } from '@/commands/architecture/_common/intended-validation.ts';
+import {
+  describeFileSource,
+  type IntendedSource,
+  resolveIntendedSource,
+} from '@/commands/architecture/_common/model-source.ts';
 import { setIntended as setIntendedModel } from '@/commands/architecture/_common/set-intended.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { type CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -50,6 +55,13 @@ export async function setIntended(
 ): Promise<void> {
   const file = parseIntendedFile(await readJsonFile(options.file));
   const projectKey = await resolveProject(options, ctx);
+  const source = await resolveIntendedSource(ctx, projectKey);
+  if (source.type === 'FILE') throw fileManagedError(projectKey, source);
+  if (source.setting === 'DYNAMIC' && !source.hasCheckout) {
+    ctx.console.warn(
+      `This directory is not a checkout of '${projectKey}'. If its repository holds a sonar-architecture file, analyses use that file instead of this model.`,
+    );
+  }
   const dryRun = options.dryRun === true;
   const api = createArchitectureApi(ctx.connection, projectKey);
   const result = await setIntendedModel(api, file, {
@@ -121,6 +133,19 @@ export async function setIntended(
     );
   }
   ctx.console.info('SonarQube applies it from the next analysis.');
+}
+
+function fileManagedError(projectKey: string, source: IntendedSource): CommandFailedError {
+  const edit =
+    source.file === undefined
+      ? 'Add a sonar-architecture.json file to the repository and commit it'
+      : `Edit ${source.file} and commit it`;
+  return new CommandFailedError(
+    `The intended architecture of '${projectKey}' is managed by ${describeFileSource(source)}; nothing was changed.`,
+    {
+      remediationHint: `${edit}, or set the project's Architecture model location to SERVER to manage it in SonarQube.`,
+    },
+  );
 }
 
 async function readJsonFile(path: string): Promise<unknown> {
