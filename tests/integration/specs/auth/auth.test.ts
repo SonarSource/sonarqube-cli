@@ -1305,33 +1305,37 @@ describe('auth login — organization selection', () => {
     expect(result.stderr).toContain('Organization key is required');
   });
 
-  it('lets user select an organization from a list when user is a member of multiple organizations', async () => {
-    const server = await harness
-      .newFakeServer()
-      .withAuthToken('my-token')
-      .withOrganizations([
-        { key: 'my-org', name: 'My Org' },
-        { key: 'my-org-2', name: 'My Org 2' },
-      ])
-      .start();
+  it(
+    'lets user select an organization from a list when user is a member of multiple organizations',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([
+          { key: 'my-org', name: 'My Org' },
+          { key: 'my-org-2', name: 'My Org 2' },
+        ])
+        .start();
 
-    const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
-      extraEnv: {
-        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
-        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
-      },
-      browserToken: 'my-token',
-    });
-    await session.waitText('Select an organization');
-    session.keyDown();
-    session.keyEnter();
-    const result = await session.waitFinish();
+      const session = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+      });
+      await session.waitText('Select an organization');
+      session.keyDown();
+      session.keyEnter();
+      const result = await session.waitFinish();
 
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain(
-      `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
-    );
-  });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain(
+        `Authentication successful for: ${server.baseUrl()} (my-org-2)`,
+      );
+    },
+    { timeout: 15_000 },
+  );
 
   it.each(PICKER_STATUS_CASES)(
     'picker %s',

@@ -391,13 +391,13 @@ jobs:
         run: bun run test:coverage:unit
 
       - name: Generate unit lcov from Istanbul data (Linux)
-        run: bun build-scripts/report-coverage.ts
+        run: bun build-scripts/report-coverage.ts --lcov-only
 
       - name: Upload unit coverage (Linux)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unit-coverage
-          path: tests/coverage/reports/unit/
+          path: tests/coverage/reports/unit/lcov.info
 
   unit-tests-windows:
     name: Unit Tests - windows
