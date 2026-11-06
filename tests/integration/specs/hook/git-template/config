@@ -1,0 +1,5 @@
+[user]
+	email = test@example.com
+	name = Test User
+[core]
+	hooksPath = .git/hooks-disabled
