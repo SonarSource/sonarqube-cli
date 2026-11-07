@@ -1,0 +1,8 @@
+model_provider = "portkey"
+
+[model_providers.portkey]
+name = "Portkey"
+base_url = "https://api.portkey.ai/v1"
+wire_api = "responses"
+http_headers = { "x-portkey-provider" = "@open-ai" }
+env_http_headers = { "x-portkey-api-key" = "PORTKEY_API_KEY" }
