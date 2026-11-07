@@ -78,6 +78,10 @@ export function readCommandEvents(sonarUserHome: string): StoredCommandExecutedE
   );
 }
 
+export function readCommandTargetEvents(sonarUserHome: string): StoredTelemetryEvent[] {
+  return readTelemetryEvents(sonarUserHome, 'Analytics.Cli.CliCommandTarget');
+}
+
 export function readIntegrationEvents(sonarUserHome: string): StoredIntegrationConfiguredEvent[] {
   return readTelemetryEvents<StoredIntegrationConfiguredEvent>(
     sonarUserHome,
