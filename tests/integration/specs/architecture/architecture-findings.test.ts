@@ -177,6 +177,35 @@ describe('public architecture findings contract', () => {
     );
     expect(requests(server)[0].query.category).toBe(category);
   });
+  it.each([
+    ['--type tangle --type weakTangle', '--type'],
+    ['--type weakTangle --type tangle', '--type'],
+    ['--type tangle --type tangle', '--type'],
+    ['--type=tangle --type=weakTangle', '--type'],
+    ['--category flaw --category smell', '--category'],
+    ['--category smell --category flaw', '--category'],
+    ['--category flaw --category flaw', '--category'],
+    ['--category=flaw --category=smell', '--category'],
+  ])('rejects repeated Findings filters: %s', async (options, flag) => {
+    const server = await configured();
+    const result = await h.run(`arch findings get -p shop ${options} --format json`);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(`${flag} can only be specified once.`);
+    expect(server.getRecordedRequests()).toHaveLength(0);
+  });
+  it.each([
+    '--types tangle',
+    '--categories flaw',
+    '--page-index 2',
+    '--type tangle,weakTangle',
+    '--category flaw,smell',
+  ])('rejects unsupported Findings parameter forms: %s', async (options) => {
+    const server = await configured();
+    const result = await h.run(`arch findings get -p shop ${options} --format json`);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('error:');
+    expect(server.getRecordedRequests()).toHaveLength(0);
+  });
   it('combines type, category and language using AND', async () => {
     const server = await configured();
     const result = await h.run(

@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { InvalidArgumentError } from 'commander';
+
 import { parseInteger } from '@/core/commands/params.ts';
 import { type SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 
@@ -41,6 +43,19 @@ import { type FindingsReadOptions, getFindings } from './findings/get/index.ts';
 import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
 import { type SetFileOptions, setIntended } from './intended/set/index.ts';
+
+function singleValue(option: SonarOption): SonarOption {
+  const parseValue = option.parseArg;
+
+  return option.argParser((value, previous: unknown) => {
+    if (previous !== undefined) {
+      throw new InvalidArgumentError(`${option.long} can only be specified once.`);
+    }
+
+    parseValue?.(value, previous);
+    return value;
+  });
+}
 
 export function registerArchitectureCommands(parent: SonarCommand): void {
   const architecture = parent
@@ -143,9 +158,15 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .description('List findings with their details from the latest main-branch analysis')
     .option('-p, --project <project>', 'Project key')
     .addOption(
-      new SonarOption('--category <category>', 'Only this category').choices(FINDING_CATEGORIES),
+      singleValue(
+        new SonarOption('--category <category>', 'Only this category').choices(FINDING_CATEGORIES),
+      ),
     )
-    .addOption(new SonarOption('--type <type>', 'Only this finding type').choices(FINDING_TYPES))
+    .addOption(
+      singleValue(
+        new SonarOption('--type <type>', 'Only this finding type').choices(FINDING_TYPES),
+      ),
+    )
     .addOption(languageOption())
     .addOption(textFormatOption())
     .option('--page <n>', 'Page number (default 1)', parseFindingPageIndex)
