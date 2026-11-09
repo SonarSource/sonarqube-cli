@@ -22,7 +22,15 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
 import * as readline from 'node:readline';
@@ -45,6 +53,7 @@ import {
   getMcpContainerCommand,
   MCP_CONTAINER_CA_CERT_PATH,
   MCP_CONTAINER_CLIENT_CERT_PATH,
+  MCP_CONTAINER_JVM_SECRETS_PATH,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
@@ -98,11 +107,15 @@ function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
   };
 }
 
-function makeFakeChild(exitCode = 0, beforeExit?: () => void): childProcess.ChildProcess {
+function makeFakeChild(
+  exitCode: number | 'spawn' = 0,
+  beforeExit?: () => void,
+): childProcess.ChildProcess {
   const emitter = new EventEmitter();
   setImmediate(() => {
     beforeExit?.();
-    emitter.emit('exit', exitCode);
+    if (exitCode === 'spawn') emitter.emit('error', new Error('synthetic spawn failure'));
+    else emitter.emit('exit', exitCode);
   });
   return emitter as unknown as childProcess.ChildProcess;
 }
@@ -467,6 +480,40 @@ describe('runMcp', () => {
     }
   });
 
+  it.each([0, 23, 'spawn'] as const)(
+    'removes the JVM file after child outcome %s',
+    async (outcome) => {
+      detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+        runtime: 'docker',
+        viaWsl: false,
+      });
+      let path = '';
+      spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(
+        makeFakeChild(outcome, () => {
+          const suffix = `:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`;
+          const args = spawnSpy.mock.calls[0][1] as string[];
+          path = args.find((arg) => arg.endsWith(suffix))!.slice(0, -suffix.length);
+          expect(existsSync(path)).toBe(true);
+        }),
+      );
+      createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(readlineInput());
+      await runMcp(
+        FAKE_CTX,
+        {},
+        makeProxyNetwork(
+          makeProxy({
+            proxyHttps: createRedactedUrl(
+              'http://fixture-user:fixture-password@proxy.example.test',
+            ),
+          }),
+        ),
+      );
+      expect(path).not.toBe('');
+      expect(existsSync(path)).toBe(false);
+      process.exitCode = 0;
+    },
+  );
+
   it('deletes the cached CA certificate after the MCP container exits', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
@@ -506,8 +553,27 @@ describe('runMcp', () => {
   });
 });
 
+function jvmSecretsText(jvmSecretsPath: string | undefined): string {
+  return jvmSecretsPath === undefined ? '' : readFileSync(jvmSecretsPath, 'utf-8');
+}
+
+function removeJvmSecretsFiles(): void {
+  if (!existsSync(CLI_TMP_DIR)) {
+    return;
+  }
+  for (const name of readdirSync(CLI_TMP_DIR)) {
+    if (name.startsWith(`mcp-jvm-secrets-${process.pid}-`)) {
+      rmSync(join(CLI_TMP_DIR, name), { force: true });
+    }
+  }
+}
+
 describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
   const context = { withFsMount: false } as const;
+
+  afterEach(() => {
+    removeJvmSecretsFiles();
+  });
 
   it('does not set JAVA_OPTS when no proxy is configured', () => {
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
@@ -533,8 +599,53 @@ describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
     );
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
 
-    expect(result.env.JAVA_OPTS).toContain('-Dhttps.proxyUser=alice');
-    expect(result.env.JAVA_OPTS).toContain('-Dhttps.proxyPassword=secret');
+    const secrets = jvmSecretsText(result.jvmSecretsPath);
+    expect(result.env.JAVA_OPTS).not.toContain('proxyUser');
+    expect(result.env.JAVA_OPTS).not.toContain('proxyPassword');
+    expect(result.env.JAVA_OPTS).toContain(`@${MCP_CONTAINER_JVM_SECRETS_PATH}`);
+    expect(result.args.join(' ')).not.toContain('proxyPassword');
+    expect(Object.values(result.env).join('\n')).not.toContain('proxyPassword');
+    expect(secrets).toContain('-Dhttps.proxyUser=alice');
+    expect(secrets).toContain('-Dhttps.proxyPassword=secret');
+    expect(result.args).toContain(
+      `${normalizePath(result.jvmSecretsPath ?? '')}:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`,
+    );
+  });
+
+  it('quotes proxy passwords that contain spaces or comment markers', () => {
+    const network = makeProxyNetwork(
+      makeProxy({
+        proxyHttps: createRedactedUrl('http://alice:se%20cret%23%22x@proxy.corp.com:3128'),
+      }),
+    );
+    const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
+
+    expect(result.env.JAVA_OPTS).not.toContain('se cret');
+    expect(jvmSecretsText(result.jvmSecretsPath)).toContain('"-Dhttps.proxyPassword=se cret#\\"x"');
+  });
+
+  it('keeps proxy credentials out of the WSL command line', () => {
+    const network = makeProxyNetwork(
+      makeProxy({ proxyHttps: createRedactedUrl('http://alice:secret@proxy.corp.com:3128') }),
+    );
+    const result = resolveMcpContainerCommand(
+      FAKE_AUTH,
+      { runtime: 'docker', viaWsl: true },
+      context,
+      {},
+      network,
+    );
+
+    expect(result.args.join(' ')).not.toContain('proxyPassword');
+    expect(result.args.join(' ')).toContain(
+      `"$SONARQUBE_MCP_JVM_SECRETS_PATH":${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`,
+    );
+    expect(result.env.JAVA_OPTS).not.toContain('proxyPassword');
+    if (result.jvmSecretsPath === undefined) {
+      throw new Error('expected a JVM secrets file');
+    }
+    expect(result.env.SONARQUBE_MCP_JVM_SECRETS_PATH).toBe(result.jvmSecretsPath);
+    expect(jvmSecretsText(result.jvmSecretsPath)).toContain('-Dhttps.proxyPassword=secret');
   });
 
   it('sets http proxy host and port from proxyHttp', () => {
@@ -618,6 +729,10 @@ describe('getMcpContainerCommand — CA cert → volume mount', () => {
 describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', () => {
   const context = { withFsMount: false } as const;
 
+  afterEach(() => {
+    removeJvmSecretsFiles();
+  });
+
   it('does not add a client cert mount or JAVA_OPTS when no client cert is configured', () => {
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
 
@@ -653,7 +768,7 @@ describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', 
     expect(result.args).toContain('JAVA_OPTS');
   });
 
-  it('sets keyStorePassword in JAVA_OPTS when passphrase is present', () => {
+  it('keeps keyStorePassword out of JAVA_OPTS when a passphrase is present', () => {
     const result = getMcpContainerCommand(
       FAKE_AUTH,
       'docker',
@@ -662,7 +777,16 @@ describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', 
       makeClientCertNetwork({ passphrase: 'secret' }),
     );
 
-    expect(result.env.JAVA_OPTS).toContain('-Djavax.net.ssl.keyStorePassword=secret');
+    const secrets = jvmSecretsText(result.jvmSecretsPath);
+    expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
+    expect(result.env.JAVA_OPTS).toContain(`@${MCP_CONTAINER_JVM_SECRETS_PATH}`);
+    expect(result.args.join(' ')).not.toContain('keyStorePassword');
+    expect(Object.values(result.env).join('\n')).not.toContain('keyStorePassword');
+    expect(secrets).toContain('-Djavax.net.ssl.keyStorePassword=secret');
+    if (process.platform !== 'win32' && result.jvmSecretsPath) {
+      expect(statSync(result.jvmSecretsPath).mode & 0o777).toBe(0o644);
+      expect(statSync(CLI_TMP_DIR).mode & 0o777).toBe(0o700);
+    }
   });
 
   it('omits keyStorePassword from JAVA_OPTS when no passphrase', () => {
