@@ -21,11 +21,15 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 
 import {
+  assertNoCleartextTokenDowngrade,
   httpsTokenDowngradeTarget,
   persistLoginCredentials,
 } from '@/commands/auth/persist-login.ts';
 import * as revocation from '@/commands/auth/revoke-server-token.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import * as keychain from '@/core/host/keychain.ts';
+import { normalizeServerUrl } from '@/core/host/keychain.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as repository from '@/core/state/state-repository.ts';
 
@@ -63,6 +67,33 @@ describe('login persistence', () => {
       for (const spy of spies.slice(1)) expect(spy).not.toHaveBeenCalled();
     } finally {
       for (const spy of spies) spy.mockRestore();
+    }
+  });
+
+  it('suggests a quoted saved URL without user information', () => {
+    const saved = "https://fixture-user:fixture-password@sample.example.test/base';echo";
+    const state = getDefaultState('1.0.0');
+    state.auth.connections.push({
+      id: 'saved',
+      type: 'on-premise',
+      serverUrl: saved,
+      authenticatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const spy = spyOn(repository, 'loadState').mockReturnValue(state);
+    try {
+      let error: unknown;
+      try {
+        assertNoCleartextTokenDowngrade('http://sample.example.test');
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(CommandFailedError);
+      const hint = (error as CommandFailedError).remediationHint;
+      expect(hint).toContain(`sonar auth logout --server ${shellQuote(normalizeServerUrl(saved))}`);
+      expect(hint).not.toContain('fixture-user');
+      expect(hint).not.toContain('fixture-password');
+    } finally {
+      spy.mockRestore();
     }
   });
 
