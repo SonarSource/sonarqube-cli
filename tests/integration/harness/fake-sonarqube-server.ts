@@ -636,6 +636,9 @@ export class FakeSonarQubeServerBuilder {
   private projectsSearchErrorStatusCode?: number;
   private projectsSearchErrorBody?: string;
   private projectCreateErrorBody?: string;
+  private organizationCreateErrorStatus?: number;
+  private subscriptionCreateErrorStatus?: number;
+  private organizationHiddenLookups = 0;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
   private provisionProjectsStatusCode?: number;
@@ -831,6 +834,24 @@ export class FakeSonarQubeServerBuilder {
 
   withOrganizationsSearchError(statusCode: number): this {
     this.organizationsSearchErrorCode = statusCode;
+    return this;
+  }
+
+  /** Make POST /api/organizations/create fail with this status (403/404: creation unavailable). */
+  withOrganizationCreateRejected(status: number): this {
+    this.organizationCreateErrorStatus = status;
+    return this;
+  }
+
+  /** A created organization answers 404 on `/organizations/organizations` this many times first. */
+  withCreatedOrganizationHiddenFor(lookups: number): this {
+    this.organizationHiddenLookups = lookups;
+    return this;
+  }
+
+  /** Make POST /billing/subscriptions fail with this status, so the organization stays unsubscribed. */
+  withSubscriptionCreateRejected(status: number): this {
+    this.subscriptionCreateErrorStatus = status;
     return this;
   }
 
@@ -1180,6 +1201,9 @@ export class FakeSonarQubeServerBuilder {
       projectsSearchErrorStatusCode,
       projectsSearchErrorBody,
       projectCreateErrorBody,
+      organizationCreateErrorStatus,
+      subscriptionCreateErrorStatus,
+      organizationHiddenLookups,
       organizationBindingsErrorCode,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
@@ -1213,6 +1237,8 @@ export class FakeSonarQubeServerBuilder {
     const memberOrganizationsTotal = rawMemberOrganizationsTotal ?? memberOrganizations.length;
     const requests: RecordedRequest[] = [];
     const patCallCounts = new Map<string, number>();
+    const hiddenLookups = new Map<string, number>();
+    const organizationSubscriptions = new Map<string, { planKey: string; status: string }[]>();
     const provisionConcurrency = { current: 0, peak: 0 };
 
     const server = Bun.serve({
@@ -1907,6 +1933,14 @@ export class FakeSonarQubeServerBuilder {
             });
           }
           const orgKey = query.organizationKey;
+          const hidden = hiddenLookups.get(orgKey ?? '') ?? 0;
+          if (hidden > 0) {
+            hiddenLookups.set(orgKey ?? '', hidden - 1);
+            return Response.json(
+              { message: `Organization with key ${orgKey} is not found` },
+              { status: 404 },
+            );
+          }
           const sqaaEntitlement = orgKey ? sqaaEntitlementOrgs.get(orgKey) : undefined;
           const cagEntitlement = orgKey ? cagEntitlementOrgs.get(orgKey) : undefined;
           const entitlementUuid = cagEntitlement?.uuid ?? sqaaEntitlement?.uuid;
@@ -2061,6 +2095,74 @@ export class FakeSonarQubeServerBuilder {
             }),
             { headers: { 'Content-Type': 'application/json' } },
           );
+        }
+
+        if (path === '/api/organizations/create' && req.method === 'POST') {
+          if (organizationCreateErrorStatus !== undefined) {
+            return Response.json(
+              { errors: [{ msg: 'Organization creation failed' }] },
+              { status: organizationCreateErrorStatus },
+            );
+          }
+          const params = new URLSearchParams(body ?? '');
+          const key = params.get('key') ?? '';
+          const name = params.get('name') ?? key;
+          if ([...memberOrganizations, ...visibleOrganizations].some((org) => org.key === key)) {
+            return Response.json(
+              { errors: [{ msg: `Organization key '${key}' is already taken` }] },
+              { status: 409 },
+            );
+          }
+          const organization: Organization = { key, name, actions: { admin: true } };
+          memberOrganizations.push(organization);
+          hiddenLookups.set(key, organizationHiddenLookups);
+          return Response.json({ organization });
+        }
+
+        if (path === '/billing/plans' && req.method === 'GET') {
+          return Response.json([
+            {
+              name: 'Free',
+              tiers: [{ priceId: 'price-legacy', currencyOptions: [{ unitAmount: 0 }] }],
+            },
+            {
+              name: 'Team',
+              tiers: [{ priceId: 'price-team', currencyOptions: [{ unitAmount: 3000 }] }],
+            },
+            {
+              name: 'Free_v2',
+              tiers: [{ priceId: 'price-free', currencyOptions: [{ unitAmount: 0 }] }],
+            },
+          ]);
+        }
+
+        if (path === '/billing/subscriptions') {
+          if (req.method === 'POST') {
+            if (subscriptionCreateErrorStatus !== undefined) {
+              return Response.json(
+                { errors: [{ msg: 'Subscription creation failed' }] },
+                { status: subscriptionCreateErrorStatus },
+              );
+            }
+            const { entityId, priceId, email } = JSON.parse(body ?? '{}') as {
+              entityId: string;
+              priceId?: string;
+              email?: string | null;
+            };
+            // The real endpoint refuses a null email.
+            if (typeof email !== 'string') {
+              return Response.json(
+                { message: 'createSubscriptionRequestDto.email: must not be null' },
+                { status: 400 },
+              );
+            }
+            const planKey = priceId === 'price-free' ? 'Free_v2' : 'Team';
+            organizationSubscriptions.set(entityId, [{ planKey, status: 'active' }]);
+            return Response.json({ planKey });
+          }
+          return Response.json({
+            subscriptions: organizationSubscriptions.get(query.resourceId ?? '') ?? [],
+          });
         }
 
         if (path === '/billing/entitlements' && req.method === 'GET') {
@@ -2362,7 +2464,12 @@ export class FakeSonarQubeServerBuilder {
         if (path === '/api/users/current') {
           const global = hasProvisionProjects ? ['provisioning'] : [];
           return new Response(
-            JSON.stringify({ id: currentUserId, login: 'fake-user', permissions: { global } }),
+            JSON.stringify({
+              id: currentUserId,
+              login: 'fake-user',
+              email: 'fake-user@example.com',
+              permissions: { global },
+            }),
             { headers: { 'Content-Type': 'application/json' } },
           );
         }

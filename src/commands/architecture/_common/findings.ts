@@ -24,6 +24,7 @@ import { type CommandFailedError, InvalidOptionError } from '@/core/commands/com
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
+import { MAX_ARCHITECTURE_PAGE_INDEX } from './dependency-query.ts';
 import { collectionFailure, incompatibleResponse } from './errors.ts';
 
 export const DEFAULT_FINDINGS_PAGE_SIZE = 50;
@@ -110,7 +111,7 @@ export async function fetchFindingsPage(
 }
 
 export function parseFindingPageIndex(value: string): number {
-  return parseFindingNumber(value, 1, Number.MAX_SAFE_INTEGER, 'page');
+  return parseFindingNumber(value, 1, MAX_ARCHITECTURE_PAGE_INDEX, 'page');
 }
 
 export function parseFindingPageSize(value: string): number {
@@ -146,12 +147,13 @@ export function validateFindingPagination(pageIndex: number, pageSize: number): 
   if (
     !Number.isSafeInteger(pageIndex) ||
     pageIndex < 1 ||
+    pageIndex > MAX_ARCHITECTURE_PAGE_INDEX ||
     !Number.isSafeInteger(pageSize) ||
     pageSize < 0 ||
     pageSize > MAX_FINDINGS_PAGE_SIZE
   )
     throw new InvalidOptionError(
-      'Finding page must be >= 1 and page size must be between 0 and 1000.',
+      `Finding page must be between 1 and ${MAX_ARCHITECTURE_PAGE_INDEX} and page size must be between 0 and 1000.`,
     );
 }
 

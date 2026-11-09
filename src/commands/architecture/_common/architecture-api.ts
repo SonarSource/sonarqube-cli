@@ -84,11 +84,17 @@ export interface IntendedArchitecture {
   constraints: IntendedConstraint[];
 }
 
+export interface IntendedState {
+  id?: string;
+  models: IntendedArchitecture[];
+}
+
 export interface ArchitectureApi {
   /** The current architecture per analyzed language; `[]` when the public API returns no current graphs. */
   getCurrent(language?: Ecosystem): Promise<CurrentGraph[]>;
   /** The intended architecture per language; `[]` when the project has none. */
   getIntended(): Promise<IntendedArchitecture[]>;
+  getIntendedState(): Promise<IntendedState>;
   /** Saves `models` as the project's intended architecture; the project must have none. */
   createIntended(models: IntendedArchitecture[]): Promise<void>;
   /** Replaces all perspectives of the model read from the public API. */

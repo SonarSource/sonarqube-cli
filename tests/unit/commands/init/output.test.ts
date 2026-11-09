@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { InitOutcome } from '@/commands/init/init-outcome.ts';
-import { renderProjectDashboards } from '@/commands/init/output.ts';
+import { renderInitOutcome, renderProjectDashboards } from '@/commands/init/output.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -69,5 +69,22 @@ describe('renderProjectDashboards', () => {
 
   it('prints nothing for a declined creation', () => {
     expect(render({ kind: 'declined' })).toEqual([]);
+  });
+
+  it('prints nothing when the account has no organization', () => {
+    expect(render({ kind: 'no-organization' })).toEqual([]);
+  });
+});
+
+describe('renderInitOutcome', () => {
+  it('renders a no-organization run without credentials, ending on the integrate hint', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome({ kind: 'no-organization' }, undefined, console, { suggestIntegrate: true });
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed[0]).toBe('No organization was created.');
+    expect(printed.at(-1)).toContain('sonar integrate');
+    expect(printed.some((line) => line.includes('Project dashboard'))).toBe(false);
   });
 });

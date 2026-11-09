@@ -40,7 +40,7 @@ const MODEL_SEQUENCE_LENGTH = 12;
 
 const RESOURCES = [
   'current-architectures',
-  'intended-architectures',
+  'project-intended-architectures',
   'project-directives',
   'project-findings',
 ] as const;
@@ -78,7 +78,7 @@ interface ArchitectureRequest {
   method: string;
   query: Record<string, string>;
   body?: string;
-  /** The server id of `/intended-architectures/{id}`. */
+  /** The server id of `/project-intended-architectures/{id}`. */
   modelId?: string;
   contentType?: string;
 }
@@ -105,9 +105,15 @@ export class FakeArchitecture {
   private intendedReads = 0;
   private readonly staleReads = new Map<
     number,
-    { id?: string | null; intendedArchitectures: unknown[] }
+    { intendedArchitectures: { id: string; perspectives: unknown[] }[] }
   >();
   private staleWriteResponse = false;
+  private malformedWriteResponse = false;
+
+  withMalformedWriteResponse(): this {
+    this.malformedWriteResponse = true;
+    return this;
+  }
   private missingPatchResponseId: 'null' | 'omitted' | undefined;
 
   withMissingPatchResponseId(value: 'null' | 'omitted'): this {
@@ -366,7 +372,7 @@ export class FakeArchitecture {
         const graphs = this.structure.get(request.query.language as Ecosystem) ?? [];
         return json({ currentArchitectures: graphs.map(({ id: _id, ...graph }) => graph) });
       }
-      case 'intended-architectures:GET': {
+      case 'project-intended-architectures:GET': {
         const status = this.readFailures.get(this.intendedReads + 1);
         if (status !== undefined) {
           this.intendedReads++;
@@ -374,15 +380,15 @@ export class FakeArchitecture {
         }
         return json(this.readIntended());
       }
-      case 'intended-architectures:POST':
+      case 'project-intended-architectures:POST':
         return request.contentType === 'application/json'
           ? this.createIntendedArchitectures(request.body)
           : json({ message: 'POST requires application/json' }, 415);
-      case 'intended-architectures:PATCH':
+      case 'project-intended-architectures:PATCH':
         return request.contentType === 'application/merge-patch+json'
           ? this.updateIntendedArchitectures(request.modelId, request.body)
           : json({ message: 'PATCH requires application/merge-patch+json' }, 415);
-      case 'intended-architectures:DELETE':
+      case 'project-intended-architectures:DELETE':
         return request.modelId
           ? this.deleteModel(request.modelId)
           : json({ message: 'A model id is required' }, 400);
@@ -391,7 +397,7 @@ export class FakeArchitecture {
     }
   }
 
-  private readIntended(): { id?: string | null; intendedArchitectures: unknown[] } {
+  private readIntended(): { intendedArchitectures: { id: string; perspectives: unknown[] }[] } {
     this.intendedReads++;
     const stale = this.staleReads.get(this.intendedReads);
     if (stale !== undefined) return stale;
@@ -408,11 +414,20 @@ export class FakeArchitecture {
     return this.exportEnvelope();
   }
 
-  private exportEnvelope(): { id?: string | null; intendedArchitectures: unknown[] } {
+  private exportEnvelope(): { intendedArchitectures: { id: string; perspectives: unknown[] }[] } {
+    return {
+      intendedArchitectures: this.models.map((model) => ({
+        id: model.id,
+        perspectives: this.exportModel(model),
+      })),
+    };
+  }
+
+  private exportResource(): { id?: string | null; perspectives: unknown[] } {
     const model = this.models[0];
     return model
-      ? { id: model.id, intendedArchitectures: this.exportModel(model) }
-      : { id: null, intendedArchitectures: [] };
+      ? { id: model.id, perspectives: this.exportModel(model) }
+      : { id: null, perspectives: [] };
   }
 
   private deleteModel(modelId: string | undefined): Response {
@@ -431,22 +446,23 @@ export class FakeArchitecture {
     if (this.models.length > 0)
       return json({ message: 'A model already exists for this project.' }, 400);
     const parsed = parseWriteBody(body, true);
-    if (!parsed)
-      return json({ message: 'POST requires projectId and intendedArchitectures only' }, 400);
-    const previous = this.exportEnvelope();
+    if (!parsed) return json({ message: 'POST requires projectId and perspectives only' }, 400);
+    const previous = this.exportResource();
     const model = this.toSavedModel(parsed);
     this.models.push(model);
     return this.committedCreateFailures.has(++this.intendedCreates)
       ? json({ message: 'Create response failed after commit' }, 500)
-      : json(this.staleWriteResponse ? previous : this.exportEnvelope(), 201);
+      : this.malformedWriteResponse
+        ? new Response('not JSON', { status: 201 })
+        : json(this.staleWriteResponse ? previous : this.exportResource(), 201);
   }
 
   private updateIntendedArchitectures(id: string | undefined, body: string | undefined): Response {
     const model = this.models.find((model) => model.id === id);
     if (!model) return json({ message: 'Model not found' }, 404);
     const parsed = parseWriteBody(body, false);
-    if (!parsed) return json({ message: 'PATCH requires intendedArchitectures only' }, 400);
-    const previous = this.exportEnvelope();
+    if (!parsed) return json({ message: 'PATCH requires perspectives only' }, 400);
+    const previous = this.exportResource();
     const failure = this.updateFailures.get(++this.intendedUpdates);
     if (!failure || failure.committed)
       model.perspectives = parsed.map(({ type, groups, ...rest }) => ({
@@ -454,12 +470,14 @@ export class FakeArchitecture {
         groups: this.saveGroups(groups),
         ...rest,
       }));
-    const response = this.staleWriteResponse ? previous : this.exportEnvelope();
+    const response = this.staleWriteResponse ? previous : this.exportResource();
     if (this.missingPatchResponseId !== undefined)
       response.id = this.missingPatchResponseId === 'null' ? null : undefined;
     return failure
       ? json({ message: `Patch response failed (${failure.status})` }, failure.status)
-      : json(response);
+      : this.malformedWriteResponse
+        ? new Response('not JSON', { status: 200 })
+        : json(response);
   }
 
   private exportModel({ perspectives }: SavedModel): unknown[] {
@@ -599,13 +617,11 @@ function parseWriteBody(
 ): IntendedArchitecture[] | undefined {
   const parsed = JSON.parse(body ?? '{}') as Record<string, unknown>;
   const keys = Object.keys(parsed).sort().join(',');
-  if (keys !== (create ? 'intendedArchitectures,projectId' : 'intendedArchitectures'))
-    return undefined;
+  if (keys !== (create ? 'perspectives,projectId' : 'perspectives')) return undefined;
   if (create && typeof parsed.projectId !== 'string') return undefined;
-  if (!Array.isArray(parsed.intendedArchitectures) || parsed.intendedArchitectures.length === 0)
-    return undefined;
+  if (!Array.isArray(parsed.perspectives) || parsed.perspectives.length === 0) return undefined;
   if (
-    parsed.intendedArchitectures.some(
+    parsed.perspectives.some(
       (model: {
         qualifiers?: unknown;
         type?: unknown;
@@ -623,7 +639,7 @@ function parseWriteBody(
   )
     return undefined;
   return (
-    parsed.intendedArchitectures as (Omit<IntendedArchitecture, 'type'> & {
+    parsed.perspectives as (Omit<IntendedArchitecture, 'type'> & {
       qualifiers: IntendedArchitecture['type'];
     })[]
   ).map(({ qualifiers, ...rest }) => ({ type: qualifiers, ...rest }));

@@ -384,6 +384,8 @@ describe('public architecture findings contract', () => {
     '--page 1junk',
     '--page 1e2',
     '--page 0',
+    '--page 2147483648',
+    '--page 3000000000',
     '--page 9007199254740992',
     '--page-size 1.5',
     '--page-size -1',
@@ -395,6 +397,16 @@ describe('public architecture findings contract', () => {
     expect(result.stderr).toContain('Finding');
     expect(result.stderr).not.toContain('at parse');
     expect(server.getRecordedRequests()).toHaveLength(0);
+  });
+
+  it('accepts the largest supported page index without changing it', async () => {
+    const server = await configured();
+    const result = await h.run(
+      'arch findings get -p shop --page 2147483647 --page-size 1 --format json',
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).page.pageIndex).toBe(2147483647);
+    expect(requests(server)[0]?.query.pageIndex).toBe('2147483647');
   });
 
   it('identifies active filters for a genuinely empty result', async () => {
