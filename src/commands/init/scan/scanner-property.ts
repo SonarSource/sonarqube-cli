@@ -49,6 +49,8 @@ const MANAGED_PROPERTIES = new Set([
   'sonar.scanner.javaExePath',
   'sonar.scanner.skipJreProvisioning',
   'sonar.scanner.javaOpts',
+  'sonar.scanner.engineJarPath',
+  'sonar.userHome',
   'sonar.scanner.os',
   'sonar.scanner.arch',
 ]);
