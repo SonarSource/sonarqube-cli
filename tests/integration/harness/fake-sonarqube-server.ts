@@ -322,9 +322,9 @@ export class ProjectBuilder {
   }
 
   /**
-   * Makes `GET /api/qualitygates/project_status` 404 when queried for this exact branch,
-   * matching the real API's "no analysis for this branch yet" response — distinct from
-   * `NONE`, which means the project *is* analyzed but has no quality gate.
+   * Omits `analysisDate` from the branch list and returns quality-gate 404 for this branch.
+   * An omitted quality-gate branch selects the default branch. Unlike `NONE`, this means
+   * the branch has no analysis yet.
    */
   withUnanalyzedBranch(branch: string): this {
     this.unanalyzedBranch = branch;
@@ -1421,7 +1421,8 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
-          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === query.branch) {
+          const requestedBranch = query.branch ?? projectData.defaultBranchName;
+          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === requestedBranch) {
             return new Response(
               JSON.stringify({ errors: [{ msg: 'Component or ref not found' }] }),
               { status: 404, headers: { 'Content-Type': 'application/json' } },

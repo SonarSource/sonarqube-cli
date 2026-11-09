@@ -59,6 +59,31 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
     }
   });
 
+  it.each([
+    ['main', 'main'],
+    ['trunk', 'trunk'],
+    ['main', 'feature'],
+  ])(
+    'keeps implicit and explicit quality gate branch state consistent for %s/%s',
+    async (main, unanalyzed) => {
+      server = await new FakeSonarQubeServerBuilder()
+        .withProject('shop', (project) =>
+          project.withDefaultBranchName(main).withUnanalyzedBranch(unanalyzed),
+        )
+        .start();
+      const endpoint = `${server.baseUrl()}/api/qualitygates/project_status?projectKey=shop`;
+      const implicit = await fetch(endpoint);
+      const explicit = await fetch(`${endpoint}&branch=${main}`);
+      expect(implicit.status).toBe(main === unanalyzed ? 404 : HTTP_OK);
+      expect(explicit.status).toBe(implicit.status);
+      expect(await implicit.json()).toEqual(await explicit.json());
+      const selected = await fetch(`${endpoint}&branch=${unanalyzed}`);
+      expect(selected.status).toBe(404);
+      const analyzed = await fetch(`${endpoint}&branch=analyzed`);
+      expect(analyzed.status).toBe(HTTP_OK);
+    },
+  );
+
   it('preserves an explicit null public project lookup response', async () => {
     server = await new FakeSonarQubeServerBuilder().withProjectsLookupResponse(200, null).start();
 
