@@ -55,7 +55,7 @@ export async function setIntended(
       `The intended architecture file is for project '${file.project}', not '${projectKey}'. Nothing was changed.`,
       {
         remediationHint:
-          'Export the intended architecture from the selected project and reapply your edits.',
+          'Export the intended architecture from the selected project and reapply your edits, or remove "project" from the file to reuse it as a template.',
       },
     );
   }

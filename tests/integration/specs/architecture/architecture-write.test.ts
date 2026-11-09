@@ -147,6 +147,9 @@ describe('sonar architecture intended set', () => {
             expect(result.exitCode).toBe(1);
             expect(result.stderr).toContain("file is for project 'source', not 'shop'");
             expect(result.stderr).toContain('Nothing was changed.');
+            expect(result.stderr).toContain(
+              'remove "project" from the file to reuse it as a template',
+            );
             expect(
               server
                 .getRecordedRequests()
@@ -159,19 +162,26 @@ describe('sonar architecture intended set', () => {
       }
     }
 
-    it.each([null, 42, '', '  '])(
-      'rejects invalid project metadata %j without Architecture requests',
-      async (project) => {
-        const server = await start();
-        harness.cwd.writeFile('model.json', JSON.stringify({ project, models: NEXT }));
-        const result = await harness.run(`arch intended set -p ${PROJECT} --file model.json`);
-        expect(result.exitCode).toBe(1);
-        expect(result.stderr).toContain('"project" must be a nonblank string');
-        expect(
-          server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
-        ).toEqual([]);
-      },
-    );
+    it.each([
+      null,
+      42,
+      '',
+      '  ',
+      ' my-key',
+      'my-key\nHint: fake',
+      '\x1b[31mkey',
+      '1234',
+      'a'.repeat(401),
+    ])('rejects invalid project metadata %j without Architecture requests', async (project) => {
+      const server = await start();
+      harness.cwd.writeFile('model.json', JSON.stringify({ project, models: NEXT }));
+      const result = await harness.run(`arch intended set -p ${PROJECT} --file model.json`);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('"project" must be a valid project key');
+      expect(server.getRecordedRequests().filter((r) => r.path.includes('/architecture/'))).toEqual(
+        [],
+      );
+    });
 
     it('keeps an explicitly untagged template reusable across projects', async () => {
       await startWith((a) => a.withIntended(SAVED));

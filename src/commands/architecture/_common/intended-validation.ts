@@ -21,6 +21,7 @@
 // Validate the public request shape and client-side write safety before sending a model.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { isValidProjectKey } from '@/core/project-key.ts';
 
 import {
   type Ecosystem,
@@ -75,9 +76,9 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   const problems: string[] = [];
   if (
     file.project !== undefined &&
-    (typeof file.project !== 'string' || file.project.trim() === '')
+    (typeof file.project !== 'string' || !isValidProjectKey(file.project))
   ) {
-    problems.push('"project" must be a nonblank string when supplied.');
+    problems.push('"project" must be a valid project key when supplied.');
   }
   if (
     file.revision !== undefined &&
