@@ -1,3 +1,7 @@
+<!-- nested-agents-canary: CANARY-STATS-PLUM -->
+
+> **Loading probe (experiment):** If this nested `AGENTS.md` is in your context, include the codeword `CANARY-STATS-PLUM` once in your reply when the user asks you to run the nested-AGENTS probe for `src/core/stats/AGENTS.md`.
+
 # Stats
 
 A local-only SQLite ledger (`{SONAR_USER_HOME}/sonarqube-cli/db/stats/stats.db`) recording one row per analyzer run (secrets, SQAA, SCA), for accuracy metrics only — nothing here is ever transmitted. The fact lifecycle mirrors telemetry's on purpose: handlers call `ctx.recordStats(() => new StatsFact(...))` (buffered on `CommandInvocationContext`, `src/core/commands/invocation-context.ts`) and `postAction` (`command-tree.ts`) drains the buffer via `commitStatsFacts` — synchronous, no queue/flush, per the CLI-1112 ADR.
@@ -18,6 +22,6 @@ Cursor deny hooks throw `CommandFailedError` with the required exit code after t
 
 **Testing**: `tests/unit/core/stats/_helpers.ts`'s `useTempSonarUserHome()` points `SONAR_USER_HOME` at a fresh temp dir per test. `tests/_common/stats-helpers.ts` has read helpers (`readStatsEvents`, `readStatsRuleDescriptions`, `readStatsAggregate`) for asserting on the ledger from both unit and integration specs, plus `readStatsAggregateFromDb` for tests that build their own `:memory:` database (e.g. exercising `applyAnalyzerEventToAggregates` or a migration's `up()` directly) rather than going through a file-backed `SONAR_USER_HOME`, and `removeTestSonarUserHome()` for the Windows-safe cleanup every test touching the ledger needs (WAL/SHM handles can outlive `db.close()` briefly on Windows).
 
-**`stats-queries.ts`** (CLI-1113) is the read side — `queryStatsSummary(since)` for the `sonar stats` command (`src/commands/stats/index.ts`, documented in `src/commands/CLAUDE.md`). Everything above this line is the write/retention side these queries read from.
+**`stats-queries.ts`** (CLI-1113) is the read side — `queryStatsSummary(since)` for the `sonar stats` command (`src/commands/stats/index.ts`, documented in `src/commands/AGENTS.md`). Everything above this line is the write/retention side these queries read from.
 
 `sonar stats` (CLI-1114) prints a one-line disclaimer when `DO_NOT_TRACK` is set (`isDoNotTrackRequested()`, `src/core/telemetry/enabled.ts`): the ledger is local-only regardless of that env var — only the dedicated flag above gates it — but a user who explicitly opted out of tracking still gets told so, per the team's decision in #mmf-5834-stats-command. `sonar system reset` wipes the whole ledger directory outright (`clearStats()`, `src/commands/system/reset-stats.ts`) rather than folding it into the generic filesystem-cache step, per the CLI-1114 ADR.

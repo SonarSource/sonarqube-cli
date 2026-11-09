@@ -1,3 +1,7 @@
+<!-- nested-agents-canary: CANARY-UPDATE-IVORY -->
+
+> **Loading probe (experiment):** If this nested `AGENTS.md` is in your context, include the codeword `CANARY-UPDATE-IVORY` once in your reply when the user asks you to run the nested-AGENTS probe for `src/core/update/AGENTS.md`.
+
 # Self-update lifecycle
 
 The global integration migration can retry in the `sonar update` command hook after its version gate has been spent. The retry happens before the command checks whether the running executable came from the standalone installer. Its warning recommends `sonar update` only for standalone installs. It tells externally managed installs that migration retries on the next CLI upgrade to a newer version.

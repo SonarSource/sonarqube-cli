@@ -98,7 +98,7 @@ Run `bun run pretest:integration` before `bun run test:e2e` to build the CLI and
 
 E2E tests cover dependencies that the isolated integration harness does not replace. Requirements vary by suite: OS keychain access, network access for installers and binary downloads, real SonarQube services, or external tools. Check the relevant tests under `tests/e2e/` before running them. Suites can skip tests when their prerequisites are unavailable; a skipped test does not validate that behavior.
 
-The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/CLAUDE.md) for harness and coverage details.
+The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/AGENTS.md) for harness and coverage details.
 
 ## macOS code signing (optional)
 

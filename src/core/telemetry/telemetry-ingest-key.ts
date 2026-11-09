@@ -20,7 +20,7 @@
 
 // This module holds only the telemetry ingest key, kept apart from config-constants.ts so
 // that the secrets scanner, which reports this intentional value, never blocks reading the
-// shared constants file. Nothing should need to open this file; see src/core/telemetry/CLAUDE.md.
+// shared constants file. Nothing should need to open this file; see src/core/telemetry/AGENTS.md.
 
 /** Write-only ingest API key, intentionally embedded in the binary. */
 export const TELEMETRY_API_KEY = 'hJPRohLsOsasZeOhSCSNDiL4h2yR96S5fOWJqRch';

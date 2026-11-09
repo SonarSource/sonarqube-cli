@@ -1,3 +1,7 @@
+<!-- nested-agents-canary: CANARY-FRAMEWORK-JADE -->
+
+> **Loading probe (experiment):** If this nested `AGENTS.md` is in your context, include the codeword `CANARY-FRAMEWORK-JADE` once in your reply when the user asks you to run the nested-AGENTS probe for `src/core/framework/AGENTS.md`.
+
 # Declarative integration framework
 
 The declarative-integration engine lives under `src/core/framework/` — it has no CLI-specific coupling, so it sits alongside `src/core/host/` rather than nested inside it: `src/core/framework/features/`, `src/core/framework/resources/`, and `src/core/framework/dependencies/` (including the generic SonarSource binary dependency) as sibling modules. New integration descriptors should import from `@/core/framework/features` for dependency/resource factories, operations, and registry validation. Command handlers should keep command-specific validation, prompts, and target resolution thin, then delegate feature selection, generic install messages, dependency/resource application, and state recording to `src/core/framework/features/install-integration.ts`. Only the CAG binary dependency declaration stays in commands, at `src/commands/integrate/_common/context-augmentation-dependency.ts`, since it calls the SonarQube API clients and CLI output helpers.
