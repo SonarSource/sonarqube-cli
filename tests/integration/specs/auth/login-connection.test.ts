@@ -163,6 +163,46 @@ sonar.projectKey=sample
     });
   });
 
+  it.each([true, false])(
+    'completes local cleanup for a conflicting connection with scoped=%s',
+    async (scoped) => {
+      const server = await harness.newFakeServer().withAuthToken('connection-token').start();
+      const state = seedConnections(server.baseUrl());
+      const selected = state.auth.connections[2];
+      selected.tokenName = 'fixture-token-name';
+      if (!scoped) state.auth.activeConnectionId = selected.id;
+      harness.state().withRawState(JSON.stringify(state));
+      const result = await harness.run(
+        `auth logout${scoped ? ` --server ${server.baseUrl()}` : ''}`,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr.replaceAll(/\s+/g, ' ')).toContain(
+        'The server-side token could not be revoked automatically. Revoke it manually on the server if needed. Continuing with local logout.',
+      );
+      expect(result.stderr).not.toContain(server.baseUrl());
+      expect(result.stderr).not.toContain('https://localhost');
+      expect(result.stdout + result.stderr).not.toContain(selected.tokenName);
+      expect(result.stdout + result.stderr).not.toContain('connection-token');
+      expect(
+        server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/user_tokens/revoke'),
+      ).toEqual([]);
+      expect(
+        server.getRecordedRequests().filter((request) => request.headers.authorization),
+      ).toEqual([]);
+      expect(harness.stateJsonFile.asJson().auth).toEqual({
+        ...state.auth,
+        activeConnectionId: scoped ? state.auth.activeConnectionId : undefined,
+        isAuthenticated: scoped,
+        connections: scoped
+          ? [state.auth.connections[0]]
+          : state.auth.connections.filter((connection) => connection.id !== selected.id),
+      });
+      expect(tokens()).toEqual({ 'unrelated.example.test': 'active-token' });
+    },
+  );
+
   it('completes scoped local cleanup after revocation fails', async () => {
     const server = await harness
       .newFakeServer()
@@ -171,6 +211,7 @@ sonar.projectKey=sample
       .start();
     const state = seedConnections(server.baseUrl());
     state.auth.connections[2].tokenName = 'fixture-token-name';
+    state.auth.connections = [state.auth.connections[0], state.auth.connections[2]];
     harness.state().withRawState(JSON.stringify(state));
     const result = await harness.run(`auth logout --server ${server.baseUrl()}`);
     expect(result.exitCode).toBe(0);
