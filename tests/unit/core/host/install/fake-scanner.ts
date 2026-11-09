@@ -26,6 +26,7 @@ import { SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
 export interface FakeLauncherOptions {
   /** What `--version` prints; defaults to the pinned scanner version. */
   version?: string;
+  javaVersion?: string;
   /** Exit code of `--version`. */
   exitCode?: number;
   /** Whether the reported class path entry exists. */
@@ -48,8 +49,18 @@ export function writeExecutable(path: string, lines: string[]): void {
 }
 
 /** A `java` that prints the scanner banner, as the real one does for `--version`. */
-export function writeFakeJava(path: string, version = SONAR_SCANNER_VERSION, exitCode = 0): void {
-  writeExecutable(path, ['#!/bin/sh', `echo "SonarScanner CLI ${version}"`, `exit ${exitCode}`]);
+export function writeFakeJava(
+  path: string,
+  version = SONAR_SCANNER_VERSION,
+  exitCode = 0,
+  javaVersion = '21.0.9',
+): void {
+  writeExecutable(path, [
+    '#!/bin/sh',
+    `echo "SonarScanner CLI ${version}"`,
+    `echo "Java ${javaVersion}"`,
+    `exit ${exitCode}`,
+  ]);
 }
 
 /**
@@ -65,7 +76,7 @@ export function writeFakeLauncher(root: string, options: FakeLauncherOptions = {
   const javaPath = join(javaHome, 'bin', 'java');
   mkdirSync(join(home, 'lib'), { recursive: true });
   if (options.jarExists !== false) writeFileSync(jar, '');
-  writeFakeJava(javaPath, version);
+  writeFakeJava(javaPath, version, 0, options.javaVersion);
   writeExecutable(join(binDir, 'sonar-scanner'), [
     '#!/bin/sh',
     `if [ "$1" = "--version" ]; then echo "SonarScanner CLI ${version}"; exit ${options.exitCode ?? 0}; fi`,

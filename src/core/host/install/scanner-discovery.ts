@@ -36,6 +36,7 @@ export interface ScannerInstallation {
 
 const PROBE_TIMEOUT_MS = 30000;
 const MIN_SCANNER_MAJOR_VERSION = 6;
+const MIN_ENGINE_JAVA_MAJOR_VERSION = 17;
 const UNICODE_ESCAPE_LENGTH = 5;
 const JAR_EXTENSION_LENGTH = '.jar'.length;
 const PROBE_ENV: NodeJS.ProcessEnv = {
@@ -77,8 +78,15 @@ export async function verifyScanner(scanner: ScannerInstallation): Promise<void>
     PROBE_TIMEOUT_MS,
     'SonarScanner installation verification timed out.',
   );
-  if (result.exitCode !== 0 || scannerVersion(result.stdout + result.stderr) !== scanner.version) {
+  const output = result.stdout + result.stderr;
+  if (result.exitCode !== 0 || scannerVersion(output) !== scanner.version) {
     throw new CommandFailedError('SonarScanner installation verification failed.');
+  }
+  const javaMajorVersion = Number(/\bJava (\d+)\b/.exec(output)?.[1] ?? 0);
+  if (javaMajorVersion < MIN_ENGINE_JAVA_MAJOR_VERSION) {
+    throw new CommandFailedError(
+      'SonarScanner requires Java 17 or later to run the analysis engine.',
+    );
   }
 }
 
