@@ -19,11 +19,12 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { DEFAULT_ANALYSIS_TIMEOUT_SECONDS } from '@/core/commands/poll.ts';
 import { fetchAnonymous } from '@/core/server/fetch.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { isAtLeast } from '@/core/server/server-info.ts';
 
-const ENGINE_DOWNLOAD_TIMEOUT_MS = 30_000;
+const ENGINE_DOWNLOAD_TIMEOUT_MS = DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000;
 
 export class ScannerEngineApi {
   constructor(private readonly http: SonarHttpClient) {}
@@ -57,7 +58,7 @@ export class ScannerEngineApi {
     const downloadUrl = metadata.downloadUrl?.trim();
     const bytes = downloadUrl
       ? await this.downloadAnonymous(downloadUrl)
-      : await this.http.getBytes(endpoint).orThrow();
+      : await this.http.getBytes(endpoint, ENGINE_DOWNLOAD_TIMEOUT_MS).orThrow();
     return { bytes, sha256: metadata.sha256 };
   }
 

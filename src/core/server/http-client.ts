@@ -237,14 +237,17 @@ export class SonarHttpClient {
   }
 
   /** Download authenticated binary content through the same network and redirect protections. */
-  getBytes(endpoint: string): ResultAsync<ArrayBuffer, HttpClientError> {
+  getBytes(
+    endpoint: string,
+    timeoutMs = GET_REQUEST_TIMEOUT_MS,
+  ): ResultAsync<ArrayBuffer, HttpClientError> {
     return ResultAsync.fromPromise(
       fetchAuthenticated(
         `${this.apiHostFor(endpoint)}${endpoint}`,
         buildRequest(
           'GET',
           { ...this.commonHeaders(), Accept: 'application/octet-stream' },
-          GET_REQUEST_TIMEOUT_MS,
+          timeoutMs,
           undefined,
         ),
       ),

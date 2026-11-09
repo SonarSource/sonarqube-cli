@@ -184,14 +184,19 @@ describe('scanner engine provisioning', () => {
   );
 
   it('rejects a cross-origin redirect from the authenticated endpoint', async () => {
-    fetchSpy.mockImplementation(() =>
-      Promise.resolve(
-        new Response(null, {
-          status: 302,
-          headers: { Location: 'https://other.example/engine' },
-        }),
-      ),
-    );
+    fetchSpy.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      const headers = new Headers(init?.headers);
+      requests.push({ url, headers });
+      return Promise.resolve(
+        headers.get('Accept') === 'application/json'
+          ? Response.json(metadata)
+          : new Response(null, {
+              status: 302,
+              headers: { Location: 'https://other.example/engine' },
+            }),
+      );
+    });
     expect(
       (
         await failureOf(
@@ -199,7 +204,64 @@ describe('scanner engine provisioning', () => {
         )
       ).message,
     ).toBeString();
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(requests.map(({ headers }) => headers.get('Accept'))).toEqual([
+      'application/json',
+      'application/octet-stream',
+    ]);
+    expect(requests.every(({ url }) => url === 'https://api.sonarcloud.io/analysis/engine')).toBe(
+      true,
+    );
     expect(readdirSync(directory)).toEqual([]);
   });
+
+  it.each([false, true])(
+    'allows an engine body to outlast the metadata timeout (external URL: %s)',
+    async (external) => {
+      metadata = { sha256, ...(external ? { downloadUrl: 'https://cdn.example/engine' } : {}) };
+      const timeouts: { budget: number; controller: AbortController }[] = [];
+      const timeoutSpy = spyOn(AbortSignal, 'timeout').mockImplementation((budget) => {
+        const controller = new AbortController();
+        timeouts.push({ budget, controller });
+        return controller.signal;
+      });
+      let finishBody: () => void = () => {};
+      let bodyStarted: () => void = () => {};
+      const started = new Promise<void>((resolve) => {
+        bodyStarted = resolve;
+      });
+      fetchSpy.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : input.toString();
+        if (new Headers(init?.headers).get('Accept') === 'application/json')
+          return Promise.resolve(Response.json(metadata));
+        const stream = new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+            finishBody = () => {
+              controller.enqueue(engine);
+              controller.close();
+            };
+          },
+        });
+        requests.push({ url, headers: new Headers(init?.headers) });
+        bodyStarted();
+        return Promise.resolve(new Response(stream));
+      });
+      try {
+        const pending = prepareScannerEngine(
+          new SonarHttpClient('https://sonarcloud.io', token),
+          directory,
+        );
+        await started;
+        for (const { budget, controller } of timeouts) {
+          if (budget <= 31_000) controller.abort(new DOMException('Timed out', 'TimeoutError'));
+        }
+        finishBody();
+        const path = await pending;
+        expect(new Uint8Array(readFileSync(path))).toEqual(engine);
+        expect(timeouts.map(({ budget }) => budget)).toEqual([30_000, 600_000]);
+      } finally {
+        timeoutSpy.mockRestore();
+      }
+    },
+  );
 });
