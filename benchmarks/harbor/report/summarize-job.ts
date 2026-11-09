@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 interface TrialResult {
   task_name: string;
-  agent_info: { model_info?: { name?: string } } | null;
+  agent_info: { name?: string; model_info?: { name?: string } } | null;
   started_at: string | null;
   finished_at: string | null;
   exception_info: { exception_type?: string } | null;
@@ -26,6 +26,7 @@ const LEAK_MARKER_FILE = 'secrets-leak.json';
 interface Row {
   label: string;
   task: string;
+  agent: string | null;
   model: string | null;
   status: Status;
   agentSeconds: number | null;
@@ -58,10 +59,11 @@ function lastSegment(value: string): string {
   return value.slice(value.lastIndexOf('/') + 1);
 }
 
-function errorRow(label: string, task: string, model: string | null): Row {
+function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
   return {
     label,
     task,
+    agent,
     model,
     status: 'ERROR',
     agentSeconds: null,
@@ -74,7 +76,7 @@ function errorRow(label: string, task: string, model: string | null): Row {
 }
 
 function crashedTrialRow(label: string, trialDir: string, trialName: string): Row {
-  const config = readJson<{ agent?: { model_name?: string | null } }>(
+  const config = readJson<{ agent?: { name?: string | null; model_name?: string | null } }>(
     join(trialDir, 'config.json'),
   );
   const modelName = config?.agent?.model_name;
@@ -82,6 +84,7 @@ function crashedTrialRow(label: string, trialDir: string, trialName: string): Ro
   return errorRow(
     label,
     suffixStart > 0 ? trialName.slice(0, suffixStart) : trialName,
+    config?.agent?.name ?? null,
     modelName ? lastSegment(modelName) : null,
   );
 }
@@ -96,6 +99,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   return {
     label,
     task: lastSegment(trial.task_name),
+    agent: trial.agent_info?.name ?? null,
     model: trial.agent_info?.model_info?.name ?? null,
     status: statusOf(trial),
     agentSeconds: secondsBetween(
@@ -123,8 +127,8 @@ function rowsFor(label: string, jobDir: string): Row[] {
       return existsSync(join(trialDir, LEAK_MARKER_FILE)) ? leakedRow(row) : row;
     });
   if (existsSync(join(jobDir, LEAK_MARKER_FILE)))
-    rows.push(leakedRow(errorRow(label, 'job files', null)));
-  return rows.length > 0 ? rows : [errorRow(label, 'no trials', null)];
+    rows.push(leakedRow(errorRow(label, 'job files', null, null)));
+  return rows.length > 0 ? rows : [errorRow(label, 'no trials', null, null)];
 }
 
 function cell(value: number | null, format: (n: number) => string = String): string {
@@ -135,6 +139,7 @@ function renderTrial(row: Row): string[] {
   return [
     row.label,
     row.task,
+    row.agent ?? '-',
     row.model ?? '-',
     row.status,
     cell(row.agentSeconds, (n) => `${n.toFixed(0)}s`),
@@ -161,7 +166,7 @@ function average(values: (number | null)[]): number | null {
 function groupTrials(rows: Row[]): Row[][] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
-    const key = [row.task, row.model ?? '-', row.label].join('|');
+    const key = [row.task, row.agent ?? '-', row.model ?? '-', row.label].join('|');
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
@@ -173,6 +178,7 @@ function renderGroup(group: Row[]): string[] {
   return [
     first.label,
     first.task,
+    first.agent ?? '-',
     first.model ?? '-',
     `${passed}/${group.length}`,
     cell(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)}s`),
@@ -204,10 +210,10 @@ function renderReport(rows: Row[]): string {
   const lines = [
     '## Harbor benchmark',
     '',
-    'Averages over the trials of each task, model and OS.',
+    'Averages over the trials of each task, agent, model and OS.',
     '',
     ...renderTable(
-      ['OS', 'Task', 'Model', 'Passed', ...metrics],
+      ['OS', 'Task', 'Agent', 'Model', 'Passed', ...metrics],
       groupTrials(rows).map(renderGroup),
     ),
     '',
@@ -219,7 +225,7 @@ function renderReport(rows: Row[]): string {
     '<details>',
     '<summary>Trials</summary>',
     '',
-    ...renderTable(['OS', 'Task', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
+    ...renderTable(['OS', 'Task', 'Agent', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
     '',
     '</details>',
   ];
