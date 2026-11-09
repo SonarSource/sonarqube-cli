@@ -38,6 +38,7 @@ import {
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import { removeJvmSecretsFile } from '@/core/host/mcp/mcp-jvm-secrets.ts';
 import {
   isLoopbackServerUrl,
   mcpLoopbackAdvice,
@@ -76,6 +77,7 @@ export async function runMcp(
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
   let cachedCaCertPath: string | undefined;
+  let jvmSecretsPath: string | undefined;
   try {
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const authResult = await ctx.resolveAuth();
@@ -137,6 +139,7 @@ export async function runMcp(
       resolvedNetwork,
     );
     cachedCaCertPath = config.cachedCaCertPath;
+    jvmSecretsPath = config.jvmSecretsPath;
 
     if (options.debug) {
       debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
@@ -189,6 +192,7 @@ export async function runMcp(
   }
 
   function cleanup(network: ResolvedNetworkConfig) {
+    removeJvmSecretsFile(jvmSecretsPath);
     if (cachedCaCertPath) {
       try {
         rmSync(cachedCaCertPath, { force: true });

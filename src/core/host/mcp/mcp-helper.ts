@@ -49,6 +49,7 @@ import {
 import { normalizePath } from '../../io/fs-utils.ts';
 import type { ContainerRuntime, ContainerRuntimeDetection } from '../environment/tool-detector.ts';
 import type { RedactedUrl } from '../redacted-url.ts';
+import { removeJvmSecretsFile, writeJvmSecretsFile } from './mcp-jvm-secrets.ts';
 
 export interface McpServerConfig {
   command: string;
@@ -61,6 +62,7 @@ export interface McpContainerCommand {
   args: string[];
   env: Record<string, string>;
   cachedCaCertPath?: string;
+  jvmSecretsPath?: string;
 }
 export interface McpServerOptions {
   debug?: boolean;
@@ -121,6 +123,9 @@ export const MCP_CONTAINER_CA_CERT_PATH = '/usr/local/share/ca-certificates/sona
 // Fixed mount path for the client certificate PKCS12 keystore inside the MCP container.
 export const MCP_CONTAINER_CLIENT_CERT_PATH = '/etc/ssl/mcp/client.p12';
 
+// The JVM expands this file after the image entrypoint processes JAVA_OPTS.
+export const MCP_CONTAINER_JVM_SECRETS_PATH = '/etc/ssl/mcp/jvm-secrets.args';
+
 // All MCP toolsets supported by the server, excluding 'cag'/'vortex' which are available
 // directly via the CLI's own Vortex analysis. Passed explicitly to avoid relying on MCP-side defaults.
 export const MCP_DEFAULT_TOOLSETS =
@@ -134,30 +139,36 @@ function toJavaNonProxyHosts(noProxy: string): string {
     .join('|');
 }
 
-function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): string[] {
+interface SplitJavaOpts {
+  publicOpts: string[];
+  secretOpts: string[];
+}
+
+function proxyJavaProps(proxyUrl: RedactedUrl, scheme: 'http' | 'https'): SplitJavaOpts {
   const url = new URL(proxyUrl.getUrlWithCredentials());
-  const parts = [`-D${scheme}.proxyHost=${url.hostname}`];
+  const publicOpts = [`-D${scheme}.proxyHost=${url.hostname}`];
+  const secretOpts: string[] = [];
   if (url.port) {
-    parts.push(`-D${scheme}.proxyPort=${url.port}`);
+    publicOpts.push(`-D${scheme}.proxyPort=${url.port}`);
   }
   if (url.username) {
-    parts.push(`-D${scheme}.proxyUser=${decodeURIComponent(url.username)}`);
+    secretOpts.push(`-D${scheme}.proxyUser=${decodeURIComponent(url.username)}`);
   }
   if (url.password) {
-    parts.push(`-D${scheme}.proxyPassword=${decodeURIComponent(url.password)}`);
+    secretOpts.push(`-D${scheme}.proxyPassword=${decodeURIComponent(url.password)}`);
   }
-  return parts;
+  return { publicOpts, secretOpts };
 }
 
 function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
   const parts: string[] = [];
 
   if (proxy.proxyHttps) {
-    parts.push(...proxyJavaProps(proxy.proxyHttps, 'https'));
+    parts.push(...proxyJavaProps(proxy.proxyHttps, 'https').publicOpts);
   }
 
   if (proxy.proxyHttp) {
-    parts.push(...proxyJavaProps(proxy.proxyHttp, 'http'));
+    parts.push(...proxyJavaProps(proxy.proxyHttp, 'http').publicOpts);
   }
 
   if (proxy.noProxy) {
@@ -168,9 +179,23 @@ function collectProxyJavaOpts(proxy: ProxyGroup): string[] {
   return parts;
 }
 
+function collectSecretJavaOpts(network: ResolvedNetworkConfig): string[] {
+  const secretOpts: string[] = [];
+  if (network.proxy?.proxyHttps) {
+    secretOpts.push(...proxyJavaProps(network.proxy.proxyHttps, 'https').secretOpts);
+  }
+  if (network.proxy?.proxyHttp) {
+    secretOpts.push(...proxyJavaProps(network.proxy.proxyHttp, 'http').secretOpts);
+  }
+  // PEM keystores are written without a password. Only a PKCS#12 passphrase reaches the JVM.
+  if (network.clientCert?.format === 'pkcs12' && network.clientCert.passphrase) {
+    secretOpts.push(`-Djavax.net.ssl.keyStorePassword=${network.clientCert.passphrase}`);
+  }
+  return secretOpts;
+}
+
 interface ClientCertMount {
   hostCertPath: string;
-  keystorePassphrase: string | undefined;
 }
 
 export function clientCertCachePath(clientCert: ClientCertConfig): string {
@@ -260,7 +285,6 @@ function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
   if (clientCert.format === 'pkcs12') {
     return {
       hostCertPath: normalizePath(clientCert.certPath),
-      keystorePassphrase: clientCert.passphrase,
     };
   }
   const cachedPath = clientCertCachePath(clientCert);
@@ -277,19 +301,14 @@ function resolveClientCertMount(clientCert: ClientCertConfig): ClientCertMount {
   }
   return {
     hostCertPath: normalizePath(cachedPath),
-    keystorePassphrase: undefined,
   };
 }
 
-function collectClientCertJavaOpts(passphrase: string | undefined): string[] {
-  const parts = [
+function collectClientCertJavaOpts(): string[] {
+  return [
     `-Djavax.net.ssl.keyStore=${MCP_CONTAINER_CLIENT_CERT_PATH}`,
     '-Djavax.net.ssl.keyStoreType=PKCS12',
   ];
-  if (passphrase) {
-    parts.push(`-Djavax.net.ssl.keyStorePassword=${passphrase}`);
-  }
-  return parts;
 }
 
 function buildDockerRunArgsAndEnv(
@@ -298,8 +317,18 @@ function buildDockerRunArgsAndEnv(
   mountSource: string | undefined,
   options: McpServerOptions,
   network: ResolvedNetworkConfig,
-  certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {},
-): { args: string[]; env: Record<string, string>; cachedCaCertPath?: string } {
+  certMountSources: {
+    caCert?: string;
+    cachedCaCertPath?: string;
+    clientCert?: string;
+    jvmSecrets?: string;
+  } = {},
+): {
+  args: string[];
+  env: Record<string, string>;
+  cachedCaCertPath?: string;
+  jvmSecretsPath?: string;
+} {
   const { token, orgKey: org, serverUrl } = auth;
 
   const args = [
@@ -361,10 +390,10 @@ function buildDockerRunArgsAndEnv(
   }
 
   if (network.clientCert) {
-    const { hostCertPath, keystorePassphrase } = resolveClientCertMount(network.clientCert);
+    const { hostCertPath } = resolveClientCertMount(network.clientCert);
     const mountPath = certMountSources.clientCert ?? hostCertPath;
     args.push('-v', `${mountPath}:${MCP_CONTAINER_CLIENT_CERT_PATH}:ro`);
-    javaOpts.push(...collectClientCertJavaOpts(keystorePassphrase));
+    javaOpts.push(...collectClientCertJavaOpts());
   }
 
   if (network.caCert) {
@@ -375,6 +404,14 @@ function buildDockerRunArgsAndEnv(
     cachedCaCertPath = mount.cachedPath;
   }
 
+  if (certMountSources.jvmSecrets) {
+    args.push(
+      '-v',
+      `${normalizePath(certMountSources.jvmSecrets)}:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`,
+    );
+    javaOpts.push(`@${MCP_CONTAINER_JVM_SECRETS_PATH}`);
+  }
+
   if (javaOpts.length > 0) {
     args.push('-e', 'JAVA_OPTS');
     env.JAVA_OPTS = javaOpts.join(' ');
@@ -382,7 +419,11 @@ function buildDockerRunArgsAndEnv(
 
   args.push(SONARQUBE_MCP_DOCKER_IMAGE_NAME);
 
-  return cachedCaCertPath ? { args, env, cachedCaCertPath } : { args, env };
+  return {
+    args,
+    env,
+    ...(cachedCaCertPath ? { cachedCaCertPath } : {}),
+  };
 }
 
 export function getMcpContainerCommand(
@@ -393,13 +434,22 @@ export function getMcpContainerCommand(
   network: ResolvedNetworkConfig,
 ): McpContainerCommand {
   const mountSource = context.withFsMount ? normalizePath(context.projectRoot) : undefined;
-  const config = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network);
-  return { command: runtime, ...config };
+  const jvmSecretsPath = writeJvmSecretsFile(collectSecretJavaOpts(network));
+  try {
+    const config = buildDockerRunArgsAndEnv(auth, context, mountSource, options, network, {
+      jvmSecrets: jvmSecretsPath,
+    });
+    return { command: runtime, ...config, ...(jvmSecretsPath ? { jvmSecretsPath } : {}) };
+  } catch (error) {
+    removeJvmSecretsFile(jvmSecretsPath);
+    throw error;
+  }
 }
 
 const WSL_HOST_PATH_ENV_VAR = 'SONARQUBE_MCP_HOST_PATH';
 const WSL_CA_PATH_ENV_VAR = 'SONARQUBE_MCP_CA_PATH';
 const WSL_CLIENT_CERT_PATH_ENV_VAR = 'SONARQUBE_MCP_CLIENT_CERT_PATH';
+const WSL_JVM_SECRETS_PATH_ENV_VAR = 'SONARQUBE_MCP_JVM_SECRETS_PATH';
 const WSL_NETWORK_ENV_VAR = 'SONARQUBE_MCP_NETWORK';
 const WSL_ADD_HOST_ENV_VAR = 'SONARQUBE_MCP_ADD_HOST';
 
@@ -410,82 +460,98 @@ function getMcpWslContainerCommand(
   options: McpServerOptions,
   network: ResolvedNetworkConfig,
 ): McpContainerCommand {
-  const mountSource = context.withFsMount ? `"$${WSL_HOST_PATH_ENV_VAR}"` : undefined;
+  const jvmSecretsPath = writeJvmSecretsFile(collectSecretJavaOpts(network));
+  try {
+    let mountSource: string | undefined;
 
-  // Cert host paths must be routed through WSLENV /p-translated env vars so WSL can
-  // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
-  // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
-  // it as "$VAR" (quoted to handle spaces) in the docker run args.
-  const certMountSources: { caCert?: string; cachedCaCertPath?: string; clientCert?: string } = {};
-  const wslPathEnv: Record<string, string> = {};
+    // Cert host paths must be routed through WSLENV /p-translated env vars so WSL can
+    // convert Windows paths (C:/...) to WSL mount paths (/mnt/c/...) before Docker sees them.
+    // Mirroring the workspace mount pattern: store the Windows path in an env var and reference
+    // it as "$VAR" (quoted to handle spaces) in the docker run args.
+    const certMountSources: {
+      caCert?: string;
+      cachedCaCertPath?: string;
+      clientCert?: string;
+      jvmSecrets?: string;
+    } = {};
+    const wslPathEnv: Record<string, string> = {};
+    if (context.withFsMount) {
+      mountSource = `"$${WSL_HOST_PATH_ENV_VAR}"`;
+      wslPathEnv[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
+    }
 
-  if (network.caCert) {
-    certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
+    if (network.caCert) {
+      certMountSources.caCert = `"$${WSL_CA_PATH_ENV_VAR}"`;
+    }
+
+    if (network.clientCert) {
+      const hostPath =
+        network.clientCert.format === 'pkcs12'
+          ? normalizePath(network.clientCert.certPath)
+          : normalizePath(clientCertCachePath(network.clientCert));
+      certMountSources.clientCert = `"$${WSL_CLIENT_CERT_PATH_ENV_VAR}"`;
+      wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
+    }
+
+    if (jvmSecretsPath) {
+      certMountSources.jvmSecrets = `"$${WSL_JVM_SECRETS_PATH_ENV_VAR}"`;
+      wslPathEnv[WSL_JVM_SECRETS_PATH_ENV_VAR] = jvmSecretsPath;
+    }
+
+    const wslOptions = { ...options };
+    if (options.containerNetwork) {
+      wslOptions.containerNetwork = `"$${WSL_NETWORK_ENV_VAR}"`;
+    }
+    if (options.containerAddHost) {
+      wslOptions.containerAddHost = `"$${WSL_ADD_HOST_ENV_VAR}"`;
+    }
+
+    const config = buildDockerRunArgsAndEnv(
+      auth,
+      context,
+      mountSource,
+      wslOptions,
+      network,
+      certMountSources,
+    );
+    const { args, env } = config;
+    let cachedCaCertPath: string | undefined;
+
+    if (network.caCert) {
+      const mount = resolveCaCertMount(network.caCert.path);
+      wslPathEnv[WSL_CA_PATH_ENV_VAR] = mount.hostPath;
+      cachedCaCertPath = mount.cachedPath;
+    }
+
+    const wslenv = Object.keys(env).map((name) => `${name}/u`);
+
+    if (options.containerNetwork) {
+      env[WSL_NETWORK_ENV_VAR] = options.containerNetwork;
+      wslenv.push(`${WSL_NETWORK_ENV_VAR}/u`);
+    }
+    if (options.containerAddHost) {
+      env[WSL_ADD_HOST_ENV_VAR] = options.containerAddHost;
+      wslenv.push(`${WSL_ADD_HOST_ENV_VAR}/u`);
+    }
+
+    for (const [key, value] of Object.entries(wslPathEnv)) {
+      env[key] = value;
+      wslenv.push(`${key}/p`);
+    }
+
+    env.WSLENV = wslenv.join(':');
+
+    return {
+      command: 'wsl.exe',
+      args: ['sh', '-c', [runtime, ...args].join(' ')],
+      env,
+      ...(cachedCaCertPath ? { cachedCaCertPath } : {}),
+      ...(jvmSecretsPath ? { jvmSecretsPath } : {}),
+    };
+  } catch (error) {
+    removeJvmSecretsFile(jvmSecretsPath);
+    throw error;
   }
-
-  if (network.clientCert) {
-    const hostPath =
-      network.clientCert.format === 'pkcs12'
-        ? normalizePath(network.clientCert.certPath)
-        : normalizePath(clientCertCachePath(network.clientCert));
-    certMountSources.clientCert = `"$${WSL_CLIENT_CERT_PATH_ENV_VAR}"`;
-    wslPathEnv[WSL_CLIENT_CERT_PATH_ENV_VAR] = hostPath;
-  }
-
-  const wslOptions = { ...options };
-  if (options.containerNetwork) {
-    wslOptions.containerNetwork = `"$${WSL_NETWORK_ENV_VAR}"`;
-  }
-  if (options.containerAddHost) {
-    wslOptions.containerAddHost = `"$${WSL_ADD_HOST_ENV_VAR}"`;
-  }
-
-  const config = buildDockerRunArgsAndEnv(
-    auth,
-    context,
-    mountSource,
-    wslOptions,
-    network,
-    certMountSources,
-  );
-  const { args, env } = config;
-  let cachedCaCertPath: string | undefined;
-
-  if (network.caCert) {
-    const mount = resolveCaCertMount(network.caCert.path);
-    wslPathEnv[WSL_CA_PATH_ENV_VAR] = mount.hostPath;
-    cachedCaCertPath = mount.cachedPath;
-  }
-
-  const wslenv = Object.keys(env).map((name) => `${name}/u`);
-
-  if (context.withFsMount) {
-    env[WSL_HOST_PATH_ENV_VAR] = context.projectRoot;
-    wslenv.push(`${WSL_HOST_PATH_ENV_VAR}/p`);
-  }
-
-  if (options.containerNetwork) {
-    env[WSL_NETWORK_ENV_VAR] = options.containerNetwork;
-    wslenv.push(`${WSL_NETWORK_ENV_VAR}/u`);
-  }
-  if (options.containerAddHost) {
-    env[WSL_ADD_HOST_ENV_VAR] = options.containerAddHost;
-    wslenv.push(`${WSL_ADD_HOST_ENV_VAR}/u`);
-  }
-
-  for (const [key, value] of Object.entries(wslPathEnv)) {
-    env[key] = value;
-    wslenv.push(`${key}/p`);
-  }
-
-  env.WSLENV = wslenv.join(':');
-
-  return {
-    command: 'wsl.exe',
-    args: ['sh', '-c', [runtime, ...args].join(' ')],
-    env,
-    ...(cachedCaCertPath ? { cachedCaCertPath } : {}),
-  };
 }
 
 export function resolveMcpContainerCommand(
