@@ -28,9 +28,12 @@ import {
   normalizeServerUrl,
 } from '@/core/host/keychain.ts';
 import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
 import { loadState, updateState } from '@/core/state/state-repository.ts';
+import type { Console } from '@/core/ui/console.ts';
 
+import { httpsTokenDowngradeTarget } from './persist-login.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
@@ -76,20 +79,7 @@ export async function authLogout(
           (connection) =>
             generateKeychainAccount(connection.serverUrl) === generateKeychainAccount(server),
         );
-  let token: string | undefined;
-  try {
-    token = (await getToken(server)) ?? undefined;
-  } catch (err) {
-    console.warn(
-      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
-    );
-  }
-
-  const revokeOutcome = await revokeServerTokenIfPossible(selected, token);
-  reportRevokeServerTokenOutcome(revokeOutcome, {
-    continuingMessage: 'Continuing with local logout.',
-    console,
-  });
+  await revokeTokenBeforeLogout(selected, state.auth.connections, console);
 
   try {
     await deleteToken(server);
@@ -125,4 +115,32 @@ export async function authLogout(
   const displayServerLogout =
     selected.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;
   console.success(`Logged out from: ${displayServerLogout}`);
+}
+
+async function revokeTokenBeforeLogout(
+  connection: AuthConnection,
+  savedConnections: readonly AuthConnection[],
+  console: Console,
+): Promise<void> {
+  if (httpsTokenDowngradeTarget(savedConnections, connection.serverUrl) !== undefined) {
+    console.warn(
+      'The server-side token could not be revoked automatically. Revoke it manually on the server if needed. Continuing with local logout.',
+    );
+    return;
+  }
+
+  let token: string | undefined;
+  try {
+    token = (await getToken(connection.serverUrl)) ?? undefined;
+  } catch (err) {
+    console.warn(
+      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
+
+  const revokeOutcome = await revokeServerTokenIfPossible(connection, token);
+  reportRevokeServerTokenOutcome(revokeOutcome, {
+    continuingMessage: 'Continuing with local logout.',
+    console,
+  });
 }
