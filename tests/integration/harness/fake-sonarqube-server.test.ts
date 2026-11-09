@@ -32,18 +32,26 @@ describe('FakeSonarQubeServer — UUID consistency', () => {
     await server?.stop();
   });
 
-  it.each([undefined, null, '2026-01-01T00:00:00+0000'])(
-    'preserves main branch analysis metadata: %s',
-    async (analysisDate) => {
+  it.each(['main', 'feature'])(
+    'omits analysisDate only for unanalyzed branch %s',
+    async (unanalyzed) => {
       server = await new FakeSonarQubeServerBuilder()
-        .withProject('shop', (project) => project.withMainBranchAnalysisDate(analysisDate))
+        .withProject('shop', (project) =>
+          project.withBranches(['main', 'feature', 'analyzed']).withUnanalyzedBranch(unanalyzed),
+        )
         .start();
       const response = await fetch(`${server.baseUrl()}/api/project_branches/list?project=shop`);
       const { branches } = (await response.json()) as {
-        branches: { isMain: boolean; analysisDate?: string | null }[];
+        branches: { name: string; analysisDate?: string }[];
       };
-      expect(branches[0].isMain).toBe(true);
-      expect(branches[0].analysisDate).toBe(analysisDate);
+      expect(branches).toHaveLength(3);
+      for (const branch of branches) {
+        if (branch.name === unanalyzed) {
+          expect(branch).not.toHaveProperty('analysisDate');
+        } else {
+          expect(branch.analysisDate).toBeTruthy();
+        }
+      }
     },
   );
 

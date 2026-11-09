@@ -169,6 +169,8 @@ function resolveIssuesSearchScope(
   return { projectKey, componentFilterKey: subPath === undefined ? undefined : scopeValue };
 }
 
+const FAKE_ANALYSIS_DATE = '2026-01-01T00:00:00+0000';
+
 interface ProjectData {
   organization?: string;
   componentShowStatusCode?: number;
@@ -178,7 +180,6 @@ interface ProjectData {
   qualityGateStatus?: QualityGateStatus;
   qualityGateConditions?: QualityGateCondition[];
   defaultBranchName: string | null;
-  mainBranchAnalysisDate?: string | null;
   branchNames: string[];
   unanalyzedBranch?: string;
   componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]>;
@@ -216,7 +217,6 @@ export class ProjectBuilder {
   private qualityGateStatus?: QualityGateStatus;
   private qualityGateConditions?: QualityGateCondition[];
   private defaultBranchName: string | null = 'main';
-  private mainBranchAnalysisDate: string | null | undefined = '2026-01-01T00:00:00+0000';
   private readonly branchNames: string[] = [];
   private unanalyzedBranch?: string;
   private readonly componentTreeFilesByMetric: Map<string, ComponentTreeFileConfig[]> = new Map();
@@ -278,11 +278,6 @@ export class ProjectBuilder {
   /** Configure the `conditions` array `GET /api/qualitygates/project_status` returns for this project. */
   withConditions(conditions: QualityGateCondition[]): this {
     this.qualityGateConditions = conditions;
-    return this;
-  }
-
-  withMainBranchAnalysisDate(value: string | null | undefined): this {
-    this.mainBranchAnalysisDate = value;
     return this;
   }
 
@@ -438,7 +433,6 @@ export class ProjectBuilder {
       qualityGateStatus: this.qualityGateStatus,
       qualityGateConditions: this.qualityGateConditions,
       defaultBranchName: this.defaultBranchName,
-      mainBranchAnalysisDate: this.mainBranchAnalysisDate,
       branchNames: this.branchNames,
       unanalyzedBranch: this.unanalyzedBranch,
       componentTreeFilesByMetric: this.componentTreeFilesByMetric,
@@ -1678,6 +1672,8 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
+          const analysisDateOf = (name: string) =>
+            name === projectData.unanalyzedBranch ? undefined : FAKE_ANALYSIS_DATE;
           return new Response(
             JSON.stringify({
               branches: [
@@ -1686,7 +1682,7 @@ export class FakeSonarQubeServerBuilder {
                       {
                         name: projectData.defaultBranchName,
                         branchId: fakeMainBranchId(projectData.key),
-                        analysisDate: projectData.mainBranchAnalysisDate,
+                        analysisDate: analysisDateOf(projectData.defaultBranchName),
                         isMain: true,
                         type: 'LONG',
                         status: { qualityGateStatus: 'OK' },
@@ -1697,6 +1693,7 @@ export class FakeSonarQubeServerBuilder {
                   .filter((branchName) => branchName !== projectData.defaultBranchName)
                   .map((name) => ({
                     name,
+                    analysisDate: analysisDateOf(name),
                     isMain: false,
                     type: 'LONG',
                     status: { qualityGateStatus: 'OK' },
