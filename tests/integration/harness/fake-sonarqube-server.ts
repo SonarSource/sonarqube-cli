@@ -169,6 +169,8 @@ function resolveIssuesSearchScope(
   return { projectKey, componentFilterKey: subPath === undefined ? undefined : scopeValue };
 }
 
+const FAKE_ANALYSIS_DATE = '2026-01-01T00:00:00+0000';
+
 interface ProjectData {
   organization?: string;
   componentShowStatusCode?: number;
@@ -1670,6 +1672,8 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
+          const analysisDateOf = (name: string) =>
+            name === projectData.unanalyzedBranch ? undefined : FAKE_ANALYSIS_DATE;
           return new Response(
             JSON.stringify({
               branches: [
@@ -1678,6 +1682,7 @@ export class FakeSonarQubeServerBuilder {
                       {
                         name: projectData.defaultBranchName,
                         branchId: fakeMainBranchId(projectData.key),
+                        analysisDate: analysisDateOf(projectData.defaultBranchName),
                         isMain: true,
                         type: 'LONG',
                         status: { qualityGateStatus: 'OK' },
@@ -1688,6 +1693,7 @@ export class FakeSonarQubeServerBuilder {
                   .filter((branchName) => branchName !== projectData.defaultBranchName)
                   .map((name) => ({
                     name,
+                    analysisDate: analysisDateOf(name),
                     isMain: false,
                     type: 'LONG',
                     status: { qualityGateStatus: 'OK' },
