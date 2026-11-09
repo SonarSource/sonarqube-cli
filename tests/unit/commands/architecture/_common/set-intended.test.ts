@@ -51,25 +51,30 @@ const MODEL: IntendedArchitecture = {
 describe('intended backup safety', () => {
   let root: string;
   let deleted: boolean;
-  function api(): ArchitectureApi {
-    let saved = [MODEL];
-    return {
+  function api(models: IntendedArchitecture[] = [MODEL]): ArchitectureApi {
+    let saved: { id?: string; models: IntendedArchitecture[] } = {
+      id: '11111111-1111-4111-8111-111111111111',
+      models,
+    };
+    const backend: ArchitectureApi = {
       getCurrent: () => Promise.resolve([]),
-      getIntended: () => Promise.resolve(saved),
+      getIntended: () => Promise.resolve(saved.models),
+      getIntendedState: () => Promise.resolve(saved),
       createIntended: (models) => {
-        saved = models;
+        saved = { id: '11111111-1111-4111-8111-111111111111', models };
         return Promise.resolve();
       },
       updateIntended: (models) => {
-        saved = models;
+        saved = { id: '11111111-1111-4111-8111-111111111111', models };
         return Promise.resolve();
       },
       deleteIntended: () => {
         deleted = true;
-        saved = [];
+        saved = { models: [] };
         return Promise.resolve();
       },
     };
+    return backend;
   }
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'architecture-backup-'));
@@ -160,9 +165,11 @@ describe('intended backup safety', () => {
       });
       let reads = 0;
       let writes = 0;
-      backend.getIntended = () => {
+      backend.getIntendedState = () => {
         reads++;
-        return reads <= 2 ? Promise.resolve([MODEL]) : Promise.reject(readFailure);
+        return reads <= 2
+          ? Promise.resolve({ id: '11111111-1111-4111-8111-111111111111', models: [MODEL] })
+          : Promise.reject(readFailure);
       };
       backend.updateIntended = () => {
         writes++;
@@ -183,6 +190,73 @@ describe('intended backup safety', () => {
       expect(deleted).toBe(false);
     },
   );
+
+  it.each([{ models: [MODEL] }, { models: [] }])(
+    'refuses a full-resource clear without a revision (%j)',
+    async ({ models }) => {
+      const backend = api([...models]);
+      const failure = await setIntended(
+        backend,
+        { models: [] },
+        { projectKey: 'test', dryRun: false, backupDir: root },
+      ).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(CommandFailedError);
+      expect((failure as Error).message).toContain(
+        'Clearing the stored intended architecture requires its exported revision',
+      );
+      expect(deleted).toBe(false);
+    },
+  );
+
+  it('previews an empty stored resource without a revision, then clears with its revision', async () => {
+    const backend = api([]);
+    const preview = await setIntended(
+      backend,
+      { models: [] },
+      { projectKey: 'test', dryRun: true, backupDir: root },
+    );
+    expect(preview.clearsResource).toBe(true);
+    expect(deleted).toBe(false);
+    const result = await setIntended(
+      backend,
+      { models: [], revision: revisionOf([]) },
+      { projectKey: 'test', dryRun: false, backupDir: root },
+    );
+    expect(result.mode).toBe('cleared');
+    expect(deleted).toBe(true);
+    expect((await backend.getIntendedState()).id).toBeUndefined();
+  });
+
+  it('stops after one ambiguous empty readback following a failed DELETE', async () => {
+    const backend = api();
+    const remove = backend.deleteIntended.bind(backend);
+    let writes = 0;
+    const writeError = new ServerError(500, 'Lost DELETE response');
+    backend.deleteIntended = async () => {
+      writes++;
+      await remove();
+      throw writeError;
+    };
+    const read = spyOn(backend, 'getIntendedState');
+    const failure = await setIntended(
+      backend,
+      { models: [], revision: revisionOf([MODEL]) },
+      { projectKey: 'test', dryRun: false, backupDir: root },
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(CommandFailedError);
+    expect((failure as Error).cause).toBe(writeError);
+    expect((failure as Error).message).toContain(
+      'The verification read found no visible intended architecture',
+    );
+    expect((failure as Error).message).toContain(
+      'the failed DELETE response prevents confirming deletion',
+    );
+    expect((failure as Error).message).not.toContain(
+      'verification reads did not confirm the requested model',
+    );
+    expect(writes).toBe(1);
+    expect(read).toHaveBeenCalledTimes(3);
+  });
 
   it.each([undefined, 'java'] as const)(
     'requires an exported revision for a clear scoped to %s',

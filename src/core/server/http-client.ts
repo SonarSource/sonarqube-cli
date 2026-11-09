@@ -85,6 +85,11 @@ export class SonarHttpClient {
     this.isCloud = isSonarQubeCloud(serverURL);
   }
 
+  /** The connection URL without a trailing slash, for links shown to the user. */
+  get baseUrl(): string {
+    return this.serverURL;
+  }
+
   /**
    * The API host serving `endpoint`. On Cloud several endpoint families live on a
    * region-specific host rather than on the connection URL; on Server it is the

@@ -67,7 +67,7 @@ const NEXT: IntendedArchitecture[] = [
   },
 ];
 
-const MODELS_PATH = '/architecture/intended-architectures';
+const MODELS_PATH = '/architecture/project-intended-architectures';
 
 function writes(server: FakeSonarQubeServer): RecordedRequest[] {
   return server
@@ -369,7 +369,7 @@ describe('sonar architecture intended set', () => {
         ]);
         expect(JSON.parse(calls[0].body ?? '{}')).toEqual({
           projectId: 'shop-branch-id',
-          intendedArchitectures: NEXT.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
+          perspectives: NEXT.map(({ type, ...model }) => ({ qualifiers: type, ...model })),
         });
       },
       { timeout: 15000 },
@@ -596,7 +596,7 @@ describe('sonar architecture intended set', () => {
       async () => {
         await startWith((fake) =>
           fake.withStatus(
-            'intended-architectures',
+            'project-intended-architectures',
             403,
             JSON.stringify({ message: 'Missing architectureadmin' }),
             'POST',

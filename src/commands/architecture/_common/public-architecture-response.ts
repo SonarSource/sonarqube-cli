@@ -38,7 +38,7 @@ function invalidPublicModel(): never {
   );
 }
 
-function objectField(value: unknown): Record<string, unknown> {
+export function objectField(value: unknown): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     return invalidPublicModel();
   return value as Record<string, unknown>;

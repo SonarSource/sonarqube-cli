@@ -70,6 +70,9 @@ export async function setIntended(
   });
 
   printDiff(ctx, result.diff);
+  if (result.clearsResource) {
+    ctx.console.info('This preview would delete the stored intended architecture resource.');
+  }
   if (result.unchecked) {
     ctx.console.warn(
       'The file has no revision, so changes made in SonarQube since it was written could not be detected.',
