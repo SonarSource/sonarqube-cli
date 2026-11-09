@@ -336,7 +336,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   auth
     .command('logout')
-    .description('Remove active connection token from keychain')
+    .description(
+      'Remove the active connection, or all saved connections for a hostname with --server',
+    )
     .option(
       '-s, --server <server>',
       'Select a saved server URL and clear all saved connections and the shared token for its hostname',
