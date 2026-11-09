@@ -48,6 +48,12 @@ import {
   type ProjectDirective,
 } from './directives.ts';
 import { collectionFailure, incompatibleResponse } from './errors.ts';
+import {
+  fetchFindingsPage,
+  type FindingFilters,
+  type FindingPage,
+  validateFindingPagination,
+} from './findings.ts';
 import { MODEL_ID, objectField, publicGraph, toIntended } from './public-architecture-response.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
@@ -317,6 +323,23 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return directive;
   }
 
+  async getFindingsPage(
+    filters: FindingFilters,
+    pageIndex: number,
+    pageSize: number,
+  ): Promise<FindingPage> {
+    validateFindingPagination(pageIndex, pageSize);
+    const { organizationId, branchId } = await this.resolveIds(true);
+    return fetchFindingsPage(
+      this.http,
+      this.path('project-findings'),
+      { organizationId, branchId },
+      filters,
+      pageIndex,
+      pageSize,
+    );
+  }
+
   private readDirectiveBeforeWrite(id: string): Promise<ProjectDirective> {
     return this.getDirective(id).catch((error: unknown) => {
       const message =
@@ -424,10 +447,11 @@ export class SonarArchitectureApi implements ArchitectureApi {
     return this.idsPromise;
   }
 
-  private async resolveIds(): Promise<ArchitectureIds> {
+  private async resolveIds(requireAnalysis = false): Promise<ArchitectureIds> {
     const branches = await new BranchesClient(this.http).listBranches(this.projectKey).orThrow();
-    const branchId = branches.find((branch) => branch.isMain)?.branchId;
-    if (!branchId) {
+    const mainBranch = branches.find((branch) => branch.isMain);
+    const branchId = mainBranch?.branchId;
+    if (!branchId || (requireAnalysis && !mainBranch.analysisDate)) {
       throw new CommandFailedError(`Project '${this.projectKey}' has no analyzed main branch.`, {
         remediationHint: 'Run an analysis of the main branch first.',
       });

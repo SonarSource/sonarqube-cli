@@ -18,11 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { InvalidArgumentError } from 'commander';
+
 import { parseInteger } from '@/core/commands/params.ts';
 import { type SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 
 import { ECOSYSTEMS } from './_common/architecture-api.ts';
 import { type CurrentReadOptions, parseDependencyPageNumber } from './_common/dependency-query.ts';
+import {
+  FINDING_CATEGORIES,
+  FINDING_TYPES,
+  parseFindingPageIndex,
+  parseFindingPageSize,
+} from './_common/findings.ts';
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
 import { getCurrent } from './current/get/index.ts';
@@ -31,9 +39,23 @@ import {
   getDirectives as getArchitectureDirectives,
 } from './directives/get/index.ts';
 import { setProjectDirectives } from './directives/set/index.ts';
+import { type FindingsReadOptions, getFindings } from './findings/get/index.ts';
 import { installSkill, type InstallSkillOptions } from './install-skill.ts';
 import { getIntended } from './intended/get/index.ts';
 import { type SetFileOptions, setIntended } from './intended/set/index.ts';
+
+function singleValue(option: SonarOption): SonarOption {
+  const parseValue = option.parseArg;
+
+  return option.argParser((value, previous: unknown) => {
+    if (previous !== undefined) {
+      throw new InvalidArgumentError(`${option.long} can only be specified once.`);
+    }
+
+    parseValue?.(value, previous);
+    return value;
+  });
+}
 
 export function registerArchitectureCommands(parent: SonarCommand): void {
   const architecture = parent
@@ -127,6 +149,33 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
       '\nCreation skips existing directives. Updates retain unspecified fields. Deletion requires an explicit ID; omissions never delete entries.',
     )
     .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
+
+  const findings = architecture
+    .command('findings')
+    .description('Read architecture deviations, flaws and smells');
+  findings
+    .command('get')
+    .description('List findings with their details from the latest main-branch analysis')
+    .option('-p, --project <project>', 'Project key')
+    .addOption(
+      singleValue(
+        new SonarOption('--category <category>', 'Only this category').choices(FINDING_CATEGORIES),
+      ),
+    )
+    .addOption(
+      singleValue(
+        new SonarOption('--type <type>', 'Only this finding type').choices(FINDING_TYPES),
+      ),
+    )
+    .addOption(languageOption())
+    .addOption(textFormatOption())
+    .option('--page <n>', 'Page number (default 1)', parseFindingPageIndex)
+    .option(
+      '--page-size <n>',
+      'Items per page (default 50, 0 counts only, maximum 1000)',
+      parseFindingPageSize,
+    )
+    .authenticatedAction((ctx, options: FindingsReadOptions) => getFindings(options, ctx));
 
   architecture
     .command('install-skill')
