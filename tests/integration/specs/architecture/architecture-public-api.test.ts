@@ -28,6 +28,7 @@ import {
   type IntendedArchitecture,
   type StructureGraph,
 } from '@/commands/architecture/_common/architecture-api.ts';
+import { revisionOf } from '@/commands/architecture/_common/intended-model.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 
 import type { RecordedRequest } from '../../harness';
@@ -213,44 +214,56 @@ describe('sonar architecture reads on the public API', () => {
     });
   }
 
-  for (const response of [{ id: null, intendedArchitectures: [] }, { intendedArchitectures: [] }]) {
-    it(`reads an unsaved intended model with an absent or null id: ${JSON.stringify(response)}`, async () => {
-      const server = await cloudServerWith((project) =>
-        project.withArchitecture((architecture) =>
-          architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+  it('reads an unsaved intended model from an empty public resource collection', async () => {
+    const server = await cloudServerWith((project) =>
+      project.withArchitecture((architecture) =>
+        architecture.withStatus(
+          'project-intended-architectures',
+          200,
+          JSON.stringify({ intendedArchitectures: [] }),
+          'GET',
         ),
-      );
-      const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
-      expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout).models).toEqual([]);
-      expect(writes(server)).toEqual([]);
-    });
-  }
+      ),
+    );
+    const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).models).toEqual([]);
+    expect(writes(server)).toEqual([]);
+  });
 
   it('reads the public root id and qualifiers schema with all documented metadata', async () => {
     const response = {
-      id: '00000000-0000-4000-8000-000000000001',
       intendedArchitectures: [
         {
-          qualifiers: 'namespace',
-          language: 'java',
-          label: 'Layers',
-          description: 'Perspective description',
-          groups: [
+          id: '00000000-0000-4000-8000-000000000001',
+          perspectives: [
             {
-              label: 'Shared',
-              description: 'Group description',
-              patternId: '11111111-1111-4111-8111-111111111111',
-              groups: [{ label: 'Imported', patterns: ['src:**'] }],
+              qualifiers: 'namespace',
+              language: 'java',
+              label: 'Layers',
+              description: 'Perspective description',
+              groups: [
+                {
+                  label: 'Shared',
+                  description: 'Group description',
+                  patternId: '11111111-1111-4111-8111-111111111111',
+                  groups: [{ label: 'Imported', patterns: ['src:**'] }],
+                },
+              ],
+              constraints: [],
             },
           ],
-          constraints: [],
         },
       ],
     };
     await cloudServerWith((project) =>
       project.withArchitecture((architecture) =>
-        architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+        architecture.withStatus(
+          'project-intended-architectures',
+          200,
+          JSON.stringify(response),
+          'GET',
+        ),
       ),
     );
     const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
@@ -262,7 +275,7 @@ describe('sonar architecture reads on the public API', () => {
         language: 'java',
         label: 'Layers',
         description: 'Perspective description',
-        groups: response.intendedArchitectures[0].groups,
+        groups: response.intendedArchitectures[0].perspectives[0].groups,
         constraints: [],
       },
     ]);
@@ -272,31 +285,40 @@ describe('sonar architecture reads on the public API', () => {
 
   it('normalizes nullable optional fields from the public response while preserving false', async () => {
     const response = {
-      id: '00000000-0000-4000-8000-000000000001',
       intendedArchitectures: [
         {
-          qualifiers: 'namespace',
-          language: 'java',
-          label: null,
-          description: null,
-          groups: [
+          id: '00000000-0000-4000-8000-000000000001',
+          perspectives: [
             {
-              label: 'Domain',
+              qualifiers: 'namespace',
+              language: 'java',
+              label: null,
               description: null,
-              patternId: null,
-              patterns: ['src:**'],
-              groups: [],
-              interface: false,
-              interfaceAccess: null,
+              groups: [
+                {
+                  label: 'Domain',
+                  description: null,
+                  patternId: null,
+                  patterns: ['src:**'],
+                  groups: [],
+                  interface: false,
+                  interfaceAccess: null,
+                },
+              ],
+              constraints: [],
             },
           ],
-          constraints: [],
         },
       ],
     };
     await cloudServerWith((project) =>
       project.withArchitecture((architecture) =>
-        architecture.withStatus('intended-architectures', 200, JSON.stringify(response), 'GET'),
+        architecture.withStatus(
+          'project-intended-architectures',
+          200,
+          JSON.stringify(response),
+          'GET',
+        ),
       ),
     );
     const result = await harness.run(`arch intended get -p ${PROJECT} --format json`);
@@ -330,11 +352,12 @@ describe('sonar architecture reads on the public API', () => {
       p.withArchitecture((a) =>
         a
           .withStatus(
-            'intended-architectures',
+            'project-intended-architectures',
             200,
             JSON.stringify({
-              id: '00000000-0000-4000-8000-000000000001',
-              intendedArchitectures: [model],
+              intendedArchitectures: [
+                { id: '00000000-0000-4000-8000-000000000001', perspectives: [model] },
+              ],
             }),
             'GET',
           )
@@ -373,11 +396,15 @@ describe('sonar architecture reads on the public API', () => {
       await cloudServerWith((p) =>
         p.withArchitecture((a) =>
           a.withStatus(
-            'intended-architectures',
+            'project-intended-architectures',
             200,
             JSON.stringify({
-              id: '00000000-0000-4000-8000-000000000001',
-              intendedArchitectures: [{ ...wireModels(INTENDED)[0], ...malformed }],
+              intendedArchitectures: [
+                {
+                  id: '00000000-0000-4000-8000-000000000001',
+                  perspectives: [{ ...wireModels(INTENDED)[0], ...malformed }],
+                },
+              ],
             }),
             'GET',
           ),
@@ -424,7 +451,7 @@ describe('sonar architecture reads on the public API', () => {
   }
 
   it(
-    'reads /current-architectures and /intended-architectures on Cloud with the same ids',
+    'reads /current-architectures and /project-intended-architectures on Cloud with the same ids',
     async () => {
       const server = await cloudServerWith((p) =>
         p.withArchitecture((a) => a.withStructure('java', GRAPH).withIntended(INTENDED)),
@@ -452,7 +479,7 @@ describe('sonar architecture reads on the public API', () => {
         language: 'java',
       });
       const intendedCall = requests.find(
-        ({ path }) => path === '/architecture/intended-architectures',
+        ({ path }) => path === '/architecture/project-intended-architectures',
       );
       expect(intendedCall?.query).toEqual({ projectId: fakeMainBranchId(PROJECT) });
       expect((JSON.parse(intended.stdout) as { models: unknown }).models).toEqual(
@@ -657,7 +684,7 @@ const NEXT: IntendedArchitecture[] = [
   },
 ];
 
-const PUBLIC_PATH = '/architecture/intended-architectures';
+const PUBLIC_PATH = '/architecture/project-intended-architectures';
 
 function writes(server: FakeSonarQubeServer): RecordedRequest[] {
   return server
@@ -768,7 +795,7 @@ describe('sonar architecture intended set on the public API', () => {
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect(JSON.parse(writes(server)[0].body!)).toEqual({
-      intendedArchitectures: wireModels([...publicModels([cs]), ...file.models]),
+      perspectives: wireModels([...publicModels([cs]), ...file.models]),
     });
   });
 
@@ -805,14 +832,14 @@ describe('sonar architecture intended set on the public API', () => {
     expect(result.exitCode).toBe(0);
     expect(writes(server)).toHaveLength(1);
     const body = JSON.parse(writes(server)[0].body!);
-    expect(body.intendedArchitectures[0]).toMatchObject({
+    expect(body.perspectives[0]).toMatchObject({
       qualifiers: 'namespace',
       label: 'Layers',
       description: 'Updated perspective',
     });
-    expect(body.intendedArchitectures[0]).not.toHaveProperty('type');
-    expect(body.intendedArchitectures[0]).not.toHaveProperty('id');
-    expect(body.intendedArchitectures[0].groups[0].patternId).toBe(patternId);
+    expect(body.perspectives[0]).not.toHaveProperty('type');
+    expect(body.perspectives[0]).not.toHaveProperty('id');
+    expect(body.perspectives[0].groups[0].patternId).toBe(patternId);
     const saved = await readSaved();
     expect(saved.models[0].groups[0]).toMatchObject({
       description: 'Updated group',
@@ -1048,7 +1075,7 @@ describe('sonar architecture intended set on the public API', () => {
       expect(call.headers['content-type']).toBe('application/json');
       expect(JSON.parse(call.body!)).toEqual({
         projectId: fakeMainBranchId(PROJECT),
-        intendedArchitectures: wireModels(models),
+        perspectives: wireModels(models),
       });
       expect((await readSaved()).models).toEqual(publicModels(models));
     });
@@ -1065,7 +1092,7 @@ describe('sonar architecture intended set on the public API', () => {
     expect(call.path).toBe(`${PUBLIC_PATH}/00000000-0000-4000-8000-000000000001`);
     expect(call.query).toEqual({});
     expect(call.headers['content-type']).toBe('application/merge-patch+json');
-    expect(JSON.parse(call.body!)).toEqual({ intendedArchitectures: wireModels(desired) });
+    expect(JSON.parse(call.body!)).toEqual({ perspectives: wireModels(desired) });
     expect((await readSaved()).models).toEqual(publicModels(desired));
   });
   it('preserves other perspectives when changing the second qualifier of one language', async () => {
@@ -1115,18 +1142,42 @@ describe('sonar architecture intended set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
     expect((await readSaved()).models).toEqual(publicModels(INTENDED));
   });
+  it.each([false, true])(
+    'gives truthful clear-preview instructions (revision=%s)',
+    async (withRevision) => {
+      const server = await startWith((fake) => fake.withIntended(INTENDED));
+      const file = { ...(withRevision ? await readSaved() : {}), models: [] };
+      const preview = await setFile(file, ' --dry-run');
+      expect(preview.exitCode).toBe(0);
+      expect(writes(server)).toEqual([]);
+      if (withRevision) {
+        expect(preview.stdout).toContain('Run without --dry-run to apply.');
+      } else {
+        expect(preview.stdout).toContain('requires its exported revision');
+        expect(preview.stdout).toContain(
+          'sonar architecture intended get --project shop --format json',
+        );
+        expect(preview.stdout).toContain('Add that revision to the change file and preview again');
+        expect(preview.stdout).not.toContain('Run without --dry-run to apply.');
+      }
+    },
+  );
+
   for (const method of ['POST', 'DELETE'] as const) {
     it(`reports a rejected ${method} without verification reads`, async () => {
       const server = await startWith((fake) => {
         if (method === 'DELETE') fake.withIntended(INTENDED);
         fake.withStatus(
-          'intended-architectures',
+          'project-intended-architectures',
           400,
           JSON.stringify({ message: 'Invalid model' }),
           method,
         );
       });
-      const result = await setFile({ models: method === 'POST' ? NEXT : [] });
+      const result = await setFile({
+        models: method === 'POST' ? NEXT : [],
+        ...(method === 'DELETE' ? { revision: revisionOf(publicModels(INTENDED)) } : {}),
+      });
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('server rejected the architecture write');
       expect(result.stderr).toContain('Invalid model');
@@ -1180,17 +1231,58 @@ describe('sonar architecture intended set on the public API', () => {
     });
   }
   for (const committed of [false, true]) {
-    it(`clears via DELETE only and reconciles response failure (committed=${committed})`, async () => {
+    it(`keeps failed DELETE unconfirmed without replay (committed=${committed})`, async () => {
       const server = await startWith((fake) =>
         fake.withIntended(INTENDED).failModelDelete(1, committed),
       );
       const result = await setFile({ ...(await readSaved()), models: [] });
-      expect(result.exitCode).toBe(committed ? 0 : 1);
+      expect(result.exitCode).toBe(1);
       expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
       expect((await readSaved()).models).toEqual(publicModels(committed ? [] : INTENDED));
-      if (!committed) backupFrom(result.stderr);
+      backupFrom(result.stderr);
+      if (committed) {
+        expect(result.stderr).toContain('verification read found no visible intended architecture');
+        expect(result.stderr).toContain('failed DELETE response prevents confirming deletion');
+      }
     });
   }
+  it('patches an existing resource whose perspectives are empty instead of creating another', async () => {
+    const server = await startWith((fake) => fake.withIntended([]));
+    const result = await setFile({ models: NEXT });
+    expect(result.exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['PATCH']);
+    expect((await readSaved()).models).toEqual(publicModels(NEXT));
+  });
+  for (const models of [INTENDED, []]) {
+    it(`refuses clearing an existing resource without a revision (${models.length} perspectives)`, async () => {
+      const server = await startWith((fake) => fake.withIntended(models));
+      const result = await setFile({ models: [] });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('requires its exported revision');
+      expect(writes(server)).toEqual([]);
+    });
+  }
+  it('deletes an existing empty resource only on apply', async () => {
+    const server = await startWith((fake) => fake.withIntended([]));
+    const preview = await setFile({ models: [] }, ' --dry-run');
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stdout).toContain(
+      'preview would delete the stored intended architecture resource',
+    );
+    expect(preview.stdout).toContain('requires its exported revision');
+    expect(preview.stdout).not.toContain('Run without --dry-run to apply.');
+    expect(writes(server)).toEqual([]);
+    const result = await setFile({ ...(await readSaved()), models: [] });
+    expect(result.exitCode).toBe(0);
+    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+  });
+  it('does not confuse an undeleted empty resource with confirmed absence', async () => {
+    const server = await startWith((fake) => fake.withIntended([]).failModelDelete(1, false));
+    const result = await setFile({ ...(await readSaved()), models: [] });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('could not be confirmed');
+    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
+  });
   it('clears the resource with DELETE, then creates a new model through POST', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED));
     expect((await setFile({ ...(await readSaved()), models: [] })).exitCode).toBe(0);
@@ -1200,15 +1292,28 @@ describe('sonar architecture intended set on the public API', () => {
     expect(writes(server).map(({ method }) => method)).toEqual(['DELETE', 'POST']);
     expect((await readSaved()).models).toEqual(publicModels(NEXT));
   });
-  it('does not delete additional legacy resources exposed by clear', async () => {
+  for (const body of ['null', '{}', '{"intendedArchitectures":{}}']) {
+    it(`reports the intended collection shape separately from resource count: ${body}`, async () => {
+      const server = await startWith((fake) =>
+        fake.withStatus('project-intended-architectures', 200, body, 'GET'),
+      );
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('intendedArchitectures must be an array');
+      expect(result.stderr).toContain('sonar update');
+      expect(result.stderr).not.toContain('expected at most one resource');
+      expect(writes(server)).toEqual([]);
+    });
+  }
+  it('rejects ambiguous multiple resources before any deletion', async () => {
     const server = await startWith((fake) =>
       fake.withIntended(INTENDED).withAdditionalIntended(NEXT),
     );
-    const result = await setFile({ ...(await readSaved()), models: [] });
+    const result = await setFile({ models: [] });
     expect(result.exitCode).toBe(1);
-    expect(writes(server).map(({ method }) => method)).toEqual(['DELETE']);
-    backupFrom(result.stderr);
-    expect((await readSaved()).models).toEqual(publicModels(NEXT));
+    expect(result.stderr).toContain('expected at most one resource');
+    expect(result.stderr).not.toContain('intendedArchitectures must be an array');
+    expect(writes(server)).toEqual([]);
   });
   it('confirms POST committed before its response failed without another write', async () => {
     const server = await startWith((fake) => fake.failCommittedIntendedCreate(1));
@@ -1231,12 +1336,12 @@ describe('sonar architecture intended set on the public API', () => {
   it('does not trust a successful PATCH response when the public read returns different persisted content', async () => {
     const response = {
       id: '00000000-0000-4000-8000-000000000001',
-      intendedArchitectures: wireModels(NEXT),
+      perspectives: wireModels(NEXT),
     };
     const server = await startWith((fake) =>
       fake
         .withIntended(INTENDED)
-        .withStatus('intended-architectures', 200, JSON.stringify(response), 'PATCH'),
+        .withStatus('project-intended-architectures', 200, JSON.stringify(response), 'PATCH'),
     );
     const result = await setFile({ ...(await readSaved()), models: NEXT });
     expect(result.exitCode).toBe(1);
@@ -1289,30 +1394,36 @@ describe('sonar architecture intended set on the public API', () => {
     });
   }
   for (const body of [
-    JSON.stringify({ intendedArchitectures: INTENDED }),
-    JSON.stringify({ intendedArchitectures: [{ ...INTENDED[0], id: 'bad-id' }] }),
-    JSON.stringify({ id: null, intendedArchitectures: wireModels(INTENDED) }),
-    JSON.stringify({ id: 'bad-id', intendedArchitectures: wireModels(INTENDED) }),
+    JSON.stringify({ intendedArchitectures: [{ perspectives: wireModels(INTENDED) }] }),
+    JSON.stringify({
+      intendedArchitectures: [{ id: 'bad-id', perspectives: wireModels(INTENDED) }],
+    }),
+    JSON.stringify({ intendedArchitectures: [{ id: null, perspectives: wireModels(INTENDED) }] }),
+    JSON.stringify({ intendedArchitectures: [{ id: 42, perspectives: wireModels(INTENDED) }] }),
   ]) {
     it(`rejects malformed public model identity before writing: ${body}`, async () => {
       const server = await startWith((fake) =>
-        fake.withStatus('intended-architectures', 200, body, 'GET'),
+        fake.withStatus('project-intended-architectures', 200, body, 'GET'),
       );
-      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('expected a resource id and perspectives');
       expect(writes(server)).toEqual([]);
     });
   }
   for (const body of [
     JSON.stringify({ id: '00000000-0000-4000-8000-000000000001' }),
     JSON.stringify({ intendedArchitectures: [] }),
-    JSON.stringify({ intendedArchitectures: [{ ...NEXT[0], id: 'invalid-id' }] }),
-    JSON.stringify({ id: null, intendedArchitectures: wireModels(NEXT) }),
+    JSON.stringify({ id: 'invalid-id', perspectives: wireModels(NEXT) }),
+    JSON.stringify({ id: null, perspectives: wireModels(NEXT) }),
   ]) {
     it(`rejects malformed POST response envelope: ${body}`, async () => {
       const server = await startWith((fake) =>
-        fake.withStatus('intended-architectures', 201, body, 'POST'),
+        fake.withStatus('project-intended-architectures', 201, body, 'POST'),
       );
-      expect((await setFile({ models: NEXT })).exitCode).toBe(1);
+      const result = await setFile({ models: NEXT });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('expected a resource id and perspectives');
       expect(writes(server).map(({ method }) => method)).toEqual(['POST']);
       expect((await readSaved()).models).toEqual([]);
     });
@@ -1350,6 +1461,31 @@ describe('sonar architecture intended set on the public API', () => {
     });
   }
 
+  for (const create of [false, true]) {
+    for (const committed of [false, true]) {
+      it(`handles malformed successful ${create ? 'POST' : 'PATCH'} JSON with committed=${committed} without replay`, async () => {
+        const server = await startWith((fake) => {
+          if (!create) fake.withIntended(INTENDED);
+          if (committed) fake.withMalformedWriteResponse();
+          else
+            fake.withStatus(
+              'project-intended-architectures',
+              create ? 201 : 200,
+              'not JSON',
+              create ? 'POST' : 'PATCH',
+            );
+        });
+        const result = await setFile({ models: NEXT });
+        expect(result.exitCode).toBe(committed ? 0 : 1);
+        if (!committed) {
+          expect(result.stderr).toContain('write could not be confirmed');
+          expect(result.stderr).toContain('sonar update');
+        }
+        expect(writes(server).map(({ method }) => method)).toEqual([create ? 'POST' : 'PATCH']);
+      });
+    }
+  }
+
   it('recovers from a transient verification read failure without repeating PATCH', async () => {
     const server = await startWith((fake) => fake.withIntended(INTENDED).failIntendedRead(3));
     expect((await setFile({ models: NEXT })).exitCode).toBe(0);
@@ -1369,11 +1505,11 @@ describe('sonar architecture intended set on the public API', () => {
   it('rejects a mismatched PATCH response without rollback', async () => {
     const server = await startWith((fake) =>
       fake.withIntended(INTENDED).withStatus(
-        'intended-architectures',
+        'project-intended-architectures',
         200,
         JSON.stringify({
           id: '00000000-0000-4000-8000-000000000002',
-          intendedArchitectures: wireModels(INTENDED),
+          perspectives: wireModels(INTENDED),
         }),
         'PATCH',
       ),
