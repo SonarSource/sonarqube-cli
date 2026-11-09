@@ -169,6 +169,8 @@ function resolveIssuesSearchScope(
   return { projectKey, componentFilterKey: subPath === undefined ? undefined : scopeValue };
 }
 
+const FAKE_ANALYSIS_DATE = '2026-01-01T00:00:00+0000';
+
 interface ProjectData {
   organization?: string;
   componentShowStatusCode?: number;
@@ -320,9 +322,9 @@ export class ProjectBuilder {
   }
 
   /**
-   * Makes `GET /api/qualitygates/project_status` 404 when queried for this exact branch,
-   * matching the real API's "no analysis for this branch yet" response — distinct from
-   * `NONE`, which means the project *is* analyzed but has no quality gate.
+   * Omits `analysisDate` from the branch list and returns quality-gate 404 for this branch.
+   * An omitted quality-gate branch selects the default branch. Unlike `NONE`, this means
+   * the branch has no analysis yet.
    */
   withUnanalyzedBranch(branch: string): this {
     this.unanalyzedBranch = branch;
@@ -1419,7 +1421,8 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
-          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === query.branch) {
+          const requestedBranch = query.branch ?? projectData.defaultBranchName;
+          if (projectData.unanalyzedBranch && projectData.unanalyzedBranch === requestedBranch) {
             return new Response(
               JSON.stringify({ errors: [{ msg: 'Component or ref not found' }] }),
               { status: 404, headers: { 'Content-Type': 'application/json' } },
@@ -1670,6 +1673,8 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
+          const analysisDateOf = (name: string) =>
+            name === projectData.unanalyzedBranch ? undefined : FAKE_ANALYSIS_DATE;
           return new Response(
             JSON.stringify({
               branches: [
@@ -1678,6 +1683,7 @@ export class FakeSonarQubeServerBuilder {
                       {
                         name: projectData.defaultBranchName,
                         branchId: fakeMainBranchId(projectData.key),
+                        analysisDate: analysisDateOf(projectData.defaultBranchName),
                         isMain: true,
                         type: 'LONG',
                         status: { qualityGateStatus: 'OK' },
@@ -1688,6 +1694,7 @@ export class FakeSonarQubeServerBuilder {
                   .filter((branchName) => branchName !== projectData.defaultBranchName)
                   .map((name) => ({
                     name,
+                    analysisDate: analysisDateOf(name),
                     isMain: false,
                     type: 'LONG',
                     status: { qualityGateStatus: 'OK' },
