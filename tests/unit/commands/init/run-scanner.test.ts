@@ -83,6 +83,7 @@ posixOnly('runScanner', () => {
         source: 'env',
       }),
       directory,
+      engineJarPath: join(directory, 'trusted-engine.jar'),
       networkEnv: {},
       scannerProperties: new Map([['sonar.some.setting', PROPERTY_VALUE]]),
     };
@@ -122,6 +123,16 @@ posixOnly('runScanner', () => {
       expect(args).toContain(`-Dsonar.scanner.apiBaseUrl=${apiBaseUrl}`);
     },
   );
+
+  it('pins the engine executable, options and jar on the command line', async () => {
+    const run = newRun(stubJava(0));
+    const args = await scannerArgs(run);
+    expect(args).toContain(`-Dsonar.scanner.javaExePath=${run.scanner.javaPath}`);
+    expect(args).toContain('-Dsonar.scanner.javaOpts=');
+    expect(args).toContain(`-Dsonar.scanner.engineJarPath=${run.engineJarPath}`);
+    run.engineJarPath = '';
+    expect(await scannerArgs(run)).toContain('-Dsonar.scanner.engineJarPath=');
+  });
 
   it('pins a server to the stock Cloud URLs, so it is never taken for Cloud', async () => {
     const serverUrl = 'https://sonar.example.com';
@@ -236,6 +247,7 @@ posixOnly('startScannerInBackground', () => {
         source: 'env',
       }),
       directory,
+      engineJarPath: join(directory, 'trusted-engine.jar'),
       networkEnv: {},
       scannerProperties: new Map(),
     };
@@ -277,6 +289,9 @@ posixOnly('startScannerInBackground', () => {
       await Bun.sleep(20);
       log = readFileSync(started.logPath, 'utf8');
     }
+    expect(log).toContain(`-Dsonar.scanner.javaExePath=${join(directory, 'script-java')}`);
+    expect(log).toContain('-Dsonar.scanner.javaOpts=');
+    expect(log).toContain(`-Dsonar.scanner.engineJarPath=${join(directory, 'trusted-engine.jar')}`);
     expect(log).toContain('-Dsonar.verbose=false');
     expect(log).toContain('-Dsonar.log.level=INFO');
   });
