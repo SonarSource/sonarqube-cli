@@ -20,7 +20,7 @@
 
 // Integration tests for `sonar run mcp`
 
-import { chmodSync } from 'node:fs';
+import { chmodSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -42,6 +42,69 @@ describe('run mcp', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.each([0, 23])(
+    'keeps JVM credentials private and cleans its file after exit %s',
+    async (exitCode) => {
+      const server = await harness.newFakeServer().withAuthToken('fixture-token').start();
+      harness.withAuth(server.baseUrl(), 'fixture-token');
+      const source = harness.cwd.file('runtime.ts').path;
+      const binary = harness.cwd.file('fake-bin', IS_WINDOWS ? 'docker.exe' : 'docker').path;
+      const record = harness.cwd.file('runtime.json');
+      harness.cwd.writeFile(
+        'runtime.ts',
+        `
+      import { readFileSync, statSync, writeFileSync } from 'node:fs';
+      import { dirname } from 'node:path';
+      if (process.argv[2] === 'info') process.exit(0);
+      const suffix = ':/etc/ssl/mcp/jvm-secrets.args:ro';
+      const mount = process.argv.find(arg => arg.endsWith(suffix));
+      const path = mount?.slice(0, -suffix.length);
+      const text = path ? readFileSync(path, 'utf8') : '';
+      writeFileSync(${JSON.stringify(record.path)}, JSON.stringify({path, matched: text.includes('-Dhttps.proxyUser=fixture-user') && text.includes('-Dhttps.proxyPassword=fixture-password'), fileMode: path ? statSync(path).mode & 511 : 0, directoryMode: path ? statSync(dirname(path)).mode & 511 : 0, javaOpts: process.env.JAVA_OPTS, args: process.argv}));
+      process.exit(${exitCode});
+    `,
+      );
+      const compilation = Bun.spawnSync([
+        process.execPath,
+        'build',
+        '--compile',
+        source,
+        '--outfile',
+        binary,
+      ]);
+      expect(compilation.exitCode).toBe(0);
+      const result = await harness.run('run mcp --debug', {
+        extraEnv: {
+          PATH: `${harness.cwd.dir('fake-bin').path}${PATH_SEP}${process.env.PATH ?? ''}`,
+          SONAR_HTTPS_PROXY_URL: 'http://fixture-user:fixture-password@proxy.example.test',
+          SONAR_NO_PROXY: '*',
+        },
+      });
+      expect(result.exitCode).toBe(exitCode);
+      const captured = record.asJson() as {
+        path: string;
+        matched: boolean;
+        fileMode: number;
+        directoryMode: number;
+        javaOpts: string;
+        args: string[];
+      };
+      expect(captured.matched).toBe(true);
+      expect(captured.javaOpts).toContain('@/etc/ssl/mcp/jvm-secrets.args');
+      expect(existsSync(captured.path)).toBe(false);
+      if (!IS_WINDOWS) {
+        expect(captured.fileMode).toBe(0o644);
+        expect(captured.directoryMode).toBe(0o700);
+      }
+      for (const value of ['fixture-user', 'fixture-password']) {
+        expect(
+          captured.args.join(' ') + captured.javaOpts + result.stdout + result.stderr,
+        ).not.toContain(value);
+      }
+    },
+    { timeout: 15000 },
+  );
 
   /**
    * Writes a platform-appropriate fake docker binary that:

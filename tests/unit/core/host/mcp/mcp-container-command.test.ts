@@ -44,6 +44,7 @@ import {
   MCP_DEFAULT_TOOLSETS,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import { createRedactedUrl } from '@/core/host/redacted-url.ts';
 import { normalizePath } from '@/core/io/fs-utils.ts';
 
 const ON_PREMISE_AUTH = new ResolvedAuth({
@@ -610,6 +611,9 @@ describe('getMcpContainerCommand — CA cert mount', () => {
       const certHash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
       const cachePrefix = `mcp-ca-${certHash}-`;
       writeFileSync(sourcePath, contents);
+      const secretsBefore = existsSync(CLI_TMP_DIR)
+        ? readdirSync(CLI_TMP_DIR).filter((name) => name.startsWith('mcp-jvm-secrets-'))
+        : [];
       const conversionSpy = spyOn(pkcs12Module, 'pemToPkcs12').mockImplementation(() => {
         throw new Error('conversion failed');
       });
@@ -632,7 +636,15 @@ describe('getMcpContainerCommand — CA cert mount', () => {
             { withFsMount: false },
             {},
             {
-              proxy: null,
+              proxy: {
+                source: 'sonar-env',
+                explicit: true,
+                proxyHttps: createRedactedUrl(
+                  'http://fixture-user:fixture-password@proxy.example.test',
+                ),
+                proxyHttp: null,
+                noProxy: null,
+              },
               caCert: { source: 'sonar-env', explicit: true, path: sourcePath },
               clientCert,
             },
@@ -640,6 +652,9 @@ describe('getMcpContainerCommand — CA cert mount', () => {
         ).toThrow('conversion failed');
         const cachedFiles = existsSync(CLI_TMP_DIR) ? readdirSync(CLI_TMP_DIR) : [];
         expect(cachedFiles.some((file) => file.startsWith(cachePrefix))).toBe(false);
+        expect(cachedFiles.filter((name) => name.startsWith('mcp-jvm-secrets-'))).toEqual(
+          secretsBefore,
+        );
       } finally {
         conversionSpy.mockRestore();
         rmSync(sourceDir, { recursive: true, force: true });
@@ -715,6 +730,13 @@ describe('getMcpContainerCommand — client cert mount', () => {
     pemToPkcs12Spy?.mockRestore();
     rmSync(expectedCachedPath, { force: true });
     rmSync(altCachedPath, { force: true });
+    if (existsSync(CLI_TMP_DIR)) {
+      for (const name of readdirSync(CLI_TMP_DIR)) {
+        if (name.startsWith(`mcp-jvm-secrets-${process.pid}-`)) {
+          rmSync(join(CLI_TMP_DIR, name), { force: true });
+        }
+      }
+    }
   });
 
   it('converts PEM cert+key to PKCS12, writes with restricted permissions, and mounts it', () => {
@@ -816,6 +838,10 @@ describe('getMcpContainerCommand — client cert mount', () => {
 
     expect(pemToPkcs12Spy).not.toHaveBeenCalled();
     expect(config.args).toContain(`${normalizePath(P12_PATH)}:/etc/ssl/mcp/client.p12:ro`);
-    expect(config.env.JAVA_OPTS).toContain('javax.net.ssl.keyStorePassword=sonar');
+    expect(config.env.JAVA_OPTS).not.toContain('keyStorePassword');
+    expect(config.jvmSecretsPath).toBeDefined();
+    expect(readFileSync(config.jvmSecretsPath ?? '', 'utf-8')).toContain(
+      '-Djavax.net.ssl.keyStorePassword=sonar',
+    );
   });
 });
