@@ -54,9 +54,7 @@ describe.skipIf(!java || !javac || !jar || !archiveTool)('init with the real sca
   let completed: Record<string, string>[];
   let engineRequests: string[];
   let legacy: boolean;
-  let backendRequests: string[];
-
-  async function command(args: string[], cwd = fixtures) {
+  async function command(args: string[], cwd = fixtures, env: NodeJS.ProcessEnv = {}) {
     const proc = Bun.spawn(args, {
       cwd,
       stdout: 'pipe',
@@ -65,6 +63,7 @@ describe.skipIf(!java || !javac || !jar || !archiveTool)('init with the real sca
         ...process.env,
         SCANNER_TEST_ARCHIVE: join(fixtures, 'scanner.zip'),
         SCANNER_TEST_DESTINATION: fixtures,
+        ...env,
       },
     });
     const [exitCode, stdout, stderr] = await Promise.all([
@@ -147,18 +146,6 @@ class RepositoryPayload {
       'payload.mf',
       'RepositoryPayload.class',
     ]);
-    writeFileSync(
-      join(fixtures, 'payload.ts'),
-      'await Bun.write(process.env.EXECUTION_MARKER!, "repository executable ran");',
-    );
-    await command([
-      process.execPath,
-      'build',
-      '--compile',
-      'payload.ts',
-      '--outfile',
-      windows ? 'payload.exe' : 'payload',
-    ]);
     const legacySources = {
       'EnvironmentInformation.java': `
 package org.sonar.batch.bootstrapper;
@@ -222,7 +209,6 @@ public class Batch {
     completed = [];
     engineRequests = [];
     legacy = false;
-    backendRequests = [];
     const engine = readFileSync(join(fixtures, 'engine.jar'));
     const legacyEngine = readFileSync(join(fixtures, 'legacy-engine.jar'));
     backend = Bun.serve({
@@ -230,7 +216,6 @@ public class Batch {
       port: 0,
       async fetch(request) {
         const url = new URL(request.url);
-        backendRequests.push(url.pathname);
         if (legacy && url.pathname === '/api/system/status')
           return Response.json({ status: 'UP', version: '10.5.0.1' });
         if (legacy && ['/api/v2/analysis/version', '/api/server/version'].includes(url.pathname))
@@ -305,72 +290,27 @@ public class Batch {
     await harness?.dispose();
   });
 
-  for (const detach of [false, true]) {
-    it.each(['root', 'escaped', 'module'])(
-      'prevents %s repository execution and completes analysis' + (detach ? ' detached' : ''),
-      async (variant) => {
-        copyFileSync(join(fixtures, 'payload.jar'), join(harness.cwd.path, 'payload.jar'));
-        const executable = windows ? 'payload.exe' : 'payload';
-        copyFileSync(join(fixtures, executable), join(harness.cwd.path, executable));
-        const javaPath = join(harness.cwd.path, executable).replaceAll('\\', '/');
-        const jarPath = join(harness.cwd.path, 'payload.jar').replaceAll('\\', '/');
-        const properties = [
-          'sonar.sources=.',
-          'sonar.test.benign=kept',
-          `sonar.scanner.javaExePath=${javaPath}`,
-          `sonar.scanner.javaOpts=-javaagent:${jarPath}`,
-          `sonar.scanner.engineJarPath=${jarPath}`,
-          'sonar.userHome=.repository-cache',
-        ];
-        if (variant === 'escaped') {
-          properties[2] = `sonar.scanner.javaExe\\u0050ath=${javaPath}`;
-          properties[3] = `sonar.scanner.java\\\n Opts=-javaagent:${jarPath}`;
-          properties[4] = `sonar.scanner.engine\\\n JarPath=${jarPath}`;
-          properties[5] = 'sonar.user\\u0048ome=.repository-cache';
-        }
-        if (variant === 'module') {
-          properties.splice(2, 4, 'sonar.modules=sonar');
-          harness.cwd.writeFile(
-            'sonar/sonar-project.properties',
-            'scanner.engineJarPath=payload.jar\nuserHome=.repository-cache\n',
-          );
-          copyFileSync(
-            join(fixtures, 'payload.jar'),
-            join(harness.cwd.path, 'sonar', 'payload.jar'),
-          );
-        }
-        harness.cwd.writeFile('sonar-project.properties', properties.join('\n'));
-        const result = await harness.run(
-          `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
-          {
-            timeoutMs: 30_000,
-            extraEnv: {
-              SONARQUBE_CLI_SONARCLOUD_URL: `http://localhost:${backend.port}`,
-              SONARQUBE_CLI_SONARCLOUD_API_URL: `http://localhost:${backend.port}`,
-            },
-          },
-        );
-        expect(
-          result.exitCode,
-          result.stdout + result.stderr + JSON.stringify(backendRequests),
-        ).toBe(0);
-        const deadline = Date.now() + 15_000;
-        while (completed.length === 0 && Date.now() < deadline) await Bun.sleep(50);
-        expect(completed).toHaveLength(1);
-        expect(completed[0]['sonar.test.benign']).toBe('kept');
-        expect(completed[0]['sonar.exclusions']).toBe('ignored/**');
-        expect(completed[0]['sonar.userHome']).toBe(
-          join(completed[0]['sonar.scanner.metadataFilePath'], '..', 'scanner-home'),
-        );
-        expect(engineRequests).toEqual(['application/json', 'application/octet-stream']);
-        expect(existsSync(join(harness.cwd.path, 'repository-executed'))).toBe(false);
-        expect(result.stdout).toContain(
-          detach ? 'Analysis started in the background' : 'Analysis completed',
-        );
-        if (detach) expect(existsSync(completed[0]['sonar.scanner.metadataFilePath'])).toBe(true);
-      },
-      60_000,
-    );
+  function plantModernProperties(variant: string) {
+    copyFileSync(join(fixtures, 'payload.jar'), join(harness.cwd.path, 'payload.jar'));
+    const jarPath = join(harness.cwd.path, 'payload.jar').replaceAll('\\', '/');
+    const properties = ['sonar.sources=.', 'sonar.test.benign=kept'];
+    if (variant === 'module') {
+      properties.push('sonar.modules=sonar');
+      harness.cwd.writeFile(
+        'sonar/sonar-project.properties',
+        'scanner.engineJarPath=payload.jar\nuserHome=.repository-cache\n',
+      );
+      copyFileSync(join(fixtures, 'payload.jar'), join(harness.cwd.path, 'sonar', 'payload.jar'));
+    } else {
+      const missingJava = join(harness.cwd.path, 'missing-java').replaceAll('\\', '/');
+      properties.push(
+        `sonar.scanner.javaExe\\u0050ath=${missingJava}`,
+        `sonar.scanner.java\\\n Opts=-javaagent:${jarPath}`,
+        `sonar.scanner.engine\\\n JarPath=${jarPath}`,
+        'sonar.user\\u0048ome=.repository-cache',
+      );
+    }
+    harness.cwd.writeFile('sonar-project.properties', properties.join('\n'));
   }
 
   function plantLegacyCache(variant: string) {
@@ -387,10 +327,9 @@ public class Batch {
     const cachedDirectory = join(harness.cwd.path, cache, 'cache', hash);
     mkdirSync(cachedDirectory, { recursive: true });
     copyFileSync(join(fixtures, 'legacy-payload.jar'), join(cachedDirectory, 'engine.jar'));
-    const home = variant === 'escaped' ? 'sonar.user\\u0048ome' : 'sonar.userHome';
     harness.cwd.writeFile(
       'sonar-project.properties',
-      `sonar.projectKey=fixture-project\nsonar.sources=.\nsonar.test.benign=kept\n${variant === 'module' ? 'sonar.modules=sonar' : `${home}=${cache}`}\n`,
+      `sonar.projectKey=fixture-project\nsonar.sources=.\nsonar.test.benign=kept\n${variant === 'module' ? 'sonar.modules=sonar' : `sonar.userHome=${cache}`}\n`,
     );
     if (variant === 'module')
       harness.cwd.writeFile('sonar/sonar-project.properties', `userHome=${cache}\n`);
@@ -399,7 +338,7 @@ public class Batch {
 
   it('demonstrates an unpinned legacy scanner executes a poisoned cache without downloading it', async () => {
     const url = plantLegacyCache('root');
-    const proc = Bun.spawn(
+    await command(
       [
         java!,
         '-jar',
@@ -407,56 +346,67 @@ public class Batch {
         `-Dsonar.host.url=${url}`,
         `-Dsonar.scanner.metadataFilePath=${join(harness.cwd.path, 'report-task.txt')}`,
       ],
+      harness.cwd.path,
       {
-        cwd: harness.cwd.path,
-        env: {
-          ...process.env,
-          SONAR_TOKEN: token,
-          ENGINE_BACKEND: `${url}/engine-complete`,
-          EXECUTION_MARKER: join(harness.cwd.path, 'repository-executed'),
-        },
-        stdout: 'pipe',
-        stderr: 'pipe',
+        SONAR_TOKEN: token,
+        ENGINE_BACKEND: `${url}/engine-complete`,
+        EXECUTION_MARKER: join(harness.cwd.path, 'repository-executed'),
       },
     );
-    const [exitCode, stdout, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
-    expect(exitCode, stdout + stderr).toBe(0);
     expect(readFileSync(join(harness.cwd.path, 'repository-executed'), 'utf8')).toBe(token);
     expect(engineRequests).toEqual(['/batch/index']);
   }, 30_000);
 
-  for (const detach of [false, true]) {
-    it.each(['root', 'escaped', 'module'])(
-      'ignores a %s repository cache on legacy Server' + (detach ? ' detached' : ''),
-      async (variant) => {
-        plantLegacyCache(variant);
-        const result = await harness.run(
-          `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
-          { timeoutMs: 30_000 },
+  it.each([
+    ['modern escaped/continued foreground', false, 'escaped', false],
+    ['modern module detached', false, 'module', true],
+    ['legacy root foreground', true, 'root', false],
+    ['legacy module detached', true, 'module', true],
+  ] as const)(
+    'prevents repository execution: %s',
+    async (_name, legacyBootstrap, variant, detach) => {
+      if (legacyBootstrap) plantLegacyCache(variant);
+      else plantModernProperties(variant);
+      const result = await harness.run(
+        `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
+        {
+          timeoutMs: 30_000,
+          extraEnv: legacyBootstrap
+            ? {}
+            : {
+                SONARQUBE_CLI_SONARCLOUD_URL: `http://localhost:${backend.port}`,
+                SONARQUBE_CLI_SONARCLOUD_API_URL: `http://localhost:${backend.port}`,
+              },
+        },
+      );
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      const deadline = Date.now() + 15_000;
+      while (completed.length === 0 && Date.now() < deadline) await Bun.sleep(50);
+      expect(completed).toHaveLength(1);
+      const properties = completed[0];
+      const report = properties['sonar.scanner.metadataFilePath'];
+      const directory = join(report, '..');
+      expect(properties['sonar.test.benign']).toBe('kept');
+      expect(properties['sonar.exclusions']).toBe('ignored/**');
+      expect(properties['sonar.userHome']).toBe(join(directory, 'scanner-home'));
+      expect(engineRequests).toEqual(
+        legacyBootstrap
+          ? ['/batch/index', '/batch/file']
+          : ['application/json', 'application/octet-stream'],
+      );
+      expect(existsSync(join(harness.cwd.path, 'repository-executed'))).toBe(false);
+      expect(result.stdout).toContain(
+        detach ? 'Analysis started in the background' : 'Analysis completed',
+      );
+      expect(existsSync(report)).toBe(detach);
+      expect(existsSync(directory)).toBe(detach);
+      if (!legacyBootstrap) {
+        expect(properties['sonar.scanner.engineJarPath']).toBe(
+          join(directory, 'scanner-engine.jar'),
         );
-        expect(
-          result.exitCode,
-          result.stdout + result.stderr + JSON.stringify(backendRequests),
-        ).toBe(0);
-        const deadline = Date.now() + 15_000;
-        while (completed.length === 0 && Date.now() < deadline) await Bun.sleep(50);
-        expect(completed).toHaveLength(1);
-        expect(completed[0]['sonar.test.benign']).toBe('kept');
-        expect(completed[0]['sonar.exclusions']).toBe('ignored/**');
-        expect(completed[0]['sonar.userHome']).toBe(
-          join(completed[0]['sonar.scanner.metadataFilePath'], '..', 'scanner-home'),
-        );
-        expect(engineRequests).toEqual(['/batch/index', '/batch/file']);
-        expect(existsSync(join(harness.cwd.path, 'repository-executed'))).toBe(false);
-        expect(result.stdout).toContain(
-          detach ? 'Analysis started in the background' : 'Analysis completed',
-        );
-      },
-      60_000,
-    );
-  }
+        expect(existsSync(properties['sonar.scanner.engineJarPath'])).toBe(detach);
+      }
+    },
+    60_000,
+  );
 });

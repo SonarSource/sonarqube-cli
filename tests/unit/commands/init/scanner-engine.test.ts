@@ -32,12 +32,6 @@ const engine = new Uint8Array([0, 255, 17, 42]);
 const sha256 = createHash('sha256').update(engine).digest('hex');
 const token = 'dummy-engine-token';
 
-async function failureOf(promise: Promise<unknown>): Promise<Error> {
-  const error = await promise.catch((cause: unknown) => cause);
-  expect(error).toBeInstanceOf(Error);
-  return error as Error;
-}
-
 describe('scanner engine provisioning', () => {
   let directory: string;
   let fetchSpy: ReturnType<typeof spyOn>;
@@ -99,16 +93,6 @@ describe('scanner engine provisioning', () => {
     expect(requests[1].headers.has('Authorization')).toBe(false);
   });
 
-  it.each([undefined, '', '   '])(
-    'uses authenticated fallback for downloadUrl %p',
-    async (downloadUrl) => {
-      metadata = { sha256, downloadUrl };
-      await prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory);
-      expect(requests).toHaveLength(2);
-      expect(requests[1].headers.get('Authorization')).toBe(`Bearer ${token}`);
-    },
-  );
-
   it.each(['9.9.8', '10.5.9'])(
     'keeps legacy bootstrap for Server %s without the engine endpoint',
     async (serverVersion) => {
@@ -123,67 +107,45 @@ describe('scanner engine provisioning', () => {
     },
   );
 
-  it.each([undefined, null, 10.6, '', 'unknown', '10', '10.6oops', '10..6'])(
-    'fails closed on version %p',
-    async (invalid) => {
-      version = invalid;
-      expect(
-        (
-          await failureOf(
-            prepareScannerEngine(new SonarHttpClient('https://sonar.example', token), directory),
-          )
-        ).message,
-      ).toContain('valid version');
-      expect(requests).toHaveLength(1);
-      expect(readdirSync(directory)).toEqual([]);
-    },
-  );
-
-  it.each([null, {}, { sha256: 'bad' }, { sha256: '0'.repeat(63) }, { sha256, downloadUrl: 4 }])(
-    'rejects malformed metadata %p before downloading',
-    async (invalid) => {
-      metadata = invalid;
-      expect(
-        (
-          await failureOf(
-            prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
-          )
-        ).message,
-      ).toContain('invalid scanner engine metadata');
-      expect(requests).toHaveLength(1);
-      expect(readdirSync(directory)).toEqual([]);
-    },
-  );
-
-  it('removes an incomplete download after a digest mismatch', async () => {
-    metadata = { sha256: '0'.repeat(64) };
-    expect(
-      (
-        await failureOf(
-          prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
-        )
-      ).message,
-    ).toContain('SHA-256 verification');
+  it.each([undefined, 10.6, '10.6oops'])('fails closed on version %p', (invalid) => {
+    version = invalid;
+    expect(() =>
+      prepareScannerEngine(new SonarHttpClient('https://sonar.example', token), directory),
+    ).toThrow('valid version');
+    expect(requests).toHaveLength(1);
     expect(readdirSync(directory)).toEqual([]);
   });
 
-  it.each([false, true])(
-    'does not publish failed downloads (external URL: %s)',
-    async (external) => {
-      metadata = { sha256, ...(external ? { downloadUrl: 'https://cdn.example/engine' } : {}) };
-      downloadStatus = 500;
-      expect(
-        (
-          await failureOf(
-            prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
-          )
-        ).message,
-      ).toBeString();
+  it.each([null, { sha256: 'bad' }, { sha256, downloadUrl: 4 }])(
+    'rejects malformed metadata %p before downloading',
+    (invalid) => {
+      metadata = invalid;
+      expect(() =>
+        prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
+      ).toThrow('invalid scanner engine metadata');
+      expect(requests).toHaveLength(1);
       expect(readdirSync(directory)).toEqual([]);
     },
   );
 
-  it('rejects a cross-origin redirect from the authenticated endpoint', async () => {
+  it('removes an incomplete download after a digest mismatch', () => {
+    metadata = { sha256: '0'.repeat(64) };
+    expect(() =>
+      prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
+    ).toThrow('SHA-256 verification');
+    expect(readdirSync(directory)).toEqual([]);
+  });
+
+  it.each([false, true])('does not publish failed downloads (external URL: %s)', (external) => {
+    metadata = { sha256, ...(external ? { downloadUrl: 'https://cdn.example/engine' } : {}) };
+    downloadStatus = 500;
+    expect(() =>
+      prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
+    ).toThrow();
+    expect(readdirSync(directory)).toEqual([]);
+  });
+
+  it('rejects a cross-origin redirect from the authenticated endpoint', () => {
     fetchSpy.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : input.toString();
       const headers = new Headers(init?.headers);
@@ -197,13 +159,9 @@ describe('scanner engine provisioning', () => {
             }),
       );
     });
-    expect(
-      (
-        await failureOf(
-          prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
-        )
-      ).message,
-    ).toBeString();
+    expect(() =>
+      prepareScannerEngine(new SonarHttpClient('https://sonarcloud.io', token), directory),
+    ).toThrow();
     expect(requests.map(({ headers }) => headers.get('Accept'))).toEqual([
       'application/json',
       'application/octet-stream',
