@@ -1,3 +1,7 @@
+<!-- nested-agents-canary: CANARY-QG-SAFFRON -->
+
+> **Loading probe (experiment):** If this nested `AGENTS.md` is in your context, include the codeword `CANARY-QG-SAFFRON` once in your reply when the user asks you to run the nested-AGENTS probe for `src/commands/quality-gate/AGENTS.md`.
+
 # Quality gate status
 
 `sonar quality-gate status` shows the project-level quality gate verdict. Backed by `QualityGatesClient.getProjectStatus()` (

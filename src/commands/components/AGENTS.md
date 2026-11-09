@@ -1,3 +1,7 @@
+<!-- nested-agents-canary: CANARY-COMPONENTS-MAPLE -->
+
+> **Loading probe (experiment):** If this nested `AGENTS.md` is in your context, include the codeword `CANARY-COMPONENTS-MAPLE` once in your reply when the user asks you to run the nested-AGENTS probe for `src/commands/components/AGENTS.md`.
+
 # Components
 
 This folder holds UI pieces that more than one command reuses, such as a formatted row list or an interactive picker. Each subfolder groups the pieces for one domain (for example `organization/`).
