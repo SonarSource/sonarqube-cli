@@ -82,7 +82,7 @@ describe('MCP container networking', () => {
           { autoNetwork: true },
           'win32',
         ),
-      ).toEqual({ serverUrl: `http://${alias}:9000/` });
+      ).toEqual({ serverUrl: `http://${alias}:9000/`, proxyBypassHost: alias });
     },
   );
 
