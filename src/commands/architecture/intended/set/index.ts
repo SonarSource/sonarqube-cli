@@ -50,6 +50,15 @@ export async function setIntended(
 ): Promise<void> {
   const file = parseIntendedFile(await readJsonFile(options.file));
   const projectKey = await resolveProject(options, ctx);
+  if (file.project !== undefined && file.project !== projectKey) {
+    throw new CommandFailedError(
+      `The intended architecture file is for project '${file.project}', not '${projectKey}'. Nothing was changed.`,
+      {
+        remediationHint:
+          'Export the intended architecture from the selected project and reapply your edits.',
+      },
+    );
+  }
   const dryRun = options.dryRun === true;
   const api = createArchitectureApi(ctx.connection, projectKey);
   const result = await setIntendedModel(api, file, {

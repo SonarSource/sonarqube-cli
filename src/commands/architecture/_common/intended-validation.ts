@@ -44,6 +44,7 @@ export const VALID_MODEL_RULES =
 /** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
   models: IntendedArchitecture[];
+  project?: string;
   /** The revision the file was read at; absent from a hand-written file. */
   revision?: string;
   /** Set when the file was read with --language: it replaces only that language's model. */
@@ -73,6 +74,12 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   }
   const problems: string[] = [];
   if (
+    file.project !== undefined &&
+    (typeof file.project !== 'string' || file.project.trim() === '')
+  ) {
+    problems.push('"project" must be a nonblank string when supplied.');
+  }
+  if (
     file.revision !== undefined &&
     (typeof file.revision !== 'string' || file.revision.trim() === '')
   ) {
@@ -101,6 +108,7 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   if (problems.length > 0) throw invalidModel(problems);
   return {
     models,
+    ...(typeof file.project === 'string' ? { project: file.project } : {}),
     revision: typeof file.revision === 'string' ? file.revision : undefined,
     ...(typeof scope === 'string' && isEcosystem(scope) ? { language: scope } : {}),
   };
