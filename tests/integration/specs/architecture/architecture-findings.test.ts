@@ -114,22 +114,28 @@ describe('public architecture findings contract', () => {
     server.getRecordedRequests().filter((r) => r.path.includes('project-findings'));
 
   for (const cloud of [true, false]) {
-    it(`rejects an unanalyzed main branch on Cloud=${cloud}`, async () => {
-      const builder = h
-        .newFakeServer()
-        .withAuthToken('findings-token')
-        .withProject('shop', (p) =>
-          p.withUnanalyzedBranch('main').withArchitecture((api) => api.withFindings([])),
-        );
-      const server = await (cloud ? builder.asSonarCloud() : builder).start();
-      h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
-      const result = await h.run('arch findings get -p shop --format text');
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain("Project 'shop' has no analyzed main branch.");
-      expect(result.stderr).toContain('Run an analysis of the main branch first.');
-      expect(result.stdout).not.toContain('No findings');
-      expect(requests(server)).toHaveLength(0);
-    });
+    it.each(['main', 'trunk'])(
+      `rejects an unanalyzed %s main branch on Cloud=${cloud}`,
+      async (main) => {
+        const builder = h
+          .newFakeServer()
+          .withAuthToken('findings-token')
+          .withProject('shop', (p) =>
+            p
+              .withDefaultBranchName(main)
+              .withUnanalyzedBranch(main)
+              .withArchitecture((api) => api.withFindings([])),
+          );
+        const server = await (cloud ? builder.asSonarCloud() : builder).start();
+        h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
+        const result = await h.run('arch findings get -p shop --format text');
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain("Project 'shop' has no analyzed main branch.");
+        expect(result.stderr).toContain('Run an analysis of the main branch first.');
+        expect(result.stdout).not.toContain('No findings');
+        expect(requests(server)).toHaveLength(0);
+      },
+    );
   }
 
   it.each([true, false])(
