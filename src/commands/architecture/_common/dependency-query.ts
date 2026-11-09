@@ -29,7 +29,7 @@ import { childSeparator, type IndexedGraph, indexStructure, type SliceEdge } fro
 import type { ArchitectureReadOptions } from './read-options.ts';
 
 export const DEPENDENCY_PAGE_SIZE = 20;
-const MAX_DEPENDENCY_PAGE_INDEX = 2_147_483_647;
+export const MAX_ARCHITECTURE_PAGE_INDEX = 2_147_483_647;
 
 export function parseDependencyPageNumber(value: string): number {
   if (!/^\d+$/.test(value)) {
@@ -76,7 +76,7 @@ export function dependencySelection(options: CurrentReadOptions): DependencySele
 }
 
 function validatePagination(pageIndex: number, pageSize: number): void {
-  if (!Number.isSafeInteger(pageIndex) || pageIndex < 1 || pageIndex > MAX_DEPENDENCY_PAGE_INDEX)
+  if (!Number.isSafeInteger(pageIndex) || pageIndex < 1 || pageIndex > MAX_ARCHITECTURE_PAGE_INDEX)
     throw new InvalidOptionError('--page must be between 1 and 2147483647.');
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > DEPENDENCY_PAGE_SIZE)
     throw new InvalidOptionError('--page-size must be between 1 and 20.');
