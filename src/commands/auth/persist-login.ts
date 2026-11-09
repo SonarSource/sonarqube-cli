@@ -27,6 +27,7 @@ import {
   normalizeServerUrl,
   saveToken,
 } from '@/core/host/keychain.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
@@ -88,8 +89,7 @@ export function assertNoCleartextTokenDowngrade(requestedServer: string): void {
   throw new CommandFailedError(
     `Cannot connect to ${normalizeServerUrl(requestedServer)} while an HTTPS connection for this hostname is saved.`,
     {
-      remediationHint:
-        "Run 'sonar auth logout' before 'sonar auth login' if you intend to use the HTTP server.",
+      remediationHint: `Run sonar auth logout --server ${shellQuote(normalizeServerUrl(savedHttpsUrl))} to clear all saved connections for this hostname before signing in to the HTTP server.`,
     },
   );
 }
