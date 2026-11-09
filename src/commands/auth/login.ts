@@ -51,7 +51,11 @@ import { loadState } from '@/core/state/state-repository.ts';
 import { NOTE_STYLES } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { isSameServer, persistLoginCredentials } from './persist-login.ts';
+import {
+  assertNoCleartextTokenDowngrade,
+  isSameServer,
+  persistLoginCredentials,
+} from './persist-login.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
@@ -85,6 +89,7 @@ export async function authLogin(
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
   const server = await resolveServer(options.server, console);
+  assertNoCleartextTokenDowngrade(server);
   const isCloud = isSonarQubeCloud(server);
   if (!isCloud) {
     await confirmServerTrust(server, console);
@@ -317,6 +322,9 @@ async function completeLogin(
 
 async function authLoginWithToken(options: AuthLoginOptions, console: Console): Promise<void> {
   assertNoEnvironmentAuthentication();
+  if (options.server !== undefined) {
+    assertNoCleartextTokenDowngrade(options.server);
+  }
   if (process.stdin.isTTY) {
     throw new InvalidOptionError(
       '--with-token reads a token from standard input.',
