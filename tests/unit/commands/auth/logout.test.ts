@@ -80,3 +80,86 @@ it.each([
     }
   },
 );
+
+it('preserves refreshed and newly added connections during scoped logout', async () => {
+  const snapshot = getDefaultState('1.0.0');
+  const active = {
+    id: 'unrelated',
+    type: 'on-premise' as const,
+    serverUrl: 'https://unrelated.example.test',
+    authenticatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  snapshot.auth = {
+    isAuthenticated: true,
+    activeConnectionId: active.id,
+    connections: [
+      active,
+      { ...active, id: 'selected', serverUrl: 'https://sample.example.test/base' },
+      { ...active, id: 'refreshed', serverUrl: 'http://sample.example.test:9000/other' },
+    ],
+  };
+  const latest = structuredClone(snapshot);
+  latest.auth.connections[2].authenticatedAt = '2026-01-02T00:00:00.000Z';
+  latest.auth.connections.push({
+    ...active,
+    id: 'added',
+    serverUrl: 'https://sample.example.test:9443',
+  });
+  const spies = [
+    spyOn(stateRepository, 'loadState').mockReturnValue(snapshot),
+    spyOn(stateRepository, 'updateState').mockImplementation((update) => update(latest)),
+    spyOn(keychain, 'getToken').mockResolvedValue('fixture-token'),
+    spyOn(keychain, 'deleteToken').mockResolvedValue(undefined),
+  ];
+  try {
+    const console = new FakeConsole();
+    await authLogout(new CommandInvocationContext(console), {
+      server: 'https://SAMPLE.example.test/base/',
+    });
+    expect(latest.auth.connections.map((connection) => connection.id)).toEqual([
+      'unrelated',
+      'refreshed',
+      'added',
+    ]);
+    expect(latest.auth.activeConnectionId).toBe(active.id);
+    expect(latest.auth.isAuthenticated).toBe(true);
+    expect(spies[3]).toHaveBeenCalledTimes(1);
+    expect(console.findCall('warn', 'The newer connection was kept in state.')).toBeDefined();
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+});
+
+it.each(['getToken', 'deleteToken'] as const)(
+  'continues scoped cleanup when %s fails',
+  async (operation) => {
+    const state = getDefaultState('1.0.0');
+    state.auth.connections = [
+      {
+        id: 'inactive',
+        type: 'on-premise',
+        serverUrl: 'https://sample.example.test',
+        authenticatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const spies = [
+      spyOn(stateRepository, 'loadState').mockReturnValue(structuredClone(state)),
+      spyOn(stateRepository, 'updateState').mockImplementation((update) => update(state)),
+      spyOn(keychain, 'getToken').mockResolvedValue(null),
+      spyOn(keychain, 'deleteToken').mockResolvedValue(undefined),
+    ];
+    const failureSpy = spyOn(keychain, operation).mockRejectedValue(new Error('fixture failure'));
+    try {
+      const console = new FakeConsole();
+      await authLogout(new CommandInvocationContext(console), {
+        server: 'https://sample.example.test',
+      });
+      expect(state.auth.connections).toEqual([]);
+      expect(state.auth.isAuthenticated).toBe(false);
+      expect(console.findCall('warn', 'Continuing with local logout.')).toBeDefined();
+    } finally {
+      failureSpy.mockRestore();
+      for (const spy of spies) spy.mockRestore();
+    }
+  },
+);
