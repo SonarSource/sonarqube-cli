@@ -197,6 +197,7 @@ export async function listIssues(
 
   let componentKeys: string | undefined;
   if (options.file) {
+    // Keep directory scope nonrecursive: enumerating 201 files previously caused HTTP 414 on the GET-only API.
     ({ componentKey: componentKeys } = await resolveFileComponentKey(
       client,
       projectKey,
