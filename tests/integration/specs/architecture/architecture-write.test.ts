@@ -118,6 +118,83 @@ describe('sonar architecture intended set', () => {
   }
 
   describe('intended', () => {
+    for (const cloud of [true, false]) {
+      for (const explicit of [true, false]) {
+        for (const dryRun of [true, false]) {
+          it(`rejects another project's export before Architecture requests (Cloud=${cloud}, explicit=${explicit}, dryRun=${dryRun})`, async () => {
+            const builder = harness
+              .newFakeServer()
+              .withAuthToken(TOKEN)
+              .withProject('source', (p) => p.withArchitecture((a) => a.withIntended(SAVED)))
+              .withProject(PROJECT, (p) => p.withArchitecture((a) => a.withIntended(SAVED)));
+            if (cloud) builder.asSonarCloud();
+            const server = await builder.start();
+            harness.withAuth(server.recordedAuthServerUrl(), TOKEN, cloud ? 'my-org' : undefined);
+            const exported = await harness.run('arch intended get -p source --format json');
+            expect(exported.exitCode).toBe(0);
+            const file = JSON.parse(exported.stdout) as Record<string, unknown>;
+            expect(file.project).toBe('source');
+            harness.cwd.writeFile('model.json', JSON.stringify({ ...file, models: NEXT }));
+            harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${PROJECT}\n`);
+            const before = server.getRecordedRequests().length;
+
+            const result = await harness.run(
+              'arch intended set --file model.json' +
+                (explicit ? ` --project ${PROJECT}` : '') +
+                (dryRun ? ' --dry-run' : ''),
+            );
+
+            expect(result.exitCode).toBe(1);
+            expect(result.stderr).toContain("file is for project 'source', not 'shop'");
+            expect(result.stderr).toContain('Nothing was changed.');
+            expect(result.stderr).toContain(
+              'remove "project" from the file to reuse it as a template',
+            );
+            expect(
+              server
+                .getRecordedRequests()
+                .slice(before)
+                .filter((r) => r.path.includes('/architecture/')),
+            ).toEqual([]);
+            expect(writes(server)).toEqual([]);
+          });
+        }
+      }
+    }
+
+    it.each([
+      null,
+      42,
+      '',
+      '  ',
+      ' my-key',
+      'my-key\nHint: fake',
+      '\x1b[31mkey',
+      '1234',
+      'a'.repeat(401),
+    ])('rejects invalid project metadata %j without Architecture requests', async (project) => {
+      const server = await start();
+      harness.cwd.writeFile('model.json', JSON.stringify({ project, models: NEXT }));
+      const result = await harness.run(`arch intended set -p ${PROJECT} --file model.json`);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('"project" must be a valid project key');
+      expect(server.getRecordedRequests().filter((r) => r.path.includes('/architecture/'))).toEqual(
+        [],
+      );
+    });
+
+    it('keeps an explicitly untagged template reusable across projects', async () => {
+      await startWith((a) => a.withIntended(SAVED));
+      const exported = await readSavedFile();
+      harness.cwd.writeFile(
+        'model.json',
+        JSON.stringify({ ...exported, project: undefined, models: NEXT }),
+      );
+      const result = await harness.run(`arch intended set -p ${PROJECT} --file model.json`);
+      expect(result.exitCode).toBe(0);
+      expect((await readSavedFile()).models).toEqual(publicModels(NEXT));
+    });
+
     it('preserves public discovery failure details in a write-free preview', async () => {
       const server = await startWith((fake) =>
         fake.withIntended(SAVED).withStatus('current-architectures', 200, '{}'),

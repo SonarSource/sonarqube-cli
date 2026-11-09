@@ -21,6 +21,7 @@
 // Validate the public request shape and client-side write safety before sending a model.
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { isValidProjectKey } from '@/core/project-key.ts';
 
 import {
   type Ecosystem,
@@ -44,6 +45,7 @@ export const VALID_MODEL_RULES =
 /** A model file, as `intended get --format json` writes it, or a bare array of models. */
 export interface IntendedFile {
   models: IntendedArchitecture[];
+  project?: string;
   /** The revision the file was read at; absent from a hand-written file. */
   revision?: string;
   /** Set when the file was read with --language: it replaces only that language's model. */
@@ -73,6 +75,12 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   }
   const problems: string[] = [];
   if (
+    file.project !== undefined &&
+    (typeof file.project !== 'string' || !isValidProjectKey(file.project))
+  ) {
+    problems.push('"project" must be a valid project key when supplied.');
+  }
+  if (
     file.revision !== undefined &&
     (typeof file.revision !== 'string' || file.revision.trim() === '')
   ) {
@@ -101,6 +109,7 @@ export function parseIntendedFile(raw: unknown): IntendedFile {
   if (problems.length > 0) throw invalidModel(problems);
   return {
     models,
+    ...(typeof file.project === 'string' ? { project: file.project } : {}),
     revision: typeof file.revision === 'string' ? file.revision : undefined,
     ...(typeof scope === 'string' && isEcosystem(scope) ? { language: scope } : {}),
   };
