@@ -110,6 +110,7 @@ function scannerArguments(run: ScannerRun, reportPath: string): string[] {
     `-Dsonar.scanner.javaExePath=${run.scanner.javaPath}`,
     '-Dsonar.scanner.javaOpts=',
     `-Dsonar.scanner.engineJarPath=${run.engineJarPath}`,
+    `-Dsonar.userHome=${join(run.directory, 'scanner-home')}`,
   ];
   if (auth.orgKey) {
     args.push(`-Dsonar.organization=${auth.orgKey}`);

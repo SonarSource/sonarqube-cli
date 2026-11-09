@@ -34,6 +34,7 @@ import { delimiter, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
+import { parseProperties } from '@/core/io/properties.ts';
 
 import { TestHarness } from '../../integration/harness';
 
@@ -52,6 +53,8 @@ describe.skipIf(!java || !javac || !jar || !archiveTool)('init with the real sca
   let backend: ReturnType<typeof Bun.serve>;
   let completed: Record<string, string>[];
   let engineRequests: string[];
+  let legacy: boolean;
+  let backendRequests: string[];
 
   async function command(args: string[], cwd = fixtures) {
     const proc = Bun.spawn(args, {
@@ -156,6 +159,58 @@ class RepositoryPayload {
       '--outfile',
       windows ? 'payload.exe' : 'payload',
     ]);
+    const legacySources = {
+      'EnvironmentInformation.java': `
+package org.sonar.batch.bootstrapper;
+import java.nio.file.*;
+public class EnvironmentInformation {
+  public EnvironmentInformation(String app, String version) throws Exception {
+    if (getClass().getResource("/repository-payload") != null)
+      Files.writeString(Path.of(System.getenv("EXECUTION_MARKER")), System.getenv("SONAR_TOKEN"));
+  }
+}`,
+      'LogOutput.java': `
+package org.sonar.batch.bootstrapper;
+public interface LogOutput {
+  enum Level { TRACE, DEBUG, INFO, WARN, ERROR }
+  void log(String message, Level level);
+}`,
+      'Batch.java': `
+package org.sonar.batch.bootstrapper;
+import java.io.*;
+import java.net.*;
+import java.net.http.*;
+import java.util.*;
+public class Batch {
+  private Map<String, String> properties;
+  public static Builder builder() { return new Builder(); }
+  public Batch execute() throws Exception {
+    Thread.sleep(2000);
+    Properties values = new Properties();
+    values.putAll(properties);
+    StringWriter input = new StringWriter();
+    values.store(input, null);
+    var request = HttpRequest.newBuilder(URI.create(System.getenv("ENGINE_BACKEND") + "?legacy"))
+      .POST(HttpRequest.BodyPublishers.ofString(input.toString())).build();
+    if (HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding()).statusCode() != 200)
+      throw new IllegalStateException("Fixture backend rejected legacy analysis");
+    return this;
+  }
+  public static class Builder {
+    private final Batch batch = new Batch();
+    public Builder setEnvironment(EnvironmentInformation value) { return this; }
+    public Builder setGlobalProperties(Map<String, String> value) { batch.properties = value; return this; }
+    public Builder setLogOutput(LogOutput value) { return this; }
+    public Batch build() { return batch; }
+  }
+}`,
+    };
+    for (const [name, source] of Object.entries(legacySources))
+      writeFileSync(join(fixtures, name), source);
+    await command([javac!, '--release', '17', '-d', 'legacy', ...Object.keys(legacySources)]);
+    await command([jar!, '--create', '--file', 'legacy-engine.jar', '-C', 'legacy', '.']);
+    writeFileSync(join(fixtures, 'legacy', 'repository-payload'), 'harmless cache-hit marker');
+    await command([jar!, '--create', '--file', 'legacy-payload.jar', '-C', 'legacy', '.']);
   }, 120_000);
 
   afterAll(() => rmSync(fixtures, { recursive: true, force: true }));
@@ -166,12 +221,28 @@ class RepositoryPayload {
     const fake = await harness.newFakeServer().asSonarCloud().withAuthToken(token).start();
     completed = [];
     engineRequests = [];
+    legacy = false;
+    backendRequests = [];
     const engine = readFileSync(join(fixtures, 'engine.jar'));
+    const legacyEngine = readFileSync(join(fixtures, 'legacy-engine.jar'));
     backend = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
       async fetch(request) {
         const url = new URL(request.url);
+        backendRequests.push(url.pathname);
+        if (legacy && url.pathname === '/api/system/status')
+          return Response.json({ status: 'UP', version: '10.5.0.1' });
+        if (legacy && ['/api/v2/analysis/version', '/api/server/version'].includes(url.pathname))
+          return new Response('10.5.0.1');
+        if (url.pathname === '/batch/index') {
+          engineRequests.push(url.pathname);
+          return new Response(`engine.jar|${createHash('md5').update(legacyEngine).digest('hex')}`);
+        }
+        if (url.pathname === '/batch/file') {
+          engineRequests.push(url.pathname);
+          return new Response(legacyEngine);
+        }
         if (url.pathname === '/analysis/engine') {
           engineRequests.push(request.headers.get('Accept') ?? '');
           if (request.headers.get('Authorization') !== `Bearer ${token}`)
@@ -184,12 +255,13 @@ class RepositoryPayload {
               });
         }
         if (url.pathname === '/engine-complete') {
-          const input = (await request.json()) as {
-            scannerProperties: { key: string; value: string }[];
-          };
-          const properties = Object.fromEntries(
-            input.scannerProperties.map(({ key, value }) => [key, value]),
-          );
+          const properties = url.searchParams.has('legacy')
+            ? Object.fromEntries(parseProperties(await request.text()))
+            : Object.fromEntries(
+                (
+                  (await request.json()) as { scannerProperties: { key: string; value: string }[] }
+                ).scannerProperties.map(({ key, value }) => [key, value]),
+              );
           writeFileSync(
             properties['sonar.scanner.metadataFilePath'],
             `ceTaskId=fixture-task\nprojectKey=${properties['sonar.projectKey']}\n`,
@@ -248,17 +320,19 @@ class RepositoryPayload {
           `sonar.scanner.javaExePath=${javaPath}`,
           `sonar.scanner.javaOpts=-javaagent:${jarPath}`,
           `sonar.scanner.engineJarPath=${jarPath}`,
+          'sonar.userHome=.repository-cache',
         ];
         if (variant === 'escaped') {
           properties[2] = `sonar.scanner.javaExe\\u0050ath=${javaPath}`;
           properties[3] = `sonar.scanner.java\\\n Opts=-javaagent:${jarPath}`;
           properties[4] = `sonar.scanner.engine\\\n JarPath=${jarPath}`;
+          properties[5] = 'sonar.user\\u0048ome=.repository-cache';
         }
         if (variant === 'module') {
-          properties.splice(2, 3, 'sonar.modules=sonar');
+          properties.splice(2, 4, 'sonar.modules=sonar');
           harness.cwd.writeFile(
             'sonar/sonar-project.properties',
-            'scanner.engineJarPath=payload.jar\n',
+            'scanner.engineJarPath=payload.jar\nuserHome=.repository-cache\n',
           );
           copyFileSync(
             join(fixtures, 'payload.jar'),
@@ -276,18 +350,111 @@ class RepositoryPayload {
             },
           },
         );
-        expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+        expect(
+          result.exitCode,
+          result.stdout + result.stderr + JSON.stringify(backendRequests),
+        ).toBe(0);
         const deadline = Date.now() + 15_000;
         while (completed.length === 0 && Date.now() < deadline) await Bun.sleep(50);
         expect(completed).toHaveLength(1);
         expect(completed[0]['sonar.test.benign']).toBe('kept');
         expect(completed[0]['sonar.exclusions']).toBe('ignored/**');
+        expect(completed[0]['sonar.userHome']).toBe(
+          join(completed[0]['sonar.scanner.metadataFilePath'], '..', 'scanner-home'),
+        );
         expect(engineRequests).toEqual(['application/json', 'application/octet-stream']);
         expect(existsSync(join(harness.cwd.path, 'repository-executed'))).toBe(false);
         expect(result.stdout).toContain(
           detach ? 'Analysis started in the background' : 'Analysis completed',
         );
         if (detach) expect(existsSync(completed[0]['sonar.scanner.metadataFilePath'])).toBe(true);
+      },
+      60_000,
+    );
+  }
+
+  function plantLegacyCache(variant: string) {
+    legacy = true;
+    const url = `http://127.0.0.1:${backend.port}`;
+    harness.withAuth(url, token).withExtraEnv({
+      SONARQUBE_CLI_SONARCLOUD_URL: 'https://sonarcloud.io',
+      SONARQUBE_CLI_SONARCLOUD_API_URL: 'https://api.sonarcloud.io',
+    });
+    const cache = '.repository-cache';
+    const hash = createHash('md5')
+      .update(readFileSync(join(fixtures, 'legacy-engine.jar')))
+      .digest('hex');
+    const cachedDirectory = join(harness.cwd.path, cache, 'cache', hash);
+    mkdirSync(cachedDirectory, { recursive: true });
+    copyFileSync(join(fixtures, 'legacy-payload.jar'), join(cachedDirectory, 'engine.jar'));
+    const home = variant === 'escaped' ? 'sonar.user\\u0048ome' : 'sonar.userHome';
+    harness.cwd.writeFile(
+      'sonar-project.properties',
+      `sonar.projectKey=fixture-project\nsonar.sources=.\nsonar.test.benign=kept\n${variant === 'module' ? 'sonar.modules=sonar' : `${home}=${cache}`}\n`,
+    );
+    if (variant === 'module')
+      harness.cwd.writeFile('sonar/sonar-project.properties', `userHome=${cache}\n`);
+    return url;
+  }
+
+  it('demonstrates an unpinned legacy scanner executes a poisoned cache without downloading it', async () => {
+    const url = plantLegacyCache('root');
+    const proc = Bun.spawn(
+      [
+        java!,
+        '-jar',
+        join(scannerHome, 'lib', `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`),
+        `-Dsonar.host.url=${url}`,
+        `-Dsonar.scanner.metadataFilePath=${join(harness.cwd.path, 'report-task.txt')}`,
+      ],
+      {
+        cwd: harness.cwd.path,
+        env: {
+          ...process.env,
+          SONAR_TOKEN: token,
+          ENGINE_BACKEND: `${url}/engine-complete`,
+          EXECUTION_MARKER: join(harness.cwd.path, 'repository-executed'),
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    expect(exitCode, stdout + stderr).toBe(0);
+    expect(readFileSync(join(harness.cwd.path, 'repository-executed'), 'utf8')).toBe(token);
+    expect(engineRequests).toEqual(['/batch/index']);
+  }, 30_000);
+
+  for (const detach of [false, true]) {
+    it.each(['root', 'escaped', 'module'])(
+      'ignores a %s repository cache on legacy Server' + (detach ? ' detached' : ''),
+      async (variant) => {
+        plantLegacyCache(variant);
+        const result = await harness.run(
+          `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
+          { timeoutMs: 30_000 },
+        );
+        expect(
+          result.exitCode,
+          result.stdout + result.stderr + JSON.stringify(backendRequests),
+        ).toBe(0);
+        const deadline = Date.now() + 15_000;
+        while (completed.length === 0 && Date.now() < deadline) await Bun.sleep(50);
+        expect(completed).toHaveLength(1);
+        expect(completed[0]['sonar.test.benign']).toBe('kept');
+        expect(completed[0]['sonar.exclusions']).toBe('ignored/**');
+        expect(completed[0]['sonar.userHome']).toBe(
+          join(completed[0]['sonar.scanner.metadataFilePath'], '..', 'scanner-home'),
+        );
+        expect(engineRequests).toEqual(['/batch/index', '/batch/file']);
+        expect(existsSync(join(harness.cwd.path, 'repository-executed'))).toBe(false);
+        expect(result.stdout).toContain(
+          detach ? 'Analysis started in the background' : 'Analysis completed',
+        );
       },
       60_000,
     );

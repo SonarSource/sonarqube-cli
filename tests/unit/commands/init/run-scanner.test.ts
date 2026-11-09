@@ -130,6 +130,7 @@ posixOnly('runScanner', () => {
     expect(args).toContain(`-Dsonar.scanner.javaExePath=${run.scanner.javaPath}`);
     expect(args).toContain('-Dsonar.scanner.javaOpts=');
     expect(args).toContain(`-Dsonar.scanner.engineJarPath=${run.engineJarPath}`);
+    expect(args).toContain(`-Dsonar.userHome=${join(directory, 'scanner-home')}`);
     run.engineJarPath = '';
     expect(await scannerArgs(run)).toContain('-Dsonar.scanner.engineJarPath=');
   });
@@ -292,6 +293,7 @@ posixOnly('startScannerInBackground', () => {
     expect(log).toContain(`-Dsonar.scanner.javaExePath=${join(directory, 'script-java')}`);
     expect(log).toContain('-Dsonar.scanner.javaOpts=');
     expect(log).toContain(`-Dsonar.scanner.engineJarPath=${join(directory, 'trusted-engine.jar')}`);
+    expect(log).toContain(`-Dsonar.userHome=${join(directory, 'scanner-home')}`);
     expect(log).toContain('-Dsonar.verbose=false');
     expect(log).toContain('-Dsonar.log.level=INFO');
   });
