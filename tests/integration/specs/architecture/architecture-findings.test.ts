@@ -186,6 +186,10 @@ describe('public architecture findings contract', () => {
     ['--category smell --category flaw', '--category'],
     ['--category flaw --category flaw', '--category'],
     ['--category=flaw --category=smell', '--category'],
+    ['--language java --language ts', '--language'],
+    ['--language ts --language java', '--language'],
+    ['--language java --language java', '--language'],
+    ['--language=java --language=ts', '--language'],
   ])('rejects repeated Findings filters: %s', async (options, flag) => {
     const server = await configured();
     const result = await h.run(`arch findings get -p shop ${options} --format json`);

@@ -167,7 +167,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
         new SonarOption('--type <type>', 'Only this finding type').choices(FINDING_TYPES),
       ),
     )
-    .addOption(languageOption())
+    .addOption(singleValue(languageOption()))
     .addOption(textFormatOption())
     .option('--page <n>', 'Page number (default 1)', parseFindingPageIndex)
     .option(
