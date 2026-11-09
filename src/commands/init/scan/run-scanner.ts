@@ -48,6 +48,7 @@ const QUIET_ARGUMENTS = ['-Dsonar.verbose=false', '-Dsonar.log.level=INFO'];
 
 export interface ScannerRun {
   scanner: ScannerInstallation;
+  engineJarPath: string;
   projectRoot: string;
   projectKey: string;
   auth: ResolvedAuth;
@@ -106,6 +107,9 @@ function scannerArguments(run: ScannerRun, reportPath: string): string[] {
     `-Dsonar.scanner.metadataFilePath=${reportPath}`,
     '-Dsonar.qualitygate.wait=false',
     '-Dsonar.scanner.autoconfig.enabled=true',
+    `-Dsonar.scanner.javaExePath=${run.scanner.javaPath}`,
+    '-Dsonar.scanner.javaOpts=',
+    `-Dsonar.scanner.engineJarPath=${run.engineJarPath}`,
   ];
   if (auth.orgKey) {
     args.push(`-Dsonar.organization=${auth.orgKey}`);

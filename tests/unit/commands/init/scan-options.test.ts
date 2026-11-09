@@ -69,6 +69,9 @@ describe('parseScannerProperties', () => {
     'sonar.scanner.apiBaseUrl',
     'sonar.scanner.sonarcloudUrl',
     'sonar.scanner.internal.dumpToFile',
+    'sonar.scanner.javaExePath',
+    'sonar.scanner.javaOpts',
+    'sonar.scanner.engineJarPath',
   ])('rejects the token-redirecting key %s', (key) => {
     expect(() => parseScannerProperties([`${key}=x`])).toThrow(/managed by 'sonar init'/);
   });
