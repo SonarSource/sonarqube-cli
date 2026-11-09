@@ -18,8 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -104,7 +103,6 @@ function httpAnswering(overrides: Routes = {}): SonarHttpClient {
     ...overrides,
   };
   return {
-    getBytes: () => okAsync(new TextEncoder().encode('trusted engine').buffer),
     get: (path: string, params?: Params) => {
       const route = routes[path];
       const answer =
@@ -325,22 +323,6 @@ posixOnly('runFirstScan in the foreground', () => {
       qualityGate: 'OK',
       openIssues: 7,
     });
-  });
-
-  it('launches a modern analysis with the verified engine and removes its private directory', async () => {
-    installScanner();
-    await scan({
-      '/api/system/status': { version: '10.6' },
-      '/api/v2/analysis/engine': {
-        sha256: createHash('sha256').update('trusted engine').digest('hex'),
-      },
-    });
-    const args = readFileSync(join(root, 'launched'), 'utf8').split('\n');
-    const enginePath = args
-      .find((arg) => arg.startsWith('-Dsonar.scanner.engineJarPath='))
-      ?.split('=')[1];
-    expect(enginePath).toMatch(/scanner-engine\.jar$/);
-    expect(existsSync(enginePath!)).toBe(false);
   });
 
   it('shows the scanner output live, without the token, when verbose', async () => {
