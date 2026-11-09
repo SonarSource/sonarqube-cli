@@ -236,6 +236,27 @@ export class SonarHttpClient {
     return this.getSafe<T>(endpoint, params).andThen((result) => this.toGetResult(result));
   }
 
+  /** Download authenticated binary content through the same network and redirect protections. */
+  getBytes(
+    endpoint: string,
+    timeoutMs = GET_REQUEST_TIMEOUT_MS,
+  ): ResultAsync<ArrayBuffer, HttpClientError> {
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        `${this.apiHostFor(endpoint)}${endpoint}`,
+        buildRequest(
+          'GET',
+          { ...this.commonHeaders(), Accept: 'application/octet-stream' },
+          timeoutMs,
+          undefined,
+        ),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'GET', () => response.arrayBuffer()),
+    );
+  }
+
   /**
    * Like `get`, but treats a 404 as a meaningful, expected answer instead of a failure:
    * resolves to `Ok(null)` when the server responds 404. Every other non-2xx status
