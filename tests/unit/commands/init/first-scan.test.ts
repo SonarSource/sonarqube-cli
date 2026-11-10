@@ -141,7 +141,8 @@ function installScanner(exitCode = 0): void {
   writeExecutable(launcher.javaPath, [
     '#!/bin/sh',
     'for arg in "$@"; do case "$arg" in',
-    '  --version) printf "SonarScanner CLI 8.3.1.16491\\nJava 21.0.9\\n"; exit 0;;',
+    '  -XshowSettings:properties) echo "    java.specification.version = 21" >&2; exit 0;;',
+    '  --version) echo "SonarScanner CLI 8.3.1.16491"; exit 0;;',
     '  -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";;',
     'esac; done',
     `printf '%s\\n' "$@" > '${join(root, 'launched')}'`,

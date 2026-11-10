@@ -48,7 +48,14 @@ export function writeExecutable(path: string, lines: string[]): void {
   chmodSync(path, 0o755);
 }
 
-/** A `java` that prints the scanner banner, as the real one does for `--version`. */
+/** The JVM prints its settings on stderr; an empty version leaves the property out. */
+export function javaSettings(javaVersion: string): string {
+  return javaVersion
+    ? `echo "    java.specification.version = ${javaVersion.split('.')[0]}" >&2`
+    : 'true';
+}
+
+/** A `java` that prints the scanner banner for `--version` and its runtime settings for `-XshowSettings`. */
 export function writeFakeJava(
   path: string,
   version = SONAR_SCANNER_VERSION,
@@ -57,8 +64,10 @@ export function writeFakeJava(
 ): void {
   writeExecutable(path, [
     '#!/bin/sh',
+    'for arg in "$@"; do case "$arg" in',
+    `  -XshowSettings:properties) ${javaSettings(javaVersion)}; exit 0;;`,
+    'esac; done',
     `echo "SonarScanner CLI ${version}"`,
-    `echo "Java ${javaVersion}"`,
     `exit ${exitCode}`,
   ]);
 }

@@ -82,12 +82,27 @@ export async function verifyScanner(scanner: ScannerInstallation): Promise<void>
   if (result.exitCode !== 0 || scannerVersion(output) !== scanner.version) {
     throw new CommandFailedError('SonarScanner installation verification failed.');
   }
-  const javaMajorVersion = Number(/\bJava (\d+)\b/.exec(output)?.[1] ?? 0);
-  if (javaMajorVersion < MIN_ENGINE_JAVA_MAJOR_VERSION) {
+  if ((await javaMajorVersion(scanner.javaPath)) < MIN_ENGINE_JAVA_MAJOR_VERSION) {
     throw new CommandFailedError(
       'SonarScanner requires Java 17 or later to run the analysis engine.',
     );
   }
+}
+
+/** The scanner banner does not name its Java runtime (8.3 on macOS), so the runtime is asked directly. */
+async function javaMajorVersion(javaPath: string): Promise<number> {
+  const result = await spawnProcessWithTimeout(
+    javaPath,
+    ['-XshowSettings:properties', '-version'],
+    { env: PROBE_ENV },
+    PROBE_TIMEOUT_MS,
+    'Java runtime verification timed out.',
+  );
+  // Java 8 reports "1.8", later releases the bare major version.
+  const major = /java\.specification\.version = (?:1\.)?(\d+)/.exec(
+    result.stdout + result.stderr,
+  )?.[1];
+  return result.exitCode === 0 && major ? Number(major) : 0;
 }
 
 function decodeJavaProperty(value: string | undefined): string {
