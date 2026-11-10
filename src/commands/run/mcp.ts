@@ -20,7 +20,7 @@
 
 // Run the SonarQube MCP server, proxying stdio for MCP transport
 
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -38,6 +38,7 @@ import {
   type McpServerContext,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
+import { removeJvmSecretsFile } from '@/core/host/mcp/mcp-jvm-secrets.ts';
 import {
   isLoopbackServerUrl,
   mcpLoopbackAdvice,
@@ -60,6 +61,7 @@ export interface McpRunOptions {
 
 const AUTHENTICATION_ERROR_MESSAGE = "Not authenticated. Run 'sonar auth login' to authenticate.";
 const INTERNAL_ERROR_CODE = -32000;
+const HANGUP_EXIT_CODE = 129;
 const INTERRUPTED_EXIT_CODE = 130;
 const TERMINATED_EXIT_CODE = 143;
 const CONTAINER_SHUTDOWN_EXIT_CODES = new Set([INTERRUPTED_EXIT_CODE, TERMINATED_EXIT_CODE]);
@@ -76,6 +78,8 @@ export async function runMcp(
 ): Promise<void> {
   let resolvedNetwork: ResolvedNetworkConfig | undefined;
   let cachedCaCertPath: string | undefined;
+  let child: ChildProcess | undefined;
+  let disposeJvmSecrets: (() => void) | undefined;
   try {
     resolvedNetwork = network ?? (await getNetworkConfigOrThrow());
     const authResult = await ctx.resolveAuth();
@@ -137,6 +141,9 @@ export async function runMcp(
       resolvedNetwork,
     );
     cachedCaCertPath = config.cachedCaCertPath;
+    if (config.jvmSecretsPath) {
+      disposeJvmSecrets = ownJvmSecrets(config.jvmSecretsPath, () => child);
+    }
 
     if (options.debug) {
       debugLog(`runtime: ${detection.runtime}${detection.viaWsl ? ' (via WSL)' : ''}`);
@@ -146,7 +153,7 @@ export async function runMcp(
     }
 
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(config.command, config.args, {
+      child = spawn(config.command, config.args, {
         stdio: 'inherit',
         env: { ...process.env, ...config.env },
       });
@@ -169,9 +176,12 @@ export async function runMcp(
         resolve();
       });
     });
+    disposeJvmSecrets?.();
   } catch (error) {
+    disposeJvmSecrets?.();
     await failStartup(error);
   } finally {
+    disposeJvmSecrets?.();
     if (resolvedNetwork) {
       cleanup(resolvedNetwork);
     }
@@ -205,6 +215,35 @@ export async function runMcp(
       }
     }
   }
+}
+
+function ownJvmSecrets(path: string, getChild: () => ChildProcess | undefined): () => void {
+  const handlers = new Map<NodeJS.Signals, () => void>();
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+    removeJvmSecretsFile(path);
+  };
+  for (const [signal, code] of [
+    ['SIGHUP', HANGUP_EXIT_CODE],
+    ['SIGINT', INTERRUPTED_EXIT_CODE],
+    ['SIGTERM', TERMINATED_EXIT_CODE],
+  ] as const) {
+    const handler = () => {
+      dispose();
+      try {
+        getChild()?.kill(signal);
+      } catch {
+        // Cleanup and exit must finish even if the runtime cannot receive the signal.
+      }
+      process.exit(code);
+    };
+    handlers.set(signal, handler);
+    process.on(signal, handler);
+  }
+  return dispose;
 }
 
 function runtimeDetectionError(detection: ContainerRuntimeDetection): CommandFailedError {

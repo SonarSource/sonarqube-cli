@@ -22,7 +22,15 @@
 
 import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import * as os from 'node:os';
 import { join } from 'node:path';
 import * as readline from 'node:readline';
@@ -45,6 +53,7 @@ import {
   getMcpContainerCommand,
   MCP_CONTAINER_CA_CERT_PATH,
   MCP_CONTAINER_CLIENT_CERT_PATH,
+  MCP_CONTAINER_JVM_SECRETS_PATH,
   resolveMcpContainerCommand,
 } from '@/core/host/mcp/mcp-helper.ts';
 import { createRedactedUrl } from '@/core/host/redacted-url.ts';
@@ -63,6 +72,15 @@ const FAKE_AUTH = new ResolvedAuth({
 const FAKE_CTX = new CommandAuthenticatedInvocationContext(FAKE_AUTH, new FakeConsole());
 
 const NO_NETWORK: ResolvedNetworkConfig = { proxy: null, caCert: null, clientCert: null };
+const JVM_SIGNALS = ['SIGHUP', 'SIGINT', 'SIGTERM'] as const;
+
+function fixtureJvmNetwork(): ResolvedNetworkConfig {
+  return makeProxyNetwork(
+    makeProxy({
+      proxyHttps: createRedactedUrl('http://fixture-user:fixture-password@proxy.example.test'),
+    }),
+  );
+}
 
 function makeProxyNetwork(proxy: ProxyGroup): ResolvedNetworkConfig {
   return { proxy, caCert: null, clientCert: null };
@@ -98,11 +116,15 @@ function makeProxy(overrides: Partial<ProxyGroup> = {}): ProxyGroup {
   };
 }
 
-function makeFakeChild(exitCode = 0, beforeExit?: () => void): childProcess.ChildProcess {
+function makeFakeChild(
+  exitCode: number | 'spawn' = 0,
+  beforeExit?: () => void,
+): childProcess.ChildProcess {
   const emitter = new EventEmitter();
   setImmediate(() => {
     beforeExit?.();
-    emitter.emit('exit', exitCode);
+    if (exitCode === 'spawn') emitter.emit('error', new Error('synthetic spawn failure'));
+    else emitter.emit('exit', exitCode);
   });
   return emitter as unknown as childProcess.ChildProcess;
 }
@@ -467,6 +489,163 @@ describe('runMcp', () => {
     }
   });
 
+  it.each([0, 23, 'spawn', 'throw'] as const)(
+    'disposes each launch after child outcome %s without changing other listeners',
+    async (outcome) => {
+      detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+        runtime: 'docker',
+        viaWsl: false,
+      });
+      const unrelated = () => undefined;
+      for (const signal of JVM_SIGNALS) process.on(signal, unrelated);
+      const previous = JVM_SIGNALS.map((signal) => process.listeners(signal));
+      const initialExitCode = process.exitCode;
+      createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue(readlineInput());
+      try {
+        spawnSpy = spyOn(childProcess, 'spawn');
+        for (let launch = 0; launch < 2; launch++) {
+          let path = '';
+          let fileAtSpawn = false;
+          let listenersAtSpawn: NodeJS.SignalsListener[][] = [];
+          spawnSpy.mockImplementation((_command: string, args: string[]) => {
+            const suffix = `:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`;
+            path = args.find((arg) => arg.endsWith(suffix))!.slice(0, -suffix.length);
+            fileAtSpawn = existsSync(path);
+            listenersAtSpawn = JVM_SIGNALS.map((signal) => process.listeners(signal));
+            if (outcome === 'throw') throw new Error('synthetic spawn failure');
+            return makeFakeChild(outcome);
+          });
+          await runMcp(FAKE_CTX, {}, fixtureJvmNetwork());
+          expect(path).not.toBe('');
+          expect(fileAtSpawn).toBe(true);
+          listenersAtSpawn.forEach((listeners, index) => {
+            expect(listeners).toHaveLength(previous[index].length + 1);
+            expect(listeners.slice(0, -1)).toEqual(previous[index]);
+          });
+          expect(existsSync(path)).toBe(false);
+          expect(JVM_SIGNALS.map((signal) => process.listeners(signal))).toEqual(previous);
+        }
+      } finally {
+        for (const signal of JVM_SIGNALS) process.off(signal, unrelated);
+        process.exitCode = initialExitCode;
+      }
+    },
+  );
+
+  it('installs no signal handlers without a JVM file', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    spawnSpy = spyOn(childProcess, 'spawn').mockReturnValue(makeFakeChild());
+    const onSpy = spyOn(process, 'on');
+    try {
+      await runMcp(FAKE_CTX, {}, NO_NETWORK);
+      expect(
+        (onSpy.mock.calls as unknown[][]).filter(([event]) =>
+          JVM_SIGNALS.some((signal) => event === signal),
+        ),
+      ).toEqual([]);
+    } finally {
+      onSpy.mockRestore();
+    }
+  });
+
+  it.each([false, true])('finishes disposal when signal forwarding throws=%s', async (throws) => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    const previous = JVM_SIGNALS.map((signal) => process.listeners(signal));
+    let path = '';
+    let forwardedSignal: string | undefined;
+    let fileAtForward: boolean | undefined;
+    let listenersAtForward: NodeJS.SignalsListener[][] = [];
+    const child = Object.assign(new EventEmitter(), {
+      kill: (signal: string) => {
+        forwardedSignal = signal;
+        fileAtForward = existsSync(path);
+        listenersAtForward = JVM_SIGNALS.map((name) => process.listeners(name));
+        if (throws) throw new Error('synthetic forwarding failure');
+        return false;
+      },
+    });
+    let ready!: () => void;
+    const started = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    spawnSpy = spyOn(childProcess, 'spawn');
+    spawnSpy.mockImplementation((_command: string, args: string[]) => {
+      const suffix = `:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`;
+      path = args.find((arg) => arg.endsWith(suffix))!.slice(0, -suffix.length);
+      ready();
+      return child as unknown as childProcess.ChildProcess;
+    });
+    const exitSpy = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const initialExitCode = process.exitCode;
+    const launch = runMcp(FAKE_CTX, {}, fixtureJvmNetwork());
+    try {
+      await started;
+      const handler = process.listeners('SIGTERM').at(-1) as () => void;
+      handler();
+      expect(forwardedSignal).toBe('SIGTERM');
+      expect(fileAtForward).toBe(false);
+      expect(listenersAtForward).toEqual(previous);
+      expect(exitSpy.mock.calls).toEqual([[143]]);
+      expect(existsSync(path)).toBe(false);
+    } finally {
+      child.emit('exit', 0);
+      await launch;
+      exitSpy.mockRestore();
+      process.exitCode = initialExitCode;
+    }
+  });
+
+  it('disposes before waiting for an initialize request after launch failure', async () => {
+    detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
+      runtime: 'docker',
+      viaWsl: false,
+    });
+    let path = '';
+    spawnSpy = spyOn(childProcess, 'spawn');
+    spawnSpy.mockImplementation((_command: string, args: string[]) => {
+      const suffix = `:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`;
+      path = args.find((arg) => arg.endsWith(suffix))!.slice(0, -suffix.length);
+      return makeFakeChild('spawn');
+    });
+    let finish!: () => void;
+    let waiting!: () => void;
+    const input = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      waiting = resolve;
+    });
+    createInterfaceSpy = spyOn(readline, 'createInterface').mockReturnValue({
+      close: () => undefined,
+      async *[Symbol.asyncIterator]() {
+        waiting();
+        await input;
+        yield initializeRequest();
+      },
+    } as never);
+    const previous = JVM_SIGNALS.map((signal) => process.listeners(signal));
+    const stdoutSpy = spyOn(process.stdout, 'write').mockReturnValue(true);
+    const initialExitCode = process.exitCode;
+    const launch = runMcp(FAKE_CTX, {}, fixtureJvmNetwork());
+    try {
+      await started;
+      expect(path).not.toBe('');
+      expect(existsSync(path)).toBe(false);
+      expect(JVM_SIGNALS.map((signal) => process.listeners(signal))).toEqual(previous);
+    } finally {
+      finish();
+      await launch;
+      stdoutSpy.mockRestore();
+      process.exitCode = initialExitCode;
+    }
+  });
+
   it('deletes the cached CA certificate after the MCP container exits', async () => {
     detectRuntimeSpy = spyOn(toolDetector, 'detectContainerRuntime').mockResolvedValue({
       runtime: 'docker',
@@ -506,8 +685,27 @@ describe('runMcp', () => {
   });
 });
 
+function jvmSecretsText(jvmSecretsPath: string | undefined): string {
+  return jvmSecretsPath === undefined ? '' : readFileSync(jvmSecretsPath, 'utf-8');
+}
+
+function removeJvmSecretsFiles(): void {
+  if (!existsSync(CLI_TMP_DIR)) {
+    return;
+  }
+  for (const name of readdirSync(CLI_TMP_DIR)) {
+    if (name.startsWith(`mcp-jvm-secrets-${process.pid}-`)) {
+      rmSync(join(CLI_TMP_DIR, name), { force: true });
+    }
+  }
+}
+
 describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
   const context = { withFsMount: false } as const;
+
+  afterEach(() => {
+    removeJvmSecretsFiles();
+  });
 
   it('does not set JAVA_OPTS when no proxy is configured', () => {
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
@@ -533,8 +731,53 @@ describe('getMcpContainerCommand — proxy → JAVA_OPTS', () => {
     );
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
 
-    expect(result.env.JAVA_OPTS).toContain('-Dhttps.proxyUser=alice');
-    expect(result.env.JAVA_OPTS).toContain('-Dhttps.proxyPassword=secret');
+    const secrets = jvmSecretsText(result.jvmSecretsPath);
+    expect(result.env.JAVA_OPTS).not.toContain('proxyUser');
+    expect(result.env.JAVA_OPTS).not.toContain('proxyPassword');
+    expect(result.env.JAVA_OPTS).toContain(`@${MCP_CONTAINER_JVM_SECRETS_PATH}`);
+    expect(result.args.join(' ')).not.toContain('proxyPassword');
+    expect(Object.values(result.env).join('\n')).not.toContain('proxyPassword');
+    expect(secrets).toContain('-Dhttps.proxyUser=alice');
+    expect(secrets).toContain('-Dhttps.proxyPassword=secret');
+    expect(result.args).toContain(
+      `${normalizePath(result.jvmSecretsPath ?? '')}:${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`,
+    );
+  });
+
+  it('quotes proxy passwords that contain spaces or comment markers', () => {
+    const network = makeProxyNetwork(
+      makeProxy({
+        proxyHttps: createRedactedUrl('http://alice:se%20cret%23%22x@proxy.corp.com:3128'),
+      }),
+    );
+    const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, network);
+
+    expect(result.env.JAVA_OPTS).not.toContain('se cret');
+    expect(jvmSecretsText(result.jvmSecretsPath)).toContain('"-Dhttps.proxyPassword=se cret#\\"x"');
+  });
+
+  it('keeps proxy credentials out of the WSL command line', () => {
+    const network = makeProxyNetwork(
+      makeProxy({ proxyHttps: createRedactedUrl('http://alice:secret@proxy.corp.com:3128') }),
+    );
+    const result = resolveMcpContainerCommand(
+      FAKE_AUTH,
+      { runtime: 'docker', viaWsl: true },
+      context,
+      {},
+      network,
+    );
+
+    expect(result.args.join(' ')).not.toContain('proxyPassword');
+    expect(result.args.join(' ')).toContain(
+      `"$SONARQUBE_MCP_JVM_SECRETS_PATH":${MCP_CONTAINER_JVM_SECRETS_PATH}:ro`,
+    );
+    expect(result.env.JAVA_OPTS).not.toContain('proxyPassword');
+    if (result.jvmSecretsPath === undefined) {
+      throw new Error('expected a JVM secrets file');
+    }
+    expect(result.env.SONARQUBE_MCP_JVM_SECRETS_PATH).toBe(result.jvmSecretsPath);
+    expect(jvmSecretsText(result.jvmSecretsPath)).toContain('-Dhttps.proxyPassword=secret');
   });
 
   it('sets http proxy host and port from proxyHttp', () => {
@@ -618,6 +861,10 @@ describe('getMcpContainerCommand — CA cert → volume mount', () => {
 describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', () => {
   const context = { withFsMount: false } as const;
 
+  afterEach(() => {
+    removeJvmSecretsFiles();
+  });
+
   it('does not add a client cert mount or JAVA_OPTS when no client cert is configured', () => {
     const result = getMcpContainerCommand(FAKE_AUTH, 'docker', context, {}, NO_NETWORK);
 
@@ -653,7 +900,7 @@ describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', 
     expect(result.args).toContain('JAVA_OPTS');
   });
 
-  it('sets keyStorePassword in JAVA_OPTS when passphrase is present', () => {
+  it('keeps keyStorePassword out of JAVA_OPTS when a passphrase is present', () => {
     const result = getMcpContainerCommand(
       FAKE_AUTH,
       'docker',
@@ -662,7 +909,16 @@ describe('getMcpContainerCommand — client cert → volume mount + JAVA_OPTS', 
       makeClientCertNetwork({ passphrase: 'secret' }),
     );
 
-    expect(result.env.JAVA_OPTS).toContain('-Djavax.net.ssl.keyStorePassword=secret');
+    const secrets = jvmSecretsText(result.jvmSecretsPath);
+    expect(result.env.JAVA_OPTS).not.toContain('keyStorePassword');
+    expect(result.env.JAVA_OPTS).toContain(`@${MCP_CONTAINER_JVM_SECRETS_PATH}`);
+    expect(result.args.join(' ')).not.toContain('keyStorePassword');
+    expect(Object.values(result.env).join('\n')).not.toContain('keyStorePassword');
+    expect(secrets).toContain('-Djavax.net.ssl.keyStorePassword=secret');
+    if (process.platform !== 'win32' && result.jvmSecretsPath) {
+      expect(statSync(result.jvmSecretsPath).mode & 0o777).toBe(0o644);
+      expect(statSync(CLI_TMP_DIR).mode & 0o777).toBe(0o700);
+    }
   });
 
   it('omits keyStorePassword from JAVA_OPTS when no passphrase', () => {
