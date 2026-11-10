@@ -109,7 +109,7 @@ export async function runBulkImportJob(
   while (collection.hasMore) {
     let page;
     try {
-      page = await collection.loadMore();
+      page = await collection.loadMore(); // NOSONAR: sequential by design, each page continues from the previous one
     } catch (err) {
       // A later page's fetch failure still leaves earlier pages' provisioning results behind —
       // finish the display so they're reported, same as any other partial-failure exit.
@@ -121,7 +121,7 @@ export async function runBulkImportJob(
     }
     progress.recordSkipped(page.skipped.length);
     progress.setTotal(collection.total);
-    await importPage(page.eligible);
+    await importPage(page.eligible); // NOSONAR: sequential by design, a page is imported before the next is fetched
   }
 
   const { succeeded, failed } = progress.finish();

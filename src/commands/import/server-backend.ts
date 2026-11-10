@@ -26,6 +26,7 @@ import {
   type CommandFailedErrorOptions,
   InvalidOptionError,
 } from '@/core/commands/command-error.ts';
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/config-constants.ts';
 import { AccessDeniedError, BadRequestError, UnexpectedApiError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
@@ -155,26 +156,37 @@ export class ServerBackend implements ImportBackend {
     if (!repository) {
       throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
     }
-    for (const { projectKey, projectName } of projects) {
-      report(projectKey, 'running');
-      try {
-        if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
-          report(projectKey, 'done', 'project already exists with matching binding');
-          continue;
-        }
-        await this.api.createBoundProject({
-          projectKey,
-          projectName,
-          devOpsPlatformSettingId: setting.id,
-          repositoryIdentifier: repository.repositoryIdentifier,
-          projectIdentifier: repository.projectIdentifier,
-          monorepo: true,
-        });
-        report(projectKey, 'done');
-      } catch (error) {
-        const failure = this.explainedImportFailure(error, setting, projectKey);
-        report(projectKey, 'failed', failure instanceof Error ? failure.message : inspect(failure));
+    // A limit of one keeps the bindings strictly in the order given, one request at a time.
+    await runWithConcurrencyLimit(projects, 1, (project) =>
+      this.bindMonorepoProject(setting, repository, project, report),
+    );
+  }
+
+  /** Binds one project to `repository`; a failure is reported, never thrown. */
+  private async bindMonorepoProject(
+    setting: DopSetting,
+    repository: ServerRepository,
+    { projectKey, projectName }: MonorepoProject,
+    report: MonorepoProgressReporter,
+  ): Promise<void> {
+    report(projectKey, 'running');
+    try {
+      if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
+        report(projectKey, 'done', 'project already exists with matching binding');
+        return;
       }
+      await this.api.createBoundProject({
+        projectKey,
+        projectName,
+        devOpsPlatformSettingId: setting.id,
+        repositoryIdentifier: repository.repositoryIdentifier,
+        projectIdentifier: repository.projectIdentifier,
+        monorepo: true,
+      });
+      report(projectKey, 'done');
+    } catch (error) {
+      const failure = this.explainedImportFailure(error, setting, projectKey);
+      report(projectKey, 'failed', failure instanceof Error ? failure.message : inspect(failure));
     }
   }
 

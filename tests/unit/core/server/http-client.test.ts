@@ -173,7 +173,7 @@ describe('SonarHttpClient', () => {
         json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
         text: () => Promise.resolve(''),
       } as unknown as Response);
-      const result = await client.get<void>('/api/alm_integration/check_pat');
+      const result = await client.get<undefined>('/api/alm_integration/check_pat');
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap()).toBeUndefined();
     });

@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { inspect } from 'node:util';
+
 import {
   ConfirmPrompt,
   getColumns,
@@ -610,7 +612,7 @@ export class TerminalConsole implements Console {
             })
             .catch((err: unknown) => {
               // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
-              loadMoreError = err instanceof Error ? err.message : String(err);
+              loadMoreError = err instanceof Error ? err.message : inspect(err);
             })
             .finally(() => {
               loadingMore = false;
