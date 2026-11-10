@@ -27,7 +27,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
@@ -37,9 +36,9 @@ import { isTelemetryEnabled } from './enabled.ts';
 const CACHE_FILENAME = 'project-uuid-cache.json';
 
 /**
- * Transport-level budget for each project's resolution, passed to
- * `ComponentsClient.getComponentId()`. Deliberately far below the default GET timeout (30s):
- * this runs in the `postAction` hook, after the command has already printed its result, so a
+ * Transport-level budget for a whole batch of resolutions: every lookup starts at once with it,
+ * passed to `ComponentsClient.getComponentId()`. Deliberately far below the default GET timeout
+ * (30s): this runs in the `postAction` hook, after the command has already printed its result, so a
  * slow server would otherwise look like the CLI hanging at exit (worst for
  * `hook git-pre-commit`, where it would stall a commit). Enforced via the fetch's own
  * `AbortSignal` rather than a `Promise.race`: racing only caps what we *await*, and an open
@@ -47,8 +46,6 @@ const CACHE_FILENAME = 'project-uuid-cache.json';
  * project; every later run hits the permanent disk cache.
  */
 const RESOLVE_BUDGET_MS = 3_000;
-
-const RESOLVE_CONCURRENCY = 8;
 
 /**
  * The cache file is user-writable JSON, so entry *values* are as untrusted as the envelope:
@@ -143,12 +140,12 @@ export async function resolveProjectUuids(
     const missingIndices = uuids.flatMap((uuid, index) => (uuid === undefined ? [index] : []));
     if (missingIndices.length === 0) return uuids.map((uuid) => uuid ?? null);
 
-    const fetched = await runWithConcurrencyLimit(missingIndices, RESOLVE_CONCURRENCY, (index) =>
-      fetchProjectUuid(projects[index]),
+    const fetched = await Promise.all(
+      missingIndices.map((index) => fetchProjectUuid(projects[index])),
     );
     let cacheChanged = false;
-    for (const { item: index, value } of fetched) {
-      const uuid = value ?? null;
+    for (const [position, uuid] of fetched.entries()) {
+      const index = missingIndices[position];
       uuids[index] = uuid;
       // Only a resolved id is cached. `Ok(null)` is a 404: the project doesn't exist *yet*, and
       // a later analysis commonly provisions it. So it retries on the next command instead of

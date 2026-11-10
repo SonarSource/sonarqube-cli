@@ -32,6 +32,8 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
+import { ResultAsync } from '@/core/result.ts';
+import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import {
@@ -430,6 +432,33 @@ describe('noteProject() / resolveTelemetryTargetProjects()', () => {
     expect(await resolveProjectUuid(auth(), 'proj-batch-b')).toBe('AV-batch-b');
     expect(getSafeSpy).toHaveBeenCalledTimes(2);
 
+    getSafeSpy.mockRestore();
+  });
+
+  it('starts every lookup at once with the same budget, however many projects', async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const getSafeSpy = spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(<TValue>() =>
+      ResultAsync.fromSafePromise(
+        released.then(() => ({
+          response: { ok: true, status: 200 } as Response,
+          value: {} as TValue,
+        })),
+      ),
+    );
+    const keys = Array.from({ length: 12 }, (_, index) => `proj-concurrent-${index}`);
+    for (const key of keys) noteProject(auth(), key);
+
+    const resolving = resolveTelemetryTargetProjects();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getSafeSpy).toHaveBeenCalledTimes(keys.length);
+    expect(new Set(getSafeSpy.mock.calls.map((call) => call[2]))).toEqual(new Set([3_000]));
+
+    release();
+    await resolving;
     getSafeSpy.mockRestore();
   });
 
