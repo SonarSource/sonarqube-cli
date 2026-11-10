@@ -136,6 +136,13 @@ describe('Architecture API compatibility diagnostics', () => {
         const result = await harness.run(
           `arch ${target} get -p shop --format json${target === 'current' ? ' --language java' : ''}`,
         );
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain('sonar update');
         expect(result.stderr).toContain('Architecture API');
@@ -180,6 +187,13 @@ describe('Architecture API compatibility diagnostics', () => {
         const result = await harness.run(
           `arch ${target} get -p shop --format json${target === 'current' ? ' --language java' : ''}`,
         );
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain(COMPATIBILITY);
         expect(result.stderr).toContain('sonar update');
@@ -223,6 +237,13 @@ describe('Architecture API compatibility diagnostics', () => {
           cloud ? 'my-org' : undefined,
         );
         const result = await harness.run('arch directives get -p shop --format json');
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
         if (compatibleShape) {
           expect(result.stderr).not.toContain(COMPATIBILITY);
@@ -250,10 +271,16 @@ describe('Architecture API compatibility diagnostics', () => {
       const result = await harness.run(
         'arch directives get -p shop --id 11111111-1111-4111-8111-111111111111 --format json',
       );
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('was not found or is not accessible');
-      if (cloud) expect(result.stderr).not.toContain('Server build');
-      else expect(result.stderr).toContain('Server build');
+      expect(result.stderr).not.toContain('Server build');
       expect(
         server
           .getRecordedRequests()
@@ -281,6 +308,13 @@ describe('Architecture API compatibility diagnostics', () => {
         const result = await harness.run(
           `arch ${target} get -p shop --format json${target === 'current' ? ' --language java' : ''}`,
         );
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(0);
         expect(JSON.parse(result.stdout)).toBeDefined();
         expect(result.stderr + result.stdout).not.toContain(COMPATIBILITY);
@@ -326,6 +360,13 @@ describe('Architecture API compatibility diagnostics', () => {
         }),
       );
       const result = await harness.run('arch intended set -p shop --file model.json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain(COMPATIBILITY);
       expect(result.stderr).toContain('sonar update');
@@ -366,11 +407,17 @@ describe('Architecture API compatibility diagnostics', () => {
           cloud ? 'my-org' : undefined,
         );
         const result = await harness.run('arch current get -p shop --language java --format json');
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
-        if (status === 404 || (cloud && status === 403))
-          expect(result.stderr).toContain(COMPATIBILITY);
+        if (status === 404 || status === 403) expect(result.stderr).toContain(COMPATIBILITY);
         else expect(result.stderr).not.toContain(COMPATIBILITY);
-        if (cloud && status === 403) {
+        if (status === 403) {
           expect(result.stderr).toContain('sonar update');
           expect(result.stderr).toContain('permission');
         } else if (status !== 404) expect(result.stderr).not.toContain('sonar update');
