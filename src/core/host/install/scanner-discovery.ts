@@ -36,6 +36,7 @@ export interface ScannerInstallation {
 
 const PROBE_TIMEOUT_MS = 30000;
 const MIN_SCANNER_MAJOR_VERSION = 6;
+const MIN_ENGINE_JAVA_MAJOR_VERSION = 17;
 const UNICODE_ESCAPE_LENGTH = 5;
 const JAR_EXTENSION_LENGTH = '.jar'.length;
 const PROBE_ENV: NodeJS.ProcessEnv = {
@@ -77,9 +78,31 @@ export async function verifyScanner(scanner: ScannerInstallation): Promise<void>
     PROBE_TIMEOUT_MS,
     'SonarScanner installation verification timed out.',
   );
-  if (result.exitCode !== 0 || scannerVersion(result.stdout + result.stderr) !== scanner.version) {
+  const output = result.stdout + result.stderr;
+  if (result.exitCode !== 0 || scannerVersion(output) !== scanner.version) {
     throw new CommandFailedError('SonarScanner installation verification failed.');
   }
+  if ((await javaMajorVersion(scanner.javaPath)) < MIN_ENGINE_JAVA_MAJOR_VERSION) {
+    throw new CommandFailedError(
+      'SonarScanner requires Java 17 or later to run the analysis engine.',
+    );
+  }
+}
+
+/** The scanner banner does not name its Java runtime (8.3 on macOS), so the runtime is asked directly. */
+async function javaMajorVersion(javaPath: string): Promise<number> {
+  const result = await spawnProcessWithTimeout(
+    javaPath,
+    ['-XshowSettings:properties', '-version'],
+    { env: PROBE_ENV },
+    PROBE_TIMEOUT_MS,
+    'Java runtime verification timed out.',
+  );
+  // Java 8 reports "1.8", later releases the bare major version.
+  const major = /java\.specification\.version = (?:1\.)?(\d+)/.exec(
+    result.stdout + result.stderr,
+  )?.[1];
+  return result.exitCode === 0 && major ? Number(major) : 0;
 }
 
 function decodeJavaProperty(value: string | undefined): string {
