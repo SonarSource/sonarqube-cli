@@ -36,6 +36,16 @@ export async function resolveProject(
     const version = await fetchServerVersion(ctx.auth.serverUrl).catch(() => undefined);
     if (
       version !== undefined &&
+      !isFullYearVersion(version) &&
+      Number(version.split('.')[0]) >= 20
+    ) {
+      throw new CommandFailedError(
+        `SonarQube Community Build ${version} does not include Architecture; SonarQube Server ${MIN_ARCHITECTURE_SERVER_VERSION} or later is required.`,
+        { remediationHint: 'Use SonarQube Server or SonarQube Cloud for Architecture commands.' },
+      );
+    }
+    if (
+      version !== undefined &&
       (!isFullYearVersion(version) || !isAtLeast(version, MIN_ARCHITECTURE_SERVER_VERSION))
     ) {
       throw new CommandFailedError(

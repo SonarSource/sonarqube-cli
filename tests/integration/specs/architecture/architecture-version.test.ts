@@ -47,6 +47,10 @@ describe('Architecture Server version', () => {
           const result = await h.run(command);
           expect(result.exitCode).toBe(1);
           expect(result.stderr).toContain('2026.6 or later is required');
+          if (version === '26.11') {
+            expect(result.stderr).toContain('Community Build 26.11 does not include Architecture');
+            expect(result.stderr).toContain('Use SonarQube Server or SonarQube Cloud');
+          }
         }
         expect(
           server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
