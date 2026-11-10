@@ -82,12 +82,15 @@ posixOnly('verifyScanner', () => {
     return { home: root, javaPath, classPath: join(root, 'x.jar'), version: SONAR_SCANNER_VERSION };
   }
 
-  it('accepts a scanner that reports the expected version', async () => {
-    const javaPath = join(root, 'java');
-    writeFakeJava(javaPath);
+  it.each(['17.0.17', '21.0.9'])(
+    'accepts the expected scanner version on Java %s',
+    async (javaVersion) => {
+      const javaPath = join(root, 'java');
+      writeFakeJava(javaPath, SONAR_SCANNER_VERSION, 0, javaVersion);
 
-    expect(await verifyScanner(scannerWith(javaPath))).toBeUndefined();
-  });
+      expect(await verifyScanner(scannerWith(javaPath))).toBeUndefined();
+    },
+  );
 
   it('rejects a scanner that reports another version', async () => {
     const javaPath = join(root, 'java');
@@ -154,6 +157,9 @@ posixOnly('discoverSonarScanner', () => {
 
   it.each([
     ['is older than version 6', { version: '5.0.1.3006' }],
+    ['runs on Java 11', { javaVersion: '11.0.29' }],
+    ['runs on Java 16', { javaVersion: '16.0.2' }],
+    ['does not report its Java version', { javaVersion: '' }],
     ['cannot report its version', { exitCode: 1 }],
     ['reports a class path that does not exist', { jarExists: false }],
   ])('falls back to a managed install when the launcher %s', async (_reason, options) => {

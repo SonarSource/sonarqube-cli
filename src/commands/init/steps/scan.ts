@@ -44,6 +44,7 @@ import {
   type IssueBreakdown,
   readIssueBreakdown,
 } from '../scan/issue-breakdown.ts';
+import { prepareScannerEngine } from '../scan/prepare-scanner-engine.ts';
 import { runScanner, startScannerInBackground } from '../scan/run-scanner.ts';
 import { assertScannerNetworkUsable, scannerNetworkEnv } from '../scan/scanner-network.ts';
 import type { DetectDeps } from './detect.ts';
@@ -199,6 +200,7 @@ export async function runFirstScan(
     directory = newWorkDirectory(flags.detach);
     const run = {
       scanner,
+      engineJarPath: await prepareScannerEngine(deps.http, directory),
       projectRoot,
       projectKey,
       auth,
