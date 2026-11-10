@@ -20,7 +20,7 @@
 
 // Integration tests for `sonar run mcp`
 
-import { chmodSync } from 'node:fs';
+import { chmodSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -28,9 +28,26 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
+import { spawnCliProcess } from '../../harness/cli-runner.ts';
 
 const EXECUTABLE_MODE = 0o755;
 const PATH_SEP = IS_WINDOWS ? ';' : ':';
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('Timed out waiting for the runtime fixture.');
+    await Bun.sleep(20);
+  }
+}
+
+function killFixture(pid: number): void {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Teardown must also handle a fixture that already exited.
+  }
+}
 
 describe('run mcp', () => {
   let harness: TestHarness;
@@ -42,6 +59,152 @@ describe('run mcp', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  describe.skipIf(IS_WINDOWS)('interruption cleanup', () => {
+    it.each([
+      { signal: 'SIGHUP', code: 129, ignore: false },
+      { signal: 'SIGINT', code: 130, ignore: false },
+      { signal: 'SIGTERM', code: 143, ignore: false },
+      { signal: 'SIGTERM', code: 143, ignore: true },
+    ] as const)(
+      'cleans up on $signal with ignore=$ignore',
+      async ({ signal, code, ignore }) => {
+        const server = await harness.newFakeServer().withAuthToken('fixture-token').start();
+        harness.withAuth(server.baseUrl(), 'fixture-token');
+        const binary = harness.cwd.file('fake-bin', 'docker').path;
+        const compilation = Bun.spawnSync([
+          process.execPath,
+          'build',
+          '--compile',
+          join(import.meta.dir, 'fixtures/persistent-runtime.ts'),
+          '--outfile',
+          binary,
+        ]);
+        expect(compilation.exitCode).toBe(0);
+        const record = harness.cwd.file('runtime.json');
+        const forwarded = harness.cwd.file('runtime.json.signal');
+        const { proc } = spawnCliProcess(
+          'run mcp --debug',
+          harness.env({
+            extraEnv: {
+              PATH: `${harness.cwd.dir('fake-bin').path}${PATH_SEP}${process.env.PATH ?? ''}`,
+              SONAR_HTTPS_PROXY_URL: 'http://fixture-user:fixture-password@proxy.example.test',
+              SONAR_NO_PROXY: '*',
+              MCP_TEST_RECORD: record.path,
+              MCP_TEST_IGNORE_SIGNAL: ignore ? '1' : '0',
+            },
+          }),
+          { cwd: harness.cwd.path, stdin: 'pipe' },
+        );
+        const output = Promise.all([
+          new Response(proc.stdout).text(),
+          new Response(proc.stderr).text(),
+        ]);
+        let outputComplete = false;
+        void output.then(() => {
+          outputComplete = true;
+        });
+        let exitCode: number | undefined;
+        void proc.exited.then((value) => {
+          exitCode = value;
+        });
+        let captured: { pid: number; parentPid: number; path: string; ready: boolean } | undefined;
+        try {
+          await waitUntil(() => record.exists());
+          captured = record.asJson() as NonNullable<typeof captured>;
+          expect(captured.ready).toBe(true);
+          expect(captured.pid).toBeGreaterThan(0);
+          expect(captured.parentPid).toBeGreaterThan(0);
+          expect(captured.parentPid).not.toBe(process.pid);
+          expect(existsSync(captured.path)).toBe(true);
+          const { pid, path } = captured;
+          process.kill(captured.parentPid, signal);
+          await waitUntil(() => exitCode !== undefined && !existsSync(path));
+          expect(exitCode).toBe(code);
+          await waitUntil(() => forwarded.exists());
+          expect(forwarded.asText()).toBe(signal);
+          if (ignore) expect(() => process.kill(pid, 0)).not.toThrow();
+        } finally {
+          captured ??= record.exists()
+            ? (record.asJson() as NonNullable<typeof captured>)
+            : undefined;
+          if (captured) {
+            killFixture(captured.pid);
+            killFixture(captured.parentPid);
+          }
+          proc.kill();
+          await waitUntil(() => exitCode !== undefined && outputComplete);
+          const text = (await output).join('');
+          for (const value of ['fixture-user', 'fixture-password'])
+            expect(text).not.toContain(value);
+        }
+      },
+      { timeout: 15000 },
+    );
+  });
+
+  it.each([0, 23])(
+    'keeps JVM credentials private and cleans its file after exit %s',
+    async (exitCode) => {
+      const server = await harness.newFakeServer().withAuthToken('fixture-token').start();
+      harness.withAuth(server.baseUrl(), 'fixture-token');
+      const source = harness.cwd.file('runtime.ts').path;
+      const binary = harness.cwd.file('fake-bin', IS_WINDOWS ? 'docker.exe' : 'docker').path;
+      const record = harness.cwd.file('runtime.json');
+      harness.cwd.writeFile(
+        'runtime.ts',
+        `
+      import { readFileSync, statSync, writeFileSync } from 'node:fs';
+      import { dirname } from 'node:path';
+      if (process.argv[2] === 'info') process.exit(0);
+      const suffix = ':/etc/ssl/mcp/jvm-secrets.args:ro';
+      const mount = process.argv.find(arg => arg.endsWith(suffix));
+      const path = mount?.slice(0, -suffix.length);
+      const text = path ? readFileSync(path, 'utf8') : '';
+      writeFileSync(${JSON.stringify(record.path)}, JSON.stringify({path, matched: text.includes('-Dhttps.proxyUser=fixture-user') && text.includes('-Dhttps.proxyPassword=fixture-password'), fileMode: path ? statSync(path).mode & 511 : 0, directoryMode: path ? statSync(dirname(path)).mode & 511 : 0, javaOpts: process.env.JAVA_OPTS, args: process.argv}));
+      process.exit(${exitCode});
+    `,
+      );
+      const compilation = Bun.spawnSync([
+        process.execPath,
+        'build',
+        '--compile',
+        source,
+        '--outfile',
+        binary,
+      ]);
+      expect(compilation.exitCode).toBe(0);
+      const result = await harness.run('run mcp --debug', {
+        extraEnv: {
+          PATH: `${harness.cwd.dir('fake-bin').path}${PATH_SEP}${process.env.PATH ?? ''}`,
+          SONAR_HTTPS_PROXY_URL: 'http://fixture-user:fixture-password@proxy.example.test',
+          SONAR_NO_PROXY: '*',
+        },
+      });
+      expect(result.exitCode).toBe(exitCode);
+      const captured = record.asJson() as {
+        path: string;
+        matched: boolean;
+        fileMode: number;
+        directoryMode: number;
+        javaOpts: string;
+        args: string[];
+      };
+      expect(captured.matched).toBe(true);
+      expect(captured.javaOpts).toContain('@/etc/ssl/mcp/jvm-secrets.args');
+      expect(existsSync(captured.path)).toBe(false);
+      if (!IS_WINDOWS) {
+        expect(captured.fileMode).toBe(0o644);
+        expect(captured.directoryMode).toBe(0o700);
+      }
+      for (const value of ['fixture-user', 'fixture-password']) {
+        expect(
+          captured.args.join(' ') + captured.javaOpts + result.stdout + result.stderr,
+        ).not.toContain(value);
+      }
+    },
+    { timeout: 15000 },
+  );
 
   /**
    * Writes a platform-appropriate fake docker binary that:
