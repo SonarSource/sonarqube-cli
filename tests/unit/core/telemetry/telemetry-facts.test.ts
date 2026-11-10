@@ -106,6 +106,22 @@ describe('commitTelemetryFacts', () => {
     });
   });
 
+  it('forwards a null fact auth instead of the invocation auth', async () => {
+    const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
+    const invocationAuth = new ResolvedAuth({
+      connectionType: 'cloud',
+      source: 'state' as const,
+      serverUrl: 'https://sonarcloud.io',
+      token: 'test-token',
+      orgKey: 'my-org',
+    });
+    const executed = new TelemetryFact('CliCommandExecuted', {}, { auth: null });
+
+    await commitTelemetryFacts([executed], { auth: invocationAuth });
+
+    expect(emitSpy.mock.calls[0][2]).toMatchObject({ auth: null });
+  });
+
   it('swallows emit failures', async () => {
     const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockRejectedValue(
       new Error('boom'),
