@@ -27,6 +27,7 @@ import {
   normalizeServerUrl,
   saveToken,
 } from '@/core/host/keychain.ts';
+import { shellQuote } from '@/core/host/shell-quote.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import type { AuthConnection } from '@/core/state/state.ts';
 import { addOrUpdateConnection, getActiveConnection } from '@/core/state/state-manager.ts';
@@ -44,6 +45,55 @@ interface PersistLoginOptions {
   console?: Console;
 }
 
+// Keychain accounts are shared by every connection on the same hostname.
+export function httpsTokenDowngradeTarget(
+  connections: ReadonlyArray<{ serverUrl: string }>,
+  requestedServer: string,
+): string | undefined {
+  let requested: URL;
+  try {
+    requested = new URL(requestedServer);
+  } catch {
+    return undefined;
+  }
+  if (requested.protocol !== 'http:') {
+    return undefined;
+  }
+  for (const connection of connections) {
+    try {
+      const existing = new URL(connection.serverUrl);
+      if (existing.protocol === 'https:' && existing.hostname === requested.hostname) {
+        return connection.serverUrl;
+      }
+    } catch {
+      // A stored URL that does not parse cannot be the HTTPS connection being downgraded.
+    }
+  }
+  return undefined;
+}
+
+export function assertNoCleartextTokenDowngrade(requestedServer: string): void {
+  let requested: URL;
+  try {
+    requested = new URL(requestedServer);
+  } catch {
+    return;
+  }
+  if (requested.protocol !== 'http:') {
+    return;
+  }
+  const savedHttpsUrl = httpsTokenDowngradeTarget(loadState().auth.connections, requestedServer);
+  if (savedHttpsUrl === undefined) {
+    return;
+  }
+  throw new CommandFailedError(
+    `Cannot connect to ${normalizeServerUrl(requestedServer)} while an HTTPS connection for this hostname is saved.`,
+    {
+      remediationHint: `Run sonar auth logout --server ${shellQuote(normalizeServerUrl(savedHttpsUrl))} to clear all saved connections for this hostname before signing in to the HTTP server.`,
+    },
+  );
+}
+
 export async function persistLoginCredentials(
   server: string,
   isCloud: boolean,
@@ -51,6 +101,7 @@ export async function persistLoginCredentials(
   token: string,
   options: PersistLoginOptions = {},
 ): Promise<void> {
+  assertNoCleartextTokenDowngrade(server);
   const state = loadState();
   await revokePreviousLoginToken(getActiveConnection(state), server, token, options);
 
