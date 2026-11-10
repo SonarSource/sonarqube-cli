@@ -34,7 +34,7 @@ export const OPENCODE_SECRETS_PLUGIN_CONTENT = String.raw`${OPENCODE_PLUGIN_MANA
 ${OPENCODE_PLUGIN_HELPERS_CONTENT}
 const HOOK_TIMEOUT_MS = 60000;
 const BYPASS_WARNING =
-  'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action.';
+  'Do not attempt to access this file another way (e.g. via bash) — inform the user of the block and ask before taking any other action. Scan only specific files with sonar analyze secrets <files>. Do not scan whole trees with . or a repository-root path.';
 
 const SECRETS_NOTICE_REDACTED = ${JSON.stringify(SECRETS_NOTICE_REDACTED)};
 const SECRETS_NOTICE_BLOCKED_TEMPLATE = ${JSON.stringify(SECRETS_NOTICE_BLOCKED_TEMPLATE)};

@@ -30,13 +30,14 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   analyzeSecrets,
+  type AnalyzeSecretsOptions,
   runSecretsBinaryOnStream,
   runSecretsBinaryOnText,
 } from '@/commands/analyze/secrets.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { MAX_SCANNED_FILE_SIZE } from '@/core/config-constants.ts';
+import { MAX_SCANNED_FILE_SIZE, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import * as installSecrets from '@/core/host/install/secrets.ts';
 import * as processLib from '@/core/process/process.ts';
 import * as secretsScanSettings from '@/core/secrets/scan-settings.ts';
@@ -448,25 +449,52 @@ describe('secretCheckCommand: scan failures', () => {
 // ─── Error handling paths (handleScanError) ───────────────────────────────────
 
 describe('secretCheckCommand: scan error handling', () => {
-  it('shows timeout hint and exits 1 when scan times out', async () => {
-    spawnSpy.mockRejectedValue(new Error('Scan timed out after 60000ms'));
+  const timeoutCases: { name: string; options: AnalyzeSecretsOptions; hint: string }[] = [
+    {
+      name: 'paths',
+      options: { paths: ['src/index.ts'] },
+      hint: "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. For a directory scan, use '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards). This replaces 'secrets.exclude'; repeat any configured paths you still need to exclude.",
+    },
+    {
+      name: 'analyze telemetry caller without invokedBy',
+      options: { paths: ['src/index.ts'], telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
+      hint: "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. For a directory scan, use '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards). This replaces 'secrets.exclude'; repeat any configured paths you still need to exclude.",
+    },
+    {
+      name: 'stdin',
+      options: { stdin: true },
+      hint: "Retry with less input, or scan specific files with 'sonar analyze secrets <file1> <file2>'.",
+    },
+    {
+      name: 'bare analyze',
+      options: { paths: ['src/index.ts'], invokedBy: 'analyze' },
+      hint: "Narrow the change set with 'sonar analyze --staged' or 'sonar analyze --file <path>', or scan specific files with 'sonar analyze secrets <file1> <file2>'.",
+    },
+  ];
 
-    const existsSpy = mockBinaryExists(true);
-    let caughtError: unknown;
-    try {
-      await analyzeSecrets({ paths: ['src/index.ts'] }, FAKE_AUTHENTICATED_CONTEXT);
-    } catch (err) {
-      caughtError = err;
-    } finally {
-      existsSpy.mockRestore();
-    }
+  it.each(timeoutCases)(
+    'shows the applicable timeout hint and exits 1 for $name',
+    async ({ options, hint }) => {
+      spawnSpy.mockRejectedValue(new Error('Scan timed out after 30000ms'));
 
-    expect(caughtError).toBeInstanceOf(CommandFailedError);
-    expect((caughtError as CommandFailedError).message).toBe('Error: Scan timed out after 60000ms');
-    expect((caughtError as CommandFailedError).remediationHint).toBe(
-      'Try scanning a smaller file or check system resources.',
-    );
-  });
+      const existsSpy = mockBinaryExists(true);
+      let caughtError: unknown;
+      try {
+        await analyzeSecrets(options, FAKE_AUTHENTICATED_CONTEXT);
+      } catch (err) {
+        caughtError = err;
+      } finally {
+        existsSpy.mockRestore();
+      }
+
+      expect(caughtError).toBeInstanceOf(CommandFailedError);
+      expect((caughtError as CommandFailedError).message).toBe(
+        'Error: Scan timed out after 30000ms',
+      );
+      expect((caughtError as CommandFailedError).exitCode).toBe(1);
+      expect((caughtError as CommandFailedError).remediationHint).toBe(hint);
+    },
+  );
 
   it('shows reinstall hint and exits 1 when binary is not executable (ENOENT)', async () => {
     spawnSpy.mockRejectedValue(new Error('spawn ENOENT: no such file or directory'));
