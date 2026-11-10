@@ -18,12 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { inspect } from 'node:util';
+
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import {
   CommandFailedError,
   type CommandFailedErrorOptions,
   InvalidOptionError,
 } from '@/core/commands/command-error.ts';
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/config-constants.ts';
 import { AccessDeniedError, BadRequestError, UnexpectedApiError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
@@ -31,7 +34,14 @@ import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
-import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-backend.ts';
+import {
+  type ImportBackend,
+  type ImportPlan,
+  type ImportRepoOutcome,
+  type MonorepoProgressReporter,
+  projectOverviewUrl,
+} from './import-backend.ts';
+import type { MonorepoProject } from './monorepo-projects.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
 import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
 import { guardAzureSignIn } from './server/azure-sign-in.ts';
@@ -126,9 +136,58 @@ export class ServerBackend implements ImportBackend {
         label: 'Dashboard',
         url: `${this.serverUrl.replace(/\/$/, '')}/admin/project-coverage`,
       },
+      projectUrl: (projectKey) => projectOverviewUrl(this.serverUrl, projectKey),
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
       importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
+      importMonorepo: (resolved, projects, report) =>
+        this.importMonorepoProjects(setting, repositories, resolved, projects, report),
     };
+  }
+
+  /** One `bound-projects` call per project, in the order given; a failure does not stop the others. */
+  private async importMonorepoProjects(
+    setting: DopSetting,
+    repositories: Map<string, ServerRepository>,
+    resolved: ResolvedRepo,
+    projects: MonorepoProject[],
+    report: MonorepoProgressReporter,
+  ): Promise<void> {
+    const repository = repositories.get(resolved.installationKey);
+    if (!repository) {
+      throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
+    }
+    // A limit of one keeps the bindings strictly in the order given, one request at a time.
+    await runWithConcurrencyLimit(projects, 1, (project) =>
+      this.bindMonorepoProject(setting, repository, project, report),
+    );
+  }
+
+  /** Binds one project to `repository`; a failure is reported, never thrown. */
+  private async bindMonorepoProject(
+    setting: DopSetting,
+    repository: ServerRepository,
+    { projectKey, projectName }: MonorepoProject,
+    report: MonorepoProgressReporter,
+  ): Promise<void> {
+    report(projectKey, 'running');
+    try {
+      if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
+        report(projectKey, 'done', 'project already exists with matching binding');
+        return;
+      }
+      await this.api.createBoundProject({
+        projectKey,
+        projectName,
+        devOpsPlatformSettingId: setting.id,
+        repositoryIdentifier: repository.repositoryIdentifier,
+        projectIdentifier: repository.projectIdentifier,
+        monorepo: true,
+      });
+      report(projectKey, 'done');
+    } catch (error) {
+      const failure = this.explainedImportFailure(error, setting, projectKey);
+      report(projectKey, 'failed', failure instanceof Error ? failure.message : inspect(failure));
+    }
   }
 
   private async importRepository(

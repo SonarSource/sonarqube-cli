@@ -116,6 +116,31 @@ export const EXAMPLES: Record<string, Example[]> = {
       description: 'Non-interactive: install a pre-push secrets hook globally for all repositories',
     },
   ],
+  'sonar import': [
+    {
+      command: 'sonar import --repo my-org/my-repo',
+      description: 'Import one repository as a single project',
+    },
+    {
+      command:
+        'sonar import --monorepo my-org/my-repo --project myorg_mymonorepo_api=API --project myorg_mymonorepo_web="Web app"',
+      description: 'Bind several projects to one monorepo repository, naming each project',
+    },
+    {
+      command:
+        'sonar import --monorepo my-org/my-repo --project myorg_mymonorepo_api=API,myorg_mymonorepo_web=Web',
+      description: 'Same, with the projects given as one comma-separated list',
+    },
+    {
+      command:
+        'echo \'[{"projectKey":"myorg_mymonorepo_api","projectName":"API"},{"projectKey":"myorg_mymonorepo_web","projectName":"Web app"}]\' > projects.json',
+      description: 'Write a projects file (same JSON format as the web UI import)',
+    },
+    {
+      command: 'sonar import --monorepo my-org/my-repo --projects-file projects.json',
+      description: 'Bind every project listed in the file to one monorepo repository',
+    },
+  ],
   'sonar list issues': [
     { command: 'sonar list issues -p my-project', description: 'List issues in a project' },
     {

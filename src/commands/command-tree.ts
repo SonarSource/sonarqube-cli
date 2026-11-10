@@ -138,6 +138,7 @@ import { piChatMessage } from './hook/pi-chat-message.ts';
 import { piPostToolUse } from './hook/pi-post-tool-use.ts';
 import { piPreToolUse } from './hook/pi-pre-tool-use.ts';
 import { importHandler, type ImportOptions } from './import';
+import { collectProjectKeyOption } from './import/monorepo-projects.ts';
 import { collectRepoOption } from './import/repo-option.ts';
 import { init, type InitOptions } from './init';
 import { supportedIntegrations } from './integrate';
@@ -475,6 +476,27 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option(
       '--dop-setting <key>',
       'SonarQube Server only: key of the DevOps platform setting to import from. Required when several are configured and prompts are off.',
+    )
+    .option(
+      '--monorepo <slug>',
+      'Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects-file. The repository must not be imported yet. Cannot be combined with --repo, --all or --regex.',
+    )
+    .option(
+      '--project <key[=name]>',
+      'With --monorepo: the key of a project to create, optionally followed by =<display name> (defaults to the key). Repeatable and comma-separated (e.g. api=API,web=Web).',
+      collectProjectKeyOption,
+      [],
+    )
+    .option(
+      '--projects-file <file>',
+      'With --monorepo: path to a JSON file listing the projects to create. Can be combined with --project.\n' +
+        '\n' +
+        '                   A JSON array of objects with a "projectKey" and an optional "projectName" (defaults to the key), the same format as the web UI import. Keys must be unique across the whole organization or server; a key that is already taken fails that project.\n' +
+        '                   Example:\n' +
+        '                       [\n' +
+        '                         { "projectKey": "myorg_mymonorepo_api", "projectName": "API" },\n' +
+        '                         { "projectKey": "myorg_mymonorepo_web", "projectName": "Web app" }\n' +
+        '                       ]\n',
     )
     .option('--non-interactive', 'Skip all prompts; require explicit flags')
     .authenticatedAction((ctx, options: ImportOptions) => importHandler(options, ctx));
