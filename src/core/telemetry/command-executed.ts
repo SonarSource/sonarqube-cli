@@ -42,11 +42,12 @@ export type CommandExecutedPayload = {
 export type TargetProjectResolvedPayload = {
   command: string | undefined;
   subcommand: string | null;
-  project_uuid: string | null;
+  project_uuid: string;
 };
 
 /**
- * Build the CliCommandExecuted fact plus one CliTargetProjectResolved fact per noted target project.
+ * Build the CliCommandExecuted fact plus one CliTargetProjectResolved fact per resolved target
+ * project.
  *
  * `result` is derived from `process.exitCode` (`success` when 0 or unset). An intentional block
  * that exits non-zero (git secrets hooks, Cursor file-read denies) therefore reports `failure`;
@@ -71,13 +72,17 @@ export async function buildCommandFacts(command: SonarCommand): Promise<Telemetr
     // Several target projects cannot be attributed to one server, so the command event carries none.
     targetProjects.length > 1 ? { auth: null } : undefined,
   );
-  const targetProjectFacts = targetProjects.map(
-    ({ auth, projectUuid }) =>
-      new TelemetryFact<TargetProjectResolvedPayload>(
-        CLI_TARGET_PROJECT_RESOLVED,
-        { command: commandName, subcommand, project_uuid: projectUuid },
-        { auth },
-      ),
+  // A target whose id did not resolve identifies no project; target_project_count still counts it.
+  const targetProjectFacts = targetProjects.flatMap(({ auth, projectUuid }) =>
+    projectUuid === null
+      ? []
+      : [
+          new TelemetryFact<TargetProjectResolvedPayload>(
+            CLI_TARGET_PROJECT_RESOLVED,
+            { command: commandName, subcommand, project_uuid: projectUuid },
+            { auth },
+          ),
+        ],
   );
   return [executed, ...targetProjectFacts];
 }
