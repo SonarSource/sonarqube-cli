@@ -29,7 +29,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { RequestPayloadTooLargeError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 
-import { fetchChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
+import { fetchPreparedChunkWith413Split } from '../../../../src/commands/analyze/sqaa-api.ts';
 import type { SqaaChunkFile } from '../../../../src/commands/analyze/sqaa-chunking.ts';
 import * as sqaaChunking from '../../../../src/commands/analyze/sqaa-chunking.ts';
 
@@ -52,7 +52,15 @@ function makeFile(relativePath: string): SqaaChunkFile {
   };
 }
 
-describe('fetchChunkWith413Split', () => {
+function request(files: SqaaChunkFile[]): SqaaAnalysisRequest {
+  return {
+    organizationKey: 'org',
+    projectKey: 'project',
+    files: files.map(({ relativePath, content }) => ({ path: relativePath, content })),
+  };
+}
+
+describe('fetchPreparedChunkWith413Split', () => {
   let createAnalysisSpy: ReturnType<typeof spyOn>;
   let previousRetryDelay: string | undefined;
 
@@ -89,11 +97,10 @@ describe('fetchChunkWith413Split', () => {
       );
     });
 
-    const result = await fetchChunkWith413Split(
+    const result = await fetchPreparedChunkWith413Split(
       CONNECTION,
-      'project',
+      request([makeFile('a.ts'), makeFile('b.ts')]),
       [makeFile('a.ts'), makeFile('b.ts')],
-      undefined,
     );
 
     expect(result.parts).toHaveLength(1);
@@ -120,11 +127,10 @@ describe('fetchChunkWith413Split', () => {
       return Promise.reject(new CommandFailedError('network down'));
     });
 
-    const result = await fetchChunkWith413Split(
+    const result = await fetchPreparedChunkWith413Split(
       CONNECTION,
-      'project',
+      request([makeFile('a.ts'), makeFile('b.ts')]),
       [makeFile('a.ts'), makeFile('b.ts')],
-      undefined,
     );
 
     expect(result.parts).toHaveLength(1);
@@ -147,11 +153,10 @@ describe('fetchChunkWith413Split', () => {
       return Promise.reject(new ServiceUnavailableError());
     });
 
-    const err = await fetchChunkWith413Split(
+    const err = await fetchPreparedChunkWith413Split(
       CONNECTION,
-      'project',
+      request([makeFile('a.ts'), makeFile('b.ts')]),
       [makeFile('a.ts'), makeFile('b.ts')],
-      undefined,
     ).catch((rejected: unknown) => rejected);
 
     expect(
@@ -178,7 +183,7 @@ describe('fetchChunkWith413Split', () => {
     const files = [makeFile('a.ts'), makeFile('b.ts'), makeFile('c.ts')];
 
     try {
-      await fetchChunkWith413Split(CONNECTION, 'project', files, undefined);
+      await fetchPreparedChunkWith413Split(CONNECTION, request(files), files);
       expect(packSpy.mock.calls[0]?.[1]).toMatchObject({
         maxRequestBytes: 512_000,
         maxFilesPerRequest: 2,
@@ -198,80 +203,12 @@ describe('fetchChunkWith413Split', () => {
     );
 
     const file = makeFile('large.ts');
-    const result = await fetchChunkWith413Split(CONNECTION, 'project', [file], undefined);
+    const result = await fetchPreparedChunkWith413Split(CONNECTION, request([file]), [file]);
 
     expect(result.parts).toEqual([]);
     expect(result.groupErrors).toHaveLength(1);
     expect(result.groupErrors[0]?.files).toEqual([file]);
     expect(result.groupErrors[0]?.error.message).toContain('Request payload too large');
     expect((result.groupErrors[0]?.error as CommandFailedError).remediationHint).toContain('1 KB');
-  });
-
-  it('skips invalid paths and analyzes valid files in the same chunk', async () => {
-    createAnalysisSpy.mockResolvedValue({
-      issues: [{ rule: 'ts:S1', message: 'issue', filePath: 'a.ts' }],
-      errors: null,
-    });
-
-    const result = await fetchChunkWith413Split(
-      CONNECTION,
-      'project',
-      [makeFile('a.ts'), makeFile('src\\bad.ts')],
-      undefined,
-    );
-
-    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
-    expect(createAnalysisSpy.mock.calls[0]?.[0].files).toEqual([
-      { path: 'a.ts', content: 'const x = 1;' },
-    ]);
-    expect(result.parts).toHaveLength(1);
-    expect(result.parts[0]?.files).toEqual([makeFile('a.ts')]);
-    expect(result.groupErrors).toHaveLength(1);
-    expect(result.groupErrors[0]?.files).toEqual([makeFile('src\\bad.ts')]);
-    expect(result.groupErrors[0]?.error.message).toMatch(/forward slashes/);
-  });
-
-  it('does not call the API when every file path fails pre-flight validation', async () => {
-    const file = makeFile('/absolute/large.ts');
-
-    const result = await fetchChunkWith413Split(CONNECTION, 'project', [file], undefined);
-
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
-    expect(result.parts).toEqual([]);
-    expect(result.groupErrors).toHaveLength(1);
-    expect(result.groupErrors[0]?.error.message).toMatch(/project-relative/);
-  });
-
-  it('rejects every invalid path in a chunk without calling the API', async () => {
-    const a = makeFile('a\\.ts');
-    const b = makeFile('b\\.ts');
-    const result = await fetchChunkWith413Split(CONNECTION, 'project', [a, b], undefined);
-
-    expect(createAnalysisSpy).not.toHaveBeenCalled();
-    expect(result.parts).toEqual([]);
-    expect(result.groupErrors).toHaveLength(2);
-    expect(result.groupErrors[0]?.files).toEqual([a]);
-    expect(result.groupErrors[1]?.files).toEqual([b]);
-    expect(result.groupErrors[0]?.error.message).toMatch(/forward slashes/);
-    expect(result.groupErrors[1]?.error.message).toMatch(/forward slashes/);
-  });
-
-  it('does not double-count duplicate paths in parts and groupErrors', async () => {
-    createAnalysisSpy.mockResolvedValue({
-      issues: [],
-      errors: null,
-    });
-
-    const first = makeFile('dup.ts');
-    const second = makeFile('dup.ts');
-    const result = await fetchChunkWith413Split(CONNECTION, 'project', [first, second], undefined);
-
-    expect(createAnalysisSpy).toHaveBeenCalledTimes(1);
-    expect(createAnalysisSpy.mock.calls[0]?.[0].files).toHaveLength(1);
-    expect(result.parts).toHaveLength(1);
-    expect(result.parts[0]?.files).toEqual([first]);
-    expect(result.groupErrors).toHaveLength(1);
-    expect(result.groupErrors[0]?.files).toEqual([second]);
-    expect(result.groupErrors[0]?.error.message).toMatch(/Duplicate file path/);
   });
 });
