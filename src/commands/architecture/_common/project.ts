@@ -27,6 +27,7 @@ import {
 import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
 
 const MIN_ARCHITECTURE_SERVER_VERSION = '2026.6';
+const MIN_COMMUNITY_BUILD_YEAR = 20;
 
 export async function resolveProject(
   options: { project?: string },
@@ -37,7 +38,7 @@ export async function resolveProject(
     if (
       version !== undefined &&
       !isFullYearVersion(version) &&
-      Number(version.split('.')[0]) >= 20
+      Number(version.split('.')[0]) >= MIN_COMMUNITY_BUILD_YEAR
     ) {
       throw new CommandFailedError(
         `SonarQube Community Build ${version} does not include Architecture; SonarQube Server ${MIN_ARCHITECTURE_SERVER_VERSION} or later is required.`,
