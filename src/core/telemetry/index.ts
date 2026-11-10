@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { disableHandleInheritance } from '@/core/host/windows-handle-inheritance.ts';
 
@@ -53,7 +54,7 @@ export async function commitTelemetryFacts(
       await emitTelemetryEvent(fact.name, fact.payload as object, {
         eventTimestampMs: fact.timestamp,
         agentSessionId: options?.agentSessionId,
-        auth: fact.auth ?? options?.auth,
+        auth: resolveFactAuth(fact, options?.auth),
       });
     } catch {
       // Telemetry is strictly fire-and-forget.
@@ -61,6 +62,15 @@ export async function commitTelemetryFacts(
   }
 
   scheduleTelemetryFlush(options?.command);
+}
+
+/** A fact's `null` auth means no server identity, so only `undefined` falls back. */
+function resolveFactAuth(
+  fact: TelemetryFact,
+  fallback: ResolvedAuth | null | undefined,
+): ResolvedAuth | null | undefined {
+  if (fact.auth !== undefined) return fact.auth;
+  return fallback;
 }
 
 /**
