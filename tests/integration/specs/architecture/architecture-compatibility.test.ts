@@ -280,8 +280,7 @@ describe('Architecture API compatibility diagnostics', () => {
       }
       expect(result.exitCode).toBe(1);
       expect(result.stderr).toContain('was not found or is not accessible');
-      if (cloud) expect(result.stderr).not.toContain('Server build');
-      else expect(result.stderr).toContain('Server build');
+      expect(result.stderr).not.toContain('Server build');
       expect(
         server
           .getRecordedRequests()
@@ -416,10 +415,9 @@ describe('Architecture API compatibility diagnostics', () => {
           return;
         }
         expect(result.exitCode).toBe(1);
-        if (status === 404 || (cloud && status === 403))
-          expect(result.stderr).toContain(COMPATIBILITY);
+        if (status === 404 || status === 403) expect(result.stderr).toContain(COMPATIBILITY);
         else expect(result.stderr).not.toContain(COMPATIBILITY);
-        if (cloud && status === 403) {
+        if (status === 403) {
           expect(result.stderr).toContain('sonar update');
           expect(result.stderr).toContain('permission');
         } else if (status !== 404) expect(result.stderr).not.toContain('sonar update');

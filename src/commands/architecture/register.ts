@@ -74,7 +74,8 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
   const architecture = parent
     .command('architecture')
     .alias('arch')
-    .description('Read and set the architecture of a project (SonarQube Cloud only)')
+    .description('Read and set the architecture of a project')
+    .addHelpText('after', '\n(SonarQube Cloud only)')
     .rootHelp({ category: 'data', label: 'architecture|arch <command>' });
 
   const currentArchitecture = architecture

@@ -166,17 +166,13 @@ describe('public architecture findings contract', () => {
         page: { pageIndex: 1, pageSize: 50, total: 8 },
       });
       const [request] = requests(server);
-      expect(request.path).toBe(
-        cloud ? '/architecture/project-findings' : '/api/v2/architecture/project-findings',
-      );
+      expect(request.path).toBe('/architecture/project-findings');
       expect(request.query).toMatchObject({
         branchId: 'shop-branch-id',
         pageIndex: '1',
         pageSize: '50',
       });
-      expect(request.query.organizationId).toBe(
-        cloud ? 'my-org-uuid-v4' : '00000000-0000-4000-0000-000000000000',
-      );
+      expect(request.query.organizationId).toBe('my-org-uuid-v4');
       expect(request.query.projectId).toBeUndefined();
       expect(request.query.language).toBeUndefined();
       expect(
@@ -421,8 +417,7 @@ describe('public architecture findings contract', () => {
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('public Architecture API endpoint was not found (HTTP 404)');
       expect(result.stderr).toContain('feature availability, Browse permission and API routing');
-      if (cloud) expect(result.stderr).not.toContain('older Server versions');
-      else expect(result.stderr).toContain('older Server versions');
+      expect(result.stderr).not.toContain('older Server versions');
       expect(requests(server)).toHaveLength(1);
     });
   }
