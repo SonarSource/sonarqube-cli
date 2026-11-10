@@ -131,6 +131,13 @@ describe('public architecture findings contract', () => {
         const server = await (cloud ? builder.asSonarCloud() : builder).start();
         h.withAuth(server.recordedAuthServerUrl(), 'findings-token', cloud ? 'my-org' : undefined);
         const result = await h.run('arch findings get -p shop --format text');
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
         expect(result.stderr).toContain("Project 'shop' has no analyzed main branch.");
         expect(result.stderr).toContain('Run an analysis of the main branch first.');
@@ -145,6 +152,13 @@ describe('public architecture findings contract', () => {
     async (cloud) => {
       const server = await configured(cloud);
       const result = await h.run('arch findings get -p shop --format json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         project: 'shop',
@@ -357,6 +371,13 @@ describe('public architecture findings contract', () => {
         api.withStatus('project-findings', 200, '{"findings":null}', 'GET'),
       );
       const result = await h.run('arch findings get -p shop --format json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('Invalid public findings page');
@@ -369,6 +390,13 @@ describe('public architecture findings contract', () => {
         api.withStatus('project-findings', 200, '<html>Unexpected gateway page</html>', 'GET'),
       );
       const result = await h.run('arch findings get -p shop --format json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('public Architecture API returned an unreadable response');
@@ -382,6 +410,13 @@ describe('public architecture findings contract', () => {
         api.withStatus('project-findings', 404, '{"message":"Missing endpoint"}', 'GET'),
       );
       const result = await h.run('arch findings get -p shop --format json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
       expect(result.stderr).toContain('public Architecture API endpoint was not found (HTTP 404)');
@@ -496,6 +531,13 @@ describe('public architecture findings contract', () => {
         ),
       );
       const result = await h.run('arch findings get -p shop --format json');
+      if (!cloud) {
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          'The sonar architecture command requires a SonarQube Cloud connection.',
+        );
+        return;
+      }
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         project: 'shop',
@@ -543,6 +585,13 @@ describe('public architecture findings contract', () => {
           ),
         );
         const result = await h.run(`arch findings get -p shop ${filters} --format json`);
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(1);
         expect(result.stdout).toBe('');
         expect(result.stderr).toContain('outside the requested filters');
@@ -568,6 +617,13 @@ describe('public architecture findings contract', () => {
           ),
         );
         const result = await h.run(`arch findings get -p shop ${filters} --format json`);
+        if (!cloud) {
+          expect(result.exitCode).toBe(1);
+          expect(result.stderr).toContain(
+            'The sonar architecture command requires a SonarQube Cloud connection.',
+          );
+          return;
+        }
         expect(result.exitCode).toBe(0);
         expect(JSON.parse(result.stdout)).toMatchObject({
           findings: [],
