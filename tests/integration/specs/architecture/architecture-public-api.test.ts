@@ -98,6 +98,7 @@ describe('sonar architecture reads on the public API', () => {
   async function cloudServerWith(configure: (project: ProjectBuilder) => void) {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, configure)
@@ -141,6 +142,7 @@ describe('sonar architecture reads on the public API', () => {
   it('uses the shared git-remote project discovery and accepts an explicit key', async () => {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (project) =>
@@ -588,6 +590,7 @@ describe('sonar architecture reads on the public API', () => {
   it('uses public Server project lookup while current remains independent', async () => {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture((a) => a.withStructure('java', GRAPH)))
       .start();
@@ -703,6 +706,7 @@ describe('sonar architecture intended set on the public API', () => {
   async function startWith(configure: (fake: FakeArchitecture) => void) {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture(configure))
@@ -759,6 +763,7 @@ describe('sonar architecture intended set on the public API', () => {
     const original = [INTENDED[0], cs, javaFile];
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (project) =>
@@ -1033,6 +1038,7 @@ describe('sonar architecture intended set on the public API', () => {
   it('keeps lazily-created model UUIDs distinct from another project', async () => {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (project) =>
