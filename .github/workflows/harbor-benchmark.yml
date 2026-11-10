@@ -49,6 +49,16 @@ on:
           - "3"
           - "5"
           - "10"
+      cli-version:
+        description: Version of the SonarQube CLI under test, written in the release report
+        default: unknown
+      iteration:
+        description: Iteration name written in the release report, for example 26Q4-4 (optional)
+        default: ""
+      store-report:
+        description: Store the release report on the benchmark-data branch and build the dashboard
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -227,6 +237,29 @@ jobs:
         if: ${{ !cancelled() && hashFiles('report.txt') != '' }}
         run: tee -a "$GITHUB_STEP_SUMMARY" < report.txt
 
+      - name: Build the release report
+        id: release-report
+        if: ${{ !cancelled() && hashFiles('harbor-jobs/**') != '' }}
+        shell: bash
+        env:
+          CLI_VERSION: ${{ inputs.cli-version }}
+          ITERATION: ${{ inputs.iteration }}
+        run: |
+          iteration=()
+          [ -n "${ITERATION}" ] && iteration=(--iteration "${ITERATION}")
+          mkdir release-report
+          bun benchmarks/harbor/report/to-json.ts \
+            --cli-version "${CLI_VERSION}" --run-id "${GITHUB_RUN_ID}" --commit "${GITHUB_SHA}" \
+            --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${iteration[@]+"${iteration[@]}"} \
+            harbor-jobs > "release-report/${GITHUB_RUN_ID}.json"
+
+      - name: Upload the release report
+        if: ${{ !cancelled() && steps.release-report.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-report
+          path: release-report
+
       - name: Fail when a trial did not pass
         if: ${{ !cancelled() && steps.summarize.outputs.status != '0' }}
         run: exit 1
@@ -236,3 +269,56 @@ jobs:
         run: |
           echo "A benchmark job finished with: ${{ needs.benchmark.result }}"
           exit 1
+
+  store:
+    name: Store the release report
+    runs-on: sonar-xs
+    needs: report
+    if: ${{ !cancelled() && inputs.store-report }}
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: benchmark-data
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        with:
+          secrets: |
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
+            development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
+          artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+
+      - name: Download the release report
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-report
+          path: release-report
+
+      - name: Store the release report
+        env:
+          BENCHMARK_DATA_REMOTE: https://x-access-token:${{ secrets.HB_BENCHMARK_DATA_TOKEN }}@github.com/jonathan-balli-sonarsource/harbor-benchmark-data-poc.git
+        run: bash benchmarks/harbor/report/adapters/git-branch.sh push "release-report/${GITHUB_RUN_ID}.json"
+
+      - name: Build the dashboard
+        env:
+          BENCHMARK_DATA_REMOTE: https://x-access-token:${{ secrets.HB_BENCHMARK_DATA_TOKEN }}@github.com/jonathan-balli-sonarsource/harbor-benchmark-data-poc.git
+        run: |
+          bash benchmarks/harbor/report/adapters/git-branch.sh pull release-data
+          bun benchmarks/harbor/report/dashboard.ts release-data > dashboard.html
+
+      - name: Upload the dashboard
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: harbor-dashboard
+          path: dashboard.html
