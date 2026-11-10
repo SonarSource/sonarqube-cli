@@ -12,6 +12,7 @@
 - Repository imports are create-only. Treat an existing project as a no-op only after its binding matches the selected setting and repository; never upsert on creation conflicts. Report truncated discovery as incomplete rather than claiming success or not found.
 - Onboarding must not create a second project when linking an existing one cannot prompt or persist its mapping.
 - Require an explicit scan request before downloading or running an external scanner. Pin endpoints and managed settings from the active connection so repository configuration cannot redirect credentials. Keep tokens and sensitive property values out of process arguments; preserve log redaction and detached-run restrictions.
+- MCP JVM credential files must stay under the private CLI temporary directory. Cleanup must happen on failed startup, child exit, and catchable termination signals, before waiting for initialization input or forwarding a signal.
 - Organization billing setup may follow only an organization created by the current invocation. Never interpret transient subscription lookup failures as an absent subscription.
 - Architecture commands use public APIs only. Intended-model writes reject partial exports and save owner-only backups; directive batches preflight before writing and report confirmed partial results without automatic retry or rollback.
 - Prefer integration tests using the existing harness. Read [test guidance](../../tests/AGENTS.md) before adding or modifying tests.
