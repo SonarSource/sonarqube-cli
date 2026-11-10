@@ -98,7 +98,10 @@ export async function analyzeAll(
   if (rawFiles?.length) {
     const entries = resolveSqaaFileArgs(rawFiles);
     const paths = entries.map((e) => e.absolutePath);
-    await analyzeSecrets({ paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze }, ctx);
+    await analyzeSecrets(
+      { paths, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze, invokedBy: 'analyze' },
+      ctx,
+    );
     await analyzeSqaa({ file: paths, project, force, format, depth }, ctx, {
       requireProject: false,
       telemetryCallerCommand: SQAA_ANALYZE_CALLER_COMMAND,
@@ -118,7 +121,11 @@ export async function analyzeAll(
   }
 
   await analyzeSecrets(
-    { paths: changeSet.files, telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
+    {
+      paths: changeSet.files,
+      telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze,
+      invokedBy: 'analyze',
+    },
     ctx,
   );
   // analyzeSqaa resolves the change set again internally. The two resolutions may
