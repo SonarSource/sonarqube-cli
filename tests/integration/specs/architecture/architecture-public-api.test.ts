@@ -585,40 +585,28 @@ describe('sonar architecture reads on the public API', () => {
     ).toBe(true);
   });
 
-  it('uses public Server project lookup while current remains independent', async () => {
+  it('blocks Server before looking up a project or its architecture', async () => {
     const server = await harness
       .newFakeServer()
-      .withVersion('2026.6')
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture((a) => a.withStructure('java', GRAPH)))
       .start();
     harness.withAuth(server.baseUrl(), TOKEN);
-    const current = await harness.run(
-      `architecture current get --project ${PROJECT} --language java --format json`,
-    );
-    expect(current.exitCode).toBe(0);
-    expect(JSON.parse(current.stdout).languages[0]).not.toHaveProperty('graphId');
-    const currentRequests = server.getRecordedRequests();
-    expect(currentRequests.some(({ path }) => path === '/api/v2/components/projects')).toBe(false);
-    expect(
-      currentRequests.find(({ path }) => path.endsWith('/current-architectures'))?.query,
-    ).toMatchObject({ branchId: fakeMainBranchId(PROJECT), language: 'java' });
-    const before = server.getRecordedRequests().length;
-    const intended = await harness.run(
-      `architecture intended get --project ${PROJECT} --format json`,
-    );
-    expect(intended.exitCode).toBe(0);
+    for (const target of ['current', 'intended']) {
+      const result = await harness.run(
+        `architecture ${target} get --project ${PROJECT} --format json`,
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'The sonar architecture command requires a SonarQube Cloud connection.',
+      );
+    }
     expect(
       server
         .getRecordedRequests()
-        .slice(before)
-        .some(({ path }) => path === '/api/v2/components/projects'),
-    ).toBe(true);
-    expect(
-      server
-        .getRecordedRequests()
-        .slice(before)
-        .filter(({ path }) => path.includes('search_projects') || path.includes('/navigation/')),
+        .filter(
+          ({ path }) => path === '/api/v2/components/projects' || path.includes('/architecture/'),
+        ),
     ).toEqual([]);
   });
 

@@ -24,37 +24,11 @@ import {
   assertSingleLineProjectKey,
   discoverProject,
 } from '@/core/project-discovery/project-info.ts';
-import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
-
-const MIN_ARCHITECTURE_SERVER_VERSION = '2026.6';
-const MIN_COMMUNITY_BUILD_YEAR = 20;
 
 export async function resolveProject(
   options: { project?: string },
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<string> {
-  if (ctx.auth.connectionType !== 'cloud') {
-    const version = await fetchServerVersion(ctx.auth.serverUrl).catch(() => undefined);
-    if (
-      version !== undefined &&
-      !isFullYearVersion(version) &&
-      Number(version.split('.')[0]) >= MIN_COMMUNITY_BUILD_YEAR
-    ) {
-      throw new CommandFailedError(
-        `SonarQube Community Build ${version} does not include Architecture; SonarQube Server ${MIN_ARCHITECTURE_SERVER_VERSION} or later is required.`,
-        { remediationHint: 'Use SonarQube Server or SonarQube Cloud for Architecture commands.' },
-      );
-    }
-    if (
-      version !== undefined &&
-      (!isFullYearVersion(version) || !isAtLeast(version, MIN_ARCHITECTURE_SERVER_VERSION))
-    ) {
-      throw new CommandFailedError(
-        `SonarQube Server ${version} does not support these Architecture commands; ${MIN_ARCHITECTURE_SERVER_VERSION} or later is required.`,
-        { remediationHint: 'Upgrade SonarQube Server, then retry.' },
-      );
-    }
-  }
   const projectKey =
     options.project ??
     (

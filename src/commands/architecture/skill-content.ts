@@ -161,8 +161,8 @@ never repeat a write or roll back automatically.
 
 ## Availability
 
-Intended and directive operations on SonarQube Server require the public project lookup
-(/api/v2/components/projects) and public Architecture APIs.
+The CLI architecture commands require a SonarQube Cloud connection. Check the installed MCP
+tool descriptions for their supported environments.
 Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
@@ -171,7 +171,7 @@ unavailable operations, claim their results or substitute other analysis tools.
 Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
 optionally \`--category deviation|flaw|smell\`, \`--type <type>\` or \`--language <language>\`.
 Every row includes its category, type, language, details and files; findings have no IDs or separate detail lookup.
-Findings use the analyzed main branch on Cloud and Server and are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
+Findings use the analyzed main branch and are read-only. Use \`--page-size 0\` only to count findings; do not request further count-only pages.
 To read findings, use a positive page size. Retain \`pageIndex\`, \`pageSize\` and \`total\` from each response.
 Keep the same filters and page size, and increment \`--page\` while \`pageIndex * pageSize < total\`.
 A zero total means no findings match the active filters or are visible; it does not establish project access or a clean architecture.
