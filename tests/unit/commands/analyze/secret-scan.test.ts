@@ -456,13 +456,18 @@ describe('secretCheckCommand: scan error handling', () => {
       hint: "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. For a directory scan, use '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards). This replaces 'secrets.exclude'; repeat any configured paths you still need to exclude.",
     },
     {
+      name: 'analyze telemetry caller without invokedBy',
+      options: { paths: ['src/index.ts'], telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
+      hint: "Retry with specific files: 'sonar analyze secrets <file1> <file2>'. Use 'sonar analyze' to scan changed files. For a directory scan, use '--exclude <path>' (repeatable; exact paths or directory prefixes, no wildcards). This replaces 'secrets.exclude'; repeat any configured paths you still need to exclude.",
+    },
+    {
       name: 'stdin',
       options: { stdin: true },
       hint: "Retry with less input, or scan specific files with 'sonar analyze secrets <file1> <file2>'.",
     },
     {
-      name: 'changed files',
-      options: { paths: ['src/index.ts'], telemetryCallerCommand: SECRETS_CALLER_COMMANDS.analyze },
+      name: 'bare analyze',
+      options: { paths: ['src/index.ts'], invokedBy: 'analyze' },
       hint: "Narrow the change set with 'sonar analyze --staged' or 'sonar analyze --file <path>', or scan specific files with 'sonar analyze secrets <file1> <file2>'.",
     },
   ];
