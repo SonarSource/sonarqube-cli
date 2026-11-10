@@ -18,14 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SonarCommand } from '@/core/commands/sonar-command.ts';
+import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { noteProject, resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
+import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
+import { mockProjectUuidGetSafe } from './project-uuid-api-mock.ts';
 
 const AUTH = new ResolvedAuth({
   token: 'token-a',
@@ -61,5 +68,40 @@ describe('buildCommandFacts() command event auth', () => {
     noteProject(AUTH, 'proj-b');
 
     expect(await commandEventAuth()).toBeNull();
+  });
+});
+
+describe('buildCommandFacts() target project events', () => {
+  let testDir: string;
+  let savedSonarUserHome: string | undefined;
+  let savedDoNotTrack: string | undefined;
+
+  beforeEach(() => {
+    savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
+    savedDoNotTrack = process.env.DO_NOT_TRACK;
+    testDir = mkdtempSync(join(tmpdir(), 'command-executed-test-'));
+    process.env[ENV_SONAR_USER_HOME] = testDir;
+    delete process.env.DO_NOT_TRACK;
+  });
+
+  afterEach(() => {
+    restoreEnv(ENV_SONAR_USER_HOME, savedSonarUserHome);
+    restoreEnv('DO_NOT_TRACK', savedDoNotTrack);
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  it('emits events only for resolved projects but counts every target project', async () => {
+    const getSafeSpy = mockProjectUuidGetSafe({ idByProjectKey: { 'proj-a': 'AV-a' } });
+    noteProject(AUTH, 'proj-a');
+    noteProject(AUTH, 'proj-unresolved');
+
+    const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
+    const [executed, ...targetProjects] = await buildCommandFacts(command);
+
+    expect(executed.payload).toMatchObject({ target_project_count: 2, project_uuid: null });
+    expect(targetProjects.map((fact) => fact.payload)).toEqual([
+      expect.objectContaining({ project_uuid: 'AV-a' }),
+    ]);
+    getSafeSpy.mockRestore();
   });
 });

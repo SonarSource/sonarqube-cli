@@ -32,7 +32,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts';
-import { ResultAsync } from '@/core/result.ts';
+import { okAsync, ResultAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
@@ -432,6 +432,30 @@ describe('noteProject() / resolveTelemetryTargetProjects()', () => {
     expect(await resolveProjectUuid(auth(), 'proj-batch-b')).toBe('AV-batch-b');
     expect(getSafeSpy).toHaveBeenCalledTimes(2);
 
+    getSafeSpy.mockRestore();
+  });
+
+  it('keeps the other ids of a batch when one lookup throws', async () => {
+    seedDiskCache('https://sonarcloud.io', 'proj-cached', 'AV-cached');
+    const getSafeSpy = spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(
+      <TValue>(_endpoint: string, params?: Record<string, string | number | boolean>) => {
+        if (params?.component === 'proj-throws') throw new Error('boom');
+        return okAsync({
+          response: { ok: true, status: 200 } as Response,
+          value: { id: 'AV-fetched' } as TValue,
+        });
+      },
+    );
+
+    noteProject(auth(), 'proj-cached');
+    noteProject(auth(), 'proj-throws');
+    noteProject(auth(), 'proj-fetched');
+
+    expect(projectUuids(await resolveTelemetryTargetProjects())).toEqual([
+      'AV-cached',
+      null,
+      'AV-fetched',
+    ]);
     getSafeSpy.mockRestore();
   });
 

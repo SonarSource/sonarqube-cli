@@ -170,10 +170,15 @@ export async function resolveProjectUuids(
   }
 }
 
+/** Never rejects, so one failing lookup cannot discard the rest of its batch. */
 async function fetchProjectUuid({ auth, projectKey }: NotedProject): Promise<string | null> {
-  const client = new SonarHttpClient(auth.serverUrl, auth.token);
-  const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
-  return result.isOk() ? result.value : null;
+  try {
+    const client = new SonarHttpClient(auth.serverUrl, auth.token);
+    const result = await new ComponentsClient(client).getComponentId(projectKey, RESOLVE_BUDGET_MS);
+    return result.isOk() ? result.value : null;
+  } catch {
+    return null;
+  }
 }
 
 // --- Ambient per-invocation target projects ------------------------------------------------
