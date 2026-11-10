@@ -147,7 +147,7 @@ describe('runAnalyses partial 413', () => {
   let readSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    fetchSpy = spyOn(sqaaApi, 'fetchChunkWith413Split');
+    fetchSpy = spyOn(sqaaApi, 'fetchPreparedChunkWith413Split');
     readSpy = spyOn(sqaaApi, 'readSqaaFileContent').mockReturnValue('x');
   });
 

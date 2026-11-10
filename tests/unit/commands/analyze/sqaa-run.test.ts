@@ -66,7 +66,7 @@ describe('runSqaaGroups', () => {
   let readSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
-    fetchSpy = spyOn(sqaaApi, 'fetchChunkWith413Split');
+    fetchSpy = spyOn(sqaaApi, 'fetchPreparedChunkWith413Split');
     readSpy = spyOn(sqaaApi, 'readSqaaFileContent').mockReturnValue('x');
   });
 
@@ -93,10 +93,9 @@ describe('runSqaaGroups', () => {
       { ...RUN, silent: true },
     );
 
-    expect(fetchSpy.mock.calls.map((call: unknown[]) => call[1] as string)).toEqual([
-      'app-a',
-      'app-b',
-    ]);
+    expect(
+      fetchSpy.mock.calls.map((call: unknown[]) => (call[1] as { projectKey: string }).projectKey),
+    ).toEqual(['app-a', 'app-b']);
     expect(tally.allResults.map((r) => r.filePath)).toEqual(['app-a/x.ts', 'app-b/y.ts']);
   });
 

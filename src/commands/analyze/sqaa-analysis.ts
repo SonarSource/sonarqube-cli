@@ -20,13 +20,13 @@
 
 // Sequential chunked execution engine for SQAA change-set analysis
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getSqaaRetry503BaseDelayMs } from '@/core/config-constants.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 
 import {
-  fetchChunkWith413Split,
+  fetchPreparedChunkWith413Split,
   MAX_503_RETRIES,
-  readSqaaFileContent,
   type SqaaChunkGroupError,
   type SqaaChunkResponse,
 } from './sqaa-api.ts';
@@ -35,6 +35,7 @@ import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 import { type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
+import { type PreparedSqaaProject, prepareSqaaProject } from './sqaa-request.ts';
 import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {
@@ -75,16 +76,37 @@ export interface RunTally {
  * every chunk has been processed (or fail-fast stops remaining chunks).
  */
 export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
+  return executePreparedAnalyses(
+    ctx,
+    prepareSqaaProject(
+      { projectKey: ctx.projectKey, files: ctx.paths },
+      ctx.connection,
+      ctx.branch,
+      ctx.analysisDepth,
+    ),
+  );
+}
+
+export async function executePreparedAnalyses(
+  ctx: RunContext,
+  prepared: PreparedSqaaProject,
+): Promise<RunTally> {
   const tally = emptyTally();
   if (ctx.paths.length === 0) return tally;
-
   const fileIndexByAbsolutePath = new Map(ctx.paths.map((p, i) => [p.absolutePath, i]));
-  const { chunks, chunkFileIndices } = prepareChunks(
-    ctx,
-    fileIndexByAbsolutePath,
-    tally,
-    ctx.progress,
-  );
+  for (const failure of prepared.failures) {
+    const index = fileIndexForPath(fileIndexByAbsolutePath, failure.file);
+    recordFileFailure(ctx.progress, tally, index, ctx.paths[index], failure.failure);
+  }
+  const chunkFiles = prepared.payload.files.map((file, index) => ({
+    absolutePath: prepared.paths[index].absolutePath,
+    relativePath: file.path,
+    content: file.content,
+  }));
+  const chunks: SqaaChunk[] = chunkFiles.length ? [{ files: chunkFiles }] : [];
+  const chunkFileIndices = [
+    chunkFiles.map((file) => fileIndexForPath(fileIndexByAbsolutePath, file.absolutePath)),
+  ];
   ctx.progress.start();
 
   for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
@@ -93,6 +115,7 @@ export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
       tally,
       chunkIndex,
       chunks[chunkIndex],
+      prepared,
       chunkFileIndices[chunkIndex],
       fileIndexByAbsolutePath,
     );
@@ -104,6 +127,12 @@ export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
 
   sortResultsByFileOrder(tally, ctx.paths);
   return tally;
+}
+
+function fileIndexForPath(indices: Map<string, number>, path: string): number {
+  const index = indices.get(path);
+  if (index === undefined) throw new CommandFailedError(`Missing file index for ${path}`);
+  return index;
 }
 
 function emptyTally(): RunTally {
@@ -121,43 +150,6 @@ export function mergeTallies(tallies: RunTally[]): RunTally {
     merged.globalError ??= tally.globalError;
   }
   return merged;
-}
-
-function prepareChunks(
-  ctx: RunContext,
-  fileIndexByAbsolutePath: Map<string, number>,
-  tally: RunTally,
-  progress: SqaaProgress,
-): { chunks: SqaaChunk[]; chunkFileIndices: number[][] } {
-  const readableChunkFiles: SqaaChunkFile[] = [];
-  for (let idx = 0; idx < ctx.paths.length; idx++) {
-    const path = ctx.paths[idx];
-    try {
-      readableChunkFiles.push({
-        absolutePath: path.absolutePath,
-        relativePath: path.serverPath,
-        content: readSqaaFileContent(path.absolutePath),
-      });
-    } catch (err) {
-      recordFileFailure(progress, tally, idx, path, err as Error);
-    }
-  }
-
-  if (readableChunkFiles.length === 0) {
-    return { chunks: [], chunkFileIndices: [] };
-  }
-
-  const chunks: SqaaChunk[] = [{ files: readableChunkFiles }];
-  const chunkFileIndices = [
-    readableChunkFiles.map((f) => {
-      const idx = fileIndexByAbsolutePath.get(f.absolutePath);
-      if (idx === undefined) {
-        throw new Error(`Missing file index for ${f.absolutePath}`);
-      }
-      return idx;
-    }),
-  ];
-  return { chunks, chunkFileIndices };
 }
 
 function chunkPathsForFiles(
@@ -232,6 +224,7 @@ async function processChunk(
   tally: RunTally,
   chunkIndex: number,
   chunk: SqaaChunk,
+  prepared: PreparedSqaaProject,
   fileIndices: number[],
   fileIndexByAbsolutePath: Map<string, number>,
 ): Promise<boolean> {
@@ -239,11 +232,10 @@ async function processChunk(
   markChunkAnalyzing(ctx.progress, chunkIndex, fileIndices);
 
   try {
-    const { parts, groupErrors } = await fetchChunkWith413Split(
+    const { parts, groupErrors } = await fetchPreparedChunkWith413Split(
       ctx.connection,
-      ctx.projectKey,
+      prepared.payload,
       chunk.files,
-      ctx.branch,
       (attempt) =>
         ctx.progress.retryingChunk(
           chunkIndex,
@@ -254,7 +246,6 @@ async function processChunk(
       () => {
         ctx.progress.warnPayloadSplit();
       },
-      ctx.analysisDepth,
     );
 
     recordSuccessfulParts(ctx, tally, ctx.progress, parts, fileIndexByAbsolutePath);

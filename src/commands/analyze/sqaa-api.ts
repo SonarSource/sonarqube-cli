@@ -37,11 +37,10 @@ import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   isGlobalSqaaError,
   payloadTooLargeCommandError,
-  sqaaCommandFailedError,
   toSqaaCommandError,
 } from './sqaa-errors.ts';
 import { partitionSqaaAnalysisFiles, type SqaaFileValidationRejection } from './sqaa-validation.ts';
-import type { SqaaAnalysisFile, SqaaIssue } from './sqaa-wire-types.ts';
+import type { SqaaAnalysisFile, SqaaAnalysisRequest, SqaaIssue } from './sqaa-wire-types.ts';
 
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
@@ -71,11 +70,6 @@ function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): bo
   return includePayloadTooLarge && err instanceof RequestPayloadTooLargeError;
 }
 
-export type SqaaPostResult = {
-  response: SqaaChunkResponse;
-  rejected: SqaaFileValidationRejection[];
-};
-
 function validChunkFilesAfterRejection(
   chunkFiles: SqaaChunkFile[],
   rejected: SqaaFileValidationRejection[],
@@ -94,78 +88,27 @@ function validationGroupErrors(
   }));
 }
 
-async function postSqaaAnalysis(
+async function postPreparedSqaaAnalysis(
   connection: SonarConnection,
-  projectKey: string,
-  branch: string | undefined,
-  files: SqaaAnalysisFile[],
-  options: { analysisDepth?: SqaaDeepWireDepth; includePayloadTooLarge?: boolean } = {},
-): Promise<SqaaPostResult> {
-  const wireDepth = options.analysisDepth;
-  const { valid, rejected } = partitionSqaaAnalysisFiles(files, {
-    analysisDepth: wireDepth,
-  });
-
-  if (valid.length === 0) {
-    throw (
-      rejected[0]?.error ??
-      sqaaCommandFailedError('At least one valid file is required in files[].')
-    );
-  }
-
-  const client = new SqaaAnalysisClient(connection.httpClient);
+  request: SqaaAnalysisRequest,
+  includePayloadTooLarge = false,
+): Promise<SqaaChunkResponse> {
   try {
-    const response = await client.createAnalysis({
-      ...(connection.auth.orgKey ? { organizationKey: connection.auth.orgKey } : {}),
-      projectKey,
-      ...(branch ? { branchName: branch } : {}),
-      ...(wireDepth ? { analysisDepth: wireDepth } : {}),
-      files: valid,
-    });
-    return { response, rejected };
+    return await new SqaaAnalysisClient(connection.httpClient).createAnalysis(request);
   } catch (err) {
-    // Propagate typed errors so hook handlers can distinguish them.
-    if (err instanceof SqaaForbiddenError) {
-      throw err;
-    }
-    if (isRetryableSqaaError(err, options.includePayloadTooLarge ?? false)) {
+    if (err instanceof SqaaForbiddenError || isRetryableSqaaError(err, includePayloadTooLarge)) {
       throw err;
     }
     throw toSqaaCommandError(err);
   }
 }
 
-/** Validated SQAA POST for hook and other callers outside the analyze command. */
-export async function submitValidatedSqaaAnalysis(
+export function fetchPreparedSqaaWithRetry(
   connection: SonarConnection,
-  projectKey: string,
-  files: SqaaAnalysisFile[],
-  options: { branch?: string; analysisDepth?: SqaaDeepWireDepth } = {},
+  request: SqaaAnalysisRequest,
+  onRetry?: (attempt: number) => Promise<void>,
 ): Promise<SqaaChunkResponse> {
-  const { response } = await postSqaaAnalysis(connection, projectKey, options.branch, files, {
-    analysisDepth: options.analysisDepth,
-  });
-  return response;
-}
-
-/**
- * Fetch the SQAA API response for a single file. Does not print anything.
- * Throws ServiceUnavailableError on 503 (caller handles retry), CommandFailedError on other failures.
- */
-export async function fetchSqaaResponse(
-  connection: SonarConnection,
-  projectKey: string,
-  file: SqaaAnalysisFile,
-  branch: string | undefined,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
-  const { response, rejected } = await postSqaaAnalysis(connection, projectKey, branch, [file], {
-    analysisDepth,
-  });
-  if (rejected.length > 0) {
-    throw rejected[0].error;
-  }
-  return response;
+  return with503Retry(() => postPreparedSqaaAnalysis(connection, request), onRetry);
 }
 
 async function with503Retry<T>(
@@ -192,28 +135,6 @@ async function with503Retry<T>(
   );
 }
 
-export interface FetchSqaaRetryOptions {
-  onRetry?: (attempt: number) => Promise<void>;
-  analysisDepth?: SqaaDeepWireDepth;
-}
-
-/**
- * Calls fetchSqaaResponse with a 503-retry loop.
- */
-export async function fetchWithRetry(
-  connection: SonarConnection,
-  projectKey: string,
-  file: SqaaAnalysisFile,
-  branch: string | undefined,
-  retryOptions?: FetchSqaaRetryOptions,
-): Promise<{ issues: SqaaIssue[]; errors?: Array<{ code: string; message: string }> | null }> {
-  const { onRetry, analysisDepth } = retryOptions ?? {};
-  return with503Retry(
-    () => fetchSqaaResponse(connection, projectKey, file, branch, analysisDepth),
-    onRetry,
-  );
-}
-
 export type SqaaChunkResponse = {
   issues: SqaaIssue[];
   errors?: Array<{ code: string; message: string }> | null;
@@ -234,75 +155,6 @@ export type SqaaChunkGroupError = {
   error: Error;
 };
 
-function packLimitsForRequest(
-  connection: SonarConnection,
-  projectKey: string,
-  branch: string | undefined,
-  overrides: { maxRequestBytes?: number; maxFilesPerRequest?: number } = {},
-  analysisDepth?: SqaaDeepWireDepth,
-) {
-  return {
-    ...overrides,
-    organizationKey: connection.auth.orgKey,
-    projectKey,
-    ...(branch ? { branchName: branch } : {}),
-    ...(analysisDepth ? { analysisDepth } : {}),
-  };
-}
-
-function packLimitsFrom413Error(
-  connection: SonarConnection,
-  projectKey: string,
-  branch: string | undefined,
-  err: RequestPayloadTooLargeError,
-  analysisDepth?: SqaaDeepWireDepth,
-) {
-  return packLimitsForRequest(
-    connection,
-    projectKey,
-    branch,
-    {
-      ...(err.meta?.maxRequestSize == null ? {} : { maxRequestBytes: err.meta.maxRequestSize }),
-      ...(err.meta?.maxFiles == null ? {} : { maxFilesPerRequest: err.meta.maxFiles }),
-    },
-    analysisDepth,
-  );
-}
-
-/**
- * Fetch the SQAA API response for a multi-file chunk at the resolved analysis depth.
- * Throws ServiceUnavailableError on 503, RequestPayloadTooLargeError on 413.
- */
-export async function fetchChunkResponse(
-  connection: SonarConnection,
-  projectKey: string,
-  files: SqaaAnalysisFile[],
-  branch: string | undefined,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<SqaaPostResult> {
-  return postSqaaAnalysis(connection, projectKey, branch, files, {
-    analysisDepth,
-    includePayloadTooLarge: true,
-  });
-}
-
-/**
- * Calls fetchChunkResponse with a 503-retry loop.
- */
-export async function fetchChunkWithRetry(
-  connection: SonarConnection,
-  projectKey: string,
-  files: SqaaAnalysisFile[],
-  branch: string | undefined,
-  onRetry?: (attempt: number) => Promise<void>,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<SqaaPostResult> {
-  return with503Retry(
-    () => fetchChunkResponse(connection, projectKey, files, branch, analysisDepth),
-    onRetry,
-  );
-}
-
 function toAnalysisFiles(chunkFiles: SqaaChunkFile[]): SqaaAnalysisFile[] {
   return chunkFiles.map((f) => ({ path: f.relativePath, content: f.content }));
 }
@@ -316,44 +168,6 @@ function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): Sqaa
   return [files.slice(0, mid), files.slice(mid)];
 }
 
-async function fetchSplitParts(
-  connection: SonarConnection,
-  projectKey: string,
-  partGroups: SqaaChunkFile[][],
-  branch: string | undefined,
-  onRetry?: (attempt: number) => Promise<void>,
-  onPayloadSplit?: () => void,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<SqaaChunkFetchResult> {
-  const parts: SqaaChunkPart[] = [];
-  const groupErrors: SqaaChunkGroupError[] = [];
-  for (const group of partGroups) {
-    try {
-      const result = await fetchChunkWith413Split(
-        connection,
-        projectKey,
-        group,
-        branch,
-        onRetry,
-        onPayloadSplit,
-        analysisDepth,
-      );
-      parts.push(...result.parts);
-      groupErrors.push(...result.groupErrors);
-    } catch (err) {
-      if (isGlobalSqaaError(err)) {
-        throw err;
-      }
-      groupErrors.push({ files: group, error: err as Error });
-    }
-  }
-  return { parts, groupErrors };
-}
-
-/**
- * Send a chunk with 503 retry; on 413 split the chunk and retry sub-chunks sequentially.
- * Returns partial successes when only some sub-chunks fail after splitting.
- */
 export async function fetchChunkWith413Split(
   connection: SonarConnection,
   projectKey: string,
@@ -363,68 +177,78 @@ export async function fetchChunkWith413Split(
   onPayloadSplit?: () => void,
   analysisDepth?: SqaaDeepWireDepth,
 ): Promise<SqaaChunkFetchResult> {
-  const analysisFiles = toAnalysisFiles(chunkFiles);
-  const preflight = partitionSqaaAnalysisFiles(analysisFiles, { analysisDepth });
-  if (preflight.valid.length === 0) {
-    return {
-      parts: [],
-      groupErrors: validationGroupErrors(preflight.rejected, chunkFiles),
-    };
-  }
-
-  try {
-    const { response, rejected } = await fetchChunkWithRetry(
-      connection,
+  const { valid, rejected } = partitionSqaaAnalysisFiles(toAnalysisFiles(chunkFiles), {
+    analysisDepth,
+  });
+  const result = await fetchPreparedChunkWith413Split(
+    connection,
+    {
+      ...(connection.auth.orgKey ? { organizationKey: connection.auth.orgKey } : {}),
       projectKey,
-      analysisFiles,
-      branch,
+      ...(branch ? { branchName: branch } : {}),
+      ...(analysisDepth ? { analysisDepth } : {}),
+      files: valid,
+    },
+    validChunkFilesAfterRejection(chunkFiles, rejected),
+    onRetry,
+    onPayloadSplit,
+  );
+  return {
+    parts: result.parts,
+    groupErrors: [...validationGroupErrors(rejected, chunkFiles), ...result.groupErrors],
+  };
+}
+
+export async function fetchPreparedChunkWith413Split(
+  connection: SonarConnection,
+  request: SqaaAnalysisRequest,
+  chunkFiles: SqaaChunkFile[],
+  onRetry?: (attempt: number) => Promise<void>,
+  onPayloadSplit?: () => void,
+): Promise<SqaaChunkFetchResult> {
+  if (request.files.length === 0) return { parts: [], groupErrors: [] };
+  try {
+    const response = await with503Retry(
+      () => postPreparedSqaaAnalysis(connection, request, true),
       onRetry,
-      analysisDepth,
     );
-    const validationErrors = validationGroupErrors(rejected, chunkFiles);
-    const validChunkFiles = validChunkFilesAfterRejection(chunkFiles, rejected);
-
-    return {
-      parts: [{ response, files: validChunkFiles }],
-      groupErrors: validationErrors,
-    };
+    return { parts: [{ response, files: chunkFiles }], groupErrors: [] };
   } catch (err) {
-    if (!(err instanceof RequestPayloadTooLargeError)) {
-      throw err;
-    }
-
-    const { rejected } = preflight;
-    const validationErrors = validationGroupErrors(rejected, chunkFiles);
-    const validChunkFiles = validChunkFilesAfterRejection(chunkFiles, rejected);
-
-    if (validChunkFiles.length === 1) {
+    if (!(err instanceof RequestPayloadTooLargeError)) throw err;
+    if (chunkFiles.length === 1) {
       return {
         parts: [],
-        groupErrors: [
-          ...validationErrors,
-          { files: validChunkFiles, error: payloadTooLargeCommandError(err) },
-        ],
+        groupErrors: [{ files: chunkFiles, error: payloadTooLargeCommandError(err) }],
       };
     }
-
     onPayloadSplit?.();
-
-    const splitResult = await fetchSplitParts(
-      connection,
-      projectKey,
-      splitChunkFiles(
-        validChunkFiles,
-        packLimitsFrom413Error(connection, projectKey, branch, err, analysisDepth),
-      ),
-      branch,
-      onRetry,
-      onPayloadSplit,
-      analysisDepth,
-    );
-    return {
-      parts: splitResult.parts,
-      groupErrors: [...validationErrors, ...splitResult.groupErrors],
-    };
+    const groups = splitChunkFiles(chunkFiles, {
+      ...request,
+      ...(err.meta?.maxRequestSize == null ? {} : { maxRequestBytes: err.meta.maxRequestSize }),
+      ...(err.meta?.maxFiles == null ? {} : { maxFilesPerRequest: err.meta.maxFiles }),
+    });
+    const parts: SqaaChunkPart[] = [];
+    const groupErrors: SqaaChunkGroupError[] = [];
+    let offset = 0;
+    for (const group of groups) {
+      const files = request.files.slice(offset, offset + group.length);
+      offset += group.length;
+      try {
+        const result = await fetchPreparedChunkWith413Split(
+          connection,
+          { ...request, files },
+          group,
+          onRetry,
+          onPayloadSplit,
+        );
+        parts.push(...result.parts);
+        groupErrors.push(...result.groupErrors);
+      } catch (error) {
+        if (isGlobalSqaaError(error)) throw error;
+        groupErrors.push({ files: group, error: error as Error });
+      }
+    }
+    return { parts, groupErrors };
   }
 }
 

@@ -30,10 +30,9 @@ import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-mess
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { RunTally } from './sqaa-analysis.ts';
-import { mergeTallies, runAnalyses } from './sqaa-analysis.ts';
+import { executePreparedAnalyses, mergeTallies } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry } from './sqaa-analysis-telemetry.ts';
-import { fetchWithRetry, MAX_503_RETRIES, readSqaaFileContent } from './sqaa-api.ts';
-import { resolveSqaaBranch } from './sqaa-changeset.ts';
+import { fetchPreparedSqaaWithRetry, MAX_503_RETRIES } from './sqaa-api.ts';
 import { prepareSqaaRun } from './sqaa-context.ts';
 import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
@@ -49,6 +48,12 @@ import {
 import { isGlobalSqaaError } from './sqaa-errors.ts';
 import { soleFile, type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import { SqaaProgress } from './sqaa-progress.ts';
+import {
+  type PreparedSqaaAnalysis,
+  type PreparedSqaaProject,
+  prepareSqaaProject,
+  prepareSqaaRequests,
+} from './sqaa-request.ts';
 import type {
   AnalyzeSqaaOptions,
   PreparedSqaaRun,
@@ -81,6 +86,20 @@ export async function runSqaaGroups(
     isTTY?: boolean;
   },
 ): Promise<RunTally> {
+  return executeSqaaGroups(
+    projects,
+    projects.map((project) => prepareSqaaProject(project, connection, run.branch, run.wireDepth)),
+    connection,
+    run,
+  );
+}
+
+async function executeSqaaGroups(
+  projects: SqaaProjectFiles[],
+  requests: PreparedSqaaProject[],
+  connection: SonarConnection,
+  run: Parameters<typeof runSqaaGroups>[2],
+): Promise<RunTally> {
   const tallies: RunTally[] = [];
   for (const [index, { projectKey, files }] of projects.entries()) {
     const progress = new SqaaProgress({
@@ -90,15 +109,18 @@ export async function runSqaaGroups(
       silent: run.silent,
       console: run.console,
     });
-    const tally = await runAnalyses({
-      paths: files,
-      connection,
-      projectKey,
-      branch: run.branch,
-      progress,
-      analysisDepth: run.wireDepth,
-      displayAnalysisDepth: run.displayDepth,
-    });
+    const tally = await executePreparedAnalyses(
+      {
+        paths: files,
+        connection,
+        projectKey,
+        branch: run.branch,
+        progress,
+        analysisDepth: run.wireDepth,
+        displayAnalysisDepth: run.displayDepth,
+      },
+      requests[index],
+    );
     progress.finish();
     tallies.push(tally);
     if (tally.globalError) break;
@@ -108,21 +130,13 @@ export async function runSqaaGroups(
 
 async function fetchSingleFileTally(
   connection: SonarConnection,
-  projectKey: string,
+  prepared: PreparedSqaaProject,
   path: SqaaPath,
-  fileContent: string,
-  branch?: string,
-  wireDepth?: SqaaDeepWireDepth,
   onRetry?: (attempt: number) => Promise<void>,
 ): Promise<RunTally> {
   try {
-    const response = await fetchWithRetry(
-      connection,
-      projectKey,
-      { path: path.serverPath, content: fileContent },
-      branch,
-      { analysisDepth: wireDepth, onRetry },
-    );
+    if (prepared.failures.length > 0) throw prepared.failures[0].failure;
+    const response = await fetchPreparedSqaaWithRetry(connection, prepared.payload, onRetry);
     const issues = withDisplayFilePath(response.issues, path.displayPath);
     return {
       allResults: [
@@ -156,7 +170,7 @@ export async function runSqaaAnalysis(
   const start = performance.now();
   let completed: { tally: RunTally; durationMs: number } | undefined;
   try {
-    completed = await executeSqaaRun(prepared, runOptions);
+    completed = await executeSqaaRun(await prepareSqaaRequests(prepared), runOptions);
   } catch (err) {
     if (runOptions.onExecutionError !== 'record-and-skip') throw err;
     logger.debug(`Vortex analysis failed: ${(err as Error).message}`);
@@ -183,43 +197,33 @@ export async function runSqaaAnalysis(
   return completed ? { prepared, tally, durationMs } : null;
 }
 
-async function executeSqaaRun(
-  prepared: PreparedSqaaRun,
+export async function executeSqaaRun(
+  prepared: PreparedSqaaAnalysis,
   options: SqaaPreparedRunOptions,
 ): Promise<{ tally: RunTally; durationMs: number }> {
-  const { connection, files, branch, wireDepth, displayDepth, mode } = prepared;
+  const { connection, files, branch, wireDepth, displayDepth, mode } = prepared.run;
   let execute: () => Promise<RunTally>;
   if (mode === 'single-file' || mode === 'edited-file') {
-    const { projectKey, file: path } = soleFile(files);
-    const content = readSqaaFileContent(path.absolutePath);
-    const singleBranch =
-      mode === 'edited-file' ? await resolveSqaaBranch(undefined, path.absolutePath) : branch;
+    const { file: path } = soleFile(files);
     const progress = new SqaaProgress({
       files: [path.displayPath],
       console: options.console,
       silent: options.format === 'json',
     });
     execute = () =>
-      fetchSingleFileTally(
-        connection,
-        projectKey,
-        path,
-        content,
-        singleBranch,
-        wireDepth,
-        (attempt) =>
-          progress.retryingChunk(
-            0,
-            attempt,
-            MAX_503_RETRIES,
-            getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
-          ),
+      fetchSingleFileTally(connection, prepared.projects[0], path, (attempt) =>
+        progress.retryingChunk(
+          0,
+          attempt,
+          MAX_503_RETRIES,
+          getSqaaRetry503BaseDelayMs() * 2 ** (attempt - 1),
+        ),
       ).finally(() => {
         progress.finish();
       });
   } else {
     execute = () =>
-      runSqaaGroups(files.projects, connection, {
+      executeSqaaGroups(files.projects, prepared.projects, connection, {
         branch,
         wireDepth,
         displayDepth,
