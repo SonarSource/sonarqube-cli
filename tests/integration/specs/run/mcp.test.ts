@@ -148,28 +148,13 @@ describe('run mcp', () => {
     async (exitCode) => {
       const server = await harness.newFakeServer().withAuthToken('fixture-token').start();
       harness.withAuth(server.baseUrl(), 'fixture-token');
-      const source = harness.cwd.file('runtime.ts').path;
       const binary = harness.cwd.file('fake-bin', IS_WINDOWS ? 'docker.exe' : 'docker').path;
       const record = harness.cwd.file('runtime.json');
-      harness.cwd.writeFile(
-        'runtime.ts',
-        `
-      import { readFileSync, statSync, writeFileSync } from 'node:fs';
-      import { dirname } from 'node:path';
-      if (process.argv[2] === 'info') process.exit(0);
-      const suffix = ':/etc/ssl/mcp/jvm-secrets.args:ro';
-      const mount = process.argv.find(arg => arg.endsWith(suffix));
-      const path = mount?.slice(0, -suffix.length);
-      const text = path ? readFileSync(path, 'utf8') : '';
-      writeFileSync(${JSON.stringify(record.path)}, JSON.stringify({path, matched: text.includes('-Dhttps.proxyUser=fixture-user') && text.includes('-Dhttps.proxyPassword=fixture-password'), fileMode: path ? statSync(path).mode & 511 : 0, directoryMode: path ? statSync(dirname(path)).mode & 511 : 0, javaOpts: process.env.JAVA_OPTS, args: process.argv}));
-      process.exit(${exitCode});
-    `,
-      );
       const compilation = Bun.spawnSync([
         process.execPath,
         'build',
         '--compile',
-        source,
+        join(import.meta.dir, 'fixtures/recording-runtime.ts'),
         '--outfile',
         binary,
       ]);
@@ -179,6 +164,8 @@ describe('run mcp', () => {
           PATH: `${harness.cwd.dir('fake-bin').path}${PATH_SEP}${process.env.PATH ?? ''}`,
           SONAR_HTTPS_PROXY_URL: 'http://fixture-user:fixture-password@proxy.example.test',
           SONAR_NO_PROXY: '*',
+          MCP_TEST_RECORD: record.path,
+          MCP_TEST_EXIT_CODE: String(exitCode),
         },
       });
       expect(result.exitCode).toBe(exitCode);
