@@ -23,7 +23,12 @@ import { BadRequestError } from '@/core/server/errors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { ImportApiClient } from './import-api.ts';
-import type { ImportBackend, ImportPlan, MonorepoProgressReporter } from './import-backend.ts';
+import {
+  type ImportBackend,
+  type ImportPlan,
+  type MonorepoProgressReporter,
+  projectOverviewUrl,
+} from './import-backend.ts';
 import type { MonorepoProject } from './monorepo-projects.ts';
 import {
   accountsForEveryProject,
@@ -88,6 +93,7 @@ export class CloudBackend implements ImportBackend {
         label: 'Dashboard',
         url: `${this.serverUrl.replace(/\/$/, '')}/organizations/${resolvedOrgKey}/onboarding-dashboard`,
       },
+      projectUrl: (projectKey) => projectOverviewUrl(this.serverUrl, projectKey),
       toResolvedRepo: (repo) => ({
         slug: repo.slug,
         installationKey: computeInstallationKey(repo, almKey),

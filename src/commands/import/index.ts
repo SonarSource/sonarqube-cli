@@ -174,7 +174,7 @@ async function runMonorepoImport(
   projects: MonorepoProject[],
   console: Console,
 ): Promise<void> {
-  const { selection, outroLink } = plan;
+  const { selection } = plan;
   if (selection.kind !== 'batch' || selection.repos.length !== 1) {
     throw new CommandFailedError('A monorepo import needs exactly one resolved repository.');
   }
@@ -189,8 +189,10 @@ async function runMonorepoImport(
   progress.addRepos(projects.map((project) => project.projectKey));
   progress.start();
 
+  const bound = new Set<string>();
   try {
     await plan.importMonorepo(repo, projects, (projectKey, status, detail) => {
+      if (status === 'done') bound.add(projectKey);
       progress.update(projectKey, status, detail);
     });
   } catch (error) {
@@ -208,10 +210,13 @@ async function runMonorepoImport(
       { remediationHint: 'See the per-project errors above for details.' },
     );
   }
+  const projectLinks = projects
+    .filter(({ projectKey }) => bound.has(projectKey))
+    .map(({ projectKey }) => `${projectKey}: ${plan.projectUrl(projectKey)}`);
   console.outro(
     `Bound ${succeeded} ${noun(succeeded)} to ${repo.slug}`,
     'success',
-    `${outroLink.label}: ${outroLink.url}`,
+    projectLinks.join('\n'),
   );
 }
 

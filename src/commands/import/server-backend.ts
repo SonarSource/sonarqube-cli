@@ -33,11 +33,12 @@ import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
-import type {
-  ImportBackend,
-  ImportPlan,
-  ImportRepoOutcome,
-  MonorepoProgressReporter,
+import {
+  type ImportBackend,
+  type ImportPlan,
+  type ImportRepoOutcome,
+  type MonorepoProgressReporter,
+  projectOverviewUrl,
 } from './import-backend.ts';
 import type { MonorepoProject } from './monorepo-projects.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
@@ -134,6 +135,7 @@ export class ServerBackend implements ImportBackend {
         label: 'Dashboard',
         url: `${this.serverUrl.replace(/\/$/, '')}/admin/project-coverage`,
       },
+      projectUrl: (projectKey) => projectOverviewUrl(this.serverUrl, projectKey),
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
       importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
       importMonorepo: (resolved, projects, report) =>

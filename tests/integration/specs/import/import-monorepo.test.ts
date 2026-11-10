@@ -88,6 +88,8 @@ describe('sonar import --monorepo', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Bound 2 projects to my-org/repo');
+        expect(result.stdout).toContain('/project/overview?id=my-org_repo_api');
+        expect(result.stdout).toContain('/project/overview?id=my-org_repo_web');
         const recorded = server.getRecordedRequests();
         const batches = recorded.filter(
           (r) => r.path === '/api/alm_integration/provision_monorepo_projects',
@@ -132,6 +134,7 @@ describe('sonar import --monorepo', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain('Key already exists');
         expect(output).toContain('Bound 1 of 2 projects to my-org/repo (1 failed)');
+        expect(output).not.toContain('/project/overview?id=');
       },
       { timeout: 15000 },
     );
@@ -216,6 +219,8 @@ describe('sonar import --monorepo', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Bound 2 projects to group/repo');
+        expect(result.stdout).toContain('/project/overview?id=group_repo_api');
+        expect(result.stdout).toContain('/project/overview?id=group_repo_web');
         expect(
           payloads(server).map(({ projectKey, projectName, repositoryIdentifier, monorepo }) => ({
             projectKey,

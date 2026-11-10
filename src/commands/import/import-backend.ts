@@ -31,7 +31,6 @@ export interface ImportRepoOutcome {
   projectKey?: string;
 }
 
-/** What a backend resolved for one run: which repositories to import, and how to import each. */
 /** Reports one project's progress while a monorepo import runs. */
 export type MonorepoProgressReporter = (
   projectKey: string,
@@ -39,10 +38,18 @@ export type MonorepoProgressReporter = (
   detail?: string,
 ) => void;
 
+/** The overview page of one project, for the links shown once it is imported. */
+export function projectOverviewUrl(serverUrl: string, projectKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
+}
+
+/** What a backend resolved for one run: which repositories to import, and how to import each. */
 export interface ImportPlan {
   selection: RepoResolution;
   /** Where to send the user once the import has finished. */
   outroLink: { label: string; url: string };
+  /** Where to find one imported project. */
+  projectUrl(projectKey: string): string;
   /** Maps a listed repository to the shape `importRepo` expects. */
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */

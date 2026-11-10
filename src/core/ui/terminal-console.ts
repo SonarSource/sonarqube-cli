@@ -349,7 +349,9 @@ export class TerminalConsole implements Console {
       process.stdout.write(`\n  ${DIVIDER}\n`);
       process.stdout.write(`  ${icon}  ${bold(colorFn(message))}\n`);
       // Aligns under the message text: 2 leading + 2-col emoji icon + 2 gap.
-      if (detail) process.stdout.write(`      ${bold(cyan(detail))}\n`);
+      if (detail) {
+        for (const line of detail.split('\n')) process.stdout.write(`      ${bold(cyan(line))}\n`);
+      }
       process.stdout.write(`  ${DIVIDER}\n\n`);
       return;
     }
