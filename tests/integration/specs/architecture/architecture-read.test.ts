@@ -118,7 +118,6 @@ describe('sonar architecture reads', () => {
   async function serverWith(configure: (project: ProjectBuilder) => void = () => undefined) {
     const server = await harness
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, configure)

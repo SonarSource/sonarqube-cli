@@ -495,7 +495,6 @@ describe('public project directives', () => {
     const id = '00000000-0000-4000-8000-000000000001';
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -726,7 +725,6 @@ describe('public project directives', () => {
     };
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -815,7 +813,6 @@ describe('public project directives', () => {
     const value = 'value' in input ? input.value : input;
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -848,7 +845,6 @@ describe('public project directives', () => {
     const removed = '00000000-0000-4000-8000-000000000002';
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -890,7 +886,6 @@ describe('public project directives', () => {
     const id = '00000000-0000-4000-8000-000000000001';
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -919,7 +914,6 @@ describe('public project directives', () => {
   it('shows perspectives and descriptions in create previews', async () => {
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives([])))
@@ -970,7 +964,6 @@ describe('public project directives', () => {
   ])('rejects invalid set options without mutation: %s', async (flags) => {
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives([])))
@@ -1003,7 +996,6 @@ describe('public project directives', () => {
     ];
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives(existing)))
@@ -1075,7 +1067,6 @@ describe('public project directives', () => {
   ])('rejects invalid updates before writing: %j', async (...items) => {
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -1140,7 +1131,6 @@ describe('public project directives', () => {
     const wrong = { ...directive, id, projectId: 'other-branch-id' };
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('token')
       .withProject('shop', (p) =>
@@ -1200,7 +1190,6 @@ describe('public project directives', () => {
     }));
     const s = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('directive-token')
       .withProject('shop', (p) => p.withArchitecture((a) => a.withDirectives(existing)))
@@ -1254,7 +1243,6 @@ describe('public project directives', () => {
   it('relays a backend permission refusal without creating or replacing directives', async () => {
     const s = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('directive-token')
       .withProject('shop', (p) =>
@@ -1284,7 +1272,6 @@ describe('public project directives', () => {
   ) {
     const server = await h
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken('directive-token')
       .withProject('shop', (project) => project.withArchitecture(configure))

@@ -91,7 +91,6 @@ describe('sonar architecture intended set', () => {
   ): Promise<FakeSonarQubeServer> {
     const server = await harness
       .newFakeServer()
-      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture(configure))
