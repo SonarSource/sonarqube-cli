@@ -37,12 +37,15 @@ const PROJECT_NAME_MAX_LENGTH = 255;
 const KEY_RULES_HINT = `A project key has letters, digits and "-_.:", at most ${PROJECT_KEY_MAX_LENGTH} characters, and at least one non-digit.`;
 
 /**
- * Collects a repeatable `--project <key>[=<name>]`. Not split on commas: unlike repository
- * slugs, a display name can contain one.
+ * Collects a repeatable `--project <key>[=<name>]`; each value may be comma-separated. Duplicates
+ * are kept so `assertValid` can report them.
  */
 export function collectProjectKeyOption(value: string, previous: string[] = []): string[] {
-  const entry = value.trim();
-  return entry.length > 0 ? [...previous, entry] : previous;
+  const entries = value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return [...previous, ...entries];
 }
 
 export interface MonorepoImport {
@@ -57,12 +60,12 @@ export interface MonorepoImport {
  */
 export function resolveMonorepoImport(options: ImportOptions): MonorepoImport | undefined {
   const flagEntries = options.project ?? [];
-  const givesProjects = flagEntries.length > 0 || options.projects !== undefined;
+  const givesProjects = flagEntries.length > 0 || options.projectsFile !== undefined;
 
   if (options.monorepo === undefined) {
     if (givesProjects) {
       throw new InvalidOptionError(
-        '--project and --projects require --monorepo.',
+        '--project and --projects-file require --monorepo.',
         'Add --monorepo <slug> to bind several projects to one repository.',
       );
     }
@@ -85,12 +88,12 @@ export function resolveMonorepoImport(options: ImportOptions): MonorepoImport | 
 
   const projects = [
     ...flagEntries.map(parseProjectEntry),
-    ...(options.projects === undefined ? [] : readProjectsFile(options.projects)),
+    ...(options.projectsFile === undefined ? [] : readProjectsFile(options.projectsFile)),
   ];
   if (projects.length === 0) {
     throw new InvalidOptionError(
       '--monorepo requires at least one project.',
-      'Pass --project <key>[=<name>] (repeatable) or --projects <file.json>.',
+      'Pass --project <key>[=<name>] (repeatable) or --projects-file <file.json>.',
     );
   }
 
@@ -114,13 +117,13 @@ function readProjectsFile(path: string): MonorepoProject[] {
     parsed = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     throw new InvalidOptionError(
-      `Could not read --projects file '${path}': ${error instanceof Error ? error.message : String(error)}`,
+      `Could not read --projects-file '${path}': ${error instanceof Error ? error.message : String(error)}`,
       'Pass a JSON file shaped like [{ "projectKey": "org_repo_api", "projectName": "API" }].',
     );
   }
   if (!Array.isArray(parsed)) {
     throw new InvalidOptionError(
-      `--projects file '${path}' must contain a JSON array.`,
+      `--projects-file '${path}' must contain a JSON array.`,
       'Use the shape [{ "projectKey": "org_repo_api", "projectName": "API" }].',
     );
   }
@@ -135,13 +138,13 @@ function parseFileEntry(entry: unknown, index: number, path: string): MonorepoPr
   const { projectKey, projectName } = candidate;
   if (typeof projectKey !== 'string' || projectKey.trim() === '') {
     throw new InvalidOptionError(
-      `--projects file '${path}': entry ${index + 1} has no "projectKey".`,
+      `--projects-file '${path}': entry ${index + 1} has no "projectKey".`,
       'Every entry needs a string "projectKey" and may have a string "projectName".',
     );
   }
   if (projectName !== undefined && typeof projectName !== 'string') {
     throw new InvalidOptionError(
-      `--projects file '${path}': "projectName" of entry ${index + 1} must be a string.`,
+      `--projects-file '${path}': "projectName" of entry ${index + 1} must be a string.`,
       'Remove it to use the project key as the display name.',
     );
   }

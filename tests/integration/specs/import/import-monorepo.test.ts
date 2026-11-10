@@ -82,7 +82,7 @@ describe('sonar import --monorepo', () => {
         const server = await startCloud();
 
         const result = await run(
-          '--monorepo my-org/repo --project my-org_repo_api --project my-org_repo_web=Web',
+          '--monorepo my-org/repo --project my-org_repo_api,my-org_repo_web=Web',
           server,
         );
 

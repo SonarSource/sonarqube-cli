@@ -479,16 +479,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--monorepo <slug>',
-      'Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects. The repository must not be imported yet. Cannot be combined with --repo, --all or --regex.',
+      'Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects-file. The repository must not be imported yet. Cannot be combined with --repo, --all or --regex.',
     )
     .option(
       '--project <key[=name]>',
-      'With --monorepo: the key of a project to create, optionally followed by =<display name> (defaults to the key). Repeatable.',
+      'With --monorepo: the key of a project to create, optionally followed by =<display name> (defaults to the key). Repeatable and comma-separated (e.g. api=API,web=Web).',
       collectProjectKeyOption,
       [],
     )
     .option(
-      '--projects <file>',
+      '--projects-file <file>',
       'With --monorepo: path to a JSON file listing the projects to create. Can be combined with --project.\n' +
         '\n' +
         '                   A JSON array of objects with a "projectKey" and an optional "projectName" (defaults to the key), the same format as the web UI import. Keys must be unique across the whole organization or server; a key that is already taken fails that project.\n' +

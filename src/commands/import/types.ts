@@ -26,5 +26,5 @@ export interface ImportOptions {
   dopSetting?: string;
   monorepo?: string;
   project?: string[];
-  projects?: string;
+  projectsFile?: string;
 }

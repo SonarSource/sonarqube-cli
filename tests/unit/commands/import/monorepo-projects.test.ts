@@ -55,13 +55,32 @@ function failure(options: Parameters<typeof resolveMonorepoImport>[0]): InvalidO
 }
 
 describe('collectProjectKeyOption', () => {
-  it('accumulates entries, keeping commas in display names', () => {
-    const once = collectProjectKeyOption('org_api=API, core', []);
-    expect(collectProjectKeyOption('org_web', once)).toEqual(['org_api=API, core', 'org_web']);
+  it('splits comma-separated keys', () => {
+    expect(collectProjectKeyOption('frontend,backend', [])).toEqual(['frontend', 'backend']);
   });
 
-  it('ignores blank entries', () => {
+  it('splits comma-separated key=name pairs', () => {
+    expect(collectProjectKeyOption('frontend=Name 1,backend=Name 2', [])).toEqual([
+      'frontend=Name 1',
+      'backend=Name 2',
+    ]);
+  });
+
+  it('accumulates across repeated flags', () => {
+    const once = collectProjectKeyOption('org_api,org_web=Web', []);
+    expect(collectProjectKeyOption('org_cli', once)).toEqual(['org_api', 'org_web=Web', 'org_cli']);
+  });
+
+  it('trims entries and drops empty ones', () => {
+    expect(collectProjectKeyOption(' a , ,b,', ['c'])).toEqual(['c', 'a', 'b']);
+  });
+
+  it('ignores blank input', () => {
     expect(collectProjectKeyOption('   ', ['org_api'])).toEqual(['org_api']);
+  });
+
+  it('keeps duplicates so validation can report them', () => {
+    expect(collectProjectKeyOption('a=One,a=Two', [])).toEqual(['a=One', 'a=Two']);
   });
 });
 
@@ -74,7 +93,7 @@ describe('resolveMonorepoImport', () => {
 
   it('rejects project flags without --monorepo', () => {
     expect(failure({ project: ['org_api'] }).message).toContain('require --monorepo');
-    expect(failure({ projects: 'projects.json' }).message).toContain('require --monorepo');
+    expect(failure({ projectsFile: 'projects.json' }).message).toContain('require --monorepo');
   });
 
   it('rejects --repo, --all and --regex', () => {
@@ -107,7 +126,7 @@ describe('resolveMonorepoImport', () => {
     const path = projectsFile(
       JSON.stringify([{ projectKey: 'org_api', projectName: 'API' }, { projectKey: 'org_web' }]),
     );
-    expect(resolveMonorepoImport({ ...base, projects: path, project: ['org_cli'] })).toEqual({
+    expect(resolveMonorepoImport({ ...base, projectsFile: path, project: ['org_cli'] })).toEqual({
       repo: 'owner/repo',
       projects: [
         { projectKey: 'org_cli', projectName: 'org_cli' },
@@ -118,18 +137,18 @@ describe('resolveMonorepoImport', () => {
   });
 
   it('rejects an unreadable, malformed or mis-shaped file', () => {
-    expect(failure({ ...base, projects: '/does/not/exist.json' }).message).toContain(
+    expect(failure({ ...base, projectsFile: '/does/not/exist.json' }).message).toContain(
       'Could not read',
     );
-    expect(failure({ ...base, projects: projectsFile('not json') }).message).toContain(
+    expect(failure({ ...base, projectsFile: projectsFile('not json') }).message).toContain(
       'Could not read',
     );
-    expect(failure({ ...base, projects: projectsFile('{}') }).message).toContain('JSON array');
-    expect(failure({ ...base, projects: projectsFile('[{"projectName":"x"}]') }).message).toContain(
-      'no "projectKey"',
-    );
+    expect(failure({ ...base, projectsFile: projectsFile('{}') }).message).toContain('JSON array');
     expect(
-      failure({ ...base, projects: projectsFile('[{"projectKey":"a_b","projectName":3}]') })
+      failure({ ...base, projectsFile: projectsFile('[{"projectName":"x"}]') }).message,
+    ).toContain('no "projectKey"');
+    expect(
+      failure({ ...base, projectsFile: projectsFile('[{"projectKey":"a_b","projectName":3}]') })
         .message,
     ).toContain('must be a string');
   });
