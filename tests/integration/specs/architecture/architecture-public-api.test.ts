@@ -588,6 +588,7 @@ describe('sonar architecture reads on the public API', () => {
   it('uses public Server project lookup while current remains independent', async () => {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture((a) => a.withStructure('java', GRAPH)))
       .start();

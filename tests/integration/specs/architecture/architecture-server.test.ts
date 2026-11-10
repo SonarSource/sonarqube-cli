@@ -78,6 +78,7 @@ describe('Server public architecture project lookup', () => {
   it('previews and creates intended architecture without an analyzed branch', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) => p.withNoDefaultBranch().withArchitecture(() => undefined))
       .start();
@@ -113,6 +114,7 @@ describe('Server public architecture project lookup', () => {
   it('updates and clears intended architecture without an analyzed branch', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p
@@ -157,6 +159,7 @@ describe('Server public architecture project lookup', () => {
   it('previews and creates directives once on Server', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) => p.withNoDefaultBranch().withArchitecture(() => undefined))
       .start();
@@ -182,6 +185,7 @@ describe('Server public architecture project lookup', () => {
   it('updates explicit directives and retains unspecified fields on Server', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p.withNoDefaultBranch().withArchitecture((a) => a.withDirectives([storedDirective])),
@@ -211,6 +215,7 @@ describe('Server public architecture project lookup', () => {
     };
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p
@@ -233,6 +238,7 @@ describe('Server public architecture project lookup', () => {
     async (resource) => {
       const server = await h
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop', (p) =>
           p.withArchitecture((a) =>
@@ -263,6 +269,7 @@ describe('Server public architecture project lookup', () => {
   ])('refuses an unusable lookup before any mutation (%s)', async (status, body, message) => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop')
       .withProjectsLookupResponse(status, body)
@@ -285,6 +292,7 @@ describe('Server public architecture project lookup', () => {
     async (command) => {
       const server = await h
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop')
         .withProjectsLookupResponse(403, { message: 'Lookup forbidden' })
@@ -309,6 +317,7 @@ describe('Server public architecture project lookup', () => {
     const id = '00000000-0000-4000-8000-000000000099';
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p.withArchitecture((a) =>
@@ -339,6 +348,7 @@ describe('Server public architecture project lookup', () => {
     it(`reports a missing Architecture collection without blaming a resolved project on ${cloud ? 'Cloud' : 'Server'}`, async () => {
       const builder = h
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop', (p) =>
           p.withArchitecture((a) =>
@@ -366,7 +376,11 @@ describe('Server public architecture project lookup', () => {
 
   for (const cloud of [false, true]) {
     it(`keeps missing-project guidance separate from Server API availability on ${cloud ? 'Cloud' : 'Server'}`, async () => {
-      const builder = h.newFakeServer().withAuthToken('test-token').withProject('shop');
+      const builder = h
+        .newFakeServer()
+        .withVersion('2026.6')
+        .withAuthToken('test-token')
+        .withProject('shop');
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
       h.withAuth(
         cloud ? server.recordedAuthServerUrl() : server.baseUrl(),
@@ -387,6 +401,7 @@ describe('Server public architecture project lookup', () => {
   it('encodes the project key without changing the returned project id', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop:api-v2', (p) => p.withArchitecture(() => undefined))
       .start();
@@ -405,6 +420,7 @@ describe('Server public architecture project lookup', () => {
   it('accepts an empty intended response with a null unsaved model id', async () => {
     const server = await h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('test-token')
       .withProject('shop', (p) =>
         p.withArchitecture((a) =>
