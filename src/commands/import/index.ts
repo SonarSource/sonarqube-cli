@@ -27,6 +27,7 @@ import { CloudBackend } from './cloud-backend.ts';
 import { type DopRepository, ImportApiClient } from './import-api.ts';
 import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import { ImportProgress } from './import-progress.ts';
+import { type MonorepoProject, resolveMonorepoImport } from './monorepo-projects.ts';
 import type { RepositoryCollection, SkippedRepo } from './repository-collection';
 import type { ResolvedRepo } from './resolve-options';
 import { ServerImportApiClient } from './server/server-import-api.ts';
@@ -167,6 +168,53 @@ function reportOutcome(
   );
 }
 
+/** Binds `projects` to the single repository the plan resolved, then reports per project. */
+async function runMonorepoImport(
+  plan: ImportPlan,
+  projects: MonorepoProject[],
+  console: Console,
+): Promise<void> {
+  const { selection, outroLink } = plan;
+  if (selection.kind !== 'batch' || selection.repos.length !== 1) {
+    throw new CommandFailedError('A monorepo import needs exactly one resolved repository.');
+  }
+  const [repo] = selection.repos;
+  console.info(`Repository: ${repo.slug}`);
+
+  const progress = new ImportProgress({
+    console,
+    maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT,
+  });
+  progress.setTotal(projects.length);
+  progress.addRepos(projects.map((project) => project.projectKey));
+  progress.start();
+
+  try {
+    await plan.importMonorepo(repo, projects, (projectKey, status, detail) => {
+      progress.update(projectKey, status, detail);
+    });
+  } catch (error) {
+    progress.finish();
+    throw error;
+  }
+
+  const { succeeded, failed } = progress.finish();
+  const noun = (count: number): string => (count === 1 ? 'project' : 'projects');
+  if (failed > 0) {
+    throw new CommandFailedError(
+      succeeded === 0
+        ? `Failed to bind ${failed} ${noun(failed)} to ${repo.slug}.`
+        : `Bound ${succeeded} of ${succeeded + failed} projects to ${repo.slug} (${failed} failed).`,
+      { remediationHint: 'See the per-project errors above for details.' },
+    );
+  }
+  console.outro(
+    `Bound ${succeeded} ${noun(succeeded)} to ${repo.slug}`,
+    'success',
+    `${outroLink.label}: ${outroLink.url}`,
+  );
+}
+
 function createBackend(
   options: ImportOptions,
   ctx: CommandAuthenticatedInvocationContext,
@@ -192,9 +240,16 @@ export async function importHandler(
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
   const { console } = ctx;
+  const monorepo = resolveMonorepoImport(options);
+  // The repository resolves like an explicit `--repo`, so every check on it stays shared.
+  const effective = monorepo ? { ...options, repo: [monorepo.repo] } : options;
   console.intro('Import repositories', 'SonarQube');
 
-  const plan = await createBackend(options, ctx).plan(options, console);
+  const plan = await createBackend(effective, ctx).plan(effective, console);
+  if (monorepo) {
+    await runMonorepoImport(plan, monorepo.projects, console);
+    return;
+  }
   const { selection, outroLink } = plan;
 
   if (selection.kind === 'streaming') {

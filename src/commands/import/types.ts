@@ -24,4 +24,7 @@ export interface ImportOptions {
   regex?: string;
   nonInteractive?: boolean;
   dopSetting?: string;
+  monorepo?: string;
+  project?: string[];
+  projects?: string;
 }

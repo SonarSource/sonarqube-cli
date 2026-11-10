@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { inspect } from 'node:util';
+
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import {
   CommandFailedError,
@@ -31,7 +33,13 @@ import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
-import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-backend.ts';
+import type {
+  ImportBackend,
+  ImportPlan,
+  ImportRepoOutcome,
+  MonorepoProgressReporter,
+} from './import-backend.ts';
+import type { MonorepoProject } from './monorepo-projects.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
 import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
 import { guardAzureSignIn } from './server/azure-sign-in.ts';
@@ -128,7 +136,44 @@ export class ServerBackend implements ImportBackend {
       },
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
       importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
+      importMonorepo: (resolved, projects, report) =>
+        this.importMonorepoProjects(setting, repositories, resolved, projects, report),
     };
+  }
+
+  /** One `bound-projects` call per project, in the order given; a failure does not stop the others. */
+  private async importMonorepoProjects(
+    setting: DopSetting,
+    repositories: Map<string, ServerRepository>,
+    resolved: ResolvedRepo,
+    projects: MonorepoProject[],
+    report: MonorepoProgressReporter,
+  ): Promise<void> {
+    const repository = repositories.get(resolved.installationKey);
+    if (!repository) {
+      throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
+    }
+    for (const { projectKey, projectName } of projects) {
+      report(projectKey, 'running');
+      try {
+        if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
+          report(projectKey, 'done', 'project already exists with matching binding');
+          continue;
+        }
+        await this.api.createBoundProject({
+          projectKey,
+          projectName,
+          devOpsPlatformSettingId: setting.id,
+          repositoryIdentifier: repository.repositoryIdentifier,
+          projectIdentifier: repository.projectIdentifier,
+          monorepo: true,
+        });
+        report(projectKey, 'done');
+      } catch (error) {
+        const failure = this.explainedImportFailure(error, setting, projectKey);
+        report(projectKey, 'failed', failure instanceof Error ? failure.message : inspect(failure));
+      }
+    }
   }
 
   private async importRepository(

@@ -21,6 +21,7 @@
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
+import type { MonorepoProject } from './monorepo-projects.ts';
 import type { RepoResolution, ResolvedRepo } from './resolve-options';
 import type { ImportOptions } from './types';
 
@@ -31,6 +32,13 @@ export interface ImportRepoOutcome {
 }
 
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
+/** Reports one project's progress while a monorepo import runs. */
+export type MonorepoProgressReporter = (
+  projectKey: string,
+  status: 'running' | 'done' | 'failed',
+  detail?: string,
+) => void;
+
 export interface ImportPlan {
   selection: RepoResolution;
   /** Where to send the user once the import has finished. */
@@ -39,6 +47,15 @@ export interface ImportPlan {
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */
   importRepo(repo: ResolvedRepo): Promise<ImportRepoOutcome | undefined>;
+  /**
+   * Binds each of `projects` to the one repository `repo`, reporting every project's outcome
+   * through `report`. Per-project failures are reported, not thrown.
+   */
+  importMonorepo(
+    repo: ResolvedRepo,
+    projects: MonorepoProject[],
+    report: MonorepoProgressReporter,
+  ): Promise<void>;
 }
 
 /** One SonarQube flavour's way of resolving the import target and provisioning repositories. */

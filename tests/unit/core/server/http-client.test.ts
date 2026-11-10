@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { remediationHintFor } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
-import { isCriticalFailure } from '@/core/server/errors.ts';
+import { type BadRequestError, isCriticalFailure } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import {
   SONARCLOUD_STAGING_API_URL,
@@ -373,6 +373,17 @@ describe('SonarHttpClient', () => {
         Authorization: `Bearer ${TOKEN}`,
         'User-Agent': `sonarqube-cli/${VERSION}`,
       });
+    });
+    it('keeps every errors[].msg of a 400 on BadRequestError, with message set to the first', async () => {
+      fetchSpy = mockFetch(
+        { errors: [{ msg: 'first' }, { msg: '' }, { other: 1 }, null, { msg: 'second' }] },
+        { ok: false, status: 400 },
+      );
+      const result = await client.patch('/api/v2/architecture/intended-architectures/model-id', {});
+
+      const error = result._unsafeUnwrapErr() as BadRequestError;
+      expect(error.errors).toEqual(['first', 'second']);
+      expect(error.message).toBe('first');
     });
     it.each([
       [403, 'ForbiddenApiError'],
