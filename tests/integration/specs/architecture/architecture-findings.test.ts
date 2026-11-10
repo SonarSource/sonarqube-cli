@@ -103,6 +103,7 @@ describe('public architecture findings contract', () => {
   ) {
     const builder = h
       .newFakeServer()
+      .withVersion('2026.6')
       .withAuthToken('findings-token')
       .withProject('shop', (p) => p.withArchitecture(configure));
     if (cloud) builder.asSonarCloud();
@@ -119,6 +120,7 @@ describe('public architecture findings contract', () => {
       async (main) => {
         const builder = h
           .newFakeServer()
+          .withVersion('2026.6')
           .withAuthToken('findings-token')
           .withProject('shop', (p) =>
             p
