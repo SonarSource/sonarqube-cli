@@ -22,7 +22,7 @@ import { describe, expect, it } from 'bun:test';
 import { TestHarness } from '../../harness';
 
 describe('Architecture Server version', () => {
-  it.each(['2025.1', '2026.5.4'])(
+  it.each(['2025.1', '2026.5.4', '26.11'])(
     'rejects Architecture operations on Server %s',
     async (version) => {
       const h = await TestHarness.create();
