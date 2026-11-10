@@ -98,4 +98,27 @@ describe('Architecture Server version', () => {
       await h.dispose();
     }
   });
+
+  it('reports an unavailable Architecture API when the Server version cannot be read', async () => {
+    const h = await TestHarness.create();
+    try {
+      const server = await h
+        .newFakeServer()
+        .withSystemStatusCode(503)
+        .withAuthToken('test-token')
+        .withProject('shop', (p) =>
+          p.withArchitecture((architecture) =>
+            architecture.withStatus('current-architectures', 404, '{}', 'GET'),
+          ),
+        )
+        .start();
+      h.withAuth(server.baseUrl(), 'test-token');
+      const result = await h.run('arch current get -p shop --language java --format json');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('The public Architecture API endpoint was not found');
+      expect(result.stderr).toContain('Server build that exposes the public Architecture APIs');
+    } finally {
+      await h.dispose();
+    }
+  });
 });
