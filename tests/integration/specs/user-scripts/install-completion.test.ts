@@ -50,12 +50,14 @@ for (const variant of ['install', 'install-prerelease']) {
           [
             '/bin/bash',
             '-c',
-            `set -euo pipefail
-${completion}
-INSTALL_DIR=$TEST_INSTALL_DIR
-BINARY_NAME=sonar
-version=test-version
-print_completion`,
+            [
+              'set -euo pipefail',
+              completion,
+              'INSTALL_DIR=$TEST_INSTALL_DIR',
+              'BINARY_NAME=sonar',
+              'version=test-version',
+              'print_completion',
+            ].join('\n'),
           ],
           { env: { PATH: path, TEST_INSTALL_DIR: installDir } },
         );
@@ -99,14 +101,15 @@ print_completion`,
             '-NoProfile',
             '-NonInteractive',
             '-Command',
-            `
-$ErrorActionPreference = 'Stop'
-${completion}
-$InstallDir = $env:TEST_INSTALL_DIR
-$Dest = "$InstallDir\\sonar.exe"
-$Version = 'test-version'
-$env:PATH = $env:TEST_PATH
-Show-Completion`,
+            [
+              "$ErrorActionPreference = 'Stop'",
+              completion,
+              '$InstallDir = $env:TEST_INSTALL_DIR',
+              '$Dest = "$InstallDir\\sonar.exe"',
+              "$Version = 'test-version'",
+              '$env:PATH = $env:TEST_PATH',
+              'Show-Completion',
+            ].join('\n'),
           ],
           { env: { ...process.env, TEST_INSTALL_DIR: installDir, TEST_PATH: path } },
         );
