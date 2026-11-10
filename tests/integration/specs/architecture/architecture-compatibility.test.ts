@@ -111,6 +111,7 @@ describe('Architecture API compatibility diagnostics', () => {
       it(`offers an update for a non-JSON ${target} response on ${cloud ? 'Cloud' : 'Server'}`, async () => {
         const builder = harness
           .newFakeServer()
+          .withVersion('2026.6')
           .withAuthToken('test-token')
           .withProject('shop', (project) =>
             project.withArchitecture((architecture) =>
@@ -154,6 +155,7 @@ describe('Architecture API compatibility diagnostics', () => {
       it(`explains an incompatible ${target} envelope on ${cloud ? 'Cloud' : 'Server'} without writing`, async () => {
         const builder = harness
           .newFakeServer()
+          .withVersion('2026.6')
           .withAuthToken('test-token')
           .withProject('shop', (project) =>
             project.withArchitecture((architecture) =>
@@ -202,6 +204,7 @@ describe('Architecture API compatibility diagnostics', () => {
       ] as const) {
         const builder = harness
           .newFakeServer()
+          .withVersion('2026.6')
           .withAuthToken('test-token')
           .withProject('shop', (project) =>
             project.withArchitecture((architecture) =>
@@ -235,6 +238,7 @@ describe('Architecture API compatibility diagnostics', () => {
     it(`keeps an explicit directive 404 distinct while explaining Server availability on ${cloud ? 'Cloud' : 'Server'}`, async () => {
       const builder = harness
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop', (project) => project.withArchitecture(() => {}));
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
@@ -264,6 +268,7 @@ describe('Architecture API compatibility diagnostics', () => {
     it(`keeps valid empty results and invalid input separate from compatibility on ${cloud ? 'Cloud' : 'Server'}`, async () => {
       const builder = harness
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop', (project) => project.withArchitecture(() => {}));
       const server = await (cloud ? builder.asSonarCloud() : builder).start();
@@ -294,6 +299,7 @@ describe('Architecture API compatibility diagnostics', () => {
     it(`preserves compatibility guidance for an unconfirmed write on ${cloud ? 'Cloud' : 'Server'} without replay`, async () => {
       const builder = harness
         .newFakeServer()
+        .withVersion('2026.6')
         .withAuthToken('test-token')
         .withProject('shop', (project) =>
           project.withArchitecture((architecture) =>
@@ -341,6 +347,7 @@ describe('Architecture API compatibility diagnostics', () => {
       it(`does not diagnose HTTP ${status} as version incompatibility on ${cloud ? 'Cloud' : 'Server'}`, async () => {
         const builder = harness
           .newFakeServer()
+          .withVersion('2026.6')
           .withAuthToken('test-token')
           .withProject('shop', (project) =>
             project.withArchitecture((architecture) =>
