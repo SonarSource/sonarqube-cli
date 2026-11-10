@@ -91,6 +91,7 @@ describe('sonar architecture intended set', () => {
   ): Promise<FakeSonarQubeServer> {
     const server = await harness
       .newFakeServer()
+      .withVersion('2026.6')
       .asSonarCloud()
       .withAuthToken(TOKEN)
       .withProject(PROJECT, (p) => p.withArchitecture(configure))
@@ -124,6 +125,7 @@ describe('sonar architecture intended set', () => {
           it(`rejects another project's export before Architecture requests (Cloud=${cloud}, explicit=${explicit}, dryRun=${dryRun})`, async () => {
             const builder = harness
               .newFakeServer()
+              .withVersion('2026.6')
               .withAuthToken(TOKEN)
               .withProject('source', (p) => p.withArchitecture((a) => a.withIntended(SAVED)))
               .withProject(PROJECT, (p) => p.withArchitecture((a) => a.withIntended(SAVED)));
