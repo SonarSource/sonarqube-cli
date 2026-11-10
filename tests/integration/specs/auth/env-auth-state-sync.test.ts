@@ -94,7 +94,8 @@ describe('env-var auth — state sync', () => {
       const loginSession = harness.runInteractive(`auth login --server ${loginServer.baseUrl()}`, {
         browserToken: 'login-token',
       });
-      await loginSession.accept('Connect to:');
+      await loginSession.waitText('Connect to:');
+      loginSession.write('y');
       expect((await loginSession.waitFinish()).exitCode).toBe(0);
       const loginAccount = generateKeychainAccount(loginServer.baseUrl());
 
@@ -131,7 +132,8 @@ describe('env-var auth — state sync', () => {
       const loginSession = harness.runInteractive(`auth login --server ${server.baseUrl()}`, {
         browserToken: 'login-token',
       });
-      await loginSession.accept('Connect to:');
+      await loginSession.waitText('Connect to:');
+      loginSession.write('y');
       expect((await loginSession.waitFinish()).exitCode).toBe(0);
 
       const envServer = await harness.newFakeServer().withAuthToken('env-token').start();
