@@ -31,12 +31,11 @@ import {
   type SqaaChunkResponse,
 } from './sqaa-api.ts';
 import { type SqaaChunk, type SqaaChunkFile } from './sqaa-chunking.ts';
-import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import { isGlobalSqaaError, isPayloadTooLargeCommandError } from './sqaa-errors.ts';
 import { type SqaaPath, withDisplayFilePath } from './sqaa-paths.ts';
 import type { SqaaProgress } from './sqaa-progress.ts';
-import { type PreparedSqaaProject, prepareSqaaProject } from './sqaa-request.ts';
-import type { SqaaAnalysisDepth, SqaaIssue } from './sqaa-wire-types.ts';
+import type { PreparedSqaaProject } from './sqaa-request.ts';
+import type { SqaaIssue } from './sqaa-wire-types.ts';
 
 export type FileSuccess = {
   file: string;
@@ -50,11 +49,7 @@ export type FileResult = FileSuccess | FileFailure;
 export interface RunContext {
   paths: SqaaPath[];
   connection: SonarConnection;
-  projectKey: string;
-  branch: string | undefined;
   progress: SqaaProgress;
-  analysisDepth?: SqaaDeepWireDepth;
-  displayAnalysisDepth: SqaaAnalysisDepth;
 }
 
 export interface RunTally {
@@ -75,18 +70,6 @@ export interface RunTally {
  * Run analyses as sequential multi-file chunks. Returns the merged tally once
  * every chunk has been processed (or fail-fast stops remaining chunks).
  */
-export async function runAnalyses(ctx: RunContext): Promise<RunTally> {
-  return executePreparedAnalyses(
-    ctx,
-    prepareSqaaProject(
-      { projectKey: ctx.projectKey, files: ctx.paths },
-      ctx.connection,
-      ctx.branch,
-      ctx.analysisDepth,
-    ),
-  );
-}
-
 export async function executePreparedAnalyses(
   ctx: RunContext,
   prepared: PreparedSqaaProject,

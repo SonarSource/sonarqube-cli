@@ -22,13 +22,14 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   distributeChunkResponse,
+  executePreparedAnalyses,
   mergeTallies,
-  runAnalyses,
   shouldContinueAfterChunk,
 } from '@/commands/analyze/sqaa-analysis.ts';
 import type { SqaaChunkFile } from '@/commands/analyze/sqaa-chunking.ts';
 import { payloadTooLargeCommandError } from '@/commands/analyze/sqaa-errors.ts';
 import { SqaaProgress } from '@/commands/analyze/sqaa-progress.ts';
+import { prepareSqaaProject } from '@/commands/analyze/sqaa-request.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
@@ -142,7 +143,7 @@ describe('shouldContinueAfterChunk', () => {
   });
 });
 
-describe('runAnalyses partial 413', () => {
+describe('executePreparedAnalyses partial 413', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
   let readSpy: ReturnType<typeof spyOn>;
 
@@ -203,18 +204,24 @@ describe('runAnalyses partial 413', () => {
       silent: true,
       console: new FakeConsole(),
     });
-    const tally = await runAnalyses({
-      paths: files.map((absolutePath) => {
-        const name = absolutePath.replace('/repo/', '');
-        return { absolutePath, displayPath: name, serverPath: name };
-      }),
-      connection: CONNECTION,
-      projectKey: 'proj',
-      branch: undefined,
-      progress,
-      analysisDepth: 'DEEP',
-      displayAnalysisDepth: 'DEEP',
+    const paths = files.map((absolutePath) => {
+      const name = absolutePath.replace('/repo/', '');
+      return { absolutePath, displayPath: name, serverPath: name };
     });
+    const prepared = prepareSqaaProject(
+      { projectKey: 'proj', files: paths },
+      CONNECTION,
+      undefined,
+      'DEEP',
+    );
+    const tally = await executePreparedAnalyses(
+      {
+        paths,
+        connection: CONNECTION,
+        progress,
+      },
+      prepared,
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0]?.[2]).toEqual([a, b, c]);
@@ -241,18 +248,24 @@ describe('runAnalyses partial 413', () => {
       silent: true,
       console: new FakeConsole(),
     });
-    const tally = await runAnalyses({
-      paths: [
-        { absolutePath: '/repo/ok.ts', displayPath: 'ok.ts', serverPath: 'ok.ts' },
-        { absolutePath: '/repo/bad.ts', displayPath: 'bad.ts', serverPath: 'bad.ts' },
-      ],
-      connection: CONNECTION,
-      projectKey: 'proj',
-      branch: undefined,
-      progress,
-      analysisDepth: 'DEEP',
-      displayAnalysisDepth: 'DEEP',
-    });
+    const paths = [
+      { absolutePath: '/repo/ok.ts', displayPath: 'ok.ts', serverPath: 'ok.ts' },
+      { absolutePath: '/repo/bad.ts', displayPath: 'bad.ts', serverPath: 'bad.ts' },
+    ];
+    const prepared = prepareSqaaProject(
+      { projectKey: 'proj', files: paths },
+      CONNECTION,
+      undefined,
+      'DEEP',
+    );
+    const tally = await executePreparedAnalyses(
+      {
+        paths,
+        connection: CONNECTION,
+        progress,
+      },
+      prepared,
+    );
 
     expect(tally.totalFailures).toBe(1);
     expect(tally.allResults).toHaveLength(2);

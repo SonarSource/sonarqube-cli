@@ -20,8 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { runSqaaGroups } from '@/commands/analyze/sqaa-run.ts';
-import type { SqaaProjectFiles } from '@/commands/analyze/sqaa-types.ts';
+import { prepareSqaaRequests } from '@/commands/analyze/sqaa-request.ts';
+import { executeSqaaRun } from '@/commands/analyze/sqaa-run.ts';
+import type { PreparedSqaaRun, SqaaProjectFiles } from '@/commands/analyze/sqaa-types.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
@@ -54,14 +55,27 @@ function groupOf(projectKey: string, file: string): SqaaProjectFiles {
   };
 }
 
-const RUN = {
-  branch: undefined,
-  wireDepth: undefined,
-  displayDepth: 'STANDARD' as const,
-  console: new FakeConsole(),
-};
+function run(projects: SqaaProjectFiles[]): PreparedSqaaRun {
+  return {
+    connection: CONNECTION,
+    mode: 'change-set',
+    displayDepth: 'STANDARD',
+    displayBase: '/repo',
+    ignored: [],
+    files: {
+      projects,
+      displayPaths: projects.flatMap(({ files }) => files.map(({ displayPath }) => displayPath)),
+      displayProjects: projects.map(({ projectKey, files }) => ({
+        projectKey,
+        paths: files.map(({ displayPath }) => displayPath),
+      })),
+    },
+  };
+}
 
-describe('runSqaaGroups', () => {
+const OPTIONS = { console: new FakeConsole(), format: 'json' as const };
+
+describe('executeSqaaRun project groups', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
   let readSpy: ReturnType<typeof spyOn>;
 
@@ -76,7 +90,7 @@ describe('runSqaaGroups', () => {
   });
 
   function succeedPerFile(): void {
-    fetchSpy.mockImplementation((_connection: unknown, _key: unknown, files: unknown[]) =>
+    fetchSpy.mockImplementation((_connection: unknown, _request: unknown, files: unknown[]) =>
       Promise.resolve({
         parts: [{ response: { issues: [], errors: null }, files }],
         groupErrors: [],
@@ -86,12 +100,10 @@ describe('runSqaaGroups', () => {
 
   it('analyzes each project in order against its own project key and merges the results', async () => {
     succeedPerFile();
-
-    const tally = await runSqaaGroups(
-      [groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')],
-      CONNECTION,
-      { ...RUN, silent: true },
+    const prepared = await prepareSqaaRequests(
+      run([groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')]),
     );
+    const { tally } = await executeSqaaRun(prepared, OPTIONS);
 
     expect(
       fetchSpy.mock.calls.map((call: unknown[]) => (call[1] as { projectKey: string }).projectKey),
@@ -99,57 +111,43 @@ describe('runSqaaGroups', () => {
     expect(tally.allResults.map((r) => r.filePath)).toEqual(['app-a/x.ts', 'app-b/y.ts']);
   });
 
-  it('labels each project, with its position out of the total, on the live progress', async () => {
-    succeedPerFile();
-    const chunks: string[] = [];
-    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
-      chunks.push(String(chunk));
-      return true;
-    });
-    try {
-      await runSqaaGroups([groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')], CONNECTION, {
-        ...RUN,
-        silent: false,
-        isTTY: true,
+  it.each([1, 2])(
+    'labels projects only when the run spans several projects (%i)',
+    async (count) => {
+      succeedPerFile();
+      const prepared = await prepareSqaaRequests(
+        run([groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')].slice(0, count)),
+      );
+      const chunks: string[] = [];
+      const writeSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+        chunks.push(String(chunk));
+        return true;
       });
-    } finally {
-      writeSpy.mockRestore();
-    }
-
-    const output = chunks.join('');
-    expect(output).toContain('Project 1/2 · app-a');
-    expect(output).toContain('Project 2/2 · app-b');
-    expect(output.indexOf('Project 1/2')).toBeLessThan(output.indexOf('Project 2/2'));
-  });
-
-  it('does not label a run that covers one project', async () => {
-    succeedPerFile();
-    const chunks: string[] = [];
-    const writeSpy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
-      chunks.push(String(chunk));
-      return true;
-    });
-    try {
-      await runSqaaGroups([groupOf('app-a', 'x.ts')], CONNECTION, {
-        ...RUN,
-        silent: false,
-        isTTY: true,
-      });
-    } finally {
-      writeSpy.mockRestore();
-    }
-
-    expect(chunks.join('')).not.toContain('Project 1/1');
-  });
+      const isTTY = process.stdout.isTTY;
+      try {
+        process.stdout.isTTY = true;
+        await executeSqaaRun(prepared, { console: OPTIONS.console });
+      } finally {
+        process.stdout.isTTY = isTTY;
+        writeSpy.mockRestore();
+      }
+      const output = chunks.join('');
+      if (count === 1) {
+        expect(output).not.toContain('Project 1/1');
+      } else {
+        expect(output).toContain('Project 1/2 · app-a');
+        expect(output).toContain('Project 2/2 · app-b');
+        expect(output.indexOf('Project 1/2')).toBeLessThan(output.indexOf('Project 2/2'));
+      }
+    },
+  );
 
   it('stops at a global error instead of moving on to the next project', async () => {
     fetchSpy.mockRejectedValue(new SqaaForbiddenError());
-
-    const tally = await runSqaaGroups(
-      [groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')],
-      CONNECTION,
-      { ...RUN, silent: true },
+    const prepared = await prepareSqaaRequests(
+      run([groupOf('app-a', 'x.ts'), groupOf('app-b', 'y.ts')]),
     );
+    const { tally } = await executeSqaaRun(prepared, OPTIONS);
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(tally.globalError).toBeInstanceOf(SqaaForbiddenError);

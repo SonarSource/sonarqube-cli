@@ -194,6 +194,45 @@ describe('prepared SQAA requests', () => {
     ]);
   });
 
+  it.each([
+    { paths: ['0.ts', 'src\\bad.ts'], failures: 1, message: /forward slashes/ },
+    { paths: ['/absolute.ts', 'src\\bad.ts'], failures: 2, message: /project-relative/ },
+    { paths: ['a\\.ts', 'b\\.ts'], failures: 2, message: /forward slashes/ },
+    { paths: ['same.ts', 'same.ts'], failures: 1, message: /Duplicate file path/ },
+  ])(
+    'reports validation failures without sending rejected files ($paths)',
+    async ({ paths, failures, message }) => {
+      const context = run();
+      const project = context.files.projects[0];
+      project.files.forEach((file, index) => {
+        file.serverPath = paths[index];
+      });
+      const prepared = await prepareSqaaRequests(context);
+      expect(prepared.projects[0].failures).toHaveLength(failures);
+      expect(prepared.projects[0].failures[0].failure.message).toMatch(message);
+      expect(createAnalysis).not.toHaveBeenCalled();
+
+      const { tally } = await executeSqaaRun(prepared, OPTIONS);
+      expect(tally.totalFailures).toBe(failures);
+      expect(tally.allResults).toHaveLength(project.files.length);
+      expect(
+        tally.allResults.filter((result) => 'failure' in result).map(({ file }) => file),
+      ).toEqual(
+        project.files
+          .slice(project.files.length - failures)
+          .map(({ absolutePath }) => absolutePath),
+      );
+      if (failures === project.files.length) {
+        expect(createAnalysis).not.toHaveBeenCalled();
+      } else {
+        expect(createAnalysis).toHaveBeenCalledTimes(1);
+        expect(createAnalysis.mock.calls[0][0].files).toEqual([
+          { path: paths[0], content: 'const value = 0;' },
+        ]);
+      }
+    },
+  );
+
   it('exposes the destination independently of credentials and supports an empty run', async () => {
     const context = run();
     const project = context.files.projects[0];

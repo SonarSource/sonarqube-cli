@@ -25,7 +25,6 @@ import logger from '@/core/observability/logger.ts';
 import { timed } from '@/core/observability/timed.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SqaaForbiddenError } from '@/core/server/errors.ts';
-import type { Console } from '@/core/ui/console.ts';
 import { vortexUnavailableCommandMessage } from '@/core/vortex/availability-messages.ts';
 import { recheckVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
@@ -34,7 +33,6 @@ import { executePreparedAnalyses, mergeTallies } from './sqaa-analysis.ts';
 import { recordSqaaAnalysisTelemetry } from './sqaa-analysis-telemetry.ts';
 import { fetchPreparedSqaaWithRetry, MAX_503_RETRIES } from './sqaa-api.ts';
 import { prepareSqaaRun } from './sqaa-context.ts';
-import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   buildJsonReport,
   displaySqaaResults,
@@ -51,7 +49,6 @@ import { SqaaProgress } from './sqaa-progress.ts';
 import {
   type PreparedSqaaAnalysis,
   type PreparedSqaaProject,
-  prepareSqaaProject,
   prepareSqaaRequests,
 } from './sqaa-request.ts';
 import type {
@@ -60,7 +57,6 @@ import type {
   SqaaPreparedRunOptions,
   SqaaProjectFiles,
 } from './sqaa-types.ts';
-import type { SqaaAnalysisDepth } from './sqaa-wire-types.ts';
 
 export async function enrichForbiddenGlobalError(
   report: SqaaJsonReport,
@@ -74,50 +70,25 @@ export async function enrichForbiddenGlobalError(
   };
 }
 
-export async function runSqaaGroups(
-  projects: SqaaProjectFiles[],
-  connection: SonarConnection,
-  run: {
-    branch: string | undefined;
-    wireDepth: SqaaDeepWireDepth | undefined;
-    displayDepth: SqaaAnalysisDepth;
-    console: Console;
-    silent: boolean;
-    isTTY?: boolean;
-  },
-): Promise<RunTally> {
-  return executeSqaaGroups(
-    projects,
-    projects.map((project) => prepareSqaaProject(project, connection, run.branch, run.wireDepth)),
-    connection,
-    run,
-  );
-}
-
 async function executeSqaaGroups(
   projects: SqaaProjectFiles[],
   requests: PreparedSqaaProject[],
   connection: SonarConnection,
-  run: Parameters<typeof runSqaaGroups>[2],
+  options: SqaaPreparedRunOptions,
 ): Promise<RunTally> {
   const tallies: RunTally[] = [];
   for (const [index, { projectKey, files }] of projects.entries()) {
     const progress = new SqaaProgress({
       files: files.map((file) => file.displayPath),
       project: { key: projectKey, index: index + 1, total: projects.length },
-      isTTY: run.isTTY,
-      silent: run.silent,
-      console: run.console,
+      silent: options.format === 'json',
+      console: options.console,
     });
     const tally = await executePreparedAnalyses(
       {
         paths: files,
         connection,
-        projectKey,
-        branch: run.branch,
         progress,
-        analysisDepth: run.wireDepth,
-        displayAnalysisDepth: run.displayDepth,
       },
       requests[index],
     );
@@ -201,7 +172,7 @@ export async function executeSqaaRun(
   prepared: PreparedSqaaAnalysis,
   options: SqaaPreparedRunOptions,
 ): Promise<{ tally: RunTally; durationMs: number }> {
-  const { connection, files, branch, wireDepth, displayDepth, mode } = prepared.run;
+  const { connection, files, mode } = prepared.run;
   let execute: () => Promise<RunTally>;
   if (mode === 'single-file' || mode === 'edited-file') {
     const { file: path } = soleFile(files);
@@ -222,14 +193,7 @@ export async function executeSqaaRun(
         progress.finish();
       });
   } else {
-    execute = () =>
-      executeSqaaGroups(files.projects, prepared.projects, connection, {
-        branch,
-        wireDepth,
-        displayDepth,
-        console: options.console,
-        silent: options.format === 'json',
-      });
+    execute = () => executeSqaaGroups(files.projects, prepared.projects, connection, options);
   }
   const { result: tally, durationMs } = await timed(execute);
   return { tally, durationMs };

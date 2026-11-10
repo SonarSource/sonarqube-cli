@@ -33,14 +33,12 @@ import {
 
 import { SqaaAnalysisClient } from './sqaa-analysis-client.ts';
 import { type PackChunksLimits, packFilesIntoChunks, type SqaaChunkFile } from './sqaa-chunking.ts';
-import type { SqaaDeepWireDepth } from './sqaa-depth.ts';
 import {
   isGlobalSqaaError,
   payloadTooLargeCommandError,
   toSqaaCommandError,
 } from './sqaa-errors.ts';
-import { partitionSqaaAnalysisFiles, type SqaaFileValidationRejection } from './sqaa-validation.ts';
-import type { SqaaAnalysisFile, SqaaAnalysisRequest, SqaaIssue } from './sqaa-wire-types.ts';
+import type { SqaaAnalysisRequest, SqaaIssue } from './sqaa-wire-types.ts';
 
 /** Maximum number of retries on 503 responses. */
 export const MAX_503_RETRIES = 3;
@@ -68,24 +66,6 @@ function isRetryableSqaaError(err: unknown, includePayloadTooLarge: boolean): bo
     return true;
   }
   return includePayloadTooLarge && err instanceof RequestPayloadTooLargeError;
-}
-
-function validChunkFilesAfterRejection(
-  chunkFiles: SqaaChunkFile[],
-  rejected: SqaaFileValidationRejection[],
-): SqaaChunkFile[] {
-  const rejectedIndices = new Set<number>(rejected.map((entry) => entry.index));
-  return chunkFiles.filter((_, index) => !rejectedIndices.has(index));
-}
-
-function validationGroupErrors(
-  rejected: SqaaFileValidationRejection[],
-  chunkFiles: SqaaChunkFile[],
-): SqaaChunkGroupError[] {
-  return rejected.map(({ index, error }) => ({
-    files: chunkFiles[index] ? [chunkFiles[index]] : [],
-    error,
-  }));
 }
 
 async function postPreparedSqaaAnalysis(
@@ -155,10 +135,6 @@ export type SqaaChunkGroupError = {
   error: Error;
 };
 
-function toAnalysisFiles(chunkFiles: SqaaChunkFile[]): SqaaAnalysisFile[] {
-  return chunkFiles.map((f) => ({ path: f.relativePath, content: f.content }));
-}
-
 function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): SqaaChunkFile[][] {
   const packed = packFilesIntoChunks(files, limits);
   if (packed.length > 1) {
@@ -166,37 +142,6 @@ function splitChunkFiles(files: SqaaChunkFile[], limits: PackChunksLimits): Sqaa
   }
   const mid = Math.ceil(files.length / 2);
   return [files.slice(0, mid), files.slice(mid)];
-}
-
-export async function fetchChunkWith413Split(
-  connection: SonarConnection,
-  projectKey: string,
-  chunkFiles: SqaaChunkFile[],
-  branch: string | undefined,
-  onRetry?: (attempt: number) => Promise<void>,
-  onPayloadSplit?: () => void,
-  analysisDepth?: SqaaDeepWireDepth,
-): Promise<SqaaChunkFetchResult> {
-  const { valid, rejected } = partitionSqaaAnalysisFiles(toAnalysisFiles(chunkFiles), {
-    analysisDepth,
-  });
-  const result = await fetchPreparedChunkWith413Split(
-    connection,
-    {
-      ...(connection.auth.orgKey ? { organizationKey: connection.auth.orgKey } : {}),
-      projectKey,
-      ...(branch ? { branchName: branch } : {}),
-      ...(analysisDepth ? { analysisDepth } : {}),
-      files: valid,
-    },
-    validChunkFilesAfterRejection(chunkFiles, rejected),
-    onRetry,
-    onPayloadSplit,
-  );
-  return {
-    parts: result.parts,
-    groupErrors: [...validationGroupErrors(rejected, chunkFiles), ...result.groupErrors],
-  };
 }
 
 export async function fetchPreparedChunkWith413Split(
