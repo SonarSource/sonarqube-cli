@@ -18,46 +18,68 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { isValidServerUrl } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { deleteToken, getToken } from '@/core/host/keychain.ts';
+import {
+  deleteToken,
+  generateKeychainAccount,
+  getToken,
+  normalizeServerUrl,
+} from '@/core/host/keychain.ts';
+import { INVALID_SERVER_URL_MESSAGE } from '@/core/server/server-url-validation.ts';
+import type { AuthConnection } from '@/core/state/state.ts';
 import { getActiveConnection, removeConnection } from '@/core/state/state-manager.ts';
 import { loadState, updateState } from '@/core/state/state-repository.ts';
+import type { Console } from '@/core/ui/console.ts';
 
+import { httpsTokenDowngradeTarget } from './persist-login.ts';
 import {
   reportRevokeServerTokenOutcome,
   revokeServerTokenIfPossible,
 } from './revoke-server-token.ts';
 
-/**
- * Logout command - remove token from keychain
- */
-export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
+export interface AuthLogoutOptions {
+  server?: string;
+}
+
+export async function authLogout(
+  ctx: CommandInvocationContext,
+  options: AuthLogoutOptions = {},
+): Promise<void> {
+  if (options.server !== undefined && !isValidServerUrl(options.server)) {
+    throw new InvalidOptionError(INVALID_SERVER_URL_MESSAGE);
+  }
   const { console } = ctx;
   const state = loadState();
-  const active = getActiveConnection(state);
+  const requestedServer =
+    options.server === undefined ? undefined : normalizeServerUrl(options.server);
+  const selected =
+    requestedServer === undefined
+      ? getActiveConnection(state)
+      : state.auth.connections.find(
+          (connection) => normalizeServerUrl(connection.serverUrl) === requestedServer,
+        );
 
-  if (!state.auth.isAuthenticated || active === undefined || state.auth.connections.length === 0) {
-    console.print('You are already logged out.');
+  if (selected === undefined || (options.server === undefined && !state.auth.isAuthenticated)) {
+    console.print(
+      options.server === undefined
+        ? 'You are already logged out.'
+        : 'No saved connection matches this server.',
+    );
     return;
   }
 
-  const server = active.serverUrl;
-  const org = active.orgKey;
-  let token: string | undefined;
-  try {
-    token = (await getToken(server)) ?? undefined;
-  } catch (err) {
-    console.warn(
-      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
-    );
-  }
-
-  const revokeOutcome = await revokeServerTokenIfPossible(active, token);
-  reportRevokeServerTokenOutcome(revokeOutcome, {
-    continuingMessage: 'Continuing with local logout.',
-    console,
-  });
+  const server = selected.serverUrl;
+  const org = selected.orgKey;
+  const connections =
+    options.server === undefined
+      ? [selected]
+      : state.auth.connections.filter(
+          (connection) =>
+            generateKeychainAccount(connection.serverUrl) === generateKeychainAccount(server),
+        );
+  await revokeTokenBeforeLogout(selected, state.auth.connections, console);
 
   try {
     await deleteToken(server);
@@ -70,15 +92,14 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   let removed: boolean;
   try {
     removed = updateState((latest) => {
-      const current = latest.auth.connections.find((connection) => connection.id === active.id);
-      if (current === undefined) {
-        return true;
+      let allRemoved = true;
+      for (const saved of connections) {
+        const current = latest.auth.connections.find((connection) => connection.id === saved.id);
+        if (current === undefined) continue;
+        if (current.authenticatedAt === saved.authenticatedAt) removeConnection(latest, saved.id);
+        else allRemoved = false;
       }
-      if (current.authenticatedAt === active.authenticatedAt) {
-        removeConnection(latest, active.id);
-        return true;
-      }
-      return false;
+      return allRemoved;
     });
   } catch (error) {
     throw new CommandFailedError(
@@ -92,6 +113,34 @@ export async function authLogout(ctx: CommandInvocationContext): Promise<void> {
   }
 
   const displayServerLogout =
-    active.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;
+    selected.type === 'cloud' && org !== undefined ? `${server} (${org})` : server;
   console.success(`Logged out from: ${displayServerLogout}`);
+}
+
+async function revokeTokenBeforeLogout(
+  connection: AuthConnection,
+  savedConnections: readonly AuthConnection[],
+  console: Console,
+): Promise<void> {
+  if (httpsTokenDowngradeTarget(savedConnections, connection.serverUrl) !== undefined) {
+    console.warn(
+      'The server-side token could not be revoked automatically. Revoke it manually on the server if needed. Continuing with local logout.',
+    );
+    return;
+  }
+
+  let token: string | undefined;
+  try {
+    token = (await getToken(connection.serverUrl)) ?? undefined;
+  } catch (err) {
+    console.warn(
+      `Could not read the local token: ${(err as Error).message}. Continuing with local logout.`,
+    );
+  }
+
+  const revokeOutcome = await revokeServerTokenIfPossible(connection, token);
+  reportRevokeServerTokenOutcome(revokeOutcome, {
+    continuingMessage: 'Continuing with local logout.',
+    console,
+  });
 }

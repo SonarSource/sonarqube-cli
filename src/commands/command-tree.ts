@@ -89,7 +89,7 @@ import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { registerArchitectureCommands } from './architecture/register.ts';
 import { authLogin, type AuthLoginOptions } from './auth/login.ts';
-import { authLogout } from './auth/logout.ts';
+import { authLogout, type AuthLogoutOptions } from './auth/logout.ts';
 import { authOrg } from './auth/org.ts';
 import {
   authStatus,
@@ -336,8 +336,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   auth
     .command('logout')
-    .description('Remove active connection token from keychain')
-    .anonymousAction((ctx) => authLogout(ctx));
+    .description(
+      'Remove the active connection, or all saved connections for a hostname with --server',
+    )
+    .option(
+      '-s, --server <server>',
+      'Select a saved server URL and clear all saved connections and the shared token for its hostname',
+    )
+    .anonymousAction((ctx, options: AuthLogoutOptions) => authLogout(ctx, options));
 
   auth
     .command('status')
