@@ -578,12 +578,17 @@ async function parseBadRequestError(
     return new BadRequestError(fallback);
   }
   const message = typeof body.message === 'string' && body.message ? body.message : undefined;
-  const errors = Array.isArray(body.errors) ? (body.errors as Array<{ msg?: unknown } | null>) : [];
-  const detail = errors.find((error) => typeof error?.msg === 'string' && error.msg)?.msg;
+  const entries = Array.isArray(body.errors)
+    ? (body.errors as Array<{ msg?: unknown } | null>)
+    : [];
+  const messages = entries.flatMap((entry) =>
+    typeof entry?.msg === 'string' && entry.msg ? [entry.msg] : [],
+  );
   return new BadRequestError(
-    message ?? (typeof detail === 'string' ? detail : fallback),
+    message ?? messages.at(0) ?? fallback,
     body.code,
     body.meta as Record<string, unknown> | undefined,
+    messages,
   );
 }
 

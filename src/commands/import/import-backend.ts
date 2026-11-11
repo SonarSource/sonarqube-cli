@@ -18,11 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
+import type { MonorepoProject } from './monorepo-projects.ts';
 import type { RepoResolution, ResolvedRepo } from './resolve-options';
-import type { ImportOptions } from './types';
+import type { ImportPlanOptions } from './types';
 
 /** What happened to one repository, when more than "imported" is worth saying. */
 export interface ImportRepoOutcome {
@@ -30,18 +32,63 @@ export interface ImportRepoOutcome {
   projectKey?: string;
 }
 
+/** Reports one project's progress while a monorepo import runs. */
+export type MonorepoProgressReporter = (
+  projectKey: string,
+  status: 'running' | 'done' | 'failed',
+  detail?: string,
+) => void;
+
+/** The overview page of one project, for the links shown once it is imported. */
+export function projectOverviewUrl(serverUrl: string, projectKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
+}
+
+/** Parallel project lookups per monorepo import; keeps a long project list from flooding the server. */
+const LOOKUP_CONCURRENCY = 5;
+
+/**
+ * Runs `task` over `items` with bounded concurrency and results in input order. Unlike
+ * `runWithConcurrencyLimit`, the first failure (in input order) rejects.
+ */
+export async function mapWithLimit<TItem, TValue>(
+  items: TItem[],
+  task: (item: TItem) => Promise<TValue>,
+): Promise<TValue[]> {
+  const results = await runWithConcurrencyLimit(items, LOOKUP_CONCURRENCY, task);
+  return results.map((result) => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value as TValue;
+  });
+}
+
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
 export interface ImportPlan {
   selection: RepoResolution;
   /** Where to send the user once the import has finished. */
   outroLink: { label: string; url: string };
+  /** Where to find one imported project. */
+  projectUrl(projectKey: string): string;
   /** Maps a listed repository to the shape `importRepo` expects. */
   toResolvedRepo(repo: DopRepository): ResolvedRepo;
   /** Provisions a single repository; rejects with the failure reason. */
   importRepo(repo: ResolvedRepo): Promise<ImportRepoOutcome | undefined>;
+  /** Every project already bound to `repo`; `elsewhere` counts bound projects the CLI cannot name. */
+  listBoundProjectKeys(repo: ResolvedRepo): Promise<{ keys: string[]; elsewhere: number }>;
+  /** Which of `projectKeys` already exist, so a monorepo import can skip them. */
+  findExistingProjectKeys(repo: ResolvedRepo, projectKeys: string[]): Promise<string[]>;
+  /**
+   * Binds each of `projects` to the one repository `repo`, reporting every project's outcome
+   * through `report`. Per-project failures are reported, not thrown.
+   */
+  importMonorepo(
+    repo: ResolvedRepo,
+    projects: MonorepoProject[],
+    report: MonorepoProgressReporter,
+  ): Promise<void>;
 }
 
 /** One SonarQube flavour's way of resolving the import target and provisioning repositories. */
 export interface ImportBackend {
-  plan(options: ImportOptions, console: Console): Promise<ImportPlan>;
+  plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan>;
 }
