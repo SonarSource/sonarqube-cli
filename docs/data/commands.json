@@ -1,5 +1,5 @@
 {
-  "version": "1.11.0",
+  "version": "1.12.0",
   "commands": [
     {
       "id": "sonar",
@@ -135,7 +135,7 @@
       "name": "logout",
       "fullName": "sonar auth logout",
       "aliases": [],
-      "description": "Remove active connection token from keychain",
+      "description": "Remove the active connection, or all saved connections for a hostname with --server",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -143,11 +143,24 @@
       "depth": 2,
       "parentId": "sonar-auth",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "flags": "-s, --server <server>",
+          "long": "--server",
+          "short": "-s",
+          "description": "Select a saved server URL and clear all saved connections and the shared token for its hostname",
+          "type": "string",
+          "required": false
+        }
+      ],
       "examples": [
         {
           "command": "sonar auth logout",
-          "description": "Remove active connection token from keychain"
+          "description": "Remove the active connection and its token from the keychain"
+        },
+        {
+          "command": "sonar auth logout --server https://sonarqube.my.com/sonarqube",
+          "description": "Remove all saved connections and the shared token for the selected hostname"
         }
       ],
       "children": []
@@ -537,7 +550,7 @@
       "name": "import",
       "fullName": "sonar import",
       "aliases": [],
-      "description": "Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only)",
+      "description": "Import repositories from a connected DevOps platform into SonarQube",
       "isGroup": false,
       "isRoot": false,
       "stage": "beta",
@@ -565,6 +578,13 @@
           "flags": "--regex <regex>",
           "long": "--regex",
           "description": "Import only eligible repositories whose DevOps platform name (not slug) matches this regular expression.\n\n                   Case-sensitive by default; wrap as /pattern/flags to add flags like case-insensitive matching. Cannot be combined with --repo or --all.\n                   Examples:\n                       --regex \"^test-\"\n                       --regex \"/^archived-/i\"\n",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--dop-setting <key>",
+          "long": "--dop-setting",
+          "description": "SonarQube Server only: key of the DevOps platform setting to import from. Required when several are configured and prompts are off.",
           "type": "string",
           "required": false
         },
@@ -860,7 +880,7 @@
       "name": "codex",
       "fullName": "sonar integrate codex",
       "aliases": [],
-      "description": "Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.",
+      "description": "Setup SonarQube integration for Codex. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -1221,9 +1241,20 @@
           "description": "Read from standard input instead of paths",
           "type": "boolean",
           "required": false
+        },
+        {
+          "flags": "--exclude <path>",
+          "long": "--exclude",
+          "description": "File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key",
+          "type": "string",
+          "required": false
         }
       ],
       "examples": [
+        {
+          "command": "sonar analyze secrets src --exclude src/generated --exclude src/vendor",
+          "description": "Skip directories with repeatable --exclude options"
+        },
         {
           "command": "sonar analyze secrets src/config.ts",
           "description": "Scan a file for hardcoded secrets"
@@ -1425,8 +1456,8 @@
       "arguments": [
         {
           "name": "projectKey",
-          "description": "SonarQube project key",
-          "required": true,
+          "description": "SonarQube project key (omit to pick one: a verified suggestion, or a search)",
+          "required": false,
           "variadic": false
         }
       ],
@@ -1658,7 +1689,7 @@
       "aliases": [
         "arch"
       ],
-      "description": "Read and set the architecture of a project",
+      "description": "Read and set the architecture of a project (SonarQube Cloud only)",
       "isGroup": true,
       "isRoot": false,
       "stage": "stable",
@@ -1671,6 +1702,8 @@
       "children": [
         "sonar-architecture-current",
         "sonar-architecture-intended",
+        "sonar-architecture-directives",
+        "sonar-architecture-findings",
         "sonar-architecture-install-skill"
       ]
     },
@@ -1726,6 +1759,34 @@
           "flags": "--depth <n>",
           "long": "--depth",
           "description": "Levels below the start node (default 1)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--from <key>",
+          "long": "--from",
+          "description": "Dependency source key, including descendants; requires --to",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--to <key>",
+          "long": "--to",
+          "description": "Dependency destination key, including descendants; requires --from",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page <n>",
+          "long": "--page",
+          "description": "Dependency page (default 1; requires --from/--to)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page-size <n>",
+          "long": "--page-size",
+          "description": "Dependencies per page (default/maximum 20)",
           "type": "string",
           "required": false
         },
@@ -1878,6 +1939,237 @@
           "long": "--project",
           "short": "-p",
           "description": "Project key",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-directives",
+      "name": "directives",
+      "fullName": "sonar architecture directives",
+      "aliases": [],
+      "description": "Read, create, update and delete project directives",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-architecture",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-architecture-directives-get",
+        "sonar-architecture-directives-set"
+      ]
+    },
+    {
+      "id": "sonar-architecture-directives-get",
+      "name": "get",
+      "fullName": "sonar architecture directives get",
+      "aliases": [],
+      "description": "Read a directive by id or list a page of visible project directives",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-directives",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--id <id>",
+          "long": "--id",
+          "description": "Directive UUID; cannot be combined with pagination",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format (default: text on a terminal, toon otherwise)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "text",
+            "toon",
+            "json"
+          ]
+        },
+        {
+          "flags": "--page <n>",
+          "long": "--page",
+          "description": "Page number (default 1)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page-size <n>",
+          "long": "--page-size",
+          "description": "Items per page (default 50, maximum 1000)",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-directives-set",
+      "name": "set",
+      "fullName": "sonar architecture directives set",
+      "aliases": [],
+      "description": "Create, update or delete explicit project directives",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-directives",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--file <file>",
+          "long": "--file",
+          "description": "JSON object with create, update and delete arrays",
+          "type": "string",
+          "required": true
+        },
+        {
+          "flags": "--dry-run",
+          "long": "--dry-run",
+          "description": "Preview changes without writing",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
+      "id": "sonar-architecture-findings",
+      "name": "findings",
+      "fullName": "sonar architecture findings",
+      "aliases": [],
+      "description": "Read architecture deviations, flaws and smells",
+      "isGroup": true,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": false,
+      "depth": 2,
+      "parentId": "sonar-architecture",
+      "arguments": [],
+      "options": [],
+      "examples": [],
+      "children": [
+        "sonar-architecture-findings-get"
+      ]
+    },
+    {
+      "id": "sonar-architecture-findings-get",
+      "name": "get",
+      "fullName": "sonar architecture findings get",
+      "aliases": [],
+      "description": "List findings with their details from the latest main-branch analysis",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "stable",
+      "requiresAuth": true,
+      "depth": 3,
+      "parentId": "sonar-architecture-findings",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "-p, --project <project>",
+          "long": "--project",
+          "short": "-p",
+          "description": "Project key",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--category <category>",
+          "long": "--category",
+          "description": "Only this category",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "deviation",
+            "flaw",
+            "smell"
+          ]
+        },
+        {
+          "flags": "--type <type>",
+          "long": "--type",
+          "description": "Only this finding type",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "structuralDeviation",
+            "relationshipDeviation",
+            "tangle",
+            "oversizedComponent",
+            "weakTangle",
+            "splitResponsibility"
+          ]
+        },
+        {
+          "flags": "--language <language>",
+          "long": "--language",
+          "description": "Only this language (default: all)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "java",
+            "cs",
+            "js",
+            "ts",
+            "py"
+          ]
+        },
+        {
+          "flags": "--format <format>",
+          "long": "--format",
+          "description": "Output format (default: text on a terminal, toon otherwise)",
+          "type": "string",
+          "required": false,
+          "allowedValues": [
+            "text",
+            "toon",
+            "json"
+          ]
+        },
+        {
+          "flags": "--page <n>",
+          "long": "--page",
+          "description": "Page number (default 1)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--page-size <n>",
+          "long": "--page-size",
+          "description": "Items per page (default 50, 0 counts only, maximum 1000)",
           "type": "string",
           "required": false
         }
