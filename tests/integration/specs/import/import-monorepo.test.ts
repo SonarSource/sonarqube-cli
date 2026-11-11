@@ -134,7 +134,27 @@ describe('sonar import --monorepo', () => {
         const output = result.stdout + result.stderr;
         expect(output).toContain('Key already exists');
         expect(output).toContain('Bound 1 of 2 projects to my-org/repo (1 failed)');
-        expect(output).not.toContain('/project/overview?id=');
+        // The project that was bound keeps its link; the refused one gets none.
+        expect(output).toContain('/project/overview?id=my-org_repo_api');
+        expect(output).not.toContain('/project/overview?id=my-org_repo_web');
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'aborts without creating anything when the existing-project lookup fails',
+      async () => {
+        const server = await startCloud((s) => s.withComponentShowStatus(500));
+
+        const result = await run('--monorepo my-org/repo --project my-org_repo_api', server);
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).not.toContain('Bound');
+        expect(
+          server
+            .getRecordedRequests()
+            .some((r) => r.path === '/api/alm_integration/provision_monorepo_projects'),
+        ).toBe(false);
       },
       { timeout: 15000 },
     );

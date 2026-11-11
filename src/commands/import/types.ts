@@ -27,6 +27,10 @@ export interface ImportOptions {
   monorepo?: string;
   project?: string[];
   projectsFile?: string;
-  /** Set by a monorepo import: its repository is imported already, and gains projects. */
+}
+
+/** What a backend plans from: the CLI options plus flags only the import code itself sets. */
+export interface ImportPlanOptions extends ImportOptions {
+  /** A monorepo import targets a repository that is imported already, and adds projects to it. */
   allowImportedRepo?: boolean;
 }

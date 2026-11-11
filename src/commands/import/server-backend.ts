@@ -38,6 +38,7 @@ import {
   type ImportBackend,
   type ImportPlan,
   type ImportRepoOutcome,
+  mapWithLimit,
   type MonorepoProgressReporter,
   projectOverviewUrl,
 } from './import-backend.ts';
@@ -59,7 +60,7 @@ import {
 } from './server/server-import-api.ts';
 import type { ServerRepository } from './server/server-repository.ts';
 import { waitForPat } from './server/wait-for-pat.ts';
-import type { ImportOptions } from './types';
+import type { ImportOptions, ImportPlanOptions } from './types';
 
 /** Every repository is selectable: SonarQube Server has no per-organization visibility rule. */
 const NO_VISIBILITY_RESTRICTION: OnlyPrivateProjects = { enabled: false, available: true };
@@ -75,7 +76,7 @@ export class ServerBackend implements ImportBackend {
     private readonly serverUrl: string,
   ) {}
 
-  async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+  async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
     validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options) });
     await this.api.requireSupportedVersion();
 
@@ -147,9 +148,10 @@ export class ServerBackend implements ImportBackend {
         return { keys: await listBoundProjectKeys(this.api, setting, repository), elsewhere: 0 };
       },
       findExistingProjectKeys: async (_resolved, projectKeys) => {
-        const states = await Promise.all(
-          projectKeys.map(async (key) => ({ key, state: await this.api.lookupProject(key) })),
-        );
+        const states = await mapWithLimit(projectKeys, async (key) => ({
+          key,
+          state: await this.api.lookupProject(key),
+        }));
         return states.filter(({ state }) => state !== 'missing').map(({ key }) => key);
       },
       importMonorepo: (resolved, projects, report) =>

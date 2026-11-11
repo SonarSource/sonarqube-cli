@@ -18,12 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
 import type { MonorepoProject } from './monorepo-projects.ts';
 import type { RepoResolution, ResolvedRepo } from './resolve-options';
-import type { ImportOptions } from './types';
+import type { ImportPlanOptions } from './types';
 
 /** What happened to one repository, when more than "imported" is worth saying. */
 export interface ImportRepoOutcome {
@@ -41,6 +42,24 @@ export type MonorepoProgressReporter = (
 /** The overview page of one project, for the links shown once it is imported. */
 export function projectOverviewUrl(serverUrl: string, projectKey: string): string {
   return `${serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
+}
+
+/** Parallel project lookups per monorepo import; keeps a long project list from flooding the server. */
+const LOOKUP_CONCURRENCY = 5;
+
+/**
+ * Runs `task` over `items` with bounded concurrency and results in input order. Unlike
+ * `runWithConcurrencyLimit`, the first failure (in input order) rejects.
+ */
+export async function mapWithLimit<TItem, TValue>(
+  items: TItem[],
+  task: (item: TItem) => Promise<TValue>,
+): Promise<TValue[]> {
+  const results = await runWithConcurrencyLimit(items, LOOKUP_CONCURRENCY, task);
+  return results.map((result) => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value as TValue;
+  });
 }
 
 /** What a backend resolved for one run: which repositories to import, and how to import each. */
@@ -71,5 +90,5 @@ export interface ImportPlan {
 
 /** One SonarQube flavour's way of resolving the import target and provisioning repositories. */
 export interface ImportBackend {
-  plan(options: ImportOptions, console: Console): Promise<ImportPlan>;
+  plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan>;
 }

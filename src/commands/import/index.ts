@@ -32,7 +32,7 @@ import type { RepositoryCollection, SkippedRepo } from './repository-collection'
 import type { ResolvedRepo } from './resolve-options';
 import { ServerImportApiClient } from './server/server-import-api.ts';
 import { ServerBackend } from './server-backend.ts';
-import type { ImportOptions } from './types';
+import type { ImportOptions, ImportPlanOptions } from './types';
 
 export { type ImportOptions } from './types';
 
@@ -315,7 +315,7 @@ export async function importHandler(
   const { console } = ctx;
   const monorepo = resolveMonorepoImport(options);
   // The repository resolves like an explicit `--repo`, so every check on it stays shared.
-  const effective = monorepo
+  const effective: ImportPlanOptions = monorepo
     ? { ...options, repo: [monorepo.repo], allowImportedRepo: true }
     : options;
   console.intro('Import repositories', 'SonarQube');

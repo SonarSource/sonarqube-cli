@@ -26,6 +26,7 @@ import type { ImportApiClient } from './import-api.ts';
 import {
   type ImportBackend,
   type ImportPlan,
+  mapWithLimit,
   type MonorepoProgressReporter,
   projectOverviewUrl,
 } from './import-backend.ts';
@@ -43,7 +44,7 @@ import {
   resolveOrg,
   resolveRepos,
 } from './resolve-options';
-import type { ImportOptions } from './types';
+import type { ImportPlanOptions } from './types';
 
 /** SonarQube Cloud: the org is the one tied to the active connection. */
 export class CloudBackend implements ImportBackend {
@@ -54,7 +55,7 @@ export class CloudBackend implements ImportBackend {
     private readonly resolvedOrg?: ResolvedOrg,
   ) {}
 
-  async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+  async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
     const {
       key: resolvedOrgKey,
       almKey: resolvedAlmKey,
@@ -108,10 +109,8 @@ export class CloudBackend implements ImportBackend {
         return { keys, elsewhere: Math.max(ids.length - keys.length, 0) };
       },
       findExistingProjectKeys: async (_repo, projectKeys) => {
-        const found = await Promise.all(
-          projectKeys.map(async (key) =>
-            (await projectExistsOrThrow(client, resolvedOrgKey, key)) ? key : null,
-          ),
+        const found = await mapWithLimit(projectKeys, async (key) =>
+          (await projectExistsOrThrow(client, resolvedOrgKey, key)) ? key : null,
         );
         return found.filter((key): key is string => key !== null);
       },
@@ -189,12 +188,10 @@ async function settleRefusals(
   }
   const reason = parsed.untagged.join(' ') || NOT_CREATED;
   const unaccounted = keys.filter((key) => !failures.has(key));
-  const lookups = await Promise.all(
-    unaccounted.map(async (key) => ({
-      key,
-      found: await projectExists(client, organization, key),
-    })),
-  );
+  const lookups = await mapWithLimit(unaccounted, async (key) => ({
+    key,
+    found: await projectExists(client, organization, key),
+  }));
   for (const { key, found } of lookups) {
     if (!found) failures.set(key, reason);
   }

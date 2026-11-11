@@ -366,7 +366,7 @@ export class ServerImportApiClient {
   /** Creates a bound project without changing an existing project. */
   async createBoundProject(request: BoundProjectRequest): Promise<void> {
     await this.client
-      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { monorepo: false, ...request })
+      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { ...request, monorepo: request.monorepo ?? false })
       .orThrow();
   }
 
