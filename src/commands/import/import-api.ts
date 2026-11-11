@@ -27,6 +27,9 @@
 import logger from '@/core/observability/logger.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
+
+import type { MonorepoProject } from './monorepo-projects.ts';
 
 export interface DopRepository {
   id: string;
@@ -42,17 +45,30 @@ export interface ProvisionedProject {
   projectKey: string;
 }
 
+/**
+ * A `provision_monorepo_projects` call that created every project. Refused projects never come
+ * back here: the server answers HTTP 400 and lists them in `errors` (see `monorepo-provision-errors.ts`).
+ */
+export interface MonorepoProvisionResult {
+  projects?: ProvisionedProject[];
+}
+
+/** Ids sent per `search_projects` call, which keeps the URL short and the answer on one page. */
+const PROJECT_IDS_PER_REQUEST = 50;
+
 export class ImportApiClient {
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
 
   /** One instance for the whole run, so its organization cache is shared across lookups. */
   readonly organizations: OrganizationsClient;
+  readonly projects: ProjectsClient;
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
     this.organizations = new OrganizationsClient(client);
+    this.projects = new ProjectsClient(client);
   }
 
   get isCloud(): boolean {
@@ -79,6 +95,25 @@ export class ImportApiClient {
   }
 
   /**
+   * The keys of the organization's projects with these ids, via `GET /api/components/search_projects`
+   * (SonarQube Cloud only). An id of a project outside the organization yields no key.
+   */
+  async projectKeysByIds(organization: string, projectIds: string[]): Promise<string[]> {
+    const keys: string[] = [];
+    for (let start = 0; start < projectIds.length; start += PROJECT_IDS_PER_REQUEST) {
+      const response = await this.client // NOSONAR: sequential, a few small requests at most
+        .get<{ components?: Array<{ key: string }> }>('/api/components/search_projects', {
+          organization,
+          projectIds: projectIds.slice(start, start + PROJECT_IDS_PER_REQUEST).join(','),
+          ps: PROJECT_IDS_PER_REQUEST,
+        })
+        .orThrow();
+      keys.push(...(response.components ?? []).map((component) => component.key));
+    }
+    return keys;
+  }
+
+  /**
    * Create (provision) a SonarQube project bound to a single DevOps platform repository via the
    * legacy `POST /api/alm_integration/provision_projects` endpoint (SonarQube Cloud only). This
    * has not migrated to the newer `dop-translation` family yet.
@@ -94,6 +129,28 @@ export class ImportApiClient {
       .postFormJson<{ projects: ProvisionedProject[] }>('/api/alm_integration/provision_projects', {
         organization,
         installationKeys: installationKey,
+      })
+      .orThrow();
+  }
+
+  /**
+   * Create several projects bound to the same repository via
+   * `POST /api/alm_integration/provision_monorepo_projects` (SonarQube Cloud only). The response
+   * lists what was created and what was refused, so a partly failed batch is not an error here.
+   */
+  provisionMonorepoProjects(
+    organization: string,
+    installationKey: string,
+    projects: MonorepoProject[],
+  ): Promise<MonorepoProvisionResult> {
+    return this.client
+      .post<MonorepoProvisionResult>('/api/alm_integration/provision_monorepo_projects', {
+        organization,
+        projects: projects.map(({ projectKey, projectName }) => ({
+          projectKey,
+          projectName,
+          installationKey,
+        })),
       })
       .orThrow();
   }

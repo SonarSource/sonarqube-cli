@@ -151,6 +151,8 @@ export interface BoundProjectRequest {
   repositoryIdentifier: string;
   /** Needed for Azure DevOps and Bitbucket Server only. */
   projectIdentifier?: string;
+  /** Binds the project as one of several on the same repository. Defaults to false. */
+  monorepo?: boolean;
 }
 
 export class ServerImportApiClient {
@@ -364,7 +366,7 @@ export class ServerImportApiClient {
   /** Creates a bound project without changing an existing project. */
   async createBoundProject(request: BoundProjectRequest): Promise<void> {
     await this.client
-      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { ...request, monorepo: false })
+      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { ...request, monorepo: request.monorepo ?? false })
       .orThrow();
   }
 
