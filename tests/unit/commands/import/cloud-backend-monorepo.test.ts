@@ -20,7 +20,7 @@
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { importMonorepoProjects } from '@/commands/import/cloud-backend.ts';
+import { CloudImportPlan } from '@/commands/import/cloud-import-plan.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -38,7 +38,7 @@ const PROJECTS = [
   { projectKey: 'org_web', projectName: 'Web' },
 ];
 
-describe('importMonorepoProjects (SonarQube Cloud)', () => {
+describe('CloudImportPlan.importMonorepo', () => {
   let fetchSpy: ReturnType<typeof spyOn>;
 
   afterEach(() => {
@@ -49,11 +49,19 @@ describe('importMonorepoProjects (SonarQube Cloud)', () => {
     return new ImportApiClient(new SonarHttpClient(SONARCLOUD_URL, 'token'));
   }
 
+  function plan(): CloudImportPlan {
+    return new CloudImportPlan(client(), 'org', undefined, SONARCLOUD_URL, {
+      kind: 'batch',
+      repos: [],
+      skipped: [],
+    });
+  }
+
+  const REPO = { slug: 'owner/repo', installationKey: 'owner/repo|42' };
+
   function run() {
     const reports: Array<[string, string, string | undefined]> = [];
-    const done = importMonorepoProjects(client(), 'org', 'owner/repo|42', PROJECTS, (k, s, d) =>
-      reports.push([k, s, d]),
-    );
+    const done = plan().importMonorepo(REPO, PROJECTS, (k, s, d) => reports.push([k, s, d]));
     return { reports, done };
   }
 
@@ -110,10 +118,8 @@ describe('importMonorepoProjects (SonarQube Cloud)', () => {
         ),
       );
       const reports: Array<[string, string, string | undefined]> = [];
-      await importMonorepoProjects(
-        client(),
-        'org',
-        'owner/repo|42',
+      await plan().importMonorepo(
+        REPO,
         keys.map((projectKey) => ({ projectKey, projectName: projectKey })),
         (k, s, d) => reports.push([k, s, d]),
       );

@@ -25,7 +25,14 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { ComponentShowResponse } from '@/core/server/types.ts';
 
-import { lastFetchInit, lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
+import {
+  fakeResponse,
+  lastFetchInit,
+  lastFetchUrl,
+  mockFetch,
+  mockFetchSeq,
+  nthFetchUrl,
+} from '../../helpers/mock-fetch.ts';
 
 const SERVER_URL = 'https://sonarqube.example.com';
 
@@ -116,5 +123,56 @@ describe('ProjectsClient.findProject', () => {
     const result = await clientReturning(show({ organization: 'mine' })).findProject('k', 'mine');
 
     expect(result.isOk() && result.value).toEqual({ key: 'k', name: 'Name' });
+  });
+});
+
+describe('ProjectsClient.findProjectKeysByIds', () => {
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  const client = () => new ProjectsClient(new SonarHttpClient(SERVER_URL, 'test-token'));
+
+  it('resolves the keys of the organization projects with these ids', async () => {
+    fetchSpy = mockFetch({ components: [{ key: 'org_api' }, { key: 'org_web' }] });
+
+    expect(await client().findProjectKeysByIds('org', ['id-1', 'id-2']).orThrow()).toEqual([
+      'org_api',
+      'org_web',
+    ]);
+    const url = new URL(lastFetchUrl(fetchSpy));
+    expect(url.pathname).toBe('/api/components/search_projects');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      organization: 'org',
+      projectIds: 'id-1,id-2',
+      ps: '50',
+    });
+  });
+
+  it('yields no key for an id outside the organization', async () => {
+    fetchSpy = mockFetch({});
+
+    expect(await client().findProjectKeysByIds('org', ['elsewhere']).orThrow()).toEqual([]);
+  });
+
+  it('splits more than 50 ids over several requests, in order', async () => {
+    const ids = Array.from({ length: 51 }, (_, index) => `id-${index}`);
+    fetchSpy = mockFetchSeq(
+      fakeResponse({ components: [{ key: 'first' }] }),
+      fakeResponse({ components: [{ key: 'second' }] }),
+    );
+
+    expect(await client().findProjectKeysByIds('org', ids).orThrow()).toEqual(['first', 'second']);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(new URL(nthFetchUrl(fetchSpy, 1)).searchParams.get('projectIds')).toBe('id-50');
+  });
+
+  it('makes no request without ids', async () => {
+    fetchSpy = mockFetch({});
+
+    expect(await client().findProjectKeysByIds('org', []).orThrow()).toEqual([]);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

@@ -53,9 +53,6 @@ export interface MonorepoProvisionResult {
   projects?: ProvisionedProject[];
 }
 
-/** Ids sent per `search_projects` call, which keeps the URL short and the answer on one page. */
-const PROJECT_IDS_PER_REQUEST = 50;
-
 export class ImportApiClient {
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
@@ -92,25 +89,6 @@ export class ImportApiClient {
       }>(endpoint, { organizationId, pageIndex, pageSize })
       .orThrow();
     return { repositories: result.repositories, total: result.page.total };
-  }
-
-  /**
-   * The keys of the organization's projects with these ids, via `GET /api/components/search_projects`
-   * (SonarQube Cloud only). An id of a project outside the organization yields no key.
-   */
-  async projectKeysByIds(organization: string, projectIds: string[]): Promise<string[]> {
-    const keys: string[] = [];
-    for (let start = 0; start < projectIds.length; start += PROJECT_IDS_PER_REQUEST) {
-      const response = await this.client // NOSONAR: sequential, a few small requests at most
-        .get<{ components?: Array<{ key: string }> }>('/api/components/search_projects', {
-          organization,
-          projectIds: projectIds.slice(start, start + PROJECT_IDS_PER_REQUEST).join(','),
-          ps: PROJECT_IDS_PER_REQUEST,
-        })
-        .orThrow();
-      keys.push(...(response.components ?? []).map((component) => component.key));
-    }
-    return keys;
   }
 
   /**

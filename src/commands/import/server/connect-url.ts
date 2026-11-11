@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { PatStatus } from './pat-status.ts';
 import type { DopSetting } from './server-import-api.ts';
 
 const CREATE_PROJECT_PATH = '/projects/create';
@@ -47,4 +48,15 @@ export function buildConnectUrl(
     params.set('resetPat', '1');
   }
   return `${serverUrl.replace(/\/$/, '')}${CREATE_PROJECT_PATH}?${params.toString()}`;
+}
+
+/** The web UI ignores `resetPat` for GitHub: it authorizes again on every visit. */
+export function reconnectUrl(
+  serverUrl: string,
+  setting: Pick<DopSetting, 'id' | 'type'>,
+  status: PatStatus,
+): string {
+  return buildConnectUrl(serverUrl, setting, {
+    resetPat: status === 'invalid' && setting.type !== 'github',
+  });
 }
