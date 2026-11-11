@@ -110,7 +110,7 @@ export class CloudBackend implements ImportBackend {
       findExistingProjectKeys: async (_repo, projectKeys) => {
         const found = await Promise.all(
           projectKeys.map(async (key) =>
-            (await projectExists(client, resolvedOrgKey, key)) ? key : null,
+            (await projectExistsOrThrow(client, resolvedOrgKey, key)) ? key : null,
           ),
         );
         return found.filter((key): key is string => key !== null);
@@ -201,6 +201,17 @@ async function settleRefusals(
   return failures;
 }
 
+/** Lookup failures propagate, so an outage is never mistaken for a project that does not exist. */
+async function projectExistsOrThrow(
+  client: ImportApiClient,
+  organization: string,
+  projectKey: string,
+): Promise<boolean> {
+  const project = await client.projects.findProject(projectKey, organization).orThrow();
+  return project !== null;
+}
+
+/** Lenient lookup: a failure reads as "not found", which only ever marks a project as failed. */
 function projectExists(
   client: ImportApiClient,
   organization: string,

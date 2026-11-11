@@ -265,7 +265,14 @@ async function runMonorepoImport(
   if (skippedKeys.length > 0) {
     console.info(`Skipped (already exist): ${skippedKeys.join(', ')}`);
   }
+  const projectLinks = toImport
+    .filter(({ projectKey }) => bound.has(projectKey))
+    .map(({ projectKey }) => `${projectKey}: ${plan.projectUrl(projectKey)}`);
   if (failed > 0) {
+    // Keep the links of the projects that did get bound; the error alone would hide them.
+    if (projectLinks.length > 0) {
+      console.info(`Bound:\n${projectLinks.join('\n')}`);
+    }
     throw new CommandFailedError(
       succeeded === 0
         ? `Failed to bind ${failed} ${noun(failed)} to ${repo.slug}.`
@@ -273,9 +280,6 @@ async function runMonorepoImport(
       { remediationHint: 'See the per-project errors above for details.' },
     );
   }
-  const projectLinks = toImport
-    .filter(({ projectKey }) => bound.has(projectKey))
-    .map(({ projectKey }) => `${projectKey}: ${plan.projectUrl(projectKey)}`);
   const skippedSuffix = skippedKeys.length > 0 ? ` (${skippedKeys.length} skipped)` : '';
   console.outro(
     `Bound ${succeeded} ${noun(succeeded)} to ${repo.slug}${skippedSuffix}`,

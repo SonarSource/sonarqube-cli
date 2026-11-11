@@ -24,8 +24,6 @@
 // non-2xx response becomes a typed error. Everything above it — the per-domain API
 // wrappers — is written in terms of `get` / `post` and lives next to its callers.
 
-import { inspect } from 'node:util';
-
 import { NetworkConfigError } from '@/core/errors.ts';
 import { errAsync, okAsync, ResultAsync } from '@/core/result.ts';
 import {
@@ -187,7 +185,7 @@ export class SonarHttpClient {
         const parsed = JSON.parse(data) as Record<string, unknown>;
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(parsed)) {
-          params.set(key, formValue(value));
+          params.set(key, String(value));
         }
         requestBody = params.toString();
       } else {
@@ -313,7 +311,7 @@ export class SonarHttpClient {
             url.searchParams.append(key, String(value));
           });
         }
-        return await fetchAuthenticated(
+        return fetchAuthenticated(
           url.toString(),
           buildRequest('GET', this.commonHeaders(), timeoutMs, undefined),
         );
@@ -517,27 +515,9 @@ function toError(err: unknown): HttpClientError {
   if (err instanceof NetworkConfigError) {
     return err;
   }
-  if (err instanceof Error) {
-    return new TransportError(err.message, { cause: err });
-  }
-  return new TransportError(typeof err === 'string' ? err : inspect(err));
-}
-
-/** A JSON value as a form field: scalars and arrays as `String()` renders them, objects as JSON. */
-function formValue(value: unknown): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.join(',');
-  }
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return String(value);
-  }
-  return '';
+  return err instanceof Error
+    ? new TransportError(err.message, { cause: err })
+    : new TransportError(String(err));
 }
 
 function redactSensitiveHeaders(headers: Record<string, string>): Record<string, string> {

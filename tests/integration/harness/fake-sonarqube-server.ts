@@ -648,6 +648,7 @@ export class FakeSonarQubeServerBuilder {
   private hasProvisionProjects = true;
   private boundProjectsStatusCode?: number;
   private projectBindingsStatusCode = 200;
+  private componentShowStatusCode?: number;
   private dopSettingsStatusCode?: number;
   private readonly gitlabRepos = new Map<string, FakeGitlabRepo[]>();
   private readonly azureRepos = new Map<string, FakeAzureRepo[]>();
@@ -1057,6 +1058,12 @@ export class FakeSonarQubeServerBuilder {
     return this;
   }
 
+  /** Makes `GET /api/components/show` fail with this status, as an outage would. */
+  withComponentShowStatus(statusCode: number): this {
+    this.componentShowStatusCode = statusCode;
+    return this;
+  }
+
   withProjectBindingsStatus(statusCode: number): this {
     this.projectBindingsStatusCode = statusCode;
     return this;
@@ -1222,6 +1229,7 @@ export class FakeSonarQubeServerBuilder {
       hasProvisionProjects,
       boundProjectsStatusCode,
       projectBindingsStatusCode,
+      componentShowStatusCode,
       dopSettingsStatusCode,
       patResponses,
       gitlabRepos,
@@ -1743,6 +1751,9 @@ export class FakeSonarQubeServerBuilder {
         }
 
         if (path === '/api/components/show') {
+          if (componentShowStatusCode !== undefined) {
+            return new Response('{}', { status: componentShowStatusCode });
+          }
           const componentKey = query.component ?? '';
           const { projectKey, subPath } = resolveProjectKeyFromComponent(componentKey, projects);
           const projectData = projectKey ? projects.get(projectKey) : undefined;

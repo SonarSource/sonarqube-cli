@@ -479,7 +479,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--monorepo <slug>',
-      'Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects-file. The repository must not be imported yet. Cannot be combined with --repo, --all or --regex.',
+      'Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects-file. Cannot be combined with --repo, --all or --regex.',
     )
     .option(
       '--project <key[=name]>',
