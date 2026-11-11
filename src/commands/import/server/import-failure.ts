@@ -29,6 +29,7 @@ import {
   HTTP_STATUS_BAD_REQUEST,
   HTTP_STATUS_FORBIDDEN,
   HTTP_STATUS_NOT_FOUND,
+  HTTP_STATUS_UNAUTHORIZED,
 } from '@/core/server/http-constants.ts';
 
 import { patStatusFromError } from './pat-status.ts';
@@ -44,7 +45,6 @@ export interface ImportFailureContext {
   projectKey?: string;
 }
 
-const HTTP_STATUS_UNAUTHORIZED = 401;
 const STATUS_PREFIX = /^SonarQube API error: \d{3} .*? - /s;
 const BITBUCKET_CLOUD_REJECTION = /\[http 40[13]\]/i;
 const PLATFORM_FETCH_FAILURE =
