@@ -19,10 +19,22 @@
  */
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { BadRequestError } from '@/core/server/errors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { ImportApiClient } from './import-api.ts';
-import type { ImportBackend, ImportPlan } from './import-backend.ts';
+import {
+  type ImportBackend,
+  type ImportPlan,
+  type MonorepoProgressReporter,
+  projectOverviewUrl,
+} from './import-backend.ts';
+import type { MonorepoProject } from './monorepo-projects.ts';
+import {
+  accountsForEveryProject,
+  type MonorepoProvisionErrors,
+  parseMonorepoProvisionErrors,
+} from './monorepo-provision-errors.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
 import {
   computeInstallationKey,
@@ -81,13 +93,136 @@ export class CloudBackend implements ImportBackend {
         label: 'Dashboard',
         url: `${this.serverUrl.replace(/\/$/, '')}/organizations/${resolvedOrgKey}/onboarding-dashboard`,
       },
+      projectUrl: (projectKey) => projectOverviewUrl(this.serverUrl, projectKey),
       toResolvedRepo: (repo) => ({
         slug: repo.slug,
         installationKey: computeInstallationKey(repo, almKey),
+        boundProjectIds: repo.boundProjectIds,
       }),
       importRepo: async (repo) => ({
         projectKey: await client.importRepository(resolvedOrgKey, repo.installationKey),
       }),
+      listBoundProjectKeys: async (repo) => {
+        const ids = repo.boundProjectIds ?? [];
+        const keys = ids.length === 0 ? [] : await client.projectKeysByIds(resolvedOrgKey, ids);
+        return { keys, elsewhere: Math.max(ids.length - keys.length, 0) };
+      },
+      findExistingProjectKeys: async (_repo, projectKeys) => {
+        const found = await Promise.all(
+          projectKeys.map(async (key) =>
+            (await projectExistsOrThrow(client, resolvedOrgKey, key)) ? key : null,
+          ),
+        );
+        return found.filter((key): key is string => key !== null);
+      },
+      importMonorepo: (repo, projects, report) =>
+        importMonorepoProjects(client, resolvedOrgKey, repo.installationKey, projects, report),
     };
   }
+}
+
+const NOT_CREATED = 'SonarQube Cloud did not create this project.';
+
+/**
+ * One batch call, then a verdict per project. A project is `done` only when the server created it
+ * (listed in a 200) or is known to exist after a partly refused batch; it is never assumed.
+ */
+export async function importMonorepoProjects(
+  client: ImportApiClient,
+  organization: string,
+  installationKey: string,
+  projects: MonorepoProject[],
+  report: MonorepoProgressReporter,
+): Promise<void> {
+  const keys = projects.map(({ projectKey }) => projectKey);
+  for (const projectKey of keys) report(projectKey, 'running');
+
+  const failures = await provisionFailures(client, organization, installationKey, projects);
+  for (const projectKey of keys) {
+    const reason = failures.get(projectKey);
+    if (reason === undefined) {
+      report(projectKey, 'done');
+    } else {
+      report(projectKey, 'failed', reason);
+    }
+  }
+}
+
+/** The reason each project failed; a project absent from the map exists. */
+async function provisionFailures(
+  client: ImportApiClient,
+  organization: string,
+  installationKey: string,
+  projects: MonorepoProject[],
+): Promise<Map<string, string>> {
+  const keys = projects.map(({ projectKey }) => projectKey);
+  try {
+    const result = await client.provisionMonorepoProjects(organization, installationKey, projects);
+    const created = new Set((result.projects ?? []).map((project) => project.projectKey));
+    return failuresFor(
+      keys.filter((key) => !created.has(key)),
+      NOT_CREATED,
+    );
+  } catch (error) {
+    const parsed =
+      error instanceof BadRequestError ? parseMonorepoProvisionErrors(keys, error.errors) : null;
+    if (parsed === null) {
+      return failuresFor(keys, error instanceof Error ? error.message : String(error));
+    }
+    return settleRefusals(client, organization, keys, parsed);
+  }
+}
+
+/**
+ * The server committed every project it did not refuse, but a 400 lists only the refused ones. When
+ * those add up, the rest exist; otherwise each unaccounted project is looked up before it is called done.
+ */
+async function settleRefusals(
+  client: ImportApiClient,
+  organization: string,
+  keys: string[],
+  parsed: MonorepoProvisionErrors,
+): Promise<Map<string, string>> {
+  const failures = new Map(parsed.refusals);
+  if (accountsForEveryProject(parsed, keys)) {
+    return failures;
+  }
+  const reason = parsed.untagged.join(' ') || NOT_CREATED;
+  const unaccounted = keys.filter((key) => !failures.has(key));
+  const lookups = await Promise.all(
+    unaccounted.map(async (key) => ({
+      key,
+      found: await projectExists(client, organization, key),
+    })),
+  );
+  for (const { key, found } of lookups) {
+    if (!found) failures.set(key, reason);
+  }
+  return failures;
+}
+
+/** Lookup failures propagate, so an outage is never mistaken for a project that does not exist. */
+async function projectExistsOrThrow(
+  client: ImportApiClient,
+  organization: string,
+  projectKey: string,
+): Promise<boolean> {
+  const project = await client.projects.findProject(projectKey, organization).orThrow();
+  return project !== null;
+}
+
+/** Lenient lookup: a failure reads as "not found", which only ever marks a project as failed. */
+function projectExists(
+  client: ImportApiClient,
+  organization: string,
+  projectKey: string,
+): Promise<boolean> {
+  return client.projects.findProject(projectKey, organization).match(
+    (project) => project !== null,
+    () => false,
+  );
+}
+
+function failuresFor(keys: string[], reason: string): Map<string, string> {
+  return new Map(keys.map((key) => [key, reason]));
 }

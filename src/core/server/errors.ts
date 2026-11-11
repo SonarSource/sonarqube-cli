@@ -53,12 +53,20 @@ export class ServiceUnavailableError extends Error {
 export class BadRequestError extends Error {
   readonly code?: string;
   readonly meta?: Record<string, unknown>;
+  /** Every `errors[].msg` of the response body, in order; `message` carries only one of them. */
+  readonly errors: readonly string[];
 
-  constructor(message: string, code?: string, meta?: Record<string, unknown>) {
+  constructor(
+    message: string,
+    code?: string,
+    meta?: Record<string, unknown>,
+    errors: readonly string[] = [],
+  ) {
     super(message);
     this.name = 'BadRequestError';
     this.code = code;
     this.meta = meta;
+    this.errors = errors;
   }
 }
 
