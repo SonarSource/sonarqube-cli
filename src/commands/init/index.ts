@@ -38,6 +38,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { confirmMonorepo, runMonorepo } from './steps/monorepo.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
   NOT_RUN,
@@ -87,11 +88,9 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   if (scan.status === 'not-run') {
     warnIgnoredScanOptions(scanOptions, console);
   }
-  const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, auth, console, {
-    suggestIntegrate: suggestIntegrate && (declined || !interactive),
-  });
-  if (suggestIntegrate && interactive && !declined && auth) {
+  renderInitOutcome(outcome, auth, console);
+  // Without a session (the user declined to create an organization) there is nothing to integrate with.
+  if (interactive && auth && findInstalledIntegrationIds().length === 0) {
     await offerIntegrate(ctx, auth);
   }
 }
@@ -129,6 +128,10 @@ async function run(
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
+  // Asked before detection: a monorepo that is already partly linked must reach its remaining roots.
+  if (interactive && (await confirmMonorepo(console))) {
+    return { outcome: await runMonorepo(projectRoot, deps), auth, deps };
+  }
   const detected = await detectInitPath(projectRoot, deps);
   return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth, deps };
 }
