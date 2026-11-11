@@ -20,6 +20,8 @@
 
 import { InvalidArgumentError } from 'commander';
 
+import { CommandFailedError } from '@/core/commands/command-error.ts';
+import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { parseInteger } from '@/core/commands/params.ts';
 import { type SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 
@@ -57,11 +59,23 @@ function singleValue(option: SonarOption): SonarOption {
   });
 }
 
+function requireCloud(ctx: CommandAuthenticatedInvocationContext): void {
+  if (ctx.auth.connectionType !== 'cloud') {
+    throw new CommandFailedError(
+      'The sonar architecture command requires a SonarQube Cloud connection.',
+      {
+        remediationHint: 'Authenticate against SonarQube Cloud with ‘sonar auth login’ and retry.',
+      },
+    );
+  }
+}
+
 export function registerArchitectureCommands(parent: SonarCommand): void {
   const architecture = parent
     .command('architecture')
     .alias('arch')
-    .description('Read and set the architecture of a project')
+    .description('Read and set the architecture of a project (SonarQube Cloud only)')
+    .addHelpText('afterAll', '\n(SonarQube Cloud only)')
     .rootHelp({ category: 'data', label: 'architecture|arch <command>' });
 
   const currentArchitecture = architecture
@@ -101,7 +115,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     )
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: CurrentReadOptions) => getCurrent(options, ctx));
+    .authenticatedAction((ctx, options: CurrentReadOptions) => {
+      requireCloud(ctx);
+      return getCurrent(options, ctx);
+    });
   intendedArchitecture
     .command('get')
     .description(
@@ -112,7 +129,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .option('--depth <n>', 'Levels of groups below the start group (default: all)', parseInteger)
     .addOption(languageOption())
     .addOption(textFormatOption())
-    .authenticatedAction((ctx, options: ArchitectureReadOptions) => getIntended(options, ctx));
+    .authenticatedAction((ctx, options: ArchitectureReadOptions) => {
+      requireCloud(ctx);
+      return getIntended(options, ctx);
+    });
 
   intendedArchitecture
     .command('set')
@@ -122,7 +142,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .requiredOption('--file <file>', 'Intended architecture JSON file')
     .option('--dry-run', 'Validate and show the changes, removals first, without writing')
     .option('-p, --project <project>', 'Project key')
-    .authenticatedAction((ctx, options: SetFileOptions) => setIntended(options, ctx));
+    .authenticatedAction((ctx, options: SetFileOptions) => {
+      requireCloud(ctx);
+      return setIntended(options, ctx);
+    });
 
   const directives = architecture
     .command('directives')
@@ -135,9 +158,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .addOption(textFormatOption())
     .option('--page <n>', 'Page number (default 1)', parseInteger)
     .option('--page-size <n>', 'Items per page (default 50, maximum 1000)', parseInteger)
-    .authenticatedAction((ctx, options: DirectivesReadOptions) =>
-      getArchitectureDirectives(options, ctx),
-    );
+    .authenticatedAction((ctx, options: DirectivesReadOptions) => {
+      requireCloud(ctx);
+      return getArchitectureDirectives(options, ctx);
+    });
   directives
     .command('set')
     .description('Create, update or delete explicit project directives')
@@ -148,7 +172,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
       'after',
       '\nCreation skips existing directives. Updates retain unspecified fields. Deletion requires an explicit ID; omissions never delete entries.',
     )
-    .authenticatedAction((ctx, options: SetFileOptions) => setProjectDirectives(options, ctx));
+    .authenticatedAction((ctx, options: SetFileOptions) => {
+      requireCloud(ctx);
+      return setProjectDirectives(options, ctx);
+    });
 
   const findings = architecture
     .command('findings')
@@ -175,7 +202,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
       'Items per page (default 50, 0 counts only, maximum 1000)',
       parseFindingPageSize,
     )
-    .authenticatedAction((ctx, options: FindingsReadOptions) => getFindings(options, ctx));
+    .authenticatedAction((ctx, options: FindingsReadOptions) => {
+      requireCloud(ctx);
+      return getFindings(options, ctx);
+    });
 
   architecture
     .command('install-skill')
@@ -183,5 +213,8 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .description('Install the architecture skill for Claude Code and Cursor in this repository')
     .option('--global', 'Install in the home directory instead of the repository')
     .option('--force', 'Replace a SKILL.md that was not written by this command')
-    .authenticatedAction((ctx, options: InstallSkillOptions) => installSkill(options, ctx));
+    .authenticatedAction((ctx, options: InstallSkillOptions) => {
+      requireCloud(ctx);
+      return installSkill(options, ctx);
+    });
 }

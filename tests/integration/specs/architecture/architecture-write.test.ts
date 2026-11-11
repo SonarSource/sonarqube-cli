@@ -132,6 +132,14 @@ describe('sonar architecture intended set', () => {
             const server = await builder.start();
             harness.withAuth(server.recordedAuthServerUrl(), TOKEN, cloud ? 'my-org' : undefined);
             const exported = await harness.run('arch intended get -p source --format json');
+            if (!cloud) {
+              expect(exported.exitCode).toBe(1);
+              expect(exported.stderr).toContain(
+                'The sonar architecture command requires a SonarQube Cloud connection.',
+              );
+              expect(writes(server)).toEqual([]);
+              return;
+            }
             expect(exported.exitCode).toBe(0);
             const file = JSON.parse(exported.stdout) as Record<string, unknown>;
             expect(file.project).toBe('source');
