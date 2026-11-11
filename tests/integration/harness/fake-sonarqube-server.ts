@@ -2064,7 +2064,7 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/components/search_projects' && req.method === 'GET') {
           const projectIds = (query.projectIds ?? '').split(',');
-          const components = [...projectKeysByGitRemote.values()]
+          const components = [...projectKeysByGitRemote.values(), ...projects.keys()]
             .filter((key) => projectIds.includes(`id-${key}`))
             .map((key) => ({ key }));
           return new Response(JSON.stringify({ components }), {

@@ -139,23 +139,84 @@ describe('sonar import --monorepo', () => {
       { timeout: 15000 },
     );
 
+    const IMPORTED_REPO = { boundProjectIds: ['existing-uuid'], importedInCurrentOrg: true };
+
+    function batchKeys(server: FakeSonarQubeServer): string[] {
+      return server
+        .getRecordedRequests()
+        .filter((r) => r.path === '/api/alm_integration/provision_monorepo_projects')
+        .flatMap((r) =>
+          (JSON.parse(r.body ?? '{}') as { projects: Array<{ projectKey: string }> }).projects.map(
+            (p) => p.projectKey,
+          ),
+        );
+    }
+
     it(
-      'refuses a repository that is already imported, creating nothing',
+      'warns about every project bound to the repository and skips the keys that exist',
       async () => {
-        const server = await startCloud(() => {}, {
-          boundProjectIds: ['existing-uuid'],
-          importedInCurrentOrg: true,
-        });
+        const server = await startCloud(
+          (s) => s.withProject('my-org_repo_web').withProject('my-org_repo_docs'),
+          {
+            boundProjectIds: ['id-my-org_repo_web', 'id-my-org_repo_docs', 'id-in-another-org'],
+            importedInCurrentOrg: true,
+          },
+        );
+
+        const result = await run(
+          '--monorepo my-org/repo --project my-org_repo_api,my-org_repo_web',
+          server,
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(
+          '2 projects already bound to my-org/repo: my-org_repo_web, my-org_repo_docs',
+        );
+        expect(result.stderr).toContain('1 more project bound to my-org/repo not visible');
+        expect(result.stderr).toContain(
+          '1 requested project already exists and will be skipped: my-org_repo_web',
+        );
+        expect(result.stdout).toContain('Skipped (already exist): my-org_repo_web');
+        expect(result.stdout).toContain('Bound 1 project to my-org/repo (1 skipped)');
+        expect(batchKeys(server)).toEqual(['my-org_repo_api']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'creates nothing and succeeds when every project key already exists',
+      async () => {
+        const server = await startCloud((s) => s.withProject('my-org_repo_api'), IMPORTED_REPO);
 
         const result = await run('--monorepo my-org/repo --project my-org_repo_api', server);
 
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Nothing to import');
+        expect(batchKeys(server)).toEqual([]);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'asks before creating the remaining projects and creates nothing when declined',
+      async () => {
+        const server = await startCloud((s) => s.withProject('my-org_repo_web'), IMPORTED_REPO);
+
+        const session = harness.runInteractive(
+          'import --monorepo my-org/repo --project my-org_repo_api,my-org_repo_web',
+          {
+            extraEnv: {
+              SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+              CI: 'false',
+              SONARQUBE_CLI_MOCK_TTY: '1',
+            },
+          },
+        );
+        await session.decline('Create the other 1 project (my-org_repo_api)?');
+        const result = await session.waitFinish();
+
         expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('has already been imported');
-        expect(
-          server
-            .getRecordedRequests()
-            .some((r) => r.path === '/api/alm_integration/provision_monorepo_projects'),
-        ).toBe(false);
+        expect(batchKeys(server)).toEqual([]);
       },
       { timeout: 15000 },
     );
@@ -247,15 +308,34 @@ describe('sonar import --monorepo', () => {
     );
 
     it(
-      'refuses a repository that already has a bound project, creating nothing',
+      'adds projects to a repository that already has a bound project, skipping keys that exist',
       async () => {
-        const server = await startServer(gitlabRepo({ sqProjectKey: 'group_repo' }));
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopSettings([GITLAB])
+          .withGitlabRepos('my-gitlab', [gitlabRepo({ sqProjectKey: 'group_repo' })])
+          .withProject('group_repo_web')
+          .withProjectBindings([
+            { projectKey: 'group_repo_web', repository: '11', dopSettingId: 'gl-id' },
+            { projectKey: 'group_repo_docs', repository: '11', dopSettingId: 'gl-id' },
+            { projectKey: 'other_repo', repository: '12', dopSettingId: 'gl-id' },
+          ])
+          .start();
+        harness.withAuth(server.baseUrl(), 'test-token');
 
-        const result = await harness.run('import --monorepo group/repo --project group_repo_api');
+        const result = await harness.run(
+          'import --monorepo group/repo --project group_repo_api,group_repo_web',
+        );
 
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('has already been imported');
-        expect(payloads(server)).toHaveLength(0);
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(
+          '2 projects already bound to group/repo: group_repo_web, group_repo_docs',
+        );
+        expect(result.stderr).not.toContain('other_repo');
+        expect(result.stderr).toContain('already exists and will be skipped: group_repo_web');
+        expect(result.stdout).toContain('Skipped (already exist): group_repo_web');
+        expect(payloads(server).map(({ projectKey }) => projectKey)).toEqual(['group_repo_api']);
       },
       { timeout: 15000 },
     );

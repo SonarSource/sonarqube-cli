@@ -58,6 +58,10 @@ export interface ImportPlan {
    * Binds each of `projects` to the one repository `repo`, reporting every project's outcome
    * through `report`. Per-project failures are reported, not thrown.
    */
+  /** Every project already bound to `repo`; `elsewhere` counts bound projects the CLI cannot name. */
+  listBoundProjectKeys(repo: ResolvedRepo): Promise<{ keys: string[]; elsewhere: number }>;
+  /** Which of `projectKeys` already exist, so a monorepo import can skip them. */
+  findExistingProjectKeys(repo: ResolvedRepo, projectKeys: string[]): Promise<string[]>;
   importMonorepo(
     repo: ResolvedRepo,
     projects: MonorepoProject[],

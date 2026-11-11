@@ -47,7 +47,7 @@ import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './reso
 import { guardAzureSignIn } from './server/azure-sign-in.ts';
 import { buildConnectUrl } from './server/connect-url.ts';
 import { explainImportFailure } from './server/import-failure.ts';
-import { assertProjectKeyUsable } from './server/key-guard.ts';
+import { assertProjectKeyUsable, listBoundProjectKeys } from './server/key-guard.ts';
 import type { PatStatus } from './server/pat-status.ts';
 import { SUPPORTED_PLATFORMS } from './server/platforms.ts';
 import { deriveProjectKey } from './server/project-key.ts';
@@ -139,6 +139,19 @@ export class ServerBackend implements ImportBackend {
       projectUrl: (projectKey) => projectOverviewUrl(this.serverUrl, projectKey),
       toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
       importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
+      listBoundProjectKeys: async (resolved) => {
+        const repository = repositories.get(resolved.installationKey);
+        if (!repository) {
+          throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
+        }
+        return { keys: await listBoundProjectKeys(this.api, setting, repository), elsewhere: 0 };
+      },
+      findExistingProjectKeys: async (_resolved, projectKeys) => {
+        const states = await Promise.all(
+          projectKeys.map(async (key) => ({ key, state: await this.api.lookupProject(key) })),
+        );
+        return states.filter(({ state }) => state !== 'missing').map(({ key }) => key);
+      },
       importMonorepo: (resolved, projects, report) =>
         this.importMonorepoProjects(setting, repositories, resolved, projects, report),
     };

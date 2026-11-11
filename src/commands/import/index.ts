@@ -168,7 +168,59 @@ function reportOutcome(
   );
 }
 
-/** Binds `projects` to the single repository the plan resolved, then reports per project. */
+const noun = (count: number): string => (count === 1 ? 'project' : 'projects');
+
+/**
+ * Splits `projects` into those still to create and the keys that already exist. Existing keys are
+ * announced before anything is created, and an interactive user decides whether to go on with the rest.
+ */
+async function selectNewProjects(
+  plan: ImportPlan,
+  repo: ResolvedRepo,
+  projects: MonorepoProject[],
+  console: Console,
+): Promise<{ toImport: MonorepoProject[]; skippedKeys: string[] }> {
+  const existing = new Set(
+    await plan.findExistingProjectKeys(
+      repo,
+      projects.map(({ projectKey }) => projectKey),
+    ),
+  );
+  const skippedKeys = projects.filter((p) => existing.has(p.projectKey)).map((p) => p.projectKey);
+  const toImport = projects.filter((p) => !existing.has(p.projectKey));
+  const bound = await plan.listBoundProjectKeys(repo);
+  if (skippedKeys.length === 0 && bound.keys.length === 0 && bound.elsewhere === 0) {
+    return { toImport, skippedKeys };
+  }
+
+  if (bound.keys.length > 0) {
+    console.warn(
+      ` ${bound.keys.length} ${noun(bound.keys.length)} already bound to ${repo.slug}: ${bound.keys.join(', ')}`,
+    );
+  }
+  if (bound.elsewhere > 0) {
+    console.warn(
+      ` ${bound.elsewhere} more ${noun(bound.elsewhere)} bound to ${repo.slug} not visible in this organization.`,
+    );
+  }
+  if (skippedKeys.length > 0) {
+    console.warn(
+      ` ${skippedKeys.length} requested ${noun(skippedKeys.length)} already ${skippedKeys.length === 1 ? 'exists' : 'exist'} and will be skipped: ${skippedKeys.join(', ')}`,
+    );
+  }
+  if (toImport.length > 0 && console.canPrompt()) {
+    const proceed = await console.confirmPrompt(
+      `Create the other ${toImport.length} ${noun(toImport.length)} (${toImport.map((p) => p.projectKey).join(', ')})?`,
+      true,
+    );
+    if (!proceed) {
+      throw new CommandFailedError('Monorepo import cancelled; nothing was created.');
+    }
+  }
+  return { toImport, skippedKeys };
+}
+
+/** Binds the not-yet-existing `projects` to the single repository the plan resolved, then reports per project. */
 async function runMonorepoImport(
   plan: ImportPlan,
   projects: MonorepoProject[],
@@ -181,17 +233,26 @@ async function runMonorepoImport(
   const [repo] = selection.repos;
   console.info(`Repository: ${repo.slug}`);
 
+  const { toImport, skippedKeys } = await selectNewProjects(plan, repo, projects, console);
+  if (toImport.length === 0) {
+    console.outro(
+      `Nothing to import: every project already exists (${skippedKeys.join(', ')})`,
+      'success',
+    );
+    return;
+  }
+
   const progress = new ImportProgress({
     console,
     maxVisible: IMPORT_PROVISION_CONCURRENCY_LIMIT,
   });
-  progress.setTotal(projects.length);
-  progress.addRepos(projects.map((project) => project.projectKey));
+  progress.setTotal(toImport.length);
+  progress.addRepos(toImport.map((project) => project.projectKey));
   progress.start();
 
   const bound = new Set<string>();
   try {
-    await plan.importMonorepo(repo, projects, (projectKey, status, detail) => {
+    await plan.importMonorepo(repo, toImport, (projectKey, status, detail) => {
       if (status === 'done') bound.add(projectKey);
       progress.update(projectKey, status, detail);
     });
@@ -201,7 +262,9 @@ async function runMonorepoImport(
   }
 
   const { succeeded, failed } = progress.finish();
-  const noun = (count: number): string => (count === 1 ? 'project' : 'projects');
+  if (skippedKeys.length > 0) {
+    console.info(`Skipped (already exist): ${skippedKeys.join(', ')}`);
+  }
   if (failed > 0) {
     throw new CommandFailedError(
       succeeded === 0
@@ -210,11 +273,12 @@ async function runMonorepoImport(
       { remediationHint: 'See the per-project errors above for details.' },
     );
   }
-  const projectLinks = projects
+  const projectLinks = toImport
     .filter(({ projectKey }) => bound.has(projectKey))
     .map(({ projectKey }) => `${projectKey}: ${plan.projectUrl(projectKey)}`);
+  const skippedSuffix = skippedKeys.length > 0 ? ` (${skippedKeys.length} skipped)` : '';
   console.outro(
-    `Bound ${succeeded} ${noun(succeeded)} to ${repo.slug}`,
+    `Bound ${succeeded} ${noun(succeeded)} to ${repo.slug}${skippedSuffix}`,
     'success',
     projectLinks.join('\n'),
   );
@@ -247,7 +311,9 @@ export async function importHandler(
   const { console } = ctx;
   const monorepo = resolveMonorepoImport(options);
   // The repository resolves like an explicit `--repo`, so every check on it stays shared.
-  const effective = monorepo ? { ...options, repo: [monorepo.repo] } : options;
+  const effective = monorepo
+    ? { ...options, repo: [monorepo.repo], allowImportedRepo: true }
+    : options;
   console.intro('Import repositories', 'SonarQube');
 
   const plan = await createBackend(effective, ctx).plan(effective, console);

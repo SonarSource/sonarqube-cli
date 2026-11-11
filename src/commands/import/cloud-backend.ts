@@ -97,10 +97,24 @@ export class CloudBackend implements ImportBackend {
       toResolvedRepo: (repo) => ({
         slug: repo.slug,
         installationKey: computeInstallationKey(repo, almKey),
+        boundProjectIds: repo.boundProjectIds,
       }),
       importRepo: async (repo) => ({
         projectKey: await client.importRepository(resolvedOrgKey, repo.installationKey),
       }),
+      listBoundProjectKeys: async (repo) => {
+        const ids = repo.boundProjectIds ?? [];
+        const keys = ids.length === 0 ? [] : await client.projectKeysByIds(resolvedOrgKey, ids);
+        return { keys, elsewhere: Math.max(ids.length - keys.length, 0) };
+      },
+      findExistingProjectKeys: async (_repo, projectKeys) => {
+        const found = await Promise.all(
+          projectKeys.map(async (key) =>
+            (await projectExists(client, resolvedOrgKey, key)) ? key : null,
+          ),
+        );
+        return found.filter((key): key is string => key !== null);
+      },
       importMonorepo: (repo, projects, report) =>
         importMonorepoProjects(client, resolvedOrgKey, repo.installationKey, projects, report),
     };
