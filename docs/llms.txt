@@ -2,7 +2,7 @@
 
 > Code quality and security in your terminal. Scan, integrate, and fix issues — locally or with AI.
 
-- Version: 1.11.0
+- Version: 1.12.0
 - Install (Linux/macOS): curl -o- https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.sh | bash
 - Install (Windows): irm https://raw.githubusercontent.com/SonarSource/sonarqube-cli/refs/heads/master/user-scripts/install.ps1 | iex
 - Machine-readable schema: https://sonarsource.com/sonarqube/cli/data/commands.json
@@ -14,6 +14,8 @@ sonar auth login
 sonar integrate claude
 
 ## For AI Agents
+Scan the specific changed files with `sonar analyze secrets <file1> <file2>`. Do not scan whole trees with `.` or a repository-root path.
+For a required directory scan, use `--exclude <path>` to skip large directories. Repeat the option for each exact path or directory prefix; wildcards are not supported. `--exclude` replaces the `secrets.exclude` configuration; repeat any configured paths you still need to exclude.
 Use `sonar list issues --format toon` to output issues in a format optimized for LLM consumption.
 Use `sonar list projects` to discover available projects before running analysis.
 Commands marked with * require prior authentication via `sonar auth login`.
@@ -42,11 +44,15 @@ Switch the active SonarQube Cloud organization without logging in again
 Usage: sonar auth org [org]
 
 ### sonar auth logout
-Remove active connection token from keychain
-Usage: sonar auth logout
+Remove the active connection, or all saved connections for a hostname with --server
+Usage: sonar auth logout [-s <value>]
+
+Options:
+  --server, -s  <string>   Select a saved server URL and clear all saved connections and the shared token for its hostname
 
 Examples:
   sonar auth logout
+  sonar auth logout --server https://sonarqube.my.com/sonarqube
 
 ### sonar auth status
 Show active authentication connection with token verification
@@ -122,8 +128,8 @@ Options:
   --top  <number>   Number of entries to include in the breakdown, per condition
 
 ### sonar import *
-Import repositories from a connected GitHub or Azure DevOps organization into SonarQube (SonarQube Cloud only) [BETA]
-Usage: sonar import [--repo <value>] [--all] [--regex <value>] [--non-interactive]
+Import repositories from a connected DevOps platform into SonarQube [BETA]
+Usage: sonar import [--repo <value>] [--all] [--regex <value>] [--dop-setting <value>] [--non-interactive]
 
 Options:
   --repo  <object>   DevOps platform repository slug (e.g. my-org/my-repo). Repeatable and/or comma-separated to import multiple repositories. Cannot be combined with --all or --regex.
@@ -135,6 +141,7 @@ Options:
                        --regex "^test-"
                        --regex "/^archived-/i"
 
+  --dop-setting  <string>   SonarQube Server only: key of the DevOps platform setting to import from. Required when several are configured and prompts are off.
   --non-interactive   Skip all prompts; require explicit flags
 
 ### sonar api *
@@ -196,7 +203,7 @@ Options:
   --global, -g   Backwards compatibility; integrations are installed globally by default [DEPRECATED] This option is deprecated since 1.9.0 and will be removed in a future version. Use 'sonar integrate copilot' instead.
 
 ### sonar integrate codex *
-Setup SonarQube integration for Codex. Installs a UserPromptSubmit hook for prompt secrets scanning, secrets-on-read instructions, and the MCP server. When Vortex is available, also installs startup context hooks, analysis hooks, and end-of-turn analysis instructions.
+Setup SonarQube integration for Codex. This will install secrets scanning hooks, configure Vortex analysis and MCP Server.
 Usage: sonar integrate codex [--non-interactive] [--global]
 
 Options:
@@ -252,12 +259,14 @@ Analyze code for quality and security issues
 
 ### sonar analyze secrets *
 Scan files or stdin for hardcoded secrets
-Usage: sonar analyze secrets [--stdin] [paths]
+Usage: sonar analyze secrets [--stdin] [--exclude <value>] [paths]
 
 Options:
   --stdin   Read from standard input instead of paths
+  --exclude  <string>   File or directory to skip (repeatable; exact path or directory prefix, no wildcards). Overrides the secrets.exclude config key
 
 Examples:
+  sonar analyze secrets src --exclude src/generated --exclude src/vendor
   sonar analyze secrets src/config.ts
   sonar analyze secrets src/file1.ts src/file2.ts
   cat .env | sonar analyze secrets --stdin
@@ -348,19 +357,23 @@ Remove a stored sonar config value
 Usage: sonar config unset <key>
 
 ### sonar architecture|arch
-Read and set the architecture of a project
+Read and set the architecture of a project (SonarQube Cloud only)
 
 ### sonar architecture current
 Read the current architecture
 
 ### sonar architecture current get *
 Current architecture, at most 150 nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth
-Usage: sonar architecture current get [-p <value>] [--component <value>] [--depth <value>] [--language <value>] [--format <value>]
+Usage: sonar architecture current get [-p <value>] [--component <value>] [--depth <value>] [--from <value>] [--to <value>] [--page <value>] [--page-size <value>] [--language <value>] [--format <value>]
 
 Options:
   --project, -p  <string>   Project key
   --component  <string>   Node key to start below, from a previous current get
   --depth  <string>   Levels below the start node (default 1)
+  --from  <string>   Dependency source key, including descendants; requires --to
+  --to  <string>   Dependency destination key, including descendants; requires --from
+  --page  <string>   Dependency page (default 1; requires --from/--to)
+  --page-size  <string>   Dependencies per page (default/maximum 20)
   --language  <string>   Only this language (default: all)
   --format  <string>   Output format (default: text on a terminal, toon otherwise)
 
@@ -386,6 +399,45 @@ Options:
   --file  <string>   Intended architecture JSON file
   --dry-run   Validate and show the changes, removals first, without writing
   --project, -p  <string>   Project key
+
+### sonar architecture directives
+Read, create, update and delete project directives
+
+### sonar architecture directives get *
+Read a directive by id or list a page of visible project directives
+Usage: sonar architecture directives get [--id <value>] [-p <value>] [--format <value>] [--page <value>] [--page-size <value>]
+
+Options:
+  --id  <string>   Directive UUID; cannot be combined with pagination
+  --project, -p  <string>   Project key
+  --format  <string>   Output format (default: text on a terminal, toon otherwise)
+  --page  <string>   Page number (default 1)
+  --page-size  <string>   Items per page (default 50, maximum 1000)
+
+### sonar architecture directives set *
+Create, update or delete explicit project directives
+Usage: sonar architecture directives set [--file <value>] [--dry-run] [-p <value>]
+
+Options:
+  --file  <string>   JSON object with create, update and delete arrays
+  --dry-run   Preview changes without writing
+  --project, -p  <string>   Project key
+
+### sonar architecture findings
+Read architecture deviations, flaws and smells
+
+### sonar architecture findings get *
+List findings with their details from the latest main-branch analysis
+Usage: sonar architecture findings get [-p <value>] [--category <value>] [--type <value>] [--language <value>] [--format <value>] [--page <value>] [--page-size <value>]
+
+Options:
+  --project, -p  <string>   Project key
+  --category  <string>   Only this category
+  --type  <string>   Only this finding type
+  --language  <string>   Only this language (default: all)
+  --format  <string>   Output format (default: text on a terminal, toon otherwise)
+  --page  <string>   Page number (default 1)
+  --page-size  <string>   Items per page (default 50, 0 counts only, maximum 1000)
 
 ### sonar architecture install-skill *
 Install the architecture skill for Claude Code and Cursor in this repository [BETA]
