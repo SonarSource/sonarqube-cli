@@ -74,17 +74,101 @@ describe('renderProjectDashboards', () => {
   it('prints nothing when the account has no organization', () => {
     expect(render({ kind: 'no-organization' })).toEqual([]);
   });
+
+  it('prints the link of each root that ended configured, and none for the others', () => {
+    expect(
+      render({
+        kind: 'monorepo',
+        roots: [
+          { path: 'a', kind: 'configured', projectKey: 'a' },
+          { path: 'b', kind: 'linked', projectKey: 'b' },
+          { path: 'c', kind: 'bound', projectKey: 'c' },
+          { path: 'f', kind: 'unbound', projectKey: 'f' },
+          { path: 'd', kind: 'skipped' },
+          { path: 'e', kind: 'failed', reason: 'boom' },
+        ],
+      }),
+    ).toEqual([
+      `Project dashboard (a): ${URL('a')}`,
+      `Project dashboard (b): ${URL('b')}`,
+      `Project dashboard (c): ${URL('c')}`,
+      `Project dashboard (f): ${URL('f')}`,
+    ]);
+  });
 });
 
 describe('renderInitOutcome', () => {
-  it('renders a no-organization run without credentials, ending on the integrate hint', () => {
+  it('renders a no-organization run without credentials and without any integrate hint', () => {
     const console = new FakeConsole();
 
-    renderInitOutcome({ kind: 'no-organization' }, undefined, console, { suggestIntegrate: true });
+    renderInitOutcome({ kind: 'no-organization' }, undefined, console);
 
     const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printed[0]).toBe('No organization was created.');
-    expect(printed.at(-1)).toContain('sonar integrate');
-    expect(printed.some((line) => line.includes('Project dashboard'))).toBe(false);
+    expect(printed).toEqual(['No organization was created.']);
+  });
+
+  it('summarizes a monorepo run by outcome and explains how to resume', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'api', kind: 'unbound', projectKey: 'api-key' },
+          { path: 'web', kind: 'skipped' },
+          { path: 'docs', kind: 'failed', reason: 'Key is taken\nChoose another key.' },
+        ],
+      },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.slice(0, 7)).toEqual([
+      'Monorepo onboarding summary:',
+      '  Configured (1):',
+      '    api: api-key (created)',
+      '  Skipped (1):',
+      '    web',
+      '  Failed (1):',
+      '    docs: Key is taken\n      Choose another key.',
+    ]);
+    expect(printed).toHaveLength(8);
+    expect(printed[7]).toContain("run 'sonar init' again");
+  });
+
+  it('does not suggest resuming when every root is configured', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      { kind: 'monorepo', roots: [{ path: '.', kind: 'configured', projectKey: 'k' }] },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.join('\n')).not.toContain('resume');
+  });
+
+  it('points to sonar link --monorepo when no root is mapped', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome({ kind: 'no-monorepo-roots' }, undefined, console);
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.join('\n')).toContain('sonar link --monorepo');
+  });
+
+  it('says in the summary when a root got a project bound to the repository', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      { kind: 'monorepo', roots: [{ path: 'api', kind: 'bound', projectKey: 'api-key' }] },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toContain('    api: api-key (created and bound to the repository)');
   });
 });

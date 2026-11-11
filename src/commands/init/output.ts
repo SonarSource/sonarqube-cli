@@ -21,11 +21,62 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { InitOutcome } from './init-outcome.ts';
+import type { InitOutcome, MonorepoRootResult } from './init-outcome.ts';
 import { projectDashboardUrl } from './steps/mapping.ts';
 
-const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
-const NO_ORGANIZATION_NOTE = "A project needs an organization. Secrets scanning doesn't.";
+const NO_MONOREPO_ROOTS = [
+  'No project root is mapped in .sonar-config.json, so nothing was changed.',
+  "Map each root with 'sonar link --monorepo' (add --path to name its directory), then run 'sonar init' again.",
+];
+const MONOREPO_RESUME =
+  "To resume, run 'sonar init' again and answer yes to the monorepo question: roots that are already configured are left as they are.";
+
+/** A root that ended up mapped to a project, whichever path got it there. */
+function isMappedRoot(
+  root: MonorepoRootResult,
+): root is Extract<MonorepoRootResult, { projectKey: string }> {
+  return 'projectKey' in root;
+}
+
+function describeMonorepo(roots: readonly MonorepoRootResult[]): string[] {
+  const lines = ['Monorepo onboarding summary:'];
+  const sections: { title: string; includes: (root: MonorepoRootResult) => boolean }[] = [
+    { title: 'Configured', includes: isMappedRoot },
+    { title: 'Skipped', includes: (root) => root.kind === 'skipped' },
+    { title: 'Failed', includes: (root) => root.kind === 'failed' },
+  ];
+  for (const { title, includes } of sections) {
+    const matching = roots.filter(includes);
+    if (matching.length > 0) {
+      lines.push(
+        `  ${title} (${matching.length}):`,
+        ...matching.map((root) => `    ${describeMonorepoRoot(root)}`),
+      );
+    }
+  }
+  if (roots.some((root) => root.kind === 'skipped' || root.kind === 'failed')) {
+    lines.push(MONOREPO_RESUME);
+  }
+  return lines;
+}
+
+function describeMonorepoRoot(root: MonorepoRootResult): string {
+  switch (root.kind) {
+    case 'configured':
+      return `${root.path}: ${root.projectKey} (already configured)`;
+    case 'linked':
+      return `${root.path}: ${root.projectKey} (mapped to the existing project)`;
+    case 'bound':
+      return `${root.path}: ${root.projectKey} (created and bound to the repository)`;
+    case 'unbound':
+      return `${root.path}: ${root.projectKey} (created)`;
+    case 'skipped':
+      return root.path;
+    case 'failed':
+      return `${root.path}: ${root.reason.replaceAll('\n', '\n      ')}`;
+  }
+}
+
 function describe(outcome: InitOutcome): string[] {
   switch (outcome.kind) {
     case 'complete': {
@@ -44,30 +95,24 @@ function describe(outcome: InitOutcome): string[] {
       return ['No project was created.'];
     case 'no-organization':
       return ['No organization was created.'];
+    case 'monorepo':
+      return describeMonorepo(outcome.roots);
+    case 'no-monorepo-roots':
+      return NO_MONOREPO_ROOTS;
   }
 }
 
-/**
- * Prints what the run did, then the project dashboard link, then the `sonar integrate` hint. The
- * link comes before anything about integrating, so a run reads: result, where to see it, next step.
- */
+/** Prints what the run did, then the project dashboard link. The integrate offer follows it. */
 export function renderInitOutcome(
   outcome: InitOutcome,
   auth: ResolvedAuth | undefined,
   console: Console,
-  { suggestIntegrate }: { suggestIntegrate: boolean },
 ): void {
   for (const line of describe(outcome)) {
     console.print(line);
   }
   if (auth) {
     renderProjectDashboards(outcome, auth, console);
-  }
-  if (suggestIntegrate) {
-    if (outcome.kind === 'no-organization') {
-      console.info(NO_ORGANIZATION_NOTE);
-    }
-    console.print(INTEGRATE_SUGGESTION);
   }
 }
 
@@ -79,8 +124,11 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'bound':
     case 'unbound':
       return [outcome.projectKey];
+    case 'monorepo':
+      return outcome.roots.filter(isMappedRoot).map((root) => root.projectKey);
     case 'declined':
     case 'no-organization':
+    case 'no-monorepo-roots':
       return [];
   }
 }
