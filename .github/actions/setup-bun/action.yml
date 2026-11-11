@@ -12,7 +12,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+    - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
       with:
         version: 2026.10.21
 
