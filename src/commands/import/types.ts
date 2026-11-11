@@ -24,4 +24,9 @@ export interface ImportOptions {
   regex?: string;
   nonInteractive?: boolean;
   dopSetting?: string;
+  monorepo?: string;
+  project?: string[];
+  projectsFile?: string;
+  /** Set by a monorepo import: its repository is imported already, and gains projects. */
+  allowImportedRepo?: boolean;
 }

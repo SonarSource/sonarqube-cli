@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { inspect } from 'node:util';
+
 import {
   ConfirmPrompt,
   getColumns,
@@ -349,7 +351,9 @@ export class TerminalConsole implements Console {
       process.stdout.write(`\n  ${DIVIDER}\n`);
       process.stdout.write(`  ${icon}  ${bold(colorFn(message))}\n`);
       // Aligns under the message text: 2 leading + 2-col emoji icon + 2 gap.
-      if (detail) process.stdout.write(`      ${bold(cyan(detail))}\n`);
+      if (detail) {
+        for (const line of detail.split('\n')) process.stdout.write(`      ${bold(cyan(line))}\n`);
+      }
       process.stdout.write(`  ${DIVIDER}\n\n`);
       return;
     }
@@ -608,7 +612,7 @@ export class TerminalConsole implements Console {
             })
             .catch((err: unknown) => {
               // Leave `options`/`hasMore()` untouched so the row reappears and Enter retries.
-              loadMoreError = err instanceof Error ? err.message : String(err);
+              loadMoreError = err instanceof Error ? err.message : inspect(err);
             })
             .finally(() => {
               loadingMore = false;

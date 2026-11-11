@@ -635,6 +635,7 @@ export class FakeSonarQubeServerBuilder {
   private organizationHiddenLookups = 0;
   private organizationBindingsErrorCode?: number;
   private serverMode: 'MQR' | 'STANDARD' = 'STANDARD';
+  private readonly monorepoProvisionRefusals = new Map<string, string>();
   private provisionProjectsStatusCode?: number;
   private provisionProjectsStatusBody?: string;
   private provisionProjectsFailingInstallationKey?: string;
@@ -978,6 +979,15 @@ export class FakeSonarQubeServerBuilder {
   }
 
   /**
+   * Makes `provision_monorepo_projects` refuse one project key. The others are still created and the
+   * answer is a 400 with `errors: ["Could not provision some of the projects (n/m)", "<key>: <message>"]`.
+   */
+  withMonorepoProvisionRefusal(projectKey: string, message: string): this {
+    this.monorepoProvisionRefusals.set(projectKey, message);
+    return this;
+  }
+
+  /**
    * Force POST /api/alm_integration/provision_projects to fail with the given HTTP status
    * code, simulating a provisioning error (e.g. repo already imported, permission denied).
    * When `onlyForInstallationKey` is set, only requests for that exact `installationKeys`
@@ -1199,6 +1209,7 @@ export class FakeSonarQubeServerBuilder {
       subscriptionCreateErrorStatus,
       organizationHiddenLookups,
       organizationBindingsErrorCode,
+      monorepoProvisionRefusals,
       provisionProjectsStatusCode,
       provisionProjectsStatusBody,
       provisionProjectsFailingInstallationKey,
@@ -2053,7 +2064,7 @@ export class FakeSonarQubeServerBuilder {
 
         if (path === '/api/components/search_projects' && req.method === 'GET') {
           const projectIds = (query.projectIds ?? '').split(',');
-          const components = [...projectKeysByGitRemote.values()]
+          const components = [...projectKeysByGitRemote.values(), ...projects.keys()]
             .filter((key) => projectIds.includes(`id-${key}`))
             .map((key) => ({ key }));
           return new Response(JSON.stringify({ components }), {
@@ -2229,6 +2240,35 @@ export class FakeSonarQubeServerBuilder {
           } finally {
             provisionConcurrency.current--;
           }
+        }
+
+        if (path === '/api/alm_integration/provision_monorepo_projects' && req.method === 'POST') {
+          const payload = JSON.parse(body ?? '{}') as {
+            projects?: Array<{ projectKey: string }>;
+          };
+          const requested = payload.projects ?? [];
+          const created: Array<{ projectKey: string }> = [];
+          const refusals: string[] = [];
+          for (const { projectKey } of requested) {
+            const refusal = monorepoProvisionRefusals.get(projectKey);
+            if (refusal === undefined) {
+              created.push({ projectKey });
+            } else {
+              refusals.push(`${projectKey}: ${refusal}`);
+            }
+          }
+          // Like the real action: any refusal turns the whole answer into a 400 whose first error
+          // counts the created projects, followed by one `<projectKey>: <message>` per refusal.
+          if (refusals.length > 0) {
+            const summary = `Could not provision some of the projects (${created.length}/${requested.length})`;
+            return new Response(
+              JSON.stringify({ errors: [summary, ...refusals].map((msg) => ({ msg })) }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } },
+            );
+          }
+          return new Response(JSON.stringify({ projects: created, failures: [] }), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         }
 
         if (path === '/api/autoscan/eligibility' && req.method === 'GET') {

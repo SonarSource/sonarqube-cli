@@ -151,6 +151,8 @@ export interface BoundProjectRequest {
   repositoryIdentifier: string;
   /** Needed for Azure DevOps and Bitbucket Server only. */
   projectIdentifier?: string;
+  /** Binds the project as one of several on the same repository. Defaults to false. */
+  monorepo?: boolean;
 }
 
 export class ServerImportApiClient {
@@ -191,7 +193,7 @@ export class ServerImportApiClient {
    * listing does not prove the token works: it comes back empty, which `organizationCount` exposes.
    * An empty listing is inconclusive (a dead token, or a valid one with no installation).
    */
-  async probeGithubPat(settingKey: string): Promise<PatProbe> {
+  probeGithubPat(settingKey: string): Promise<PatProbe> {
     return this.client
       .get<{
         organizations?: unknown[];
@@ -323,7 +325,7 @@ export class ServerImportApiClient {
    * visibility, so a 404 means it does not exist and a 403 means it exists but the caller cannot
    * see it.
    */
-  async lookupProject(projectKey: string): Promise<'found' | 'missing' | 'hidden'> {
+  lookupProject(projectKey: string): Promise<'found' | 'missing' | 'hidden'> {
     return this.client.get<unknown>('/api/components/show', { component: projectKey }).match(
       () => 'found',
       (error) => {
@@ -364,7 +366,7 @@ export class ServerImportApiClient {
   /** Creates a bound project without changing an existing project. */
   async createBoundProject(request: BoundProjectRequest): Promise<void> {
     await this.client
-      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { ...request, monorepo: false })
+      .post<unknown>(BOUND_PROJECTS_ENDPOINT, { monorepo: false, ...request })
       .orThrow();
   }
 
@@ -429,7 +431,7 @@ function nextBitbucketStart(
 function withPercentEncodedQuery(endpoint: string, params: QueryParams | undefined): string {
   if (!params) return endpoint;
   const query = Object.entries(params)
-    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}`)
+    .map(([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`)
     .join('&');
   return `${endpoint}?${query}`;
 }
