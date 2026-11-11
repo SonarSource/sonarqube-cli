@@ -170,9 +170,45 @@ function reportOutcome(
 
 const noun = (count: number): string => (count === 1 ? 'project' : 'projects');
 
+/** Announces what is already bound, skipped or in conflict; returns whether it said anything. */
+function warnAboutExistingProjects(
+  console: Console,
+  repo: ResolvedRepo,
+  bound: { keys: string[]; elsewhere: number },
+  skippedKeys: string[],
+  conflictKeys: string[],
+): boolean {
+  const notices: string[] = [];
+  if (bound.keys.length > 0) {
+    notices.push(
+      `${bound.keys.length} ${noun(bound.keys.length)} already bound to ${repo.slug}: ${bound.keys.join(', ')}`,
+    );
+  }
+  if (bound.elsewhere > 0) {
+    notices.push(
+      `${bound.elsewhere} more ${noun(bound.elsewhere)} bound to ${repo.slug} not visible in this organization.`,
+    );
+  }
+  if (skippedKeys.length > 0) {
+    notices.push(
+      `${skippedKeys.length} requested ${noun(skippedKeys.length)} already ${skippedKeys.length === 1 ? 'exists' : 'exist'} and will be skipped: ${skippedKeys.join(', ')}`,
+    );
+  }
+  if (conflictKeys.length > 0) {
+    const one = conflictKeys.length === 1;
+    notices.push(
+      `${conflictKeys.length} requested ${noun(conflictKeys.length)} already ${one ? 'exists' : 'exist'} but ${one ? 'is' : 'are'} not bound to ${repo.slug}; the import will report ${one ? 'it' : 'them'} as failed: ${conflictKeys.join(', ')}`,
+    );
+  }
+  for (const notice of notices) console.warn(` ${notice}`);
+  return notices.length > 0;
+}
+
 /**
- * Splits `projects` into those still to create and the keys that already exist. Existing keys are
- * announced before anything is created, and an interactive user decides whether to go on with the rest.
+ * Splits `projects` into those to send to the backend and the keys to skip. Only a key that exists
+ * and is already bound to `repo` is skipped; a key that exists but is not bound to it (taken by
+ * another project) stays in the import so the backend reports that conflict as a failure. Skipped
+ * keys are announced before anything is created, and an interactive user decides whether to go on.
  */
 async function selectNewProjects(
   plan: ImportPlan,
@@ -186,31 +222,22 @@ async function selectNewProjects(
       projects.map(({ projectKey }) => projectKey),
     ),
   );
-  const skippedKeys = projects.filter((p) => existing.has(p.projectKey)).map((p) => p.projectKey);
-  const toImport = projects.filter((p) => !existing.has(p.projectKey));
   const bound = await plan.listBoundProjectKeys(repo);
-  if (skippedKeys.length === 0 && bound.keys.length === 0 && bound.elsewhere === 0) {
+  const boundKeys = new Set(bound.keys);
+  const skippedKeys = projects
+    .filter((p) => existing.has(p.projectKey) && boundKeys.has(p.projectKey))
+    .map((p) => p.projectKey);
+  const conflictKeys = projects
+    .filter((p) => existing.has(p.projectKey) && !boundKeys.has(p.projectKey))
+    .map((p) => p.projectKey);
+  const toImport = projects.filter((p) => !skippedKeys.includes(p.projectKey));
+  const warned = warnAboutExistingProjects(console, repo, bound, skippedKeys, conflictKeys);
+  if (!warned) {
     return { toImport, skippedKeys };
-  }
-
-  if (bound.keys.length > 0) {
-    console.warn(
-      ` ${bound.keys.length} ${noun(bound.keys.length)} already bound to ${repo.slug}: ${bound.keys.join(', ')}`,
-    );
-  }
-  if (bound.elsewhere > 0) {
-    console.warn(
-      ` ${bound.elsewhere} more ${noun(bound.elsewhere)} bound to ${repo.slug} not visible in this organization.`,
-    );
-  }
-  if (skippedKeys.length > 0) {
-    console.warn(
-      ` ${skippedKeys.length} requested ${noun(skippedKeys.length)} already ${skippedKeys.length === 1 ? 'exists' : 'exist'} and will be skipped: ${skippedKeys.join(', ')}`,
-    );
   }
   if (toImport.length > 0 && console.canPrompt()) {
     const proceed = await console.confirmPrompt(
-      `Create the other ${toImport.length} ${noun(toImport.length)} (${toImport.map((p) => p.projectKey).join(', ')})?`,
+      `Import the other ${toImport.length} ${noun(toImport.length)} (${toImport.map((p) => p.projectKey).join(', ')})?`,
       true,
     );
     if (!proceed) {

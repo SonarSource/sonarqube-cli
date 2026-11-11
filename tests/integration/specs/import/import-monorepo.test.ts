@@ -159,7 +159,9 @@ describe('sonar import --monorepo', () => {
       { timeout: 15000 },
     );
 
-    const IMPORTED_REPO = { boundProjectIds: ['existing-uuid'], importedInCurrentOrg: true };
+    function boundTo(...keys: string[]) {
+      return { boundProjectIds: keys.map((key) => `id-${key}`), importedInCurrentOrg: true };
+    }
 
     function batchKeys(server: FakeSonarQubeServer): string[] {
       return server
@@ -206,7 +208,10 @@ describe('sonar import --monorepo', () => {
     it(
       'creates nothing and succeeds when every project key already exists',
       async () => {
-        const server = await startCloud((s) => s.withProject('my-org_repo_api'), IMPORTED_REPO);
+        const server = await startCloud(
+          (s) => s.withProject('my-org_repo_api'),
+          boundTo('my-org_repo_api'),
+        );
 
         const result = await run('--monorepo my-org/repo --project my-org_repo_api', server);
 
@@ -218,9 +223,35 @@ describe('sonar import --monorepo', () => {
     );
 
     it(
+      'reports a key taken by a project bound elsewhere as a failure, not as already imported',
+      async () => {
+        const server = await startCloud(
+          (s) =>
+            s
+              .withProject('my-org_repo_api')
+              .withMonorepoProvisionRefusal('my-org_repo_api', 'Project key already exists'),
+          boundTo('my-org_repo_docs'),
+        );
+
+        const result = await run('--monorepo my-org/repo --project my-org_repo_api', server);
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).not.toContain('Nothing to import');
+        expect(output).toContain('exists but is not bound to my-org/repo');
+        expect(output).toContain('Project key already exists');
+        expect(batchKeys(server)).toEqual(['my-org_repo_api']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
       'asks before creating the remaining projects and creates nothing when declined',
       async () => {
-        const server = await startCloud((s) => s.withProject('my-org_repo_web'), IMPORTED_REPO);
+        const server = await startCloud(
+          (s) => s.withProject('my-org_repo_web'),
+          boundTo('my-org_repo_web'),
+        );
 
         const session = harness.runInteractive(
           'import --monorepo my-org/repo --project my-org_repo_api,my-org_repo_web',
@@ -232,7 +263,7 @@ describe('sonar import --monorepo', () => {
             },
           },
         );
-        await session.decline('Create the other 1 project (my-org_repo_api)?');
+        await session.decline('Import the other 1 project (my-org_repo_api)?');
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
@@ -355,6 +386,35 @@ describe('sonar import --monorepo', () => {
         expect(result.stderr).not.toContain('other_repo');
         expect(result.stderr).toContain('already exists and will be skipped: group_repo_web');
         expect(result.stdout).toContain('Skipped (already exist): group_repo_web');
+        expect(payloads(server).map(({ projectKey }) => projectKey)).toEqual(['group_repo_api']);
+      },
+      { timeout: 15000 },
+    );
+
+    it(
+      'reports a key taken by a project bound to another repository as a failure',
+      async () => {
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('test-token')
+          .withDopSettings([GITLAB])
+          .withGitlabRepos('my-gitlab', [gitlabRepo({ sqProjectKey: 'group_repo' })])
+          .withProject('group_repo_web')
+          .withProjectBindings([
+            { projectKey: 'group_repo_web', repository: '12', dopSettingId: 'gl-id' },
+          ])
+          .start();
+        harness.withAuth(server.baseUrl(), 'test-token');
+
+        const result = await harness.run(
+          'import --monorepo group/repo --project group_repo_api,group_repo_web',
+        );
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).not.toContain('Skipped (already exist)');
+        expect(output).toContain('is not bound to group/repo');
+        expect(output).toContain('Bound 1 of 2 projects to group/repo (1 failed)');
         expect(payloads(server).map(({ projectKey }) => projectKey)).toEqual(['group_repo_api']);
       },
       { timeout: 15000 },
