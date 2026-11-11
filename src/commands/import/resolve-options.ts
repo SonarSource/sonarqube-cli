@@ -52,6 +52,8 @@ export interface ResolvedRepo {
   slug: string;
   /** ALM-specific identifier expected by `provision_projects`' `installationKeys` param. */
   installationKey: string;
+  /** Ids of the projects already bound to the repository (SonarQube Cloud only). */
+  boundProjectIds?: string[];
 }
 
 /**
@@ -278,6 +280,8 @@ export interface RepoSelectionOptions {
   all?: boolean;
   regex?: string;
   nonInteractive?: boolean;
+  /** Accept `--repo` slugs that were imported before (a monorepo adds projects to one). */
+  allowImportedRepo?: boolean;
   console: Console;
 }
 
@@ -372,7 +376,7 @@ export async function selectRepos(
   }
 
   if (opts.repo?.length) {
-    const repos = await resolveReposBySlug(source, opts.repo);
+    const repos = await resolveReposBySlug(source, opts.repo, opts.allowImportedRepo === true);
     return { kind: 'batch', repos, skipped: [] };
   }
 
@@ -495,7 +499,11 @@ async function resolveOnboardingMode(
   }
 }
 
-async function resolveReposBySlug(source: RepoSource, slugs: string[]): Promise<ResolvedRepo[]> {
+async function resolveReposBySlug(
+  source: RepoSource,
+  slugs: string[],
+  allowImported: boolean,
+): Promise<ResolvedRepo[]> {
   const { almKey, onlyPrivateProjects } = source;
   const matches = await findReposBySlugs(source.fetchPage, slugs);
 
@@ -509,7 +517,10 @@ async function resolveReposBySlug(source: RepoSource, slugs: string[]): Promise<
 
   const alreadyImported = slugs
     .map((slug) => matches.get(slug))
-    .filter((repo): repo is DopRepository => repo !== undefined && isAlreadyImported(repo));
+    .filter(
+      (repo): repo is DopRepository =>
+        !allowImported && repo !== undefined && isAlreadyImported(repo),
+    );
   if (alreadyImported.length === 1) {
     throw new CommandFailedError(
       `Repository '${alreadyImported[0].slug}' has already been imported into SonarQube.`,
@@ -548,7 +559,11 @@ async function resolveReposBySlug(source: RepoSource, slugs: string[]): Promise<
     if (!repo) {
       throw new CommandFailedError(`Repository '${slug}' not found.`);
     }
-    return { slug: repo.slug, installationKey: computeInstallationKey(repo, almKey) };
+    return {
+      slug: repo.slug,
+      installationKey: computeInstallationKey(repo, almKey),
+      boundProjectIds: repo.boundProjectIds,
+    };
   });
 }
 

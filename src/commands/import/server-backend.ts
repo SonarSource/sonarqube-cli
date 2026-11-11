@@ -25,36 +25,32 @@ import {
   InvalidOptionError,
 } from '@/core/commands/command-error.ts';
 import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/config-constants.ts';
-import { AccessDeniedError, BadRequestError, UnexpectedApiError } from '@/core/server/errors.ts';
+import { AccessDeniedError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { fetchServerVersion } from '@/core/server/server-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
-import type { ImportBackend, ImportPlan, ImportRepoOutcome } from './import-backend.ts';
+import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
-import { type ResolvedRepo, selectRepos, validateSelectionOptions } from './resolve-options';
+import { type RepoResolution, selectRepos, validateSelectionOptions } from './resolve-options';
 import { guardAzureSignIn } from './server/azure-sign-in.ts';
-import { buildConnectUrl } from './server/connect-url.ts';
-import { explainImportFailure } from './server/import-failure.ts';
-import { assertProjectKeyUsable } from './server/key-guard.ts';
+import { buildConnectUrl, reconnectUrl } from './server/connect-url.ts';
 import type { PatStatus } from './server/pat-status.ts';
 import { SUPPORTED_PLATFORMS } from './server/platforms.ts';
-import { deriveProjectKey } from './server/project-key.ts';
 import {
   DOP_PLATFORM_LABELS,
   type DopSetting,
   type PatProbe,
   type ServerImportApiClient,
 } from './server/server-import-api.ts';
-import type { ServerRepository } from './server/server-repository.ts';
+import { ServerImportPlan } from './server/server-import-plan.ts';
+import type { PlatformSupport, ServerRepository } from './server/server-repository.ts';
 import { waitForPat } from './server/wait-for-pat.ts';
-import type { ImportOptions } from './types';
+import type { ImportOptions, ImportPlanOptions } from './types';
 
 /** Every repository is selectable: SonarQube Server has no per-organization visibility rule. */
 const NO_VISIBILITY_RESTRICTION: OnlyPrivateProjects = { enabled: false, available: true };
-
-const CREATION_CONFLICT_STATUS = 409;
 
 const NETWORK_HINT = 'Check your network connection and authentication, then retry.';
 
@@ -65,7 +61,7 @@ export class ServerBackend implements ImportBackend {
     private readonly serverUrl: string,
   ) {}
 
-  async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+  async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
     validateSelectionOptions({ ...options, nonInteractive: !canPrompt(options) });
     await this.api.requireSupportedVersion();
 
@@ -84,14 +80,31 @@ export class ServerBackend implements ImportBackend {
     }
 
     const repositories = new Map<string, ServerRepository>();
-    const claimedKeys = new Map<string, string>();
+    const selection = await this.selectRepositories(
+      setting,
+      support,
+      repositories,
+      options,
+      console,
+    );
+    return new ServerImportPlan(this.api, this.serverUrl, setting, repositories, selection);
+  }
+
+  /** Lists the platform's repositories page by page, recording each in `repositories`, and applies the user's selection. */
+  private selectRepositories(
+    setting: DopSetting,
+    support: PlatformSupport,
+    repositories: Map<string, ServerRepository>,
+    options: ImportPlanOptions,
+    console: Console,
+  ): Promise<RepoResolution> {
     const listed = support.listRepositories(this.api, setting, options.repo);
     const fetchServerPage =
       setting.type === 'azure'
         ? guardAzureSignIn(listed, buildConnectUrl(this.serverUrl, setting, { resetPat: true }))
         : listed;
     const reportedWarnings = new Set<string>();
-    const selection = await selectRepos(
+    return selectRepos(
       {
         fetchPage: async (pageIndex, pageSize) => {
           const page = await fetchServerPage(pageIndex, pageSize);
@@ -119,72 +132,6 @@ export class ServerBackend implements ImportBackend {
       },
       { ...options, nonInteractive: !canPrompt(options), console },
     );
-
-    return {
-      selection,
-      outroLink: {
-        label: 'Dashboard',
-        url: `${this.serverUrl.replace(/\/$/, '')}/admin/project-coverage`,
-      },
-      toResolvedRepo: (repo) => ({ slug: repo.slug, installationKey: repo.id }),
-      importRepo: (resolved) => this.importRepository(setting, repositories, claimedKeys, resolved),
-    };
-  }
-
-  private async importRepository(
-    setting: DopSetting,
-    repositories: Map<string, ServerRepository>,
-    claimedKeys: Map<string, string>,
-    resolved: ResolvedRepo,
-  ): Promise<ImportRepoOutcome | undefined> {
-    const repository = repositories.get(resolved.installationKey);
-    if (!repository) {
-      throw new CommandFailedError(`Repository '${resolved.slug}' is no longer listed.`);
-    }
-    const projectKey = deriveProjectKey(repository.slug);
-    const claimedBy = claimedKeys.get(projectKey);
-    if (claimedBy !== undefined && claimedBy !== repository.id) {
-      throw new CommandFailedError(
-        `Repository '${repository.slug}' would get the project key '${projectKey}', already used by another repository in this run.`,
-        { remediationHint: 'Import it from SonarQube Server in your browser instead.' },
-      );
-    }
-    claimedKeys.set(projectKey, repository.id);
-    if (await assertProjectKeyUsable(this.api, setting, repository, projectKey)) {
-      return { detail: 'project already exists with matching binding' };
-    }
-    try {
-      await this.api.createBoundProject({
-        projectKey,
-        projectName: repository.name,
-        devOpsPlatformSettingId: setting.id,
-        repositoryIdentifier: repository.repositoryIdentifier,
-        projectIdentifier: repository.projectIdentifier,
-      });
-    } catch (error) {
-      if (
-        (error instanceof BadRequestError ||
-          (error instanceof UnexpectedApiError && error.status === CREATION_CONFLICT_STATUS)) &&
-        (await assertProjectKeyUsable(this.api, setting, repository, projectKey))
-      ) {
-        return { detail: 'project already exists with matching binding' };
-      }
-      throw this.explainedImportFailure(error, setting, projectKey);
-    }
-    return undefined;
-  }
-
-  private explainedImportFailure(error: unknown, setting: DopSetting, projectKey: string): unknown {
-    const reason = explainImportFailure(error, {
-      settingKey: setting.key,
-      platformLabel: DOP_PLATFORM_LABELS[setting.type],
-      connectUrl: this.reconnectUrl(setting, 'missing'),
-      reconnectUrl: this.reconnectUrl(setting, 'invalid'),
-      projectKey,
-    });
-    return error instanceof Error && reason === error.message
-      ? error
-      : new CommandFailedError(reason);
   }
 
   private async loadSettings(): Promise<DopSetting[]> {
@@ -318,11 +265,8 @@ export class ServerBackend implements ImportBackend {
     return `The personal access token for ${label} setting '${setting.key}' was rejected by ${label}.`;
   }
 
-  /** The web UI ignores `resetPat` for GitHub: it authorizes again on every visit. */
   private reconnectUrl(setting: DopSetting, status: PatStatus): string {
-    return buildConnectUrl(this.serverUrl, setting, {
-      resetPat: status === 'invalid' && setting.type !== 'github',
-    });
+    return reconnectUrl(this.serverUrl, setting, status);
   }
 
   private async probeOf(setting: DopSetting): Promise<PatProbe> {

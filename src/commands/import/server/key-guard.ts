@@ -35,6 +35,26 @@ enum ProjectKeyState {
   Conflicting = 'conflicting',
 }
 
+/** The keys of every project bound to this repository, whether or not the CLI created them. */
+export async function listBoundProjectKeys(
+  api: Pick<ServerImportApiClient, 'findProjectBinding'>,
+  setting: DopSetting,
+  repository: ServerRepository,
+): Promise<string[]> {
+  const keys = new Set<string>();
+  // The matcher collects instead of matching, so the call reads every page of bindings.
+  await api.findProjectBinding(setting.id, repository.repositoryIdentifier, (candidate) => {
+    if (
+      candidate.devOpsPlatformSettingId === setting.id &&
+      bindsRepository(candidate, setting, repository)
+    ) {
+      keys.add(candidate.projectKey);
+    }
+    return false;
+  });
+  return [...keys];
+}
+
 /** Returns whether the existing project is already bound to this repository. */
 export async function assertProjectKeyUsable(
   api: KeyGuardApi,
@@ -84,7 +104,7 @@ async function projectKeyState(
   return binding === undefined ? ProjectKeyState.Conflicting : ProjectKeyState.Matching;
 }
 
-function bindsRepository(
+export function bindsRepository(
   binding: ProjectBindingResponse,
   setting: DopSetting,
   { repositoryIdentifier, projectIdentifier }: ServerRepository,
