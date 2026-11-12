@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor trajectories</title>
+<style>
+@font-face {
+  font-family: "Google Sans Code";
+  src: url(data:font/ttf;base64,__FONT_BASE64__) format("truetype");
+  font-weight: 300 800;
+}
+:root {
+  --bg: oklch(100% 0 0); --fg: oklch(14.1% .005 285.8); --card: oklch(100% 0 0);
+  --muted: oklch(96.7% .001 286.4); --muted-fg: oklch(55.2% .016 285.9);
+  --border: oklch(92% .004 286.3); --primary: oklch(21% .006 285.9);
+  --bar1: oklch(21% .006 285.9); --bar2: oklch(45% .01 286); --bar3: oklch(65% .012 286); --bar4: oklch(85% .006 286);
+  --bad: oklch(55% .2 27); --bad-bg: oklch(96% .03 27);
+  --warn: oklch(55% .13 70); --warn-bg: oklch(96% .04 80);
+  --ok: oklch(52% .13 150);
+  --font: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: oklch(14.1% .005 285.8); --fg: oklch(98.5% 0 0); --card: oklch(21% .006 285.9);
+    --muted: oklch(27.4% .006 286); --muted-fg: oklch(70.5% .015 286);
+    --border: oklch(30.2% .006 286); --primary: oklch(92% .004 286.3);
+    --bar1: oklch(92% .004 286); --bar2: oklch(72% .01 286); --bar3: oklch(52% .01 286); --bar4: oklch(36% .008 286);
+    --bad: oklch(72% .17 25); --bad-bg: oklch(28% .06 25);
+    --warn: oklch(78% .13 80); --warn-bg: oklch(30% .05 80);
+    --ok: oklch(75% .14 150);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: oklch(14.1% .005 285.8); --fg: oklch(98.5% 0 0); --card: oklch(21% .006 285.9);
+  --muted: oklch(27.4% .006 286); --muted-fg: oklch(70.5% .015 286);
+  --border: oklch(30.2% .006 286); --primary: oklch(92% .004 286.3);
+  --bar1: oklch(92% .004 286); --bar2: oklch(72% .01 286); --bar3: oklch(52% .01 286); --bar4: oklch(36% .008 286);
+  --bad: oklch(72% .17 25); --bad-bg: oklch(28% .06 25);
+  --warn: oklch(78% .13 80); --warn-bg: oklch(30% .05 80);
+  --ok: oklch(75% .14 150);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.55 var(--font); }
+button { font: inherit; color: inherit; }
+.layout { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+aside { border-right: 1px solid var(--border); padding: 16px 0; position: sticky; top: 0; height: 100vh; overflow: auto; }
+aside .head { padding: 0 16px 12px; }
+aside h1 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+.group-title { padding: 12px 16px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-fg); display: flex; justify-content: space-between; gap: 8px; }
+.entry { display: block; width: 100%; text-align: left; background: none; border: 0; border-left: 2px solid transparent; padding: 7px 16px; cursor: pointer; }
+.entry:hover { background: var(--muted); }
+.entry[aria-current="true"] { background: var(--muted); border-left-color: var(--primary); }
+.entry .name { display: flex; gap: 8px; align-items: center; }
+.entry .sub { color: var(--muted-fg); font-size: 11px; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry.task { font-weight: 600; border: 1px solid var(--border); margin: 4px 12px; width: calc(100% - 24px); padding: 9px 10px; }
+.entry.task .task-id { padding-left: 16px; font-weight: 400; }
+.entry.task:hover { border-color: var(--primary); }
+.hint { padding: 0 16px 8px; font-size: 11px; color: var(--muted-fg); }
+.entry.task .count { margin-left: auto; font-weight: 400; font-size: 11px; color: var(--muted-fg); }
+.entry:not(.task) { padding-left: 32px; }
+.chevron { width: 10px; color: var(--muted-fg); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.dot.bad { background: var(--bad); }
+.dot.warn { background: var(--warn); }
+main { padding: 24px 32px 64px; max-width: 1100px; min-width: 0; }
+h1.title { font-size: 26px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+h2, h3 { margin: 0; font-weight: 600; font-size: 14px; }
+.muted { color: var(--muted-fg); }
+.card { border: 1px solid var(--border); margin-top: 16px; background: var(--card); }
+.card > .block { padding: 14px 18px; border-top: 1px solid var(--border); }
+.card > .block:first-child { border-top: 0; }
+.kv { display: flex; justify-content: space-between; padding: 2px 0; }
+.bar { display: flex; height: 28px; margin: 10px 0 6px; background: var(--bar4); }
+.bar > span { display: block; height: 100%; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted-fg); }
+.sw { display: inline-block; width: 9px; height: 9px; margin-right: 5px; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 8px; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 12px 14px; cursor: pointer; color: var(--muted-fg); }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--primary); }
+.timeline { display: flex; height: 22px; margin: 12px 0 4px; gap: 1px; }
+.timeline button { border: 0; padding: 0; cursor: pointer; min-width: 3px; background: var(--bar2); }
+.timeline button.slow { background: var(--bad); }
+.timeline button.err { background: var(--warn); }
+.step { padding: 14px 18px; border-top: 1px solid var(--border); border-left: 3px solid transparent; scroll-margin-top: 12px; }
+.step.err { border-left-color: var(--warn); }
+.step.slow { border-left-color: var(--bad); }
+.step .meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted-fg); margin-bottom: 6px; }
+.step .msg { white-space: pre-wrap; margin: 4px 0 8px; overflow-wrap: anywhere; }
+.wait { color: var(--bad); font-weight: 700; }
+.call { border: 1px solid var(--border); margin: 6px 0; background: var(--muted); }
+.call > button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 8px 10px; cursor: pointer; }
+.call .cmd { display: flex; gap: 10px; align-items: baseline; }
+.call .cmd code { overflow-wrap: anywhere; font: inherit; }
+.call .preview { color: var(--muted-fg); font-size: 12px; padding-left: 4px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call pre { margin: 0; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--card); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font); max-height: 420px; overflow: auto; }
+.call.err { border-color: var(--warn); }
+.pill { display: inline-block; padding: 0 8px; font-size: 11px; background: var(--muted); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.ok { color: var(--ok); }
+.btn { border: 1px solid var(--border); background: var(--bg); padding: 5px 10px; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 18px; border-top: 1px solid var(--border); }
+th { color: var(--muted-fg); font-weight: 500; font-size: 12px; }
+tr.click { cursor: pointer; }
+tr.click:hover { background: var(--muted); }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<div class="layout"><aside id="side"></aside><main id="main"></main></div>
+<script id="data" type="text/plain">__TRIALS_JSON__</script>
+<script>
+(function () {
+  const trials = JSON.parse(decodeURIComponent(document.getElementById('data').textContent.trim()));
+  const side = document.getElementById('side');
+  const main = document.getElementById('main');
+  const WAIT_SECONDS = 30;
+  const MIN_TRIALS_FOR_MEDIAN = 3;
+  const MEDIAN_FACTOR = 2;
+  const PREVIEW_LENGTH = 140;
+  const SECONDS_PER_MINUTE = 60;
+  const SHORT_SECONDS = 10;
+  const openTasks = new Set();
+
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    Object.keys(props || {}).forEach((key) => {
+      if (key === 'class') node.className = props[key];
+      else if (key === 'text') node.textContent = props[key];
+      else if (key.startsWith('on')) node.addEventListener(key.slice(2), props[key]);
+      else node.setAttribute(key, props[key]);
+    });
+    (children || []).forEach((child) => {
+      if (child !== null && child !== undefined) node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+    });
+    return node;
+  }
+  function fmtSeconds(value) {
+    if (value === null || value === undefined) return '-';
+    if (value < SECONDS_PER_MINUTE) return value.toFixed(value < SHORT_SECONDS ? 1 : 0) + 's';
+    return Math.floor(value / SECONDS_PER_MINUTE) + 'm ' + Math.round(value % SECONDS_PER_MINUTE) + 's';
+  }
+  const fmtNumber = (value) => (value === null || value === undefined ? '-' : value.toLocaleString('en-US'));
+  const fmtCost = (value) => (value === null || value === undefined ? '-' : '$' + value.toFixed(4));
+  function median(values) {
+    const sorted = values.filter((v) => v !== null).sort((a, b) => a - b);
+    if (sorted.length === 0) return null;
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  const rewardOf = (trial) => (trial.rewards && trial.rewards.reward !== undefined ? trial.rewards.reward : null);
+  const tokensOf = (trial) => (trial.inputTokens || 0) + (trial.outputTokens || 0);
+
+  function gapsOf(trial) {
+    let previous = null;
+    return trial.steps.map((step, index) => {
+      const time = step.at ? Date.parse(step.at) : null;
+      const gap = previous !== null && time !== null ? (time - previous) / 1000 : null;
+      if (time !== null) previous = time;
+      const afterAgent = index > 0 && trial.steps[index - 1].source === 'agent';
+      return { gap, counts: afterAgent };
+    });
+  }
+  function longestWait(trial) {
+    const waits = gapsOf(trial).filter((g) => g.gap !== null && g.counts).map((g) => g.gap);
+    return waits.length ? Math.max(...waits) : null;
+  }
+  const failedCommands = (trial) => trial.steps.reduce((sum, s) => sum + s.results.filter((r) => r.isError).length, 0);
+
+  function flagsOf(trial, siblings) {
+    const found = [];
+    const reward = rewardOf(trial);
+    if (trial.exception) found.push('exception');
+    else if (reward === null) found.push('no reward');
+    else if (reward < 1) found.push('reward ' + reward);
+    if (siblings.length >= MIN_TRIALS_FOR_MEDIAN) {
+      const timeMedian = median(siblings.map((t) => t.seconds.agent));
+      if (timeMedian && trial.seconds.agent !== null && trial.seconds.agent > MEDIAN_FACTOR * timeMedian) found.push('slow: ' + fmtSeconds(trial.seconds.agent) + ' vs median ' + fmtSeconds(timeMedian));
+      const tokenMedian = median(siblings.map(tokensOf));
+      if (tokenMedian && tokensOf(trial) > MEDIAN_FACTOR * tokenMedian) found.push('many tokens');
+    }
+    const wait = longestWait(trial);
+    if (wait !== null && wait >= WAIT_SECONDS) found.push('wait ' + fmtSeconds(wait));
+    const failed = failedCommands(trial);
+    if (failed > 0) found.push(failed + ' failed command' + (failed > 1 ? 's' : ''));
+    return found;
+  }
+  const flagged = new Map();
+  trials.forEach((trial) => {
+    const siblings = trials.filter((t) => t.group === trial.group && t.task === trial.task);
+    flagged.set(trial, flagsOf(trial, siblings));
+  });
+  const keyOf = (trial) => trial.group + '/' + trial.name;
+  const dotClass = (trial) => {
+    const reward = rewardOf(trial);
+    if (reward === null || reward < 1) return 'dot bad';
+    return flagged.get(trial).length ? 'dot warn' : 'dot';
+  };
+
+  function themeButton() {
+    return el('button', { class: 'btn', type: 'button', text: 'Light / dark', onclick() {
+      const root = document.documentElement;
+      const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+      root.dataset.theme = dark ? 'light' : 'dark';
+    } });
+  }
+
+  const titleOfTask = (task) => (trials.find((t) => t.task === task) || {}).taskTitle || task;
+  const passedCount = (members) => members.filter((t) => rewardOf(t) !== null && rewardOf(t) >= 1).length;
+  function groupBy(items, keyOf2) {
+    const groups = new Map();
+    items.forEach((item) => {
+      const key = keyOf2(item);
+      groups.set(key, (groups.get(key) || []).concat([item]));
+    });
+    return groups;
+  }
+  function taskNode(agent, task, members, selected, rerender) {
+    const id = agent + '/' + task;
+    const open = openTasks.has(id);
+    const attention = members.filter((t) => flagged.get(t).length > 0).length;
+    const title = el('button', { class: 'entry task', type: 'button', 'aria-expanded': String(open), onclick() {
+      if (open) openTasks.delete(id);
+      else openTasks.add(id);
+      rerender();
+    } }, [
+      el('div', { class: 'name' }, [
+        el('span', { class: 'chevron', text: open ? '▾' : '▸' }),
+        el('span', { text: titleOfTask(task) }),
+        el('span', { class: 'count', text: passedCount(members) + '/' + members.length + (attention ? ' · ' + attention + ' to read' : '') }),
+      ]),
+    ]);
+    if (titleOfTask(task) !== task) title.appendChild(el('div', { class: 'sub task-id', text: task }));
+    const node = el('div', {}, [title]);
+    if (open) members.forEach((trial) => node.appendChild(entryNode(trial, selected)));
+    return node;
+  }
+  function renderSide(selected) {
+    if (selected) openTasks.add(selected.agent + '/' + selected.task);
+    const head = el('div', { class: 'head' }, [
+      el('h1', { text: 'Harbor trajectories' }),
+      el('div', { class: 'muted', text: trials.length + ' trials' }),
+      el('div', { style: 'display:flex;gap:6px;margin-top:10px' }, [
+        el('button', { class: 'btn', type: 'button', style: 'flex:1', text: 'Overview', onclick() { location.hash = ''; } }),
+        themeButton(),
+      ]),
+    ]);
+    const list = el('div', {}, [el('div', { class: 'hint', text: 'Pick a task to list its jobs, then a job to read its trajectory.' })]);
+    const byAgent = groupBy(trials, (t) => t.agent || '-');
+    const rerender = () => renderSide(selected);
+    [...byAgent.keys()].sort().forEach((agent) => list.appendChild(agentNode(agent, byAgent.get(agent), selected, rerender)));
+    side.replaceChildren(head, list);
+  }
+  function agentNode(agent, members, selected, rerender) {
+    const node = el('div', {}, [
+      el('div', { class: 'group-title' }, [el('span', { text: agent }), el('span', { text: passedCount(members) + '/' + members.length })]),
+    ]);
+    const byTask = groupBy(members, (t) => t.task);
+    [...byTask.keys()].sort().forEach((task) => node.appendChild(taskNode(agent, task, byTask.get(task), selected, rerender)));
+    return node;
+  }
+  function entryNode(trial, selected) {
+    const sub = [trial.model, fmtSeconds(trial.seconds.agent)].filter(Boolean).join(' · ');
+    return el('button', { class: 'entry', type: 'button', 'aria-current': String(selected === trial), onclick() { location.hash = encodeURIComponent(keyOf(trial)); } }, [
+      el('div', { class: 'name' }, [el('span', { class: dotClass(trial) }), el('span', { text: trial.name })]),
+      el('div', { class: 'sub', text: sub }),
+    ]);
+  }
+
+  function bar(parts) {
+    const total = parts.reduce((sum, p) => sum + (p.value || 0), 0);
+    const colors = ['var(--bar1)', 'var(--bar2)', 'var(--bar3)', 'var(--bar4)'];
+    const segments = parts.map((part, index) => {
+      const span = el('span', { title: part.label + ': ' + part.text });
+      span.style.width = total ? (100 * (part.value || 0) / total) + '%' : '0';
+      span.style.background = colors[index % colors.length];
+      return span;
+    });
+    const legend = parts.map((part, index) => {
+      const sw = el('span', { class: 'sw' });
+      sw.style.background = colors[index % colors.length];
+      return el('span', {}, [sw, part.label + ' (' + part.text + ')']);
+    });
+    return [el('div', { class: 'bar' }, segments), el('div', { class: 'legend' }, legend)];
+  }
+
+  function firstLine(text) {
+    const line = text.split('\n').map((l) => l.trim()).find((l) => /\w{2}/.test(l)) || '';
+    return line.length > PREVIEW_LENGTH ? line.slice(0, PREVIEW_LENGTH) + '…' : line;
+  }
+  function callNode(call, results) {
+    const result = results.find((r) => r.callId === call.id);
+    const shown = call.arguments.command !== undefined ? call.arguments.command : call.arguments.cmd;
+    const command = shown !== undefined ? String(shown) : JSON.stringify(call.arguments);
+    const body = el('pre', { text: result ? result.content : '(no output recorded)' });
+    body.hidden = true;
+    const header = el('button', { type: 'button', 'aria-expanded': 'false', onclick() {
+      body.hidden = !body.hidden;
+      header.setAttribute('aria-expanded', String(!body.hidden));
+    } }, [
+      el('div', { class: 'cmd' }, [el('b', { text: call.name }), el('code', { text: command }), result && result.isError ? el('span', { class: 'pill warn', text: 'failed' }) : null]),
+      result ? el('div', { class: 'preview', text: '→ ' + firstLine(result.content) }) : null,
+    ]);
+    return el('div', { class: 'call' + (result && result.isError ? ' err' : '') }, [header, body]);
+  }
+
+  function trajectoryView(trial) {
+    const wrap = el('div');
+    const gaps = gapsOf(trial);
+    const failed = failedCommands(trial);
+    const wait = longestWait(trial);
+    const summary = [trial.steps.length + ' steps', failed + ' failed command' + (failed === 1 ? '' : 's'), 'longest wait ' + fmtSeconds(wait)];
+    wrap.appendChild(el('div', { class: 'block', style: 'padding:14px 18px' }, [el('h3', { text: 'Trajectory' }), el('div', { class: 'muted', text: summary.join('  ·  ') })]));
+    if (trial.steps.length === 0) {
+      wrap.appendChild(el('div', { class: 'muted', style: 'padding:14px 18px', text: 'No trajectory recorded for this trial.' }));
+      return wrap;
+    }
+    const stepNodes = [];
+    const timeline = el('div', { class: 'timeline' });
+    trial.steps.forEach((step, index) => {
+      const { gap, counts } = gaps[index];
+      const slow = counts && gap !== null && gap >= WAIT_SECONDS;
+      const err = step.results.some((r) => r.isError);
+      const segment = el('button', { type: 'button', title: '#' + step.id + (gap === null ? '' : ' +' + fmtSeconds(gap)), 'aria-label': 'Go to step ' + step.id, onclick() { stepNodes[index].scrollIntoView({ behavior: 'smooth' }); } });
+      segment.className = stateClass(slow, err);
+      segment.style.flex = String(Math.max(gap || 0, 1));
+      timeline.appendChild(segment);
+      stepNodes.push(stepNode(step, gap, slow, err));
+    });
+    const holder = el('div', { style: 'padding:0 18px' }, [timeline, el('div', { class: 'legend' }, [el('span', { text: 'Each block is a step, wider = longer. Red: wait of ' + WAIT_SECONDS + 's or more. Orange: a command failed.' })])]);
+    wrap.appendChild(holder);
+    stepNodes.forEach((node) => wrap.appendChild(node));
+    return wrap;
+  }
+  function stateClass(slow, err) {
+    if (slow) return 'slow';
+    return err ? 'err' : '';
+  }
+  function stepNode(step, gap, slow, err) {
+    const meta = el('div', { class: 'meta' }, [
+      el('b', { text: '#' + step.id }),
+      gap === null ? null : el('span', { class: slow ? 'wait' : '', text: '+' + fmtSeconds(gap) }),
+      el('span', { text: step.source }),
+      step.costUsd !== null ? el('span', { text: fmtCost(step.costUsd) }) : null,
+      step.promptTokens !== null ? el('span', { text: 'in ' + fmtNumber(step.promptTokens) }) : null,
+      step.cachedTokens !== null ? el('span', { text: 'cache ' + fmtNumber(step.cachedTokens) }) : null,
+      step.completionTokens !== null ? el('span', { text: 'out ' + fmtNumber(step.completionTokens) }) : null,
+    ]);
+    const node = el('div', { class: ('step ' + stateClass(slow, err)).trim() }, [meta]);
+    if (step.message) node.appendChild(el('div', { class: 'msg', text: step.message }));
+    step.calls.forEach((call) => node.appendChild(callNode(call, step.results)));
+    return node;
+  }
+
+  function verifierView(trial) {
+    if (!trial.rewards) return el('div', { class: 'muted', style: 'padding:14px 18px', text: 'No verifier result.' });
+    const table = el('table');
+    Object.keys(trial.rewards).sort().forEach((key) => {
+      table.appendChild(el('tr', {}, [el('td', { text: key }), el('td', { text: String(trial.rewards[key]) })]));
+    });
+    return table;
+  }
+
+  function trialPage(trial) {
+    const reward = rewardOf(trial);
+    const others = trial.rewards ? Object.keys(trial.rewards).length - 1 : 0;
+    const found = flagged.get(trial);
+    const s = trial.seconds;
+    const page = el('div');
+    page.appendChild(el('h1', { class: 'title', text: trial.name }));
+    page.appendChild(el('div', { class: 'muted', text: [trial.taskTitle || trial.task, trial.agent && trial.agent + (trial.agentVersion ? '@' + trial.agentVersion : ''), trial.model, trial.group].filter(Boolean).join('  |  ') }));
+    const outcome = el('div', { class: 'block' }, [
+      el('h3', { text: 'Outcome' }),
+      el('div', { class: 'kv' }, [el('span', { class: 'muted', text: 'Status' }), el('span', { text: trial.exception ? 'Error: ' + trial.exception : 'Completed' })]),
+      el('div', { class: 'kv' }, [el('span', { class: 'muted', text: 'Reward' }), el('span', { text: (reward === null ? '-' : String(reward)) + (others > 0 ? ' +' + others + ' more' : '') })]),
+      el('div', { class: 'kv' }, [el('span', { class: 'muted', text: 'Cost' }), el('span', { text: fmtCost(trial.costUsd) })]),
+      found.length ? el('div', { style: 'margin-top:8px;display:flex;gap:6px;flex-wrap:wrap' }, found.map((f) => el('span', { class: 'pill warn', text: f }))) : null,
+    ]);
+    const prompt = Math.max((trial.inputTokens || 0) - (trial.cachedTokens || 0), 0);
+    const tokens = el('div', { class: 'block' }, [el('h3', { text: 'Tokens' })].concat(bar([
+      { label: 'Output', value: trial.outputTokens, text: fmtNumber(trial.outputTokens) },
+      { label: 'Prompt', value: prompt, text: fmtNumber(prompt) },
+      { label: 'Cached', value: trial.cachedTokens, text: fmtNumber(trial.cachedTokens) },
+    ])));
+    const timing = el('div', { class: 'block' }, [el('h3', { text: 'Timing' })].concat(bar([
+      { label: 'Env setup', value: s.environment, text: fmtSeconds(s.environment) },
+      { label: 'Agent setup', value: s.agentSetup, text: fmtSeconds(s.agentSetup) },
+      { label: 'Agent execution', value: s.agent, text: fmtSeconds(s.agent) },
+      { label: 'Verifier', value: s.verifier, text: fmtSeconds(s.verifier) },
+    ])));
+    const content = el('div');
+    const views = { Trajectory: () => trajectoryView(trial), Verifier: () => verifierView(trial) };
+    const tabs = el('div', { class: 'tabs', role: 'tablist' });
+    const select = (name) => {
+      [...tabs.children].forEach((button) => button.setAttribute('aria-selected', String(button.textContent === name)));
+      content.replaceChildren(views[name]());
+    };
+    Object.keys(views).forEach((name) => tabs.appendChild(el('button', { type: 'button', role: 'tab', text: name, onclick() { select(name); } })));
+    page.appendChild(el('div', { class: 'card' }, [outcome, tokens, timing]));
+    page.appendChild(el('div', { class: 'card' }, [tabs, content]));
+    select('Trajectory');
+    return page;
+  }
+
+  function overviewPage() {
+    const page = el('div');
+    page.appendChild(el('div', { class: 'top' }, [el('h1', { class: 'title', text: 'Overview' })]));
+    const standing = trials.filter((t) => flagged.get(t).length > 0);
+    page.appendChild(el('div', { class: 'muted', text: trials.length + ' trials, ' + standing.length + ' stand out. Pick a trial on the left, or start with these.' }));
+    const table = el('table');
+    table.appendChild(el('tr', {}, ['Trial', 'Task', 'Agent / model', 'Reward', 'Agent time', 'Why it stands out'].map((h) => el('th', { text: h }))));
+    const rows = (standing.length ? standing : trials).slice().sort((a, b) => flagged.get(b).length - flagged.get(a).length);
+    rows.forEach((trial) => table.appendChild(overviewRow(trial)));
+    page.appendChild(el('div', { class: 'card' }, [table]));
+    return page;
+  }
+  function overviewRow(trial) {
+    const reward = rewardOf(trial);
+    return el('tr', { class: 'click', onclick() { location.hash = encodeURIComponent(keyOf(trial)); } }, [
+      el('td', { text: trial.name }),
+      el('td', { text: trial.taskTitle || trial.task }),
+      el('td', { text: [trial.agent, trial.model].filter(Boolean).join(' / ') }),
+      el('td', {}, [el('span', { class: 'pill ' + (reward !== null && reward >= 1 ? 'ok' : 'bad'), text: reward === null ? '-' : String(reward) })]),
+      el('td', { text: fmtSeconds(trial.seconds.agent) }),
+      el('td', {}, flagged.get(trial).map((f) => el('span', { class: 'pill warn', text: f, style: 'margin-right:4px' }))),
+    ]);
+  }
+
+  function render() {
+    const hash = decodeURIComponent(location.hash.slice(1));
+    const trial = trials.find((t) => keyOf(t) === hash);
+    renderSide(trial);
+    main.replaceChildren(trial ? trialPage(trial) : overviewPage());
+    window.scrollTo(0, 0);
+  }
+  window.addEventListener('hashchange', render);
+  render();
+})();
+</script>
+</body>
+</html>
