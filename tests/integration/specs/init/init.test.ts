@@ -1591,6 +1591,7 @@ describe('sonar init', () => {
   describe('monorepo', () => {
     const SELECT_PROMPT = 'Select the project roots to onboard';
     const STALE_SERVER = 'https://sq.example.com';
+    const OFFER_MONOREPO_PROMPT = 'Onboard this as a monorepo instead?';
 
     beforeEach(() => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
@@ -1805,15 +1806,82 @@ describe('sonar init', () => {
     );
 
     it(
-      'reports an enclosing mapping as complete without --monorepo',
+      'offers the monorepo flow in plain init when the config links several roots, and keeps the usual path on a no',
       async () => {
         const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
-        writeMonorepoConfig(serverUrl, [{ path: '.', key: 'api-key' }]);
+        writeMonorepoConfig(serverUrl, [
+          { path: '.', key: 'api-key' },
+          { path: 'web', key: 'web-key' },
+        ]);
+
+        const session = harness.runInteractive('init');
+        await session.decline(OFFER_MONOREPO_PROMPT);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.stdout).toContain('Nothing left to set up');
+        expect(result.stdout).not.toContain('Monorepo onboarding summary:');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'runs the monorepo flow when the offer in plain init is accepted',
+      async () => {
+        const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
+        writeMonorepoConfig(serverUrl, [
+          { path: 'api', key: 'api-key', stale: true },
+          { path: 'web', key: 'web-key' },
+        ]);
+
+        const session = harness.runInteractive('init');
+        await session.accept(OFFER_MONOREPO_PROMPT);
+        await selectFirstRoots(session);
+        await session.accept('Replace the connection recorded');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Monorepo onboarding summary:');
+        expect(readConfig().projects[0].serverUrl).not.toBe(STALE_SERVER);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not offer the monorepo flow for a config with only a single project',
+      async () => {
+        const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile(
+          '.sonar-config.json',
+          JSON.stringify({
+            project: { projectKey: 'api-key', path: '.', serverUrl, organization: ORG },
+          }),
+        );
 
         const session = harness.runInteractive('init');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
+        expect(result.stdout).not.toContain('Onboard this as a monorepo');
+        expect(result.stdout).toContain('Nothing left to set up');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not offer the monorepo flow without a terminal',
+      async () => {
+        const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
+        writeMonorepoConfig(serverUrl, [
+          { path: '.', key: 'api-key' },
+          { path: 'web', key: 'web-key' },
+        ]);
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.stdout + result.stderr).not.toContain('Onboard this as a monorepo');
         expect(result.stdout).toContain('Nothing left to set up');
       },
       TIMEOUT,

@@ -39,7 +39,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
-import { runMonorepo } from './steps/monorepo.ts';
+import { offerMonorepo, runMonorepo } from './steps/monorepo.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
   NOT_RUN,
@@ -139,7 +139,7 @@ async function run(
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
   // Chosen before detection: a monorepo that is already partly linked must reach its remaining roots.
-  if (monorepo) {
+  if (monorepo || (interactive && (await offerMonorepo(projectRoot, console)))) {
     return { outcome: await runMonorepo(projectRoot, deps), auth, deps };
   }
   const detected = await detectInitPath(projectRoot, deps);
