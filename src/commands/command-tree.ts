@@ -114,6 +114,7 @@ import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { agentSecretsMasking } from './hook/agent-secrets-masking/index.ts';
 import { agentSessionStart } from './hook/agent-session-start';
+import { agentStop } from './hook/agent-stop/index.ts';
 import { antigravityPreToolUse } from './hook/antigravity-pre-tool-use.ts';
 import { claudePostToolUseFailure } from './hook/claude-post-tool-use-failure.ts';
 import { claudePreToolUse } from './hook/claude-pre-tool-use.ts';
@@ -1271,6 +1272,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       handleHookInvocation((ctx, options: { agent: string }) =>
         agentSecretsMasking(ctx, options.agent),
       ),
+    );
+
+  hookCommand
+    .command('agent-stop')
+    .description('Run deep Vortex analysis before an agent finishes')
+    .requiredOption('--agent <agent>', 'Agent whose hook input and output format to use (claude)')
+    .anonymousAction(
+      handleHookInvocation((ctx, options: { agent: string }) => agentStop(ctx, options.agent)),
     );
 
   hookCommand
