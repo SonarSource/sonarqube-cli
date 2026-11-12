@@ -161,7 +161,7 @@ describe('deep analysis state', () => {
       expect(resetAnalysisCounterIfIdle(SESSION)).toBe(false);
       expect(stubs.reset).not.toHaveBeenCalled();
       expect(stubs.write).not.toHaveBeenCalled();
-      expect(stubs.reset).not.toHaveBeenCalled();
+      expect(stubs.insert).not.toHaveBeenCalled();
     },
   );
 
