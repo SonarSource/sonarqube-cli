@@ -60,14 +60,25 @@ function formatCount(n: number): string {
   return n.toLocaleString('en-US');
 }
 
+/** How far a search for `query` has got, as the status line under its results reports it. */
+export interface SearchProgress {
+  query: string;
+  /** Results on screen. */
+  shown: number;
+  /** Matches on the backing store, which may exceed `shown`. */
+  total: number;
+  /** A request is pending or in flight, so the list on screen may be stale. */
+  loading: boolean;
+  /** At least one search has completed for the current query. */
+  loaded: boolean;
+}
+
 interface SearchState<T> {
   query: string;
   options: SearchOption<T>[];
   total: number;
   cursor: number;
-  /** A request is pending or in flight, so the list on screen may be stale. */
   loading: boolean;
-  /** At least one search has completed for the current query. */
   loaded: boolean;
 }
 
@@ -95,34 +106,35 @@ function renderRows<T>(state: SearchState<T>): string[] {
   });
 }
 
-function renderFooter<T>(
-  state: SearchState<T>,
+/** The status line under a result list: progress, the match count, or why nothing shows. */
+export function renderFooter(
+  progress: SearchProgress,
   noun: string,
   minQueryLength: number,
 ): string | undefined {
-  const query = state.query.trim();
+  const query = progress.query.trim();
   const needsMore = query.length > 0 && query.length < minQueryLength;
   if (needsMore) {
     return dim(`Type at least ${minQueryLength} characters to search.`);
   }
-  if (state.loading) {
+  if (progress.loading) {
     return dim('Searching…');
   }
-  if (!state.loaded) {
+  if (!progress.loaded) {
     return undefined;
   }
-  if (state.options.length === 0) {
+  if (progress.shown === 0) {
     return dim(query ? `No ${noun} match '${query}'.` : `No ${noun} found.`);
   }
   let what = noun;
   if (query) {
-    what = state.total === 1 ? 'match' : 'matches';
+    what = progress.total === 1 ? 'match' : 'matches';
   }
-  return state.total > state.options.length
+  return progress.total > progress.shown
     ? dim(
-        `Showing ${state.options.length} of ${formatCount(state.total)} ${what}. Type more to narrow.`,
+        `Showing ${progress.shown} of ${formatCount(progress.total)} ${what}. Type more to narrow.`,
       )
-    : dim(`${formatCount(state.total)} ${what}`);
+    : dim(`${formatCount(progress.total)} ${what}`);
 }
 
 /**
@@ -180,7 +192,7 @@ export function createSearchPrompt<T>(
       const hint = opts.hint ? ` ${dim('(' + opts.hint + ')')}` : '';
       const lines = [`  ${cyan('?')}  ${message}${hint}  ${prompt.inputWithCursor}`];
       lines.push(...renderRows(state));
-      const footer = renderFooter(state, noun, minQueryLength);
+      const footer = renderFooter({ ...state, shown: state.options.length }, noun, minQueryLength);
       if (footer) lines.push(`  ${footer}`);
       lines.push(`  ${dim('↑↓ move   Enter choose   Esc cancel')}`);
       return lines.join('\n');
