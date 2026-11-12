@@ -22,7 +22,7 @@ import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 
 import {
   SHARED_PROJECT_CONFIG_FILE_NAME,
@@ -30,7 +30,10 @@ import {
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { SharedProjectConfigRepositoryImpl } from '@/core/project-discovery/shared-project-config.ts';
+import {
+  SharedProjectConfigFileImpl,
+  SharedProjectConfigRepositoryImpl,
+} from '@/core/project-discovery/shared-project-config.ts';
 
 function tempDir(name: string): string {
   const dir = join(tmpdir(), `shared-project-config-ut-${name}-${Date.now()}`);
@@ -42,12 +45,12 @@ function writeConfig(dir: string, content: string): void {
   writeFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), content);
 }
 
-/** Wraps a raw entry under the `project` container, mirroring what `set()` writes. */
+/** Wraps a raw entry under the `project` container, as a single-project config holds it. */
 function writeProjectConfig(dir: string, project: unknown): void {
   writeConfig(dir, JSON.stringify({ project }));
 }
 
-describe('SharedProjectConfigFileRepository.load', () => {
+describe('SharedProjectConfigRepositoryImpl.load', () => {
   it('resolves a Cloud entry', async () => {
     const dir = tempDir('cloud');
     mkdirSync(join(dir, 'services/eu'), { recursive: true });
@@ -457,19 +460,21 @@ describe('SharedProjectConfigFileRepository.load', () => {
   });
 });
 
-describe('SharedProjectConfigFileRepository.set', () => {
+describe('SharedProjectConfigFileImpl.writeEntries', () => {
   it('writes a Server entry that round-trips through load()', async () => {
     const dir = tempDir('write-server');
     mkdirSync(join(dir, 'services/onprem'), { recursive: true });
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
-      await repo.set(dir, {
-        projectKey: 'onprem_key',
-        path: 'services/onprem',
-        serverUrl: 'https://sonarqube.internal',
-      });
+      const file = new SharedProjectConfigFileImpl();
+      await file.writeEntries(dir, [
+        {
+          projectKey: 'onprem_key',
+          path: 'services/onprem',
+          serverUrl: 'https://sonarqube.internal',
+        },
+      ]);
 
-      expect(await repo.load(dir)).toEqual([
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([
         {
           projectRoot: canonicalizePath(join(dir, 'services/onprem')),
           projectKey: 'onprem_key',
@@ -485,15 +490,17 @@ describe('SharedProjectConfigFileRepository.set', () => {
   it('writes a Cloud entry that round-trips through load()', async () => {
     const dir = tempDir('write-cloud');
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
-      await repo.set(dir, {
-        projectKey: 'acme_us',
-        path: '.',
-        region: 'us',
-        organization: 'acme',
-      });
+      const file = new SharedProjectConfigFileImpl();
+      await file.writeEntries(dir, [
+        {
+          projectKey: 'acme_us',
+          path: '.',
+          region: 'us',
+          organization: 'acme',
+        },
+      ]);
 
-      expect(await repo.load(dir)).toEqual([
+      expect(await new SharedProjectConfigRepositoryImpl().load(dir)).toEqual([
         {
           projectRoot: canonicalizePath(join(dir, '.')),
           projectKey: 'acme_us',
@@ -509,11 +516,15 @@ describe('SharedProjectConfigFileRepository.set', () => {
   it('overwrites an existing entry rather than appending to it', async () => {
     const dir = tempDir('overwrite');
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
-      await repo.set(dir, { projectKey: 'first', path: '.', serverUrl: 'https://a.example' });
-      await repo.set(dir, { projectKey: 'second', path: '.', serverUrl: 'https://b.example' });
+      const file = new SharedProjectConfigFileImpl();
+      await file.writeEntries(dir, [
+        { projectKey: 'first', path: '.', serverUrl: 'https://a.example' },
+      ]);
+      await file.writeEntries(dir, [
+        { projectKey: 'second', path: '.', serverUrl: 'https://b.example' },
+      ]);
 
-      const mappings = await repo.load(dir);
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
       expect(mappings[0]?.projectKey).toBe('second');
       expect(mappings[0]?.serverUrl).toBe('https://b.example');
     } finally {
@@ -524,8 +535,10 @@ describe('SharedProjectConfigFileRepository.set', () => {
   it('nests the written entry under a "project" field, leaving room for future top-level fields', async () => {
     const dir = tempDir('write-shape');
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
-      await repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' });
+      const file = new SharedProjectConfigFileImpl();
+      await file.writeEntries(dir, [
+        { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
+      ]);
 
       const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
       expect(raw).toEqual({
@@ -540,8 +553,10 @@ describe('SharedProjectConfigFileRepository.set', () => {
     const dir = tempDir('preserve-siblings');
     writeConfig(dir, JSON.stringify({ someFutureField: 'keep-me' }));
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
-      await repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' });
+      const file = new SharedProjectConfigFileImpl();
+      await file.writeEntries(dir, [
+        { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' },
+      ]);
 
       const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
       expect(raw).toEqual({
@@ -557,15 +572,47 @@ describe('SharedProjectConfigFileRepository.set', () => {
     const dir = tempDir('unreadable-existing');
     writeConfig(dir, '{ not valid json ]');
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
+      const file = new SharedProjectConfigFileImpl();
       const before = readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8');
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }),
+        file.writeEntries(dir, [{ projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }]),
       ).rejects.toThrow();
 
       expect(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8')).toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes several entries as a projects array, dropping a previous project entry', async () => {
+    const dir = tempDir('save-several');
+    writeConfig(dir, JSON.stringify({ project: { projectKey: 'old', path: '.', serverUrl: 'x' } }));
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    try {
+      const file = new SharedProjectConfigFileImpl();
+      const root = { projectKey: 'root', path: '.', serverUrl: 'https://sq.example' };
+      const api = { projectKey: 'api', path: 'api', serverUrl: 'https://sq.example' };
+      await file.writeEntries(dir, [root, api]);
+
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw).toEqual({ projects: [root, api] });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('writes a lone entry as project, dropping a previous projects array', async () => {
+    const dir = tempDir('save-one');
+    writeConfig(dir, JSON.stringify({ projects: [], keep: true }));
+    try {
+      const file = new SharedProjectConfigFileImpl();
+      const root = { projectKey: 'root', path: '.', serverUrl: 'https://sq.example' };
+      await file.writeEntries(dir, [root]);
+
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw).toEqual({ keep: true, project: root });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -578,12 +625,82 @@ describe('SharedProjectConfigFileRepository.set', () => {
       JSON.stringify([{ serverUrl: 'https://sq.example', projectKey: 'x', path: '.' }]),
     );
     try {
-      const repo = new SharedProjectConfigRepositoryImpl();
+      const file = new SharedProjectConfigFileImpl();
 
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(
-        repo.set(dir, { projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }),
+        file.writeEntries(dir, [{ projectKey: 'x', path: '.', serverUrl: 'https://sq.example' }]),
       ).rejects.toThrow();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('SharedProjectConfigFileImpl.readEntries', () => {
+  const entry = { projectKey: 'k', path: '.', serverUrl: 'https://sq.example' };
+
+  async function entriesOf(content: string | undefined, strict = true) {
+    const dir = tempDir('entries');
+    try {
+      if (content !== undefined) writeConfig(dir, content);
+      return await new SharedProjectConfigFileImpl().readEntries(dir, { strict });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('reads the projects array, which takes precedence over a project entry', async () => {
+    const other = { ...entry, projectKey: 'other' };
+    expect(await entriesOf(JSON.stringify({ project: entry, projects: [other] }))).toEqual([other]);
+  });
+
+  it('reads a lone project entry', async () => {
+    expect(await entriesOf(JSON.stringify({ project: entry }))).toEqual([entry]);
+  });
+
+  it('has no entries without a file, and drops invalid ones', async () => {
+    expect(await entriesOf(undefined)).toEqual([]);
+    expect(await entriesOf(JSON.stringify({ projects: [entry, { path: '.' }] }))).toEqual([entry]);
+  });
+
+  it('fails on a file it could not parse or a projects field that is not an array', async () => {
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(entriesOf('{ not json')).rejects.toThrow();
+    // eslint-disable-next-line @typescript-eslint/await-thenable
+    await expect(entriesOf(JSON.stringify({ projects: {} }))).rejects.toThrow(
+      'must contain a projects array',
+    );
+  });
+
+  it('reads such files as holding nothing, or just the project entry, when not strict', async () => {
+    expect(await entriesOf('{ not json', false)).toEqual([]);
+    expect(await entriesOf(JSON.stringify([entry]), false)).toEqual([]);
+    expect(await entriesOf(JSON.stringify({ project: entry, projects: {} }), false)).toEqual([
+      entry,
+    ]);
+  });
+});
+
+describe('SharedProjectConfigRepositoryImpl', () => {
+  it('loads through the file it is given, reading leniently', async () => {
+    const dir = tempDir('injected');
+    try {
+      const entry = { projectKey: 'k', path: '.', serverUrl: 'https://sq.example' };
+      const readEntries = mock(() => Promise.resolve([entry]));
+      const file = { readEntries, writeEntries: mock(() => Promise.resolve()) };
+
+      const mappings = await new SharedProjectConfigRepositoryImpl(file).load(dir);
+
+      expect(readEntries).toHaveBeenCalledWith(dir, { strict: false });
+      expect(mappings).toEqual([
+        {
+          projectRoot: dir,
+          projectKey: 'k',
+          serverUrl: 'https://sq.example',
+          organization: undefined,
+        },
+      ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

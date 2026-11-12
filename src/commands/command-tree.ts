@@ -233,13 +233,17 @@ ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
 Supports one project per repository. Linking again replaces the existing link.
-Without a project key, in an interactive terminal, 'sonar link' suggests a project it can verify
-on the server, or lets you search for one. Scripts and CI must pass the key.
+Without a project key, in an interactive terminal, 'sonar link' lets you pick the project folder
+(unless --path is given), then suggests a project it can verify on the server, or lets you search
+for one. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
 For a monorepo, use --monorepo to link several directories:
   sonar link --monorepo api_project --path services/api
   sonar link --monorepo web_project --path services/web
+Without a key or --path, 'sonar link' lets you tick the repository root or folders at any depth
+(Tab ticks; type to search folders by name), then pick the project for each. Ticking several
+folders links them as a monorepo.
 
 Paths are relative to the repository root (the current directory outside Git).
 Mappings are saved in the projects array in .sonar-config.json.
@@ -918,10 +922,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '[projectKey]',
       'SonarQube project key (omit to pick one: a verified suggestion, or a search)',
     )
-    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .option(
+      '--path <path>',
+      'Path to the project root, relative to the repository root (default: the root, or picked interactively without a key)',
+    )
     .option(
       '--monorepo',
-      'Add or update this directory in the projects array instead of replacing the single link',
+      'Add or update this directory among the existing links instead of replacing them',
     )
     .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, projectKey: string | undefined, options: LinkOptions) =>

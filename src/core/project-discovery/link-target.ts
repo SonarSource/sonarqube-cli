@@ -29,7 +29,7 @@ import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 import {
   resolveContainedPath,
   type SharedProjectConfigEntry,
-  sharedProjectConfigRepository,
+  sharedProjectConfigFile,
 } from './shared-project-config.ts';
 
 export interface LinkTarget {
@@ -50,12 +50,25 @@ export class InvalidLinkPathError extends Error {
   }
 }
 
-/** What `saveProjectLink()` observed, for the caller to report in its own words. */
-export interface SavedLink {
-  /** Key of the mapping this write replaced for the same directory, if any. */
-  replacedProjectKey?: string;
-  /** The link was written but a `projects` array takes precedence, so it has no effect. */
-  shadowed: boolean;
+/**
+ * How new links combine with what `.sonar-config.json` already links: `merge` adds them, replacing
+ * the mappings of the same directories; `replace` leaves only the new links.
+ */
+export type LinkMode = 'merge' | 'replace';
+
+export interface ProjectLink {
+  projectKey: string;
+  projectRoot: string;
+}
+
+/** What `linkProjectDirectories()` observed, for the caller to report in its own words. */
+export interface SavedLinks {
+  /** Keys of the mappings this write replaced for the same directories. */
+  replacedProjectKeys: string[];
+  /** Keys of the mappings of other directories that a `replace` write removed. */
+  removedProjectKeys: string[];
+  /** How many projects the file links now; more than one is written as a `projects` array. */
+  linkedCount: number;
 }
 
 function deriveEntry(
@@ -107,37 +120,36 @@ export function relativeProjectPath(targetDir: string, projectRoot: string): str
 }
 
 /**
- * Writes `entry` into `<dir>/.sonar-config.json`: as the singular `project` by default,
- * into the `projects` array in monorepo mode.
+ * The one write path for `sonar link` and `sonar init`: derives each link's entry from the active
+ * connection, combines them with `targetDir`'s config as `mode` says and saves the result, leaving
+ * the reporting to the caller.
  */
-async function saveProjectLink(
-  dir: string,
-  entry: SharedProjectConfigEntry,
-  { monorepo }: { monorepo: boolean },
-): Promise<SavedLink> {
-  const target = canonicalizePath(resolve(dir, entry.path));
-  const previous = (await sharedProjectConfigRepository.load(dir)).find(
-    (mapping) => canonicalizePath(mapping.projectRoot) === target,
-  );
-
-  if (monorepo) {
-    await sharedProjectConfigRepository.addProject(dir, entry);
-    return { replacedProjectKey: previous?.projectKey, shadowed: false };
-  }
-  const shadowed = await sharedProjectConfigRepository.set(dir, entry);
-  return { replacedProjectKey: previous?.projectKey, shadowed };
-}
-
-/**
- * The one write path for `sonar link` and `sonar init`: derives the entry for `target` from the
- * active connection and saves it, leaving the reporting to the caller.
- */
-export async function linkProjectDirectory(
+export async function linkProjectDirectories(
   auth: ResolvedAuth,
-  projectKey: string,
-  target: LinkTarget,
-  options: { monorepo: boolean },
-): Promise<SavedLink> {
-  const path = relativeProjectPath(target.targetDir, target.projectRoot);
-  return saveProjectLink(target.targetDir, deriveEntry(auth, projectKey, path), options);
+  targetDir: string,
+  links: readonly ProjectLink[],
+  mode: LinkMode,
+): Promise<SavedLinks> {
+  const rootOf = (entry: SharedProjectConfigEntry): string =>
+    canonicalizePath(resolve(targetDir, entry.path));
+  const added = links.map(({ projectKey, projectRoot }) =>
+    deriveEntry(auth, projectKey, relativeProjectPath(targetDir, projectRoot)),
+  );
+  const addedRoots = new Set(added.map(rootOf));
+  const existing = await sharedProjectConfigFile.readEntries(targetDir, { strict: true });
+  const sameRoot = existing.filter((entry) => addedRoots.has(rootOf(entry)));
+  const otherRoots = existing.filter((entry) => !addedRoots.has(rootOf(entry)));
+
+  // A Map keeps a replaced mapping in its place and appends the new ones.
+  const entries = new Map(
+    (mode === 'merge' ? existing : []).map((entry) => [rootOf(entry), entry]),
+  );
+  for (const entry of added) entries.set(rootOf(entry), entry);
+  await sharedProjectConfigFile.writeEntries(targetDir, [...entries.values()]);
+
+  return {
+    replacedProjectKeys: sameRoot.map((entry) => entry.projectKey),
+    removedProjectKeys: mode === 'replace' ? otherRoots.map((entry) => entry.projectKey) : [],
+    linkedCount: entries.size,
+  };
 }

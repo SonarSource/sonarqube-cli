@@ -34,7 +34,7 @@ function posixWords(command: string): string[] {
 function parseWithLinkCommand(hint: string): {
   operands: string[];
   unknown: string[];
-  path: string;
+  path: string | undefined;
 } {
   const words = posixWords(hint);
   expect(words.slice(0, 2)).toEqual(['sonar', 'link']);
@@ -45,15 +45,16 @@ function parseWithLinkCommand(hint: string): {
     throw new Error('the link command is not registered');
   }
   const { operands, unknown } = link.parseOptions(words.slice(2));
-  return { operands, unknown, path: link.opts<{ path: string }>().path };
+  return { operands, unknown, path: link.opts<{ path?: string }>().path };
 }
 
 describe.skipIf(process.platform === 'win32')('linkCommand', () => {
-  it('is accepted by `sonar link` for a project at the root', () => {
+  it('is accepted by `sonar link` for a project at the root, which needs no --path', () => {
+    // With a key, `sonar link` links the repository root when --path is absent.
     expect(parseWithLinkCommand(linkCommand('my_key', '.', undefined))).toEqual({
       operands: ['my_key'],
       unknown: [],
-      path: '.',
+      path: undefined,
     });
   });
 
