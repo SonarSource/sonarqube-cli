@@ -65,7 +65,6 @@ function assertLock(lock: LockRow): void {
   }
 }
 
-/** Call before analysis to reserve its fingerprint and consume one attempt. */
 export function acquireAnalysisLock(options: AcquireAnalysisLockOptions): AnalysisLockResult {
   assertSession(options);
   if (
@@ -100,17 +99,14 @@ export function acquireAnalysisLock(options: AcquireAnalysisLockOptions): Analys
       lock_token: randomUUID(),
       lock_expires_at: now + LOCK_LEASE_SECONDS,
     };
-    // Keep the lock and its consumed attempt in the same transaction.
     insertAnalysisLock(db, lock);
     writeAnalysisCounter(db, options, count + 1, now);
     return { lock, analysisCount: count + 1 };
   });
 }
 
-/** Call after analysis succeeds or fails to finalize its result and release its lock. */
 export function finishAnalysis(lock: LockRow, outcome: AnalysisOutcome): void {
   assertLock(lock);
-  // Success, lock release, and the counter update must commit together.
   withAnalysisState((db, now) => {
     const counter = validateAnalysisLockOwnership(db, lock, now);
     if (outcome !== 'failed') recordSuccessfulAnalysis(db, lock.fingerprint, now);
