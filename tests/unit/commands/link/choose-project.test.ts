@@ -33,7 +33,7 @@ import {
   DiscoveredProjects,
 } from '@/core/project-discovery/project-discovery-result.ts';
 import * as projectInfo from '@/core/project-discovery/project-info.ts';
-import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
+import { sharedProjectConfigFile } from '@/core/project-discovery/shared-project-config.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
 import { TransportError } from '@/core/server/errors.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
@@ -69,8 +69,8 @@ describe('link without a project key', () => {
   let discoverSpy: Mock<typeof projectInfo.discoverProjects>;
   let findSpy: Mock<ProjectsClient['findProject']>;
   let searchSpy: Mock<ProjectsClient['searchProjects']>;
-  let setSpy: Mock<typeof sharedProjectConfigRepository.set>;
-  let addProjectSpy: Mock<typeof sharedProjectConfigRepository.addProject>;
+  let saveSpy: Mock<typeof sharedProjectConfigFile.writeItems>;
+  let entriesSpy: Mock<typeof sharedProjectConfigFile.readItems>;
   let gitRootSpy: Mock<typeof gitWorktree.resolveGitRepoRoot>;
 
   function discovered(projects: CompleteProjectMapping[], fromSharedConfig = false): void {
@@ -81,8 +81,8 @@ describe('link without a project key', () => {
     fake = new FakeConsole();
     ctx = new CommandAuthenticatedInvocationContext(auth, fake);
     gitRootSpy = spyOn(gitWorktree, 'resolveGitRepoRoot').mockResolvedValue(process.cwd());
-    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(false);
-    addProjectSpy = spyOn(sharedProjectConfigRepository, 'addProject').mockResolvedValue(undefined);
+    saveSpy = spyOn(sharedProjectConfigFile, 'writeItems').mockResolvedValue(undefined);
+    entriesSpy = spyOn(sharedProjectConfigFile, 'readItems').mockResolvedValue([]);
     discoverSpy = spyOn(projectInfo, 'discoverProjects');
     discovered([]);
     findSpy = spyOn(ProjectsClient.prototype, 'findProject').mockReturnValue(okAsync(null));
@@ -92,7 +92,7 @@ describe('link without a project key', () => {
   });
 
   afterEach(() => {
-    for (const spy of [gitRootSpy, setSpy, addProjectSpy, discoverSpy, findSpy, searchSpy] as Mock<
+    for (const spy of [gitRootSpy, saveSpy, entriesSpy, discoverSpy, findSpy, searchSpy] as Mock<
       (...args: never[]) => unknown
     >[]) {
       spy.mockRestore();
@@ -100,7 +100,8 @@ describe('link without a project key', () => {
   });
 
   function writtenKey(): string | undefined {
-    return setSpy.mock.calls.at(0)?.[1].projectKey;
+    const last = saveSpy.mock.calls.at(0)?.[1].at(-1);
+    return last?.valid ? last.entry.projectKey : undefined;
   }
 
   describe('proposal', () => {
@@ -172,7 +173,7 @@ describe('link without a project key', () => {
       expect(fake.findCall('confirmPrompt', 'Link it to another project instead?')).toBeDefined();
       expect(findSpy).not.toHaveBeenCalled();
       expect(searchSpy).not.toHaveBeenCalled();
-      expect(setSpy).not.toHaveBeenCalled();
+      expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it('names the nearest covering project, not an enclosing one listed first', async () => {
@@ -211,10 +212,9 @@ describe('link without a project key', () => {
 
       expect(findSpy).not.toHaveBeenCalled();
       expect(fake.findCall('info', 'already linked')).toBeUndefined();
-      expect(addProjectSpy).toHaveBeenCalledWith(
-        process.cwd(),
-        expect.objectContaining({ projectKey: 'found' }),
-      );
+      expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [
+        { valid: true, entry: expect.objectContaining({ projectKey: 'found' }) },
+      ]);
     });
 
     it('offers a repo-wide suggestion for the --path directory in monorepo mode', async () => {
@@ -226,10 +226,9 @@ describe('link without a project key', () => {
       expect(
         fake.findCall('confirmPrompt', `Link ${root} to Repo Wide (repo-wide)?`),
       ).toBeDefined();
-      expect(addProjectSpy).toHaveBeenCalledWith(
-        process.cwd(),
-        expect.objectContaining({ projectKey: 'repo-wide' }),
-      );
+      expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [
+        { valid: true, entry: expect.objectContaining({ projectKey: 'repo-wide' }) },
+      ]);
     });
   });
 
@@ -287,7 +286,7 @@ describe('link without a project key', () => {
       await expect(link(undefined, { path: '.' }, ctx)).rejects.toThrow(
         'Could not search projects',
       );
-      expect(setSpy).not.toHaveBeenCalled();
+      expect(saveSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -298,7 +297,7 @@ describe('link without a project key', () => {
       // eslint-disable-next-line @typescript-eslint/await-thenable
       await expect(link(undefined, { path: '.' }, ctx)).rejects.toThrow('cannot prompt');
       expect(discoverSpy).not.toHaveBeenCalled();
-      expect(setSpy).not.toHaveBeenCalled();
+      expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it('fails when the search prompt is cancelled', async () => {
@@ -308,7 +307,7 @@ describe('link without a project key', () => {
       await expect(link(undefined, { path: '.' }, ctx)).rejects.toThrow(
         'Project selection cancelled',
       );
-      expect(setSpy).not.toHaveBeenCalled();
+      expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it('fails when the proposal prompt is cancelled', async () => {

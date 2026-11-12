@@ -28,7 +28,7 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import {
   InvalidLinkPathError,
-  linkProjectDirectory,
+  linkProjectDirectories,
   relativeProjectPath,
   resolveLinkTarget,
 } from '@/core/project-discovery/link-target.ts';
@@ -83,52 +83,96 @@ describe('relativeProjectPath', () => {
   });
 });
 
-describe('linkProjectDirectory', () => {
+describe('linkProjectDirectories', () => {
   const auth = new ResolvedAuth({
     token: 't',
     serverUrl: 'https://sq.example.com',
     connectionType: 'on-premise',
     source: 'state',
   });
-  const link = (key: string, subdir: string, monorepo: boolean) =>
-    linkProjectDirectory(
-      auth,
-      key,
-      { targetDir: dir, projectRoot: join(dir, subdir), inGitRepository: false },
-      { monorepo },
-    );
+  const link = (key: string, subdir: string, mode: 'merge' | 'replace') =>
+    linkProjectDirectories(auth, dir, [{ projectKey: key, projectRoot: join(dir, subdir) }], mode);
+  const written = (): Record<string, unknown> =>
+    JSON.parse(readFileSync(join(dir, '.sonar-config.json'), 'utf8')) as Record<string, unknown>;
+  const entry = (projectKey: string, path: string) => ({
+    projectKey,
+    path,
+    serverUrl: auth.serverUrl,
+  });
 
   it('reports the mapping it replaced for the same directory', async () => {
-    await link('first', '.', false);
+    await link('first', '.', 'replace');
 
-    expect(await link('second', '.', false)).toEqual({
-      replacedProjectKey: 'first',
-      shadowed: false,
+    expect(await link('second', '.', 'replace')).toEqual({
+      replacedProjectKeys: ['first'],
+      removedProjectKeys: [],
+      removedUnnamedCount: 0,
+      linkedCount: 1,
     });
   });
 
   it('stores the path relative to the config directory', async () => {
-    await link('api', 'services/api', false);
+    await link('api', 'services/api', 'replace');
 
-    const written = JSON.parse(readFileSync(join(dir, '.sonar-config.json'), 'utf8'));
-    expect(written.project).toMatchObject({ projectKey: 'api', path: 'services/api' });
+    expect(written().project).toMatchObject({ projectKey: 'api', path: 'services/api' });
   });
 
-  it('reports a singular project shadowed by a projects array', async () => {
+  it('merges into what is linked, switching to a projects array past one project', async () => {
+    await link('root', '.', 'merge');
+    expect(written()).toEqual({ project: entry('root', '.') });
+
+    expect(await link('api', 'services/api', 'merge')).toMatchObject({ linkedCount: 2 });
+    expect(written()).toEqual({ projects: [entry('root', '.'), entry('api', 'services/api')] });
+  });
+
+  it('keeps a merged mapping in its place when its directory is linked again', async () => {
+    await link('root', '.', 'merge');
+    await link('api', 'services/api', 'merge');
+    await link('root2', '.', 'merge');
+
+    expect(written()).toEqual({ projects: [entry('root2', '.'), entry('api', 'services/api')] });
+  });
+
+  it('keeps items outside the schema as they were when merging elsewhere', async () => {
+    const future = {
+      projectKey: 'future',
+      path: 'services/api',
+      region: 'mars',
+      organization: 'o',
+    };
+    const noPath = { serverUrl: auth.serverUrl };
+    writeFileSync(join(dir, '.sonar-config.json'), JSON.stringify({ projects: [future, noPath] }));
+
+    await link('root', '.', 'merge');
+
+    expect(written()).toEqual({ projects: [future, noPath, entry('root', '.')] });
+  });
+
+  it('overwrites an item outside the schema when its folder is linked', async () => {
+    const broken = { projectKey: 'old', path: 'services/api', region: 'mars' };
+    const other = entry('root', '.');
+    writeFileSync(join(dir, '.sonar-config.json'), JSON.stringify({ projects: [broken, other] }));
+
+    expect(await link('api', 'services/api', 'merge')).toMatchObject({
+      replacedProjectKeys: ['old'],
+    });
+    expect(written()).toEqual({ projects: [entry('api', 'services/api'), other] });
+  });
+
+  it('leaves only the new link when replacing, and reports the mappings it removed', async () => {
     writeFileSync(
       join(dir, '.sonar-config.json'),
       JSON.stringify({
-        projects: [{ projectKey: 'other', path: 'services/api', serverUrl: auth.serverUrl }],
+        projects: [entry('root', '.'), entry('api', 'services/api'), { serverUrl: 'x' }],
       }),
     );
 
-    expect((await link('mine', '.', false)).shadowed).toBe(true);
-  });
-
-  it('adds to the projects array in monorepo mode without shadowing', async () => {
-    expect(await link('api', 'services/api', true)).toEqual({
-      replacedProjectKey: undefined,
-      shadowed: false,
+    expect(await link('mine', '.', 'replace')).toEqual({
+      replacedProjectKeys: ['root'],
+      removedProjectKeys: ['api'],
+      removedUnnamedCount: 1,
+      linkedCount: 1,
     });
+    expect(written()).toEqual({ project: entry('mine', '.') });
   });
 });

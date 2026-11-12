@@ -662,7 +662,22 @@ describe('discoverProject', () => {
       expect(result.serverUrl).toBe(SONARCLOUD_URL);
       expect(result.organization).toBe('shared-org');
       expect(result.projectRoot).toBe(canonicalizePath(testDir));
-      expect(loadSpy).toHaveBeenCalledWith(canonicalizePath(testDir));
+      expect(loadSpy).toHaveBeenCalledWith(canonicalizePath(testDir), expect.anything());
+    });
+
+    it('shows why the config was ignored, unless discovery is silent', async () => {
+      loadSpy.mockImplementation((_checkPath, options) => {
+        options?.warn?.('Ignoring .sonar-config.json: not valid JSON.');
+        return Promise.resolve([]);
+      });
+      const shown = new FakeConsole();
+      const quiet = new FakeConsole();
+
+      await discoverProject(testDir, { console: shown, auth: MOCK_AUTH });
+      await discoverProject(testDir, { console: quiet, auth: MOCK_AUTH, silent: true });
+
+      expect(shown.findCall('warn', 'not valid JSON')).toBeDefined();
+      expect(quiet.findCall('warn', 'not valid JSON')).toBeUndefined();
     });
 
     it('uses a Server entry the repository resolves', async () => {
@@ -782,7 +797,10 @@ describe('discoverProject', () => {
       const result = await discoverProject(subDir, { console: new FakeConsole(), auth: MOCK_AUTH });
 
       expect(result.projectKey).toBe('nearest-project');
-      expect(loadSpy.mock.calls).toEqual([[canonicalizePath(subDir)], [canonicalizePath(nested)]]);
+      expect(loadSpy.mock.calls.map(([dir]) => dir)).toEqual([
+        canonicalizePath(subDir),
+        canonicalizePath(nested),
+      ]);
     });
 
     it('resolves multiple sibling projects from one "projects" array, none ambiguous for their own directory', async () => {
