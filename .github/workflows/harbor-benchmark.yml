@@ -13,19 +13,19 @@ on:
           - "codex : gpt-6.1-terra"
           - all agents and models
       task_integrate_happy:
-        description: Task - integrate--happy
+        description: "Task: integrate--happy"
         type: boolean
         default: true
       task_auth_missing_org:
-        description: Task - auth--missing-org
+        description: "Task: auth--missing-org"
         type: boolean
         default: true
       task_secrets_context_prompt:
-        description: Task - secrets-context--prompt
+        description: "Task: secrets-context--prompt"
         type: boolean
         default: true
       task_secrets_context_file_read:
-        description: Task - secrets-context--file-read
+        description: "Task: secrets-context--file-read"
         type: boolean
         default: true
       attempts:
