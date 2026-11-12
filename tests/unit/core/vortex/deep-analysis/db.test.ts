@@ -147,6 +147,66 @@ describe('deep analysis database', () => {
     expect(fake.close).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['SQLITE_NOTADB', 'SQLITE_CORRUPT', 'SQLITE_CORRUPT_VTAB'])(
+    'quarantines database files and retries after %s',
+    (code) => {
+      stubs.migrate.mockImplementationOnce(() => {
+        throw Object.assign(new Error('Corrupt database'), { code });
+      });
+      const rename = spyOn(fs, 'renameSync').mockImplementation(() => {
+        expect(fake.close).toHaveBeenCalledTimes(1);
+      });
+      try {
+        expect(openAnalysisDb()).toBe(fake.db);
+        expect(rename.mock.calls).toEqual(
+          [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`].map((path) => [
+            path,
+            `${path}.corrupted-${NOW * 1000 + 123}`,
+          ]),
+        );
+        expect(stubs.construct).toHaveBeenCalledTimes(2);
+        expect(stubs.migrate).toHaveBeenCalledTimes(2);
+      } finally {
+        rename.mockRestore();
+      }
+    },
+  );
+
+  it('retries only once even when quarantining files fails', () => {
+    const failure = Object.assign(new Error('Corrupt database'), { code: 'SQLITE_CORRUPT' });
+    stubs.migrate.mockImplementation(() => {
+      throw failure;
+    });
+    const rename = spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('File unavailable');
+    });
+    try {
+      expect(() => openAnalysisDb()).toThrow(CommandFailedError);
+      expect(stubs.construct).toHaveBeenCalledTimes(2);
+      expect(fake.close).toHaveBeenCalledTimes(2);
+      expect(rename).toHaveBeenCalledTimes(3);
+    } finally {
+      rename.mockRestore();
+    }
+  });
+
+  it.each(['SQLITE_BUSY', 'SQLITE_LOCKED', 'SQLITE_ERROR'])(
+    'does not quarantine or retry after %s',
+    (code) => {
+      stubs.migrate.mockImplementation(() => {
+        throw Object.assign(new Error('Database unavailable'), { code });
+      });
+      const rename = spyOn(fs, 'renameSync').mockImplementation(() => undefined);
+      try {
+        expect(() => openAnalysisDb()).toThrow(CommandFailedError);
+        expect(stubs.construct).toHaveBeenCalledTimes(1);
+        expect(rename).not.toHaveBeenCalled();
+      } finally {
+        rename.mockRestore();
+      }
+    },
+  );
+
   it('closes the database when the operation fails', () => {
     const failure = new Error('Operation failed');
     let error: unknown;
@@ -206,7 +266,7 @@ describe('deep analysis database', () => {
       fingerprint: LOCK.fingerprint,
       analyzed_at: NOW,
     });
-    fake.get.mockReturnValue({ fingerprint: '', analyzed_at: NOW });
+    fake.get.mockReturnValue({ fingerprint: LOCK.fingerprint, analyzed_at: NaN });
     expect(() => readSuccessfulAnalysis(fake.db, LOCK.fingerprint)).toThrow(CommandFailedError);
   });
 
@@ -214,7 +274,7 @@ describe('deep analysis database', () => {
     expect(readAnalysisLock(fake.db, LOCK.fingerprint)).toBeNull();
     fake.get.mockReturnValue(LOCK);
     expect(readAnalysisLock(fake.db, LOCK.fingerprint)).toEqual(LOCK);
-    fake.get.mockReturnValue({ ...LOCK, lock_token: '' });
+    fake.get.mockReturnValue({ ...LOCK, lock_expires_at: NaN });
     expect(() => readAnalysisLock(fake.db, LOCK.fingerprint)).toThrow(CommandFailedError);
   });
 

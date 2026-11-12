@@ -18,16 +18,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { Database } from 'bun:sqlite';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getVortexAnalysisDbPath } from '@/core/config-constants.ts';
+import logger from '@/core/observability/logger.ts';
 
 import { applyAnalysisMigrations } from './migrations.ts';
-import { isNonEmptyString, isNonNegativeSafeInteger } from './validation.ts';
+import { isNonNegativeSafeInteger } from './validation.ts';
+
+const CORRUPTION_ERROR_CODE_PREFIXES = ['SQLITE_NOTADB', 'SQLITE_CORRUPT'];
 
 export const COUNTER_RETENTION_SECONDS = 60 * 60;
 export const SUCCESSFUL_ANALYSIS_RETENTION_SECONDS = 60 * 60;
@@ -58,34 +61,58 @@ export interface LockRow {
 
 function validateLock(row: LockRow | null): LockRow | null {
   if (!row) return null;
-  if (
-    !isNonEmptyString(row.fingerprint) ||
-    !isNonEmptyString(row.lock_token) ||
-    !isNonNegativeSafeInteger(row.lock_expires_at) ||
-    !isNonEmptyString(row.agent) ||
-    !isNonEmptyString(row.session_id)
-  ) {
+  if (!isNonNegativeSafeInteger(row.lock_expires_at)) {
     throw new CommandFailedError('Invalid Vortex analysis lock.');
   }
   return row;
 }
 
-// Open and initialize the Vortex analysis database.
-export function openAnalysisDb(): Database {
-  let db: Database | undefined;
+function isCorruptionError(error: unknown): boolean {
+  const code = (error as { code?: string }).code ?? '';
+  return CORRUPTION_ERROR_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
+}
+
+function openAndMigrate(dbPath: string): Database {
+  const db = new Database(dbPath, { create: true, strict: true });
   try {
-    const dbPath = getVortexAnalysisDbPath();
-    mkdirSync(dirname(dbPath), { recursive: true });
-    db = new Database(dbPath, { create: true, strict: true });
-    // Wait up to one second for SQLite locks.
+    // Must precede journal_mode=WAL so the WAL conversion also waits for locks.
     db.run('PRAGMA busy_timeout = 1000');
-    // WAL allows readers alongside a writer.
     db.run('PRAGMA journal_mode = WAL');
     applyAnalysisMigrations(db);
     return db;
+  } catch (error) {
+    // Release the handle before quarantining on Windows.
+    db.close();
+    throw error;
+  }
+}
+
+function quarantineAnalysisFiles(dbPath: string): void {
+  const suffix = `corrupted-${Date.now()}`;
+  for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
+    try {
+      renameSync(path, `${path}.${suffix}`);
+    } catch {
+      // Best-effort: another process may have moved the file.
+    }
+  }
+}
+
+export function openAnalysisDb(): Database {
+  try {
+    const dbPath = getVortexAnalysisDbPath();
+    mkdirSync(dirname(dbPath), { recursive: true });
+    try {
+      return openAndMigrate(dbPath);
+    } catch (error) {
+      if (!isCorruptionError(error)) {
+        throw error;
+      }
+      logger.debug('Vortex analysis state corrupted, quarantining and starting fresh', error);
+      quarantineAnalysisFiles(dbPath);
+      return openAndMigrate(dbPath);
+    }
   } catch (cause) {
-    db?.close();
-    // Storage failures must never become an empty retry budget.
     throw new CommandFailedError('Could not open Vortex analysis state.', { cause });
   }
 }
@@ -119,7 +146,6 @@ export function expireAnalysisState(db: Database, now: number): void {
   ).run(now - COUNTER_RETENTION_SECONDS);
 }
 
-// Return the session counter or null, rejecting invalid persisted values.
 export function readAnalysisCounter(db: Database, session: AnalysisSession): CounterRow | null {
   const row = db
     .prepare<CounterRow, [string, string]>(
@@ -135,7 +161,6 @@ export function readAnalysisCounter(db: Database, session: AnalysisSession): Cou
   return row;
 }
 
-// Read the last successful analysis for a fingerprint.
 export function readSuccessfulAnalysis(
   db: Database,
   fingerprint: string,
@@ -145,13 +170,12 @@ export function readSuccessfulAnalysis(
       'SELECT fingerprint, analyzed_at FROM vortex_successful_analyses WHERE fingerprint = ?',
     )
     .get(fingerprint);
-  if (row && (!isNonEmptyString(row.fingerprint) || !isNonNegativeSafeInteger(row.analyzed_at))) {
+  if (row && !isNonNegativeSafeInteger(row.analyzed_at)) {
     throw new CommandFailedError('Invalid successful Vortex analysis.');
   }
   return row;
 }
 
-// Return the fingerprint lock, or null if none exists.
 export function readAnalysisLock(db: Database, fingerprint: string): LockRow | null {
   return validateLock(
     db
@@ -162,7 +186,6 @@ export function readAnalysisLock(db: Database, fingerprint: string): LockRow | n
   );
 }
 
-// Check whether the session has unexpired locks.
 export function hasRunningAnalysesForSession(
   db: Database,
   session: AnalysisSession,
@@ -176,7 +199,7 @@ export function hasRunningAnalysesForSession(
       .get(session.agent, session.session_id, now)?.active === 1
   );
 }
-// Insert a fingerprint lock, rejecting duplicates.
+
 export function insertAnalysisLock(db: Database, lock: LockRow): void {
   db.prepare<unknown, [string, string, number, string, string]>(
     `INSERT INTO vortex_analysis_locks
@@ -184,7 +207,6 @@ export function insertAnalysisLock(db: Database, lock: LockRow): void {
   ).run(lock.fingerprint, lock.lock_token, lock.lock_expires_at, lock.agent, lock.session_id);
 }
 
-// Upsert the session counter and its update timestamp.
 export function writeAnalysisCounter(
   db: Database,
   session: AnalysisSession,
@@ -198,7 +220,6 @@ export function writeAnalysisCounter(
   ).run(session.agent, session.session_id, count, now);
 }
 
-// Reset an existing counter without creating one.
 export function resetAnalysisCounter(db: Database, session: AnalysisSession, now: number): void {
   db.prepare<unknown, [number, string, string]>(
     `UPDATE vortex_analysis_counters SET analysis_count = 0, updated_at = ?
@@ -227,7 +248,6 @@ export function validateAnalysisLockOwnership(
   return counter;
 }
 
-// Record the last successful analysis time for a fingerprint.
 export function recordSuccessfulAnalysis(db: Database, fingerprint: string, now: number): void {
   db.prepare<unknown, [string, number]>(
     `INSERT INTO vortex_successful_analyses (fingerprint, analyzed_at) VALUES (?, ?)
@@ -235,7 +255,6 @@ export function recordSuccessfulAnalysis(db: Database, fingerprint: string, now:
   ).run(fingerprint, now);
 }
 
-// Delete the fingerprint's lock without changing successful analyses.
 export function deleteAnalysisLock(db: Database, fingerprint: string): void {
   db.prepare<unknown, [string]>('DELETE FROM vortex_analysis_locks WHERE fingerprint = ?').run(
     fingerprint,
