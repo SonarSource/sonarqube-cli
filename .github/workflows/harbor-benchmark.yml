@@ -3,26 +3,15 @@ name: Harbor Benchmark
 on:
   workflow_dispatch:
     inputs:
-      harness_claude_code:
-        description: Harness - Claude Code
-        type: boolean
-        default: true
-      harness_codex:
-        description: Harness - Codex
-        type: boolean
-        default: false
-      model_claude_sonnet_5_5:
-        description: Model - Claude Sonnet 5.5
-        type: boolean
-        default: true
-      model_claude_haiku_5_5:
-        description: Model - Claude Haiku 5.5
-        type: boolean
-        default: false
-      model_gpt_6_1_terra:
-        description: Model - gpt-6.1-terra (Codex)
-        type: boolean
-        default: false
+      agent:
+        description: Agent and model
+        type: choice
+        default: "claude-code : claude-sonnet-5-5"
+        options:
+          - "claude-code : claude-sonnet-5-5"
+          - "claude-code : claude-haiku-5-5"
+          - "codex : gpt-6.1-terra"
+          - all agents and models
       task_integrate_happy:
         description: Task - integrate--happy
         type: boolean
