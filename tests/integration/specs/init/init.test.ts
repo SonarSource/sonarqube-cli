@@ -255,7 +255,7 @@ describe('sonar init', () => {
       // Linking needs an answer, so the non-interactive run stops at the hint for that path.
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain(
-        'sonar link bound_project --path packages/app',
+        'sonar link --monorepo bound_project --path packages/app',
       );
     },
     TIMEOUT,
@@ -307,7 +307,7 @@ describe('sonar init', () => {
       expect(output).toContain(
         "A Sonar project already exists for this repository: 'bound_project'",
       );
-      expect(output).toContain('sonar link bound_project');
+      expect(output).toContain('sonar link --monorepo bound_project');
       expect(output).not.toContain(UNBOUND);
       expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
     },
@@ -831,7 +831,7 @@ describe('sonar init', () => {
           expect(output).toContain(
             `A Sonar project already exists for this repository: '${projectKey}'`,
           );
-          expect(output).toContain(`sonar link ${projectKey}`);
+          expect(output).toContain(`sonar link --monorepo ${projectKey}`);
           expect(created(server)).toHaveLength(0);
           expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
         },
@@ -1555,7 +1555,7 @@ describe('sonar init', () => {
         expect(output).toContain(
           "Found project 'bound_project', but could not save .sonar-config.json",
         );
-        expect(output).toContain('sonar link bound_project');
+        expect(output).toContain('sonar link --monorepo bound_project');
         expect(output).not.toContain('Create this project');
         expect(output).not.toContain(UNBOUND);
       },

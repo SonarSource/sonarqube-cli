@@ -35,6 +35,7 @@ function parseWithLinkCommand(hint: string): {
   operands: string[];
   unknown: string[];
   path: string;
+  monorepo: boolean | undefined;
 } {
   const words = posixWords(hint);
   expect(words.slice(0, 2)).toEqual(['sonar', 'link']);
@@ -45,7 +46,8 @@ function parseWithLinkCommand(hint: string): {
     throw new Error('the link command is not registered');
   }
   const { operands, unknown } = link.parseOptions(words.slice(2));
-  return { operands, unknown, path: link.opts<{ path: string }>().path };
+  const { path, monorepo } = link.opts<{ path: string; monorepo?: boolean }>();
+  return { operands, unknown, path, monorepo };
 }
 
 describe.skipIf(process.platform === 'win32')('linkCommand', () => {
@@ -54,6 +56,7 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path: '.',
+      monorepo: true,
     });
   });
 
@@ -62,6 +65,7 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path: 'services/api',
+      monorepo: true,
     });
   });
 
@@ -71,10 +75,13 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path,
+      monorepo: true,
     });
   });
 
   it('prefixes the directory to run from', () => {
-    expect(linkCommand('my_key', '.', '/work/repo')).toBe('cd /work/repo && sonar link my_key');
+    expect(linkCommand('my_key', '.', '/work/repo')).toBe(
+      'cd /work/repo && sonar link --monorepo my_key',
+    );
   });
 });
