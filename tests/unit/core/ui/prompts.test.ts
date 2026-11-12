@@ -326,29 +326,39 @@ describe('checkboxComponent', () => {
 describe('calculateViewport', () => {
   const VP = 12;
 
-  it('starts at 0 when list fits within the viewport', () => {
+  /** Rows plus the "↑ more" / "↓ more" lines the window needs. */
+  function lineCount({ start, end }: { start: number; end: number }, total: number): number {
+    return (start > 0 ? 1 : 0) + (end - start) + (end < total ? 1 : 0);
+  }
+
+  it('shows the whole list when it fits within the viewport', () => {
     expect(calculateViewport(0, 5, VP)).toEqual({ start: 0, end: 5 });
+    expect(calculateViewport(11, VP, VP)).toEqual({ start: 0, end: VP });
   });
 
-  it('starts at 0 when cursor is near the top', () => {
-    expect(calculateViewport(2, 20, VP)).toEqual({ start: 0, end: 12 });
+  it('leaves room for the "↓ more" line when the cursor is near the top', () => {
+    expect(calculateViewport(2, 20, VP)).toEqual({ start: 0, end: VP - 1 });
   });
 
-  it('centres the cursor when it is in the middle of a large list', () => {
-    const { start, end } = calculateViewport(15, 30, VP);
-    expect(start).toBeLessThanOrEqual(15);
-    expect(end).toBeGreaterThan(15);
-    expect(end - start).toBe(VP);
+  it('leaves room for both "more" lines when the cursor is in the middle', () => {
+    expect(calculateViewport(15, 30, VP)).toEqual({ start: 10, end: 20 });
   });
 
-  it('clamps so the last item is always visible when cursor is near the bottom', () => {
-    expect(calculateViewport(19, 20, VP)).toEqual({ start: 8, end: 20 });
+  it('keeps the last item visible when the cursor is near the bottom', () => {
+    expect(calculateViewport(19, 20, VP)).toEqual({ start: 9, end: 20 });
   });
 
-  it('never returns start < 0 or end > total', () => {
-    const { start, end } = calculateViewport(0, 3, VP);
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(end).toBeLessThanOrEqual(3);
+  it('keeps a long list at the viewport height and never hides a single row behind "1 more"', () => {
+    for (const total of [VP + 1, VP + 2, 40]) {
+      for (let cursor = 0; cursor < total; cursor++) {
+        const window = calculateViewport(cursor, total, VP);
+        expect(lineCount(window, total)).toBe(VP);
+        expect(window.start).not.toBe(1);
+        expect(total - window.end).not.toBe(1);
+        expect(cursor).toBeGreaterThanOrEqual(window.start);
+        expect(cursor).toBeLessThan(window.end);
+      }
+    }
   });
 });
 
