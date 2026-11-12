@@ -670,8 +670,7 @@ describe('sonar init', () => {
       const serverUrl = await signInToCloud(() => {});
       initGitRepo(harness.cwd.path);
       writeSonarConfig(serverUrl);
-      const session = harness.runInteractive('init');
-      return session;
+      return harness.runInteractive('init');
     }
 
     it(
@@ -1666,8 +1665,10 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Monorepo onboarding summary:');
-        expect(result.stdout).toContain('api: api-key (mapped to the existing project)');
-        expect(result.stdout).toContain('web: web-key (created)');
+        expect(result.stdout).toContain('Mapped to the existing project (1):');
+        expect(result.stdout).toContain('api: api-key');
+        expect(result.stdout).toContain('Created (1):');
+        expect(result.stdout).toContain('web: web-key');
         expect(result.stdout).not.toContain('To resume');
         const config = readConfig();
         expect(config.project).toBeUndefined();
@@ -1691,7 +1692,8 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('api: api-key (already configured)');
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(result.stdout).toContain('api: api-key');
         expect(result.stdout).not.toContain(SELECT_PROMPT);
         expect(result.stdout).not.toContain(SCAN_PROMPT);
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
@@ -1740,7 +1742,8 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Failed (1):');
         expect(result.stdout).toContain("Project 'foreign-key' belongs to another organization");
-        expect(result.stdout).toContain('web: web-key (created)');
+        expect(result.stdout).toContain('Created (1):');
+        expect(result.stdout).toContain('web: web-key');
         expect(readConfig().projects.map((p) => p.projectKey)).toEqual(['foreign-key', 'web-key']);
       },
       TIMEOUT,
@@ -1768,7 +1771,7 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Configured (1):');
+        expect(result.stdout).toContain('Mapped to the existing project (1):');
         expect(result.stdout).toContain('Failed (2):');
         expect(result.stdout).toContain("To resume, run 'sonar init --monorepo' again");
         expect(readConfig().projects[0].serverUrl).not.toBe(STALE_SERVER);
