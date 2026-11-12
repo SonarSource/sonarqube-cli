@@ -18,18 +18,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 
 import { ECOSYSTEMS } from '../../_common/architecture-api.ts';
+import type { CurrentReadOptions } from '../../_common/dependency-query.ts';
 import { incompatibleResponse, toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
-import {
-  type ArchitectureReadOptions,
-  defaultTextFormat,
-  printPayload,
-  TEXT_FORMATS,
-} from '../../_common/read-options.ts';
+import { defaultTextFormat, printPayload, TEXT_FORMATS } from '../../_common/read-options.ts';
 import { SonarArchitectureApi } from '../../_common/sonar-architecture-api.ts';
 
 const categories = {
@@ -54,7 +51,7 @@ export function parseSummaries(value: unknown, language?: string): Record<string
       typeof item !== 'object' ||
       !('language' in item) ||
       typeof item.language !== 'string' ||
-      !ECOSYSTEMS.some((name) => name === item.language) ||
+      !(ECOSYSTEMS as readonly string[]).includes(item.language) ||
       (language && item.language !== language) ||
       seen.has(item.language)
     )
@@ -85,9 +82,19 @@ export function parseSummaries(value: unknown, language?: string): Record<string
 }
 
 export async function getSummary(
-  options: ArchitectureReadOptions,
+  options: CurrentReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  if (
+    options.component !== undefined ||
+    options.depth !== undefined ||
+    options.from !== undefined ||
+    options.to !== undefined ||
+    options.page !== undefined ||
+    options.pageSize !== undefined
+  ) {
+    throw new InvalidOptionError('--summary cannot be combined with graph or dependency filters.');
+  }
   const project = await resolveProject(options, ctx);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
   const api = new SonarArchitectureApi(ctx.connection, project);
