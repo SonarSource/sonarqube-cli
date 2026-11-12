@@ -24,7 +24,7 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import logger from '@/core/observability/logger.ts';
 import {
-  linkProjectDirectory,
+  linkProjectDirectories,
   relativeProjectPath,
   resolveConfigDir,
   resolveProjectTarget,
@@ -78,17 +78,16 @@ export async function writeMapping(
   const target = await resolveProjectTarget(projectRoot);
 
   try {
-    const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
-      monorepo: false,
-    });
-    if (replacedProjectKey !== undefined) {
+    // Merged so that onboarding one directory never drops the mappings of others.
+    const { replacedProjectKeys } = await linkProjectDirectories(
+      auth,
+      target.targetDir,
+      [{ projectKey, projectRoot: target.projectRoot }],
+      'merge',
+    );
+    for (const replaced of replacedProjectKeys) {
       console.warn(
-        `Replacing the mapping of this directory to '${replacedProjectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-      );
-    }
-    if (shadowed) {
-      console.warn(
-        `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
+        `Replacing the mapping of this directory to '${replaced}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
   } catch (error) {
