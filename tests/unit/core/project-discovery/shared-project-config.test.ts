@@ -589,3 +589,44 @@ describe('SharedProjectConfigFileRepository.set', () => {
     }
   });
 });
+
+describe('SharedProjectConfigFileRepository.addProject', () => {
+  it('folds a lone singular "project" into the new "projects" array instead of leaving it stale', async () => {
+    const dir = tempDir('add-migrates-singular');
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    mkdirSync(join(dir, 'web'), { recursive: true });
+    const api = { serverUrl: 'https://sq.example', projectKey: 'api', path: 'api' };
+    const web = { serverUrl: 'https://sq.example', projectKey: 'web', path: 'web' };
+    writeConfig(dir, JSON.stringify({ project: api, extra: 1 }));
+
+    try {
+      const repo = new SharedProjectConfigRepositoryImpl();
+      await repo.addProject(dir, web);
+
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw.project).toBeUndefined();
+      expect(raw.extra).toBe(1);
+      expect(raw.projects).toEqual([api, web]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('replaces the singular "project" when the added entry targets the same directory', async () => {
+    const dir = tempDir('add-replaces-singular');
+    mkdirSync(join(dir, 'api'), { recursive: true });
+    const old = { serverUrl: 'https://sq.example', projectKey: 'old', path: 'api' };
+    const next = { serverUrl: 'https://sq.example', projectKey: 'new', path: 'api' };
+    writeConfig(dir, JSON.stringify({ project: old }));
+
+    try {
+      await new SharedProjectConfigRepositoryImpl().addProject(dir, next);
+
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw.project).toBeUndefined();
+      expect(raw.projects).toEqual([next]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
