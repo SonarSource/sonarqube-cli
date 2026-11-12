@@ -55,6 +55,9 @@ import type {
   SelectOption,
 } from './console.ts';
 import { createSearchPrompt } from './search-prompt.ts';
+import { createTreeMultiSelectPrompt, createTreePrompt } from './tree/tree-prompt.ts';
+import type { TreePromptOptions } from './tree/tree-source.ts';
+import { calculateViewport } from './viewport.ts';
 
 const NOTE_MIN_WIDTH = 40;
 const NOTE_MAX_WIDTH = 80;
@@ -172,18 +175,7 @@ function formatOptionRow(
   return `    ${arrow} ${checkbox}  ${displayLabel}`;
 }
 
-export function calculateViewport(
-  cursor: number,
-  total: number,
-  viewportSize: number,
-): { start: number; end: number } {
-  const start = Math.min(
-    Math.max(0, cursor - Math.floor(viewportSize / 2)),
-    Math.max(0, total - viewportSize),
-  );
-  const end = Math.min(start + viewportSize, total);
-  return { start, end };
-}
+export { calculateViewport } from './viewport.ts';
 
 export function toggleSelected<T>(selected: T[], val: T, max: number): void {
   const idx = selected.indexOf(val);
@@ -229,6 +221,24 @@ function promptCancellation(): PromptCancellation {
       }
     },
   };
+}
+
+/** Runs a prompt whose async loading can fail: the failure stops the prompt and is rethrown. */
+async function runFailablePrompt<T>(
+  create: (signal: AbortSignal, onFailure: (error: unknown) => void) => Prompt<T>,
+): Promise<T | null> {
+  const cancellation = promptCancellation();
+  const failure = new AbortController();
+  let failed: { error: unknown } | undefined;
+  const prompt = create(AbortSignal.any([cancellation.signal, failure.signal]), (error) => {
+    failed = { error };
+    failure.abort();
+  });
+
+  const result = await cancellation.run(prompt);
+  if (failed) throw failed.error;
+  if (isCancel(result)) return null;
+  return result ?? null;
 }
 
 /** Production {@link Console}: writes to stdout/stderr. */
@@ -472,24 +482,22 @@ export class TerminalConsole implements Console {
     return result as T;
   }
 
-  async searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
-    const cancellation = promptCancellation();
-    const failure = new AbortController();
-    let failed: { error: unknown } | undefined;
-    const prompt = createSearchPrompt<T>(
-      message,
-      options,
-      AbortSignal.any([cancellation.signal, failure.signal]),
-      (error) => {
-        failed = { error };
-        failure.abort();
-      },
+  searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
+    return runFailablePrompt((signal, onFailure) =>
+      createSearchPrompt<T>(message, options, signal, onFailure),
     );
+  }
 
-    const result = await cancellation.run(prompt);
-    if (failed) throw failed.error;
-    if (isCancel(result)) return null;
-    return result ?? null;
+  treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null> {
+    return runFailablePrompt((signal, onFailure) =>
+      createTreePrompt<T>(message, options, signal, onFailure),
+    );
+  }
+
+  treeMultiSelectPrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T[] | null> {
+    return runFailablePrompt((signal, onFailure) =>
+      createTreeMultiSelectPrompt<T>(message, options, signal, onFailure),
+    );
   }
 
   async multiSelectPrompt<T>(
