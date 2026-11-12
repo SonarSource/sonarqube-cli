@@ -36,6 +36,7 @@ import {
 import { DEFAULT_MAX_NODES } from './_common/graph.ts';
 import { type ArchitectureReadOptions, TEXT_FORMATS } from './_common/read-options.ts';
 import { getCurrent } from './current/get/index.ts';
+import { getSummary } from './current/get/summary.ts';
 import {
   type DirectivesReadOptions,
   getDirectives as getArchitectureDirectives,
@@ -118,7 +119,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .addOption(textFormatOption())
     .authenticatedAction((ctx, options: CurrentReadOptions) => {
       requireCloud(ctx);
-      return getCurrent(options, ctx);
+      return options.summary ? getSummary(options, ctx) : getCurrent(options, ctx);
     });
   intendedArchitecture
     .command('get')

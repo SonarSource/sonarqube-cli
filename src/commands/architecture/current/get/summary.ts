@@ -118,9 +118,8 @@ export async function getSummary(
     ctx.console.info(`${String(summary.language)}:`);
     for (const [category, types] of Object.entries(categories)) {
       const counts = summary[category] as Record<string, number>;
-      ctx.console.info(
-        `  ${category}: ${counts.total} (${types.map((type) => `${type}: ${counts[type]}`).join(', ')})`,
-      );
+      const details = types.map((type) => `${type}: ${counts[type]}`).join(', ');
+      ctx.console.info(`  ${category}: ${counts.total} (${details})`);
     }
   }
 }
