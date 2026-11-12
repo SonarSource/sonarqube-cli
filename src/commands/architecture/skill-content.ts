@@ -166,6 +166,12 @@ tool descriptions for their supported environments.
 Architecture coverage is not exposed by these adapters in this iteration. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
+## Findings summary
+
+Use \`sonar architecture current get --summary\` or MCP \`architecture_get\` with \`target=summary\`
+to read per-language counts of deviations, flaws and smells. An empty summary does not
+prove that the project has no findings. Numeric architecture coverage is not included.
+
 ## Findings
 
 Read deviations, flaws and smells from the latest analysis with \`sonar architecture findings get\`,
