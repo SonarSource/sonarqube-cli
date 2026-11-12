@@ -57,10 +57,6 @@ interface MonorepoRoot {
   status: RootStatus;
 }
 
-export async function confirmMonorepo(console: Console): Promise<boolean> {
-  return requireAnswer(await console.confirmPrompt('Are you onboarding a monorepo?', false));
-}
-
 /** What no later root can recover from: the answer to a prompt is gone, or the credentials or organization are wrong. */
 function isRunFatal(error: unknown): boolean {
   return (

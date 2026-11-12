@@ -134,7 +134,7 @@ describe('renderInitOutcome', () => {
       '    docs: Key is taken\n      Choose another key.',
     ]);
     expect(printed).toHaveLength(8);
-    expect(printed[7]).toContain("run 'sonar init' again");
+    expect(printed[7]).toContain("run 'sonar init --monorepo' again");
   });
 
   it('does not suggest resuming when every root is configured', () => {
