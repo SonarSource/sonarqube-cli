@@ -899,7 +899,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
     .option(
       '--monorepo',
-      'Add or update this directory in the projects array instead of replacing the single link',
+      'Add or update this directory among the existing links instead of replacing them',
     )
     .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, projectKey: string | undefined, options: LinkOptions) =>
