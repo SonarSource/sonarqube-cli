@@ -143,7 +143,7 @@
     "@clack/core": "1.5.1",
     "@sentry/bun": "11.11.0",
     "@toon-format/toon": "2.3.1",
-    "commander": "15.0.0",
+    "commander": "15.1.0",
     "js-yaml": "5.5.0",
     "launchdarkly-node-client-sdk": "3.4.3",
     "neverthrow": "8.2.0",
