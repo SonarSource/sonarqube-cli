@@ -75,25 +75,10 @@ describe('renderProjectDashboards', () => {
     expect(render({ kind: 'no-organization' })).toEqual([]);
   });
 
-  it('prints the link of each root that ended configured, and none for the others', () => {
+  it('prints no separate links for a monorepo, whose summary carries them', () => {
     expect(
-      render({
-        kind: 'monorepo',
-        roots: [
-          { path: 'a', kind: 'configured', projectKey: 'a' },
-          { path: 'b', kind: 'linked', projectKey: 'b' },
-          { path: 'c', kind: 'bound', projectKey: 'c' },
-          { path: 'f', kind: 'unbound', projectKey: 'f' },
-          { path: 'd', kind: 'skipped' },
-          { path: 'e', kind: 'failed', reason: 'boom' },
-        ],
-      }),
-    ).toEqual([
-      `Project dashboard (a): ${URL('a')}`,
-      `Project dashboard (b): ${URL('b')}`,
-      `Project dashboard (c): ${URL('c')}`,
-      `Project dashboard (f): ${URL('f')}`,
-    ]);
+      render({ kind: 'monorepo', roots: [{ path: 'a', kind: 'configured', projectKey: 'a' }] }),
+    ).toEqual([]);
   });
 });
 
@@ -124,17 +109,57 @@ describe('renderInitOutcome', () => {
     );
 
     const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printed.slice(0, 7)).toEqual([
+    expect(printed.slice(0, 8)).toEqual([
+      '',
       'Monorepo onboarding summary:',
-      '  Configured (1):',
-      '    api: api-key (created)',
+      '  Created (1):',
+      '    api: api-key',
       '  Skipped (1):',
       '    web',
       '  Failed (1):',
       '    docs: Key is taken\n      Choose another key.',
     ]);
-    expect(printed).toHaveLength(8);
-    expect(printed[7]).toContain("run 'sonar init --monorepo' again");
+    expect(printed).toHaveLength(9);
+    expect(printed[8]).toContain("run 'sonar init --monorepo' again");
+  });
+
+  it('puts the dashboard link on the line of each mapped root, and on none of the others', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'a', kind: 'configured', projectKey: 'a' },
+          { path: 'b', kind: 'linked', projectKey: 'b' },
+          { path: 'c', kind: 'bound', projectKey: 'c' },
+          { path: 'f', kind: 'unbound', projectKey: 'f' },
+          { path: 'd', kind: 'skipped' },
+          { path: 'e', kind: 'failed', reason: 'boom' },
+        ],
+      },
+      AUTH,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.slice(0, -1)).toEqual([
+      '',
+      'Monorepo onboarding summary:',
+      '  Created and bound to the repository (1):',
+      `    c: c - ${URL('c')}`,
+      '  Created (1):',
+      `    f: f - ${URL('f')}`,
+      '  Mapped to the existing project (1):',
+      `    b: b - ${URL('b')}`,
+      '  Already configured (1):',
+      `    a: a - ${URL('a')}`,
+      '  Skipped (1):',
+      '    d',
+      '  Failed (1):',
+      '    e: boom',
+    ]);
+    expect(printed.at(-1)).toContain("run 'sonar init --monorepo' again");
   });
 
   it('does not suggest resuming when every root is configured', () => {
@@ -169,6 +194,7 @@ describe('renderInitOutcome', () => {
     );
 
     const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printed).toContain('    api: api-key (created and bound to the repository)');
+    expect(printed).toContain('  Created and bound to the repository (1):');
+    expect(printed).toContain('    api: api-key');
   });
 });
