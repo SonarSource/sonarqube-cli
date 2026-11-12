@@ -43,6 +43,7 @@ export function parseDependencyPageNumber(value: string): number {
 }
 
 export interface CurrentReadOptions extends ArchitectureReadOptions {
+  summary?: boolean;
   from?: string;
   to?: string;
   page?: number;

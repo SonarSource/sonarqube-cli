@@ -43,6 +43,7 @@ const RESOURCES = [
   'project-intended-architectures',
   'project-directives',
   'project-findings',
+  'project-summaries',
 ] as const;
 
 export type ArchitectureResource = (typeof RESOURCES)[number];
@@ -281,6 +282,32 @@ export class FakeArchitecture {
     if (override) return json(override.body, override.status, false);
 
     switch (`${resource}:${request.method}`) {
+      case 'project-summaries:GET': {
+        const languages = [...new Set(this.findings.map((finding) => finding.language))].filter(
+          (language) => !request.query.language || request.query.language === language,
+        );
+        const projectSummaries = languages.map((language) => {
+          const items = this.findings.filter((finding) => finding.language === language);
+          const count = (type: string) => items.filter((item) => item.type === type).length;
+          const structuralDeviation = count('structuralDeviation');
+          const relationshipDeviation = count('relationshipDeviation');
+          const tangle = count('tangle');
+          const oversizedComponent = count('oversizedComponent');
+          const weakTangle = count('weakTangle');
+          const splitResponsibility = count('splitResponsibility');
+          return {
+            language,
+            deviations: {
+              total: structuralDeviation + relationshipDeviation,
+              structuralDeviation,
+              relationshipDeviation,
+            },
+            flaws: { total: tangle + oversizedComponent, tangle, oversizedComponent },
+            smells: { total: weakTangle + splitResponsibility, weakTangle, splitResponsibility },
+          };
+        });
+        return json({ projectSummaries });
+      }
       case 'project-findings:GET': {
         if (
           (request.query.category &&
@@ -567,7 +594,11 @@ export function routeArchitectureRequest(
   const { query } = request;
   const projectId = isCloud ? fakeMainBranchId : (key: string) => `${key}-project-id`;
   let project: ArchitectureProject | undefined;
-  if (resource === 'current-architectures' || resource === 'project-findings') {
+  if (
+    resource === 'current-architectures' ||
+    resource === 'project-findings' ||
+    resource === 'project-summaries'
+  ) {
     const expectedOrganization = isCloud ? query.organizationId : FAKE_SERVER_ORGANIZATION_ID;
     if (
       !query.branchId ||
@@ -588,7 +619,9 @@ export function routeArchitectureRequest(
               total: 0,
             },
           })
-        : json({ currentArchitectures: [] });
+        : resource === 'project-summaries'
+          ? json({ projectSummaries: [] })
+          : json({ currentArchitectures: [] });
   } else if (modelId !== undefined) {
     project = projects.find(({ architecture }) =>
       architecture?.hasModel(decodeURIComponent(modelId)),

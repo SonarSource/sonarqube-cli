@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
@@ -48,11 +48,27 @@ import {
   TEXT_FORMATS,
 } from '../../_common/read-options.ts';
 import { formatCurrentText, formatSliceLimit } from './current-text.ts';
+import { getSummary } from './summary.ts';
 
 export async function getCurrent(
   options: CurrentReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  if (options.summary) {
+    if (
+      options.component !== undefined ||
+      options.depth !== undefined ||
+      options.from !== undefined ||
+      options.to !== undefined ||
+      options.page !== undefined ||
+      options.pageSize !== undefined
+    ) {
+      throw new InvalidOptionError(
+        '--summary cannot be combined with graph or dependency filters.',
+      );
+    }
+    return getSummary(options, ctx);
+  }
   const selection = dependencySelection(options);
   const depth = resolveDepth(options, 1);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
