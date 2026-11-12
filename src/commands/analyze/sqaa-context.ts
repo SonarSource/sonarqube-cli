@@ -151,7 +151,7 @@ async function explicitFilesTarget(options: AnalyzeSqaaOptions): Promise<SqaaTar
 }
 
 async function changeSetTarget(options: AnalyzeSqaaOptions): Promise<SqaaTarget> {
-  const changeSet = await resolveChangeSet(process.cwd(), options);
+  const changeSet = await resolveChangeSet(options.cwd ?? process.cwd(), options);
   return {
     ...changeSet,
     mode: 'change-set',
@@ -200,7 +200,7 @@ export async function prepareSqaaRun(
       options.project,
       console,
       inputFiles,
-      { noteFocusedProject: policy.noteFocusedProject },
+      { startDir: options.cwd, noteFocusedProject: policy.noteFocusedProject },
     );
     const resolved = resolveSqaaContext(
       resolution,
