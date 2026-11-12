@@ -31,26 +31,27 @@ const NO_MONOREPO_ROOTS = [
 const MONOREPO_RESUME =
   "To resume, run 'sonar init --monorepo' again: roots that are already configured are left as they are.";
 
-/** A root that ended up mapped to a project, whichever path got it there. */
-function isMappedRoot(
-  root: MonorepoRootResult,
-): root is Extract<MonorepoRootResult, { projectKey: string }> {
-  return 'projectKey' in root;
-}
+/** In display order; a root belongs to the section of its outcome, so a line does not repeat it. */
+const MONOREPO_SECTIONS: { title: string; kind: MonorepoRootResult['kind'] }[] = [
+  { title: 'Created and bound to the repository', kind: 'bound' },
+  { title: 'Created', kind: 'unbound' },
+  { title: 'Mapped to the existing project', kind: 'linked' },
+  { title: 'Already configured', kind: 'configured' },
+  { title: 'Skipped', kind: 'skipped' },
+  { title: 'Failed', kind: 'failed' },
+];
 
-function describeMonorepo(roots: readonly MonorepoRootResult[]): string[] {
-  const lines = ['Monorepo onboarding summary:'];
-  const sections: { title: string; includes: (root: MonorepoRootResult) => boolean }[] = [
-    { title: 'Configured', includes: isMappedRoot },
-    { title: 'Skipped', includes: (root) => root.kind === 'skipped' },
-    { title: 'Failed', includes: (root) => root.kind === 'failed' },
-  ];
-  for (const { title, includes } of sections) {
-    const matching = roots.filter(includes);
+function describeMonorepo(
+  roots: readonly MonorepoRootResult[],
+  auth: ResolvedAuth | undefined,
+): string[] {
+  const lines = ['', 'Monorepo onboarding summary:'];
+  for (const { title, kind } of MONOREPO_SECTIONS) {
+    const matching = roots.filter((root) => root.kind === kind);
     if (matching.length > 0) {
       lines.push(
         `  ${title} (${matching.length}):`,
-        ...matching.map((root) => `    ${describeMonorepoRoot(root)}`),
+        ...matching.map((root) => `    ${describeMonorepoRoot(root, auth)}`),
       );
     }
   }
@@ -60,16 +61,16 @@ function describeMonorepo(roots: readonly MonorepoRootResult[]): string[] {
   return lines;
 }
 
-function describeMonorepoRoot(root: MonorepoRootResult): string {
+/** The dashboard link sits on the root's own line, so the summary does not repeat each project. */
+function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | undefined): string {
   switch (root.kind) {
     case 'configured':
-      return `${root.path}: ${root.projectKey} (already configured)`;
     case 'linked':
-      return `${root.path}: ${root.projectKey} (mapped to the existing project)`;
     case 'bound':
-      return `${root.path}: ${root.projectKey} (created and bound to the repository)`;
-    case 'unbound':
-      return `${root.path}: ${root.projectKey} (created)`;
+    case 'unbound': {
+      const line = `${root.path}: ${root.projectKey}`;
+      return auth ? `${line} - ${projectDashboardUrl(auth, root.projectKey)}` : line;
+    }
     case 'skipped':
       return root.path;
     case 'failed':
@@ -77,7 +78,7 @@ function describeMonorepoRoot(root: MonorepoRootResult): string {
   }
 }
 
-function describe(outcome: InitOutcome): string[] {
+function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined): string[] {
   switch (outcome.kind) {
     case 'complete': {
       const noun = outcome.projectKeys.length === 1 ? 'project' : 'projects';
@@ -96,7 +97,7 @@ function describe(outcome: InitOutcome): string[] {
     case 'no-organization':
       return ['No organization was created.'];
     case 'monorepo':
-      return describeMonorepo(outcome.roots);
+      return describeMonorepo(outcome.roots, auth);
     case 'no-monorepo-roots':
       return NO_MONOREPO_ROOTS;
   }
@@ -108,7 +109,7 @@ export function renderInitOutcome(
   auth: ResolvedAuth | undefined,
   console: Console,
 ): void {
-  for (const line of describe(outcome)) {
+  for (const line of describe(outcome, auth)) {
     console.print(line);
   }
   if (auth) {
@@ -124,8 +125,7 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'bound':
     case 'unbound':
       return [outcome.projectKey];
-    case 'monorepo':
-      return outcome.roots.filter(isMappedRoot).map((root) => root.projectKey);
+    case 'monorepo': // Each root's link is already on its summary line.
     case 'declined':
     case 'no-organization':
     case 'no-monorepo-roots':
