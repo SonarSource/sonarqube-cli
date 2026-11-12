@@ -2,6 +2,36 @@ name: Harbor Benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      agent:
+        description: Agent and model
+        type: choice
+        default: "claude-code : claude-sonnet-5-5"
+        options:
+          - "claude-code : claude-sonnet-5-5"
+          - "claude-code : claude-haiku-5-5"
+          - "codex : gpt-6.1-terra"
+          - all agents and models
+      task:
+        description: Task
+        type: choice
+        default: all
+        options:
+          - all
+          - integrate--happy
+          - auth--missing-org
+          - secrets-context--prompt
+          - secrets-context--file-read
+      attempts:
+        description: Attempts per task
+        type: choice
+        default: "1"
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "5"
+          - "10"
 
 permissions:
   id-token: write
@@ -14,34 +44,35 @@ env:
   CODEX_VERSION: rust-v0.164.0
 
 jobs:
-  benchmark:
-    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.agent.name }} - ${{ matrix.agent.model }} - ${{ matrix.attempt }}
-    runs-on: ${{ matrix.os == 'macos' && 'macos-latest-xlarge' || 'sonar-m' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [linux, macos]
-        task:
-          - integrate--happy
-          - secrets-context--prompt
-          - secrets-context--file-read
-          - auth--missing-org
-        agent:
-          - { name: claude-code, provider: anthropic, model: claude-sonnet-5-5 }
-          - { name: claude-code, provider: anthropic, model: claude-haiku-5-5 }
-          - { name: codex, provider: openai, model: gpt-6.1-terra }
-        attempt: [1, 2]
-        exclude:
-          - os: macos
-            agent: { name: codex, provider: openai, model: gpt-6.1-terra }
+  plan:
+    name: Plan
+    runs-on: sonar-xs
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Cloudflare WARP
-        if: ${{ matrix.os == 'macos' }}
-        uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
+      - name: Plan the jobs
+        id: plan
+        env:
+          INPUT_AGENT: ${{ inputs.agent }}
+          INPUT_TASK: ${{ inputs.task }}
+          INPUT_ATTEMPTS: ${{ inputs.attempts }}
+        run: python3 -I benchmarks/harbor/ci/plan-matrix.py
+
+  benchmark:
+    name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.agent.name }} - ${{ matrix.agent.model }} - ${{ matrix.attempt }}
+    runs-on: sonar-m
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Vault Secrets
         id: secrets
