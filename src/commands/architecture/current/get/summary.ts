@@ -107,5 +107,13 @@ export async function getSummary(
   }
   if (!summaries.length)
     ctx.console.info('No architecture summaries are visible. Check project access and analysis.');
-  for (const summary of summaries) ctx.console.info(JSON.stringify(summary));
+  for (const summary of summaries) {
+    ctx.console.info(`${String(summary.language)}:`);
+    for (const [category, types] of Object.entries(categories)) {
+      const counts = summary[category] as Record<string, number>;
+      ctx.console.info(
+        `  ${category}: ${counts.total} (${types.map((type) => `${type}: ${counts[type]}`).join(', ')})`,
+      );
+    }
+  }
 }

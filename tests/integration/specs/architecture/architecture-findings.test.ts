@@ -244,6 +244,17 @@ describe('public architecture findings contract', () => {
     expect(result.stderr).toContain('Invalid public architecture summary response');
   });
 
+  it('prints readable summary counts in text format', async () => {
+    await configured();
+    const result = await h.run('arch current get --summary -p shop --language java --format text');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('java:');
+    expect(result.stdout).toContain(
+      'deviations: 4 (structuralDeviation: 2, relationshipDeviation: 2)',
+    );
+    expect(result.stdout).not.toContain('{"language"');
+  });
+
   it('reads summary counts with the public branch scope and language filter', async () => {
     const server = await configured();
     const result = await h.run('arch current get --summary -p shop --language java --format json');
