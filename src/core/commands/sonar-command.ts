@@ -69,7 +69,7 @@ export {
 
 const betaWarningsShownWithoutState = new Set<string>();
 
-export const COMMAND_CATEGORIES = ['core', 'data', 'integrate', 'cli-management'] as const;
+export const COMMAND_CATEGORIES = ['setup', 'guide', 'verify', 'solve', 'cli'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
 function isPrivateBetaGated(lifecycle: LifecycleState): boolean {
@@ -129,6 +129,12 @@ export class SonarOption extends Option {
 }
 
 export interface RootHelpMetadata {
+  hidden?: boolean;
+  order?: number;
+  summary?: string;
+  targets?: boolean;
+  cloudOnly?: boolean;
+  requiresVortex?: boolean;
   category?: CommandCategory;
   expandSubcommands?: boolean;
   label?: string;

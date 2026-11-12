@@ -4,7 +4,7 @@
 - Use invocation contexts for auth, the connection, lifecycle eligibility, telemetry, and stats. Resolve credentials with `ctx.resolveAuth()`; hooks/status may use `resolveAuthOrNull()` or `resolveConnection()` to degrade gracefully. Authenticated handlers already have `ctx.auth` and `ctx.connection`.
 - Gate every prompt with `console.canPrompt()`: prompt methods do not check and may wait forever on piped/closed stdin. Give noninteractive callers an explicit outcome. Test with `FakeConsole.setCanPrompt(false)`; integration prompt flows require `SONARQUBE_CLI_MOCK_TTY=1`.
 - Declare lifecycle on commands and options with `Stage`. Private Beta requires its flag key; Deprecated requires `sinceVersion` and `replacement` (explicit `null` if absent). Resolve flags before refreshing staged visibility. Public docs omit Alpha and Private Beta.
-- Visible top-level commands declare `rootHelp({ category })`; declaration order controls display order. Reuse the existing help renderer and shared console components.
+- Visible top-level commands declare `rootHelp({ category, order })`; metadata controls section and row order. Reuse the existing help renderer and shared console components.
 - Record facts on the invocation context; let `postAction` commit telemetry and stats. Domain payloads belong beside producers. See [telemetry](../core/telemetry/AGENTS.md) and [stats](../core/stats/AGENTS.md) before changing their lifecycle.
 - Read [updates](../core/update/AGENTS.md) before changing root startup hooks; initialization depends on migrated consent.
 - Follow the root error-handling conventions. Use `remediationHint` for separate actionable recovery guidance.
