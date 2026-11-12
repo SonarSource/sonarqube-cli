@@ -21,17 +21,12 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { CloudImportPlan } from './cloud-import-plan.ts';
 import type { ImportApiClient } from './import-api.ts';
 import type { ImportBackend, ImportPlan } from './import-backend.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
-import {
-  computeInstallationKey,
-  resolveAlmKey,
-  type ResolvedOrg,
-  resolveOrg,
-  resolveRepos,
-} from './resolve-options';
-import type { ImportOptions } from './types';
+import { resolveAlmKey, type ResolvedOrg, resolveOrg, resolveRepos } from './resolve-options';
+import type { ImportPlanOptions } from './types';
 
 /** SonarQube Cloud: the org is the one tied to the active connection. */
 export class CloudBackend implements ImportBackend {
@@ -42,7 +37,7 @@ export class CloudBackend implements ImportBackend {
     private readonly resolvedOrg?: ResolvedOrg,
   ) {}
 
-  async plan(options: ImportOptions, console: Console): Promise<ImportPlan> {
+  async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
     const {
       key: resolvedOrgKey,
       almKey: resolvedAlmKey,
@@ -74,20 +69,6 @@ export class CloudBackend implements ImportBackend {
       console,
     });
 
-    const client = this.client;
-    return {
-      selection,
-      outroLink: {
-        label: 'Dashboard',
-        url: `${this.serverUrl.replace(/\/$/, '')}/organizations/${resolvedOrgKey}/onboarding-dashboard`,
-      },
-      toResolvedRepo: (repo) => ({
-        slug: repo.slug,
-        installationKey: computeInstallationKey(repo, almKey),
-      }),
-      importRepo: async (repo) => ({
-        projectKey: await client.importRepository(resolvedOrgKey, repo.installationKey),
-      }),
-    };
+    return new CloudImportPlan(this.client, resolvedOrgKey, almKey, this.serverUrl, selection);
   }
 }

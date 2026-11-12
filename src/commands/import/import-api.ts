@@ -27,6 +27,9 @@
 import logger from '@/core/observability/logger.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { OrganizationsClient } from '@/core/server/organizations.ts';
+import { ProjectsClient } from '@/core/server/projects.ts';
+
+import type { MonorepoProject } from './monorepo-projects.ts';
 
 export interface DopRepository {
   id: string;
@@ -42,17 +45,27 @@ export interface ProvisionedProject {
   projectKey: string;
 }
 
+/**
+ * A `provision_monorepo_projects` call that created every project. Refused projects never come
+ * back here: the server answers HTTP 400 and lists them in `errors` (see `monorepo-provision-errors.ts`).
+ */
+export interface MonorepoProvisionResult {
+  projects?: ProvisionedProject[];
+}
+
 export class ImportApiClient {
   /** Server-enforced max `pageSize` for `/dop-translation/dop-repositories`. */
   static readonly DOP_REPOSITORIES_MAX_PAGE_SIZE = 50;
 
   /** One instance for the whole run, so its organization cache is shared across lookups. */
   readonly organizations: OrganizationsClient;
+  readonly projects: ProjectsClient;
   private readonly client: SonarHttpClient;
 
   constructor(client: SonarHttpClient) {
     this.client = client;
     this.organizations = new OrganizationsClient(client);
+    this.projects = new ProjectsClient(client);
   }
 
   get isCloud(): boolean {
@@ -94,6 +107,28 @@ export class ImportApiClient {
       .postFormJson<{ projects: ProvisionedProject[] }>('/api/alm_integration/provision_projects', {
         organization,
         installationKeys: installationKey,
+      })
+      .orThrow();
+  }
+
+  /**
+   * Create several projects bound to the same repository via
+   * `POST /api/alm_integration/provision_monorepo_projects` (SonarQube Cloud only). The response
+   * lists what was created and what was refused, so a partly failed batch is not an error here.
+   */
+  provisionMonorepoProjects(
+    organization: string,
+    installationKey: string,
+    projects: MonorepoProject[],
+  ): Promise<MonorepoProvisionResult> {
+    return this.client
+      .post<MonorepoProvisionResult>('/api/alm_integration/provision_monorepo_projects', {
+        organization,
+        projects: projects.map(({ projectKey, projectName }) => ({
+          projectKey,
+          projectName,
+          installationKey,
+        })),
       })
       .orThrow();
   }

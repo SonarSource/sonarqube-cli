@@ -24,4 +24,13 @@ export interface ImportOptions {
   regex?: string;
   nonInteractive?: boolean;
   dopSetting?: string;
+  monorepo?: string;
+  project?: string[];
+  projectsFile?: string;
+}
+
+/** What a backend plans from: the CLI options plus flags only the import code itself sets. */
+export interface ImportPlanOptions extends ImportOptions {
+  /** A monorepo import targets a repository that is imported already, and adds projects to it. */
+  allowImportedRepo?: boolean;
 }

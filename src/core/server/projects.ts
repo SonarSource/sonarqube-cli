@@ -17,7 +17,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import type { ResultAsync } from '../result.ts';
+import { okAsync, type ResultAsync } from '../result.ts';
 import { type HttpClientError } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type {
@@ -35,6 +35,9 @@ import type {
  * `DOP_REPOSITORIES_MAX_PAGE_SIZE` is a real exception specific to that one API.
  */
 export const MAX_PAGE_SIZE = 500;
+
+/** Ids sent per `search_projects` call, which keeps the URL short and the answer on one page. */
+const PROJECT_IDS_PER_REQUEST = 50;
 
 export interface PublicProjectsResponse {
   projects?: ({ id?: unknown; key?: unknown } | null)[];
@@ -115,6 +118,31 @@ export class ProjectsClient {
           ? { key: component.key, name: component.name ?? component.key }
           : null;
       });
+  }
+
+  /**
+   * The keys of the organization's projects with these ids, via `GET /api/components/search_projects`
+   * (SonarQube Cloud only). An id of a project outside the organization yields no key.
+   */
+  findProjectKeysByIds(
+    organization: string,
+    projectIds: string[],
+  ): ResultAsync<string[], HttpClientError> {
+    let keys: ResultAsync<string[], HttpClientError> = okAsync([]);
+    for (let start = 0; start < projectIds.length; start += PROJECT_IDS_PER_REQUEST) {
+      const batch = projectIds.slice(start, start + PROJECT_IDS_PER_REQUEST);
+      // Chained rather than parallel: a few small requests at most.
+      keys = keys.andThen((found) =>
+        this.client
+          .get<{ components?: Array<{ key: string }> }>('/api/components/search_projects', {
+            organization,
+            projectIds: batch.join(','),
+            ps: PROJECT_IDS_PER_REQUEST,
+          })
+          .map((response) => [...found, ...(response.components ?? []).map(({ key }) => key)]),
+      );
+    }
+    return keys;
   }
 
   /** Creates an empty project that is not bound to any repository. */
