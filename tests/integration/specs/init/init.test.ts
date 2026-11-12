@@ -308,6 +308,7 @@ describe('sonar init', () => {
         "A Sonar project already exists for this repository: 'bound_project'",
       );
       expect(output).toContain('sonar link bound_project');
+      expect(output).toContain('Add --monorepo to keep the other links in .sonar-config.json.');
       expect(output).not.toContain(UNBOUND);
       expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
     },
@@ -1556,8 +1557,32 @@ describe('sonar init', () => {
           "Found project 'bound_project', but could not save .sonar-config.json",
         );
         expect(output).toContain('sonar link bound_project');
+        expect(output).toContain('Add --monorepo to keep the other links in .sonar-config.json.');
         expect(output).not.toContain('Create this project');
         expect(output).not.toContain(UNBOUND);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'keeps the could-not-save error and hint when the config cannot be read at all',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('.sonar-config.json/.keep', '');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain(
+          "Found project 'bound_project', but could not save .sonar-config.json",
+        );
+        expect(output).toContain('sonar link bound_project');
       },
       TIMEOUT,
     );
