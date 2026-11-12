@@ -28,6 +28,9 @@ import {
   InvalidLinkPathError,
   linkItem,
   type LinkTarget,
+  type ProjectLink,
+  relativeProjectPath,
+  resolveConfigDir,
   resolveLinkTarget,
   withLink,
 } from '@/core/project-discovery/link-target.ts';
@@ -37,10 +40,13 @@ import {
   throwOnInvalidConfig,
 } from '@/core/project-discovery/shared-project-config.ts';
 
+import { chooseProjectFolders } from './choose-folder.ts';
 import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
+import { TreeFolderPicker } from './folder-picker.ts';
 
 export interface LinkOptions {
-  path: string;
+  /** Omitted: picked interactively when no project key is given either, else the root. */
+  path?: string;
   monorepo?: boolean;
 }
 
@@ -50,41 +56,13 @@ function assertLinkableConnection(auth: ResolvedAuth): void {
   }
 }
 
-export function linkProject(
-  projectKey: string | undefined,
-  options: LinkOptions,
-  ctx: CommandAuthenticatedInvocationContext,
-): Promise<void> {
-  return options.monorepo
-    ? linkMonorepoProject(projectKey, options, ctx)
-    : linkSingleProject(projectKey, options, ctx);
-}
-
-/** Single-project link: replaces the legacy singular `project` binding. */
-function linkSingleProject(
-  projectKey: string | undefined,
-  options: LinkOptions,
-  ctx: CommandAuthenticatedInvocationContext,
-): Promise<void> {
-  return runLink(projectKey, options, ctx, false);
-}
-
-/** Monorepo link: adds or updates a mapping in the `projects` array. */
-function linkMonorepoProject(
-  projectKey: string | undefined,
-  options: LinkOptions,
-  ctx: CommandAuthenticatedInvocationContext,
-): Promise<void> {
-  return runLink(projectKey, options, ctx, true);
-}
-
 /** Fails before any prompt, server call or write when the request cannot be carried out. */
 function assertLinkable(
   givenKey: string | undefined,
   { path }: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): void {
-  if (path.trim().length === 0) {
+  if (path?.trim().length === 0) {
     throw new CommandFailedError('--path must not be empty.', {
       remediationHint: "Use '--path .' for a project at the repository root.",
     });
@@ -94,6 +72,31 @@ function assertLinkable(
   if (givenKey === undefined) {
     assertCanChooseProject(ctx);
   }
+}
+
+async function resolvePickerRoot({
+  console,
+}: CommandAuthenticatedInvocationContext): Promise<LinkTarget> {
+  const { targetDir, inGitRepository } = await resolveConfigDir(process.cwd());
+  if (!inGitRepository) {
+    console.warn('No git repository found. Writing to the current directory instead.');
+  }
+  return { targetDir, projectRoot: targetDir, inGitRepository };
+}
+
+/** The folders the user ticks under the config directory, at least one. */
+async function chooseTargets(
+  { targetDir, inGitRepository }: LinkTarget,
+  items: readonly ConfigItem[],
+  { console }: CommandAuthenticatedInvocationContext,
+): Promise<LinkTarget[]> {
+  const folders = await chooseProjectFolders(
+    targetDir,
+    inGitRepository,
+    items,
+    new TreeFolderPicker(console),
+  );
+  return folders.map((projectRoot) => ({ targetDir, projectRoot, inGitRepository }));
 }
 
 async function resolveTarget(
@@ -121,10 +124,18 @@ async function resolveTarget(
   return target;
 }
 
+function savedConfigLines({ targetDir, inGitRepository }: LinkTarget): string[] {
+  const lines = [`Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`];
+  if (inGitRepository) {
+    lines.push(`Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`);
+  }
+  return lines;
+}
+
 function reportLinked(
   console: CommandAuthenticatedInvocationContext['console'],
-  { targetDir, projectRoot, inGitRepository }: LinkTarget,
-  projectKey: string,
+  target: LinkTarget,
+  links: readonly ProjectLink[],
   before: readonly ConfigItem[],
   after: readonly ConfigItem[],
 ): void {
@@ -135,38 +146,91 @@ function reportLinked(
       `Removed the other mappings in ${SHARED_PROJECT_CONFIG_FILE_NAME} (${removedNames.join(', ')}). Use 'sonar link --monorepo' to add a link without replacing them.`,
     );
   }
-  const mapping = after.length > 1 ? ' (monorepo mapping)' : '';
-  const summaryLines = [
-    `Linked ${projectRoot} to project ${projectKey}${mapping}`,
-    `Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
-  ];
-  if (inGitRepository) {
-    summaryLines.push(`Commit ${SHARED_PROJECT_CONFIG_FILE_NAME} to share it.`);
+  const [first] = links;
+  if (links.length === 1) {
+    const mapping = after.length > 1 ? ' (monorepo mapping)' : '';
+    console.success(
+      [
+        `Linked ${first.projectRoot} to project ${first.projectKey}${mapping}`,
+        ...savedConfigLines(target),
+      ].join('\n'),
+    );
+    return;
   }
-  console.success(summaryLines.join('\n'));
+  const rows = links.map(
+    ({ projectRoot, projectKey }) =>
+      `  ${relativeProjectPath(target.targetDir, projectRoot)} → ${projectKey}`,
+  );
+  console.success(
+    [
+      `Linked ${links.length} folders (monorepo mappings):`,
+      ...rows,
+      ...savedConfigLines(target),
+    ].join('\n'),
+  );
 }
 
 /** Validates the request, picks the project key when none was given, writes the link, reports it. */
-async function runLink(
+export async function linkProject(
   givenKey: string | undefined,
   options: LinkOptions,
   ctx: CommandAuthenticatedInvocationContext,
-  monorepo: boolean,
 ): Promise<void> {
   assertLinkable(givenKey, options, ctx);
-  const target = await resolveTarget(options.path, ctx);
-  // Read once: the prompts show these links, and the write applies the user's choice to them.
+  const picking = options.path === undefined && givenKey === undefined;
+  const target = picking
+    ? await resolvePickerRoot(ctx)
+    : await resolveTarget(options.path ?? '.', ctx);
+  // Read once: the prompts show these links, and the write applies the user's choices to them.
   const items = await sharedProjectConfigFile.readItems(target.targetDir, throwOnInvalidConfig);
+  const targets = picking ? await chooseTargets(target, items, ctx) : [target];
+  // Folders picked in the tree join what is already linked; a plain 'sonar link <key>' replaces it.
+  const monorepo = picking || options.monorepo === true;
 
-  const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, items, ctx));
-  if (projectKey === null) {
+  const links = await chooseLinks(
+    givenKey,
+    targets,
+    { monorepo, announce: targets.length > 1, items },
+    ctx,
+  );
+  if (links.length === 0) {
     return;
   }
-
+  const linked = links.map(({ projectRoot, projectKey }) =>
+    linkItem(ctx.auth, target.targetDir, projectRoot, projectKey),
+  );
   // A plain link replaces the others, but a relinked folder keeps its entry's extra fields.
-  const item = linkItem(ctx.auth, target.targetDir, target.projectRoot, projectKey);
-  const kept = monorepo ? items : items.filter((existing) => existing.root === item.root);
-  const updated = withLink(kept, item);
+  const kept = monorepo
+    ? items
+    : items.filter((existing) => linked.some((item) => item.root === existing.root));
+  const updated = linked.reduce<ConfigItem[]>(
+    (current, item) => withLink(current, item),
+    [...kept],
+  );
   await sharedProjectConfigFile.writeItems(target.targetDir, updated);
-  reportLinked(ctx.console, target, projectKey, items, updated);
+  reportLinked(ctx.console, target, links, items, updated);
+}
+
+/**
+ * The project for each target, prompting folder by folder; targets whose existing link is kept
+ * are left out. Nothing is written yet, so leaving a later prompt saves none of them.
+ */
+async function chooseLinks(
+  givenKey: string | undefined,
+  targets: readonly LinkTarget[],
+  options: { monorepo: boolean; announce: boolean; items: readonly ConfigItem[] },
+  ctx: CommandAuthenticatedInvocationContext,
+): Promise<ProjectLink[]> {
+  if (targets.length === 0) {
+    return [];
+  }
+  const [{ targetDir, projectRoot }, ...rest] = targets;
+  if (options.announce) {
+    ctx.console.info(`Choosing the project for ${relativeProjectPath(targetDir, projectRoot)}`);
+  }
+  const projectKey =
+    givenKey ?? (await chooseProjectKey(projectRoot, options.monorepo, options.items, ctx));
+  const chosen = projectKey === null ? [] : [{ projectRoot, projectKey }];
+  // The next folder's prompts start only once this one is settled.
+  return [...chosen, ...(await chooseLinks(givenKey, rest, options, ctx))];
 }
