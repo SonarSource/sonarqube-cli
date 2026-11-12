@@ -19,20 +19,10 @@ as_agent() {
 }
 
 create_root_dirs() {
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    sudo mkdir -p /etc/synthetic.d
-    for name in "${ROOT_DIR_NAMES[@]}"; do
-      sudo mkdir -p "${RUN_ROOT}/fs/${name}"
-      printf '%s\t%s\n' "${name}" "${RUN_ROOT}/fs/${name}"
-    done | sudo tee /etc/synthetic.d/harbor >/dev/null
-    sudo /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs.util -t || echo "apfs.util exited with $?"
-    sudo chown -R "${AGENT_USER}" "${RUN_ROOT}/fs"
-  else
-    for name in "${ROOT_DIR_NAMES[@]}"; do
-      sudo mkdir -p "/${name}"
-      sudo chown "${AGENT_USER}" "/${name}"
-    done
-  fi
+  for name in "${ROOT_DIR_NAMES[@]}"; do
+    sudo mkdir -p "/${name}"
+    sudo chown "${AGENT_USER}" "/${name}"
+  done
   ls -ld /app /logs /tests /solution /installed-agent
 }
 
@@ -68,7 +58,6 @@ install_codex() {
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) triple=x86_64-unknown-linux-musl ;;
     Linux-aarch64) triple=aarch64-unknown-linux-musl ;;
-    Darwin-arm64) triple=aarch64-apple-darwin ;;
     *)
       echo "No Codex binary for $(uname -s) $(uname -m)" >&2
       exit 1
@@ -115,7 +104,7 @@ run_benchmark() {
       file_hook=claude-pre-tool-use
       export ANTHROPIC_BASE_URL=https://api.portkey.ai
       export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
-      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
+      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
       ;;
     codex)
       : "${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
