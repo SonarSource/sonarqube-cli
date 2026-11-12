@@ -27,9 +27,10 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import {
+  type ConfigItem,
   resolveContainedPath,
   type SharedProjectConfigEntry,
-  sharedProjectConfigRepository,
+  sharedProjectConfigFile,
 } from './shared-project-config.ts';
 
 export interface LinkTarget {
@@ -50,12 +51,27 @@ export class InvalidLinkPathError extends Error {
   }
 }
 
-/** What `saveProjectLink()` observed, for the caller to report in its own words. */
-export interface SavedLink {
-  /** Key of the mapping this write replaced for the same directory, if any. */
-  replacedProjectKey?: string;
-  /** The link was written but a `projects` array takes precedence, so it has no effect. */
-  shadowed: boolean;
+/**
+ * How new links combine with what `.sonar-config.json` already links: `merge` adds them, replacing
+ * the mappings of the same directories; `replace` leaves only the new links.
+ */
+export type LinkMode = 'merge' | 'replace';
+
+export interface ProjectLink {
+  projectKey: string;
+  projectRoot: string;
+}
+
+/** What `linkProjectDirectories()` observed, for the caller to report in its own words. */
+export interface SavedLinks {
+  /** Keys of the mappings this write replaced for the same directories. */
+  replacedProjectKeys: string[];
+  /** Keys of the mappings of other directories that a `replace` write removed. */
+  removedProjectKeys: string[];
+  /** How many items without a usable project key a `replace` write removed. */
+  removedUnnamedCount: number;
+  /** How many projects the file links now; more than one is written as a `projects` array. */
+  linkedCount: number;
 }
 
 function deriveEntry(
@@ -107,37 +123,62 @@ export function relativeProjectPath(targetDir: string, projectRoot: string): str
 }
 
 /**
- * Writes `entry` into `<dir>/.sonar-config.json`: as the singular `project` by default,
- * into the `projects` array in monorepo mode.
+ * The one write path for `sonar link` and `sonar init`: derives each link's entry from the active
+ * connection, combines them with `targetDir`'s config as `mode` says and saves the result, leaving
+ * the reporting to the caller.
  */
-async function saveProjectLink(
-  dir: string,
-  entry: SharedProjectConfigEntry,
-  { monorepo }: { monorepo: boolean },
-): Promise<SavedLink> {
-  const target = canonicalizePath(resolve(dir, entry.path));
-  const previous = (await sharedProjectConfigRepository.load(dir)).find(
-    (mapping) => canonicalizePath(mapping.projectRoot) === target,
-  );
+export async function linkProjectDirectories(
+  auth: ResolvedAuth,
+  targetDir: string,
+  links: readonly ProjectLink[],
+  mode: LinkMode,
+): Promise<SavedLinks> {
+  const rootOf = (item: ConfigItem): string | undefined => {
+    const path = item.valid ? item.entry.path : item.path;
+    return path === undefined ? undefined : canonicalizePath(resolve(targetDir, path));
+  };
+  const added = links.map((link): ConfigItem => ({
+    valid: true,
+    entry: deriveEntry(auth, link.projectKey, relativeProjectPath(targetDir, link.projectRoot)),
+  }));
+  const addedByRoot = new Map(added.map((item) => [rootOf(item), item]));
+  const existing = await sharedProjectConfigFile.readItems(targetDir);
+  const isEdited = (item: ConfigItem): boolean => addedByRoot.has(rootOf(item));
+  const keyOf = (item: ConfigItem): string | undefined =>
+    item.valid ? item.entry.projectKey : item.projectKey;
 
-  if (monorepo) {
-    await sharedProjectConfigRepository.addProject(dir, entry);
-    return { replacedProjectKey: previous?.projectKey, shadowed: false };
-  }
-  const shadowed = await sharedProjectConfigRepository.set(dir, entry);
-  return { replacedProjectKey: previous?.projectKey, shadowed };
+  const items = mode === 'merge' ? mergeItems(existing, addedByRoot, rootOf) : added;
+  await sharedProjectConfigFile.writeItems(targetDir, items);
+
+  const removed = mode === 'replace' ? existing.filter((item) => !isEdited(item)) : [];
+  return {
+    replacedProjectKeys: existing.filter(isEdited).flatMap((item) => keyOf(item) ?? []),
+    removedProjectKeys: removed.flatMap((item) => keyOf(item) ?? []),
+    removedUnnamedCount: removed.filter((item) => keyOf(item) === undefined).length,
+    linkedCount: items.length,
+  };
 }
 
 /**
- * The one write path for `sonar link` and `sonar init`: derives the entry for `target` from the
- * active connection and saves it, leaving the reporting to the caller.
+ * `existing` with every item for an added folder overwritten in its place (repeats dropped), all
+ * other items kept as they were, and the remaining added ones appended.
  */
-export async function linkProjectDirectory(
-  auth: ResolvedAuth,
-  projectKey: string,
-  target: LinkTarget,
-  options: { monorepo: boolean },
-): Promise<SavedLink> {
-  const path = relativeProjectPath(target.targetDir, target.projectRoot);
-  return saveProjectLink(target.targetDir, deriveEntry(auth, projectKey, path), options);
+function mergeItems(
+  existing: readonly ConfigItem[],
+  addedByRoot: ReadonlyMap<string | undefined, ConfigItem>,
+  rootOf: (item: ConfigItem) => string | undefined,
+): ConfigItem[] {
+  const placed = new Set<string | undefined>();
+  const merged = existing.flatMap((item): ConfigItem[] => {
+    const root = rootOf(item);
+    const replacement = root === undefined ? undefined : addedByRoot.get(root);
+    if (replacement === undefined) return [item];
+    if (placed.has(root)) return [];
+    placed.add(root);
+    return [replacement];
+  });
+  for (const [root, item] of addedByRoot) {
+    if (!placed.has(root)) merged.push(item);
+  }
+  return merged;
 }
