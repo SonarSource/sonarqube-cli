@@ -630,3 +630,25 @@ describe('SharedProjectConfigFileRepository.addProject', () => {
     }
   });
 });
+
+describe('SharedProjectConfigFileRepository.hasProjectsArray', () => {
+  async function check(content: string | null): Promise<boolean> {
+    const dir = tempDir('has-projects');
+    if (content !== null) {
+      writeConfig(dir, content);
+    }
+    try {
+      return await new SharedProjectConfigRepositoryImpl().hasProjectsArray(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('is true only when the file holds a "projects" array', async () => {
+    expect(await check(JSON.stringify({ projects: [] }))).toBe(true);
+    expect(await check(JSON.stringify({ project: { projectKey: 'k', path: '.' } }))).toBe(false);
+    expect(await check(JSON.stringify({ projects: 'nope' }))).toBe(false);
+    expect(await check('not json')).toBe(false);
+    expect(await check(null)).toBe(false);
+  });
+});

@@ -22,9 +22,10 @@ import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.t
 import { remediationHintFor } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
-import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
+import { relativeProjectPath, resolveConfigDir } from '@/core/project-discovery/link-target.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
+import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
 import { UnexpectedApiError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
@@ -235,6 +236,23 @@ async function onboardRoot(
     }
     return { path, kind: 'failed', reason: describeFailure(error) };
   }
+}
+
+/**
+ * Plain `sonar init` meets a `.sonar-config.json` that already maps several roots: offers to onboard
+ * them as a monorepo. Only a `projects` array asks, so a single-project file keeps the usual path.
+ */
+export async function offerMonorepo(projectRoot: string, console: Console): Promise<boolean> {
+  const { targetDir } = await resolveConfigDir(projectRoot);
+  if (!(await sharedProjectConfigRepository.hasProjectsArray(targetDir))) {
+    return false;
+  }
+  return requireAnswer(
+    await console.confirmPrompt(
+      `${SHARED_PROJECT_CONFIG_FILE_NAME} already maps several project roots. Onboard this as a monorepo instead?`,
+      true,
+    ),
+  );
 }
 
 /**

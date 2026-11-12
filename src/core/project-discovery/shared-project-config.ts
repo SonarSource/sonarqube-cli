@@ -61,6 +61,8 @@ export type SharedProjectConfigEntry =
 
 export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping[]>;
+  /** Whether `.sonar-config.json` in `dir` is a readable file holding a `projects` array (monorepo form). */
+  hasProjectsArray(dir: string): Promise<boolean>;
   /** Resolves to whether a `projects` array already exists, which shadows the written `project`. */
   set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean>;
   /**
@@ -170,6 +172,10 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       }
     }
     return mappings;
+  }
+
+  async hasProjectsArray(dir: string): Promise<boolean> {
+    return Array.isArray((await this.readRawRoot(dir))?.projects);
   }
 
   async set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean> {
