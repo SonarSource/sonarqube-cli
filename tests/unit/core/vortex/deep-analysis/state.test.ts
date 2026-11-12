@@ -24,6 +24,7 @@ import * as sqlite from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import logger from '@/core/observability/logger.ts';
 import * as db from '@/core/vortex/deep-analysis/db.ts';
 import {
   acquireAnalysisLock,
@@ -46,6 +47,7 @@ const constructors = sqlite as unknown as {
 
 function stubStateDb() {
   return {
+    debug: spyOn(logger, 'debug').mockImplementation(() => undefined),
     mkdir: spyOn(fs, 'mkdirSync').mockImplementation(() => {
       throw new Error('Unexpected filesystem access');
     }),
@@ -156,7 +158,8 @@ describe('deep analysis state', () => {
       stubs.running.mockReturnValue(true);
       stubs.counter.mockReturnValue(counter);
       expect(acquire).toThrow(CommandFailedError);
-      expect(() => resetAnalysisCounterIfIdle(SESSION)).toThrow(CommandFailedError);
+      expect(resetAnalysisCounterIfIdle(SESSION)).toBe(false);
+      expect(stubs.reset).not.toHaveBeenCalled();
       expect(stubs.write).not.toHaveBeenCalled();
       expect(stubs.reset).not.toHaveBeenCalled();
     },
