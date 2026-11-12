@@ -143,6 +143,7 @@ function groupPathsByMapping<T extends { projectRoot: string }>(
 export class ProjectDiscoveryResult {
   repoRoot?: string;
   fromSharedConfig = false;
+  sharedConfigDir?: string;
   projects: ProjectMapping[] = [];
 
   scope(path: string): ScopedProjectMapping<ProjectMapping>[] {
@@ -157,6 +158,8 @@ export class DiscoveredProjects {
     public readonly projects: CompleteProjectMapping[],
     /** Whether the projects came from `.sonar-config.json` rather than a single-project source. */
     public readonly fromSharedConfig = false,
+    /** The directory holding the `.sonar-config.json` the projects came from. */
+    public readonly sharedConfigDir?: string,
   ) {}
 
   scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {

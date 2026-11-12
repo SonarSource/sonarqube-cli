@@ -139,7 +139,7 @@ async function run(
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
   // Chosen before detection: a monorepo that is already partly linked must reach its remaining roots.
-  if (monorepo || (interactive && (await offerMonorepo(projectRoot, console)))) {
+  if (monorepo || (interactive && (await offerMonorepo(projectRoot, deps)))) {
     return { outcome: await runMonorepo(projectRoot, deps), auth, deps };
   }
   const detected = await detectInitPath(projectRoot, deps);
