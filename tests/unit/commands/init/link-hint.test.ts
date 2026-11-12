@@ -18,10 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
 import { createCommandTree } from '@/commands/command-tree.ts';
-import { linkCommand } from '@/commands/init/steps/mapping.ts';
+import { linkCommand, linkCommandFor } from '@/commands/init/steps/mapping.ts';
+import * as gitWorktree from '@/core/host/git/worktree.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
@@ -35,6 +41,7 @@ function parseWithLinkCommand(hint: string): {
   operands: string[];
   unknown: string[];
   path: string;
+  monorepo: boolean | undefined;
 } {
   const words = posixWords(hint);
   expect(words.slice(0, 2)).toEqual(['sonar', 'link']);
@@ -45,7 +52,8 @@ function parseWithLinkCommand(hint: string): {
     throw new Error('the link command is not registered');
   }
   const { operands, unknown } = link.parseOptions(words.slice(2));
-  return { operands, unknown, path: link.opts<{ path: string }>().path };
+  const { path, monorepo } = link.opts<{ path: string; monorepo?: boolean }>();
+  return { operands, unknown, path, monorepo };
 }
 
 describe.skipIf(process.platform === 'win32')('linkCommand', () => {
@@ -54,6 +62,7 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path: '.',
+      monorepo: undefined,
     });
   });
 
@@ -62,6 +71,7 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path: 'services/api',
+      monorepo: undefined,
     });
   });
 
@@ -71,10 +81,67 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
       operands: ['my_key'],
       unknown: [],
       path,
+      monorepo: undefined,
     });
   });
 
   it('prefixes the directory to run from', () => {
     expect(linkCommand('my_key', '.', '/work/repo')).toBe('cd /work/repo && sonar link my_key');
+  });
+
+  it('adds --monorepo when other folders are linked, so they are kept', () => {
+    expect(parseWithLinkCommand(linkCommand('my_key', 'services/api', undefined, true))).toEqual({
+      operands: ['my_key'],
+      unknown: [],
+      path: 'services/api',
+      monorepo: true,
+    });
+  });
+});
+
+describe('linkCommandFor', () => {
+  let dir: string;
+  let gitRootSpy: Mock<typeof gitWorktree.resolveGitRepoRoot>;
+  const server = { serverUrl: 'https://sq.example' };
+
+  beforeEach(() => {
+    dir = canonicalizePath(mkdtempSync(join(tmpdir(), 'link-hint-')));
+    gitRootSpy = spyOn(gitWorktree, 'resolveGitRepoRoot').mockResolvedValue(dir);
+    mkdirSync(join(dir, 'app'));
+    mkdirSync(join(dir, 'other'));
+  });
+
+  afterEach(() => {
+    gitRootSpy.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function linked(...paths: string[]): void {
+    const entries = paths.map((path) => ({ ...server, projectKey: `key_${path}`, path }));
+    writeFileSync(join(dir, '.sonar-config.json'), JSON.stringify({ projects: entries }));
+  }
+
+  const hint = () => linkCommandFor('my_key', join(dir, 'app'));
+
+  it('suggests a plain link when nothing is linked yet', async () => {
+    expect(await hint()).toBe('sonar link my_key --path app');
+  });
+
+  it('suggests a plain link when only the same folder is linked', async () => {
+    linked('app');
+
+    expect(await hint()).toBe('sonar link my_key --path app');
+  });
+
+  it('adds --monorepo when a single link names another folder', async () => {
+    linked('other');
+
+    expect(await hint()).toBe('sonar link --monorepo my_key --path app');
+  });
+
+  it('adds --monorepo when several folders are linked', async () => {
+    linked('app', 'other');
+
+    expect(await hint()).toBe('sonar link --monorepo my_key --path app');
   });
 });
