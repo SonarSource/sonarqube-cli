@@ -262,6 +262,29 @@ describe('sonar init', () => {
   );
 
   it(
+    'suggests --monorepo when .sonar-config.json already links another folder, so it is kept',
+    async () => {
+      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      withRemote(GITHUB_REMOTE);
+      harness.cwd.writeFile('packages/app/.keep', '');
+      harness.cwd.writeFile('packages/other/.keep', '');
+      const other = { projectKey: 'other_project', path: 'packages/other', region: 'eu' };
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({ project: { ...other, organization: ORG } }),
+      );
+
+      const result = await harness.run('init --path packages/app');
+
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout + result.stderr).toContain(
+        'sonar link --monorepo bound_project --path packages/app',
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
     'finds the bound project for a remote that embeds credentials, without printing them',
     async () => {
       await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));

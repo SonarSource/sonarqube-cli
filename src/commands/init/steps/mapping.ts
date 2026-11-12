@@ -22,22 +22,34 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
+import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import {
-  linkProjectDirectory,
+  linkItem,
   relativeProjectPath,
   resolveConfigDir,
   resolveProjectTarget,
+  withLink,
 } from '@/core/project-discovery/link-target.ts';
+import {
+  InvalidSharedProjectConfigError,
+  sharedProjectConfigFile,
+  throwOnInvalidConfig,
+} from '@/core/project-discovery/shared-project-config.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export function linkCommand(projectKey: string, path: string, runFrom: string | undefined): string {
-  const link =
-    path === '.'
-      ? `sonar link ${shellQuote(projectKey)}`
-      : `sonar link ${shellQuote(projectKey)} --path ${shellQuote(path)}`;
+/** With `keepOtherLinks`, `--monorepo` adds the link like init does instead of replacing the others. */
+export function linkCommand(
+  projectKey: string,
+  path: string,
+  runFrom: string | undefined,
+  keepOtherLinks = false,
+): string {
+  const monorepoOption = keepOtherLinks ? ' --monorepo' : '';
+  const pathOption = path === '.' ? '' : ` --path ${shellQuote(path)}`;
+  const link = `sonar link${monorepoOption} ${shellQuote(projectKey)}${pathOption}`;
   // Windows PowerShell 5.1, the default shell there, has no `&&`.
   const separator = process.platform === 'win32' ? '; ' : ' && ';
   return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
@@ -58,10 +70,15 @@ export class MappingWriteError extends CommandFailedError {
 export async function linkCommandFor(projectKey: string, projectRoot: string): Promise<string> {
   const { targetDir } = await resolveProjectTarget(projectRoot);
   const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
+  // Problems in the file are left for `sonar link` to report when it runs.
+  const items = await sharedProjectConfigFile.readItems(targetDir, () => undefined);
+  const folder = canonicalizePath(projectRoot);
+  const keepOtherLinks = items.length > 1 || (items.length === 1 && items[0].root !== folder);
   return linkCommand(
     projectKey,
     relativeProjectPath(targetDir, projectRoot),
     linkRoot === targetDir ? undefined : targetDir,
+    keepOtherLinks,
   );
 }
 
@@ -78,21 +95,23 @@ export async function writeMapping(
   const target = await resolveProjectTarget(projectRoot);
 
   try {
-    const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
-      monorepo: false,
-    });
-    if (replacedProjectKey !== undefined) {
+    // Only this directory's link is set, so onboarding one directory never drops the others.
+    const items = await sharedProjectConfigFile.readItems(target.targetDir, throwOnInvalidConfig);
+    const item = linkItem(auth, target.targetDir, target.projectRoot, projectKey);
+    const replaced = items.find((existing) => existing.root === item.root);
+    await sharedProjectConfigFile.writeItems(target.targetDir, withLink(items, item));
+    const replacedKey = replaced?.entry.projectKey;
+    if (replacedKey !== undefined) {
       console.warn(
-        `Replacing the mapping of this directory to '${replacedProjectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-      );
-    }
-    if (shadowed) {
-      console.warn(
-        `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
+        `Replacing the mapping of this directory to '${replacedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
   } catch (error) {
-    if (error instanceof CommandFailedError) {
+    // A config file that cannot be read is a failed save, so it gets the `sonar link` hint below.
+    if (
+      error instanceof CommandFailedError &&
+      !(error instanceof InvalidSharedProjectConfigError)
+    ) {
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
