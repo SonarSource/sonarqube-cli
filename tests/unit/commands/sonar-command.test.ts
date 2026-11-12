@@ -349,27 +349,30 @@ describe('SonarCommand', () => {
     it('groups alpha commands together after all stable root-help categories', () => {
       process.env[ALPHA_ENV_VAR] = '1';
       const root = sonarCommand('sonar');
-      root.command('stable-core').description('Stable core command').rootHelp({ category: 'core' });
+      root
+        .command('stable-core')
+        .description('Stable core command')
+        .rootHelp({ category: 'verify' });
       root
         .command('alpha-core')
         .description('Alpha core command')
-        .rootHelp({ category: 'core' })
+        .rootHelp({ category: 'verify' })
         .stage(Stage.Alpha);
       root
         .command('stable-management')
         .description('Stable management command')
-        .rootHelp({ category: 'cli-management' });
+        .rootHelp({ category: 'cli' });
       root
         .command('alpha-data')
         .description('Alpha data command')
-        .rootHelp({ category: 'data' })
+        .rootHelp({ category: 'verify' })
         .stage(Stage.Alpha);
 
       const help = getCustomRootHelp(root, root.createHelp());
       const stableCoreIndex = help.indexOf('Stable core command');
       const stableManagementIndex = help.indexOf('Stable management command');
-      const alphaCoreIndex = help.indexOf('Alpha core command [ALPHA]');
-      const alphaDataIndex = help.indexOf('Alpha data command [ALPHA]');
+      const alphaCoreIndex = help.indexOf('[ALPHA] Alpha core command');
+      const alphaDataIndex = help.indexOf('[ALPHA] Alpha data command');
 
       expect(stableCoreIndex).toBeGreaterThan(-1);
       expect(stableManagementIndex).toBeGreaterThan(stableCoreIndex);
@@ -384,14 +387,15 @@ describe('SonarCommand', () => {
       const system = root
         .command('system')
         .description('System commands')
-        .rootHelp({ category: 'cli-management' });
+        .rootHelp({ category: 'cli' });
       system.command('status').description('Stable status command');
       system.command('alpha-example').description('Nested alpha command').stage(Stage.Alpha);
       system.command('reset').description('Stable reset command');
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help).toContain('system <status|reset|alpha-example[ALPHA]>');
+      expect(help).toContain('system <command>');
+      expect(help).toContain('status, reset, alpha-example');
     });
 
     it('lists alpha subcommands in a separate group at the bottom of their parent help', () => {
@@ -438,6 +442,63 @@ describe('SonarCommand', () => {
   });
 
   // ─── requiresAuth ─────────────────────────────────────────────────────────
+
+  describe('root help layout', () => {
+    it('computes a shared command and option column after a rename', () => {
+      const root = sonarCommand('sonar');
+      const command = root.command('short').description('Command summary');
+      root.option('--switch', 'Option summary');
+      const render = () => getCustomRootHelp(root, root.createHelp());
+      const initial = render();
+      command.name('a-longer-command');
+      const renamed = render();
+      const column = (help: string, summary: string) =>
+        help
+          .split('\n')
+          .find((line) => line.includes(summary))
+          ?.indexOf(summary);
+      expect(column(initial, 'Command summary')).toBe(column(initial, 'Option summary'));
+      expect(column(renamed, 'Command summary')).toBe(column(renamed, 'Option summary'));
+      expect(column(renamed, 'Command summary')).toBeGreaterThan(
+        column(initial, 'Command summary')!,
+      );
+    });
+
+    it('derives required argument names, aliases, single-child paths and badges from metadata', () => {
+      const root = sonarCommand('sonar');
+      root
+        .command('upload')
+        .alias('up')
+        .argument('<projectKey>')
+        .argument('[optional]')
+        .description('Upload project');
+      const group = root.command('allowlist').description('Manage safe values');
+      const child = group.command('secrets');
+      for (const name of ['show', 'add', 'remove', 'clear']) child.command(name);
+      root
+        .command('preview')
+        .description('Preview analysis')
+        .stage(Stage.Beta())
+        .rootHelp({ requiresVortex: true });
+      const help = getCustomRootHelp(root, root.createHelp());
+      expect(help).toContain('upload|up <project-key>');
+      expect(help).not.toContain('[optional]');
+      expect(help).toContain('allowlist secrets <command>');
+      expect(help).toContain('      show, add, remove, clear');
+      expect(help).toContain('[BETA] Preview analysis [Vortex]');
+      expect(help).not.toContain('allowlist <secrets>');
+    });
+
+    it('sorts sections and rows by metadata instead of registration order', () => {
+      const root = sonarCommand('sonar');
+      root.command('guide').description('Guide summary').rootHelp({ category: 'guide', order: 0 });
+      root.command('later').description('Later summary').rootHelp({ category: 'setup', order: 2 });
+      root.command('first').description('First summary').rootHelp({ category: 'setup', order: 0 });
+      const help = getCustomRootHelp(root, root.createHelp());
+      expect(help.indexOf('First summary')).toBeLessThan(help.indexOf('Later summary'));
+      expect(help.indexOf('Later summary')).toBeLessThan(help.indexOf('Guide summary'));
+    });
+  });
 
   describe('requiresAuth', () => {
     it('is false by default', () => {
@@ -519,29 +580,29 @@ describe('SonarCommand', () => {
       const system = root
         .command('system')
         .description('System commands')
-        .rootHelp({ category: 'cli-management' });
+        .rootHelp({ category: 'cli' });
       system.command('status').description('Stable status command');
       system.command('preview').description('Preview command').stage(Stage.Beta());
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help).toContain('system <status|preview[BETA]>');
+      expect(help).toContain('system (status|preview)');
     });
 
     it('keeps Beta commands in category declaration order', () => {
       const root = sonarCommand('sonar');
-      root.command('first').description('First command').rootHelp({ category: 'data' });
+      root.command('first').description('First command').rootHelp({ category: 'verify' });
       root
         .command('preview')
         .description('Preview command')
-        .rootHelp({ category: 'data' })
+        .rootHelp({ category: 'verify' })
         .stage(Stage.Beta());
-      root.command('last').description('Last command').rootHelp({ category: 'data' });
+      root.command('last').description('Last command').rootHelp({ category: 'verify' });
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help.indexOf('First command')).toBeLessThan(help.indexOf('Preview command [BETA]'));
-      expect(help.indexOf('Preview command [BETA]')).toBeLessThan(help.indexOf('Last command'));
+      expect(help.indexOf('First command')).toBeLessThan(help.indexOf('[BETA] Preview command'));
+      expect(help.indexOf('[BETA] Preview command')).toBeLessThan(help.indexOf('Last command'));
     });
 
     it('warns once for the command in the current CLI version', async () => {
@@ -690,7 +751,7 @@ describe('SonarCommand', () => {
       const system = root
         .command('system')
         .description('System commands')
-        .rootHelp({ category: 'cli-management' });
+        .rootHelp({ category: 'cli' });
       system.command('status').description('Stable status command');
       system
         .command('legacy')
@@ -699,7 +760,7 @@ describe('SonarCommand', () => {
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help).toContain('system <status|legacy[DEPRECATED]>');
+      expect(help).toContain('system (status|legacy)');
     });
 
     it('warns on every invocation', async () => {
