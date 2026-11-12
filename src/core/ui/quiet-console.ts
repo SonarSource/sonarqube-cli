@@ -31,6 +31,7 @@ import type {
   SearchPromptOptions,
   SelectOption,
 } from './console.ts';
+import type { TreePromptOptions } from './tree/tree-source.ts';
 
 /**
  * {@link Console} that keeps output to a minimum: informational messages go to the log file
@@ -123,6 +124,14 @@ export class QuietConsole implements Console {
 
   searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
     return this.delegate.searchPrompt(message, options);
+  }
+
+  treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null> {
+    return this.delegate.treePrompt(message, options);
+  }
+
+  treeMultiSelectPrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T[] | null> {
+    return this.delegate.treeMultiSelectPrompt(message, options);
   }
 
   multiSelectPrompt<T>(
