@@ -54,54 +54,44 @@ export const ANALYSIS_MIGRATIONS: readonly AnalysisMigration[] = [
 ];
 
 function validateAnalysisSchema(db: Database): void {
-  const counterColumns = db
-    .prepare<{ name: string; type: string; notnull: number; pk: number }, []>(
-      'PRAGMA table_info(vortex_analysis_counters)',
-    )
-    .all();
-  const successfulAnalysisColumns = db
-    .prepare<{ name: string; type: string; notnull: number; pk: number }, []>(
-      'PRAGMA table_info(vortex_successful_analyses)',
-    )
-    .all();
-  const lockColumns = db
-    .prepare<{ name: string; type: string; notnull: number; pk: number }, []>(
-      'PRAGMA table_info(vortex_analysis_locks)',
-    )
-    .all();
-  const requiredCounter = [
-    { name: 'agent', type: 'TEXT', notnull: 1, pk: 1 },
-    { name: 'session_id', type: 'TEXT', notnull: 1, pk: 2 },
-    { name: 'analysis_count', type: 'INTEGER', notnull: 1, pk: 0 },
-    { name: 'updated_at', type: 'INTEGER', notnull: 1, pk: 0 },
-  ];
-  const requiredSuccessfulAnalysis = [
-    { name: 'fingerprint', type: 'TEXT', notnull: 1, pk: 1 },
-    { name: 'analyzed_at', type: 'INTEGER', notnull: 1, pk: 0 },
-  ];
-  const requiredLock = [
-    { name: 'fingerprint', type: 'TEXT', notnull: 1, pk: 1 },
-    { name: 'lock_token', type: 'TEXT', notnull: 1, pk: 0 },
-    { name: 'lock_expires_at', type: 'INTEGER', notnull: 1, pk: 0 },
-    { name: 'agent', type: 'TEXT', notnull: 1, pk: 0 },
-    { name: 'session_id', type: 'TEXT', notnull: 1, pk: 0 },
-  ];
-  const columnsMatch = (actual: typeof counterColumns, required: typeof counterColumns) =>
-    required.every((expected) =>
-      actual.some(
-        (column) =>
-          column.name === expected.name &&
-          column.type.toUpperCase() === expected.type &&
-          column.notnull === expected.notnull &&
-          column.pk === expected.pk,
-      ),
-    );
-  if (
-    !columnsMatch(counterColumns, requiredCounter) ||
-    !columnsMatch(successfulAnalysisColumns, requiredSuccessfulAnalysis) ||
-    !columnsMatch(lockColumns, requiredLock)
-  ) {
-    throw new CommandFailedError('Invalid Vortex analysis state schema.');
+  const requiredColumns = {
+    vortex_analysis_counters: [
+      { name: 'agent', type: 'TEXT', notnull: 1, pk: 1 },
+      { name: 'session_id', type: 'TEXT', notnull: 1, pk: 2 },
+      { name: 'analysis_count', type: 'INTEGER', notnull: 1, pk: 0 },
+      { name: 'updated_at', type: 'INTEGER', notnull: 1, pk: 0 },
+    ],
+    vortex_successful_analyses: [
+      { name: 'fingerprint', type: 'TEXT', notnull: 1, pk: 1 },
+      { name: 'analyzed_at', type: 'INTEGER', notnull: 1, pk: 0 },
+    ],
+    vortex_analysis_locks: [
+      { name: 'fingerprint', type: 'TEXT', notnull: 1, pk: 1 },
+      { name: 'lock_token', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'lock_expires_at', type: 'INTEGER', notnull: 1, pk: 0 },
+      { name: 'agent', type: 'TEXT', notnull: 1, pk: 0 },
+      { name: 'session_id', type: 'TEXT', notnull: 1, pk: 0 },
+    ],
+  };
+  for (const [table, required] of Object.entries(requiredColumns)) {
+    const actual = db
+      .prepare<{ name: string; type: string; notnull: number; pk: number }, []>(
+        `PRAGMA table_info(${table})`,
+      )
+      .all();
+    if (
+      !required.every((expected) =>
+        actual.some(
+          (column) =>
+            column.name === expected.name &&
+            column.type.toUpperCase() === expected.type &&
+            column.notnull === expected.notnull &&
+            column.pk === expected.pk,
+        ),
+      )
+    ) {
+      throw new CommandFailedError('Invalid Vortex analysis state schema.');
+    }
   }
 }
 
