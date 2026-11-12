@@ -48,11 +48,13 @@ import {
   TEXT_FORMATS,
 } from '../../_common/read-options.ts';
 import { formatCurrentText, formatSliceLimit } from './current-text.ts';
+import { getSummary } from './summary.ts';
 
 export async function getCurrent(
   options: CurrentReadOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  if (options.summary) return getSummary(options, ctx);
   const selection = dependencySelection(options);
   const depth = resolveDepth(options, 1);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());

@@ -128,6 +128,18 @@ export class SonarArchitectureApi implements ArchitectureApi {
     this.http = connection.httpClient;
   }
 
+  async getSummary(language?: Ecosystem): Promise<unknown> {
+    const { organizationId, branchId } = await this.resolveIds(true);
+    return this.http
+      .get<unknown>(this.path('project-summaries'), {
+        organizationId,
+        branchId,
+        ...(language ? { language } : {}),
+      })
+      .orThrow()
+      .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
+  }
+
   async getCurrent(language?: Ecosystem): Promise<CurrentGraph[]> {
     const { organizationId, branchId } = await this.ids();
     return currentPerEcosystem(language, async (ecosystem) => {
