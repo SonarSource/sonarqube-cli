@@ -19,6 +19,7 @@
  */
 
 import type { ColorFn, NoteOptions, StepStatus } from './colors.ts';
+import type { TreePromptOptions } from './tree/tree-source.ts';
 
 export type OutputChannel = 'stdout' | 'stderr';
 
@@ -222,6 +223,18 @@ export interface Console {
    * user types. Returns the chosen value, or `null` if cancelled (Esc or Ctrl+C).
    */
   searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null>;
+
+  /**
+   * Single select over a tree whose nodes expand (→) and collapse (←) in place, loading children
+   * lazily. Returns the chosen value, or `null` if cancelled (Esc or Ctrl+C).
+   */
+  treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null>;
+
+  /**
+   * {@link treePrompt} where Tab ticks any number of nodes at any depth and Enter confirms.
+   * Returns the ticked values (never empty), or `null` if cancelled (Esc or Ctrl+C).
+   */
+  treeMultiSelectPrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T[] | null>;
 
   /**
    * Multi-select prompt. Space toggles, Enter confirms. Returns the selected values
