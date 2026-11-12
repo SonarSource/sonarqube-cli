@@ -124,8 +124,9 @@ async function mapCreatedProject(
   projectRoot: string,
   auth: ResolvedAuth,
   console: Console,
+  monorepo: boolean,
 ): Promise<void> {
-  await writeMapping(auth, projectKey, projectRoot, console, 'created');
+  await writeMapping(auth, projectKey, projectRoot, console, 'created', monorepo);
   reportProjectCreated(console, projectKey);
 }
 
@@ -158,12 +159,14 @@ async function askProjectKey(
  * Creates a project that is not bound to the repository and maps it in `.sonar-config.json`.
  * When the generated key is already taken (an earlier run created it), nothing is mapped without
  * the user's say: the `link-existing` step offers the project, and declining it asks for another
- * key. An explicit `--project` that is taken is never adopted.
+ * key. An explicit `--project` that is taken is never adopted. With `monorepo`, the mapping is
+ * merged into the `projects` array of `.sonar-config.json`.
  */
 export async function runUnboundNew(
   path: UnboundNewPath,
   deps: DetectDeps,
   options: UnboundNewOptions,
+  monorepo = false,
 ): Promise<InitOutcome> {
   const { projectRoot, remote } = path;
   const { auth, http, console } = deps;
@@ -196,6 +199,6 @@ export async function runUnboundNew(
   }
   const chosenKey = projectKey === generated.projectKey ? undefined : projectKey;
   const createdKey = await createProject(newProject, chosenKey, deps);
-  await mapCreatedProject(createdKey, projectRoot, auth, console);
+  await mapCreatedProject(createdKey, projectRoot, auth, console, monorepo);
   return { kind: 'unbound', projectKey: createdKey };
 }

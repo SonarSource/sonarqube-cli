@@ -74,6 +74,18 @@ describe.skipIf(process.platform === 'win32')('linkCommand', () => {
     });
   });
 
+  it('adds --monorepo, which `sonar link` accepts, for a root of a monorepo', () => {
+    const hint = linkCommand('my_key', 'services/api', undefined, true);
+
+    expect(hint).toBe('sonar link my_key --path services/api --monorepo');
+    const link = createCommandTree({ console: new FakeConsole() }).commands.find(
+      (command) => command.name() === 'link',
+    );
+    const { unknown } = link!.parseOptions(posixWords(hint).slice(2));
+    expect(unknown).toEqual([]);
+    expect(link!.opts<{ monorepo: boolean }>().monorepo).toBe(true);
+  });
+
   it('prefixes the directory to run from', () => {
     expect(linkCommand('my_key', '.', '/work/repo')).toBe('cd /work/repo && sonar link my_key');
   });

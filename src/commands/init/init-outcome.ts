@@ -54,6 +54,24 @@ export type InitPath =
    */
   | { path: 'unbound-new'; projectRoot: string; remote?: string };
 
+/**
+ * What happened to one mapped root of a monorepo. `path` is relative to the repository root. The
+ * kinds that carry a `projectKey` mirror `InitOutcome`: the root ended up mapped to that project.
+ */
+export type MonorepoRootResult =
+  | {
+      path: string;
+      /**
+       * `configured`: nothing to do; `linked`: an existing project was mapped; `bound`: a project
+       * bound to the repository was created and mapped; `unbound`: one without binding was.
+       */
+      kind: 'configured' | 'linked' | 'bound' | 'unbound';
+      projectKey: string;
+    }
+  /** The user left the root out, or declined the confirmation for it. */
+  | { path: string; kind: 'skipped' }
+  | { path: string; kind: 'failed'; reason: string };
+
 /** What `sonar init` ended with once the selected path ran. */
 export type InitOutcome =
   /** `.sonar-config.json` already linked this directory to the active connection. */
@@ -67,7 +85,11 @@ export type InitOutcome =
   /** The user declined the creation: nothing was created. */
   | { kind: 'declined' }
   /** The account has no organization and the user declined to create one: nothing was created. */
-  | { kind: 'no-organization' };
+  | { kind: 'no-organization' }
+  /** The user is onboarding a monorepo: each mapped root ran its own path, in file order. */
+  | { kind: 'monorepo'; roots: readonly MonorepoRootResult[] }
+  /** The user is onboarding a monorepo, but `.sonar-config.json` maps no root. */
+  | { kind: 'no-monorepo-roots' };
 
 export type LinkExistingPath = Extract<InitPath, { path: 'link-existing' }>;
 export type BoundNewPath = Extract<InitPath, { path: 'bound-new' }>;

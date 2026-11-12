@@ -63,7 +63,10 @@ export interface SharedProjectConfigRepository {
   load(dir: string): Promise<SharedProjectConfigMapping[]>;
   /** Resolves to whether a `projects` array already exists, which shadows the written `project`. */
   set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean>;
-  /** Adds (or updates, by canonical directory) an entry in the `projects` array, leaving `project` untouched. */
+  /**
+   * Adds (or updates, by canonical directory) an entry in the `projects` array. A valid singular
+   * `project` is folded into a newly created array so it is not left behind as a stale shadowed entry.
+   */
   addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
 }
 
@@ -187,7 +190,9 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       ...entry,
       path: relative(canonicalDir, projectRoot).split(sep).join('/') || '.',
     };
-    const entries: unknown[] = existing.projects ?? [];
+    const { project: singular, ...rest } = existing;
+    const migrateSingular = existing.projects === undefined && isValidEntry(singular);
+    const entries: unknown[] = existing.projects ?? (migrateSingular ? [singular] : []);
     const index = entries.findIndex(
       (value) => isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot,
     );
@@ -195,7 +200,10 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       index === -1
         ? [...entries, normalizedEntry]
         : entries.map((value, position) => (position === index ? normalizedEntry : value));
-    const file: SharedProjectConfigFileDto = { ...existing, projects };
+    const file: SharedProjectConfigFileDto = {
+      ...(migrateSingular ? rest : existing),
+      projects,
+    };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
 
