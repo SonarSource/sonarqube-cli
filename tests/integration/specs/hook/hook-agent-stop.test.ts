@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { readdirSync } from 'node:fs';
+
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -352,13 +354,19 @@ describe('agent stop hook', () => {
     expect(analyses()).toHaveLength(0);
     expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
   }, 15000);
-  it('allows stopping when storage is corrupt', async () => {
+  it('quarantines corrupt storage and runs analysis with fresh state', async () => {
     harness.cwd.writeFile('src/new.ts', BAD);
     harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', 'corrupt database');
     const result = await invoke();
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('');
-    expect(analyses()).toHaveLength(0);
+    expect(JSON.parse(result.stdout).decision).toBe('block');
+    expect(analyses()).toHaveLength(1);
+    expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+    expect(
+      readdirSync(harness.cliHome.file('db/hooks').path).some((name) =>
+        name.startsWith('stop-hook-vortex-analysis.db.corrupted-'),
+      ),
+    ).toBe(true);
   }, 15000);
 
   it('allows stopping without a connection', async () => {
