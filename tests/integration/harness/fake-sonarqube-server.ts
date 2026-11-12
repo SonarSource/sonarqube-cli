@@ -66,6 +66,7 @@ export interface SqaaIssueConfig {
 export interface SqaaResponseConfig {
   issues?: SqaaIssueConfig[];
   errors?: Array<{ code: string; message: string }>;
+  beforeSqaaResponse?: () => Promise<void>;
 }
 
 export interface ComponentTreeFileConfig {
@@ -2478,6 +2479,7 @@ export class FakeSonarQubeServerBuilder {
             }
           }
 
+          await sqaaResponse.beforeSqaaResponse?.();
           let issueFileIndex = 0;
           const issues = (sqaaResponse.issues ?? []).map((i) => ({
             rule: i.rule,
