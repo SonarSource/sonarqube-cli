@@ -26,10 +26,11 @@ import type { Console } from '@/core/ui/console.ts';
 import { CloudBackend } from './cloud-backend.ts';
 import { type DopRepository, ImportApiClient } from './import-api.ts';
 import type { ImportBackend, ImportPlan } from './import-backend.ts';
+import { ImportOnboardingTelemetry } from './import-onboarding-telemetry.ts';
 import { ImportProgress } from './import-progress.ts';
 import { type MonorepoProject, resolveMonorepoImport } from './monorepo-projects.ts';
 import type { RepositoryCollection, SkippedRepo } from './repository-collection';
-import type { ResolvedRepo } from './resolve-options';
+import { ImportCancelledError, type ResolvedRepo } from './resolve-options';
 import { ServerImportApiClient } from './server/server-import-api.ts';
 import { ServerBackend } from './server-backend.ts';
 import type { ImportOptions, ImportPlanOptions } from './types';
@@ -318,6 +319,7 @@ async function runMonorepoImport(
 function createBackend(
   options: ImportOptions,
   ctx: CommandAuthenticatedInvocationContext,
+  onboarding: ImportOnboardingTelemetry | undefined,
 ): ImportBackend {
   const { httpClient } = ctx.connection;
   if (!httpClient.isCloud) {
@@ -332,7 +334,13 @@ function createBackend(
       'Remove --dop-setting, or connect to a SonarQube Server with "sonar auth login".',
     );
   }
-  return new CloudBackend(new ImportApiClient(httpClient), ctx.auth.orgKey, ctx.auth.serverUrl);
+  return new CloudBackend(
+    new ImportApiClient(httpClient),
+    ctx.auth.orgKey,
+    ctx.auth.serverUrl,
+    undefined,
+    onboarding,
+  );
 }
 
 export async function importHandler(
@@ -347,7 +355,21 @@ export async function importHandler(
     : options;
   console.intro('Import repositories', 'SonarQube');
 
-  const plan = await createBackend(effective, ctx).plan(effective, console);
+  // The Tracking Plan's onboarding funnel only covers SonarQube Cloud.
+  const onboarding = ctx.connection.httpClient.isCloud
+    ? new ImportOnboardingTelemetry(ctx)
+    : undefined;
+  onboarding?.started();
+
+  let plan: ImportPlan;
+  try {
+    plan = await createBackend(effective, ctx, onboarding).plan(effective, console);
+  } catch (err) {
+    if (err instanceof ImportCancelledError) {
+      onboarding?.exited();
+    }
+    throw err;
+  }
   if (monorepo) {
     await runMonorepoImport(plan, monorepo.projects, console);
     return;
@@ -373,6 +395,7 @@ export async function importHandler(
       );
     }
     reportOutcome(succeeded, failed, skipped.length, outroLink, console);
+    onboarding?.completed();
     return;
   }
 
@@ -397,4 +420,5 @@ export async function importHandler(
 
   const { succeeded, failed } = progress.finish();
   reportOutcome(succeeded, failed, skipped.length, outroLink, console);
+  onboarding?.completed();
 }
