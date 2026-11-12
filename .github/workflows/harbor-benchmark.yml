@@ -178,6 +178,10 @@ jobs:
           curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
           echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
 
+      - name: Build the trajectory page
+        if: ${{ !cancelled() && hashFiles('harbor-jobs/**/result.json') != '' }}
+        run: bun benchmarks/harbor/report/trajectory-report.ts harbor-jobs/*/ > report.html
+
       - name: Scan the report for secrets and redact them
         if: ${{ !cancelled() }}
         shell: bash
@@ -190,6 +194,23 @@ jobs:
           SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
         run: |
           python3 -I benchmarks/harbor/ci/scan-secrets.py report.txt
+          if [ -f report.html ]; then
+            python3 -I benchmarks/harbor/ci/scan-secrets.py report.html
+          fi
+
+      - name: Upload the trajectory page
+        id: trajectories
+        if: ${{ !cancelled() && hashFiles('report.html') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: report.html
+          archive: false
+
+      - name: Link the trajectory page
+        if: ${{ !cancelled() && steps.trajectories.outputs.artifact-url != '' }}
+        env:
+          URL: ${{ steps.trajectories.outputs.artifact-url }}
+        run: echo "[Read the trajectories](${URL})" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the report
         if: ${{ !cancelled() && hashFiles('report.txt') != '' }}
