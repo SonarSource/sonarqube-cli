@@ -26,9 +26,11 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import {
   InvalidLinkPathError,
-  linkProjectDirectory,
+  type LinkMode,
+  linkProjectDirectories,
   type LinkTarget,
   resolveLinkTarget,
+  type SavedLinks,
 } from '@/core/project-discovery/link-target.ts';
 
 import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
@@ -119,10 +121,16 @@ function reportLinked(
   console: CommandAuthenticatedInvocationContext['console'],
   { targetDir, projectRoot, inGitRepository }: LinkTarget,
   projectKey: string,
-  monorepo: boolean,
+  { linkedCount, removedProjectKeys }: SavedLinks,
 ): void {
+  if (removedProjectKeys.length > 0) {
+    console.warn(
+      `Removed the other mappings in ${SHARED_PROJECT_CONFIG_FILE_NAME} (${removedProjectKeys.join(', ')}). Use 'sonar link --monorepo' to add a link without replacing them.`,
+    );
+  }
+  const mapping = linkedCount > 1 ? ' (monorepo mapping)' : '';
   const summaryLines = [
-    `Linked ${projectRoot} to project ${projectKey}${monorepo ? ' (monorepo mapping)' : ''}`,
+    `Linked ${projectRoot} to project ${projectKey}${mapping}`,
     `Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
   ];
   if (inGitRepository) {
@@ -146,12 +154,13 @@ async function runLink(
     return;
   }
 
-  const { shadowed } = await linkProjectDirectory(ctx.auth, projectKey, target, { monorepo });
-  if (shadowed) {
-    ctx.console.warn(
-      `${join(target.targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
-    );
-    return;
-  }
-  reportLinked(ctx.console, target, projectKey, monorepo);
+  // --monorepo joins what is already linked; a plain link replaces it.
+  const mode: LinkMode = monorepo ? 'merge' : 'replace';
+  const saved = await linkProjectDirectories(
+    ctx.auth,
+    target.targetDir,
+    [{ projectKey, projectRoot: target.projectRoot }],
+    mode,
+  );
+  reportLinked(ctx.console, target, projectKey, saved);
 }
