@@ -231,18 +231,20 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
-Supports one project per repository. Linking again replaces the existing link.
-Without a project key, in an interactive terminal, 'sonar link' suggests a project it can verify
-on the server, or lets you search for one. Scripts and CI must pass the key.
+'sonar link <projectKey>' replaces the existing links with this one.
+Without a project key or --path, in an interactive terminal, 'sonar link' offers the folders to
+link: the repository root or folders at any depth (Tab ticks one; typing searches folder names).
+Each ticked folder then gets a project, either one verified on the server or one found by search,
+and is added to the existing links. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
-For a monorepo, use --monorepo to link several directories:
+For a monorepo, use --monorepo to add directories to the existing links:
   sonar link --monorepo api_project --path services/api
   sonar link --monorepo web_project --path services/web
 
 Paths are relative to the repository root (the current directory outside Git).
-Mappings are saved in the projects array in .sonar-config.json.
-Linking the same directory again updates its mapping and preserves other mappings.
+A single link is saved as project in .sonar-config.json, several as the projects array.
+Linking the same directory again updates its mapping.
 `;
 
 export interface CreateCommandTreeOptions {
@@ -896,7 +898,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '[projectKey]',
       'SonarQube project key (omit to pick one: a verified suggestion, or a search)',
     )
-    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .option(
+      '--path <path>',
+      'Path to the project root, relative to the repository root (default: the root, or picked interactively without a key)',
+    )
     .option(
       '--monorepo',
       'Add or update this directory among the existing links instead of replacing them',
