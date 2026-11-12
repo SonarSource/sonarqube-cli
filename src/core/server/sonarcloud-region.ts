@@ -22,24 +22,58 @@
 
 import {
   SONARCLOUD_API_URL,
-  SONARCLOUD_HOSTNAME,
+  SONARCLOUD_AU_API_URL,
+  SONARCLOUD_AU_URL,
   SONARCLOUD_URL,
   SONARCLOUD_US_API_URL,
-  SONARCLOUD_US_HOSTNAME,
   SONARCLOUD_US_URL,
 } from '../config-constants.ts';
 import type { CloudRegion } from '../state/state.ts';
 
-const CANONICAL_SONARCLOUD_EU_HOST = 'sonarcloud.io';
-const CANONICAL_SONARCLOUD_US_HOST = 'sonarqube.us';
+interface RegionEndpoints {
+  /** Web host (serves `/api/...`). */
+  webUrl: string;
+  /** API host (serves everything else). */
+  apiUrl: string;
+  /** Hostnames that identify this region: the configured production host plus the canonical one. */
+  hostnames: string[];
+  stagingWebUrl: string;
+  stagingApiUrl: string;
+}
 
-export const SONARCLOUD_STAGING_URL = 'https://sc-staging.io';
-export const SONARCLOUD_STAGING_API_URL = 'https://api.sc-staging.io';
-export const SONARCLOUD_US_STAGING_URL = 'https://us-sc-staging.io';
-export const SONARCLOUD_US_STAGING_API_URL = 'https://api.us-sc-staging.io';
+// Keyed by region so a region cannot exist without its endpoints.
+const REGIONS: Record<CloudRegion, RegionEndpoints> = {
+  eu: {
+    webUrl: SONARCLOUD_URL,
+    apiUrl: SONARCLOUD_API_URL,
+    hostnames: ['sonarcloud.io', new URL(SONARCLOUD_URL).hostname],
+    stagingWebUrl: 'https://sc-staging.io',
+    stagingApiUrl: 'https://api.sc-staging.io',
+  },
+  us: {
+    webUrl: SONARCLOUD_US_URL,
+    apiUrl: SONARCLOUD_US_API_URL,
+    hostnames: ['sonarqube.us', new URL(SONARCLOUD_US_URL).hostname],
+    stagingWebUrl: 'https://us-sc-staging.io',
+    stagingApiUrl: 'https://api.us-sc-staging.io',
+  },
+  au: {
+    webUrl: SONARCLOUD_AU_URL,
+    apiUrl: SONARCLOUD_AU_API_URL,
+    hostnames: ['sonarqube.au', new URL(SONARCLOUD_AU_URL).hostname],
+    stagingWebUrl: 'https://au-sc-staging.io',
+    stagingApiUrl: 'https://api.au-sc-staging.io',
+  },
+};
 
-const STAGING_HOSTNAME = new URL(SONARCLOUD_STAGING_URL).hostname;
-const US_STAGING_HOSTNAME = new URL(SONARCLOUD_US_STAGING_URL).hostname;
+const REGION_ENTRIES = Object.entries(REGIONS) as [CloudRegion, RegionEndpoints][];
+
+export const SONARCLOUD_STAGING_URL = REGIONS.eu.stagingWebUrl;
+export const SONARCLOUD_STAGING_API_URL = REGIONS.eu.stagingApiUrl;
+export const SONARCLOUD_US_STAGING_URL = REGIONS.us.stagingWebUrl;
+export const SONARCLOUD_US_STAGING_API_URL = REGIONS.us.stagingApiUrl;
+export const SONARCLOUD_AU_STAGING_URL = REGIONS.au.stagingWebUrl;
+export const SONARCLOUD_AU_STAGING_API_URL = REGIONS.au.stagingApiUrl;
 
 function stagingHost(
   serverUrl: string,
@@ -47,15 +81,10 @@ function stagingHost(
   try {
     const { hostname, protocol } = new URL(serverUrl);
     if (protocol !== 'https:') return undefined;
-    if (hostname === STAGING_HOSTNAME) {
-      return { region: 'eu', webUrl: SONARCLOUD_STAGING_URL, apiUrl: SONARCLOUD_STAGING_API_URL };
-    }
-    if (hostname === US_STAGING_HOSTNAME) {
-      return {
-        region: 'us',
-        webUrl: SONARCLOUD_US_STAGING_URL,
-        apiUrl: SONARCLOUD_US_STAGING_API_URL,
-      };
+    for (const [region, endpoints] of REGION_ENTRIES) {
+      if (hostname === new URL(endpoints.stagingWebUrl).hostname) {
+        return { region, webUrl: endpoints.stagingWebUrl, apiUrl: endpoints.stagingApiUrl };
+      }
     }
     return undefined;
   } catch {
@@ -68,20 +97,14 @@ export function cloudRegionFromUrl(serverUrl: string): CloudRegion | undefined {
   if (staging) return staging.region;
   try {
     const { hostname } = new URL(serverUrl);
-    if (hostname === CANONICAL_SONARCLOUD_US_HOST || hostname === SONARCLOUD_US_HOSTNAME) {
-      return 'us';
-    }
-    if (hostname === CANONICAL_SONARCLOUD_EU_HOST || hostname === SONARCLOUD_HOSTNAME) {
-      return 'eu';
-    }
-    return undefined;
+    return REGION_ENTRIES.find(([, endpoints]) => endpoints.hostnames.includes(hostname))?.[0];
   } catch {
     return undefined;
   }
 }
 
 export function cloudRegionToUrl(region: CloudRegion): string {
-  return region === 'us' ? SONARCLOUD_US_URL : SONARCLOUD_URL;
+  return REGIONS[region].webUrl;
 }
 
 export function isSonarQubeCloud(serverUrl: string): boolean {
@@ -100,13 +123,8 @@ export function resolveFromEndpoint(serverUrl: string, endpoint: string): string
   if (staging) return endpoint.startsWith('/api') ? staging.webUrl : staging.apiUrl;
   const region = cloudRegionFromUrl(serverUrl);
   if (region !== undefined) {
-    const isUS = region === 'us';
-
-    if (endpoint.startsWith('/api')) {
-      return isUS ? SONARCLOUD_US_URL : SONARCLOUD_URL;
-    }
-
-    return isUS ? SONARCLOUD_US_API_URL : SONARCLOUD_API_URL;
+    const { webUrl, apiUrl } = REGIONS[region];
+    return endpoint.startsWith('/api') ? webUrl : apiUrl;
   }
   return normalized;
 }

@@ -48,6 +48,7 @@ import {
   resolveTelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';
 
+import { mockFetch } from '../../helpers/mock-fetch.ts';
 import { mockIdentityGetSafe } from './identity-api-mock.ts';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -420,6 +421,25 @@ describe('resolveCommandTelemetryIdentity()', () => {
 // ─── resolveTelemetryIdentity ──────────────────────────────────────────────────
 
 describe('resolveTelemetryIdentity()', () => {
+  it('sends identity requests for an AU connection to the AU hosts', async () => {
+    const fetchSpy = mockFetch({ id: 'au-id', uuidV4: 'au-uuid', organizations: [] });
+    const auth = new ResolvedAuth({
+      token: 'au-identity-token',
+      serverUrl: 'https://sonarqube.au',
+      orgKey: 'my-org',
+      connectionType: 'cloud',
+      source: 'state',
+    });
+
+    await resolveTelemetryIdentity(auth);
+
+    const urls = (fetchSpy.mock.calls as [string | URL][]).map((call) => call[0].toString());
+    const hosts = new Set(urls.map((url) => new URL(url).hostname));
+    fetchSpy.mockRestore();
+    expect(hosts.has('api.sonarqube.au')).toBe(true);
+    expect([...hosts].every((host) => host.endsWith('sonarqube.au'))).toBe(true);
+  });
+
   it('resolves the SQS installation id from system status for on-premise auth', async () => {
     const getSafeSpy = mockIdentityGetSafe({
       status: [{ ok: true, id: 'sqs-abc' }],
