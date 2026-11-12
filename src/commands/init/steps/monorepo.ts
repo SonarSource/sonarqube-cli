@@ -22,10 +22,9 @@ import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.t
 import { remediationHintFor } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
-import { relativeProjectPath, resolveConfigDir } from '@/core/project-discovery/link-target.ts';
+import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
-import { sharedProjectConfigFile } from '@/core/project-discovery/shared-project-config.ts';
 import { UnexpectedApiError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
@@ -239,19 +238,25 @@ async function onboardRoot(
 }
 
 /**
- * Plain `sonar init` meets a `.sonar-config.json` that already maps several roots: offers to onboard
- * them as a monorepo. A single link keeps the usual path; `--monorepo` continues an unfinished one.
+ * Plain `sonar init` meets a `.sonar-config.json` that maps several usable roots: offers to onboard
+ * them as a monorepo. The file is the one `runMonorepo` would use. A single link keeps the usual
+ * path, as it may be a project in a subfolder; `--monorepo` continues an unfinished monorepo.
  */
-export async function offerMonorepo(projectRoot: string, console: Console): Promise<boolean> {
-  const { targetDir } = await resolveConfigDir(projectRoot);
-  // Problems in the file are reported where it is read for good, as discovery does.
-  const items = await sharedProjectConfigFile.readItems(targetDir, () => undefined);
-  if (items.length < 2) {
+export async function offerMonorepo(projectRoot: string, deps: DetectDeps): Promise<boolean> {
+  const { auth, console } = deps;
+  const discovered = await discoverProjects(projectRoot, {
+    auth,
+    console,
+    silent: true,
+    useKnownMappings: false,
+    useGitRemoteBinding: false,
+  });
+  if (!discovered.fromSharedConfig || discovered.projects.length < 2) {
     return false;
   }
   return requireAnswer(
     await console.confirmPrompt(
-      `${SHARED_PROJECT_CONFIG_FILE_NAME} already maps several project roots. Onboard this as a monorepo instead?`,
+      `${SHARED_PROJECT_CONFIG_FILE_NAME} already maps project roots. Onboard it as a monorepo instead?`,
       true,
     ),
   );
