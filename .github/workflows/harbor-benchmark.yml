@@ -3,14 +3,6 @@ name: Harbor Benchmark
 on:
   workflow_dispatch:
     inputs:
-      os:
-        description: Operating system
-        type: choice
-        default: linux
-        options:
-          - linux
-          - macos
-          - both
       agent:
         description: Agent and model
         type: choice
@@ -65,7 +57,6 @@ jobs:
       - name: Plan the jobs
         id: plan
         env:
-          INPUT_OS: ${{ inputs.os }}
           INPUT_AGENT: ${{ inputs.agent }}
           INPUT_TASK: ${{ inputs.task }}
           INPUT_ATTEMPTS: ${{ inputs.attempts }}
@@ -73,7 +64,7 @@ jobs:
 
   benchmark:
     name: Benchmark - ${{ matrix.os }} - ${{ matrix.task }} - ${{ matrix.agent.name }} - ${{ matrix.agent.model }} - ${{ matrix.attempt }}
-    runs-on: ${{ matrix.os == 'macos' && 'macos-latest-xlarge' || 'sonar-m' }}
+    runs-on: sonar-m
     needs: plan
     strategy:
       fail-fast: false
@@ -82,10 +73,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Setup Cloudflare WARP
-        if: ${{ matrix.os == 'macos' }}
-        uses: SonarSource/gh-action_setup-cloudflare-warp@fe31a2b2f31595cffdef290985700732cb3469d6 # v2.1.0
 
       - name: Vault Secrets
         id: secrets
