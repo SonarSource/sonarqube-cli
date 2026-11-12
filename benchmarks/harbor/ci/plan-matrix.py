@@ -10,12 +10,7 @@ TASKS_DIR = Path(__file__).resolve().parents[1] / "tasks"
 MAX_ATTEMPTS = 10
 MAX_JOBS = 256
 
-HARNESS_INPUTS = {"harness_claude_code": "claude-code", "harness_codex": "codex"}
-MODEL_INPUTS = {
-    "model_claude_sonnet_5_5": "claude-sonnet-5-5",
-    "model_claude_haiku_5_5": "claude-haiku-5-5",
-    "model_gpt_6_1_terra": "gpt-6.1-terra",
-}
+ALL_AGENTS = "all agents and models"
 AGENTS = [
     {"name": "claude-code", "provider": "anthropic", "model": "claude-sonnet-5-5"},
     {"name": "claude-code", "provider": "anthropic", "model": "claude-haiku-5-5"},
@@ -36,21 +31,13 @@ def task_input(task: str) -> str:
     return "task_" + task.replace("--", "_").replace("-", "_")
 
 
-def selected(inputs: dict, keys: dict[str, str]) -> list[str]:
-    return [value for key, value in keys.items() if inputs[key] is True]
-
-
-def select_agents(inputs: dict) -> list[dict]:
-    harnesses = selected(inputs, HARNESS_INPUTS)
-    models = selected(inputs, MODEL_INPUTS)
-    if not harnesses:
-        fail("Select at least one harness")
-    if not models:
-        fail("Select at least one model")
-    for model in models:
-        if not any(agent["model"] == model and agent["name"] in harnesses for agent in AGENTS):
-            fail(f"Model {model} has no selected harness that can run it, select its harness too")
-    return [agent for agent in AGENTS if agent["name"] in harnesses and agent["model"] in models]
+def select_agents(choice: str) -> list[dict]:
+    if choice == ALL_AGENTS:
+        return AGENTS
+    selected = [agent for agent in AGENTS if label(agent) == choice]
+    if not selected:
+        fail(f"Unknown agent '{choice}', expected one of: {', '.join([*map(label, AGENTS), ALL_AGENTS])}")
+    return selected
 
 
 def select_tasks(inputs: dict) -> list[str]:
@@ -73,7 +60,7 @@ def select_attempts(choice: str) -> list[int]:
 def plan(inputs: dict) -> list[dict]:
     jobs = [
         {"os": "linux", "task": task, "agent": agent, "attempt": attempt}
-        for agent in select_agents(inputs)
+        for agent in select_agents(inputs["agent"])
         for task in select_tasks(inputs)
         for attempt in select_attempts(inputs["attempts"])
     ]
