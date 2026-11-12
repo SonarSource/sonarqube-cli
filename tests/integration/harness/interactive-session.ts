@@ -29,7 +29,10 @@ const ENTER = '\r';
 const CTRL_C = '\x03';
 const ARROW_UP = '\x1b[A';
 const ARROW_DOWN = '\x1b[B';
+const ARROW_RIGHT = '\x1b[C';
+const ARROW_LEFT = '\x1b[D';
 const SPACE = ' ';
+const TAB = '\t';
 
 export type PromptText = string | RegExp;
 
@@ -262,8 +265,20 @@ export class InteractiveSession {
     this.write(ARROW_DOWN);
   }
 
+  keyRight(): void {
+    this.write(ARROW_RIGHT);
+  }
+
+  keyLeft(): void {
+    this.write(ARROW_LEFT);
+  }
+
   keySpace(): void {
     this.write(SPACE);
+  }
+
+  keyTab(): void {
+    this.write(TAB);
   }
 
   keyCtrlC(): void {
