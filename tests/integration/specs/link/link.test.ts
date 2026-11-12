@@ -221,7 +221,7 @@ describe('sonar link', () => {
   });
 
   describe('monorepo', () => {
-    it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
+    it('appends directories to projects, updates repeats, and folds the singular project into the array', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile('services/api/.keep', '');
       harness.cwd.writeFile('services/web/.keep', '');
@@ -234,8 +234,8 @@ describe('sonar link', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('(monorepo mapping)');
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
-        project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
         projects: [
+          { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
           { serverUrl: SERVER_URL, projectKey: 'api2', path: 'services/api' },
           { serverUrl: SERVER_URL, projectKey: 'web', path: 'services/web' },
         ],

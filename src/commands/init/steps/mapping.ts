@@ -33,11 +33,20 @@ import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export function linkCommand(projectKey: string, path: string, runFrom: string | undefined): string {
-  const link =
-    path === '.'
-      ? `sonar link ${shellQuote(projectKey)}`
-      : `sonar link ${shellQuote(projectKey)} --path ${shellQuote(path)}`;
+export function linkCommand(
+  projectKey: string,
+  path: string,
+  runFrom: string | undefined,
+  monorepo = false,
+): string {
+  const args = [shellQuote(projectKey)];
+  if (path !== '.') {
+    args.push('--path', shellQuote(path));
+  }
+  if (monorepo) {
+    args.push('--monorepo');
+  }
+  const link = `sonar link ${args.join(' ')}`;
   // Windows PowerShell 5.1, the default shell there, has no `&&`.
   const separator = process.platform === 'win32' ? '; ' : ' && ';
   return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
@@ -55,33 +64,43 @@ export class MappingWriteError extends CommandFailedError {
  * The `sonar link` command that maps `projectKey` the way `sonar init` would, prefixed with a `cd`
  * when it has to run from another repository than the current directory's.
  */
-export async function linkCommandFor(projectKey: string, projectRoot: string): Promise<string> {
+export async function linkCommandFor(
+  projectKey: string,
+  projectRoot: string,
+  monorepo = false,
+): Promise<string> {
   const { targetDir } = await resolveProjectTarget(projectRoot);
   const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
   return linkCommand(
     projectKey,
     relativeProjectPath(targetDir, projectRoot),
     linkRoot === targetDir ? undefined : targetDir,
+    monorepo,
   );
 }
 
 const PROJECT_ORIGIN_LEAD = { created: 'Created', found: 'Found' } as const;
 
-/** The project already exists on the server by now, so a failure here has to say how to finish. */
+/**
+ * The project already exists on the server by now, so a failure here has to say how to finish.
+ * With `monorepo`, the mapping is merged into the `projects` array instead of the single `project`.
+ */
 export async function writeMapping(
   auth: ResolvedAuth,
   projectKey: string,
   projectRoot: string,
   console: Console,
   origin: keyof typeof PROJECT_ORIGIN_LEAD,
+  monorepo = false,
 ): Promise<void> {
   const target = await resolveProjectTarget(projectRoot);
 
   try {
     const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
-      monorepo: false,
+      monorepo,
     });
-    if (replacedProjectKey !== undefined) {
+    // Re-mapping the same key only refreshes the recorded connection, so there is nothing to warn about.
+    if (replacedProjectKey !== undefined && replacedProjectKey !== projectKey) {
       console.warn(
         `Replacing the mapping of this directory to '${replacedProjectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
@@ -98,7 +117,7 @@ export async function writeMapping(
     const reason = error instanceof Error ? error.message : String(error);
     throw new MappingWriteError(
       `${PROJECT_ORIGIN_LEAD[origin]} project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
-      `Fix the file, then map the project by running:\n  ${await linkCommandFor(projectKey, projectRoot)}`,
+      `Fix the file, then map the project by running:\n  ${await linkCommandFor(projectKey, projectRoot, monorepo)}`,
     );
   }
 }

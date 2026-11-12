@@ -882,6 +882,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
+      '--monorepo',
+      'Onboard every project root mapped in .sonar-config.json instead of a single project (interactive only)',
+    )
+    .option(
       '--project <key>',
       'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
     )

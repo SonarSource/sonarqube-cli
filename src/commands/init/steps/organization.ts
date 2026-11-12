@@ -61,7 +61,7 @@ const INTEGRATE_FALLBACK =
 
 /**
  * Thrown from the no-membership hook when the user declines to create an organization. It is not
- * a failure: `init` turns it into an outcome that suggests `sonar integrate` and exits 0. Every
+ * a failure: `init` turns it into an outcome that ends the run and exits 0. Every
  * other way the creation can stop is a `CommandFailedError`, so scripts see a non-zero exit.
  */
 export class OrganizationCreationDeclined extends Error {

@@ -20,7 +20,8 @@
 
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
-import { okAsync } from '@/core/result.ts';
+import { errAsync, okAsync } from '@/core/result.ts';
+import { AccessDeniedError, ServiceUnavailableError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { ComponentShowResponse } from '@/core/server/types.ts';
@@ -174,5 +175,61 @@ describe('ProjectsClient.findProjectKeysByIds', () => {
 
     expect(await client().findProjectKeysByIds('org', []).orThrow()).toEqual([]);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProjectsClient.lookupProject', () => {
+  it('tells a missing component from a project of another organization', async () => {
+    const missing = await clientReturning(null).lookupProject('k', 'mine');
+    const other = await clientReturning(show({ organization: 'other' })).lookupProject('k', 'mine');
+
+    expect(missing.isOk() && missing.value).toEqual({ kind: 'missing' });
+    expect(other.isOk() && other.value).toEqual({ kind: 'other-org' });
+  });
+
+  it('reads a component that is not a project as missing', async () => {
+    const result = await clientReturning(show({ qualifier: 'FIL' })).lookupProject('k');
+
+    expect(result.isOk() && result.value).toEqual({ kind: 'missing' });
+  });
+
+  it('finds a project of the requested organization', async () => {
+    const result = await clientReturning(show({ organization: 'mine' })).lookupProject('k', 'mine');
+
+    expect(result.isOk() && result.value).toEqual({
+      kind: 'in-org',
+      project: { key: 'k', name: 'Name' },
+    });
+  });
+});
+
+describe('ProjectsClient 403 handling', () => {
+  function clientFailing(error: Error): ProjectsClient {
+    const http = { getOrNullIf404: () => errAsync(error) } as unknown as SonarHttpClient;
+    return new ProjectsClient(http);
+  }
+
+  it('reads a 403 as a project of another organization when an organization is given', async () => {
+    const result = await clientFailing(new AccessDeniedError(403)).lookupProject('k', 'mine');
+
+    expect(result.isOk() && result.value).toEqual({ kind: 'other-org' });
+  });
+
+  it('lets a 403 propagate when no organization is given', async () => {
+    const result = await clientFailing(new AccessDeniedError(403)).lookupProject('k');
+
+    expect(result.isErr()).toBe(true);
+  });
+
+  it('lets any other failure propagate, so an outage never reads as another organization', async () => {
+    const result = await clientFailing(new ServiceUnavailableError()).lookupProject('k', 'mine');
+
+    expect(result.isErr()).toBe(true);
+  });
+
+  it('has findProject treat a 403 as no project of the organization', async () => {
+    const result = await clientFailing(new AccessDeniedError(403)).findProject('k', 'mine');
+
+    expect(result.isOk() && result.value).toBeNull();
   });
 });
