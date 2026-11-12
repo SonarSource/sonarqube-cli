@@ -20,6 +20,7 @@
 
 // Integration tests for `sonar link`
 
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -205,23 +206,32 @@ describe('sonar link', () => {
     });
   });
 
-  it('warns when an existing projects array makes the link ineffective', async () => {
+  it('replaces an existing projects array without --monorepo, warning which mappings it removed', async () => {
     harness.withAuth(SERVER_URL, 'test-token');
+    harness.cwd.writeFile('services/api/.keep', '');
     harness.cwd.writeFile(
       '.sonar-config.json',
-      JSON.stringify({ projects: [{ serverUrl: SERVER_URL, projectKey: 'a', path: '.' }] }),
+      JSON.stringify({
+        projects: [
+          { serverUrl: SERVER_URL, projectKey: 'a', path: '.' },
+          { serverUrl: SERVER_URL, projectKey: 'b', path: 'services/api' },
+        ],
+      }),
     );
 
     const result = await harness.run('link my_project --path .');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain("'sonar link --monorepo'");
-    expect(result.stdout).not.toContain('Linked ');
-    expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
+    expect(result.stdout + result.stderr).toContain('Removed the other mappings');
+    expect(result.stdout + result.stderr).toContain('(b)');
+    expect(result.stdout).toContain('Linked ');
+    expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+      project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
+    });
   });
 
   describe('monorepo', () => {
-    it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
+    it('adds directories to the existing link, updates repeats in place, and writes a projects array', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile('services/api/.keep', '');
       harness.cwd.writeFile('services/web/.keep', '');
@@ -234,8 +244,8 @@ describe('sonar link', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('(monorepo mapping)');
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
-        project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
         projects: [
+          { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
           { serverUrl: SERVER_URL, projectKey: 'api2', path: 'services/api' },
           { serverUrl: SERVER_URL, projectKey: 'web', path: 'services/web' },
         ],
@@ -376,5 +386,402 @@ describe('sonar link', () => {
       },
       TIMEOUT,
     );
+
+    describe('in a repository with folders', () => {
+      beforeEach(() => {
+        harness.cwd.writeFile('.gitignore', 'build/\n');
+        harness.cwd.writeFile('build/output.txt', '');
+        harness.cwd.writeFile('.hidden/notes.txt', '');
+        harness.cwd.writeFile('services/api/package.json', '{}');
+        harness.cwd.writeFile('web/package.json', '{}');
+      });
+
+      it(
+        'lists the visible top-level folders, then links the one ticked folder as a single project',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          await session.waitText('web');
+          const folders = session.output();
+          expect(folders).toContain('. (repository root)');
+          expect(folders).toContain('services');
+          expect(folders).not.toContain('build');
+          expect(folders).not.toContain('.hidden');
+
+          session.keyDown();
+          session.keyDown();
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain(
+            `Linked ${join(harness.cwd.path, 'web')} to project alpha`,
+          );
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: 'web' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'expands a folder to link one nested inside it',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          await session.waitText('web');
+          session.keyDown();
+          session.keyRight();
+          await session.waitText('api');
+          session.keyDown();
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: 'services/api' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'finds an empty folder, which git does not track, by name and links it',
+        async () => {
+          const serverUrl = await signInToServer();
+          mkdirSync(join(harness.cwd.path, 'services', 'api', 'empty-test'));
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          session.write('test');
+          await session.waitText('services/api/empty-test');
+          await session.waitText('1 match');
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: 'services/api/empty-test' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'finds a nested folder by name without expanding the tree, leaving ignored ones out',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          session.write('build');
+          await session.waitText("No folders match 'build'.");
+          session.write('\x7f\x7f\x7f\x7f\x7fapi');
+          await session.waitText('1 match');
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: 'services/api' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'ticks search results with Tab, keeping them across searches, and types spaces',
+        async () => {
+          const serverUrl = await signInToServer();
+          harness.cwd.writeFile('web/My App/package.json', '{}');
+
+          const session = harness.runInteractive('link --monorepo');
+          await session.waitText('Choose the project folders');
+          session.write('api');
+          await session.waitText('1 match');
+          await session.waitText('Tab select');
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.write('\x7f\x7f\x7fmy app');
+          await session.waitText('my app█');
+          await session.waitText('web/My App');
+          await session.waitText('1 match');
+          session.keyTab();
+          await session.waitText('2 selected');
+          session.keyEnter();
+
+          await session.waitText('Choosing the project for services/api');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          await session.waitText('Choosing the project for web/My App');
+          await session.waitText('2 projects');
+          session.keyDown();
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            projects: [
+              { serverUrl, projectKey: 'alpha', path: 'services/api' },
+              { serverUrl, projectKey: 'beta', path: 'web/My App' },
+            ],
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'skips the folder picker when --path is given',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link --path web');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).not.toContain('Choose the project folder');
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: 'web' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'links each folder ticked at any depth in a monorepo to its own project',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link --monorepo');
+          await session.waitText('Choose the project folders');
+          await session.waitText('web');
+          session.keyEnter();
+          await session.waitText('Select at least one with Tab.');
+          session.keyDown();
+          session.keyRight();
+          await session.waitText('api');
+          session.keyDown();
+          session.keyTab();
+          session.keyDown();
+          session.keyTab();
+          await session.waitText('2 selected');
+          session.keyEnter();
+
+          await session.waitText('Choosing the project for services/api');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          await session.waitText('Choosing the project for web');
+          await session.waitText('2 projects');
+          session.keyDown();
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            projects: [
+              { serverUrl, projectKey: 'alpha', path: 'services/api' },
+              { serverUrl, projectKey: 'beta', path: 'web' },
+            ],
+          });
+          expect(result.stdout).toContain(
+            'Linked 2 folders (monorepo mappings):\n  services/api → alpha\n  web → beta',
+          );
+          expect(result.stdout.split('Config saved to')).toHaveLength(2);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'saves none of the ticked folders when a later project prompt is cancelled',
+        async () => {
+          await signInToServer();
+
+          const session = harness.runInteractive('link --monorepo');
+          await session.waitText('Choose the project folders');
+          await session.waitText('web');
+          session.keyDown();
+          session.keyTab();
+          session.keyDown();
+          session.keyTab();
+          await session.waitText('2 selected');
+          session.keyEnter();
+          await session.waitText('Choosing the project for services');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          await session.waitText('Choosing the project for web');
+          await session.waitText('2 projects');
+          session.keyCtrlC();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).not.toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'fails without writing when the user cancels the monorepo folder picker',
+        async () => {
+          await signInToServer();
+
+          const session = harness.runInteractive('link --monorepo');
+          await session.waitText('Choose the project folders');
+          session.keyCtrlC();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).not.toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'marks the folders that are linked, or hold linked folders deeper inside',
+        async () => {
+          const serverUrl = await signInToServer();
+          harness.cwd.writeFile(
+            '.sonar-config.json',
+            JSON.stringify({
+              projects: [
+                { serverUrl, projectKey: 'web_project', path: 'web' },
+                { serverUrl, projectKey: 'api_project', path: 'services/api' },
+              ],
+            }),
+          );
+
+          const session = harness.runInteractive('link');
+          await session.waitText('2 projects deeper');
+          await session.waitText('1 project deeper');
+          await session.waitText('linked to web_project');
+          session.keyDown();
+          session.keyRight();
+          await session.waitText('linked to api_project');
+          session.keyCtrlC();
+          const result = await session.waitFinish();
+
+          // A linked folder does not count itself among the projects deeper inside it.
+          expect(result.stdout).not.toContain('linked to web_project,');
+          expect(result.stdout).not.toContain('linked to api_project,');
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'links the repository root when it is the folder ticked',
+        async () => {
+          const serverUrl = await signInToServer();
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          await session.waitText('web');
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: '.' },
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'adds a single ticked folder to the existing link, turning the file into a projects array',
+        async () => {
+          const serverUrl = await signInToServer();
+          const web = { serverUrl, projectKey: 'beta', path: 'web' };
+          harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ project: web }));
+
+          const session = harness.runInteractive('link');
+          await session.waitText('linked to beta');
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('(monorepo mapping)');
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            projects: [web, { serverUrl, projectKey: 'alpha', path: '.' }],
+          });
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'asks before relinking a ticked folder that is already linked, and keeps it on no',
+        async () => {
+          const serverUrl = await signInToServer();
+          const config = { project: { serverUrl, projectKey: 'beta', path: 'web' } };
+          harness.cwd.writeFile('.sonar-config.json', JSON.stringify(config));
+
+          const session = harness.runInteractive('link');
+          await session.waitText('linked to beta');
+          session.keyDown();
+          session.keyDown();
+          session.keyTab();
+          await session.waitText('1 selected');
+          session.keyEnter();
+          await session.waitText('is already linked to project beta');
+          await session.decline('Link it to another project instead?');
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual(config);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'fails without writing when the user cancels the folder picker',
+        async () => {
+          await signInToServer();
+
+          const session = harness.runInteractive('link');
+          await session.waitText('Choose the project folders');
+          session.keyCtrlC();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).not.toBe(0);
+          expect(result.stdout + result.stderr).not.toContain('Choose a project');
+          expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+        },
+        TIMEOUT,
+      );
+    });
   });
 });

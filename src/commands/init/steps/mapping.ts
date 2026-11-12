@@ -24,11 +24,17 @@ import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { shellQuote } from '@/core/host/shell-quote.ts';
 import logger from '@/core/observability/logger.ts';
 import {
-  linkProjectDirectory,
+  linkItem,
   relativeProjectPath,
   resolveConfigDir,
   resolveProjectTarget,
+  withLink,
 } from '@/core/project-discovery/link-target.ts';
+import {
+  InvalidSharedProjectConfigError,
+  sharedProjectConfigFile,
+  throwOnInvalidConfig,
+} from '@/core/project-discovery/shared-project-config.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { QualityGatesClient } from '@/core/server/quality-gates.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -78,21 +84,23 @@ export async function writeMapping(
   const target = await resolveProjectTarget(projectRoot);
 
   try {
-    const { replacedProjectKey, shadowed } = await linkProjectDirectory(auth, projectKey, target, {
-      monorepo: false,
-    });
-    if (replacedProjectKey !== undefined) {
+    // Only this directory's link is set, so onboarding one directory never drops the others.
+    const items = await sharedProjectConfigFile.readItems(target.targetDir, throwOnInvalidConfig);
+    const item = linkItem(auth, target.targetDir, target.projectRoot, projectKey);
+    const replaced = items.find((existing) => existing.root === item.root);
+    await sharedProjectConfigFile.writeItems(target.targetDir, withLink(items, item));
+    const replacedKey = replaced?.entry.projectKey;
+    if (replacedKey !== undefined) {
       console.warn(
-        `Replacing the mapping of this directory to '${replacedProjectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-      );
-    }
-    if (shadowed) {
-      console.warn(
-        `${SHARED_PROJECT_CONFIG_FILE_NAME} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored.`,
+        `Replacing the mapping of this directory to '${replacedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
     }
   } catch (error) {
-    if (error instanceof CommandFailedError) {
+    // A config file that cannot be read is a failed save, so it gets the `sonar link` hint below.
+    if (
+      error instanceof CommandFailedError &&
+      !(error instanceof InvalidSharedProjectConfigError)
+    ) {
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
