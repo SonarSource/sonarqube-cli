@@ -26,10 +26,16 @@ import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invo
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import {
   InvalidLinkPathError,
-  linkProjectDirectory,
+  linkItem,
   type LinkTarget,
   resolveLinkTarget,
+  withLink,
 } from '@/core/project-discovery/link-target.ts';
+import {
+  type ConfigItem,
+  sharedProjectConfigFile,
+  throwOnInvalidConfig,
+} from '@/core/project-discovery/shared-project-config.ts';
 
 import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
 
@@ -119,10 +125,19 @@ function reportLinked(
   console: CommandAuthenticatedInvocationContext['console'],
   { targetDir, projectRoot, inGitRepository }: LinkTarget,
   projectKey: string,
-  monorepo: boolean,
+  before: readonly ConfigItem[],
+  after: readonly ConfigItem[],
 ): void {
+  const removed = before.filter((item) => !after.some((kept) => kept.root === item.root));
+  if (removed.length > 0) {
+    const removedNames = removed.map((item) => item.entry.projectKey);
+    console.warn(
+      `Removed the other mappings in ${SHARED_PROJECT_CONFIG_FILE_NAME} (${removedNames.join(', ')}). Use 'sonar link --monorepo' to add a link without replacing them.`,
+    );
+  }
+  const mapping = after.length > 1 ? ' (monorepo mapping)' : '';
   const summaryLines = [
-    `Linked ${projectRoot} to project ${projectKey}${monorepo ? ' (monorepo mapping)' : ''}`,
+    `Linked ${projectRoot} to project ${projectKey}${mapping}`,
     `Config saved to ${join(targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)}`,
   ];
   if (inGitRepository) {
@@ -140,18 +155,17 @@ async function runLink(
 ): Promise<void> {
   assertLinkable(givenKey, options, ctx);
   const target = await resolveTarget(options.path, ctx);
+  // Read once: the prompts show these links, and the write applies the user's choice to them.
+  const items = await sharedProjectConfigFile.readItems(target.targetDir, throwOnInvalidConfig);
 
-  const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, ctx));
+  const projectKey = givenKey ?? (await chooseProjectKey(target.projectRoot, monorepo, items, ctx));
   if (projectKey === null) {
     return;
   }
 
-  const { shadowed } = await linkProjectDirectory(ctx.auth, projectKey, target, { monorepo });
-  if (shadowed) {
-    ctx.console.warn(
-      `${join(target.targetDir, SHARED_PROJECT_CONFIG_FILE_NAME)} contains a projects array, which takes precedence over the project entry just written, so the link was saved but is ignored. Use 'sonar link --monorepo' to update the projects array.`,
-    );
-    return;
-  }
-  reportLinked(ctx.console, target, projectKey, monorepo);
+  // --monorepo joins what is already linked; a plain link replaces it.
+  const item = linkItem(ctx.auth, target.targetDir, target.projectRoot, projectKey);
+  const updated = withLink(monorepo ? items : [], item);
+  await sharedProjectConfigFile.writeItems(target.targetDir, updated);
+  reportLinked(ctx.console, target, projectKey, items, updated);
 }
