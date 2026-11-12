@@ -37,7 +37,6 @@ const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
 const INTEGRATE_PROMPT = 'Set up your coding agents';
 const SCAN_PROMPT = 'Run the first analysis with sonar-scanner now';
-const MONOREPO_PROMPT = 'Are you onboarding a monorepo?';
 
 describe('sonar init', () => {
   let harness: TestHarness;
@@ -495,7 +494,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -533,7 +531,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -557,7 +554,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -626,7 +622,6 @@ describe('sonar init', () => {
         initGitRepo(harness.cwd.path);
 
         const session = harness.runInteractive('init', { browserToken: TOKEN });
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -661,7 +656,6 @@ describe('sonar init', () => {
       );
 
       const session = harness.runInteractive('init', { browserToken: TOKEN });
-      await session.accept(MONOREPO_PROMPT);
       await session.decline(INTEGRATE_PROMPT);
       const result = await session.waitFinish();
 
@@ -678,7 +672,6 @@ describe('sonar init', () => {
       initGitRepo(harness.cwd.path);
       writeSonarConfig(serverUrl);
       const session = harness.runInteractive('init');
-      await session.accept(MONOREPO_PROMPT);
       return session;
     }
 
@@ -853,7 +846,6 @@ describe('sonar init', () => {
           const { projectKey, server } = await startWithExistingProject();
 
           const session = harness.runInteractive('init --name Foo --visibility public');
-          await session.accept(MONOREPO_PROMPT);
           await session.accept('Link this directory');
           await session.decline(INTEGRATE_PROMPT);
           const result = await session.waitFinish();
@@ -876,7 +868,6 @@ describe('sonar init', () => {
           const { projectKey, server } = await startWithExistingProject();
 
           const session = harness.runInteractive('init');
-          await session.accept(MONOREPO_PROMPT);
           await declineLinking(session);
           await session.waitText('Project key');
           session.write(projectKey);
@@ -904,7 +895,6 @@ describe('sonar init', () => {
           const { projectKey, server } = await startWithExistingProject();
 
           const session = harness.runInteractive('init');
-          await session.accept(MONOREPO_PROMPT);
           await declineLinking(session);
           await session.waitText(`default: ${projectKey}-2`);
           session.keyEnter();
@@ -974,7 +964,6 @@ describe('sonar init', () => {
         initGitRepo(harness.cwd.path);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.waitText('Project name');
         session.keyEnter();
         await session.waitText('Project visibility');
@@ -1000,7 +989,6 @@ describe('sonar init', () => {
         harness.state().withSqaaFeature(harness.cwd.path, 'integrated_project');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.waitText('Project name');
         session.keyEnter();
         await session.waitText('Project visibility');
@@ -1129,7 +1117,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1162,7 +1149,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1183,7 +1169,6 @@ describe('sonar init', () => {
         withRemote('git@ssh.dev.azure.com:v3/example/project/repository');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1201,7 +1186,6 @@ describe('sonar init', () => {
         withRemote('https://example.visualstudio.com/project/_git/repository');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1219,7 +1203,6 @@ describe('sonar init', () => {
         initGitRepo(harness.cwd.path);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1244,7 +1227,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1271,7 +1253,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.accept('Authorize it in the browser');
         await session.decline(INTEGRATE_PROMPT);
@@ -1297,7 +1278,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         const result = await session.waitFinish();
 
@@ -1315,7 +1295,6 @@ describe('sonar init', () => {
         withRemote('https://github.com/example');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1335,7 +1314,6 @@ describe('sonar init', () => {
         writeSonarConfig('https://sq.example.com');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1358,7 +1336,6 @@ describe('sonar init', () => {
         harness.cwd.writeFile('.sonar-config.json', '{ not json');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         const result = await session.waitFinish();
 
@@ -1378,7 +1355,6 @@ describe('sonar init', () => {
         withRemote(AZURE_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1398,7 +1374,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Bind this repository');
         await session.decline('Authorize it in the browser');
         await createProject(session);
@@ -1419,7 +1394,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline('Bind this repository');
         await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
@@ -1442,7 +1416,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Link this directory');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
@@ -1471,7 +1444,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline('Link this directory');
         await session.accept('another existing project');
         await session.waitText('Choose a project');
@@ -1501,7 +1473,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline('Link this directory');
         await session.decline('another existing project');
         await createProject(session);
@@ -1525,7 +1496,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline('Link this directory');
         await session.accept('another existing project');
         await session.waitText('Choose a project');
@@ -1553,7 +1523,6 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline('Link this directory');
         await session.accept('another existing project');
         await session.waitText('Choose a project');
@@ -1580,7 +1549,6 @@ describe('sonar init', () => {
         harness.cwd.writeFile('.sonar-config.json', '{ not json');
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.accept('Link this directory');
         const result = await session.waitFinish();
 
@@ -1662,11 +1630,8 @@ describe('sonar init', () => {
       return JSON.parse(harness.cwd.file('.sonar-config.json').asText()) as WrittenConfig;
     }
 
-    async function startMonorepoInit() {
-      const session = harness.runInteractive('init');
-      await session.waitText(MONOREPO_PROMPT);
-      session.write('y');
-      return session;
+    function startMonorepoInit() {
+      return harness.runInteractive('init --monorepo');
     }
 
     /** Toggles the first `count` options of the root selection, then confirms it. */
@@ -1680,12 +1645,23 @@ describe('sonar init', () => {
     }
 
     it(
+      'rejects --monorepo without a terminal',
+      async () => {
+        const result = await harness.run('init --monorepo --non-interactive');
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr + result.stdout).toContain('--monorepo needs to prompt');
+      },
+      TIMEOUT,
+    );
+
+    it(
       'explains that nothing is mapped and points to sonar link --monorepo, changing no file',
       async () => {
         await signInToCloud(() => {});
         initGitRepo(harness.cwd.path);
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1706,7 +1682,7 @@ describe('sonar init', () => {
           { path: 'web', key: 'web-key' },
         ]);
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await selectFirstRoots(session, 2);
         await session.accept('Replace the connection recorded');
         await confirmNewProject(session);
@@ -1735,7 +1711,7 @@ describe('sonar init', () => {
         writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
         const before = harness.cwd.file('.sonar-config.json').asText();
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1755,7 +1731,7 @@ describe('sonar init', () => {
         writeMonorepoConfig(serverUrl, [{ path: 'web', key: 'web-key' }]);
         const before = harness.cwd.file('.sonar-config.json').asText();
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await session.waitText(SELECT_PROMPT);
         session.keyEnter();
         await session.decline(INTEGRATE_PROMPT);
@@ -1763,7 +1739,7 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Skipped (1):');
-        expect(result.stdout).toContain("To resume, run 'sonar init' again");
+        expect(result.stdout).toContain("To resume, run 'sonar init --monorepo' again");
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
       },
       TIMEOUT,
@@ -1780,7 +1756,7 @@ describe('sonar init', () => {
           { path: 'web', key: 'web-key' },
         ]);
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await selectFirstRoots(session, 2);
         await confirmNewProject(session);
         await session.decline(INTEGRATE_PROMPT);
@@ -1808,7 +1784,7 @@ describe('sonar init', () => {
           { path: 'docs', key: 'docs-key' },
         ]);
 
-        const session = await startMonorepoInit();
+        const session = startMonorepoInit();
         await selectFirstRoots(session, 3);
         await session.accept('Replace the connection recorded');
         await confirmNewProject(session);
@@ -1819,20 +1795,19 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Configured (1):');
         expect(result.stdout).toContain('Failed (2):');
-        expect(result.stdout).toContain("To resume, run 'sonar init' again");
+        expect(result.stdout).toContain("To resume, run 'sonar init --monorepo' again");
         expect(readConfig().projects[0].serverUrl).not.toBe(STALE_SERVER);
       },
       TIMEOUT,
     );
 
     it(
-      'asks the monorepo question before reporting an enclosing mapping as complete',
+      'reports an enclosing mapping as complete without --monorepo',
       async () => {
         const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
         writeMonorepoConfig(serverUrl, [{ path: '.', key: 'api-key' }]);
 
         const session = harness.runInteractive('init');
-        await session.accept(MONOREPO_PROMPT);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
