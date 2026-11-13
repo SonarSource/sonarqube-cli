@@ -163,6 +163,31 @@ describe('prompt matching', () => {
 });
 
 describe('InteractiveSession', () => {
+  it('matches stderr prompts, consumes matches and synchronizes input on stderr', async () => {
+    const fake = createFakeProcess();
+    const session = InteractiveSession.fromProcess(fake.handle, {
+      timeoutMs: 2000,
+      promptChannel: 'stderr',
+    });
+    try {
+      fake.pushStdout('Proceed?');
+      fake.pushStderr('\x1b[1mProceed? then Next\x1b[0m');
+      await session.waitText(/Proceed\?/);
+      await session.waitText('Next');
+      session.write('y');
+      const next = session.waitText('Proceed?');
+      fake.pushStderr('✓  Proceed? Yes\n?  Proceed?');
+      await next;
+      expect(fake.writes).toEqual(['y']);
+      fake.close();
+      const result = await session.waitFinish();
+      expect(result.stdout).toBe('Proceed?');
+      expect(result.stderr).toContain('Next');
+    } finally {
+      session.kill();
+    }
+  });
+
   it('waits for new text, writes keys, and waitFinish is idempotent', async () => {
     const fake = createFakeProcess();
     const session = InteractiveSession.fromProcess(fake.handle, { timeoutMs: 2000 });

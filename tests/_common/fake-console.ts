@@ -150,9 +150,13 @@ export class FakeConsole implements Console {
     return Promise.resolve(value);
   }
 
-  confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
+  confirmPrompt(
+    message: string,
+    defaultValue: boolean,
+    channel: OutputChannel = 'stdout',
+  ): Promise<boolean | null> {
     const value = this.dequeue<boolean>(defaultValue);
-    this.record('confirmPrompt', message, value);
+    this.record('confirmPrompt', message, value, channel);
     return Promise.resolve(value);
   }
 
