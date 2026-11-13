@@ -26,6 +26,7 @@ const LEAK_MARKER_FILE = 'secrets-leak.json';
 
 interface Row {
   label: string;
+  trialName: string | null;
   task: string;
   agent: string | null;
   model: string | null;
@@ -63,6 +64,7 @@ function lastSegment(value: string): string {
 function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
   return {
     label,
+    trialName: null,
     task,
     agent,
     model,
@@ -99,6 +101,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   const metrics = trajectory?.final_metrics;
   return {
     label,
+    trialName,
     task: lastSegment(trial.task_name),
     agent: trial.agent_info?.name ?? null,
     model: trial.agent_info?.model_info?.name ?? null,
@@ -147,6 +150,13 @@ function present(value: number | null, format: (n: number) => string): string | 
   return value === null ? null : format(value);
 }
 
+function trajectoryLink(row: Row): string | null {
+  const pageUrl = process.env.TRAJECTORY_PAGE_URL;
+  if (!pageUrl || row.trialName === null) return null;
+  const trialKey = encodeURIComponent(row.label + '/' + row.trialName);
+  return `[trajectory](${pageUrl}#${trialKey})`;
+}
+
 function renderTrialLine(row: Row): string {
   const tokens =
     row.promptTokens === null || row.completionTokens === null
@@ -158,6 +168,7 @@ function renderTrialLine(row: Row): string {
     present(row.steps, (n) => `${n} steps`),
     tokens,
     present(row.costUsd, (n) => `$${n.toFixed(4)}`),
+    trajectoryLink(row),
   ]
     .filter((part) => part !== null)
     .join(' · ');
