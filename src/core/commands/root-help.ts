@@ -58,13 +58,33 @@ function terminalWidth(): number {
     : DEFAULT_WIDTH;
 }
 
+function splitWord(word: string, width: number): string[] {
+  const chunks: string[] = [];
+  let chunk = '';
+  for (const character of word) {
+    if (chunk && Bun.stringWidth(chunk) + Bun.stringWidth(character) > width) {
+      chunks.push(chunk);
+      chunk = character;
+    } else {
+      chunk += character;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
 function wrap(text: string, width: number): string[] {
   // Bracketed badges stay atomic, including multi-word availability badges.
   const words = text.match(/\[Cloud only\]|\S+/g) ?? [];
   const lines: string[] = [];
   let line = '';
   for (const word of words) {
-    if (line && Bun.stringWidth(line) + 1 + Bun.stringWidth(word) > width) {
+    if (Bun.stringWidth(word) > width) {
+      if (line) lines.push(line);
+      const chunks = splitWord(word, width);
+      lines.push(...chunks.slice(0, -1));
+      line = chunks.at(-1) ?? '';
+    } else if (line && Bun.stringWidth(line) + 1 + Bun.stringWidth(word) > width) {
       lines.push(line);
       line = word;
     } else {
@@ -73,6 +93,10 @@ function wrap(text: string, width: number): string[] {
   }
   if (line) lines.push(line);
   return lines;
+}
+
+function padToWidth(text: string, width: number): string {
+  return text + ' '.repeat(Math.max(0, width - Bun.stringWidth(text)));
 }
 
 function colorBadges(text: string): string {
@@ -95,11 +119,13 @@ function renderTargets(targets: string[], width: number): string[] {
 
 function renderEntry(entry: HelpMenuEntry, labelWidth: number, width: number): string[] {
   const descriptionColumn = ROW_INDENT + labelWidth + COLUMN_GAP;
-  const descriptionWidth = Math.max(MIN_DESCRIPTION_WIDTH, width - descriptionColumn);
-  const lines = wrap(entry.summary, descriptionWidth);
+  const descriptionWidth = Math.max(1, width - descriptionColumn);
+  const labelLines = wrap(entry.label, labelWidth);
+  const summaryLines = wrap(entry.summary, descriptionWidth);
   return [
-    `    ${softBlue(entry.label.padEnd(labelWidth))}  ${colorBadges(lines[0] ?? '')}`,
-    ...lines.slice(1).map((line) => `${' '.repeat(descriptionColumn)}${colorBadges(line)}`),
+    `    ${softBlue(padToWidth(labelLines[0] ?? '', labelWidth))}  ${colorBadges(summaryLines[0] ?? '')}`,
+    ...labelLines.slice(1).map((line) => `    ${softBlue(line)}`),
+    ...summaryLines.slice(1).map((line) => `${' '.repeat(descriptionColumn)}${colorBadges(line)}`),
     ...(entry.targets ? renderTargets(entry.targets, width) : []),
   ];
 }
@@ -219,10 +245,13 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
       .flatMap((command) => getCommandEntries(command, helper)),
   });
   const options = getRootOptionEntries(rootCommand, helper);
-  const labelWidth = Math.max(
-    0,
-    ...[...sections.flatMap((section) => section.entries), ...options].map((entry) =>
-      Bun.stringWidth(entry.label),
+  const labelWidth = Math.min(
+    width - ROW_INDENT - COLUMN_GAP - MIN_DESCRIPTION_WIDTH,
+    Math.max(
+      1,
+      ...[...sections.flatMap((section) => section.entries), ...options].map((entry) =>
+        Bun.stringWidth(entry.label),
+      ),
     ),
   );
   const prose = (text: string) => wrap(text, width - COLUMN_GAP).map((line) => `  ${line}`);
@@ -231,6 +260,14 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
       (line) =>
         `    ${line.replace(/sonar auth login|sonar integrate/g, (command) => softBlue(command))}`,
     );
+  const footerLink = (label: string, url: string, gap: number) => {
+    const prefix = `  ${label}${' '.repeat(gap)}`;
+    const lines = wrap(url, width - Bun.stringWidth(prefix));
+    return [
+      `${prefix}${softBlue(lines[0] ?? '')}`,
+      ...lines.slice(1).map((line) => `${' '.repeat(Bun.stringWidth(prefix))}${softBlue(line)}`),
+    ];
+  };
   return [
     getBanner(VERSION),
     '',
@@ -253,8 +290,8 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
     '',
     ...prose('Run sonar <command> --help for options and examples.'),
     '',
-    `  Docs      ${softBlue(ROOT_DOCUMENTATION_URL)}`,
-    `  Feedback  ${softBlue(ROOT_FEEDBACK_URL)}`,
+    ...footerLink('Docs', ROOT_DOCUMENTATION_URL, 6),
+    ...footerLink('Feedback', ROOT_FEEDBACK_URL, 2),
     '',
   ].join('\n');
 }
