@@ -37,7 +37,7 @@ const ROW_INDENT = 4;
 const TARGET_INDENT = 6;
 const COLUMN_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 24;
-const ROOT_DOCUMENTATION_URL = 'https://sonarsource.com/sonarqube/cli';
+const ROOT_DOCUMENTATION_URL = 'https://www.sonarsource.com/products/sonarqube/cli/';
 const ROOT_FEEDBACK_URL = 'https://forms.gle/jrGic3awT5t5vf7V9';
 
 interface HelpMenuEntry {
