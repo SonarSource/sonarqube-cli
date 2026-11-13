@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkSentence, taskTitle } from './tasks.ts';
+import { TASKS_PAGE_URL, checkSentence } from './tasks.ts';
 
 interface Span {
   started_at: string | null;
@@ -75,6 +75,14 @@ function checksOf(rewards: Record<string, number> | null): { text: string; ok: b
   });
 }
 
+const CODEX_NON_ZERO_EXIT = /Process exited with code [1-9]/;
+
+function failed(result: ObservationResult): boolean {
+  return (
+    result.extra?.tool_result_is_error === true || CODEX_NON_ZERO_EXIT.test(result.content ?? '')
+  );
+}
+
 function stepOf(step: Step) {
   return {
     id: step.step_id,
@@ -89,7 +97,7 @@ function stepOf(step: Step) {
     results: (step.observation?.results ?? []).map((result) => ({
       callId: result.source_call_id ?? null,
       content: result.content ?? '',
-      isError: result.extra?.tool_result_is_error === true,
+      isError: failed(result),
     })),
     promptTokens: step.metrics?.prompt_tokens ?? null,
     completionTokens: step.metrics?.completion_tokens ?? null,
@@ -109,7 +117,7 @@ function trialOf(group: string, trialDir: string) {
     group,
     name: result.trial_name,
     task,
-    taskTitle: taskTitle(task),
+    taskPage: `${TASKS_PAGE_URL}#${task}`,
     agent: agent?.name ?? null,
     agentVersion: agent?.version ?? null,
     model: agent?.model_info?.name ?? null,
