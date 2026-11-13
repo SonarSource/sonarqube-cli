@@ -20,74 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import type { ProjectFinding } from '@/commands/architecture/_common/findings.ts';
-
+import { findings } from '../../../fixtures/architecture/findings';
 import { TestHarness } from '../../harness';
 import type { FakeArchitecture } from '../../harness/fake-architecture';
-
-const findings: ProjectFinding[] = [
-  {
-    type: 'structuralDeviation',
-    category: 'deviation',
-    language: 'java',
-    details: { reason: 'misplacedComponent', nodeKey: 'app:web', misplacedComponentCount: 3 },
-    files: ['Web.java'],
-  },
-  {
-    type: 'structuralDeviation',
-    category: 'deviation',
-    language: 'java',
-    details: { reason: 'unimplementedComponent', nodeKey: 'app:missing' },
-    files: [],
-  },
-  {
-    type: 'relationshipDeviation',
-    category: 'deviation',
-    language: 'java',
-    details: {
-      reason: 'disallowedDependency',
-      fromNodeKey: 'app:web',
-      toNodeKey: 'app:db',
-      dependencyCount: 4,
-    },
-    files: ['Web.java'],
-  },
-  {
-    type: 'relationshipDeviation',
-    category: 'deviation',
-    language: 'java',
-    details: { reason: 'interfaceViolation', fromNodeKey: 'app:web', toNodeKey: 'app:internal' },
-    files: [],
-  },
-  {
-    type: 'tangle',
-    category: 'flaw',
-    language: 'java',
-    details: { nodeKeys: ['a', 'b'], nodeCount: 2 },
-    files: [],
-  },
-  {
-    type: 'oversizedComponent',
-    category: 'flaw',
-    language: 'java',
-    details: { nodeKey: 'large', leafArtifactCount: 40 },
-    files: [],
-  },
-  {
-    type: 'weakTangle',
-    category: 'smell',
-    language: 'ts',
-    details: { nodeKeys: ['c', 'd'], nodeCount: 2 },
-    files: [],
-  },
-  {
-    type: 'splitResponsibility',
-    category: 'smell',
-    language: 'ts',
-    details: { nodeKey: 'util', fragmentCount: 3 },
-    files: [],
-  },
-];
 
 describe('public architecture findings contract', () => {
   let h: TestHarness;
