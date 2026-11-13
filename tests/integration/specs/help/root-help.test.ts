@@ -83,7 +83,7 @@ function getExpectedRootHelp(): string {
     '',
     '  Run sonar <command> --help for options and examples.',
     '',
-    '  Docs      https://sonarsource.com/sonarqube/cli',
+    '  Docs      https://www.sonarsource.com/products/sonarqube/cli/',
     '  Feedback  https://forms.gle/jrGic3awT5t5vf7V9',
     '',
   ].join('\n');
@@ -174,7 +174,9 @@ describe('root help', () => {
       expect(result.stdout).toContain('\x1b[36m[Cloud only]\x1b[39m');
       expect(result.stdout).toContain('\x1b[36m[Vortex]\x1b[39m');
       expect(result.stdout).toContain('\x1b[90mlogin, org, logout, status\x1b[39m');
-      expect(result.stdout).toContain('\x1b[38;5;69mhttps://sonarsource.com/sonarqube/cli\x1b[0m');
+      expect(result.stdout).toContain(
+        '\x1b[38;5;69mhttps://www.sonarsource.com/products/sonarqube/cli/\x1b[0m',
+      );
       expect(stripAnsi(result.stdout).replaceAll('\r\n', '\n')).toBe(getExpectedRootHelp());
     },
     { timeout: 15000 },
