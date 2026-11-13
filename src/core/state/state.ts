@@ -30,7 +30,7 @@ import type { CallerAgent } from '@/core/host/environment/agent-detector.ts';
 /**
  * Region for SonarQube Cloud instances
  */
-export type CloudRegion = 'eu' | 'us';
+export type CloudRegion = 'eu' | 'us' | 'au';
 
 /**
  * Server type classification
