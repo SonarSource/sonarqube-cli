@@ -51,19 +51,16 @@ export async function getSummary(
   });
   const { summaries, skippedSummaries } = result;
   if (format !== 'text') {
+    let message: string | undefined;
+    if (skippedSummaries)
+      message = `Skipped ${skippedSummaries} summary result(s) with unsupported languages.`;
+    else if (!summaries.length)
+      message = 'No architecture summaries are visible. Check project access and analysis.';
     printPayload(ctx, format, {
       project,
       summaries,
-      ...(skippedSummaries
-        ? {
-            skippedSummaries,
-            message: `Skipped ${skippedSummaries} summary result(s) with unsupported languages.`,
-          }
-        : summaries.length
-          ? {}
-          : {
-              message: 'No architecture summaries are visible. Check project access and analysis.',
-            }),
+      ...(skippedSummaries ? { skippedSummaries } : {}),
+      ...(message ? { message } : {}),
     });
     return;
   }
