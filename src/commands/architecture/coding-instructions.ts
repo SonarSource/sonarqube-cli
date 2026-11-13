@@ -27,7 +27,7 @@ export const ARCHITECTURE_CODING_INSTRUCTIONS = `# Architecture while coding
 
 These instructions were installed by \`sonar architecture install-skill\`. This repository has an intended architecture in SonarQube that says which parts of the code may depend on which.
 
-1. Before you add a dependency between folders, packages or modules, or create a new one, read the intended architecture with \`sonar architecture intended get\` and follow its constraints. A dependency that no constraint allows is a deviation. The constraints come after the groups, so do not cut the output short; run \`sonar architecture intended get --component <group>\` for each group you change to get only the constraints that involve it.
+1. Before you add a dependency between folders, packages or modules, or create a new one, read the intended architecture with \`sonar architecture intended get\` and follow its constraints. A dependency that no constraint allows is a deviation. The constraints come after the groups, so do not cut the output short; run \`sonar architecture intended get --component <group>\` for each group you change to get only the constraints that involve it. If it reports that a file manages the intended architecture, read the constraints from that file instead.
 2. Before you finish a code change, compare every dependency you added with those constraints and fix any that are not allowed.
 
 Do not change the intended architecture unless the user asks.
