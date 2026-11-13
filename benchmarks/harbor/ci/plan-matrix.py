@@ -69,15 +69,36 @@ def plan(inputs: dict) -> list[dict]:
     return jobs
 
 
+AGENT_TITLES = {"claude-code": "Claude Code", "codex": "Codex"}
+INDENT = "&emsp;&emsp;"
+
+
+def plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def hard_breaks(lines: list[str]) -> list[str]:
+    return [f"{line}  " for line in lines[:-1]] + lines[-1:]
+
+
 def summary(jobs: list[dict]) -> str:
+    tasks = list(dict.fromkeys(job["task"] for job in jobs))
+    agents = list(dict.fromkeys((job["agent"]["name"], job["agent"]["model"]) for job in jobs))
+    attempts = max(job["attempt"] for job in jobs)
     lines = [
-        f"### Harbor benchmark plan: {len(jobs)} jobs",
+        "## Harbor benchmark plan",
         "",
-        f"task: {', '.join(dict.fromkeys(job['task'] for job in jobs))}",
-        f"agent: {', '.join(dict.fromkeys(label(job['agent']) for job in jobs))}",
-        f"attempts: {max(job['attempt'] for job in jobs)}",
+        f"{plural(len(jobs), 'job')} to run: {plural(len(tasks), 'task')} \u00d7 {plural(len(agents), 'agent')} \u00d7 {plural(attempts, 'attempt')}",
+        "",
+        "#### Agents",
+        "",
+        *hard_breaks([f"{INDENT}{AGENT_TITLES.get(name, name)} ({model})" for name, model in agents]),
+        "",
+        "#### Tasks",
+        "",
+        *hard_breaks([f"{INDENT}`{task}`" for task in tasks]),
     ]
-    return "\n".join(f"{line}  " if line else line for line in lines) + "\n"
+    return "\n".join(lines) + "\n"
 
 
 def main() -> None:
