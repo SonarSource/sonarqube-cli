@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { taskTitle } from './tasks.ts';
 
 interface Span {
   started_at: string | null;
@@ -54,14 +55,6 @@ interface Step {
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const TASKS_DIR = join(HERE, '..', 'tasks');
-
-function titleOf(task: string): string | null {
-  const path = join(TASKS_DIR, task, 'description.md');
-  if (!existsSync(path)) return null;
-  return readFileSync(path, 'utf8').split('\n')[0].replace(/^#\s*/, '').trim() || null;
-}
-
 function readJson<T>(path: string): T | null {
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : null;
 }
@@ -109,7 +102,7 @@ function trialOf(group: string, trialDir: string) {
     group,
     name: result.trial_name,
     task,
-    taskTitle: titleOf(task),
+    taskTitle: taskTitle(task),
     agent: agent?.name ?? null,
     agentVersion: agent?.version ?? null,
     model: agent?.model_info?.name ?? null,
