@@ -315,6 +315,8 @@ function buildReconcileSubfeatureApplications(
     available: undefined,
     active:
       activeIds.has(subfeature.id) ||
-      (subfeature.required === true && (subfeature.migrationEligible?.(attrs) ?? true)),
+      (subfeature.required === true &&
+        !subfeature.isAvailable &&
+        (subfeature.migrationEligible?.(attrs) ?? true)),
   }));
 }
