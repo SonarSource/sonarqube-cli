@@ -25,7 +25,6 @@ import { isAbsolute } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
 import { CLAUDE_VORTEX_FEATURE_ID } from '@/commands/integrate/_common/vortex.ts';
 import { claudeIntegration } from '@/commands/integrate/claude/declaration.ts';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
@@ -643,9 +642,23 @@ describe('integrate claude — Vortex entitlement guard', () => {
           .file('.claude', 'hooks', 'sonar-sqaa', 'build-scripts', hookScriptName('posttool-sqaa'))
           .asText(),
       ).toContain('sonar hook claude-post-tool-use');
-      const instructions = harness.userHome.file('.claude', 'CLAUDE.md').asText();
-      expect(instructions).toContain('# Vortex analysis protocol');
-      expect(instructions).not.toContain('--project');
+      expect(harness.userHome.exists('.claude', 'CLAUDE.md')).toBe(false);
+      expect(settings.hooks?.Stop).toBeDefined();
+      expect(settings.hooks?.SubagentStop).toBeUndefined();
+      expect(
+        harness.userHome.exists(
+          '.claude',
+          'hooks',
+          'sonar-stop',
+          'build-scripts',
+          hookScriptName('stop'),
+        ),
+      ).toBe(true);
+      expect(
+        harness.userHome
+          .file('.claude', 'hooks', 'sonar-stop', 'build-scripts', hookScriptName('stop'))
+          .asText(),
+      ).toContain('sonar hook agent-stop --agent claude');
       expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.scope).toBe('global');
     },
     { timeout: 30000 },
@@ -863,8 +876,6 @@ describe('integrate claude — Vortex entitlement guard', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      const instructions = harness.userHome.file('.claude', 'CLAUDE.md').asText();
-      expect(instructions).toContain('# Vortex analysis protocol');
       expect(harness.cwd.exists('CLAUDE.md')).toBe(false);
 
       expect(
@@ -874,6 +885,12 @@ describe('integrate claude — Vortex entitlement guard', () => {
       ).toContain('sonar hook claude-post-tool-use');
       const settings = harness.userHome.file('.claude', 'settings.json').asJson();
       expect(settings.hooks?.PostToolUse).toBeDefined();
+      expect(settings.hooks?.Stop).toBeDefined();
+      expect(
+        harness.userHome
+          .file('.claude', 'hooks', 'sonar-stop', 'build-scripts', hookScriptName('stop'))
+          .asText(),
+      ).toContain('sonar hook agent-stop --agent claude');
 
       expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.scope).toBe('global');
     },
@@ -1572,7 +1589,16 @@ ${result.stderr}`).toContain('Installation cancelled');
       const output = `${result.stdout}\n${result.stderr}`;
       expect(output).toContain('Install Vortex?');
 
-      // Accepting installs the PostToolUse SQAA hook script and SQAA instructions.
+      // Accepting installs the analysis hooks.
+      expect(
+        harness.userHome.exists(
+          '.claude',
+          'hooks',
+          'sonar-stop',
+          'build-scripts',
+          hookScriptName('stop'),
+        ),
+      ).toBe(true);
       expect(
         harness.userHome.exists(
           '.claude',
@@ -1583,12 +1609,6 @@ ${result.stderr}`).toContain('Installation cancelled');
         ),
       ).toBe(true);
       expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeDefined();
-      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
-        '# Vortex analysis protocol',
-      );
-      expect(
-        findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)?.subfeatures?.map((s) => s.featureId),
-      ).toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
     },
     { timeout: 30000 },
   );
