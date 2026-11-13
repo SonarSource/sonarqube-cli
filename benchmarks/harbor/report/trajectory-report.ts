@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { taskTitle } from './tasks.ts';
+import { checkSentence, taskTitle } from './tasks.ts';
 
 interface Span {
   started_at: string | null;
@@ -68,6 +68,13 @@ function lastSegment(value: string): string {
   return value.slice(value.lastIndexOf('/') + 1);
 }
 
+function checksOf(rewards: Record<string, number> | null): { text: string; ok: boolean }[] {
+  return Object.entries(rewards ?? {}).flatMap(([key, value]) => {
+    const text = checkSentence(key);
+    return text === null ? [] : [{ text, ok: value >= 1 }];
+  });
+}
+
 function stepOf(step: Step) {
   return {
     id: step.step_id,
@@ -111,6 +118,7 @@ function trialOf(group: string, trialDir: string) {
       ? `${result.exception_info.exception_type ?? 'Error'}: ${result.exception_info.exception_message ?? ''}`
       : null,
     rewards: result.verifier_result?.rewards ?? null,
+    checks: checksOf(result.verifier_result?.rewards ?? null),
     costUsd: usage?.cost_usd ?? null,
     inputTokens: usage?.n_input_tokens ?? null,
     cachedTokens: usage?.n_cache_tokens ?? null,
