@@ -313,6 +313,10 @@ function buildReconcileSubfeatureApplications(
     subfeature,
     installed: recordedIds?.includes(subfeature.id) ?? false,
     available: undefined,
-    active: activeIds.has(subfeature.id),
+    active:
+      activeIds.has(subfeature.id) ||
+      (subfeature.required === true &&
+        !subfeature.isAvailable &&
+        (subfeature.migrationEligible?.(attrs) ?? true)),
   }));
 }

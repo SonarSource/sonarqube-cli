@@ -45,8 +45,8 @@ import { createSecretsDetectionFeature } from '../_common/features/secrets-detec
 import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
   createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
   SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildUnixHookScript,
@@ -74,6 +74,7 @@ const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOLUSEFAILURE_SCRIPT_REL = 'sonar-posttoolusefailure/build-scripts/posttoolusefailure';
+const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
@@ -122,7 +123,7 @@ const claudePostToolUseDispatchResources = createPostToolUseDispatchResources({
 const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
   const defaultVortex = createVortexFeature<ClaudeIntegrationOptions>(
     [
-      createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveClaudeMdPath)]),
+      createSqaaStopHookSubfeature(),
       createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
         agent: 'claude',
         scriptPath: (context) =>
@@ -139,8 +140,17 @@ const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
   return {
     ...defaultVortex,
     id: CLAUDE_VORTEX_FEATURE_ID,
-    replacedIds: [...(defaultVortex.replacedIds ?? []), VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID],
+    replacedIds: [
+      ...(defaultVortex.replacedIds ?? []),
+      VORTEX_FEATURE_ID,
+      SQAA_HOOK_FEATURE_ID,
+      SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+    ],
     resources: claudePostToolUseDispatchResources,
+    legacyCleanups: [
+      ...(defaultVortex.legacyCleanups ?? []),
+      createSqaaInstructionsSnippet(resolveClaudeMdPath),
+    ],
   };
 })();
 
@@ -184,6 +194,46 @@ function createCagHookConfigResource(): ResourceDeclaration {
       ]),
     removePatch: (document) => removeAgentHooks(document, [VORTEX_HOOK_MARKER]),
   });
+}
+
+function createSqaaStopHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
+  return {
+    id: 'completion-analysis-hook',
+    displayName: 'Vortex completion analysis hook',
+    required: true,
+    resources: [
+      wholeFile({
+        id: 'completion-analysis-hook-script',
+        displayName: 'Completion analysis hook script',
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, STOP_SCRIPT_REL),
+        content: {
+          unix: buildUnixHookScript('agent-stop --agent claude'),
+          windows: buildWindowsHookScript('agent-stop --agent claude'),
+        },
+        executable: true,
+      }),
+      jsonPatch({
+        id: 'completion-analysis-hook-config',
+        displayName: 'Completion analysis hook configuration',
+        targetPath: resolveClaudeSettingsPath,
+        defaultValue: { hooks: {} },
+        patch: (document, context) =>
+          upsertAgentHooks(document, [
+            createAgentHookEntry(
+              context,
+              CLAUDE_CONFIG_DIR,
+              'Stop',
+              undefined,
+              'sonar-stop',
+              STOP_SCRIPT_REL,
+              { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
+            ),
+          ]),
+        removePatch: (document) => removeAgentHooks(document, ['sonar-stop']),
+      }),
+    ],
+  };
 }
 
 function createSessionStartHookEntry(
