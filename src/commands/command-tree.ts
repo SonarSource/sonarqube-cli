@@ -41,7 +41,7 @@ import { MAX_PAGE_SIZE } from '@/core/server/projects.ts';
 import { commitStatsFacts } from '@/core/stats/facts.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
 import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
-import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
+import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
@@ -1403,12 +1403,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     initSentry();
   });
 
-  // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
     const command = actionCommand as SonarCommand;
     commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
-    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
+    await commitTelemetryFacts([...handlerFacts, ...(await buildCommandFacts(command))], {
       agentSessionId: resolveAgentSessionId(
         command.invocationContext?.currentAgentSessionId() ?? capturedAgentSessionId,
       ),
