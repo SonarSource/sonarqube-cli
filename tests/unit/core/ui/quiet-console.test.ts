@@ -121,6 +121,30 @@ describe('QuietConsole', () => {
     expect(delegate.findCall('spinner', 'Verifying signature')).toBeDefined();
   });
 
+  it('forwards prompt channels and defaults to stdout', async () => {
+    const confirm = spyOn(delegate, 'confirmPrompt');
+    await quiet.confirmPrompt('Default?', false);
+    await quiet.confirmPrompt('Private?', false, 'stderr');
+    expect(confirm).toHaveBeenNthCalledWith(1, 'Default?', false, undefined);
+    expect(confirm).toHaveBeenNthCalledWith(2, 'Private?', false, 'stderr');
+    expect(delegate.calls.map((call) => call.args)).toEqual([
+      ['Default?', false, 'stdout'],
+      ['Private?', false, 'stderr'],
+    ]);
+  });
+
+  it('overrides spinner channels only when configured', async () => {
+    const spinner = spyOn(delegate, 'withSpinner');
+    const task = () => Promise.resolve(42);
+    await quiet.withSpinner('Default', task);
+    await quiet.withSpinner('Explicit', task, 'stderr');
+    const stderr = new QuietConsole(delegate, { spinnerChannel: 'stderr' });
+    expect(await stderr.withSpinner('Override', task, 'stdout')).toBe(42);
+    expect(spinner).toHaveBeenNthCalledWith(1, 'Default', task, undefined);
+    expect(spinner).toHaveBeenNthCalledWith(2, 'Explicit', task, 'stderr');
+    expect(spinner).toHaveBeenNthCalledWith(3, 'Override', task, 'stderr');
+  });
+
   it('forwards prompts to the wrapped console', async () => {
     delegate.queueResponse('typed answer');
 
