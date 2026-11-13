@@ -38,12 +38,6 @@ on:
           - "3"
           - "5"
           - "10"
-      cli-version:
-        description: Version of the SonarQube CLI under test, written in the release report
-        default: unknown
-      iteration:
-        description: Iteration name written in the release report, for example 26Q4-4 (optional)
-        default: ""
       store-report:
         description: Publish the release report and its dashboard on SIP (a run without this box only benchmarks)
         type: boolean
@@ -235,16 +229,11 @@ jobs:
         id: release-report
         if: ${{ !cancelled() && hashFiles('harbor-jobs/**') != '' }}
         shell: bash
-        env:
-          CLI_VERSION: ${{ inputs.cli-version }}
-          ITERATION: ${{ inputs.iteration }}
         run: |
-          iteration=()
-          [ -n "${ITERATION}" ] && iteration=(--iteration "${ITERATION}")
           mkdir release-report
           bun benchmarks/harbor/report/to-json.ts \
-            --cli-version "${CLI_VERSION}" --run-id "${GITHUB_RUN_ID}" --commit "${GITHUB_SHA}" \
-            --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" ${iteration[@]+"${iteration[@]}"} \
+            --cli-version "$(sonar --version)" --run-id "${GITHUB_RUN_ID}" --commit "${GITHUB_SHA}" \
+            --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             harbor-jobs > "release-report/${GITHUB_RUN_ID}.json"
 
       - name: Upload the release report
