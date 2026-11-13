@@ -26,6 +26,7 @@ import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type Ecosystem, ECOSYSTEMS } from './architecture-api.ts';
 import { MAX_ARCHITECTURE_PAGE_INDEX } from './dependency-query.ts';
 import { collectionFailure, incompatibleResponse } from './errors.ts';
+import type { SummaryResult } from './summary.ts';
 
 export const DEFAULT_FINDINGS_PAGE_SIZE = 50;
 export const MAX_FINDINGS_PAGE_SIZE = 1000;
@@ -72,6 +73,7 @@ export interface FindingPage {
   skippedFindings?: number;
 }
 export interface FindingsApi {
+  getSummaryCounts(language?: Ecosystem): Promise<SummaryResult>;
   getFindingsPage(
     filters: FindingFilters,
     pageIndex: number,
