@@ -149,6 +149,7 @@ describe('current architecture summary', () => {
       project: 'shop',
       summaries: [],
       skippedSummaries: 1,
+      message: 'Skipped 1 summary result(s) with unsupported languages.',
     });
   });
 

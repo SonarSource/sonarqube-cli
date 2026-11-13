@@ -54,15 +54,21 @@ export async function getSummary(
     printPayload(ctx, format, {
       project,
       summaries,
-      ...(skippedSummaries ? { skippedSummaries } : {}),
-      ...(summaries.length || skippedSummaries
-        ? {}
-        : { message: 'No architecture summaries are visible. Check project access and analysis.' }),
+      ...(skippedSummaries
+        ? {
+            skippedSummaries,
+            message: `Skipped ${skippedSummaries} summary result(s) with unsupported languages.`,
+          }
+        : summaries.length
+          ? {}
+          : {
+              message: 'No architecture summaries are visible. Check project access and analysis.',
+            }),
     });
     return;
   }
   if (skippedSummaries)
-    ctx.console.warn(`Skipped ${skippedSummaries} summaries with unsupported languages.`);
+    ctx.console.warn(`Skipped ${skippedSummaries} summary result(s) with unsupported languages.`);
   if (!summaries.length && !skippedSummaries)
     ctx.console.info('No architecture summaries are visible. Check project access and analysis.');
   for (const summary of summaries) {
