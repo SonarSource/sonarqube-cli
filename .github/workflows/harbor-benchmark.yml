@@ -255,6 +255,18 @@ jobs:
             --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             harbor-jobs > "release-report/${GITHUB_RUN_ID}.json"
 
+      - name: Scan the release report for secrets and redact it
+        if: ${{ !cancelled() && steps.release-report.outcome == 'success' }}
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
+          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
+          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
+          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
+          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
+        run: python3 -I benchmarks/harbor/ci/scan-secrets.py release-report
+
       - name: Upload the release report
         if: ${{ !cancelled() && steps.release-report.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
