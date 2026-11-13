@@ -61,9 +61,8 @@ describe('integrate claude — Vortex entitlement', () => {
   /** SQAA and CAG ship together as Vortex, so one probe covers both. */
   function isVortexInstalled(): boolean {
     const settingsFile = harness.userHome.file('.claude', 'settings.json');
-    const sqaaHook = settingsFile.exists()
-      ? Boolean(settingsFile.asJson().hooks?.PostToolUse)
-      : false;
+    const hooks = settingsFile.exists() ? settingsFile.asJson().hooks : undefined;
+    const sqaaHooks = Boolean(hooks?.PostToolUse && hooks?.Stop);
     const state = harness.stateJsonFile.asJson() as CliState;
     const recordedCag = state.integrations.installed.some((integration) =>
       integration.features.some(
@@ -74,7 +73,7 @@ describe('integrate claude — Vortex entitlement', () => {
           ),
       ),
     );
-    return sqaaHook && recordedCag && isVortexHookInstalled(harness.userHome, 'claude');
+    return sqaaHooks && recordedCag && isVortexHookInstalled(harness.userHome, 'claude');
   }
 
   /** Hook entries are owned by the marker appearing in their command (see `ownsHookEntry`). */
@@ -180,9 +179,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
-        '# Vortex analysis protocol',
-      );
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
     },
     { timeout: 30000 },
   );
@@ -302,9 +299,7 @@ describe('integrate claude — Vortex entitlement', () => {
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(true);
-      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText()).toContain(
-        '# Vortex analysis protocol',
-      );
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
       expect(postToolUseHooks()).toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(true);
     },
