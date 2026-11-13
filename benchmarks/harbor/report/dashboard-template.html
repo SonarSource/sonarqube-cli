@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor benchmark</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.05);
+  --select-bg: #184f95;
+  --select-ink: #ffffff;
+  --select-wash: #c3d8f5;
+  --select-bar: #184f95;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --s5: #e87ba4;
+  --s6: #008300;
+  --s7: #6250d6;
+  --s8: #e34948;
+  --good-text: #006300;
+  --bad-text: #d03b3b;
+  --st-good: #0ca30c;
+  --st-warning: #fab219;
+  --st-serious: #ec835a;
+  --st-critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.06);
+    --select-bg: #2a78d6;
+  --select-wash: #1f3f6b;
+  --select-bar: #3987e5;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --s5: #d55181;
+    --s6: #008300;
+    --s7: #9085e9;
+    --s8: #e66767;
+    --good-text: #0ca30c;
+    --bad-text: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255, 255, 255, 0.10);
+  --wash: rgba(255, 255, 255, 0.06);
+  --select-bg: #2a78d6;
+  --select-wash: #1f3f6b;
+  --select-bar: #3987e5;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --s6: #008300;
+  --s7: #9085e9;
+  --s8: #e66767;
+  --good-text: #0ca30c;
+  --bad-text: #e66767;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--page); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+h2 { margin: 40px 0 12px; font-size: 15px; font-weight: 600; }
+.sub { margin: 4px 0 0; color: var(--ink-2); }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+button, select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--ring);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { background: var(--wash); }
+button:disabled { cursor: default; opacity: 0.4; }
+:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.note { margin: 0 0 16px; color: var(--ink-3); font-size: 12px; max-width: 90ch; }
+.part { margin-top: 40px; }
+.part-two { margin-top: 72px; padding-top: 32px; border-top: 1px solid var(--grid); }
+.part-kicker { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.step { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--select-bg); color: var(--select-ink); font-size: 12px; letter-spacing: 0; }
+.part-title { margin: 6px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.sub-title { margin: 40px 0 12px; font-size: 15px; font-weight: 600; }
+.rel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 0 0 12px; }
+.filters label { display: flex; flex-direction: column; gap: 4px; color: var(--ink-2); font-size: 12px; }
+.filters select { min-width: 160px; color: var(--ink); font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; }
+
+.bn-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 12px; }
+.chip.latest { background: var(--select-bg); color: var(--select-ink); font-weight: 600; }
+.bn-nav { display: flex; align-items: center; gap: 8px; }
+.bn-nav select { min-width: 260px; }
+
+.summary { display: flex; flex-wrap: wrap; gap: 24px 48px; align-items: stretch; }
+.sum-main { min-width: 220px; }
+.sum-label { color: var(--ink-2); font-size: 13px; }
+.sum-value { font-size: 56px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; }
+.sum-caption { margin-top: 4px; color: var(--ink-3); font-size: 12px; }
+.delta { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.delta b { font-weight: 600; }
+.delta.good b { color: var(--good-text); }
+.delta.bad b { color: var(--bad-text); }
+.sum-avgs { flex: 1 1 360px; display: flex; flex-direction: column; justify-content: center; padding-left: 48px; border-left: 1px solid var(--grid); }
+.sum-title { margin-bottom: 10px; color: var(--ink-2); font-size: 13px; }
+.sum-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.sum-grid dt { color: var(--ink-3); font-size: 12px; }
+.sum-grid dd { margin: 2px 0 0; font-size: 22px; font-weight: 600; }
+
+.evo { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.side { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.side h3 { margin: 0; padding: 14px 14px 8px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.measures { display: flex; flex-direction: column; border-top: 1px solid var(--grid); }
+.measure { position: relative; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--grid); cursor: pointer; user-select: none; }
+.measure:hover { background: var(--wash); }
+.measure.on, .measure.on:hover { background: var(--select-wash); font-weight: 600; }
+.measure.on::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--select-bar); }
+.measure:focus-visible { outline-offset: -2px; }
+.measure .mvalue { font-size: 12px; font-weight: 400; color: var(--ink-2); }
+.models { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 14px; }
+.models h3 { padding: 14px 0 8px; }
+.model { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid var(--ring); border-radius: 8px; background: var(--surface); color: var(--ink-3); }
+.model.on { background: var(--wash); color: var(--ink); border-color: transparent; }
+.model.on::after { content: "✓"; margin-left: auto; color: var(--ink-2); }
+.model:not(.on) svg { opacity: 0.35; }
+figure.chart { margin: 0; height: 100%; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.chart-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.chart-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.chart-tools select { font-size: 12px; padding: 3px 8px; color: var(--ink-2); }
+.jump { color: var(--ink-2); font-size: 12px; text-decoration: none; padding: 3px 8px; border-radius: 8px; }
+.jump:hover { background: var(--wash); color: var(--ink); }
+.chart-head button { font-size: 12px; padding: 3px 8px; color: var(--ink-2); }
+.chart-head button[aria-pressed="true"] { background: var(--wash); color: var(--ink); }
+.plot svg { display: block; overflow: visible; }
+.plot text { font-family: inherit; }
+.hit { fill: transparent; cursor: pointer; }
+.hit:focus { outline: none; }
+.hit:focus-visible { outline: 2px solid var(--s1); outline-offset: -2px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 8px; text-align: left; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--ink-2); font-weight: 500; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
+th button:focus-visible, .twist:focus-visible, .disclosure:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+tr.sum td { font-weight: 500; background: var(--wash); }
+tr.row td { color: var(--ink-2); }
+td.indent { width: 24px; }
+td.muted { color: var(--ink-3); font-weight: 400; }
+.twist { all: unset; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+.chev { display: inline-block; width: 12px; color: var(--ink-3); }
+.flags { display: inline-flex; align-items: center; gap: 3px; }
+.flag { display: inline-flex; }
+.flag.count { align-items: center; gap: 3px; margin-right: 8px; color: var(--ink-2); font-size: 12px; }
+.more { color: var(--ink-3); font-size: 11px; margin-left: 2px; }
+.disclosure { all: unset; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 600; }
+.tablecard { overflow-x: auto; padding: 8px 8px 4px; }
+.charttable { overflow-x: auto; }
+
+.heat { display: grid; gap: 2px; align-items: stretch; overflow-x: auto; }
+.heat .corner, .heat .rowhead { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+.heat .rowhead { display: flex; align-items: center; padding-right: 12px; color: var(--ink); }
+.heat .colhead { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0 2px 6px; color: var(--ink-2); font-size: 11px; text-align: center; overflow-wrap: anywhere; border-bottom: 2px solid transparent; }
+.heat .colhead .sub { color: var(--ink-3); font-weight: 400; }
+.heat .colhead.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+.heat .colhead:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.heat.compact .colhead { writing-mode: vertical-rl; transform: rotate(180deg); flex-direction: row; justify-content: flex-end; height: 96px; }
+.cell { display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 4px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.heat.compact .cell { font-size: 0; }
+.cell.empty { color: var(--ink-3); background: transparent; border: 1px solid var(--grid); }
+.cell.sel { box-shadow: inset 0 0 0 2px var(--ink); }
+.cell:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
+.cell:hover { box-shadow: inset 0 0 0 2px var(--ink); }
+.scale { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--ink-3); font-size: 12px; }
+.scale i { display: block; width: 140px; height: 8px; border-radius: 4px; }
+
+.attn-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--grid); }
+.attn-row:last-child { border-bottom: 0; }
+.attn-row .kind { display: inline-flex; align-items: center; gap: 8px; min-width: 88px; font-weight: 600; }
+.attn-row .task { font-weight: 500; }
+.attn-row .meta { color: var(--ink-2); }
+.empty-state { display: flex; align-items: center; gap: 10px; padding: 8px 4px; color: var(--ink-2); }
+
+#tip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--ring);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  max-width: 340px;
+  font-size: 12px;
+}
+#tip[hidden] { display: none; }
+.tip-h { color: var(--ink-2); margin-bottom: 6px; }
+.tip-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tip-row b { font-size: 13px; font-weight: 600; }
+.tip-row span { color: var(--ink-2); }
+
+@media (max-width: 760px) {
+  .evo { grid-template-columns: minmax(0, 1fr); }
+  .models { flex-direction: row; flex-wrap: wrap; margin-top: 16px; }
+  .model { width: auto; }
+  .models h3 { flex: 0 0 100%; }
+}
+@media (max-width: 640px) {
+  .sum-avgs { border-left: 0; padding-left: 0; }
+  .sum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bn-nav select { min-width: 0; flex: 1; }
+  .bn-nav { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Harbor benchmark</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <button id="theme" type="button"></button>
+  </header>
+
+  <section class="part" aria-labelledby="part1-title">
+    <div class="part-kicker"><span class="step">1</span> All releases</div>
+    <h2 class="part-title" id="part1-title">How the benchmark evolves, release after release</h2>
+    <p class="note">Each point of the chart is one release. Click a point, or a release in the use-case grid, to open that release in part 2 below. Success counts PASS only: FAIL, ERROR and LEAK trials are failures. Averages pool every trial in the selection, and the use-case mix can differ between runs, so narrow the filters to compare like with like.</p>
+    <div class="filters" id="filters" aria-label="Filters"></div>
+    <div class="evo">
+      <aside class="side card">
+        <h3 id="measure-label">Measure</h3>
+        <div class="measures" id="measures" role="radiogroup" aria-labelledby="measure-label"></div>
+        <div class="models" id="legend"></div>
+      </aside>
+      <div id="chart"></div>
+    </div>
+    <h3 class="sub-title">Use cases across releases</h3>
+    <div class="card" id="heat"></div>
+  </section>
+
+  <section class="part part-two" id="release-detail" aria-labelledby="release-title">
+    <div class="part-kicker"><span class="step">2</span> One release</div>
+    <div class="rel-head">
+      <div>
+        <h2 class="part-title" id="release-title">Release</h2>
+        <div class="bn-chips" id="release-chips"></div>
+      </div>
+      <div class="bn-nav" id="release-nav"></div>
+    </div>
+    <p class="note" id="scope-note"></p>
+    <div class="card summary" id="summary"></div>
+
+    <h3 class="sub-title" id="attn-title">Needs attention</h3>
+    <div class="card" id="attn"></div>
+
+    <h3 class="sub-title">
+      <button id="detail-toggle" class="disclosure" type="button" aria-expanded="true" aria-controls="detail">
+        <span class="chev" id="detail-chev" aria-hidden="true">▾</span><span id="detail-title">Details</span>
+      </button>
+    </h3>
+    <div class="card tablecard" id="detail"></div>
+  </section>
+</div>
+<div id="tip" role="tooltip" hidden></div>
+
+<script id="data" type="application/json">__RELEASES_JSON__</script>
+<script>
+(() => {
+  'use strict';
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const SEQ = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
+  const SHAPES = ['circle', 'square', 'diamond'];
+  const COST_DECIMALS = 3;
+  const TIP_OFFSET = 14;
+  const DIAMOND_RADIUS = 5.5;
+  const KEY = { width: 28, height: 12 };
+  const TICK_COUNT = 4;
+  const TICK_STEPS = Object.values({ one: 1, two: 2, twoAndAHalf: 2.5, five: 5, ten: 10 });
+  const RATE_TICKS = Array.from({ length: TICK_COUNT + 1 }, (_, i) => i / TICK_COUNT);
+  const MIN_PLOT_WIDTH = 300;
+  const CHART_HEIGHT = { wide: 560, narrow: 340 };
+  const NARROW_WIDTH = 560;
+  const CHART_MARGIN = { l: 52, r: 64, t: 12, b: 46 };
+  const X_PAD = 18;
+  const FALLBACK_SPACING = 80;
+  const LABEL_MIN_SPACING = 84;
+  const JITTER_BUCKETS = 5;
+  const JITTER_PX = 3;
+  const MIN_LABEL_GAP = 13;
+  const LABEL_OFFSET = 11;
+  const COMPACT_AFTER = 12;
+  const COLUMN_MIN = { normal: 52, compact: 28 };
+  const MAX_STATUS_ICONS = 12;
+  const LABEL_ROWS = { primary: 26, secondary: 11 };
+  const COMMIT_LENGTH = 7;
+  const AVERAGE_LABELS = { steps: 'Steps', tokens: 'Tokens', seconds: 'Agent time', cost: 'Cost' };
+  const SPANS = [['8', 'Last 8 releases'], ['12', 'Last 12 releases'], ['26', 'Last 26 releases'], ['all', 'All releases']];
+  const HEX_CHANNELS = { red: 1, green: 3, blue: 5 };
+  const HEX_RADIX = 16;
+  const CHANNEL_MAX = 255;
+  const SRGB = { threshold: 0.03928, divisor: 12.92, offset: 0.055, scale: 1.055, gamma: 2.4 };
+  const LUMA = { red: 0.2126, green: 0.7152, blue: 0.0722 };
+  const CONTRAST_OFFSET = 0.05;
+  const SORT_ARROWS = new Map([[1, ' ↑'], [-1, ' ↓']]);
+  const ARIA_SORT = new Map([[1, 'ascending'], [-1, 'descending']]);
+  const ARROW_STEP = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+  const FAILURES = ['LEAK', 'FAIL', 'ERROR'];
+  const STATUS = {
+    LEAK: { label: 'Leak', color: 'var(--st-critical)', rank: 0, hint: 'A secret appeared in the output (the scan redacted it)' },
+    FAIL: { label: 'Fail', color: 'var(--st-serious)', rank: 1, hint: 'The verifier rejected the result' },
+    ERROR: { label: 'Error', color: 'var(--st-warning)', rank: 2, hint: 'The trial crashed or has no score' },
+    PASS: { label: 'Pass', color: 'var(--st-good)', rank: 3, hint: 'The verifier accepted the result' },
+  };
+
+  const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+  function secondsText(v) {
+    if (v === 0) return '0 s';
+    return `${v < 10 ? v.toFixed(1) : v.toFixed(0)} s`;
+  }
+  const METRICS = [
+    { key: 'rate', title: 'Success rate', goodUp: true, fmt: (v) => `${(v * 100).toFixed(0)}%`, tile: (v) => `${(v * 100).toFixed(1)}%`, domain: [0, 1] },
+    { key: 'steps', title: 'Steps per trial', goodUp: false, fmt: (v) => String(Number(v.toFixed(1))), tile: (v) => v.toFixed(1) },
+    { key: 'tokens', title: 'Tokens per trial', goodUp: false, fmt: (v) => compact.format(v), tile: (v) => compact.format(v) },
+    { key: 'seconds', title: 'Agent time per trial', goodUp: false, fmt: secondsText, tile: secondsText },
+    { key: 'cost', title: 'Cost per trial', goodUp: false, fmt: (v) => `$${v.toFixed(COST_DECIMALS)}`, tile: (v) => `$${v.toFixed(COST_DECIMALS)}` },
+  ];
+
+  const byId = (id) => document.getElementById(id);
+
+  function h(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(props)) {
+      if (key === 'class') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      else node.setAttribute(key, value);
+    }
+    node.append(...children.filter(Boolean));
+    return node;
+  }
+
+  function s(tag, attrs, parent) {
+    const node = document.createElementNS(SVGNS, tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === 'text') node.textContent = value;
+      else if (key === 'style') node.style.cssText = value;
+      else node.setAttribute(key, value);
+    }
+    if (parent) parent.append(node);
+    return node;
+  }
+
+  const fmtDay = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+  const fmtInt = (v) => (v === null ? '–' : Math.round(v).toLocaleString('en'));
+
+  const releases = JSON.parse(decodeURIComponent(byId('data').textContent))
+    .map((report) => ({
+      ...report.release,
+      trials: report.trials.map((trial) => ({ ...trial, agent: trial.agent ?? 'unknown', model: trial.model ?? 'unknown' })),
+    }))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const latestRelease = releases[releases.length - 1];
+
+  const versionsUsable = releases.every((r) => r.cliVersion && r.cliVersion !== 'unknown') && new Set(releases.map((r) => r.cliVersion)).size === releases.length;
+  const dayLabels = releases.map((r) => fmtDay(r.date));
+  const sameDay = new Set(dayLabels).size !== dayLabels.length;
+  function releaseLabel(r) {
+    if (versionsUsable) return r.cliVersion;
+    return sameDay ? `${fmtDay(r.date)} ${fmtTime(r.date)}` : fmtDay(r.date);
+  }
+  function releaseSub(r) {
+    return versionsUsable ? fmtDay(r.date) : '';
+  }
+  for (const r of releases) {
+    r.label = releaseLabel(r);
+    r.sub = releaseSub(r);
+    r.when = `${fmtDay(r.date)} ${fmtTime(r.date)} UTC`;
+  }
+  function releaseTitle(r) {
+    const parts = [];
+    if (versionsUsable) parts.push(r.label);
+    parts.push(r.when);
+    return parts.join(' · ');
+  }
+
+  const unique = (key) => [...new Set(releases.flatMap((r) => r.trials.map((t) => t[key])))];
+  const MODELS = unique('model');
+  const AGENTS = unique('agent').sort();
+  const OSES = unique('os').sort();
+  const TASKS = unique('task').sort();
+  const colorOf = (model) => `var(--s${MODELS.indexOf(model) + 1})`;
+  const shapeOf = (model) => SHAPES[MODELS.indexOf(model) % SHAPES.length];
+
+  const state = { os: 'all', agent: 'all', models: new Set(MODELS), task: 'all', span: '8', release: null, metric: 'rate', expanded: new Set(), detailOpen: true };
+  const sort = { key: 'task', dir: 1 };
+
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => {
+    const forced = document.documentElement.dataset.theme;
+    return forced ? forced === 'dark' : media.matches;
+  };
+
+  const inScope = (t) => state.models.has(t.model) && ['os', 'agent', 'task'].every((key) => state[key] === 'all' || t[key] === state[key]);
+  const scoped = (release) => release.trials.filter(inScope);
+  const windowed = () => (state.span === 'all' ? releases : releases.slice(-Number(state.span)));
+  const selectedRelease = () => releases.find((r) => r.runId === state.release);
+  const currentMetric = () => METRICS.find((m) => m.key === state.metric);
+
+  const mean = (values) => {
+    const present = values.filter((v) => v !== null && v !== undefined);
+    return present.length ? present.reduce((a, b) => a + b, 0) / present.length : null;
+  };
+  const tokensOf = (t) => (t.promptTokens === null && t.completionTokens === null ? null : (t.promptTokens ?? 0) + (t.completionTokens ?? 0));
+  const trialValue = (key, t) => ({ steps: t.steps, tokens: tokensOf(t), seconds: t.agentSeconds, cost: t.costUsd })[key] ?? null;
+
+  function agg(trials) {
+    const pass = trials.filter((t) => t.status === 'PASS').length;
+    return {
+      n: trials.length,
+      pass,
+      rate: trials.length ? pass / trials.length : null,
+      steps: mean(trials.map((t) => t.steps)),
+      tokens: mean(trials.map(tokensOf)),
+      seconds: mean(trials.map((t) => t.agentSeconds)),
+      cost: mean(trials.map((t) => t.costUsd)),
+    };
+  }
+
+  const hasTrial = (rels, predicate) => rels.some((r) => scoped(r).some(predicate));
+
+  const tip = byId('tip');
+  function showTip(content, x, y) {
+    tip.replaceChildren(content);
+    tip.hidden = false;
+    const box = tip.getBoundingClientRect();
+    tip.style.left = `${Math.min(Math.max(8, x + TIP_OFFSET), innerWidth - box.width - 8)}px`;
+    tip.style.top = `${Math.min(Math.max(8, y + TIP_OFFSET), innerHeight - box.height - 8)}px`;
+  }
+  const hideTip = () => { tip.hidden = true; };
+  const centerOf = (node) => {
+    const box = node.getBoundingClientRect();
+    return [box.left + box.width / 2, box.top + box.height / 2];
+  };
+
+  function marker(shape, x, y, color, parent) {
+    const common = { style: `fill:${color};stroke:var(--surface);stroke-width:2` };
+    if (shape === 'square') return s('rect', { ...common, x: x - 4, y: y - 4, width: 8, height: 8, rx: 1.5 }, parent);
+    if (shape === 'diamond') return s('polygon', { ...common, points: `${x},${y - DIAMOND_RADIUS} ${x + DIAMOND_RADIUS},${y} ${x},${y + DIAMOND_RADIUS} ${x - DIAMOND_RADIUS},${y}` }, parent);
+    return s('circle', { ...common, cx: x, cy: y, r: 4 }, parent);
+  }
+
+  function legendKey(model) {
+    const midX = KEY.width / 2;
+    const midY = KEY.height / 2;
+    const svg = s('svg', { width: KEY.width, height: KEY.height, 'aria-hidden': 'true' });
+    s('line', { x1: 0, y1: midY, x2: KEY.width, y2: midY, style: `stroke:${colorOf(model)};stroke-width:2;stroke-linecap:round` }, svg);
+    marker(shapeOf(model), midX, midY, colorOf(model), svg);
+    return svg;
+  }
+
+  function niceTicks(max) {
+    if (max <= 0) return [0, 1];
+    const raw = max / TICK_COUNT;
+    const magnitude = 10 ** Math.floor(Math.log10(raw));
+    const step = TICK_STEPS.map((m) => m * magnitude).find((v) => v >= raw);
+    const ticks = [];
+    for (let v = 0; v < max + step - 1e-9; v += step) ticks.push(v);
+    return ticks;
+  }
+
+  function pointFor(metric, release, model) {
+    const trials = scoped(release).filter((t) => t.model === model);
+    return { n: trials.length, value: agg(trials)[metric.key], trials };
+  }
+
+  function seriesFor(metric, rels, models) {
+    return models.map((model) => ({ model, points: rels.map((r) => pointFor(metric, r, model)) }));
+  }
+
+  function dotValuesOf(metric, series) {
+    if (metric.key === 'rate') return [];
+    return series
+      .flatMap((x) => x.points.flatMap((p) => p.trials))
+      .map((t) => trialValue(metric.key, t))
+      .filter((v) => v !== null);
+  }
+
+  function tipFor(metric, rels, series, i) {
+    const box = h('div', {}, h('div', { class: 'tip-h', text: `${releaseTitle(rels[i])} · run ${rels[i].runId}` }));
+    let rows = 0;
+    for (const { model, points } of series) {
+      const point = points[i];
+      if (point.value === null) continue;
+      rows += 1;
+      const row = h('div', { class: 'tip-row' });
+      row.append(legendKey(model), h('b', { text: metric.fmt(point.value) }), h('span', { text: `${model} · ${point.n} trial${point.n === 1 ? '' : 's'}` }));
+      box.append(row);
+    }
+    if (rows === 0) box.append(h('div', { class: 'tip-row' }, h('span', { text: 'No data in this selection' })));
+    return box;
+  }
+
+  function selectRelease(runId) {
+    state.release = runId;
+    render();
+  }
+
+  function spanSelect() {
+    const select = h('select', { id: 'f-span', 'aria-label': 'Number of releases shown' }, ...SPANS.map(([value, text]) => h('option', { value, text })));
+    select.value = state.span;
+    select.addEventListener('change', () => { state.span = select.value; render(); });
+    return select;
+  }
+
+  function chartShell(metric, selected) {
+    const toggle = h('button', { type: 'button', 'aria-pressed': 'false', text: 'Table' });
+    const jump = h('a', { class: 'jump', href: '#release-detail', text: `Open release ${selected.label} ↓` });
+    const plot = h('div', { class: 'plot' });
+    const tableHost = h('div', { class: 'charttable' });
+    tableHost.hidden = true;
+    const tools = h('div', { class: 'chart-tools' }, spanSelect(), jump, toggle);
+    byId('chart').append(h('figure', { class: 'card chart' }, h('div', { class: 'chart-head' }, h('h3', { text: `${metric.title} by release` }), tools), plot, tableHost));
+    return { toggle, plot, tableHost };
+  }
+
+  function chartTable(metric, rels, series) {
+    const table = h('table');
+    table.append(h('thead', {}, h('tr', {}, h('th', { text: 'Release' }), ...series.map((x) => h('th', { class: 'num', text: x.model })))));
+    table.append(h('tbody', {}, ...rels.map((r, i) => h('tr', {}, h('td', { text: releaseTitle(r) }), ...series.map((x) => h('td', { class: 'num', text: x.points[i].value === null ? '–' : metric.fmt(x.points[i].value) }))))));
+    return table;
+  }
+
+  function chartGeometry(rels, plot, top) {
+    const W = Math.max(MIN_PLOT_WIDTH, plot.clientWidth);
+    const H = W < NARROW_WIDTH ? CHART_HEIGHT.narrow : CHART_HEIGHT.wide;
+    const m = CHART_MARGIN;
+    const innerW = W - m.l - m.r;
+    const innerH = H - m.t - m.b;
+    const xs = (i) => (rels.length === 1 ? m.l + innerW / 2 : m.l + X_PAD + ((innerW - X_PAD * 2) * i) / (rels.length - 1));
+    const ys = (v) => m.t + innerH - (v / top) * innerH;
+    const zoneOf = (i) => ({
+      left: i === 0 ? m.l : (xs(i - 1) + xs(i)) / 2,
+      right: i === rels.length - 1 ? W - m.r : (xs(i) + xs(i + 1)) / 2,
+    });
+    const spacing = rels.length > 1 ? (innerW - X_PAD * 2) / (rels.length - 1) : FALLBACK_SPACING;
+    return { W, H, m, innerH, xs, ys, zoneOf, spacing };
+  }
+
+  function drawGrid(svg, g, metric, ticks, band) {
+    if (band) s('rect', { x: band.left, y: g.m.t, width: Math.max(1, band.right - band.left), height: g.innerH, style: 'fill:var(--wash)' }, svg);
+    for (const v of ticks) {
+      s('line', { x1: g.m.l, x2: g.W - g.m.r, y1: g.ys(v), y2: g.ys(v), style: `stroke:${v === 0 ? 'var(--axis)' : 'var(--grid)'};stroke-width:1` }, svg);
+      s('text', { x: g.m.l - 8, y: g.ys(v) + 4, 'text-anchor': 'end', style: 'fill:var(--ink-3);font-size:11px', text: metric.fmt(v) }, svg);
+    }
+  }
+
+  function labelledIndexes(count, spacing, selectedIndex) {
+    const every = Math.max(1, Math.ceil(LABEL_MIN_SPACING / spacing));
+    const labelled = new Set(Array.from({ length: count }, (_, i) => i).filter((i) => i % every === 0));
+    if (selectedIndex < 0) return labelled;
+    for (const i of labelled) if (Math.abs(i - selectedIndex) * spacing < LABEL_MIN_SPACING) labelled.delete(i);
+    labelled.add(selectedIndex);
+    return labelled;
+  }
+
+  function drawReleaseLabels(svg, g, rels, selectedIndex) {
+    const labelled = labelledIndexes(rels.length, g.spacing, selectedIndex);
+    rels.forEach((r, i) => {
+      if (!labelled.has(i)) return;
+      const weight = i === selectedIndex ? 'fill:var(--ink);font-weight:600' : 'fill:var(--ink-3)';
+      s('text', { x: g.xs(i), y: g.H - LABEL_ROWS.primary, 'text-anchor': 'middle', style: `${weight};font-size:11px`, text: r.label }, svg);
+      if (r.sub) s('text', { x: g.xs(i), y: g.H - LABEL_ROWS.secondary, 'text-anchor': 'middle', style: 'fill:var(--ink-3);font-size:10px', text: r.sub }, svg);
+    });
+  }
+
+  function drawTrialDots(svg, g, metric, points, color) {
+    points.forEach((p, i) => p.trials.forEach((t, k) => {
+      const v = trialValue(metric.key, t);
+      if (v !== null) s('circle', { cx: g.xs(i) + ((k % JITTER_BUCKETS) - 2) * JITTER_PX, cy: g.ys(v), r: 2.5, style: `fill:${color};opacity:0.28` }, svg);
+    }));
+  }
+
+  function linePath(g, points) {
+    let d = '';
+    let pen = false;
+    points.forEach((p, i) => {
+      if (p.value === null) { pen = false; return; }
+      d += `${pen ? 'L' : 'M'}${g.xs(i)} ${g.ys(p.value)} `;
+      pen = true;
+    });
+    return d;
+  }
+
+  function drawSeries(svg, g, metric, series) {
+    for (const { model, points } of series) {
+      const color = colorOf(model);
+      if (metric.key !== 'rate') drawTrialDots(svg, g, metric, points, color);
+      s('path', { d: linePath(g, points), style: `fill:none;stroke:${color};stroke-width:2;stroke-linejoin:round;stroke-linecap:round` }, svg);
+      points.forEach((p, i) => { if (p.value !== null) marker(shapeOf(model), g.xs(i), g.ys(p.value), color, svg); });
+    }
+  }
+
+  function drawEndLabels(svg, g, metric, series) {
+    const ends = series
+      .map(({ points }) => {
+        let last = -1;
+        points.forEach((p, i) => { if (p.value !== null) last = i; });
+        return last < 0 ? null : { i: last, value: points[last].value };
+      })
+      .filter(Boolean)
+      .sort((a, b) => g.ys(a.value) - g.ys(b.value));
+    const crowded = ends.some((e, k) => k > 0 && g.ys(e.value) - g.ys(ends[k - 1].value) < MIN_LABEL_GAP);
+    if (crowded) return;
+    for (const e of ends) s('text', { x: g.xs(e.i) + LABEL_OFFSET, y: g.ys(e.value) + 4, style: 'fill:var(--ink-2);font-size:11px;font-weight:600', text: metric.fmt(e.value) }, svg);
+  }
+
+  function attachHits(svg, g, metric, rels, series) {
+    const cross = s('line', { y1: g.m.t, y2: g.m.t + g.innerH, style: 'stroke:var(--axis);stroke-width:1', visibility: 'hidden' }, svg);
+    const activate = (i, x, y) => {
+      cross.setAttribute('x1', g.xs(i));
+      cross.setAttribute('x2', g.xs(i));
+      cross.setAttribute('visibility', 'visible');
+      showTip(tipFor(metric, rels, series, i), x, y);
+    };
+    const deactivate = () => { cross.setAttribute('visibility', 'hidden'); hideTip(); };
+    rels.forEach((r, i) => {
+      const zone = g.zoneOf(i);
+      const summary = series.filter((x) => x.points[i].value !== null).map((x) => `${x.model} ${metric.fmt(x.points[i].value)}`).join(', ');
+      const hit = s('rect', { class: 'hit', x: zone.left, y: g.m.t, width: Math.max(1, zone.right - zone.left), height: g.innerH, tabindex: 0, role: 'button', 'aria-label': `${releaseTitle(r)}: ${summary || 'no data'}. Select this release` }, svg);
+      hit.addEventListener('pointermove', (e) => activate(i, e.clientX, e.clientY));
+      hit.addEventListener('pointerleave', deactivate);
+      hit.addEventListener('focus', () => activate(i, ...centerOf(hit)));
+      hit.addEventListener('blur', deactivate);
+      hit.addEventListener('click', () => selectRelease(r.runId));
+      hit.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectRelease(r.runId); } });
+    });
+  }
+
+  function lineChart(metric, rels, models, { toggle, plot, tableHost }, selected) {
+    const series = seriesFor(metric, rels, models);
+    const dotValues = dotValuesOf(metric, series);
+    const meanValues = series.flatMap((x) => x.points.map((p) => p.value)).filter((v) => v !== null);
+    if (meanValues.length === 0) {
+      plot.append(h('div', { class: 'empty-state', text: 'No data in this selection' }));
+      toggle.disabled = true;
+      return;
+    }
+    const ticks = metric.domain ? RATE_TICKS : niceTicks(Math.max(0, ...dotValues, ...meanValues));
+    const g = chartGeometry(rels, plot, ticks[ticks.length - 1]);
+    const selectedIndex = rels.indexOf(selected);
+    const svg = s('svg', { width: g.W, height: g.H, viewBox: `0 0 ${g.W} ${g.H}`, role: 'img', 'aria-label': `${metric.title} by release, one line per model` }, plot);
+    drawGrid(svg, g, metric, ticks, selectedIndex >= 0 ? g.zoneOf(selectedIndex) : null);
+    drawReleaseLabels(svg, g, rels, selectedIndex);
+    drawSeries(svg, g, metric, series);
+    drawEndLabels(svg, g, metric, series);
+    attachHits(svg, g, metric, rels, series);
+
+    tableHost.append(chartTable(metric, rels, series));
+    toggle.addEventListener('click', () => {
+      const showTable = toggle.getAttribute('aria-pressed') === 'false';
+      toggle.setAttribute('aria-pressed', String(showTable));
+      plot.hidden = showTable;
+      tableHost.hidden = !showTable;
+      hideTip();
+    });
+  }
+
+  function renderChart(rels, models, selected) {
+    byId('chart').replaceChildren();
+    const metric = currentMetric();
+    lineChart(metric, rels, models, chartShell(metric, selected), selected);
+  }
+
+  function toggleModel(model) {
+    if (state.models.has(model)) {
+      if (state.models.size === 1) return;
+      state.models.delete(model);
+    } else {
+      state.models.add(model);
+    }
+    render();
+  }
+
+  function renderModels() {
+    const host = byId('legend');
+    host.replaceChildren(h('h3', { text: 'Models' }));
+    for (const model of MODELS) {
+      const on = state.models.has(model);
+      const lone = on && state.models.size === 1;
+      const button = h('button', { type: 'button', class: on ? 'model on' : 'model', 'aria-pressed': String(on), title: lone ? 'At least one model must stay selected' : model }, legendKey(model), h('span', { text: model }));
+      button.addEventListener('click', () => toggleModel(model));
+      host.append(button);
+    }
+  }
+
+  function chooseMetric(key) {
+    state.metric = key;
+    render();
+    byId('measures').querySelector('[aria-checked="true"]')?.focus();
+  }
+
+  function measureKey(event, key) {
+    const keys = METRICS.map((m) => m.key);
+    const step = ARROW_STEP[event.key];
+    if (step === undefined) {
+      if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); chooseMetric(key); }
+      return;
+    }
+    event.preventDefault();
+    chooseMetric(keys[(keys.indexOf(key) + step + keys.length) % keys.length]);
+  }
+
+  function renderMeasures(selected) {
+    const host = byId('measures');
+    host.replaceChildren();
+    const stats = agg(scoped(selected));
+    for (const metric of METRICS) {
+      const on = metric.key === state.metric;
+      const value = stats[metric.key];
+      const item = h('div', { class: on ? 'measure on' : 'measure', role: 'radio', 'aria-checked': String(on), tabindex: on ? '0' : '-1' },
+        h('span', { class: 'mname', text: metric.title }),
+        h('span', { class: 'mvalue', text: value === null ? '–' : metric.tile(value) }));
+      item.addEventListener('click', () => chooseMetric(metric.key));
+      item.addEventListener('keydown', (e) => measureKey(e, metric.key));
+      host.append(item);
+    }
+  }
+
+  function rateDelta(cur, prev) {
+    if (cur === null || prev === null) return null;
+    const change = (cur - prev) * 100;
+    if (Math.abs(change) < 0.5) return { kind: 'flat', icon: '–', text: 'no change' };
+    const sign = change > 0 ? '+' : '−';
+    return { kind: change > 0 ? 'good' : 'bad', icon: change > 0 ? '▲' : '▼', text: `${sign}${Math.abs(change).toFixed(1)} pp` };
+  }
+
+  function summaryAverages(stats) {
+    const items = METRICS.filter((m) => m.key !== 'rate').map((metric) => {
+      const value = stats[metric.key];
+      return h('div', {}, h('dt', { text: AVERAGE_LABELS[metric.key] }), h('dd', { text: value === null ? '–' : metric.tile(value) }));
+    });
+    return h('dl', { class: 'sum-grid' }, ...items);
+  }
+
+  function renderSummary(selected) {
+    const index = releases.indexOf(selected);
+    const stats = agg(scoped(selected));
+    const host = byId('summary');
+    host.replaceChildren();
+    if (stats.n === 0) { host.append(h('div', { class: 'empty-state', text: 'No data in this selection' })); return; }
+    const main = h('div', { class: 'sum-main' },
+      h('div', { class: 'sum-label', text: 'Success rate' }),
+      h('div', { class: 'sum-value', text: `${(stats.rate * 100).toFixed(1)}%` }),
+      h('div', { class: 'sum-caption', text: `${stats.pass} of ${stats.n} trials passed` }));
+    let prevIndex = index - 1;
+    while (prevIndex >= 0 && agg(scoped(releases[prevIndex])).n === 0) prevIndex -= 1;
+    const delta = prevIndex >= 0 ? rateDelta(stats.rate, agg(scoped(releases[prevIndex])).rate) : null;
+    if (delta) main.append(h('div', { class: `delta ${delta.kind}` }, h('b', { text: `${delta.icon} ${delta.text}` }), ` vs release ${releases[prevIndex].label}`));
+    host.append(main, h('div', { class: 'sum-avgs' }, h('div', { class: 'sum-title', text: 'Average per trial' }), summaryAverages(stats)));
+  }
+
+  function renderReleaseHead(rels, selected) {
+    byId('release-title').textContent = `Release ${selected.label}`;
+    const chips = byId('release-chips');
+    chips.replaceChildren();
+    if (selected === latestRelease) chips.append(h('span', { class: 'chip latest', text: 'latest release' }));
+    chips.append(h('span', { class: 'chip', text: selected.when }), h('span', { class: 'chip', text: `run ${selected.runId}` }));
+    if (selected.commit) chips.append(h('span', { class: 'chip', text: `commit ${selected.commit.slice(0, COMMIT_LENGTH)}` }));
+
+    const index = rels.indexOf(selected);
+    const older = h('button', { type: 'button', 'aria-label': 'Previous release', text: '◀' });
+    const newer = h('button', { type: 'button', 'aria-label': 'Next release', text: '▶' });
+    older.disabled = index <= 0;
+    newer.disabled = index >= rels.length - 1;
+    older.addEventListener('click', () => selectRelease(rels[index - 1].runId));
+    newer.addEventListener('click', () => selectRelease(rels[index + 1].runId));
+    const menu = h('select', { 'aria-label': 'Select a release' }, ...[...rels].reverse().map((r) => h('option', { value: r.runId, text: r === latestRelease ? `${releaseTitle(r)} (latest)` : releaseTitle(r) })));
+    menu.value = selected.runId;
+    menu.addEventListener('change', () => selectRelease(menu.value));
+    byId('release-nav').replaceChildren(older, menu, newer);
+  }
+
+  const hexToRgb = (hex) => Object.values(HEX_CHANNELS).map((i) => Number.parseInt(hex.slice(i, i + 2), HEX_RADIX) / CHANNEL_MAX);
+  const linearize = (c) => (c <= SRGB.threshold ? c / SRGB.divisor : ((c + SRGB.offset) / SRGB.scale) ** SRGB.gamma);
+  const luminance = (hex) => {
+    const [r, g, b] = hexToRgb(hex).map(linearize);
+    return LUMA.red * r + LUMA.green * g + LUMA.blue * b;
+  };
+  const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + CONTRAST_OFFSET) / (Math.min(luminance(a), luminance(b)) + CONTRAST_OFFSET);
+  const ramp = () => (isDark() ? [...SEQ].reverse() : SEQ);
+  const rampColor = (rate) => ramp()[Math.round(rate * (SEQ.length - 1))];
+  const textOn = (hex) => (contrast(hex, '#ffffff') >= contrast(hex, '#0b0b0b') ? '#ffffff' : '#0b0b0b');
+
+  function heatTip(task, release, trials, pass) {
+    const box = h('div', {}, h('div', { class: 'tip-h', text: `${task} · ${releaseTitle(release)}` }), h('div', { class: 'tip-row' }, h('b', { text: `${pass} of ${trials.length}` }), h('span', { text: 'trials passed' })));
+    for (const status of FAILURES) {
+      const count = trials.filter((t) => t.status === status).length;
+      if (count) box.append(h('div', { class: 'tip-row' }, h('b', { text: String(count) }), h('span', { text: STATUS[status].label.toLowerCase() })));
+    }
+    return box;
+  }
+
+  function heatCell(task, release, selected) {
+    const trials = scoped(release).filter((t) => t.task === task);
+    if (trials.length === 0) return h('div', { class: 'cell empty', text: '–', 'aria-label': `${task}, ${release.label}: no data` });
+    const pass = trials.filter((t) => t.status === 'PASS').length;
+    const color = rampColor(pass / trials.length);
+    const cell = h('div', { class: release === selected ? 'cell sel' : 'cell', tabindex: 0, text: `${pass}/${trials.length}`, 'aria-label': `${task}, ${release.label}: ${pass} of ${trials.length} trials passed` });
+    cell.style.background = color;
+    cell.style.color = textOn(color);
+    const content = () => heatTip(task, release, trials, pass);
+    cell.addEventListener('pointermove', (e) => showTip(content(), e.clientX, e.clientY));
+    cell.addEventListener('pointerleave', hideTip);
+    cell.addEventListener('focus', () => showTip(content(), ...centerOf(cell)));
+    cell.addEventListener('blur', hideTip);
+    return cell;
+  }
+
+  function heatHead(release, selected) {
+    const head = h('button', { type: 'button', class: release === selected ? 'colhead on' : 'colhead', title: releaseTitle(release), 'aria-pressed': String(release === selected) }, h('span', { text: release.label }));
+    if (release.sub) head.append(h('span', { class: 'sub', text: release.sub }));
+    head.addEventListener('click', () => selectRelease(release.runId));
+    return head;
+  }
+
+  function renderHeat(rels, selected) {
+    const host = byId('heat');
+    host.replaceChildren();
+    const tasks = TASKS.filter((task) => hasTrial(rels, (t) => t.task === task));
+    if (tasks.length === 0) { host.append(h('div', { class: 'empty-state', text: 'No data in this selection' })); return; }
+    const dense = rels.length > COMPACT_AFTER;
+    const grid = h('div', { class: dense ? 'heat compact' : 'heat', role: 'group', 'aria-label': 'Pass rate by use case and release' });
+    const minColumn = dense ? COLUMN_MIN.compact : COLUMN_MIN.normal;
+    grid.style.gridTemplateColumns = `minmax(104px, 220px) repeat(${rels.length}, minmax(${minColumn}px, 1fr))`;
+    grid.append(h('div', { class: 'corner' }), ...rels.map((r) => heatHead(r, selected)));
+    for (const task of tasks) {
+      grid.append(h('div', { class: 'rowhead', text: task }), ...rels.map((r) => heatCell(task, r, selected)));
+    }
+    const scale = h('div', { class: 'scale' }, h('span', { text: 'Pass rate' }), h('span', { text: '0%' }), h('i'), h('span', { text: '100%' }));
+    scale.querySelector('i').style.background = `linear-gradient(90deg, ${ramp().join(', ')})`;
+    host.append(grid, scale);
+  }
+
+  function statusIcon(kind) {
+    const svg = s('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true', style: `fill:none;stroke:${STATUS[kind].color};stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round` });
+    if (kind === 'FAIL') { s('circle', { cx: 8, cy: 8, r: 6.5 }, svg); s('path', { d: 'M5.5 5.5l5 5M10.5 5.5l-5 5' }, svg); }
+    if (kind === 'ERROR') { s('path', { d: 'M8 2l6.5 11.5h-13z' }, svg); s('path', { d: 'M8 6.5v3.2M8 11.6v.1' }, svg); }
+    if (kind === 'LEAK') { s('path', { d: 'M8 1.5l5.5 2v4.5c0 3-2.5 5.5-5.5 6.5-3-1-5.5-3.5-5.5-6.5V3.5z' }, svg); s('path', { d: 'M8 5.5v3M8 10.3v.1' }, svg); }
+    if (kind === 'PASS') { s('circle', { cx: 8, cy: 8, r: 6.5 }, svg); s('path', { d: 'M5 8.2l2.2 2.2L11 6' }, svg); }
+    return svg;
+  }
+
+  function statusFlags(trials) {
+    const ordered = [...trials].sort((a, b) => STATUS[a.status].rank - STATUS[b.status].rank);
+    const shown = ordered.slice(0, MAX_STATUS_ICONS);
+    const box = h('span', { class: 'flags' });
+    for (const t of shown) {
+      const status = STATUS[t.status];
+      box.append(h('span', { class: 'flag', role: 'img', title: `${status.label}: ${status.hint}`, 'aria-label': status.label }, statusIcon(t.status)));
+    }
+    if (ordered.length > shown.length) box.append(h('span', { class: 'more', text: `+${ordered.length - shown.length}` }));
+    return box;
+  }
+
+  function statusSummary(trials) {
+    const box = h('span', { class: 'flags' });
+    for (const kind of Object.keys(STATUS)) {
+      const count = trials.filter((t) => t.status === kind).length;
+      if (count === 0) continue;
+      const label = `${count} ${STATUS[kind].label.toLowerCase()}`;
+      box.append(h('span', { class: 'flag count', role: 'img', title: label, 'aria-label': label }, statusIcon(kind), h('span', { text: String(count) })));
+    }
+    return box;
+  }
+
+  function renderAttention(selected) {
+    const trials = scoped(selected);
+    const bad = trials.filter((t) => t.status !== 'PASS').sort((a, b) => STATUS[a.status].rank - STATUS[b.status].rank || a.task.localeCompare(b.task));
+    byId('attn-title').textContent = `Needs attention in release ${selected.label}`;
+    const host = byId('attn');
+    host.replaceChildren();
+    if (trials.length === 0) { host.append(h('div', { class: 'empty-state', text: 'No data in this selection' })); return; }
+    if (bad.length === 0) {
+      host.append(h('div', { class: 'empty-state' }, statusIcon('PASS'), `Every one of the ${trials.length} trials passed.`));
+      return;
+    }
+    host.append(h('div', { class: 'empty-state', text: `${bad.length} of ${trials.length} trials did not pass.` }));
+    for (const t of bad) {
+      host.append(h('div', { class: 'attn-row', title: STATUS[t.status].hint },
+        h('span', { class: 'kind' }, statusIcon(t.status), STATUS[t.status].label),
+        h('span', { class: 'task', text: t.task }),
+        h('span', { class: 'meta', text: `${t.os} · ${t.agent} · ${t.model}` })));
+    }
+  }
+
+  const COLUMNS = [
+    { key: 'task', label: 'Use case' },
+    { key: 'os', label: 'System' },
+    { key: 'agent', label: 'Agent' },
+    { key: 'model', label: 'Model' },
+    { key: 'status', label: 'Status', plain: true },
+    { key: 'rate', label: 'Passed', num: true, text: (g) => `${g.pass}/${g.n}` },
+    { key: 'steps', label: 'Steps', num: true, text: (g) => (g.steps === null ? '–' : g.steps.toFixed(1)) },
+    { key: 'tokens', label: 'Tokens', num: true, text: (g) => fmtInt(g.tokens), hint: (g) => `prompt ${fmtInt(g.prompt)} · completion ${fmtInt(g.completion)} · cached ${fmtInt(g.cached)}` },
+    { key: 'seconds', label: 'Time', num: true, text: (g) => (g.seconds === null ? '–' : `${g.seconds.toFixed(0)} s`) },
+    { key: 'cost', label: 'Cost', num: true, text: (g) => (g.cost === null ? '–' : `$${g.cost.toFixed(4)}`) },
+  ];
+
+  function groupBy(trials, keyOf) {
+    const groups = new Map();
+    for (const t of trials) {
+      const key = keyOf(t);
+      groups.set(key, [...(groups.get(key) ?? []), t]);
+    }
+    return [...groups.values()];
+  }
+  const taskKey = (t) => t.task;
+  const rowKey = (t) => [t.os, t.agent, t.model].join('|');
+
+  function statsFor(trials) {
+    return {
+      ...agg(trials),
+      trials,
+      prompt: mean(trials.map((t) => t.promptTokens)),
+      completion: mean(trials.map((t) => t.completionTokens)),
+      cached: mean(trials.map((t) => t.cachedTokens)),
+    };
+  }
+
+  function detailGroups(trials) {
+    return groupBy(trials, taskKey).map((taskTrials) => ({
+      task: taskTrials[0].task,
+      ...statsFor(taskTrials),
+      rows: groupBy(taskTrials, rowKey).map((rowTrials) => ({
+        task: rowTrials[0].task, os: rowTrials[0].os, agent: rowTrials[0].agent, model: rowTrials[0].model, ...statsFor(rowTrials),
+      })),
+    }));
+  }
+
+  function sortValue(row) {
+    const v = row[sort.key];
+    return v === undefined ? null : v;
+  }
+
+  function compareRows(a, b) {
+    const x = sortValue(a);
+    const y = sortValue(b);
+    const order = typeof x === 'string' || typeof y === 'string' ? String(x ?? '').localeCompare(String(y ?? '')) : (x ?? -Infinity) - (y ?? -Infinity);
+    return order * sort.dir || a.task.localeCompare(b.task);
+  }
+
+  function toggleGroup(task) {
+    if (state.expanded.has(task)) state.expanded.delete(task);
+    else state.expanded.add(task);
+    renderDetail(selectedRelease());
+  }
+
+  const metricCells = (group) => COLUMNS.filter((c) => c.text).map((c) => h('td', { class: 'num', text: c.text(group), ...(c.hint ? { title: c.hint(group) } : {}) }));
+
+  function summaryRow(group) {
+    const open = state.expanded.has(group.task);
+    const twist = h('button', { class: 'twist', type: 'button', 'aria-expanded': String(open) }, h('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '▾' : '▸' }), group.task);
+    twist.addEventListener('click', () => toggleGroup(group.task));
+    const count = group.rows.length;
+    return h('tr', { class: 'sum' },
+      h('td', {}, twist),
+      h('td', { colspan: '3', class: 'muted', text: `${count} combination${count === 1 ? '' : 's'}` }),
+      h('td', {}, statusSummary(group.trials)),
+      ...metricCells(group));
+  }
+
+  function detailRow(row) {
+    return h('tr', { class: 'row' },
+      h('td', { class: 'indent' }),
+      h('td', { text: row.os }),
+      h('td', { text: row.agent }),
+      h('td', { text: row.model }),
+      h('td', {}, statusFlags(row.trials)),
+      ...metricCells(row));
+  }
+
+  function headCell(column, selected) {
+    const align = column.num ? 'num' : '';
+    if (column.plain) return h('th', { class: align, text: column.label });
+    const active = sort.key === column.key;
+    const button = h('button', { type: 'button', text: `${column.label}${active ? SORT_ARROWS.get(sort.dir) : ''}` });
+    button.addEventListener('click', () => {
+      sort.dir = active ? -sort.dir : 1;
+      sort.key = column.key;
+      renderDetail(selected);
+    });
+    return h('th', { class: align, 'aria-sort': active ? ARIA_SORT.get(sort.dir) : 'none' }, button);
+  }
+
+  function renderDetail(selected) {
+    byId('detail-title').textContent = `Details of release ${selected.label}`;
+    const host = byId('detail');
+    host.replaceChildren();
+    const groups = detailGroups(scoped(selected)).sort(compareRows);
+    if (groups.length === 0) { host.append(h('div', { class: 'empty-state', text: 'No data in this selection' })); return; }
+    const body = h('tbody');
+    for (const group of groups) {
+      body.append(summaryRow(group));
+      if (state.expanded.has(group.task)) for (const row of group.rows.sort(compareRows)) body.append(detailRow(row));
+    }
+    host.append(h('table', {}, h('thead', {}, h('tr', {}, ...COLUMNS.map((c) => headCell(c, selected)))), body));
+  }
+
+  function applyDetailOpen() {
+    byId('detail').hidden = !state.detailOpen;
+    byId('detail-toggle').setAttribute('aria-expanded', String(state.detailOpen));
+    byId('detail-chev').textContent = state.detailOpen ? '▾' : '▸';
+  }
+
+  function buildFilters() {
+    const defs = [
+      { key: 'os', label: 'System', options: [['all', 'All systems'], ...OSES.map((v) => [v, v])] },
+      { key: 'agent', label: 'Agent', options: [['all', 'All agents'], ...AGENTS.map((v) => [v, v])] },
+      { key: 'task', label: 'Use case', options: [['all', 'All use cases'], ...TASKS.map((v) => [v, v])] },
+    ];
+    for (const def of defs) {
+      const select = h('select', { id: `f-${def.key}` }, ...def.options.map(([value, text]) => h('option', { value, text })));
+      select.value = state[def.key];
+      select.addEventListener('change', () => { state[def.key] = select.value; render(); });
+      byId('filters').append(h('label', {}, h('span', { text: def.label }), select));
+    }
+  }
+
+  function scopeText() {
+    const system = state.os === 'all' ? 'all systems' : state.os;
+    const agent = state.agent === 'all' ? 'all agents' : state.agent;
+    const task = state.task === 'all' ? 'all use cases' : state.task;
+    return [system, agent, task, `${state.models.size} of ${MODELS.length} models`].join(' · ');
+  }
+
+  function render() {
+    hideTip();
+    const rels = windowed();
+    if (!rels.some((r) => r.runId === state.release)) state.release = rels[rels.length - 1].runId;
+    const selected = selectedRelease();
+    const models = MODELS.filter((model) => hasTrial(rels, (t) => t.model === model));
+    const count = `${releases.length} release${releases.length === 1 ? '' : 's'}`;
+    byId('subtitle').textContent = `How the SonarQube CLI performs for coding agents, release after release · ${count} recorded`;
+    byId('scope-note').textContent = `The release you picked in part 1. Same selection as the chart: ${scopeText()}.`;
+    byId('theme').textContent = isDark() ? 'Light mode' : 'Dark mode';
+    renderReleaseHead(rels, selected);
+    renderSummary(selected);
+    renderMeasures(selected);
+    renderModels();
+    renderChart(rels, models, selected);
+    renderHeat(rels, selected);
+    renderAttention(selected);
+    renderDetail(selected);
+    applyDetailOpen();
+  }
+
+  byId('theme').addEventListener('click', () => {
+    document.documentElement.dataset.theme = isDark() ? 'light' : 'dark';
+    render();
+  });
+  byId('detail-toggle').addEventListener('click', () => {
+    state.detailOpen = !state.detailOpen;
+    applyDetailOpen();
+  });
+  media.addEventListener('change', render);
+  let lastWidth = 0;
+  new ResizeObserver(([entry]) => {
+    const width = Math.round(entry.contentRect.width);
+    if (width === lastWidth) return;
+    lastWidth = width;
+    const rels = windowed();
+    renderChart(rels, MODELS.filter((model) => hasTrial(rels, (t) => t.model === model)), selectedRelease());
+  }).observe(byId('chart'));
+
+  buildFilters();
+  render();
+})();
+</script>
+</body>
+</html>
