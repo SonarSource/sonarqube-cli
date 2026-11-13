@@ -21,8 +21,7 @@
 import { ProjectOrganizationError } from '@/core/errors.ts';
 import { ComponentsClient } from '@/core/server/components.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import { AccessDeniedError } from '@/core/server/errors.ts';
-import { HTTP_STATUS_FORBIDDEN } from '@/core/server/http-constants.ts';
+import { isForbiddenRead } from '@/core/server/errors.ts';
 
 export async function assertProjectInOrganization(
   connection: SonarConnection,
@@ -32,10 +31,7 @@ export async function assertProjectInOrganization(
   if (!connection.httpClient.isCloud || !organization) return;
 
   const lookup = await new ComponentsClient(connection.httpClient).getComponent(projectKey);
-  if (
-    lookup.isErr() &&
-    !(lookup.error instanceof AccessDeniedError && lookup.error.status === HTTP_STATUS_FORBIDDEN)
-  ) {
+  if (lookup.isErr() && !isForbiddenRead(lookup.error)) {
     throw lookup.error;
   }
   const actualOrganization = lookup.isOk() ? lookup.value?.organization : undefined;

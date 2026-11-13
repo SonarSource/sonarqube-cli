@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,10 +28,15 @@ import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import {
   InvalidLinkPathError,
-  linkProjectDirectory,
+  linkItem,
   relativeProjectPath,
   resolveLinkTarget,
+  withLink,
 } from '@/core/project-discovery/link-target.ts';
+import type {
+  ConfigItem,
+  SharedProjectConfigEntry,
+} from '@/core/project-discovery/shared-project-config.ts';
 
 let dir: string;
 
@@ -83,52 +88,46 @@ describe('relativeProjectPath', () => {
   });
 });
 
-describe('linkProjectDirectory', () => {
+describe('linkItem and withLink', () => {
   const auth = new ResolvedAuth({
     token: 't',
     serverUrl: 'https://sq.example.com',
     connectionType: 'on-premise',
     source: 'state',
   });
-  const link = (key: string, subdir: string, monorepo: boolean) =>
-    linkProjectDirectory(
-      auth,
-      key,
-      { targetDir: dir, projectRoot: join(dir, subdir), inGitRepository: false },
-      { monorepo },
-    );
+  const item = (key: string, subdir: string) => linkItem(auth, dir, join(dir, subdir), key);
 
-  it('reports the mapping it replaced for the same directory', async () => {
-    await link('first', '.', false);
-
-    expect(await link('second', '.', false)).toEqual({
-      replacedProjectKey: 'first',
-      shadowed: false,
+  it('derives the entry from the connection, with the path relative to the config directory', () => {
+    expect(item('api', 'services/api')).toEqual({
+      entry: { projectKey: 'api', path: 'services/api', serverUrl: auth.serverUrl },
+      root: join(dir, 'services', 'api'),
     });
   });
 
-  it('stores the path relative to the config directory', async () => {
-    await link('api', 'services/api', false);
+  it('replaces the item for the same folder in its place and appends a new folder', () => {
+    const root = item('root', '.');
+    const api = item('api', 'services/api');
 
-    const written = JSON.parse(readFileSync(join(dir, '.sonar-config.json'), 'utf8'));
-    expect(written.project).toMatchObject({ projectKey: 'api', path: 'services/api' });
+    expect(withLink([root, api], item('root2', '.'))).toEqual([item('root2', '.'), api]);
+    expect(withLink([root], api)).toEqual([root, api]);
   });
 
-  it('reports a singular project shadowed by a projects array', async () => {
-    writeFileSync(
-      join(dir, '.sonar-config.json'),
-      JSON.stringify({
-        projects: [{ projectKey: 'other', path: 'services/api', serverUrl: auth.serverUrl }],
-      }),
-    );
+  it('keeps the fields outside the schema of the item it replaces, replacing the rest', () => {
+    const settings = { 'sonar.cfamily.compile-commands': 'build/compile_commands.json' };
+    const cloud = { projectKey: 'api', path: 'services/api', region: 'eu', organization: 'org' };
+    const existing: ConfigItem = {
+      entry: { ...cloud, settings } as SharedProjectConfigEntry,
+      root: join(dir, 'services', 'api'),
+    };
 
-    expect((await link('mine', '.', false)).shadowed).toBe(true);
-  });
+    const [updated] = withLink([existing], item('api2', 'services/api'));
 
-  it('adds to the projects array in monorepo mode without shadowing', async () => {
-    expect(await link('api', 'services/api', true)).toEqual({
-      replacedProjectKey: undefined,
-      shadowed: false,
+    expect(updated.entry as unknown).toEqual({
+      projectKey: 'api2',
+      path: 'services/api',
+      serverUrl: auth.serverUrl,
+      settings,
     });
+    expect(updated.root).toBe(join(dir, 'services', 'api'));
   });
 });

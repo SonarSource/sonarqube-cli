@@ -232,18 +232,18 @@ Learn more: https://docs.sonarsource.com/sonarqube-server/advanced-security/anal
 ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
-Supports one project per repository. Linking again replaces the existing link.
+'sonar link <projectKey>' replaces the existing links with this one.
 Without a project key, in an interactive terminal, 'sonar link' suggests a project it can verify
 on the server, or lets you search for one. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
-For a monorepo, use --monorepo to link several directories:
+For a monorepo, use --monorepo to add directories to the existing links:
   sonar link --monorepo api_project --path services/api
   sonar link --monorepo web_project --path services/web
 
 Paths are relative to the repository root (the current directory outside Git).
-Mappings are saved in the projects array in .sonar-config.json.
-Linking the same directory again updates its mapping and preserves other mappings.
+A single link is saved as project in .sonar-config.json, several as the projects array.
+Linking the same directory again updates its mapping.
 `;
 
 export interface CreateCommandTreeOptions {
@@ -882,6 +882,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
+      '--monorepo',
+      'Onboard every project root mapped in .sonar-config.json instead of a single project (interactive only)',
+    )
+    .option(
       '--project <key>',
       'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
     )
@@ -921,7 +925,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
     .option(
       '--monorepo',
-      'Add or update this directory in the projects array instead of replacing the single link',
+      'Add or update this directory among the existing links instead of replacing them',
     )
     .addHelpText('after', linkExtraHelp)
     .authenticatedAction((ctx, projectKey: string | undefined, options: LinkOptions) =>

@@ -18,13 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Unit tests for `sonar link`, mocking SharedProjectConfigRepository and git-root
+// Unit tests for `sonar link`, mocking SharedProjectConfigFile and git-root
 // resolution instead of touching a real repository (covered end-to-end by the
 // integration spec at tests/integration/specs/link/link.test.ts).
 
 import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
@@ -33,10 +33,20 @@ import { CommandAuthenticatedInvocationContext } from '@/core/commands/invocatio
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { sharedProjectConfigRepository } from '@/core/project-discovery/shared-project-config.ts';
+import {
+  type ConfigItem,
+  type SharedProjectConfigEntry,
+  sharedProjectConfigFile,
+  throwOnInvalidConfig,
+} from '@/core/project-discovery/shared-project-config.ts';
 
 import { link, type LinkOptions } from '../../../../src/commands/link/index.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
+
+/** The item for `entry`, with `path` relative to the current directory, which the tests use as the git root. */
+function item(entry: SharedProjectConfigEntry): ConfigItem {
+  return { entry, root: canonicalizePath(resolve(process.cwd(), entry.path)) };
+}
 
 const onPremAuth = new ResolvedAuth({
   token: 'test-token',
@@ -56,7 +66,8 @@ const cloudAuth = new ResolvedAuth({
 describe('link', () => {
   let fake: FakeConsole;
   let gitRootSpy: Mock<typeof gitWorktree.resolveGitRepoRoot>;
-  let setSpy: Mock<typeof sharedProjectConfigRepository.set>;
+  let saveSpy: Mock<typeof sharedProjectConfigFile.writeItems>;
+  let entriesSpy: Mock<typeof sharedProjectConfigFile.readItems>;
 
   function ctxFor(auth: ResolvedAuth): CommandAuthenticatedInvocationContext {
     return new CommandAuthenticatedInvocationContext(auth, fake);
@@ -67,33 +78,30 @@ describe('link', () => {
     // process.cwd() always exists, so it doubles as a real target directory
     // without needing to create one on disk for these tests.
     gitRootSpy = spyOn(gitWorktree, 'resolveGitRepoRoot').mockResolvedValue(process.cwd());
-    setSpy = spyOn(sharedProjectConfigRepository, 'set').mockResolvedValue(false);
+    saveSpy = spyOn(sharedProjectConfigFile, 'writeItems').mockResolvedValue(undefined);
+    entriesSpy = spyOn(sharedProjectConfigFile, 'readItems').mockResolvedValue([]);
   });
 
   afterEach(() => {
     gitRootSpy.mockRestore();
-    setSpy.mockRestore();
+    saveSpy.mockRestore();
+    entriesSpy.mockRestore();
   });
 
   it('writes a Server entry derived from an on-premise connection', async () => {
     await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
-    expect(setSpy).toHaveBeenCalledWith(process.cwd(), {
-      projectKey: 'my_project',
-      path: '.',
-      serverUrl: onPremAuth.serverUrl,
-    });
+    expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [
+      item({ projectKey: 'my_project', path: '.', serverUrl: onPremAuth.serverUrl }),
+    ]);
   });
 
   it('writes a Cloud entry derived from a Cloud connection', async () => {
     await link('my_project', { path: '.' }, ctxFor(cloudAuth));
 
-    expect(setSpy).toHaveBeenCalledWith(process.cwd(), {
-      projectKey: 'my_project',
-      path: '.',
-      region: 'eu',
-      organization: 'my-org',
-    });
+    expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [
+      item({ projectKey: 'my_project', path: '.', region: 'eu', organization: 'my-org' }),
+    ]);
   });
 
   it('rejects a blank --path without resolving git or writing anything', async () => {
@@ -102,7 +110,7 @@ describe('link', () => {
       '--path must not be empty.',
     );
     expect(gitRootSpy).not.toHaveBeenCalled();
-    expect(setSpy).not.toHaveBeenCalled();
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it('rejects a --path that does not resolve to an existing directory, without writing', async () => {
@@ -112,7 +120,7 @@ describe('link', () => {
     await expect(link('my_project', options, ctxFor(onPremAuth))).rejects.toThrow(
       'must point to an existing directory inside',
     );
-    expect(setSpy).not.toHaveBeenCalled();
+    expect(saveSpy).not.toHaveBeenCalled();
   });
 
   it('warns and writes to the current directory when no git repository is found', async () => {
@@ -120,7 +128,7 @@ describe('link', () => {
 
     await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
-    expect(setSpy).toHaveBeenCalledWith(process.cwd(), expect.anything());
+    expect(saveSpy).toHaveBeenCalledWith(process.cwd(), expect.anything());
     const warnings = fake.calls.filter((c) => c.method === 'warn');
     expect(warnings).toHaveLength(1);
     expect(String(warnings[0].args[0])).toContain('No git repository found');
@@ -142,7 +150,7 @@ describe('link', () => {
       await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
       const canonicalRealDir = canonicalizePath(realDir);
-      expect(setSpy).toHaveBeenCalledWith(canonicalRealDir, expect.anything());
+      expect(saveSpy).toHaveBeenCalledWith(canonicalRealDir, expect.anything());
 
       const successCall = fake.calls.find((c) => c.method === 'success');
       const message = String(successCall?.args[0]);
@@ -156,31 +164,36 @@ describe('link', () => {
     }
   });
 
-  it('warns that the link is ignored when a projects array already exists', async () => {
-    setSpy.mockResolvedValue(true);
+  const other = item({ projectKey: 'other', path: 'src', serverUrl: onPremAuth.serverUrl });
+  const mine = item({ projectKey: 'my_project', path: '.', serverUrl: onPremAuth.serverUrl });
+
+  it('replaces the other mappings without --monorepo, and warns which ones it removed', async () => {
+    entriesSpy.mockResolvedValue([other]);
 
     await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
-    expect(setSpy).toHaveBeenCalled();
+    expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [mine]);
     const warnings = fake.calls.filter((c) => c.method === 'warn');
     expect(warnings).toHaveLength(1);
+    expect(String(warnings[0].args[0])).toContain('(other)');
     expect(String(warnings[0].args[0])).toContain("'sonar link --monorepo'");
-    expect(fake.calls.filter((c) => c.method === 'success')).toHaveLength(0);
   });
 
-  it('link with monorepo writes through addProject and never calls set', async () => {
-    const addSpy = spyOn(sharedProjectConfigRepository, 'addProject').mockResolvedValue(undefined);
-    try {
-      await link('my_project', { path: '.', monorepo: true }, ctxFor(onPremAuth));
+  it('reads the config strictly, so a problem in it stops the link before anything is written', async () => {
+    await link('my_project', { path: '.' }, ctxFor(onPremAuth));
 
-      expect(addSpy).toHaveBeenCalledWith(process.cwd(), {
-        projectKey: 'my_project',
-        path: '.',
-        serverUrl: onPremAuth.serverUrl,
-      });
-      expect(setSpy).not.toHaveBeenCalled();
-    } finally {
-      addSpy.mockRestore();
-    }
+    expect(entriesSpy).toHaveBeenCalledWith(process.cwd(), throwOnInvalidConfig);
+  });
+
+  it('adds to the existing mappings with --monorepo', async () => {
+    entriesSpy.mockResolvedValue([other]);
+
+    await link('my_project', { path: '.', monorepo: true }, ctxFor(onPremAuth));
+
+    expect(saveSpy).toHaveBeenCalledWith(process.cwd(), [other, mine]);
+    expect(fake.calls.filter((c) => c.method === 'warn')).toHaveLength(0);
+    expect(String(fake.calls.find((c) => c.method === 'success')?.args[0])).toContain(
+      '(monorepo mapping)',
+    );
   });
 });

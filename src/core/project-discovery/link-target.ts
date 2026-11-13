@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { relative, resolve, sep } from 'node:path';
+import { relative, sep } from 'node:path';
 
 import { requireCloudOrganization, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
@@ -27,9 +27,10 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
 
 import {
+  type ConfigItem,
   resolveContainedPath,
+  SHARED_PROJECT_CONFIG_ENTRY_FIELDS,
   type SharedProjectConfigEntry,
-  sharedProjectConfigRepository,
 } from './shared-project-config.ts';
 
 export interface LinkTarget {
@@ -50,12 +51,9 @@ export class InvalidLinkPathError extends Error {
   }
 }
 
-/** What `saveProjectLink()` observed, for the caller to report in its own words. */
-export interface SavedLink {
-  /** Key of the mapping this write replaced for the same directory, if any. */
-  replacedProjectKey?: string;
-  /** The link was written but a `projects` array takes precedence, so it has no effect. */
-  shadowed: boolean;
+export interface ProjectLink {
+  projectKey: string;
+  projectRoot: string;
 }
 
 function deriveEntry(
@@ -106,38 +104,34 @@ export function relativeProjectPath(targetDir: string, projectRoot: string): str
   return relative(targetDir, canonicalizePath(projectRoot)).split(sep).join('/') || '.';
 }
 
-/**
- * Writes `entry` into `<dir>/.sonar-config.json`: as the singular `project` by default,
- * into the `projects` array in monorepo mode.
- */
-async function saveProjectLink(
-  dir: string,
-  entry: SharedProjectConfigEntry,
-  { monorepo }: { monorepo: boolean },
-): Promise<SavedLink> {
-  const target = canonicalizePath(resolve(dir, entry.path));
-  const previous = (await sharedProjectConfigRepository.load(dir)).find(
-    (mapping) => canonicalizePath(mapping.projectRoot) === target,
-  );
-
-  if (monorepo) {
-    await sharedProjectConfigRepository.addProject(dir, entry);
-    return { replacedProjectKey: previous?.projectKey, shadowed: false };
-  }
-  const shadowed = await sharedProjectConfigRepository.set(dir, entry);
-  return { replacedProjectKey: previous?.projectKey, shadowed };
+/** The item linking `projectRoot` to `projectKey` on the active connection. */
+export function linkItem(
+  auth: ResolvedAuth,
+  targetDir: string,
+  projectRoot: string,
+  projectKey: string,
+): ConfigItem {
+  const entry = deriveEntry(auth, projectKey, relativeProjectPath(targetDir, projectRoot));
+  return { entry, root: canonicalizePath(projectRoot) };
 }
 
 /**
- * The one write path for `sonar link` and `sonar init`: derives the entry for `target` from the
- * active connection and saves it, leaving the reporting to the caller.
+ * `items` with `item` in place of the one for the same folder, or appended when there is none. A
+ * replaced entry's fields outside the schema, such as `settings`, carry over to `item`.
  */
-export async function linkProjectDirectory(
-  auth: ResolvedAuth,
-  projectKey: string,
-  target: LinkTarget,
-  options: { monorepo: boolean },
-): Promise<SavedLink> {
-  const path = relativeProjectPath(target.targetDir, target.projectRoot);
-  return saveProjectLink(target.targetDir, deriveEntry(auth, projectKey, path), options);
+export function withLink(items: readonly ConfigItem[], item: ConfigItem): ConfigItem[] {
+  if (!items.some((existing) => existing.root === item.root)) {
+    return [...items, item];
+  }
+  return items.map((existing) =>
+    existing.root === item.root
+      ? { ...item, entry: { ...fieldsOutsideSchema(existing.entry), ...item.entry } }
+      : existing,
+  );
+}
+
+function fieldsOutsideSchema(entry: SharedProjectConfigEntry): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(entry).filter(([field]) => !SHARED_PROJECT_CONFIG_ENTRY_FIELDS.includes(field)),
+  );
 }
