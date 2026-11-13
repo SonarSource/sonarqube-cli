@@ -43,7 +43,6 @@ interface Release {
   runId: string;
   commit: string;
   date: string;
-  iteration?: string;
 }
 
 interface ReleaseReport {
@@ -170,14 +169,11 @@ function parseRelease(values: Record<string, string | undefined>): Release {
   }
   const date = values.date as string;
   if (Number.isNaN(Date.parse(date))) throw new Error(`--date is not a date: '${date}'`);
-  const iteration = values.iteration;
-  if (iteration !== undefined && !iteration) throw new Error('--iteration is empty');
   return {
     cliVersion: values['cli-version'] as string,
     runId: values['run-id'] as string,
     commit: values.commit as string,
     date,
-    ...(iteration ? { iteration } : {}),
   };
 }
 
@@ -190,7 +186,6 @@ function main(): void {
       'run-id': { type: 'string' },
       commit: { type: 'string' },
       date: { type: 'string' },
-      iteration: { type: 'string' },
     },
   });
   const release = parseRelease(values);
