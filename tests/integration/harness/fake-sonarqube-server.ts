@@ -171,7 +171,15 @@ function resolveIssuesSearchScope(
 
 const FAKE_ANALYSIS_DATE = '2026-01-01T00:00:00+0000';
 
+interface BadgeConfig {
+  visibility?: string;
+  qualifier?: string;
+  token?: unknown;
+  tokenStatus?: number;
+}
+
 interface ProjectData {
+  badge: BadgeConfig;
   organization?: string;
   componentShowStatusCode?: number;
   key: string;
@@ -210,6 +218,7 @@ export interface DopRepositoryConfig {
 }
 
 export class ProjectBuilder {
+  private badge: BadgeConfig = { visibility: 'public', qualifier: 'TRK', token: 'badge-token' };
   private readonly projectKey: string;
   private organization: string | undefined = 'my-org';
   private componentShowStatusCode?: number;
@@ -237,6 +246,11 @@ export class ProjectBuilder {
 
   constructor(projectKey: string) {
     this.projectKey = projectKey;
+  }
+
+  withBadge(config: BadgeConfig): this {
+    this.badge = config;
+    return this;
   }
 
   withOrganization(organization: string | undefined): this {
@@ -426,6 +440,7 @@ export class ProjectBuilder {
   getData(): ProjectData {
     return {
       organization: this.organization,
+      badge: this.badge,
       componentShowStatusCode: this.componentShowStatusCode,
       key: this.projectKey,
       name: this.projectKey,
@@ -465,6 +480,7 @@ export class FakeSonarQubeServer {
     requests: RecordedRequest[],
     provisionConcurrency: { current: number; peak: number },
     treatAsCloud = false,
+    private readonly contextPath = '',
   ) {
     this.server = server;
     this.requests = requests;
@@ -489,7 +505,7 @@ export class FakeSonarQubeServer {
     // it — `.github/actions/run-integration-and-e2e` pins it in `/etc/hosts`.
     // `api.127.0.0.1` would not resolve, breaking any test that exercises
     // Cloud-mode CAG.
-    return `http://localhost:${this.server.port}`;
+    return `http://localhost:${this.server.port}${this.contextPath}`;
   }
 
   /**
@@ -566,6 +582,13 @@ export interface FakeGithubOrganization {
 }
 
 export class FakeSonarQubeServerBuilder {
+  private contextPath = '';
+
+  withContextPath(path: string): this {
+    this.contextPath = path;
+    return this;
+  }
+
   private readonly projectBuilders: Map<string, ProjectBuilder> = new Map();
   private readonly systemStatus: 'UP' | 'DOWN' = 'UP';
   private treatAsCloud = false;
@@ -1240,6 +1263,7 @@ export class FakeSonarQubeServerBuilder {
       boundProjectFailures,
       analyzedProjectKeys,
       treatAsCloud,
+      contextPath,
     } = this;
     const memberOrganizations: Organization[] =
       configuredMemberOrganizations ??
@@ -1262,7 +1286,9 @@ export class FakeSonarQubeServerBuilder {
       ipv6Only: false,
       async fetch(req) {
         const url = new URL(req.url);
-        const path = url.pathname;
+        const path = url.pathname.startsWith(contextPath + '/')
+          ? url.pathname.slice(contextPath.length)
+          : url.pathname;
         const query: Record<string, string> = {};
         url.searchParams.forEach((v, k) => {
           query[k] = v;
@@ -1276,7 +1302,7 @@ export class FakeSonarQubeServerBuilder {
         requests.push({
           method: req.method,
           url: req.url,
-          path,
+          path: url.pathname,
           query,
           headers,
           body,
@@ -1795,7 +1821,8 @@ export class FakeSonarQubeServerBuilder {
                 component: {
                   key: projectData.key,
                   name: projectData.name,
-                  qualifier: 'TRK',
+                  qualifier: projectData.badge.qualifier,
+                  visibility: projectData.badge.visibility,
                   organization: projectData.organization,
                 },
               }),
@@ -2383,8 +2410,8 @@ export class FakeSonarQubeServerBuilder {
           );
         }
 
-        if (path === '/api/navigation/component') {
-          const componentKey = query.component;
+        if (path === '/api/navigation/component' || path === '/api/project_badges/token') {
+          const componentKey = query.component ?? query.project;
           const projectData = componentKey ? projects.get(componentKey) : undefined;
           if (!projectData) {
             return new Response(
@@ -2392,8 +2419,13 @@ export class FakeSonarQubeServerBuilder {
               { status: 404, headers: { 'Content-Type': 'application/json' } },
             );
           }
+          if (projectData.badge.tokenStatus)
+            return new Response(null, { status: projectData.badge.tokenStatus });
+          if (path === '/api/project_badges/token')
+            return Response.json({ token: projectData.badge.token });
           return new Response(
             JSON.stringify({
+              badgeToken: projectData.badge.token,
               id: `AY${componentKey}legacy`,
               key: projectData.key,
               name: projectData.name,
@@ -2753,7 +2785,13 @@ export class FakeSonarQubeServerBuilder {
     });
 
     return Promise.resolve(
-      new FakeSonarQubeServer(server, requests, provisionConcurrency, this.treatAsCloud),
+      new FakeSonarQubeServer(
+        server,
+        requests,
+        provisionConcurrency,
+        this.treatAsCloud,
+        contextPath,
+      ),
     );
   }
 }
