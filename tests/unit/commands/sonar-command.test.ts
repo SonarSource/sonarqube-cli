@@ -258,8 +258,8 @@ describe('SonarCommand', () => {
       const command = sonarCommand('stable').description('Stable command').stage(Stage.Stable);
 
       expect(command.lifecycle).toEqual({ stage: 'stable' });
-      expect(command.helpInformation()).not.toContain('[ALPHA]');
-      expect(command.helpInformation()).not.toContain('[BETA]');
+      expect(command.helpInformation()).not.toContain('[EXPERIMENTAL]');
+      expect(command.helpInformation()).not.toContain('[PREVIEW]');
       expect(command.helpInformation()).not.toContain('[DEPRECATED]');
     });
 
@@ -329,8 +329,8 @@ describe('SonarCommand', () => {
           .stage(Stage.Alpha);
 
         expect(root.commands.map((command) => command.name())).toContain('experimental');
-        expect(root.helpInformation()).toContain('Experimental command [ALPHA]');
-        expect(alphaCommand.helpInformation()).toContain('Experimental command [ALPHA]');
+        expect(root.helpInformation()).toContain('Experimental command [EXPERIMENTAL]');
+        expect(alphaCommand.helpInformation()).toContain('Experimental command [EXPERIMENTAL]');
       },
     );
 
@@ -343,7 +343,7 @@ describe('SonarCommand', () => {
         .summary('Experimental summary')
         .stage(Stage.Alpha);
 
-      expect(root.helpInformation()).toContain('Experimental summary [ALPHA]');
+      expect(root.helpInformation()).toContain('Experimental summary [EXPERIMENTAL]');
     });
 
     it('groups alpha commands together after all stable root-help categories', () => {
@@ -368,8 +368,8 @@ describe('SonarCommand', () => {
       const help = getCustomRootHelp(root, root.createHelp());
       const stableCoreIndex = help.indexOf('Stable core command');
       const stableManagementIndex = help.indexOf('Stable management command');
-      const alphaCoreIndex = help.indexOf('Alpha core command [ALPHA]');
-      const alphaDataIndex = help.indexOf('Alpha data command [ALPHA]');
+      const alphaCoreIndex = help.indexOf('Alpha core command [EXPERIMENTAL]');
+      const alphaDataIndex = help.indexOf('Alpha data command [EXPERIMENTAL]');
 
       expect(stableCoreIndex).toBeGreaterThan(-1);
       expect(stableManagementIndex).toBeGreaterThan(stableCoreIndex);
@@ -391,7 +391,7 @@ describe('SonarCommand', () => {
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help).toContain('system <status|reset|alpha-example[ALPHA]>');
+      expect(help).toContain('system <status|reset|alpha-example[EXPERIMENTAL]>');
     });
 
     it('lists alpha subcommands in a separate group at the bottom of their parent help', () => {
@@ -414,8 +414,8 @@ describe('SonarCommand', () => {
           '  stable-two      Second stable command',
           '  help [command]  display help for command',
           '',
-          '  alpha-one       First alpha command [ALPHA]',
-          '  alpha-two       Second alpha command [ALPHA]',
+          '  alpha-one       First alpha command [EXPERIMENTAL]',
+          '  alpha-two       Second alpha command [EXPERIMENTAL]',
           '',
         ].join('\n'),
       );
@@ -429,10 +429,13 @@ describe('SonarCommand', () => {
 
       await root.parseAsync(['experimental'], { from: 'user' });
 
-      expect(handler).toHaveBeenCalledTimes(1);
+      await root.parseAsync(['experimental'], { from: 'user' });
+
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(ui.calls.filter((call) => call.method === 'info')).toHaveLength(2);
       const warning = ui.calls.find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'sonar experimental' is in alpha; may change or be removed without notice.",
+        "'sonar experimental' is experimental in SonarQube CLI and is going through the mandatory first phase of internal testing. It may change or be removed without notice.",
       );
     });
   });
@@ -482,8 +485,8 @@ describe('SonarCommand', () => {
 
       expect(command.lifecycle).toEqual({ stage: 'beta' });
       expect(parent.commands).toContain(command);
-      expect(parent.helpInformation()).toContain('Preview command [BETA]');
-      expect(parent.helpInformation()).not.toContain('[ALPHA]');
+      expect(parent.helpInformation()).toContain('Preview command [PREVIEW]');
+      expect(parent.helpInformation()).not.toContain('[EXPERIMENTAL]');
     });
 
     it('leaves commands Stable by default', () => {
@@ -493,14 +496,14 @@ describe('SonarCommand', () => {
     it('adds the Beta tag to command help', () => {
       const command = sonarCommand('preview').description('Run the preview').stage(Stage.Beta());
 
-      expect(command.helpInformation()).toContain('Run the preview [BETA]');
+      expect(command.helpInformation()).toContain('Run the preview [PREVIEW]');
     });
 
     it('adds the Beta tag to a parent command subcommand list', () => {
       const parent = sonarCommand('sonar');
       parent.command('preview').description('Run the preview').stage(Stage.Beta());
 
-      expect(parent.helpInformation()).toContain('Run the preview [BETA]');
+      expect(parent.helpInformation()).toContain('Run the preview [PREVIEW]');
     });
 
     it('adds the Beta tag to an explicit command summary', () => {
@@ -511,7 +514,7 @@ describe('SonarCommand', () => {
         .summary('Preview summary')
         .stage(Stage.Beta());
 
-      expect(parent.helpInformation()).toContain('Preview summary [BETA]');
+      expect(parent.helpInformation()).toContain('Preview summary [PREVIEW]');
     });
 
     it('tags Beta subcommands in a root-help label', () => {
@@ -525,7 +528,7 @@ describe('SonarCommand', () => {
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help).toContain('system <status|preview[BETA]>');
+      expect(help).toContain('system <status|preview[PREVIEW]>');
     });
 
     it('keeps Beta commands in category declaration order', () => {
@@ -540,8 +543,8 @@ describe('SonarCommand', () => {
 
       const help = getCustomRootHelp(root, root.createHelp());
 
-      expect(help.indexOf('First command')).toBeLessThan(help.indexOf('Preview command [BETA]'));
-      expect(help.indexOf('Preview command [BETA]')).toBeLessThan(help.indexOf('Last command'));
+      expect(help.indexOf('First command')).toBeLessThan(help.indexOf('Preview command [PREVIEW]'));
+      expect(help.indexOf('Preview command [PREVIEW]')).toBeLessThan(help.indexOf('Last command'));
     });
 
     it('warns once for the command in the current CLI version', async () => {
@@ -559,7 +562,9 @@ describe('SonarCommand', () => {
 
       const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]?.args[0]).toBe("'preview' is in beta and may change.");
+      expect(warnings[0]?.args[0]).toBe(
+        "'preview' is in preview in SonarQube CLI. The command flags and output may still change.",
+      );
       expect(state.config.betaCommandWarnings).toEqual({ preview: VERSION });
       expect(updateStateSpy).toHaveBeenCalledTimes(1);
     });
@@ -581,7 +586,10 @@ describe('SonarCommand', () => {
       await second.parseAsync([], { from: 'user' });
 
       expect(ui.calls.filter((call) => call.method === 'info').map((call) => call.args[0])).toEqual(
-        ["'first' is in beta and may change.", "'second' is in beta and may change."],
+        [
+          "'first' is in preview in SonarQube CLI. The command flags and output may still change.",
+          "'second' is in preview in SonarQube CLI. The command flags and output may still change.",
+        ],
       );
     });
 
@@ -616,7 +624,7 @@ describe('SonarCommand', () => {
       const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
       expect(warnings[0]?.args[0]).toBe(
-        "'preview-with-unreadable-state' is in beta and may change.",
+        "'preview-with-unreadable-state' is in preview in SonarQube CLI. The command flags and output may still change.",
       );
     });
 
@@ -1147,7 +1155,7 @@ describe('SonarCommand', () => {
       expect(caught.message).toContain("unknown option '--preview'");
     });
 
-    it('registers an Alpha option with an [ALPHA] tag when alpha is enabled', async () => {
+    it('registers an Alpha option with an [EXPERIMENTAL] tag when alpha is enabled', async () => {
       const handler = mock(() => {});
       const cmd = sonarCommand('cmd', {
         runtime: createCliRuntime({ isAlphaEnabled: true }),
@@ -1157,14 +1165,14 @@ describe('SonarCommand', () => {
         .anonymousAction(handler);
 
       expect(cmd.helpInformation()).toContain('--preview');
-      expect(cmd.helpInformation()).toContain('Preview the plan [ALPHA]');
+      expect(cmd.helpInformation()).toContain('Preview the plan [EXPERIMENTAL]');
       expect(cmd.options[0]?.description).toBe('Preview the plan');
 
       await cmd.parseAsync(['--preview'], { from: 'user' });
       expect(handler).toHaveBeenCalledTimes(1);
       const warning = ui.calls.find((call) => call.method === 'info');
       expect(warning?.args[0]).toBe(
-        "'--preview' is in alpha; may change or be removed without notice.",
+        "'--preview' is experimental in SonarQube CLI and is going through the mandatory first phase of internal testing. It may change or be removed without notice.",
       );
     });
 
@@ -1183,13 +1191,13 @@ describe('SonarCommand', () => {
           '  --stable    A stable option',
           '  -h, --help  display help for command',
           '',
-          '  --preview   Preview the plan [ALPHA]',
+          '  --preview   Preview the plan [EXPERIMENTAL]',
           '',
         ].join('\n'),
       );
     });
 
-    it('keeps Open Beta options visible with a [BETA] tag and warns once on use', async () => {
+    it('keeps Open Beta options visible with a [PREVIEW] tag and warns once on use', async () => {
       const state = getDefaultState(VERSION);
       loadStateSpy = spyOn(stateManager, 'loadState').mockReturnValue(state);
       updateStateSpy = spyOn(stateManager, 'updateState').mockImplementation((update) =>
@@ -1199,14 +1207,16 @@ describe('SonarCommand', () => {
         new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()),
       );
 
-      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
+      expect(cmd.helpInformation()).toContain('Preview the plan [PREVIEW]');
 
       await cmd.parseAsync(['--preview'], { from: 'user' });
       await cmd.parseAsync(['--preview'], { from: 'user' });
 
       const warnings = ui.calls.filter((call) => call.method === 'info');
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]?.args[0]).toBe("'--preview' is in beta and may change.");
+      expect(warnings[0]?.args[0]).toBe(
+        "'--preview' is in preview in SonarQube CLI. The command flags and output may still change.",
+      );
       expect(state.config.betaCommandWarnings).toEqual({ 'cmd --preview': VERSION });
     });
 
@@ -1226,14 +1236,14 @@ describe('SonarCommand', () => {
         { isPrivateBetaEnabled: (key) => key === 'cli.beta.preview' },
       );
 
-      expect(cmd.helpInformation()).toContain('Preview the plan [BETA]');
+      expect(cmd.helpInformation()).toContain('Preview the plan [PREVIEW]');
     });
 
     it('tags staged options in the custom root help menu', () => {
       const root = sonarCommand('sonar');
       root.addOption(new SonarOption('--preview', 'Preview the plan').stage(Stage.Beta()));
 
-      expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [BETA]');
+      expect(getCustomRootHelp(root, root.createHelp())).toContain('Preview the plan [PREVIEW]');
     });
 
     it('allows deprecating a required option', () => {

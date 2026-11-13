@@ -503,13 +503,14 @@ function renderDetail(cmd) {
     parts.push(`<code class="detail-alias">${escHtml(alias)}</code>`);
   }
   if (cmd.stage === 'beta' || cmd.stage === 'deprecated') {
-    parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${escHtml(cmd.stage)}</span>`);
+    const stageLabel = cmd.stage === 'beta' ? 'preview' : escHtml(cmd.stage);
+    parts.push(`<span class="stage-badge stage-${escHtml(cmd.stage)}">${stageLabel}</span>`);
   }
   parts.push(`</div>`);
 
   // Stage banner
   if (cmd.stage === 'beta') {
-    parts.push(`<div class="stage-banner stage-banner-beta">This command is in beta. Its flags and behavior may change without notice.</div>`);
+    parts.push(`<div class="stage-banner stage-banner-beta">This command is in preview. Its flags and behavior may change without notice.</div>`);
   }
   if (cmd.stage === 'deprecated') {
     parts.push(`<div class="stage-banner stage-banner-deprecated">${escHtml(deprecationNotice('This command', cmd.deprecation))}</div>`);
@@ -539,9 +540,10 @@ function renderDetail(cmd) {
       const allowedHtml = opt.allowedValues && opt.allowedValues.length
         ? `<div class="opt-allowed">${opt.allowedValues.map(v => `<code class="opt-allowed-val">${escHtml(v)}</code>`).join('')}</div>`
         : '';
+      const stageLabel = opt.stage === 'beta' ? 'preview' : escHtml(opt.stage);
       const stageBadge =
         opt.stage === 'beta' || opt.stage === 'deprecated'
-          ? ` <span class="stage-badge stage-${escHtml(opt.stage)}">${escHtml(opt.stage)}</span>`
+          ? ` <span class="stage-badge stage-${escHtml(opt.stage)}">${stageLabel}</span>`
           : '';
       const deprecationHtml =
         opt.stage === 'deprecated'
