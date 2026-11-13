@@ -941,7 +941,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'setup',
       order: 1,
       summary: 'Link this directory to a project',
-      label: 'link <project-key>',
+      label: 'link [project-key]',
     })
     .argument(
       '[projectKey]',

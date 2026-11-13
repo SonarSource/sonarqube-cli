@@ -48,7 +48,7 @@ function getExpectedRootHelp(): string {
     '  SETUP',
     '    auth <command>               Manage authentication',
     '      login, org, logout, status',
-    '    link <project-key>           Link this directory to a project',
+    '    link [project-key]           Link this directory to a project',
     '    import                       [BETA] Import repos from your DevOps platform',
     '    integrate [target]           Set up SonarQube with AI coding agents or Git',
     '      git, claude, copilot, codex, antigravity, cursor, opencode, devin, pi',
