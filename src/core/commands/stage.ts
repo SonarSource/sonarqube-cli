@@ -19,8 +19,8 @@
  */
 
 export const ALPHA_ENV_VAR = 'SONARQUBE_CLI_ALPHA';
-export const ALPHA_HELP_TAG = '[ALPHA]';
-export const BETA_HELP_TAG = '[BETA]';
+export const ALPHA_HELP_TAG = '[EXPERIMENTAL]';
+export const BETA_HELP_TAG = '[PREVIEW]';
 export const DEPRECATED_HELP_TAG = '[DEPRECATED]';
 export const ALPHA_HELP_GROUP = '__SONARQUBE_CLI_ALPHA_COMMANDS__';
 
