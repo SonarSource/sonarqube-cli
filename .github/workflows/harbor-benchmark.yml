@@ -158,9 +158,43 @@ jobs:
           path: harbor-jobs
           merge-multiple: true
 
+      - name: Install the SonarQube CLI for the secrets scan
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
+          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
+
+      - name: Build the trajectory page
+        if: ${{ !cancelled() && hashFiles('harbor-jobs/**/result.json') != '' }}
+        run: bun benchmarks/harbor/report/trajectory-report.ts harbor-jobs/*/ > report.html
+
+      - name: Scan the trajectory page for secrets and redact them
+        if: ${{ !cancelled() && hashFiles('report.html') != '' }}
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
+          SONARQUBE_CLI_ORG: sonarlint-it
+          SONARQUBE_CLI_SERVER: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
+        run: python3 -I benchmarks/harbor/ci/scan-secrets.py report.html
+
+      - name: Upload the trajectory page
+        id: trajectories
+        if: ${{ !cancelled() && hashFiles('report.html') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: report.html
+          archive: false
+
       - name: Summarize
         id: summarize
+        if: ${{ !cancelled() }}
         shell: bash
+        env:
+          TRAJECTORY_PAGE_URL: ${{ steps.trajectories.outputs.artifact-url }}
         run: |
           shopt -s nullglob
           targets=()
@@ -170,13 +204,6 @@ jobs:
           status=0
           bun benchmarks/harbor/report/summarize-job.ts "${targets[@]}" > report.txt || status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
-
-      - name: Install the SonarQube CLI for the secrets scan
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
-          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
 
       - name: Scan the report for secrets and redact them
         if: ${{ !cancelled() }}
@@ -188,8 +215,7 @@ jobs:
           SONARQUBE_CLI_SERVER: https://sc-staging.io
           SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
           SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: |
-          python3 -I benchmarks/harbor/ci/scan-secrets.py report.txt
+        run: python3 -I benchmarks/harbor/ci/scan-secrets.py report.txt
 
       - name: Publish the report
         if: ${{ !cancelled() && hashFiles('report.txt') != '' }}
