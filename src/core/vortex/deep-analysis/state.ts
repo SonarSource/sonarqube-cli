@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import logger from '@/core/observability/logger.ts';
 
 import {
   type AnalysisSession,
@@ -119,20 +120,25 @@ export function finishAnalysis(lock: LockRow, outcome: AnalysisOutcome): void {
 
 /**
  * Call when the hook allows stopping without analysis (no project/changes, cached, or limit).
- * Returns false while another analysis is running in the session.
+ * Returns false if another analysis is running or resetting fails.
  */
 export function resetAnalysisCounterIfIdle(session: AnalysisSession): boolean {
-  assertSession(session);
-  return withAnalysisState((db, now) => {
-    expireAnalysisState(db, now);
-    const counter = readAnalysisCounter(db, session);
-    if (hasRunningAnalysesForSession(db, session, now)) {
-      if (!counter || counter.analysis_count < 1) {
-        throw new CommandFailedError('Invalid Vortex analysis counter for active analyses.');
+  try {
+    assertSession(session);
+    return withAnalysisState((db, now) => {
+      expireAnalysisState(db, now);
+      const counter = readAnalysisCounter(db, session);
+      if (hasRunningAnalysesForSession(db, session, now)) {
+        if (!counter || counter.analysis_count < 1) {
+          throw new CommandFailedError('Invalid Vortex analysis counter for active analyses.');
+        }
+        return false;
       }
-      return false;
-    }
-    resetAnalysisCounter(db, session, now);
-    return true;
-  });
+      resetAnalysisCounter(db, session, now);
+      return true;
+    });
+  } catch (error) {
+    logger.debug('Vortex analysis counter reset failed', error);
+    return false;
+  }
 }
