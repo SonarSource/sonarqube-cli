@@ -39,7 +39,7 @@ on:
           - "5"
           - "10"
       store-report:
-        description: Publish the release report and its dashboard on SIP (a run without this box only benchmarks)
+        description: Publish the release report and its dashboard on SIP (needs all the tasks, a run without this box only benchmarks)
         type: boolean
         default: false
 
