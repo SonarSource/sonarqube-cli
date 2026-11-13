@@ -92,9 +92,7 @@ function quarantineAnalysisFiles(dbPath: string): void {
   for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
     try {
       renameSync(path, `${path}.${suffix}`);
-    } catch {
-      // Best-effort: another process may have moved the file.
-    }
+    } catch {}
   }
 }
 

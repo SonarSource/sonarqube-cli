@@ -65,6 +65,7 @@ function assertLock(lock: LockRow): void {
   }
 }
 
+/** Returns null when cached, in flight, or at the analysis limit. */
 export function acquireAnalysisLock(options: AcquireAnalysisLockOptions): AnalysisLockResult {
   assertSession(options);
   if (
@@ -87,10 +88,8 @@ export function acquireAnalysisLock(options: AcquireAnalysisLockOptions): Analys
     ) {
       throw new CommandFailedError('Invalid Vortex analysis counter for active analyses.');
     }
-    // Skip fingerprints already analyzed or currently in flight.
     if (successful || existingLock) return null;
     const count = counter?.analysis_count ?? 0;
-    // Skip if the analysis count has reached the limit.
     if (count >= options.analysisLimit) return null;
     const lock = {
       agent: options.agent,
