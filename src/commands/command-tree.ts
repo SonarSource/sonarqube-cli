@@ -233,8 +233,10 @@ ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
 'sonar link <projectKey>' replaces the existing links with this one.
-Without a project key, in an interactive terminal, 'sonar link' suggests a project it can verify
-on the server, or lets you search for one. Scripts and CI must pass the key.
+Without a project key or --path, in an interactive terminal, 'sonar link' offers the folders to
+link: the repository root or folders at any depth (Tab ticks one; typing searches folder names).
+Each ticked folder then gets a project, either one verified on the server or one found by search,
+and is added to the existing links. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
 For a monorepo, use --monorepo to add directories to the existing links:
@@ -918,7 +920,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '[projectKey]',
       'SonarQube project key (omit to pick one: a verified suggestion, or a search)',
     )
-    .option('--path <path>', 'Path to the project root, relative to the repository root', '.')
+    .option(
+      '--path <path>',
+      'Path to the project root, relative to the repository root (default: the root, or picked interactively without a key)',
+    )
     .option(
       '--monorepo',
       'Add or update this directory among the existing links instead of replacing them',
