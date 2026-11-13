@@ -101,7 +101,12 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .meter .track { height: 8px; border-radius: 4px; background: var(--wash); overflow: hidden; }
 .meter .fill { height: 100%; border-radius: 4px; background: var(--accent); }
 .meter .v { text-align: right; font-variant-numeric: tabular-nums; }
-.criteria { margin-top: 18px; }
+.criteria { margin-top: 16px; }
+.criteria summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style: none; padding: 8px 0; }
+.criteria summary::-webkit-details-marker { display: none; }
+.criteria summary .eyebrow::before { content: "▸"; display: inline-block; width: 14px; transition: transform .15s; }
+.criteria[open] summary .eyebrow::before { transform: rotate(90deg); }
+.criteria .pill { font-size: 12px; padding: 2px 10px; }
 .crit-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
 .crit-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; }
 .crit-list .ico { width: 18px; height: 18px; }
@@ -109,9 +114,9 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .cnt.ok { color: var(--good-text); } .cnt.ko { color: var(--bad-text); }
 .when { color: var(--ink-3); margin: 6px 0 0; }
 .runs { margin-top: 18px; border-top: 1px solid var(--grid); padding-top: 6px; }
-.run { display: grid; grid-template-columns: 22px 62px minmax(60px, 1fr) 56px 132px; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 10px; color: var(--ink); text-decoration: none; }
+.run { display: grid; grid-template-columns: 28px 22px minmax(60px, 1fr) 56px 132px; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 10px; color: var(--ink); text-decoration: none; }
 .run:hover { background: var(--wash); }
-.run .nm { font-weight: 600; }
+.run .nm { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--grid); display: grid; place-items: center; font-size: 12px; font-weight: 650; color: var(--ink-2); }
 .run .tm { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .run .note { color: var(--ink-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip { display: flex; gap: 2px; height: 10px; }
@@ -189,8 +194,8 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
 .kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
   .board { grid-template-columns: 1fr; justify-items: center; }
-  .run { grid-template-columns: 22px 56px minmax(40px, 1fr) 52px; }
-  .run .note { grid-column: 2 / -1; }
+  .run { grid-template-columns: 28px 22px minmax(40px, 1fr) 52px; }
+  .run .note { grid-column: 3 / -1; }
   .meter { grid-template-columns: 64px 1fr 64px; }
   .kv { grid-template-columns: 1fr; } .kv dd { margin-bottom: 6px; }
   .stat { border-right: 0; border-bottom: 1px solid var(--ring); }
@@ -495,9 +500,9 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   function runRow(trial, number) {
     const failed = failedCommands(trial);
     const status = statusOf(trial);
-    return el('a', { class: 'run', href: linkTo(trial) }, [
+    return el('a', { class: 'run', href: linkTo(trial), title: 'Trial ' + number + ': ' + status.text, 'aria-label': 'Trial ' + number + ': ' + status.text }, [
+      el('span', { class: 'nm', text: String(number) }),
       icon(status.kind),
-      el('span', { class: 'nm', text: 'Trial ' + number }),
       stripNode(trial, false),
       el('span', { class: 'tm', text: fmtSeconds(trial.seconds.agent) || '' }),
       el('span', { class: 'note', text: failed ? plural(failed, 'failed command') : trial.steps.length ? plural(trial.steps.filter((s) => s.source === 'agent').length, 'step') : 'no steps' }),
@@ -512,9 +517,15 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
       counts.set(check.text, entry);
     }));
     if (counts.size === 0) return null;
-    return el('div', { class: 'criteria' }, [
-      el('div', { class: 'eyebrow', text: 'What must be true' }),
-      el('ul', { class: 'crit-list' }, [...counts.entries()].map(([text, entry]) => el('li', {}, [
+    const entries = [...counts.entries()];
+    const allMet = entries.every(([, entry]) => entry.met === entry.total);
+    const metCount = entries.filter(([, entry]) => entry.met === entry.total).length;
+    return el('details', { class: 'criteria' }, [
+      el('summary', {}, [
+        el('span', { class: 'eyebrow', text: 'What must be true' }),
+        el('span', { class: 'pill ' + (allMet ? 'good' : 'bad'), text: metCount + ' of ' + entries.length + ' always met' }),
+      ]),
+      el('ul', { class: 'crit-list' }, entries.map(([text, entry]) => el('li', {}, [
         icon(entry.met === entry.total ? 'good' : 'bad'),
         el('span', { text }),
         el('span', { class: 'cnt ' + (entry.met === entry.total ? 'ok' : 'ko'), text: entry.met + ' of ' + entry.total }),
