@@ -125,7 +125,7 @@ describe('post-update migration', () => {
       (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
     );
     expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-      SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+      'completion-analysis-hook',
       CONTEXT_AUGMENTATION_FEATURE_ID,
       CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
       'sqaa-posttooluse',
@@ -136,7 +136,8 @@ describe('post-update migration', () => {
       expect.objectContaining({ matcher: 'Edit|Write|Bash|PowerShell|Monitor|Read' }),
     ]);
     const claudeMdPath = scope === 'global' ? ['.claude', 'CLAUDE.md'] : ['CLAUDE.md'];
-    expect(root.file(...claudeMdPath).asText()).toContain('# Vortex analysis protocol');
+    expect(root.file(...claudeMdPath).exists()).toBe(false);
+    expect(root.file('.claude', 'settings.json').asJson().hooks?.Stop).toHaveLength(1);
     expectVortexHookInstalled(root, 'claude', scope);
     return vortex;
   }
@@ -467,7 +468,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        'completion-analysis-hook',
         CONTEXT_AUGMENTATION_FEATURE_ID,
         'sqaa-posttooluse',
       ]);
@@ -500,7 +501,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        'completion-analysis-hook',
         CONTEXT_AUGMENTATION_FEATURE_ID,
         CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
         'sqaa-posttooluse',
@@ -527,7 +528,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        'completion-analysis-hook',
         CONTEXT_AUGMENTATION_FEATURE_ID,
         CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
         'sqaa-posttooluse',
@@ -631,6 +632,47 @@ describe('post-update migration', () => {
     { timeout: 30000 },
   );
 
+  describe('completion analysis hook migrations', () => {
+    it('replaces managed completion instructions in an existing Claude Vortex container', async () => {
+      seedContainerizedLegacyVortexFeatures({ scope: 'global' });
+      harness.state().withContextAugmentationBinaryInstalled();
+      harness.env();
+      const state = harness.stateJsonFile.asJson() as CliState;
+      const features = state.integrations.installed[0].features;
+      features[0].featureId = CLAUDE_VORTEX_FEATURE_ID;
+      features[0].subfeatures!.push(...features[1].subfeatures!);
+      features.splice(1);
+      harness.state().withRawState(JSON.stringify(state));
+      harness.userHome.writeFile(
+        '.claude/CLAUDE.md',
+        'User instructions\n\n<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->\nOld DEEP instructions\n<!-- sonar:end:sonarqube-agentic-analysis-protocol -->\n',
+      );
+      harness.userHome.writeFile(
+        '.claude/settings.json',
+        JSON.stringify({
+          hooks: { Stop: [{ hooks: [{ type: 'command', command: 'user-stop' }] }] },
+        }),
+      );
+
+      const result = await harness.run(POST_UPDATE_TRIGGER_COMMAND);
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.userHome.file('.claude', 'CLAUDE.md').asText().trim()).toBe(
+        'User instructions',
+      );
+      const settings = harness.userHome.file('.claude', 'settings.json').asJson();
+      expect(settings.hooks.Stop).toHaveLength(2);
+      expect(settings.hooks.Stop[0].hooks[0].command).toBe('user-stop');
+      expect(settings.hooks.Stop[1].hooks[0].command).toContain('sonar-stop');
+      expect(settings.hooks.SubagentStop).toBeUndefined();
+      expect(settings.hooks.PostToolUse).toBeDefined();
+      const updated = harness.stateJsonFile.asJson() as CliState;
+      expect(
+        updated.integrations.installed[0].features[0].subfeatures?.map((s) => s.featureId),
+      ).not.toContain(SQAA_INSTRUCTIONS_SUBFEATURE_ID);
+    });
+  });
+
   it(
     'merges two already-containerized legacy Vortex records at global scope',
     async () => {
@@ -662,7 +704,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        'completion-analysis-hook',
         CONTEXT_AUGMENTATION_FEATURE_ID,
         'sqaa-posttooluse',
       ]);
