@@ -278,6 +278,10 @@ export const STATS_DB_FILENAME = 'stats.db';
 
 export const STATS_RETENTION_DAYS = 365;
 
+export function getVortexAnalysisDbPath(): string {
+  return join(getCliDir(), 'db', 'hooks', 'stop-hook-vortex-analysis.db');
+}
+
 // ---------------------------------------------------------------------------
 // sonar-secrets analyzer contract
 // ---------------------------------------------------------------------------
