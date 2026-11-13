@@ -45,7 +45,7 @@ on:
         description: Iteration name written in the release report, for example 26Q4-4 (optional)
         default: ""
       store-report:
-        description: Store the release report on the benchmark-data branch and build the dashboard
+        description: Publish the release report and its dashboard on SIP (a run without this box only benchmarks)
         type: boolean
         default: false
 
@@ -264,8 +264,8 @@ jobs:
           echo "A benchmark job finished with: ${{ needs.benchmark.result }}"
           exit 1
 
-  store:
-    name: Store the release report
+  publish:
+    name: Publish the release report
     runs-on: sonar-xs
     needs: report
     if: ${{ !cancelled() && inputs.store-report }}
@@ -273,8 +273,10 @@ jobs:
       id-token: write
       contents: read
     concurrency:
-      group: benchmark-data
+      group: sip-publish
       queue: max
+    env:
+      SIP_APP_ID: harbor-benchmark
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -299,20 +301,40 @@ jobs:
           name: release-report
           path: release-report
 
-      - name: Store the release report
-        env:
-          BENCHMARK_DATA_REMOTE: https://x-access-token:${{ secrets.HB_BENCHMARK_DATA_TOKEN }}@github.com/jonathan-balli-sonarsource/harbor-benchmark-data-poc.git
-        run: bash benchmarks/harbor/report/adapters/git-branch.sh push "release-report/${GITHUB_RUN_ID}.json"
-
-      - name: Build the dashboard
-        env:
-          BENCHMARK_DATA_REMOTE: https://x-access-token:${{ secrets.HB_BENCHMARK_DATA_TOKEN }}@github.com/jonathan-balli-sonarsource/harbor-benchmark-data-poc.git
+      - name: Install the SonarQube CLI for the secrets scan
+        shell: bash
         run: |
-          bash benchmarks/harbor/report/adapters/git-branch.sh pull release-data
-          bun benchmarks/harbor/report/dashboard.ts release-data > dashboard.html
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
+          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
 
-      - name: Upload the dashboard
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: harbor-dashboard
-          path: dashboard.html
+      - name: Build the page from the published releases and this one
+        shell: bash
+        env:
+          SIP_PLATFORM_TOKEN: ${{ secrets.SIP_PLATFORM_TOKEN }}
+        run: |
+          mkdir sip-page
+          bash benchmarks/harbor/report/sip.sh pull published.json
+          jq --slurpfile new "release-report/${GITHUB_RUN_ID}.json" \
+            '[.[] | select(.release.runId != $new[0].release.runId)] + $new' published.json > sip-page/data.json
+          bun benchmarks/harbor/report/dashboard.ts sip-page/data.json > sip-page/index.html
+
+      - name: Scan the page for secrets and redact them
+        shell: bash
+        env:
+          DO_NOT_TRACK: "1"
+          SONARQUBE_CLI_TOKEN: ${{ secrets.HB_SONAR_TOKEN }}
+          SONARQUBE_CLI_ORG: sonarlint-it
+          SONARQUBE_CLI_SERVER: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_URL: https://sc-staging.io
+          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
+        run: python3 -I benchmarks/harbor/ci/scan-secrets.py sip-page
+
+      - name: Publish the page on SIP
+        shell: bash
+        env:
+          SIP_PLATFORM_TOKEN: ${{ secrets.SIP_PLATFORM_TOKEN }}
+        run: bash benchmarks/harbor/report/sip.sh push sip-page
+
+      - name: Link the dashboard in the run summary
+        shell: bash
+        run: echo "[Release dashboard on SIP](https://internal.sip.sonarsource.io/apps/${SIP_APP_ID}/)" >> "$GITHUB_STEP_SUMMARY"
