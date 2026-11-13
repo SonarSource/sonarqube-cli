@@ -54,6 +54,8 @@ interface Step {
   };
 }
 
+const LEAK_MARKER_FILE = 'secrets-leak.json';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 function readJson<T>(path: string): T | null {
   return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : null;
@@ -117,6 +119,7 @@ function trialOf(group: string, trialDir: string) {
     group,
     name: result.trial_name,
     task,
+    leak: existsSync(join(trialDir, LEAK_MARKER_FILE)),
     taskPage: `${TASKS_PAGE_URL}#${task}`,
     agent: agent?.name ?? null,
     agentVersion: agent?.version ?? null,
