@@ -46,6 +46,8 @@ export interface AnalyzeSqaaRunOptions {
 }
 
 export interface AnalyzeSqaaOptions {
+  /** Hook-supplied working directory for Git change selection. */
+  cwd?: string;
   file?: string[];
   /** Hook-supplied path uses silent ownership checks instead of CLI argument validation. */
   editedFile?: string;
