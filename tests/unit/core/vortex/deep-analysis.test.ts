@@ -107,11 +107,13 @@ describe('deep analysis database', () => {
       stubs.migrate.mockImplementationOnce(() => {
         throw Object.assign(new Error('Corrupt database'), { code });
       });
+      const closesAtRename: number[] = [];
       const rename = spyOn(fs, 'renameSync').mockImplementation(() => {
-        expect(fake.close).toHaveBeenCalledTimes(1);
+        closesAtRename.push(fake.close.mock.calls.length);
       });
       try {
         expect(db.openAnalysisDb()).toBe(fake.db);
+        expect(closesAtRename).toEqual([1, 1, 1]);
         expect(rename.mock.calls).toEqual(
           [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`].map((path) => [
             path,
