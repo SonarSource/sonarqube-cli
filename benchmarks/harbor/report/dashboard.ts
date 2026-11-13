@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -12,17 +12,15 @@ interface ReleaseReport {
 const MAX_MODELS = 8;
 const DATA_PLACEHOLDER = '__RELEASES_JSON__';
 
-function loadReports(dataDir: string): ReleaseReport[] {
-  const files = readdirSync(dataDir)
-    .filter((file) => file.endsWith('.json'))
-    .sort();
-  if (files.length === 0) throw new Error(`No release JSON in '${dataDir}'`);
-  return files.map((file) => {
-    const report = JSON.parse(readFileSync(join(dataDir, file), 'utf8')) as ReleaseReport;
+function loadReports(dataFile: string): ReleaseReport[] {
+  const reports = JSON.parse(readFileSync(dataFile, 'utf8')) as ReleaseReport[];
+  if (!Array.isArray(reports) || reports.length === 0)
+    throw new Error(`No release in '${dataFile}'`);
+  return reports.map((report, index) => {
     if (report.schemaVersion !== 1)
-      throw new Error(`${file}: unsupported schemaVersion ${report.schemaVersion}`);
+      throw new Error(`Release ${index + 1}: unsupported schemaVersion ${report.schemaVersion}`);
     if (!Array.isArray(report.trials) || report.trials.length === 0)
-      throw new Error(`${file}: no trials`);
+      throw new Error(`Release ${index + 1}: no trials`);
     return report;
   });
 }
@@ -35,17 +33,17 @@ function checkModelCount(reports: ReleaseReport[]): void {
     );
 }
 
-function resolveDataDir(argument: string | undefined): string {
-  if (!argument) throw new Error('Usage: dashboard.ts <dataDir> > dashboard.html');
-  const dataDir = resolve(argument);
-  if (!statSync(dataDir, { throwIfNoEntry: false })?.isDirectory())
-    throw new Error(`'${argument}' is not a directory`);
-  return dataDir;
+function resolveDataFile(argument: string | undefined): string {
+  if (!argument) throw new Error('Usage: dashboard.ts <data.json> > index.html');
+  const dataFile = resolve(argument);
+  if (!statSync(dataFile, { throwIfNoEntry: false })?.isFile())
+    throw new Error(`'${argument}' is not a file`);
+  return dataFile;
 }
 
 function main(): void {
   const { positionals } = parseArgs({ args: process.argv.slice(2), allowPositionals: true });
-  const reports = loadReports(resolveDataDir(positionals[0]));
+  const reports = loadReports(resolveDataFile(positionals[0]));
   checkModelCount(reports);
   const template = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), 'dashboard-template.html'),
