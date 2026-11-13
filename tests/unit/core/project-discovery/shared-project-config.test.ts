@@ -734,16 +734,34 @@ describe('SharedProjectConfigFileImpl item handling', () => {
     ]);
   });
 
-  it('treats an absolute path as outside the schema, as it could not be written back', async () => {
-    const absolute = { ...entry, projectKey: 'absolute', path: resolve('/repo/api') };
+  it('writes an absolute path inside the config folder back relative to it', async () => {
+    const dir = tempDir('write-absolute');
+    writeConfig(dir, JSON.stringify({ project: { ...entry, path: join(dir, 'api') } }));
+    try {
+      const file = new SharedProjectConfigFileImpl();
+      const read = await file.readItems(dir, throwOnInvalidConfig);
+      await file.writeItems(dir, read);
 
-    const { read, problems } = await readCollecting(JSON.stringify({ projects: [absolute] }));
+      expect(read.map((item) => item.root)).toEqual([join(dir, 'api')]);
+      const raw = JSON.parse(readFileSync(join(dir, SHARED_PROJECT_CONFIG_FILE_NAME), 'utf-8'));
+      expect(raw).toEqual({ project: { ...entry, path: 'api' } });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reports each path outside the config folder, absolute or relative', async () => {
+    const absolute = { ...entry, projectKey: 'absolute', path: resolve('/elsewhere/api') };
+    const parent = { ...entry, projectKey: 'parent', path: '../api' };
+
+    const { read, problems } = await readCollecting(
+      JSON.stringify({ projects: [absolute, parent] }),
+    );
 
     expect(read).toEqual([]);
     expect(problems).toEqual([
-      expect.stringMatching(
-        /^Project absolute in .* does not match the expected format$/,
-      ) as string,
+      expect.stringMatching(/^Project absolute in .* links .*api, which is outside /) as string,
+      expect.stringMatching(/^Project parent in .* links \.\.\/api, which is outside /) as string,
     ]);
   });
 
@@ -872,7 +890,7 @@ describe('SharedProjectConfigRepositoryImpl warnings', () => {
     expect(warnings).toEqual([expect.stringContaining('Project second') as string]);
   });
 
-  it('keeps a relative link to a folder that an earlier absolute entry also names', async () => {
+  it('reads an absolute path inside the config folder as the folder it names', async () => {
     const dir = tempDir('load-absolute');
     mkdirSync(join(dir, 'api'));
     writeConfig(
@@ -890,8 +908,8 @@ describe('SharedProjectConfigRepositoryImpl warnings', () => {
         warn: (message) => warnings.push(message),
       });
 
-      expect(mappings.map((m) => m.projectKey)).toEqual(['relative']);
-      expect(warnings).toEqual([expect.stringContaining('Project absolute') as string]);
+      expect(mappings.map((m) => m.projectKey)).toEqual(['absolute']);
+      expect(warnings).toEqual([expect.stringContaining('Project relative') as string]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

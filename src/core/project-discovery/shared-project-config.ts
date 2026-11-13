@@ -26,7 +26,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
+import { cloudRegionToUrl, isCloudRegion } from '@/core/server/sonarcloud-region.ts';
 import type { CloudRegion } from '@/core/state/state.ts';
 
 export interface SharedProjectConfigMapping {
@@ -91,9 +91,9 @@ export type OnInvalidConfig = (error: InvalidSharedProjectConfigError) => void;
 /** The `.sonar-config.json` file format. */
 export interface SharedProjectConfigFile {
   /**
-   * The items of the `projects` array, or the lone `project`; a missing file holds none. A file
-   * that is not valid JSON, an item outside the schema and a repeat of an already listed folder
-   * each go to `onInvalid`.
+   * The items of the `projects` array, or the lone `project`; a missing file holds none. An absolute
+   * path inside `dir` is read as relative to it. A file that is not valid JSON, an item outside the
+   * schema, a path outside `dir` and a repeat of an already listed folder each go to `onInvalid`.
    */
   readItems(dir: string, onInvalid: OnInvalidConfig): Promise<ConfigItem[]>;
   /**
@@ -131,8 +131,6 @@ interface SharedProjectConfigFileDto {
   /** Monorepo form: several mappings in one file. Takes precedence over `project` when present. */
   projects?: unknown;
 }
-
-const VALID_CLOUD_REGIONS = new Set<CloudRegion>(['eu', 'us']);
 
 /**
  * A committed config must not steer writes/mounts outside the directory holding it.
@@ -175,14 +173,11 @@ export class SharedProjectConfigFileImpl implements SharedProjectConfigFile {
     const items: ConfigItem[] = [];
     for (const [index, raw] of rawItems.entries()) {
       const item = this.isValidEntry(raw) ? this.toItem(dir, raw) : undefined;
-      if (item !== undefined && !items.some((earlier) => earlier.root === item.root)) {
+      const problem = this.problemOf(dir, item, items);
+      if (item !== undefined && problem === undefined) {
         items.push(item);
         continue;
       }
-      const problem =
-        item === undefined
-          ? 'does not match the expected format'
-          : `links ${this.relativePath(dir, item.root)}, which an earlier project already links`;
       onInvalid(
         new InvalidSharedProjectConfigError(
           `Project ${this.nameOf(raw, index)} in ${this.configPath(dir)} ${problem}`,
@@ -264,7 +259,32 @@ export class SharedProjectConfigFileImpl implements SharedProjectConfigFile {
   }
 
   private toItem(dir: string, entry: SharedProjectConfigEntry): ConfigItem {
-    return { entry, root: canonicalizePath(resolve(dir, entry.path)) };
+    const root = canonicalizePath(resolve(dir, entry.path));
+    if (!isAbsolute(entry.path) || !this.contains(dir, root)) {
+      return { entry, root };
+    }
+    return { entry: { ...entry, path: this.relativePath(dir, root) }, root };
+  }
+
+  private problemOf(
+    dir: string,
+    item: ConfigItem | undefined,
+    earlier: readonly ConfigItem[],
+  ): string | undefined {
+    if (item === undefined) {
+      return 'does not match the expected format';
+    }
+    if (!this.contains(dir, item.root)) {
+      return `links ${item.entry.path}, which is outside ${canonicalizePath(dir)}`;
+    }
+    if (earlier.some((other) => other.root === item.root)) {
+      return `links ${this.relativePath(dir, item.root)}, which an earlier project already links`;
+    }
+    return undefined;
+  }
+
+  private contains(dir: string, root: string): boolean {
+    return isAncestorOrSelf(canonicalizePath(dir), root);
   }
 
   private relativePath(dir: string, root: string): string {
@@ -279,10 +299,6 @@ export class SharedProjectConfigFileImpl implements SharedProjectConfigFile {
     if (!this.isSingleLineString(record.projectKey) || !this.isSingleLineString(record.path)) {
       return false;
     }
-    // Paths are relative to the config directory; an absolute one could not be written back as such.
-    if (isAbsolute(record.path)) {
-      return false;
-    }
     return (
       this.isCloudEntry(record) || this.isServerEntry(record) || this.isCustomCloudEntry(record)
     );
@@ -291,7 +307,7 @@ export class SharedProjectConfigFileImpl implements SharedProjectConfigFile {
   private isCloudEntry(value: Record<string, unknown>): boolean {
     return (
       value.serverUrl === undefined &&
-      VALID_CLOUD_REGIONS.has(value.region as CloudRegion) &&
+      isCloudRegion(value.region) &&
       this.isNonEmptyString(value.organization)
     );
   }
