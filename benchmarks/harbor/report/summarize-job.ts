@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
 
 interface TrialResult {
   task_name: string;
@@ -135,20 +136,38 @@ function cell(value: number | null, format: (n: number) => string = String): str
   return value === null ? '-' : format(value);
 }
 
-function renderTrial(row: Row): string[] {
+const STATUS_MARK: Record<Status, string> = {
+  PASS: '✅ PASS',
+  FAIL: '❌ FAIL',
+  ERROR: '⚠️ ERROR',
+  LEAK: '🚨 LEAK',
+};
+
+function present(value: number | null, format: (n: number) => string): string | null {
+  return value === null ? null : format(value);
+}
+
+function renderTrialLine(row: Row): string {
+  const tokens =
+    row.promptTokens === null || row.completionTokens === null
+      ? null
+      : `${row.promptTokens.toLocaleString('en-US')} in / ${row.completionTokens.toLocaleString('en-US')} out`;
   return [
-    row.label,
-    row.task,
-    row.agent ?? '-',
-    row.model ?? '-',
-    row.status,
-    cell(row.agentSeconds, (n) => `${n.toFixed(0)}s`),
-    cell(row.steps),
-    cell(row.promptTokens),
-    cell(row.completionTokens),
-    cell(row.cachedTokens),
-    cell(row.costUsd, (n) => `$${n.toFixed(4)}`),
-  ];
+    `${STATUS_MARK[row.status]} · \`${row.task}\``,
+    present(row.agentSeconds, (n) => `${n.toFixed(0)} s`),
+    present(row.steps, (n) => `${n} steps`),
+    tokens,
+    present(row.costUsd, (n) => `$${n.toFixed(4)}`),
+  ]
+    .filter((part) => part !== null)
+    .join(' · ');
+}
+
+function failuresFirst(rows: Row[]): Row[] {
+  return [...rows].sort(
+    (a, b) =>
+      Number(a.status === 'PASS') - Number(b.status === 'PASS') || a.task.localeCompare(b.task),
+  );
 }
 
 function total(values: (number | null)[]): number | null {
@@ -172,62 +191,85 @@ function groupTrials(rows: Row[]): Row[][] {
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
 }
 
-function renderGroup(group: Row[]): string[] {
+function agentLabel(agent: string | null): string {
+  if (agent === 'claude-code') return 'Claude Code';
+  if (agent === 'codex') return 'Codex';
+  return agent ?? 'Unknown agent';
+}
+
+const TASKS_PER_MODEL_BEFORE_FOLD = 6;
+
+function renderTaskSection(group: Row[]): string[] {
   const [first] = group;
   const passed = group.filter((row) => row.status === 'PASS').length;
+  const time = present(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)} s`);
+  const cost = present(average(group.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`);
   return [
-    first.label,
-    first.task,
-    first.agent ?? '-',
-    first.model ?? '-',
-    `${passed}/${group.length}`,
-    cell(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)}s`),
-    cell(average(group.map((row) => row.steps)), (n) => n.toFixed(1)),
-    cell(average(group.map((row) => row.promptTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.completionTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.cachedTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`),
+    `#### [${taskTitle(first.task)}](${TASKS_PAGE_URL}#${first.task}) · \`${first.task}\``,
+    '',
+    [
+      `**${passed} of ${group.length} passed**`,
+      time && `average time ${time}`,
+      cost && `average cost ${cost}`,
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    '',
   ];
 }
 
-function renderTable(header: string[], lines: string[][]): string[] {
+function renderTaskSections(groups: Row[][]): string[] {
+  const sections = groups.flatMap(renderTaskSection);
+  if (groups.length <= TASKS_PER_MODEL_BEFORE_FOLD) return sections;
   return [
-    `| ${header.join(' | ')} |`,
-    `|${header.map(() => '---').join('|')}|`,
-    ...lines.map((line) => `| ${line.join(' | ')} |`),
+    '<details>',
+    `<summary>Show the ${groups.length} tasks</summary>`,
+    '',
+    ...sections,
+    '</details>',
+    '',
   ];
+}
+
+function renderAgentSections(rows: Row[]): string[] {
+  const sections = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = [row.agent ?? '-', row.model ?? '-'].join('|');
+    sections.set(key, [...(sections.get(key) ?? []), row]);
+  }
+  return [...sections.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([, sectionRows]) => {
+      const [first] = sectionRows;
+      return [
+        `### ${agentLabel(first.agent)} · model ${first.model ?? 'unknown'}`,
+        '',
+        ...renderTaskSections(groupTrials(sectionRows)),
+        '',
+        '<details>',
+        `<summary>Trials (${sectionRows.length})</summary>`,
+        '',
+        ...failuresFirst(sectionRows).flatMap((row) => [renderTrialLine(row), '']),
+        '',
+        '</details>',
+        '',
+      ];
+    });
 }
 
 function renderReport(rows: Row[]): string {
-  const metrics = [
-    'Agent time',
-    'Steps',
-    'Prompt tokens',
-    'Completion tokens',
-    'Cached tokens',
-    'Cost',
-  ];
+  const passed = rows.filter((row) => row.status === 'PASS').length;
   const lines = [
     '## Harbor benchmark',
     '',
-    'Averages over the trials of each task, agent, model and OS.',
-    '',
-    ...renderTable(
-      ['OS', 'Task', 'Agent', 'Model', 'Passed', ...metrics],
-      groupTrials(rows).map(renderGroup),
-    ),
-    '',
-    `Total cost of the ${rows.filter((row) => row.costUsd !== null).length} trials with a cost: ${cell(
+    `**Total: ${passed} of ${rows.length} trials passed** · cost ${cell(
       total(rows.map((row) => row.costUsd)),
       (n) => `$${n.toFixed(4)}`,
     )}`,
     '',
-    '<details>',
-    '<summary>Trials</summary>',
+    `An agent gets one request on a clean machine, then an automatic check decides pass or fail. A trial passes when its check gives a reward of 1. [What each task tests](${TASKS_PAGE_URL}).`,
     '',
-    ...renderTable(['OS', 'Task', 'Agent', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
-    '',
-    '</details>',
+    ...renderAgentSections(rows),
   ];
   return lines.join('\n') + '\n';
 }
