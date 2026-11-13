@@ -53,14 +53,14 @@ describe('sonar architecture install-skill', () => {
     expect(help.exitCode).toBe(0);
     const installerHelp = await harness.run('architecture install-skill --help');
     expect(installerHelp.exitCode).toBe(0);
-    expect(installerHelp.stdout).toContain('[BETA]');
-    expect(help.stdout).not.toContain('[ALPHA]');
+    expect(installerHelp.stdout).toContain('[PREVIEW]');
+    expect(help.stdout).not.toContain('[EXPERIMENTAL]');
     const current = await harness.run('architecture current get --help');
     expect(current.exitCode).toBe(0);
-    expect(current.stdout).not.toContain('[BETA]');
+    expect(current.stdout).not.toContain('[PREVIEW]');
     const intended = await harness.run('architecture intended set --help');
     expect(intended.exitCode).toBe(0);
-    expect(intended.stdout).not.toContain('[BETA]');
+    expect(intended.stdout).not.toContain('[PREVIEW]');
   });
 
   it('requires authentication before installing any files', async () => {
