@@ -205,23 +205,32 @@ describe('sonar link', () => {
     });
   });
 
-  it('warns when an existing projects array makes the link ineffective', async () => {
+  it('replaces an existing projects array without --monorepo, warning which mappings it removed', async () => {
     harness.withAuth(SERVER_URL, 'test-token');
+    harness.cwd.writeFile('services/api/.keep', '');
     harness.cwd.writeFile(
       '.sonar-config.json',
-      JSON.stringify({ projects: [{ serverUrl: SERVER_URL, projectKey: 'a', path: '.' }] }),
+      JSON.stringify({
+        projects: [
+          { serverUrl: SERVER_URL, projectKey: 'a', path: '.' },
+          { serverUrl: SERVER_URL, projectKey: 'b', path: 'services/api' },
+        ],
+      }),
     );
 
     const result = await harness.run('link my_project --path .');
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout + result.stderr).toContain("'sonar link --monorepo'");
-    expect(result.stdout).not.toContain('Linked ');
-    expect(result.stdout).not.toContain('Commit .sonar-config.json to share it.');
+    expect(result.stdout + result.stderr).toContain('Removed the other mappings');
+    expect(result.stdout + result.stderr).toContain('(b)');
+    expect(result.stdout).toContain('Linked ');
+    expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+      project: { serverUrl: SERVER_URL, projectKey: 'my_project', path: '.' },
+    });
   });
 
   describe('monorepo', () => {
-    it('appends directories to projects, updates repeats, and leaves the singular project alone', async () => {
+    it('adds directories to the existing link, updates repeats in place, and writes a projects array', async () => {
       harness.withAuth(SERVER_URL, 'test-token');
       harness.cwd.writeFile('services/api/.keep', '');
       harness.cwd.writeFile('services/web/.keep', '');
@@ -234,8 +243,8 @@ describe('sonar link', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('(monorepo mapping)');
       expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
-        project: { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
         projects: [
+          { serverUrl: SERVER_URL, projectKey: 'legacy', path: '.' },
           { serverUrl: SERVER_URL, projectKey: 'api2', path: 'services/api' },
           { serverUrl: SERVER_URL, projectKey: 'web', path: 'services/web' },
         ],
@@ -252,6 +261,31 @@ describe('sonar link', () => {
       expect(harness.cwd.file('.sonar-config.json').asText()).toBe(
         JSON.stringify({ projects: {} }),
       );
+    });
+
+    it('keeps the settings of an entry, also when its folder is linked again', async () => {
+      harness.withAuth(SERVER_URL, 'test-token');
+      harness.cwd.writeFile('services/native/.keep', '');
+      harness.cwd.writeFile('services/api/.keep', '');
+      const settings = { 'sonar.cfamily.compile-commands': 'build/compile_commands.json' };
+      const native = {
+        projectKey: 'native_project',
+        path: 'services/native',
+        serverUrl: SERVER_URL,
+        settings,
+      };
+      const api = { projectKey: 'api', path: 'services/api', serverUrl: SERVER_URL };
+      harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ project: native }));
+
+      expect((await harness.run('link api --monorepo --path services/api')).exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({ projects: [native, api] });
+
+      const relinked = await harness.run('link native2 --monorepo --path services/native');
+
+      expect(relinked.exitCode).toBe(0);
+      expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+        projects: [{ ...native, projectKey: 'native2' }, api],
+      });
     });
 
     it('is documented in link --help', async () => {
