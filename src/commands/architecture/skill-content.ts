@@ -168,9 +168,11 @@ unavailable operations, claim their results or substitute other analysis tools.
 
 ## Findings summary
 
-Use \`sonar architecture current get --summary\` to read per-language counts of deviations, flaws and smells.
-Use MCP \`architecture_get\` with \`target=summary\` only if the installed tool definition lists that target; otherwise use the CLI. An empty summary does not
-prove that the project has no findings. Numeric architecture coverage is not included.
+Use \`sonar architecture current get --summary\` to read per-language counts of deviations, flaws
+and smells from the analyzed main branch. Use MCP \`architecture_get\` with \`target=summary\` only if
+the installed tool definition lists that target; otherwise use the CLI. Zero counts are measured; an
+empty summary means no visible summary, not a clean architecture. Unsupported languages are skipped
+and counted in the response. Numeric architecture coverage is not included.
 
 ## Findings
 

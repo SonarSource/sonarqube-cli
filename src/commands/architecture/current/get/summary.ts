@@ -22,64 +22,12 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { resolveFormatOption } from '@/core/commands/params.ts';
 
-import { ECOSYSTEMS } from '../../_common/architecture-api.ts';
+import { createFindingsApi } from '../../_common/architecture-api.ts';
 import type { CurrentReadOptions } from '../../_common/dependency-query.ts';
-import { incompatibleResponse, toArchitectureError } from '../../_common/errors.ts';
+import { toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
 import { defaultTextFormat, printPayload, TEXT_FORMATS } from '../../_common/read-options.ts';
-import { SonarArchitectureApi } from '../../_common/sonar-architecture-api.ts';
-
-const categories = {
-  deviations: ['structuralDeviation', 'relationshipDeviation'],
-  flaws: ['tangle', 'oversizedComponent'],
-  smells: ['weakTangle', 'splitResponsibility'],
-} as const;
-
-export function parseSummaries(value: unknown, language?: string): Record<string, unknown>[] {
-  const invalid = () => incompatibleResponse('Invalid public architecture summary response.');
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('projectSummaries' in value) ||
-    !Array.isArray(value.projectSummaries)
-  )
-    throw invalid();
-  const seen = new Set<string>();
-  return value.projectSummaries.map((item: unknown) => {
-    if (
-      !item ||
-      typeof item !== 'object' ||
-      !('language' in item) ||
-      typeof item.language !== 'string' ||
-      !(ECOSYSTEMS as readonly string[]).includes(item.language) ||
-      (language && item.language !== language) ||
-      seen.has(item.language)
-    )
-      throw invalid();
-    seen.add(item.language);
-    const result: Record<string, unknown> = { language: item.language };
-    for (const [category, types] of Object.entries(categories)) {
-      if (!(category in item)) throw invalid();
-      const counts = (item as Record<string, unknown>)[category];
-      if (!counts || typeof counts !== 'object') throw invalid();
-      const source = counts as Record<string, unknown>;
-      const keys = ['total', ...types];
-      if (
-        keys.some(
-          (key) =>
-            typeof source[key] !== 'number' ||
-            !Number.isSafeInteger(source[key]) ||
-            source[key] < 0,
-        )
-      )
-        throw invalid();
-      if (source.total !== types.reduce((sum, key) => sum + (source[key] as number), 0))
-        throw invalid();
-      result[category] = Object.fromEntries(keys.map((key) => [key, source[key]]));
-    }
-    return result;
-  });
-}
+import { SUMMARY_CATEGORIES } from '../../_common/summary.ts';
 
 export async function getSummary(
   options: CurrentReadOptions,
@@ -97,27 +45,31 @@ export async function getSummary(
   }
   const project = await resolveProject(options, ctx);
   const format = resolveFormatOption(options.format, TEXT_FORMATS, defaultTextFormat());
-  const api = new SonarArchitectureApi(ctx.connection, project);
-  const response = await api.getSummary(options.language).catch((error: unknown) => {
+  const api = createFindingsApi(ctx.connection, project);
+  const result = await api.getSummaryCounts(options.language).catch((error: unknown) => {
     throw toArchitectureError(error, project, ctx.connection.httpClient.isCloud);
   });
-  const summaries = parseSummaries(response, options.language);
+  const { summaries, skippedSummaries } = result;
   if (format !== 'text') {
     printPayload(ctx, format, {
       project,
       summaries,
-      ...(summaries.length
+      ...(skippedSummaries ? { skippedSummaries } : {}),
+      ...(summaries.length || skippedSummaries
         ? {}
         : { message: 'No architecture summaries are visible. Check project access and analysis.' }),
     });
     return;
   }
-  if (!summaries.length)
+  if (skippedSummaries)
+    ctx.console.warn(`Skipped ${skippedSummaries} summaries with unsupported languages.`);
+  if (!summaries.length && !skippedSummaries)
     ctx.console.info('No architecture summaries are visible. Check project access and analysis.');
   for (const summary of summaries) {
-    ctx.console.info(`${String(summary.language)}:`);
-    for (const [category, types] of Object.entries(categories)) {
-      const counts = summary[category] as Record<string, number>;
+    ctx.console.info(`${summary.language}:`);
+    for (const category of ['deviations', 'flaws', 'smells'] as const) {
+      const types = SUMMARY_CATEGORIES[category];
+      const counts = summary[category];
       const details = types.map((type) => `${type}: ${counts[type]}`).join(', ');
       ctx.console.info(`  ${category}: ${counts.total} (${details})`);
     }

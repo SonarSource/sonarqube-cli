@@ -55,6 +55,7 @@ import {
   validateFindingPagination,
 } from './findings.ts';
 import { MODEL_ID, objectField, publicGraph, toIntended } from './public-architecture-response.ts';
+import { parseSummaries, type SummaryResult } from './summary.ts';
 
 /** The organization id SonarQube Server's architecture endpoints expect, standing in for its single organization. */
 const SERVER_ORGANIZATION_ID = '00000000-0000-4000-0000-000000000000';
@@ -128,9 +129,9 @@ export class SonarArchitectureApi implements ArchitectureApi {
     this.http = connection.httpClient;
   }
 
-  async getSummary(language?: Ecosystem): Promise<unknown> {
+  async getSummaryCounts(language?: Ecosystem): Promise<SummaryResult> {
     const { organizationId, branchId } = await this.resolveIds(true);
-    return this.http
+    const response = await this.http
       .get<unknown>(this.path('project-summaries'), {
         organizationId,
         branchId,
@@ -138,6 +139,7 @@ export class SonarArchitectureApi implements ArchitectureApi {
       })
       .orThrow()
       .catch((error: unknown) => collectionFailure(error, this.http.isCloud));
+    return parseSummaries(response, language);
   }
 
   async getCurrent(language?: Ecosystem): Promise<CurrentGraph[]> {

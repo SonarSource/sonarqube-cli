@@ -95,6 +95,12 @@ export class FakeArchitecture {
   }
 
   private findings: ProjectFinding[] = [];
+  private analyzedLanguages?: string[];
+
+  withAnalyzedLanguages(languages: string[]): this {
+    this.analyzedLanguages = [...languages];
+    return this;
+  }
 
   withFindings(findings: ProjectFinding[]): this {
     this.findings = structuredClone(findings);
@@ -283,9 +289,9 @@ export class FakeArchitecture {
 
     switch (`${resource}:${request.method}`) {
       case 'project-summaries:GET': {
-        const languages = [...new Set(this.findings.map((finding) => finding.language))].filter(
-          (language) => !request.query.language || request.query.language === language,
-        );
+        const languages = (
+          this.analyzedLanguages ?? [...new Set(this.findings.map((finding) => finding.language))]
+        ).filter((language) => !request.query.language || request.query.language === language);
         const projectSummaries = languages.map((language) => {
           const items = this.findings.filter((finding) => finding.language === language);
           const count = (type: string) => items.filter((item) => item.type === type).length;
