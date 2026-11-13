@@ -417,7 +417,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     return sameDay ? `${fmtDay(r.date)} ${fmtTime(r.date)}` : fmtDay(r.date);
   }
   function releaseSub(r) {
-    if (r.iteration) return r.iteration;
     return versionsUsable ? fmtDay(r.date) : '';
   }
   for (const r of releases) {
@@ -428,7 +427,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
   function releaseTitle(r) {
     const parts = [];
     if (versionsUsable) parts.push(r.label);
-    if (r.iteration) parts.push(r.iteration);
     parts.push(r.when);
     return parts.join(' · ');
   }
@@ -814,7 +812,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     const chips = byId('release-chips');
     chips.replaceChildren();
     if (selected === latestRelease) chips.append(h('span', { class: 'chip latest', text: 'latest release' }));
-    if (selected.iteration) chips.append(h('span', { class: 'chip', text: `iteration ${selected.iteration}` }));
     chips.append(h('span', { class: 'chip', text: selected.when }), h('span', { class: 'chip', text: `run ${selected.runId}` }));
     if (selected.commit) chips.append(h('span', { class: 'chip', text: `commit ${selected.commit.slice(0, COMMIT_LENGTH)}` }));
 
