@@ -257,7 +257,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   const rewardOf = (trial) => (trial.rewards && trial.rewards.reward !== undefined ? trial.rewards.reward : null);
   const keyOf = (trial) => trial.group + '/' + trial.name;
   const linkTo = (trial) => '#' + encodeURIComponent(keyOf(trial));
-  const passed = (trial) => !trial.exception && rewardOf(trial) !== null && rewardOf(trial) >= 1;
+  const passed = (trial) => !trial.leak && !trial.exception && rewardOf(trial) !== null && rewardOf(trial) >= 1;
   const agentLabel = (agent) => ({ 'claude-code': 'Claude Code', codex: 'Codex' })[agent] || agent || 'Unknown agent';
   const sumCost = (members) => members.reduce((sum, trial) => sum + (trial.costUsd || 0), 0);
   const sumSeconds = (members) => members.reduce((sum, trial) => sum + (trial.seconds.agent || 0), 0);
@@ -266,6 +266,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     return known.length ? known.reduce((sum, value) => sum + value, 0) / known.length : null;
   }
   function statusOf(trial) {
+    if (trial.leak) return { text: 'Secret found', kind: 'bad' };
     if (trial.exception) return { text: 'Error', kind: 'warn' };
     if (rewardOf(trial) === null) return { text: 'No result', kind: 'warn' };
     return passed(trial) ? { text: 'Passed', kind: 'good' } : { text: 'Failed', kind: 'bad' };
@@ -455,6 +456,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
       el('div', { class: 'banner ' + status.kind }, [icon(status.kind), el('h2', { text: status.text })]),
       stats.length ? el('div', { class: 'stats' }, stats.map(([value, label]) => el('div', { class: 'stat' }, [el('div', { class: 'v', text: value }), el('div', { class: 'l', text: label })]))) : null,
       trial.exception ? el('p', { class: 'note warn', style: 'padding:0 20px', text: trial.exception }) : null,
+      trial.leak ? el('p', { class: 'note slow', style: 'padding:12px 20px 0', text: 'A secret was found in the files of this trial. The published copy was redacted, and the job was marked as failed.' }) : null,
       checksNode(trial),
     ]);
     page.appendChild(verdict);
@@ -507,7 +509,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
       icon(status.kind),
       stripNode(trial, false),
       el('span', { class: 'tm', text: fmtSeconds(trial.seconds.agent) || '' }),
-      el('span', { class: 'note', text: failed ? plural(failed, 'failed command') : trial.steps.length ? plural(trial.steps.filter((s) => s.source === 'agent').length, 'step') : 'no steps' }),
+      el('span', { class: 'note', text: trial.leak ? 'secret found' : failed ? plural(failed, 'failed command') : trial.steps.length ? plural(trial.steps.filter((s) => s.source === 'agent').length, 'step') : 'no steps' }),
     ]);
   }
   function criteriaNode(members) {
