@@ -210,8 +210,10 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
   architecture
     .command('install-skill')
     .stage(Stage.Beta())
-    .description('Install the architecture skill for Claude Code and Cursor in this repository')
-    .option('--global', 'Install in the home directory instead of the repository')
+    .description(
+      'Install the architecture skill for Claude Code and Cursor, and its coding instructions in CLAUDE.md and AGENTS.md',
+    )
+    .option('--global', 'Install the skill in the home directory, without coding instructions')
     .option('--force', 'Replace a SKILL.md that was not written by this command')
     .authenticatedAction((ctx, options: InstallSkillOptions) => {
       requireCloud(ctx);
