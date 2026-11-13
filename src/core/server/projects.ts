@@ -17,8 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-import { okAsync, type ResultAsync } from '../result.ts';
-import { type HttpClientError } from './errors.ts';
+import { errAsync, okAsync, type ResultAsync } from '../result.ts';
+import { type HttpClientError, isForbiddenRead } from './errors.ts';
 import { type SonarHttpClient } from './http-client.ts';
 import type {
   ComponentShowResponse,
@@ -45,6 +45,10 @@ export interface PublicProjectsResponse {
 }
 
 export type ProjectVisibility = 'private' | 'public';
+
+/** Same vocabulary as `GitRemoteBinding`; `in-org` also covers a lookup with no organization (Server). */
+export type ProjectLookup =
+  { kind: 'in-org'; project: SonarQubeProject } | { kind: 'missing' } | { kind: 'other-org' };
 
 export interface CreateProjectParams {
   projectKey: string;
@@ -96,6 +100,39 @@ export class ProjectsClient {
   }
 
   /**
+   * Tells a project that is absent from one that belongs to another organization (Cloud only,
+   * where a project the token cannot read answers 403). Only a 404 or a component that is not a
+   * project reads as `missing`; every other failure propagates, so an outage never reads as
+   * "missing".
+   */
+  lookupProject(
+    projectKey: string,
+    organization?: string,
+  ): ResultAsync<ProjectLookup, HttpClientError> {
+    return this.client
+      .getOrNullIf404<ComponentShowResponse>('/api/components/show', { component: projectKey })
+      .map((response): ProjectLookup => {
+        const component = response?.component;
+        if (component?.qualifier !== 'TRK') {
+          return { kind: 'missing' };
+        }
+        const inOrganization =
+          !organization || !component.organization || component.organization === organization;
+        return inOrganization
+          ? {
+              kind: 'in-org',
+              project: { key: component.key, name: component.name ?? component.key },
+            }
+          : { kind: 'other-org' };
+      })
+      .orElse((error) =>
+        organization !== undefined && isForbiddenRead(error)
+          ? okAsync<ProjectLookup, HttpClientError>({ kind: 'other-org' })
+          : errAsync(error),
+      );
+  }
+
+  /**
    * Resolves the project with this key, or `null` when the server has no such project. Only a
    * 404, a component that is not a project, or (on Cloud) a project of another organization
    * resolves to `null`; every other failure propagates, so an outage never reads as "missing".
@@ -104,20 +141,9 @@ export class ProjectsClient {
     projectKey: string,
     organization?: string,
   ): ResultAsync<SonarQubeProject | null, HttpClientError> {
-    return this.client
-      .getOrNullIf404<ComponentShowResponse>('/api/components/show', { component: projectKey })
-      .map((response) => {
-        const component = response?.component;
-        if (!component) {
-          return null;
-        }
-        const isProject = component.qualifier === 'TRK';
-        const inOrganization =
-          !organization || !component.organization || component.organization === organization;
-        return isProject && inOrganization
-          ? { key: component.key, name: component.name ?? component.key }
-          : null;
-      });
+    return this.lookupProject(projectKey, organization).map((lookup) =>
+      lookup.kind === 'in-org' ? lookup.project : null,
+    );
   }
 
   /**
