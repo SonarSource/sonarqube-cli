@@ -98,7 +98,7 @@ body {
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 64px; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 32px 16px 64px; }
 h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
 h2 { margin: 40px 0 12px; font-size: 15px; font-weight: 600; }
 .sub { margin: 4px 0 0; color: var(--ink-2); }
@@ -124,9 +124,17 @@ button:disabled { cursor: default; opacity: 0.4; }
 .part-title { margin: 6px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
 .sub-title { margin: 40px 0 12px; font-size: 15px; font-weight: 600; }
 .rel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-.filters { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 0 0 12px; }
-.filters label { display: flex; flex-direction: column; gap: 4px; color: var(--ink-2); font-size: 12px; }
-.filters select { min-width: 160px; color: var(--ink); font-size: 14px; }
+.chart-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; color: var(--ink-2); font-size: 12px; }
+.pick { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--ring); border-radius: 999px; background: var(--surface); }
+.pick select { border: 0; background: transparent; padding: 3px 4px; font-size: 13px; color: var(--ink); }
+.pick.on { background: var(--select-wash); border-color: var(--select-bar); font-weight: 600; }
+.pick .clear { all: unset; cursor: pointer; padding: 0 8px; font-size: 16px; line-height: 1; color: var(--ink-2); }
+.pick .clear:hover { color: var(--ink); }
+.pick .clear:focus-visible, .scope-reset:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+.scope-models { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-left: 4px; }
+.scope-model { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.scope-reset { all: unset; cursor: pointer; margin-left: auto; text-decoration: underline; color: var(--ink-2); }
+.scope-reset:hover { color: var(--ink); }
 .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; }
 
 .bn-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -272,7 +280,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     <div class="part-kicker"><span class="step">1</span> All releases</div>
     <h2 class="part-title" id="part1-title">How the benchmark evolves, release after release</h2>
     <p class="note">Each point of the chart is one release. Click a point, or a release in the use-case grid, to open that release in part 2 below. Success counts PASS only: FAIL, ERROR and LEAK trials are failures. Averages pool every trial in the selection, and the use-case mix can differ between runs, so narrow the filters to compare like with like.</p>
-    <div class="filters" id="filters" aria-label="Filters"></div>
     <div class="evo">
       <aside class="side card">
         <h3 id="measure-label">Measure</h3>
@@ -326,7 +333,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
   const TICK_STEPS = Object.values({ one: 1, two: 2, twoAndAHalf: 2.5, five: 5, ten: 10 });
   const RATE_TICKS = Array.from({ length: TICK_COUNT + 1 }, (_, i) => i / TICK_COUNT);
   const MIN_PLOT_WIDTH = 300;
-  const CHART_HEIGHT = { wide: 560, narrow: 340 };
+  const CHART_HEIGHT = { wide: 640, narrow: 340 };
   const NARROW_WIDTH = 560;
   const CHART_MARGIN = { l: 52, r: 64, t: 12, b: 46 };
   const X_PAD = 18;
@@ -434,12 +441,11 @@ td.muted { color: var(--ink-3); font-weight: 400; }
   const unique = (key) => [...new Set(releases.flatMap((r) => r.trials.map((t) => t[key])))];
   const MODELS = unique('model');
   const AGENTS = unique('agent').sort();
-  const OSES = unique('os').sort();
   const TASKS = unique('task').sort();
   const colorOf = (model) => `var(--s${MODELS.indexOf(model) + 1})`;
   const shapeOf = (model) => SHAPES[MODELS.indexOf(model) % SHAPES.length];
 
-  const state = { os: 'all', agent: 'all', models: new Set(MODELS), task: 'all', span: '8', release: null, metric: 'rate', expanded: new Set(), detailOpen: true };
+  const state = { agent: 'all', models: new Set(MODELS), task: 'all', span: '8', release: null, metric: 'rate', expanded: new Set(), detailOpen: true };
   const sort = { key: 'task', dir: 1 };
 
   const media = matchMedia('(prefers-color-scheme: dark)');
@@ -448,7 +454,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     return forced ? forced === 'dark' : media.matches;
   };
 
-  const inScope = (t) => state.models.has(t.model) && ['os', 'agent', 'task'].every((key) => state[key] === 'all' || t[key] === state[key]);
+  const inScope = (t) => state.models.has(t.model) && ['agent', 'task'].every((key) => state[key] === 'all' || t[key] === state[key]);
   const scoped = (release) => release.trials.filter(inScope);
   const windowed = () => (state.span === 'all' ? releases : releases.slice(-Number(state.span)));
   const selectedRelease = () => releases.find((r) => r.runId === state.release);
@@ -567,7 +573,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     const tableHost = h('div', { class: 'charttable' });
     tableHost.hidden = true;
     const tools = h('div', { class: 'chart-tools' }, spanSelect(), jump, toggle);
-    byId('chart').append(h('figure', { class: 'card chart' }, h('div', { class: 'chart-head' }, h('h3', { text: `${metric.title} by release` }), tools), plot, tableHost));
+    byId('chart').append(h('figure', { class: 'card chart' }, h('div', { class: 'chart-head' }, h('h3', { text: `${metric.title} by release` }), tools), scopeBar(), plot, tableHost));
     return { toggle, plot, tableHost };
   }
 
@@ -937,13 +943,12 @@ td.muted { color: var(--ink-3); font-weight: 400; }
       host.append(h('div', { class: 'attn-row', title: STATUS[t.status].hint },
         h('span', { class: 'kind' }, statusIcon(t.status), STATUS[t.status].label),
         h('span', { class: 'task', text: t.task }),
-        h('span', { class: 'meta', text: `${t.os} · ${t.agent} · ${t.model}` })));
+        h('span', { class: 'meta', text: `${t.agent} · ${t.model}` })));
     }
   }
 
   const COLUMNS = [
     { key: 'task', label: 'Use case' },
-    { key: 'os', label: 'System' },
     { key: 'agent', label: 'Agent' },
     { key: 'model', label: 'Model' },
     { key: 'status', label: 'Status', plain: true },
@@ -963,7 +968,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     return [...groups.values()];
   }
   const taskKey = (t) => t.task;
-  const rowKey = (t) => [t.os, t.agent, t.model].join('|');
+  const rowKey = (t) => [t.agent, t.model].join('|');
 
   function statsFor(trials) {
     return {
@@ -980,7 +985,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
       task: taskTrials[0].task,
       ...statsFor(taskTrials),
       rows: groupBy(taskTrials, rowKey).map((rowTrials) => ({
-        task: rowTrials[0].task, os: rowTrials[0].os, agent: rowTrials[0].agent, model: rowTrials[0].model, ...statsFor(rowTrials),
+        task: rowTrials[0].task, agent: rowTrials[0].agent, model: rowTrials[0].model, ...statsFor(rowTrials),
       })),
     }));
   }
@@ -1012,7 +1017,7 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     const count = group.rows.length;
     return h('tr', { class: 'sum' },
       h('td', {}, twist),
-      h('td', { colspan: '3', class: 'muted', text: `${count} combination${count === 1 ? '' : 's'}` }),
+      h('td', { colspan: '2', class: 'muted', text: `${count} combination${count === 1 ? '' : 's'}` }),
       h('td', {}, statusSummary(group.trials)),
       ...metricCells(group));
   }
@@ -1020,7 +1025,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
   function detailRow(row) {
     return h('tr', { class: 'row' },
       h('td', { class: 'indent' }),
-      h('td', { text: row.os }),
       h('td', { text: row.agent }),
       h('td', { text: row.model }),
       h('td', {}, statusFlags(row.trials)),
@@ -1060,25 +1064,47 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     byId('detail-chev').textContent = state.detailOpen ? '▾' : '▸';
   }
 
-  function buildFilters() {
-    const defs = [
-      { key: 'os', label: 'System', options: [['all', 'All systems'], ...OSES.map((v) => [v, v])] },
-      { key: 'agent', label: 'Agent', options: [['all', 'All agents'], ...AGENTS.map((v) => [v, v])] },
-      { key: 'task', label: 'Use case', options: [['all', 'All use cases'], ...TASKS.map((v) => [v, v])] },
-    ];
-    for (const def of defs) {
-      const select = h('select', { id: `f-${def.key}` }, ...def.options.map(([value, text]) => h('option', { value, text })));
-      select.value = state[def.key];
-      select.addEventListener('change', () => { state[def.key] = select.value; render(); });
-      byId('filters').append(h('label', {}, h('span', { text: def.label }), select));
+  const FILTERS = [
+    { key: 'agent', label: 'Agent', all: 'All agents', values: AGENTS },
+    { key: 'task', label: 'Use case', all: 'All use cases', values: TASKS },
+  ];
+
+  function pick(def) {
+    const options = [['all', def.all], ...def.values.map((v) => [v, v])];
+    const select = h('select', { id: `f-${def.key}`, 'aria-label': def.label }, ...options.map(([value, label]) => h('option', { value, text: label })));
+    select.value = state[def.key];
+    select.addEventListener('change', () => { state[def.key] = select.value; render(); byId(`f-${def.key}`).focus(); });
+    const on = state[def.key] !== 'all';
+    const pill = h('div', { class: on ? 'pick on' : 'pick' }, h('span', { text: def.label }), select);
+    if (on) {
+      const clear = h('button', { class: 'clear', type: 'button', 'aria-label': `Clear the ${def.label.toLowerCase()} filter`, text: '\u00d7' });
+      clear.addEventListener('click', () => { state[def.key] = 'all'; render(); });
+      pill.append(clear);
     }
+    return pill;
+  }
+
+  function scopeBar() {
+    const models = MODELS.filter((model) => state.models.has(model));
+    const filtered = FILTERS.some((def) => state[def.key] !== 'all');
+    const reset = h('button', { class: 'scope-reset', type: 'button', text: 'Reset filters' });
+    reset.addEventListener('click', () => {
+      for (const def of FILTERS) {
+        state[def.key] = 'all';
+      }
+      render();
+    });
+    return h('div', { class: 'chart-scope', role: 'group', 'aria-label': 'What the chart shows' },
+      h('span', { text: 'Showing' }),
+      ...FILTERS.map(pick),
+      h('span', { class: 'scope-models' }, ...models.map((model) => h('span', { class: 'scope-model' }, legendKey(model), h('span', { text: model })))),
+      ...(filtered ? [reset] : []));
   }
 
   function scopeText() {
-    const system = state.os === 'all' ? 'all systems' : state.os;
     const agent = state.agent === 'all' ? 'all agents' : state.agent;
     const task = state.task === 'all' ? 'all use cases' : state.task;
-    return [system, agent, task, `${state.models.size} of ${MODELS.length} models`].join(' · ');
+    return [agent, task, `${state.models.size} of ${MODELS.length} models`].join(' \u00b7 ');
   }
 
   function render() {
@@ -1120,7 +1146,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     renderChart(rels, MODELS.filter((model) => hasTrial(rels, (t) => t.model === model)), selectedRelease());
   }).observe(byId('chart'));
 
-  buildFilters();
   render();
 })();
 </script>
