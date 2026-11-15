@@ -12,6 +12,7 @@ target="${2:?${usage}}"
 command -v jq > /dev/null || { echo "jq is required" >&2; exit 1; }
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
+pull_request=""
 
 api() {
   curl -sS -H "Authorization: Bearer ${token}" "$@"
@@ -27,17 +28,32 @@ pull() {
   esac
 }
 
+last_pull_request() {
+  api --fail-with-body "${base}/api/bundle/${app}/checks" 2> /dev/null | jq -r '.pullRequestUrl // empty' || true
+}
+
 upload() {
-  local status attempt
-  for attempt in 1 2 3; do
-    status="$(api -X PUT -F "bundle=@${work}/bundle.zip" -o "${work}/upload.json" -w '%{http_code}' "${base}/api/bundle/${app}")"
-    [[ "${status}" == 201 ]] && return 0
-    [[ "${status}" == 504 ]] || break
-    echo "Upload timed out (HTTP 504), attempt ${attempt} of 3" >&2
+  local before status attempt
+  before="$(last_pull_request)"
+  status="$(api -X PUT -F "bundle=@${work}/bundle.zip" -o "${work}/upload.json" -w '%{http_code}' "${base}/api/bundle/${app}")"
+  case "${status}" in
+    201)
+      pull_request="$(jq -r .pullRequestUrl "${work}/upload.json")"
+      return 0
+      ;;
+    504) echo "Upload timed out (HTTP 504), SIP is still working on it: waiting for its pull request" >&2 ;;
+    *)
+      echo "Upload failed (HTTP ${status})" >&2
+      cat "${work}/upload.json" >&2
+      exit 1
+      ;;
+  esac
+  for attempt in $(seq 1 40); do
     sleep "${interval}"
+    pull_request="$(last_pull_request)"
+    [[ -n "${pull_request}" && "${pull_request}" != "${before}" ]] && return 0
   done
-  echo "Upload failed (HTTP ${status})" >&2
-  cat "${work}/upload.json" >&2
+  echo "No new pull request after the timeout, the last one is still ${before:-unknown}: close it if it is still open, then run again" >&2
   exit 1
 }
 
@@ -84,7 +100,7 @@ push() {
   echo '{"classification": "Internal"}' > "${work}/bundle/classification.json"
   (cd "${work}/bundle" && zip -q "${work}/bundle.zip" index.html data.json classification.json)
   upload
-  wait_for_checks "$(jq -r .pullRequestUrl "${work}/upload.json")"
+  wait_for_checks "${pull_request}"
   merge
   wait_until_published
 }
