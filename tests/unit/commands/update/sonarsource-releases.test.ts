@@ -128,13 +128,13 @@ describe('sonarsource-releases', () => {
     it('appends a non-exe extension as-is', () => {
       const url = buildDownloadUrl(
         SECRETS,
-        '2.54.0.13918',
+        '2.55.0.13968',
         SONAR_SECRETS_DIST_PREFIX,
         { os: 'linux', arch: 'x86-64', extension: '' },
         'bin',
       );
       expect(url).toBe(
-        `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-2.54.0.13918-linux-x86-64.bin`,
+        `${SONARSOURCE_BINARIES_URL}/${SONAR_SECRETS_DIST_PREFIX}/sonar-secrets-2.55.0.13968-linux-x86-64.bin`,
       );
     });
   });
