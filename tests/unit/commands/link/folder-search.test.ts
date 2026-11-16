@@ -55,6 +55,22 @@ describe('listAllFolders', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('leaves out only folders git ignores themselves, like the tree does', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'folder-search-'));
+    try {
+      Bun.spawnSync(['git', 'init', '-q'], { cwd: root });
+      writeFileSync(join(root, '.gitignore'), 'node_modules/\n*.log\n');
+      mkdirSync(join(root, 'p', 'node_modules'), { recursive: true });
+      writeFileSync(join(root, 'p', 'node_modules', 'x.js'), '');
+      mkdirSync(join(root, 'logs'));
+      writeFileSync(join(root, 'logs', 'a.log'), '');
+
+      expect((await listAllFolders(root)).sort()).toEqual(['logs', 'p']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('matchFolders', () => {

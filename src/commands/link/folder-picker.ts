@@ -21,13 +21,11 @@
 import { readdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
-import { tryRunGitLines } from '@/core/host/git/exec.ts';
-import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
 import logger from '@/core/observability/logger.ts';
 import type { Console, SearchResults } from '@/core/ui/console.ts';
 import type { TreeNode, TreePromptOptions } from '@/core/ui/tree/tree-source.ts';
 
-import { listAllFolders, matchFolders } from './folder-search.ts';
+import { listAllFolders, matchFolders, withoutIgnored } from './folder-search.ts';
 
 const MAX_SEARCH_RESULTS = 50;
 
@@ -95,7 +93,7 @@ export class TreeFolderPicker implements FolderPicker {
     dir: string,
     options: FolderPickerOptions,
   ): Promise<TreeNode<string>[]> {
-    const names = await this.withoutIgnored(dir, await this.readSubfolderNames(dir));
+    const names = await this.visibleSubfolderNames(dir);
     return Promise.all(
       names.map(async (name) => {
         const path = join(dir, name);
@@ -137,14 +135,7 @@ export class TreeFolderPicker implements FolderPicker {
     }
   }
 
-  /** Drops the names git ignores in `dir`; outside a repository nothing is dropped. */
-  private async withoutIgnored(dir: string, names: string[]): Promise<string[]> {
-    if (names.length === 0) return names;
-    // check-ignore exits 1 when nothing is ignored, which reads as `undefined` here.
-    const ignored = await tryRunGitLines(['check-ignore', '--', ...names], dir);
-    if (!ignored) return names;
-    // Git quotes names with non-ASCII or special characters, so decode before comparing.
-    const skipped = new Set(ignored.map(decodeGitPath));
-    return names.filter((name) => !skipped.has(name));
+  private async visibleSubfolderNames(dir: string): Promise<string[]> {
+    return withoutIgnored(dir, await this.readSubfolderNames(dir));
   }
 }

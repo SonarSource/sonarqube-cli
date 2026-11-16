@@ -23,8 +23,7 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { tryRunGitLines } from '@/core/host/git/exec.ts';
-import { decodeGitPath } from '@/core/host/git/quoted-path.ts';
+import { tryRunGit } from '@/core/host/git/exec.ts';
 
 // Outside git nothing like node_modules is ignored, so the walk is bounded instead.
 const MAX_DEPTH_OUTSIDE_GIT = 8;
@@ -34,16 +33,17 @@ function isHidden(name: string): boolean {
   return name.startsWith('.');
 }
 
-/** The folders git ignores under `root`, as forward-slash paths; `undefined` outside git. */
-async function ignoredFolders(root: string): Promise<Set<string> | undefined> {
-  // --directory lists an ignored folder once instead of every file in it.
-  const paths = await tryRunGitLines(
-    ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory'],
-    root,
-  );
-  if (paths === undefined) return undefined;
-  const folders = paths.map(decodeGitPath).filter((path) => path.endsWith('/'));
-  return new Set(folders.map((folder) => folder.slice(0, -1)));
+/**
+ * Drops the folders git ignores, given as paths relative to `cwd`; outside a repository nothing
+ * is dropped. Only a folder that is ignored itself is dropped, not one whose contents all are.
+ */
+export async function withoutIgnored(cwd: string, folders: string[]): Promise<string[]> {
+  if (folders.length === 0) return folders;
+  // -z keeps names unquoted; exit code 1, nothing ignored, reads as `undefined` like no repository.
+  const output = await tryRunGit(['check-ignore', '-z', '--stdin'], cwd, folders.join('\0'));
+  if (output === undefined) return folders;
+  const ignored = new Set(output.split('\0'));
+  return folders.filter((folder) => !ignored.has(folder));
 }
 
 /**
@@ -51,34 +51,28 @@ async function ignoredFolders(root: string): Promise<Set<string> | undefined> {
  * and git-ignored folders are left out, empty ones (which git does not track) are kept.
  */
 export async function listAllFolders(root: string): Promise<string[]> {
-  const ignored = await ignoredFolders(root);
-  const maxDepth = ignored === undefined ? MAX_DEPTH_OUTSIDE_GIT : Infinity;
-  return walkLevels(root, [''], ignored, { depthLeft: maxDepth, budget: MAX_FOLDERS });
+  const inGit = (await tryRunGit(['rev-parse', '--is-inside-work-tree'], root)) !== undefined;
+  const maxDepth = inGit ? Infinity : MAX_DEPTH_OUTSIDE_GIT;
+  return walkLevels(root, [''], { depthLeft: maxDepth, budget: MAX_FOLDERS });
 }
 
-async function subfolders(
-  root: string,
-  rel: string,
-  ignored: Set<string> | undefined,
-): Promise<string[]> {
+async function subfolders(root: string, rel: string): Promise<string[]> {
   const entries = await readdir(join(root, rel), { withFileTypes: true }).catch(() => []);
   return entries
     .filter((entry) => entry.isDirectory() && !isHidden(entry.name))
-    .map((entry) => (rel ? `${rel}/${entry.name}` : entry.name))
-    .filter((folder) => !ignored?.has(folder));
+    .map((entry) => (rel ? `${rel}/${entry.name}` : entry.name));
 }
 
 /** Breadth-first: each level is read in parallel, and the next only once it is known. */
 async function walkLevels(
   root: string,
   level: readonly string[],
-  ignored: Set<string> | undefined,
   { depthLeft, budget }: { depthLeft: number; budget: number },
 ): Promise<string[]> {
   if (level.length === 0 || depthLeft <= 0 || budget <= 0) return [];
-  const listings = await Promise.all(level.map((rel) => subfolders(root, rel, ignored)));
-  const found = listings.flat().slice(0, budget);
-  const deeper = await walkLevels(root, found, ignored, {
+  const listings = await Promise.all(level.map((rel) => subfolders(root, rel)));
+  const found = (await withoutIgnored(root, listings.flat())).slice(0, budget);
+  const deeper = await walkLevels(root, found, {
     depthLeft: depthLeft - 1,
     budget: budget - found.length,
   });
