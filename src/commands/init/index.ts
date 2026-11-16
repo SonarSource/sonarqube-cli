@@ -27,6 +27,8 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
+  type MonorepoRootOption,
+  parseMonorepoRoots,
   type UnboundNewOptions,
   validateScanOptions,
   validateUnboundNewOptions,
@@ -54,6 +56,7 @@ export interface InitOptions {
   path?: string;
   nonInteractive?: boolean;
   monorepo?: boolean;
+  root?: string[];
   project?: string;
   name?: string;
   visibility?: string;
@@ -71,9 +74,14 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
   const { console } = ctx;
 
-  if (options.monorepo && !interactive) {
+  const monorepoRoots = parseMonorepoRoots(options.root);
+  if (monorepoRoots.length > 0 && !options.monorepo) {
+    throw new InvalidOptionError('--root only applies together with --monorepo.');
+  }
+  if (options.monorepo && !interactive && monorepoRoots.length === 0) {
     throw new InvalidOptionError(
       '--monorepo needs to prompt for the project roots to onboard, so it cannot run without a terminal or with --non-interactive.',
+      'Name the roots with --root <path>[=<project key>] instead.',
     );
   }
 
@@ -88,6 +96,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     interactive,
     unboundNewOptions,
     options.monorepo === true,
+    monorepoRoots,
   );
   const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
   if (outcome.kind !== 'unbound' && !declined) {
@@ -126,6 +135,7 @@ async function run(
   interactive: boolean,
   unboundNewOptions: UnboundNewOptions,
   monorepo: boolean,
+  monorepoRoots: readonly MonorepoRootOption[],
 ): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
   let auth: ResolvedAuth;
   try {
@@ -140,7 +150,7 @@ async function run(
   const deps: DetectDeps = { auth, http, console, interactive };
   // Chosen before detection: a monorepo that is already partly linked must reach its remaining roots.
   if (monorepo || (interactive && (await offerMonorepo(projectRoot, deps)))) {
-    return { outcome: await runMonorepo(projectRoot, deps), auth, deps };
+    return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
   }
   const detected = await detectInitPath(projectRoot, deps);
   return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth, deps };
