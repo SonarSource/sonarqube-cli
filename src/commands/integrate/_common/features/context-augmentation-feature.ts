@@ -33,6 +33,7 @@ import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatur
 
 import { getOptionalStringAttr } from '../attrs.ts';
 import {
+  CONTEXT_GUIDELINES_INSTRUCTIONS,
   isContextAugmentationSkipped,
   printContextAugmentationSkill,
   runToolIntegrateCommand,
@@ -94,7 +95,9 @@ export const CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY = `# Vortex Context
 
 The \`sonar-context-augmentation\` skill gives you this project's coding standards, architecture and semantic code navigation, through the \`sonar context\` command.
 
-At the start of every task that involves reading or changing code, load the \`sonar-context-augmentation\` skill and follow it. Before writing or editing code, run \`sonar context guidelines get\`. To locate symbols, callers or usages, prefer \`sonar context navigation\` over \`grep\` or \`find\`.
+At the start of every task that involves reading or changing code, load the \`sonar-context-augmentation\` skill and follow it. To locate symbols, callers or usages, prefer \`sonar context navigation\` over \`grep\` or \`find\`.
+
+${CONTEXT_GUIDELINES_INSTRUCTIONS}
 
 When you start a subagent, ask it to load the \`sonar-context-augmentation\` skill as its first step.
 
