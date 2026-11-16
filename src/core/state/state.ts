@@ -27,7 +27,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { CallerAgent } from '@/core/host/environment/agent-detector.ts';
 
-export const CLOUD_REGIONS = ['eu', 'us'] as const;
+export const CLOUD_REGIONS = ['eu', 'us', 'au'] as const;
 
 /**
  * Region for SonarQube Cloud instances

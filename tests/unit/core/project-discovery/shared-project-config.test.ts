@@ -26,6 +26,7 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import {
   SHARED_PROJECT_CONFIG_FILE_NAME,
+  SONARCLOUD_AU_URL,
   SONARCLOUD_URL,
   SONARCLOUD_US_URL,
 } from '@/core/config-constants.ts';
@@ -99,6 +100,23 @@ describe('SharedProjectConfigRepositoryImpl.load', () => {
     try {
       const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
       expect(mappings[0]?.serverUrl).toBe(SONARCLOUD_US_URL);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a Cloud entry in the AU region', async () => {
+    const dir = tempDir('cloud-au');
+    writeProjectConfig(dir, {
+      region: 'au',
+      organization: 'acme',
+      projectKey: 'acme_au',
+      path: '.',
+    });
+
+    try {
+      const mappings = await new SharedProjectConfigRepositoryImpl().load(dir);
+      expect(mappings[0]?.serverUrl).toBe(SONARCLOUD_AU_URL);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

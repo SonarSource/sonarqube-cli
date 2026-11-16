@@ -18,14 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { SONARCLOUD_HOSTNAME, SONARCLOUD_US_HOSTNAME } from '../config-constants.ts';
+import {
+  SONARCLOUD_AU_HOSTNAME,
+  SONARCLOUD_HOSTNAME,
+  SONARCLOUD_US_HOSTNAME,
+} from '../config-constants.ts';
 import { cloudRegionFromUrl } from './sonarcloud-region.ts';
 
 export const INVALID_SERVER_URL_MESSAGE =
   'The SonarQube server URL must be an absolute HTTP(S) URL with a host and no control characters or embedded credentials.';
 
 export function invalidCloudServerUrlMessage(): string {
-  return `The SonarQube Cloud server URL host must be ${SONARCLOUD_HOSTNAME} or ${SONARCLOUD_US_HOSTNAME}.`;
+  return `The SonarQube Cloud server URL host must be ${SONARCLOUD_HOSTNAME}, ${SONARCLOUD_US_HOSTNAME}, or ${SONARCLOUD_AU_HOSTNAME}.`;
 }
 
 function parseHttpServerUrl(serverUrl: string): URL | undefined {
