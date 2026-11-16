@@ -102,6 +102,13 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .meter .fill { height: 100%; border-radius: 4px; background: var(--accent); }
 .meter .v { text-align: right; font-variant-numeric: tabular-nums; }
 .criteria { margin-top: 16px; }
+.runs-fold summary { cursor: pointer; list-style: none; padding: 8px 0; display: flex; gap: 8px; }
+.runs-fold summary::-webkit-details-marker { display: none; }
+.runs-fold summary .eyebrow::before { content: "▸"; display: inline-block; width: 14px; }
+.runs-fold[open] summary .eyebrow::before { transform: rotate(90deg); }
+.ask-n { font-size: 10px; letter-spacing: .02em; }
+.framed { padding-bottom: 20px; }
+.frame-card { padding: 16px 20px; }
 .criteria summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style: none; padding: 8px 0; }
 .criteria summary::-webkit-details-marker { display: none; }
 .criteria summary .eyebrow::before { content: "▸"; display: inline-block; width: 14px; transition: transform .15s; }
@@ -273,22 +280,21 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   }
   const failedCommands = (trial) => trial.steps.reduce((sum, step) => sum + step.results.filter((r) => r.isError).length, 0);
   function gapsOf(trial) {
-    let previous = null;
+    const times = trial.steps.map((step) => (step.at ? Date.parse(step.at) : null));
     return trial.steps.map((step, index) => {
-      const time = step.at ? Date.parse(step.at) : null;
-      const gap = previous !== null && time !== null ? (time - previous) / 1000 : null;
-      if (time !== null) previous = time;
-      const afterAgent = index > 0 && trial.steps[index - 1].source === 'agent';
-      return afterAgent ? gap : null;
+      const next = times[index + 1];
+      const own = times[index];
+      if (step.source !== 'agent' || own === null || next === undefined || next === null) return null;
+      return (next - own) / 1000;
     });
   }
   function durationsOf(trial) {
-    let previous = null;
-    return trial.steps.map((step) => {
-      const time = step.at ? Date.parse(step.at) : null;
-      const seconds = previous !== null && time !== null ? Math.max((time - previous) / 1000, MIN_STEP_SECONDS) : MIN_STEP_SECONDS;
-      if (time !== null) previous = time;
-      return seconds;
+    const times = trial.steps.map((step) => (step.at ? Date.parse(step.at) : null));
+    return trial.steps.map((step, index) => {
+      const own = times[index];
+      const next = times[index + 1];
+      if (own === null || next === undefined || next === null) return MIN_STEP_SECONDS;
+      return Math.max((next - own) / 1000, MIN_STEP_SECONDS);
     });
   }
   function siblingsOf(trial) {
@@ -391,6 +397,12 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     return el('div', { class: 'call' + (result && result.isError ? ' err' : '') }, [header, more, body]);
   }
 
+  function askNode(step) {
+    return el('div', { class: 'step framed', id: 'step-request' }, [el('span', { class: 'n ask-n', text: 'Ask' }), el('div', { class: 'card frame-card' }, [el('div', { class: 'say' }, [richText(step.message)])])]);
+  }
+  function finalNode(step, number) {
+    return el('div', { class: 'step framed' }, [el('span', { class: 'n', text: String(number) }), el('div', { class: 'card frame-card' }, [el('div', { class: 'say' }, [richText(step.message)])])]);
+  }
   function stepNode(step, number, gap) {
     const failed = step.results.some((r) => r.isError);
     const slow = gap !== null && gap >= WAIT_SECONDS;
@@ -398,7 +410,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     if (step.message) body.appendChild(el('div', { class: 'say' }, [richText(step.message)]));
     step.calls.forEach((call) => body.appendChild(callNode(call, step.results)));
     if (failed) body.appendChild(el('p', { class: 'note warn', text: step.results.some(blockedByHook) ? 'A hook blocked this step. Click it to read why.' : 'A command failed here. Click it to read the answer.' }));
-    if (slow) body.appendChild(el('p', { class: 'note slow', text: 'The agent waited ' + fmtSeconds(gap) + ' before this step.' }));
+    if (slow) body.appendChild(el('p', { class: 'note slow', text: 'The agent waited ' + fmtSeconds(gap) + ' for the answer.' }));
     return el('li', { class: 'step' + (slow ? ' slow' : failed ? ' err' : ''), id: 'step-' + step.id }, [el('span', { class: 'n', text: String(number) }), body]);
   }
 
@@ -438,6 +450,15 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     return el('details', { class: 'tech' }, [el('summary', { text: 'Technical details' }), list]);
   }
 
+  function taskRequest(trial) {
+    return trial.steps.find((step) => step.source === 'user' && step.message && !step.message.trimStart().startsWith('<'));
+  }
+  function taskSection(request) {
+    return request ? [el('div', { class: 'section eyebrow', text: 'The task' }), askNode(request)] : [];
+  }
+  function resultSection(finalAnswer, count) {
+    return finalAnswer ? [el('div', { class: 'section eyebrow', text: 'The result' }), finalNode(finalAnswer.step, count + 1)] : [];
+  }
   function trialPage(trial) {
     const status = statusOf(trial);
     const siblings = siblingsOf(trial);
@@ -461,11 +482,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     ]);
     page.appendChild(verdict);
 
-    const request = trial.steps.find((step) => step.source === 'user');
-    if (request && request.message) {
-      page.appendChild(el('div', { class: 'section eyebrow', text: 'What the agent was asked' }));
-      page.appendChild(el('div', { class: 'quote' }, [richText(request.message)]));
-    }
+    const request = taskRequest(trial);
 
     const gaps = gapsOf(trial);
     const agentSteps = trial.steps.map((step, index) => ({ step, gap: gaps[index] })).filter((item) => item.step.source === 'agent');
@@ -485,12 +502,10 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
           el('span', {}, [el('i', { class: 'slow' }), 'Waited ' + WAIT_SECONDS + ' s or more']),
         ]),
       ]));
+      page.append(...taskSection(request));
       page.appendChild(el('ol', { class: 'steps' }, worked.map((item, index) => stepNode(item.step, index + 1, item.gap))));
     }
-    if (finalAnswer) {
-      page.appendChild(el('div', { class: 'section eyebrow', text: 'Final answer of the agent' }));
-      page.appendChild(el('div', { class: 'card' }, [richText(finalAnswer.step.message)]));
-    }
+    page.append(...resultSection(finalAnswer, worked.length));
     page.appendChild(technicalDetails(trial));
     return page;
   }
@@ -551,7 +566,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
       ]),
       meters.length ? el('div', { class: 'meters' }, meters) : null,
       criteriaNode(members),
-      el('div', { class: 'runs' }, siblingsOf(members[0]).map((trial, index) => runRow(trial, index + 1))),
+      el('details', { class: 'runs-fold' }, [el('summary', {}, [el('span', { class: 'eyebrow', text: 'Trials (' + siblingsOf(members[0]).length + ')' })]), el('div', { class: 'runs' }, siblingsOf(members[0]).map((trial, index) => runRow(trial, index + 1)))]),
     ]);
   }
   function figure(value, label) {
