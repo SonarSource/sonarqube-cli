@@ -336,6 +336,45 @@ public class Batch {
     return url;
   }
 
+  it.each(
+    [
+      ['proxy', 'sonar.scanner.proxyHost=untrusted.invalid'],
+      ['truststore', 'sonar.scanner.truststorePath=untrusted.p12'],
+      ['keystore', 'sonar.scanner.keystorePath=untrusted.p12'],
+      ['dump', 'sonar.scanner.internal.dumpToFile=repository-dump.properties'],
+    ].flatMap(([name, property]) =>
+      [false, true].flatMap((detach) =>
+        [false, true].map(
+          (module) =>
+            [
+              `${name} ${detach ? 'detached' : 'foreground'} ${module ? 'module' : 'root'}`,
+              property,
+              detach,
+              module,
+            ] as const,
+        ),
+      ),
+    ),
+  )(
+    'refuses repository %s settings',
+    async (_name, property, detach, module) => {
+      harness.cwd.writeFile('sonar-project.properties', module ? 'sonar.modules=sonar' : property);
+      if (module) harness.cwd.writeFile('sonar/sonar-project.properties', property);
+      const result = await harness.run(
+        `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
+        { timeoutMs: 30_000 },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'Repository scanner proxy, TLS and diagnostic-dump settings are not allowed.',
+      );
+      expect(completed).toHaveLength(0);
+      expect(existsSync(join(harness.cwd.path, 'repository-dump.properties'))).toBe(false);
+      expect(result.stdout + result.stderr).not.toContain(token);
+    },
+    60_000,
+  );
+
   it('demonstrates an unpinned legacy scanner executes a poisoned cache without downloading it', async () => {
     const url = plantLegacyCache('root');
     await command(
