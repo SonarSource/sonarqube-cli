@@ -20,14 +20,14 @@
 
 import type { StopAgentAdapter } from '../types.ts';
 
-interface ClaudeStopPayload {
+interface ClaudeCodexStopPayload {
   session_id: string;
   cwd: string;
 }
 
-export const claudeAdapter: StopAgentAdapter = {
+export const claudeCodexAdapter: StopAgentAdapter = {
   parse: (payload) => {
-    const p = payload as ClaudeStopPayload;
+    const p = payload as ClaudeCodexStopPayload;
     return { sessionId: p.session_id, cwd: p.cwd };
   },
   emit: ({ findings, shouldContinue }) =>
