@@ -35,6 +35,7 @@ import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
+import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -44,7 +45,7 @@ import { createMcpServerFeature } from '../_common/features/mcp-server-feature.t
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
-  createSqaaInstructionsSnippet,
+  createSqaaInstructionsRemover,
   SQAA_HOOK_FEATURE_ID,
   SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
@@ -71,7 +72,6 @@ const CLAUDE_MD_FILE = 'CLAUDE.md';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pretool-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const POSTTOOLUSEFAILURE_SCRIPT_REL = 'sonar-posttoolusefailure/build-scripts/posttoolusefailure';
-const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
 
 export const CLAUDE_INTEGRATION_ID = 'claude-code';
 export const CONTEXT_AUGMENTATION_HOOK_FEATURE_ID = 'context-augmentation-hook';
@@ -120,7 +120,11 @@ const claudePostToolUseDispatchResources = createPostToolUseDispatchResources({
 const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
   const defaultVortex = createVortexFeature<ClaudeIntegrationOptions>(
     [
-      createSqaaStopHookSubfeature(),
+      createCompletionAnalysisHookSubfeature<ClaudeIntegrationOptions>({
+        agent: 'claude',
+        configDir: CLAUDE_CONFIG_DIR,
+        settingsPath: resolveClaudeSettingsPath,
+      }),
       createContextAugmentationSubfeature<ClaudeIntegrationOptions>({
         agent: 'claude',
         scriptPath: (context) =>
@@ -146,7 +150,7 @@ const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
     resources: claudePostToolUseDispatchResources,
     legacyCleanups: [
       ...(defaultVortex.legacyCleanups ?? []),
-      createSqaaInstructionsSnippet(resolveClaudeMdPath),
+      createSqaaInstructionsRemover(resolveClaudeMdPath),
     ],
   };
 })();
@@ -191,45 +195,6 @@ function createCagHookConfigResource(): ResourceDeclaration {
       ]),
     removePatch: (document) => removeAgentHooks(document, [VORTEX_HOOK_MARKER]),
   });
-}
-
-function createSqaaStopHookSubfeature(): SubfeatureDeclaration<ClaudeIntegrationOptions> {
-  return {
-    id: 'completion-analysis-hook',
-    displayName: 'Vortex completion analysis hook',
-    required: true,
-    resources: [
-      wholeFile({
-        id: 'completion-analysis-hook-script',
-        displayName: 'Completion analysis hook script',
-        targetPath: (context) =>
-          resolveAgentHookScriptPath(context, CLAUDE_CONFIG_DIR, STOP_SCRIPT_REL),
-        content: {
-          unix: buildUnixHookScript('agent-stop --agent claude'),
-          windows: buildWindowsHookScript('agent-stop --agent claude'),
-        },
-        executable: true,
-      }),
-      jsonPatch({
-        id: 'completion-analysis-hook-config',
-        displayName: 'Completion analysis hook configuration',
-        targetPath: resolveClaudeSettingsPath,
-        defaultValue: { hooks: {} },
-        patch: (document, context) =>
-          upsertAgentHooks(document, [
-            createAgentHookEntry(
-              context,
-              CLAUDE_CONFIG_DIR,
-              'Stop',
-              undefined,
-              'sonar-stop',
-              STOP_SCRIPT_REL,
-            ),
-          ]),
-        removePatch: (document) => removeAgentHooks(document, ['sonar-stop']),
-      }),
-    ],
-  };
 }
 
 function createSessionStartHookEntry(
