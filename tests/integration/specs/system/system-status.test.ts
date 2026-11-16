@@ -1950,7 +1950,7 @@ command = "another-tool stop"
     );
 
     it(
-      'omits the VORTEX section entirely for a non-cloud connection',
+      'reports unsupported with the Server requirements when entitlement hubs are absent',
       async () => {
         const server = await harness.newFakeServer().withAuthToken(TOKEN).start();
         harness.state().withAuth(server.baseUrl(), TOKEN);
@@ -1958,11 +1958,15 @@ command = "another-tool stop"
         const result = await harness.run('system status');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).not.toContain('VORTEX');
+        expect(result.stdout).toContain('VORTEX');
+        expect(result.stdout).toContain('Unsupported');
+        expect(result.stdout).toContain('SonarQube Server 2026.5 Enterprise or later');
+        expect(result.stdout).not.toMatch(/A3S|CAG/);
+        expect(result.stdout).not.toContain('Not entitled');
 
         const jsonResult = await harness.run('system status --json');
         const json = JSON.parse(jsonResult.stdout) as { vortex: unknown };
-        expect(json.vortex).toEqual({ applicable: false });
+        expect(json.vortex).toEqual({ applicable: true, status: 'unsupported' });
       },
       { timeout: 15000 },
     );
