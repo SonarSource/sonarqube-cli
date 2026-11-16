@@ -20,10 +20,8 @@
 
 // Picks the directory for `sonar link` when neither a project key nor --path is given.
 
-import { isAbsolute, relative } from 'node:path';
-
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import {
   type ConfigItem,
   resolveContainedPath,
@@ -31,16 +29,13 @@ import {
 
 import type { FolderPicker } from './folder-picker.ts';
 
-function isStrictlyInside(path: string, dir: string): boolean {
-  const rel = relative(dir, path);
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
-}
-
 /** `linked to <key>` for a linked folder, plus how many linked folders lie deeper inside it. */
 function linkedDetail(linked: readonly ConfigItem[], dir: string): string | undefined {
   const folder = canonicalizePath(dir);
   const own = linked.find((item) => item.root === folder);
-  const deeper = linked.filter((item) => isStrictlyInside(item.root, folder)).length;
+  const deeper = linked.filter(
+    (item) => item.root !== folder && isAncestorOrSelf(folder, item.root),
+  ).length;
   const parts: string[] = [];
   if (own !== undefined) parts.push(`linked to ${own.entry.projectKey}`);
   if (deeper > 0) parts.push(`${deeper} ${deeper === 1 ? 'project' : 'projects'} deeper`);
