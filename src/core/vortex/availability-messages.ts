@@ -29,6 +29,8 @@ import type { VortexEntitlementStatus } from '@/core/vortex/entitlement.ts';
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
   'Vortex analysis is paused: the usage limit has been reached. Analysis will resume once usage resets.';
 
+export const VORTEX_SERVER_UNSUPPORTED_MESSAGE = `Vortex requires SonarQube Server 2026.5 Enterprise or later. The CAG Hub extension and A3S entitlement endpoint must be available. Ask your administrator. Learn more: ${VORTEX_PRODUCT_URL}`;
+
 const VORTEX_NOT_ENTITLED_HOOK_MESSAGE = `Vortex analysis is no longer available on this connection. Run \`sonar integrate\` to remove the analysis hooks. See ${VORTEX_PRODUCT_URL}`;
 
 const VORTEX_NOT_ENTITLED_COMMAND_MESSAGE = `Vortex analysis is not available on this connection. See ${VORTEX_PRODUCT_URL}`;
@@ -48,6 +50,9 @@ function vortexUnavailableMessage(
   status: VortexEntitlementStatus,
   notEntitledMessage: string,
 ): string | undefined {
+  if (status === 'unsupported') {
+    return VORTEX_SERVER_UNSUPPORTED_MESSAGE;
+  }
   if (status === 'over_consumption') {
     return VORTEX_OVER_CONSUMPTION_MESSAGE;
   }

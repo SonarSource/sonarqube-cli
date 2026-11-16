@@ -34,6 +34,14 @@ describe('vortexUnavailableHookMessage / vortexUnavailableCommandMessage', () =>
     );
   });
 
+  it('explains Server requirements for unsupported hooks and commands', () => {
+    const message = vortexUnavailableHookMessage('unsupported');
+    expect(message).toContain('SonarQube Server 2026.5 Enterprise or later');
+    expect(message).toContain('CAG Hub extension');
+    expect(message).toContain('A3S entitlement endpoint');
+    expect(message).toBe(vortexUnavailableCommandMessage('unsupported'));
+  });
+
   it('never suggests re-running sonar integrate for over_consumption', () => {
     expect(VORTEX_OVER_CONSUMPTION_MESSAGE).not.toContain('sonar integrate');
   });
