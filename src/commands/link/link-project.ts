@@ -45,7 +45,7 @@ import { assertCanChooseProject, chooseProjectKey } from './choose-project.ts';
 import { TreeFolderPicker } from './folder-picker.ts';
 
 export interface LinkOptions {
-  /** Omitted: picked interactively when no project key is given either, else the root. */
+  /** Omitted: offered in a tree when no project key is given either, else the root. */
   path?: string;
   monorepo?: boolean;
 }
@@ -84,19 +84,20 @@ async function resolvePickerRoot({
   return { targetDir, projectRoot: targetDir, inGitRepository };
 }
 
-/** The folders the user ticks under the config directory, at least one. */
+/** The folders the user ticks under the config directory, at least one; `undefined` for the root alone. */
 async function chooseTargets(
   { targetDir, inGitRepository }: LinkTarget,
   items: readonly ConfigItem[],
+  monorepo: boolean,
   { console }: CommandAuthenticatedInvocationContext,
-): Promise<LinkTarget[]> {
+): Promise<LinkTarget[] | undefined> {
   const folders = await chooseProjectFolders(
     targetDir,
-    inGitRepository,
-    items,
+    { inGitRepository, items, monorepo },
     new TreeFolderPicker(console),
+    console,
   );
-  return folders.map((projectRoot) => ({ targetDir, projectRoot, inGitRepository }));
+  return folders?.map((projectRoot) => ({ targetDir, projectRoot, inGitRepository }));
 }
 
 async function resolveTarget(
@@ -183,9 +184,12 @@ export async function linkProject(
     : await resolveTarget(options.path ?? '.', ctx);
   // Read once: the prompts show these links, and the write applies the user's choices to them.
   const items = await sharedProjectConfigFile.readItems(target.targetDir, throwOnInvalidConfig);
-  const targets = picking ? await chooseTargets(target, items, ctx) : [target];
+  const picked = picking
+    ? await chooseTargets(target, items, options.monorepo === true, ctx)
+    : undefined;
+  const targets = picked ?? [target];
   // Folders picked in the tree join what is already linked; a plain 'sonar link <key>' replaces it.
-  const monorepo = picking || options.monorepo === true;
+  const monorepo = picked !== undefined || options.monorepo === true;
 
   const links = await chooseLinks(
     givenKey,

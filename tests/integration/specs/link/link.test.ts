@@ -364,6 +364,7 @@ describe('sonar link', () => {
         );
 
         const session = harness.runInteractive('link');
+        await session.accept('Choose the folder to link');
         await session.accept('beta (beta)?');
         const result = await session.waitFinish();
 
@@ -386,6 +387,7 @@ describe('sonar link', () => {
         );
 
         const session = harness.runInteractive('link');
+        await session.accept('Choose the folder to link');
         await session.decline('beta (beta)?');
         await session.waitText('Choose a project');
         session.write('alpha');
@@ -407,6 +409,7 @@ describe('sonar link', () => {
         const serverUrl = await signInToServer();
 
         const session = harness.runInteractive('link');
+        await session.accept('Choose the folder to link');
         await session.waitText('Choose a project');
         await session.waitText('2 projects');
         session.keyEnter();
@@ -426,6 +429,7 @@ describe('sonar link', () => {
         await signInToServer();
 
         const session = harness.runInteractive('link');
+        await session.accept('Choose the folder to link');
         await session.waitText('Choose a project');
         session.keyCtrlC();
         const result = await session.waitFinish();
@@ -445,12 +449,21 @@ describe('sonar link', () => {
         harness.cwd.writeFile('web/package.json', '{}');
       });
 
+      async function chooseFolders(
+        session: ReturnType<typeof harness.runInteractive>,
+      ): Promise<void> {
+        await session.waitText('Choose another');
+        session.keyDown();
+        session.keyEnter();
+      }
+
       it(
         'lists the visible top-level folders, then links the one ticked folder as a single project',
         async () => {
           const serverUrl = await signInToServer();
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           await session.waitText('web');
           const folders = session.output();
@@ -486,6 +499,7 @@ describe('sonar link', () => {
           const serverUrl = await signInToServer();
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           await session.waitText('web');
           session.keyDown();
@@ -515,6 +529,7 @@ describe('sonar link', () => {
           mkdirSync(join(harness.cwd.path, 'services', 'api', 'empty-test'));
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           session.write('test');
           await session.waitText('services/api/empty-test');
@@ -541,6 +556,7 @@ describe('sonar link', () => {
           const serverUrl = await signInToServer();
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           session.write('build');
           await session.waitText("No folders match 'build'.");
@@ -747,6 +763,7 @@ describe('sonar link', () => {
           const serverUrl = await signInToServer();
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           await session.waitText('web');
           session.keyTab();
@@ -773,6 +790,7 @@ describe('sonar link', () => {
           harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ project: web }));
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('linked to beta');
           session.keyTab();
           await session.waitText('1 selected');
@@ -799,6 +817,7 @@ describe('sonar link', () => {
           harness.cwd.writeFile('.sonar-config.json', JSON.stringify(config));
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('linked to beta');
           session.keyDown();
           session.keyDown();
@@ -821,6 +840,7 @@ describe('sonar link', () => {
           await signInToServer();
 
           const session = harness.runInteractive('link');
+          await chooseFolders(session);
           await session.waitText('Choose the project folders');
           session.keyCtrlC();
           const result = await session.waitFinish();
@@ -828,6 +848,32 @@ describe('sonar link', () => {
           expect(result.exitCode).not.toBe(0);
           expect(result.stdout + result.stderr).not.toContain('Choose a project');
           expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'links the repository root by default, without the tree, replacing a lone link',
+        async () => {
+          const serverUrl = await signInToServer();
+          harness.cwd.writeFile(
+            '.sonar-config.json',
+            JSON.stringify({ project: { serverUrl, projectKey: 'beta', path: 'web' } }),
+          );
+
+          const session = harness.runInteractive('link');
+          await session.accept('Choose the folder to link');
+          await session.waitText('Choose a project');
+          await session.waitText('2 projects');
+          session.keyEnter();
+          const result = await session.waitFinish();
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).not.toContain('Choose the project folders');
+          expect(result.stdout + result.stderr).toContain('Removed the other mappings');
+          expect(harness.cwd.file('.sonar-config.json').asJson()).toEqual({
+            project: { serverUrl, projectKey: 'alpha', path: '.' },
+          });
         },
         TIMEOUT,
       );
