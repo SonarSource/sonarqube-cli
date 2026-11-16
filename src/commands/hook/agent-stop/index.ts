@@ -69,6 +69,12 @@ async function resolveStopAnalysis(
   input: StopInput,
 ): Promise<StopOutput | null> {
   const session = { agent, session_id: input.sessionId };
+  // An empty cwd would resolve to the hook process's own directory instead of the agent's.
+  if (typeof input.cwd !== 'string' || input.cwd.trim() === '') {
+    logger.debug('Vortex stop analysis skipped: no working directory');
+    resetAnalysisCounterIfIdle(session);
+    return null;
+  }
   const connection = await ctx.resolveConnection();
   if (!connection) {
     logger.debug('Vortex stop analysis skipped: no connection');
