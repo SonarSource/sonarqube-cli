@@ -869,7 +869,14 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
       expect(analyses()).toHaveLength(0);
     }, 15000);
 
-    it.each([null, {}, { session_id: null }, { session_id: 42 }, { session_id: '' }, { cwd: 42 }])(
+    it.each([
+      null,
+      {},
+      { session_id: null },
+      { session_id: 42 },
+      { session_id: '' },
+      { session_id: 'session', cwd: 42 },
+    ])(
       'allows stopping with an invalid adapter payload: %j',
       async (payload) => {
         harness.cwd.writeFile('src/new.ts', BAD);
