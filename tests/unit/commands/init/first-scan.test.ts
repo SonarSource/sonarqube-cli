@@ -136,13 +136,13 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
 }
 
 /** A scanner on the PATH whose `java` prints a line and writes the report, or fails. */
-function installScanner(exitCode = 0): void {
-  const launcher = writeFakeLauncher(root);
+function installScanner(exitCode = 0, version = '8.3.1.16491'): void {
+  const launcher = writeFakeLauncher(root, { version });
   writeExecutable(launcher.javaPath, [
     '#!/bin/sh',
     'for arg in "$@"; do case "$arg" in',
     '  -XshowSettings:properties) echo "    java.specification.version = 21" >&2; exit 0;;',
-    '  --version) echo "SonarScanner CLI 8.3.1.16491"; exit 0;;',
+    `  --version) echo "SonarScanner CLI ${version}"; exit 0;;`,
     '  -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";;',
     'esac; done',
     `printf '%s\\n' "$@" > '${join(root, 'launched')}'`,
@@ -261,7 +261,7 @@ describe('runFirstScan failures', () => {
 
   posixOnly('when the scanner fails', () => {
     it('keeps the project and points to the scanner log', async () => {
-      installScanner(1);
+      installScanner(1, '7.0.0.1');
 
       const error = await failureOf(
         runFirstScan(projectRoot, 'my-key', depsFor(new FakeConsole()), flags()),
@@ -272,6 +272,8 @@ describe('runFirstScan failures', () => {
       );
       expect(error.remediationHint).toContain("Project 'my-key'");
       expect(error.remediationHint).toContain('sonar-scanner-');
+      expect(error.remediationHint).toContain('SonarScanner 7.0.0.1 on PATH');
+      expect(error.remediationHint).toContain('Update sonar-scanner');
     });
   });
 
@@ -324,6 +326,37 @@ posixOnly('runFirstScan in the foreground', () => {
       qualityGate: 'OK',
       openIssues: 7,
     });
+  });
+
+  it('warns before analysis without blocking an older PATH scanner', async () => {
+    installScanner(0, '7.0.0.1');
+    const console = new FakeConsole();
+
+    await scan({}, flags(), console);
+
+    const warningAt = console.calls.findIndex((call) => call.method === 'warn');
+    const analysisAt = console.calls.findIndex(
+      (call) => call.method === 'spinner' && call.args[0] === 'Analyzing source code',
+    );
+    expect(warningAt).toBeGreaterThan(-1);
+    expect(analysisAt).toBeGreaterThan(warningAt);
+  });
+
+  it('warns after an interactive user accepts the first analysis', async () => {
+    installScanner(0, '7.0.0.1');
+    const console = new FakeConsole();
+    console.queueResponse(true);
+
+    const result = await runFirstScan(
+      projectRoot,
+      'my-key',
+      depsFor(console, { interactive: true }),
+      flags(),
+    );
+
+    expect(result.status).toBe('completed');
+    if (result.status === 'completed') logPaths.push(result.logPath);
+    expect(console.calls.some((call) => call.method === 'warn')).toBe(true);
   });
 
   it('shows the scanner output live, without the token, when verbose', async () => {

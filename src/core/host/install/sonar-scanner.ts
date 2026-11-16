@@ -32,6 +32,7 @@ import logger from '@/core/observability/logger.ts';
 import { spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { recordInstalledDependency } from '@/core/state/state-manager.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { isNewerVersion } from '@/core/version.ts';
 
 import {
   type PlatformInfo,
@@ -171,11 +172,22 @@ export async function cachedScannerIsUsable(scanner: ScannerInstallation): Promi
   return false;
 }
 
-export async function installSonarScanner(console: Console): Promise<ScannerInstallation> {
+export function outdatedScannerWarning(version: string): string | undefined {
+  if (!/^\d+(?:\.\d+){1,3}$/.test(version) || !isNewerVersion(version, SONAR_SCANNER_VERSION)) {
+    return undefined;
+  }
+  return `The SonarScanner ${version} on PATH is older than the expected version ${SONAR_SCANNER_VERSION}. Update sonar-scanner, or remove it from PATH so the CLI uses its managed copy. An older scanner can cause the analysis to fail.`;
+}
+
+export async function installSonarScanner(
+  console: Console,
+): Promise<ScannerInstallation & { outdatedWarning?: string }> {
   const existing = await discoverSonarScanner();
   if (existing) {
     console.info(`Using installed SonarScanner ${existing.version} from ${existing.home}.`);
-    return existing;
+    const outdatedWarning = outdatedScannerWarning(existing.version);
+    if (outdatedWarning) console.warn(outdatedWarning);
+    return { ...existing, outdatedWarning };
   }
   const platform = detectPlatform();
   const archive = scannerArchive(platform);
