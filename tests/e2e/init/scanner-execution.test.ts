@@ -41,12 +41,27 @@ import { TestHarness } from '../../integration/harness';
 const java = Bun.which('java');
 const javac = Bun.which('javac');
 const jar = Bun.which('jar');
-const archiveTool = Bun.which(process.platform === 'win32' ? 'powershell.exe' : 'unzip');
+const archiveToolName = process.platform === 'win32' ? 'powershell.exe' : 'unzip';
+const archiveTool = Bun.which(archiveToolName);
 const token = 'dummy-scanner-token';
 const windows = process.platform === 'win32';
+const missingTools = [
+  ['java', java],
+  ['javac', javac],
+  ['jar', jar],
+  [archiveToolName, archiveTool],
+]
+  .filter(([, path]) => !path)
+  .map(([name]) => name);
+
+if (missingTools.length > 0) {
+  const message = `Scanner e2e prerequisites missing from PATH: ${missingTools.join(', ')}. Install JDK 21 and ${archiveToolName}.`;
+  if (process.env.CI === 'true') throw new Error(message);
+  console.warn(`Skipping scanner e2e tests. ${message}`);
+}
 
 // External Java tools and the pinned public scanner distribution are the e2e prerequisites.
-describe.skipIf(!java || !javac || !jar || !archiveTool)('init with the real scanner', () => {
+describe.skipIf(missingTools.length > 0)('init with the real scanner', () => {
   let fixtures: string;
   let scannerHome: string;
   let harness: TestHarness;
