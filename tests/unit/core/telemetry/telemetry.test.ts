@@ -47,9 +47,10 @@ import { getDefaultState } from '@/core/state/state.ts';
 import * as stateManager from '@/core/state/state-manager.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import { commitTelemetryFacts, flushTelemetry, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
-import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
+import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { ENV_TELEMETRY_EGRESS, TELEMETRY_EGRESS_OFF } from '@/core/telemetry/egress.ts';
 import { resolveTelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
+import { resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
 import * as userModule from '@/core/telemetry/user.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
@@ -90,7 +91,7 @@ async function commitCommandExecuted(
   command: SonarCommand,
   agentSessionId: string | null = null,
 ): Promise<void> {
-  await commitTelemetryFacts([await buildCommandExecutedFact(command)], { agentSessionId });
+  await commitTelemetryFacts(await buildCommandFacts(command), { agentSessionId });
 }
 
 async function commitCommandExecutedWithEnvAuth(
@@ -100,7 +101,7 @@ async function commitCommandExecutedWithEnvAuth(
   const authResolver = new AuthResolver({ silent: true });
   const authResult = await authResolver.resolveAuth();
   const auth = authResult.isOk() ? authResult.value : null;
-  await commitTelemetryFacts([await buildCommandExecutedFact(command)], {
+  await commitTelemetryFacts(await buildCommandFacts(command), {
     agentSessionId,
     auth,
   });
@@ -134,6 +135,7 @@ let savedCodexThreadId: string | undefined;
 let savedGeminiSessionId: string | undefined;
 
 beforeEach(() => {
+  resetProjectUuidContextForTests();
   savedSonarUserHome = process.env[ENV_SONAR_USER_HOME];
   savedDoNotTrack = process.env[ENV_DO_NOT_TRACK];
   savedEgress = process.env[ENV_TELEMETRY_EGRESS];
@@ -616,7 +618,7 @@ describe('CliCommandExecuted', () => {
       const resolveAuthSpy = spyOn(AuthResolver.prototype, 'resolveAuth');
       process.env[ENV_TOKEN] = 'partial-env-token';
 
-      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand('auth login'))], {
+      await commitTelemetryFacts(await buildCommandFacts(makeCommand('auth login')), {
         auth: new ResolvedAuth({
           token: 'partial-env-token',
           serverUrl: 'https://sonarcloud.io',
@@ -640,7 +642,7 @@ describe('CliCommandExecuted', () => {
       conn.organizationUuidV4 = 'post-login-org';
       loadStateSpy.mockReturnValue(state);
 
-      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand('auth login'))], {
+      await commitTelemetryFacts(await buildCommandFacts(makeCommand('auth login')), {
         auth: null,
       });
 
@@ -786,7 +788,7 @@ describe('CliCommandExecuted', () => {
     }
 
     async function commitAs(command: string): Promise<void> {
-      await commitTelemetryFacts([await buildCommandExecutedFact(makeCommand(command))], {
+      await commitTelemetryFacts(await buildCommandFacts(makeCommand(command)), {
         command: command.split(' ')[0],
       });
     }

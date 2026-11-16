@@ -116,9 +116,7 @@ export async function runDepRisksStage(options: DepRisksStageOptions): Promise<v
   if (targets.length === 0) {
     return;
   }
-  if (targets.length === 1) {
-    noteProject(options.connection.auth, targets[0].projectKey);
-  }
+  for (const target of targets) noteProject(options.connection.auth, target.projectKey);
 
   const filter = buildRiskFilter(HOOK_STATUS_FILTER, HOOK_MIN_SEVERITY);
   if (!filter) {
