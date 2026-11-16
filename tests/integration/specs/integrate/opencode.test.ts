@@ -325,6 +325,22 @@ describe('integrate opencode — Vortex Context feature', () => {
       const skill = harness.userHome.file(...skillRelativePath, 'SKILL.md');
       expect(skill.asText()).toContain('# Generated CAG skill');
       expect(skill.asText()).toContain('--sca-enabled=true');
+      expect(skill.asText()).toContain(
+        'sonar context guidelines get --categories "<category>" --languages <language>',
+      );
+      expect(skill.asText()).toContain('Repeat the query for each edited language');
+      expect(skill.asText()).toContain('resources/intent_classes.json');
+      expect(skill.asText()).toContain('- Auth & Identity');
+      expect(skill.asText()).toContain('- i18n & Localization');
+      expect(skill.asText()).not.toContain(
+        'https://github.com/SonarSource/sonar-context-augmentation',
+      );
+      expect(skill.asText()).toContain('--languages shell');
+      expect(skill.asText()).not.toContain('sonar context guidelines get\n');
+      expect(skill.asText()).not.toContain('to narrow results');
+      expect(skill.asText()).toContain(
+        '### Before Adding or Updating Dependencies\n\nPreserve dependency guidance.',
+      );
       const printSkill = readCagInvocations(harness).find(
         (invocation) => invocation.argv[1] === 'print-skill',
       );

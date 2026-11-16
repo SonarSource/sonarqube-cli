@@ -82,7 +82,22 @@ describe('createContextAugmentationSkillSubfeature', () => {
 describe('CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY', () => {
   it('tells the agent to load the skill and to use the sonar context commands', () => {
     expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('`sonar-context-augmentation` skill');
-    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('`sonar context guidelines get`');
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain(
+      'sonar context guidelines get --categories "<category>" --languages <language>',
+    );
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain(
+      'Repeat the query for each edited language',
+    );
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain(
+      'category names from the Context Augmentation catalog (resources/intent_classes.json)',
+    );
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('- Auth & Identity');
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('- i18n & Localization');
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).not.toContain(
+      'https://github.com/SonarSource/sonar-context-augmentation',
+    );
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('--languages shell');
+    expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).not.toContain('`sonar context guidelines get`');
     expect(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY).toContain('`sonar context navigation`');
   });
 });

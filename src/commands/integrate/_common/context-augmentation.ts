@@ -148,6 +148,51 @@ export interface PrintContextAugmentationSkillParams {
 
 const PRINT_SKILL_FAILURE_MESSAGE = 'Vortex Context skill generation failed.';
 
+export const CONTEXT_GUIDELINES_INSTRUCTIONS = `Before writing or editing code, run \`sonar context guidelines get --categories "<category>" --languages <language>\`. Choose categories that fit the task and use Sonar language keys for the files you will edit. Repeat the query for each edited language. Use these category names from the Context Augmentation catalog (resources/intent_classes.json):
+
+- Inline Documentation & Metadata
+- Environment & Build Configuration
+- Testing Practices
+- Complexity & Maintainability
+- Naming & Code Style
+- Web Service & API Design
+- Web Security (Injection/XSS)
+- Auth & Identity
+- Secrets & Cryptography
+- Cloud & Network Security
+- Exception & Error Handling
+- Logging & Monitoring
+- Memory & Resource Safety
+- Regular Expressions
+- Async & Concurrency
+- Data Science & Big Data
+- Language Idioms & Modernization
+- Type Systems & Logic Safety
+- Serialization & Message Formats
+- Architectural Integrity
+- Data Modeling & Persistence
+- Data Querying & Performance
+- Framework Configuration & DI
+- UI & Accessibility
+- Mobile & Hardware SDKs
+- Platform Governance
+- i18n & Localization
+
+For example, for shell code:
+
+\`\`\`bash
+sonar context guidelines get --categories "Environment & Build Configuration" "Exception & Error Handling" "Secrets & Cryptography" --languages shell
+\`\`\``;
+
+const LEGACY_GUIDELINES_INSTRUCTIONS = `You MUST call \`guidelines get\` before generating, editing, or refactoring any source
+code to retrieve coding standards and known project issues.
+Supports **all SonarQube languages** (Java, JavaScript, TypeScript, Python, C#,
+PHP, C, C++, Go, and more). Use \`--languages\` and \`--categories\` to narrow results.
+
+\`\`\`bash
+sonar context guidelines get
+\`\`\``;
+
 export async function printContextAugmentationSkill({
   binaryPath,
   projectRoot,
@@ -184,7 +229,7 @@ export async function printContextAugmentationSkill({
     );
     throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
   }
-  return result.stdout;
+  return result.stdout.replace(LEGACY_GUIDELINES_INSTRUCTIONS, CONTEXT_GUIDELINES_INSTRUCTIONS);
 }
 
 export interface PrintSessionStartContextParams {
