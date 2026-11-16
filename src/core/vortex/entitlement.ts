@@ -28,7 +28,7 @@ import { OrganizationsClient } from '@/core/server/organizations.ts';
 
 /**
  * `not_applicable` is returned when Vortex cannot apply to this connection: Cloud without an
- * organization (see `resolveVortexEntitlement`), or a Server missing either hub (HTTP 404).
+ * organization (see `resolveVortexEntitlement`). `unsupported` means a Server hub is absent.
  */
 export type VortexEntitlementStatus =
   | 'enabled'
@@ -36,7 +36,8 @@ export type VortexEntitlementStatus =
   | 'not_entitled'
   | 'organization_not_accessible'
   | 'check_failed'
-  | 'not_applicable';
+  | 'not_applicable'
+  | 'unsupported';
 
 export interface VortexEntitlementResult {
   status: VortexEntitlementStatus;
@@ -69,7 +70,7 @@ export function checkHubEntitlement(
   return client.getSafe<HubEntitlementResponse>(endpoint).match(
     ({ response, value }): VortexEntitlementResult => {
       if (response.status === HTTP_STATUS_NOT_FOUND && !client.isCloud) {
-        return { status: 'not_applicable' };
+        return { status: 'unsupported' };
       }
       if (!response.ok || value === undefined) {
         return { status: 'check_failed' };
@@ -164,8 +165,8 @@ function mergeVortexEntitlement(
   sqaa: VortexEntitlementResult,
   cag: VortexEntitlementResult,
 ): VortexEntitlementResult {
-  if (sqaa.status === 'not_applicable' || cag.status === 'not_applicable') {
-    return { status: 'not_applicable' };
+  if (sqaa.status === 'unsupported' || cag.status === 'unsupported') {
+    return { status: 'unsupported' };
   }
   if (sqaa.status === 'check_failed' || cag.status === 'check_failed') {
     return { status: 'check_failed' };
@@ -202,7 +203,7 @@ export async function recheckVortexEntitlement(
 /**
  * `not_applicable` is decided here for a Cloud connection without an organization,
  * which cannot ask either hub. Server connections are
- * queried: a missing hub returns `not_applicable` from the 404, distinct from a
+ * queried: a missing hub returns `unsupported` from the 404, distinct from a
  * real `not_entitled` licence refusal. Cloud vs Server follows the URL
  * (`isSonarQubeCloud`), same as `SonarHttpClient`, not the stored connection type.
  */
