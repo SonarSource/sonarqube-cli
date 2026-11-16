@@ -357,6 +357,46 @@ describe('integrate git (native hooks)', () => {
     },
   );
 
+  for (const integration of ['native', 'husky']) {
+    const filenames = IS_WINDOWS
+      ? ['café.js', ' spaced .js']
+      : ['café.js', 'quote".js', 'tab\t.js', 'line\nbreak.js', ' spaced .js'];
+    for (const filename of filenames) {
+      it(
+        `${integration} pre-commit blocks a secret in ${JSON.stringify(filename)}`,
+        async () => {
+          await setupAuthenticated(harness, { withSecretsBinary: true });
+          initGitRepo(harness);
+          if (integration === 'husky') {
+            harness.cwd.writeFile('.husky/pre-commit', '#!/bin/sh\n');
+            chmodSync(harness.cwd.file('.husky', 'pre-commit').path, 0o755);
+            gitSpawn(['config', 'core.hooksPath', '.husky'], { cwd: harness.cwd.path });
+          }
+          const local = integration === 'husky' ? '--local ' : '';
+          const result = await harness.run(
+            `integrate git ${local}--hook pre-commit --non-interactive`,
+          );
+          expect(result.exitCode).toBe(0);
+          const { hookEnv } = setupSonarBinDir(harness);
+          harness.cwd.writeFile(filename, `const token = "${GITHUB_TEST_TOKEN}";`);
+          gitAdd(harness.cwd.path, filename);
+          setupGitUser(harness.cwd.path);
+
+          const commit = gitCommit(harness.cwd.path, hookEnv, 'wip', GIT_HOOK_REJECT_EXIT_CODE);
+          expect(commit.exitCode).toBe(GIT_HOOK_REJECT_EXIT_CODE);
+          expect(gitSpawnOutput(commit)).toContain('Secrets detected');
+          expect(
+            gitSpawn(['rev-parse', '--verify', 'HEAD'], {
+              cwd: harness.cwd.path,
+              expectedExitCode: 128,
+            }).exitCode,
+          ).toBe(128);
+        },
+        { timeout: 30000 },
+      );
+    }
+  }
+
   it(
     'exits with error when user is not authenticated',
     async () => {

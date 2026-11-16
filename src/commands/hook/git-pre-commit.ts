@@ -24,7 +24,7 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { tryRunGitLines } from '@/core/host/git/exec.ts';
+import { tryRunGit } from '@/core/host/git/exec.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
 
 import { runDepRisksStage } from './git-pre-commit-dependency-risks.ts';
@@ -74,7 +74,8 @@ export async function gitPreCommit(
   }
 }
 
-function getStagedFiles(): Promise<string[] | undefined> {
-  const args = ['diff', '--cached', '--name-only', '--diff-filter=ACMR'];
-  return tryRunGitLines(args, process.cwd());
+async function getStagedFiles(): Promise<string[] | undefined> {
+  const args = ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR'];
+  const stdout = await tryRunGit(args, process.cwd());
+  return stdout?.split('\0').filter(Boolean);
 }
