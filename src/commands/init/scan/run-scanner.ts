@@ -40,6 +40,8 @@ import logger from '@/core/observability/logger.ts';
 import { spawnDetachedToLog, spawnProcessWithTimeout } from '@/core/process/process.ts';
 import { isSonarQubeCloud, resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
+import { assertScannerConfigurationSafe } from './scanner-config.ts';
+
 /** Values shorter than this are left alone when redacting: they would garble unrelated output. */
 const MIN_REDACTED_VALUE_LENGTH = 4;
 
@@ -101,6 +103,8 @@ function scannerArguments(run: ScannerRun, reportPath: string): string[] {
     ...scannerJavaArgs(run.scanner, run.projectRoot),
     `-Dsonar.host.url=${auth.serverUrl}`,
     ...endpointArguments(auth.serverUrl),
+    `-Dproject.settings=${join(run.projectRoot, 'sonar-project.properties')}`,
+    `-Dscanner.settings=${join(run.scanner.home, 'conf', 'sonar-scanner.properties')}`,
     `-Dsonar.projectKey=${run.projectKey}`,
     `-Dsonar.projectBaseDir=${run.projectRoot}`,
     `-Dsonar.working.directory=${join(run.directory, 'work')}`,
@@ -134,7 +138,8 @@ function secretForms(value: string): string[] {
 
 function redactor(run: ScannerRun): (text: string) => string {
   const token = secretForms(run.auth.token).filter((form) => form.length > 0);
-  const properties = [...run.scannerProperties.values()]
+  const properties = [...run.scannerProperties.values(), ...Object.values(run.networkEnv)]
+    .filter((value): value is string => value !== undefined)
     .filter((value) => value.length >= MIN_REDACTED_VALUE_LENGTH)
     .flatMap(secretForms);
   // Longest first, so a form that contains another is replaced whole.
@@ -193,6 +198,7 @@ export async function runScanner(
   live?: ScannerOutputSink,
   timeoutMs = DEFAULT_ANALYSIS_TIMEOUT_SECONDS * 1000,
 ): Promise<ScanOutcome> {
+  assertScannerConfigurationSafe(run.projectRoot, run.scanner.home, run.scannerProperties);
   const reportPath = join(run.directory, 'report-task.txt');
   const logPath = newLogPath();
   writeLogHeader(logPath, run);
@@ -253,6 +259,7 @@ export async function runScanner(
 export async function startScannerInBackground(
   run: ScannerRun,
 ): Promise<{ pid: number; logPath: string }> {
+  assertScannerConfigurationSafe(run.projectRoot, run.scanner.home, run.scannerProperties);
   const logPath = newLogPath();
   writeLogHeader(logPath, run);
   try {

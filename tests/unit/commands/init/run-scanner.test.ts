@@ -56,6 +56,7 @@ posixOnly('runScanner', () => {
         '#!/bin/sh',
         'for arg in "$@"; do case "$arg" in -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";; esac; done',
         'echo "token=$SONAR_TOKEN params=$SONAR_SCANNER_JSON_PARAMS"',
+        'echo "proxy=$SONAR_SCANNER_PROXY_PASSWORD store=$SONAR_SCANNER_KEYSTORE_PASSWORD"',
         'echo "args: $*"',
         `if [ ${exitCode} -eq 0 ]; then printf 'ceTaskId=task-1\\nprojectKey=my-key\\n' > "$report"; fi`,
         `exit ${exitCode}`,
@@ -101,6 +102,22 @@ posixOnly('runScanner', () => {
       expect(text).toContain('[REDACTED]');
       expect(text).not.toContain(TOKEN);
       expect(text).not.toContain(PROPERTY_VALUE);
+    }
+    rmSync(logPath);
+  });
+
+  it('redacts trusted proxy and keystore passwords from scanner output', async () => {
+    const run = newRun(stubJava(0));
+    run.networkEnv = {
+      SONAR_SCANNER_PROXY_PASSWORD: 'dummy-proxy-password',
+      SONAR_SCANNER_KEYSTORE_PASSWORD: 'dummy-store-password',
+    };
+    const live: string[] = [];
+    const { logPath } = await runScanner(run, { print: (line) => live.push(line) });
+    for (const text of [readFileSync(logPath, 'utf8'), live.join('\n')]) {
+      expect(text).toContain('proxy=[REDACTED] store=[REDACTED]');
+      expect(text).not.toContain('dummy-proxy-password');
+      expect(text).not.toContain('dummy-store-password');
     }
     rmSync(logPath);
   });
