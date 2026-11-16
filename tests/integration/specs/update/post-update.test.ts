@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { COMPLETION_ANALYSIS_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/completion-analysis-hook-feature.ts';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { MCP_CONFIG_RESOURCE_ID } from '@/commands/integrate/_common/features/mcp-server-feature.ts';
 import {
@@ -125,7 +126,7 @@ describe('post-update migration', () => {
       (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
     );
     expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-      'completion-analysis-hook',
+      COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
       CONTEXT_AUGMENTATION_FEATURE_ID,
       CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
       'sqaa-posttooluse',
@@ -468,7 +469,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        'completion-analysis-hook',
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
         'sqaa-posttooluse',
       ]);
@@ -501,7 +502,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        'completion-analysis-hook',
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
         CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
         'sqaa-posttooluse',
@@ -528,7 +529,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        'completion-analysis-hook',
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
         CONTEXT_AUGMENTATION_HOOK_FEATURE_ID,
         'sqaa-posttooluse',
@@ -704,7 +705,7 @@ describe('post-update migration', () => {
         (feature) => feature.featureId === CLAUDE_VORTEX_FEATURE_ID,
       );
       expect(vortex?.subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        'completion-analysis-hook',
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
         'sqaa-posttooluse',
       ]);
@@ -843,13 +844,12 @@ describe('post-update migration', () => {
       expect(codex?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
       expect(codex?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
         SQAA_HOOK_FEATURE_ID,
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
       expect(harness.cwd.file('.codex', 'hooks.json').asJson().hooks?.PostToolUse).toBeDefined();
-      expect(harness.cwd.file('AGENTS.md').asText()).toContain(
-        '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->',
-      );
+      expect(harness.cwd.file('.codex', 'hooks.json').asJson().hooks?.Stop).toBeDefined();
+      expect(harness.cwd.file('AGENTS.md').exists()).toBe(false);
       expectVortexHookInstalled(harness.cwd, 'codex');
     },
     { timeout: 30000 },
