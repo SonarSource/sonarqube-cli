@@ -490,6 +490,7 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const finalAnswer = last && last.step.calls.length === 0 && last.step.message ? last : null;
     const worked = finalAnswer ? agentSteps.slice(0, -1) : agentSteps;
 
+    page.append(...taskSection(request));
     page.appendChild(el('div', { class: 'section eyebrow', text: 'What the agent did' }));
     if (worked.length === 0) {
       page.appendChild(el('p', { class: 'muted', text: 'No steps were recorded for this trial.' }));
@@ -502,7 +503,6 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
           el('span', {}, [el('i', { class: 'slow' }), 'Waited ' + WAIT_SECONDS + ' s or more']),
         ]),
       ]));
-      page.append(...taskSection(request));
       page.appendChild(el('ol', { class: 'steps' }, worked.map((item, index) => stepNode(item.step, index + 1, item.gap))));
     }
     page.append(...resultSection(finalAnswer, worked.length));
