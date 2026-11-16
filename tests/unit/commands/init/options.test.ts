@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  parseMonorepoRoots,
   validateProjectKey,
   validateProjectName,
   validateVisibility,
@@ -50,5 +51,56 @@ describe('validation', () => {
   it('accepts only private or public', () => {
     expect(validateVisibility('public')).toBe('public');
     expect(() => validateVisibility('internal')).toThrow(InvalidOptionError);
+  });
+});
+
+describe('parseMonorepoRoots', () => {
+  it('reads each path and key, normalizing the path', () => {
+    expect(parseMonorepoRoots(['services/api=api-key', './web/=web-key', '.=root-key'])).toEqual([
+      { path: 'services/api', projectKey: 'api-key' },
+      { path: 'web', projectKey: 'web-key' },
+      { path: '.', projectKey: 'root-key' },
+    ]);
+  });
+
+  it('leaves the key out of a root named by its path alone', () => {
+    expect(parseMonorepoRoots(['web', './docs/'])).toEqual([
+      { path: 'web', projectKey: undefined },
+      { path: 'docs', projectKey: undefined },
+    ]);
+  });
+
+  it('reads a "=" followed by a path separator as part of the path', () => {
+    expect(parseMonorepoRoots(['a=b/c'])).toEqual([{ path: 'a=b/c', projectKey: undefined }]);
+  });
+
+  it('is empty when no root was named', () => {
+    expect(parseMonorepoRoots(undefined)).toEqual([]);
+  });
+
+  it('splits at the last "=", as only a path may contain one', () => {
+    expect(parseMonorepoRoots(['a=b/c=key'])).toEqual([{ path: 'a=b/c', projectKey: 'key' }]);
+  });
+
+  it.each([
+    '=key',
+    '  =key',
+    '/abs/path=key',
+    '../outside=key',
+    'a/../../outside=key',
+    'bad\npath=key',
+  ])('rejects the malformed root %p', (root) => {
+    expect(() => parseMonorepoRoots([root])).toThrow(InvalidOptionError);
+  });
+
+  it('rejects an invalid project key, naming the option', () => {
+    expect(() => parseMonorepoRoots(['api=bad key'])).toThrow(/^--root key must contain only/);
+    expect(() => parseMonorepoRoots(['api='])).toThrow(/^--root key must contain only/);
+  });
+
+  it('rejects a directory or a key named twice', () => {
+    expect(() => parseMonorepoRoots(['api=one', './api=two'])).toThrow(/"api" more than once/);
+    expect(() => parseMonorepoRoots(['api=one', 'web=one'])).toThrow(/'one' more than once/);
+    expect(() => parseMonorepoRoots(['api', './api'])).toThrow(/"api" more than once/);
   });
 });
