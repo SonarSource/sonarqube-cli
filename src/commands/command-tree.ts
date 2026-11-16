@@ -889,11 +889,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
       '--monorepo',
-      'Onboard every project root mapped in .sonar-config.json instead of a single project (interactive, unless --root names the roots)',
+      'Onboard several project roots instead of a single project: the roots mapped in .sonar-config.json are reported as configured, and those named with --root are created or mapped',
     )
     .option(
       '--root <path[=key]>',
-      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; used instead of the roots in .sonar-config.json, and onboarded without prompting',
+      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; used instead of the roots in .sonar-config.json. A root already linked in .sonar-config.json is skipped; the others are onboarded without prompting',
       collectRoot,
     )
     .option(

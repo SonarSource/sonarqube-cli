@@ -20,7 +20,6 @@
 
 import { join } from 'node:path';
 
-import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { InvalidOptionError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
@@ -39,7 +38,7 @@ import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { OnboardingCancelledError, requireAnswer } from '../answer.ts';
+import { OnboardingCancelledError } from '../answer.ts';
 import type { InitOutcome, MonorepoRootResult } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
@@ -49,9 +48,9 @@ import { runUnboundNew } from './unbound.ts';
 
 /** Where a mapped root stands against the active connection, before anything runs for it. */
 type RootStatus =
-  /** The mapping matches the active connection and the project exists: nothing to do. */
+  /** The directory is already linked in `.sonar-config.json`, which counts as complete: nothing to do. */
   | { kind: 'configured' }
-  /** The project exists in the active organization, but the mapping records another connection. */
+  /** `--root` names a key whose project exists in the active organization, but the file does not map it. */
   | { kind: 'existing' }
   /** No project has the mapped key yet. */
   | { kind: 'new' }
@@ -68,8 +67,6 @@ interface MonorepoRoot {
   /** Relative to the repository root, for display and the summary. */
   path: string;
   status: RootStatus;
-  /** Named with `--root`, so the user already chose the key and is not asked to confirm it. */
-  explicit: boolean;
 }
 
 /** What no later root can recover from: the answer to a prompt is gone, or the credentials or organization are wrong. */
@@ -100,15 +97,13 @@ async function classifyRoot(
     case 'other-org':
       return { kind: 'other-org' };
     case 'in-org':
-      return authMatchesRecordedConnection(auth, mapping)
-        ? { kind: 'configured' }
-        : { kind: 'existing' };
+      return { kind: 'existing' };
   }
 }
 
 /**
- * A `--root` mapping carries the active connection, so on its own it would pass for recorded: the
- * file, not the mapping, tells whether the directory is already linked to this project.
+ * A `--root` mapping carries the active connection, so the file, not the mapping, tells whether the
+ * directory is already linked. A directory the file links to this key is complete, without a lookup.
  */
 async function classifyExplicitRoot(
   mapping: CompleteProjectMapping,
@@ -118,14 +113,15 @@ async function classifyExplicitRoot(
   const recorded = (await sharedProjectConfigRepository.load(repositoryRoot)).find(
     ({ projectRoot }) => projectRoot === mapping.projectRoot,
   );
-  if (recorded && recorded.projectKey !== mapping.projectKey) {
-    return { kind: 'conflict', recordedKey: recorded.projectKey };
+  if (recorded === undefined) {
+    return classifyRoot(mapping, deps);
   }
-  const status = await classifyRoot(mapping, deps);
-  const linked = recorded !== undefined && authMatchesRecordedConnection(deps.auth, recorded);
-  return status.kind === 'configured' && !linked ? { kind: 'existing' } : status;
+  return recorded.projectKey === mapping.projectKey
+    ? { kind: 'configured' }
+    : { kind: 'conflict', recordedKey: recorded.projectKey };
 }
 
+/** Roots read from the file are complete as they are; only roots named with `--root` are looked up. */
 async function inspectRoot(
   mapping: CompleteProjectMapping,
   repositoryRoot: string,
@@ -133,92 +129,23 @@ async function inspectRoot(
   explicit: boolean,
 ): Promise<MonorepoRoot> {
   const path = relativeProjectPath(repositoryRoot, mapping.projectRoot);
+  if (!explicit) {
+    return { mapping, path, status: { kind: 'configured' } };
+  }
   try {
-    const status = explicit
-      ? await classifyExplicitRoot(mapping, repositoryRoot, deps)
-      : await classifyRoot(mapping, deps);
-    return { mapping, path, status, explicit };
+    return { mapping, path, status: await classifyExplicitRoot(mapping, repositoryRoot, deps) };
   } catch (error) {
     if (isRunFatal(error)) {
       throw error;
     }
-    return {
-      mapping,
-      path,
-      status: { kind: 'unchecked', reason: describeFailure(error) },
-      explicit,
-    };
+    return { mapping, path, status: { kind: 'unchecked', reason: describeFailure(error) } };
   }
-}
-
-function describeStatus(status: RootStatus): string {
-  switch (status.kind) {
-    case 'configured':
-      return 'already configured';
-    case 'existing':
-      return 'project exists, mapping needs updating';
-    case 'new':
-      return 'project does not exist yet';
-    case 'other-org':
-      return 'belongs to another organization';
-    case 'conflict':
-      return `already mapped to '${status.recordedKey}'`;
-    case 'unchecked':
-      return `could not be checked (${status.reason.split('\n')[0]})`;
-  }
-}
-
-function describeRoot({ path, mapping, status }: MonorepoRoot): string {
-  return `${path} (${mapping.projectKey}): ${describeStatus(status)}`;
-}
-
-function needsOnboarding(root: MonorepoRoot): boolean {
-  const { kind } = root.status;
-  return kind !== 'configured' && kind !== 'unchecked' && kind !== 'conflict';
-}
-
-/** Shows every root with its status and lets the user pick which of those that need work to onboard. */
-async function selectRoots(
-  roots: readonly MonorepoRoot[],
-  console: Console,
-): Promise<ReadonlySet<MonorepoRoot>> {
-  if (!roots.some(needsOnboarding)) {
-    console.print('Mapped project roots:');
-    roots.forEach((root) => {
-      console.print(`  ${describeRoot(root)}`);
-    });
-    return new Set();
-  }
-  const picked = requireAnswer(
-    await console.multiSelectPrompt(
-      'Select the project roots to onboard (space toggles, enter confirms)',
-      roots.map((root) => ({
-        value: root,
-        label: describeRoot(root),
-        disabled: !needsOnboarding(root),
-      })),
-      { maxSelected: Infinity },
-    ),
-  );
-  return new Set(picked);
 }
 
 async function mapExistingRoot(
-  { mapping, path, explicit }: MonorepoRoot,
+  { mapping, path }: MonorepoRoot,
   { auth, console }: DetectDeps,
 ): Promise<MonorepoRootResult> {
-  const recorded = mapping.organization ?? mapping.serverUrl;
-  const confirmed =
-    explicit ||
-    requireAnswer(
-      await console.confirmPrompt(
-        `Project '${mapping.projectKey}' already exists. Replace the connection recorded for ${path} in ${SHARED_PROJECT_CONFIG_FILE_NAME} (${recorded}) with the active one?`,
-        true,
-      ),
-    );
-  if (!confirmed) {
-    return { path, kind: 'skipped' };
-  }
   await writeMapping(auth, mapping.projectKey, mapping.projectRoot, console, 'found', true);
   console.success(`Mapped ${path} to project '${mapping.projectKey}'.`);
   return { path, kind: 'linked', projectKey: mapping.projectKey };
@@ -260,11 +187,7 @@ function onboardSelectedRoot(
   }
 }
 
-async function onboardRoot(
-  root: MonorepoRoot,
-  selected: boolean,
-  deps: DetectDeps,
-): Promise<MonorepoRootResult> {
+async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<MonorepoRootResult> {
   const { path, mapping, status } = root;
   if (status.kind === 'configured') {
     return { path, kind: 'configured', projectKey: mapping.projectKey };
@@ -279,9 +202,6 @@ async function onboardRoot(
       reason: `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}'. Remap it with 'sonar link --monorepo ${mapping.projectKey} --path ${path}'.`,
     };
   }
-  if (!selected) {
-    return { path, kind: 'skipped' };
-  }
   deps.console.print(`Onboarding ${path}`);
   try {
     return await onboardSelectedRoot(root, status, deps);
@@ -294,35 +214,10 @@ async function onboardRoot(
 }
 
 /**
- * Plain `sonar init` meets a `.sonar-config.json` that maps several usable roots: offers to onboard
- * them as a monorepo. The file is the one `runMonorepo` would use. A single link keeps the usual
- * path, as it may be a project in a subfolder; `--monorepo` continues an unfinished monorepo.
- */
-export async function offerMonorepo(projectRoot: string, deps: DetectDeps): Promise<boolean> {
-  const { auth, console } = deps;
-  const discovered = await discoverProjects(projectRoot, {
-    auth,
-    console,
-    silent: true,
-    useKnownMappings: false,
-    useGitRemoteBinding: false,
-  });
-  if (!discovered.fromSharedConfig || discovered.projects.length < 2) {
-    return false;
-  }
-  return requireAnswer(
-    await console.confirmPrompt(
-      `${SHARED_PROJECT_CONFIG_FILE_NAME} already maps project roots. Onboard it as a monorepo instead?`,
-      true,
-    ),
-  );
-}
-
-/**
- * Onboards the project roots that `.sonar-config.json` maps, each on its own path. A root's mapping
- * is merged into the file as soon as that root completes, so what finished stays in place when a
- * later root fails or the run stops, and a rerun picks up from there. The roots run one after the
- * other because each may prompt.
+ * Reports the project roots that `.sonar-config.json` maps as configured, and onboards the ones named
+ * with `--root`, each on its own path. A root's mapping is merged into the file as soon as that root
+ * completes, so what finished stays in place when a later root fails or the run stops, and a rerun
+ * skips it. The roots run one after the other because each may prompt.
  */
 export async function runMonorepo(
   projectRoot: string,
@@ -345,12 +240,7 @@ export async function runMonorepo(
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
     Promise.all(mappings.map((mapping) => inspectRoot(mapping, repositoryRoot, deps, explicit))),
   );
-  // Roots named on the command line are all wanted, and may run without a terminal.
-  const selected = explicit
-    ? new Set(roots.filter(needsOnboarding))
-    : await selectRoots(roots, console);
-
-  return { kind: 'monorepo', roots: await onboardInOrder(roots, selected, deps) };
+  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps) };
 }
 
 interface GeneratedKey {
@@ -470,12 +360,11 @@ function warnOnNestedConfig(
 /** One root finishes, prompts included, before the next starts. */
 function onboardInOrder(
   roots: readonly MonorepoRoot[],
-  selected: ReadonlySet<MonorepoRoot>,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult[]> {
   return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const results = await previous;
-    results.push(await onboardRoot(root, selected.has(root), deps));
+    results.push(await onboardRoot(root, deps));
     return results;
   }, Promise.resolve([]));
 }
