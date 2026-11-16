@@ -312,7 +312,13 @@ async function resolveSharedProjectConfigMappings(
   for (const { checkPath } of lookupPaths) {
     let mappings: SharedProjectConfigMapping[];
     try {
-      mappings = await sharedProjectConfigRepository.load(checkPath);
+      mappings = await sharedProjectConfigRepository.load(checkPath, {
+        warn: options.silent
+          ? undefined
+          : (message) => {
+              options.console.warn(message);
+            },
+      });
     } catch (error) {
       logger.debug(
         `Shared project config lookup skipped for ${checkPath}: ${(error as Error).message}`,

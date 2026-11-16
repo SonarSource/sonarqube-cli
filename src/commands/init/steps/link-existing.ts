@@ -29,7 +29,12 @@ import { ProjectsClient } from '@/core/server/projects.ts';
 import { requireAnswer } from '../answer.ts';
 import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
-import { linkCommandFor, showAnalysisResults, writeMapping } from './mapping.ts';
+import {
+  KEEP_OTHER_LINKS_NOTE,
+  linkCommandFor,
+  showAnalysisResults,
+  writeMapping,
+} from './mapping.ts';
 
 /**
  * Asks to link the directory to the project that already exists for the repository: the one the
@@ -50,7 +55,7 @@ export async function runLinkExisting(
     throw new CommandFailedError(
       `A Sonar project already exists for this repository: '${detectedKey}'. Linking it needs an answer, and none can be asked.`,
       {
-        remediationHint: `Map it by running:\n  ${await linkCommandFor(detectedKey, projectRoot)}`,
+        remediationHint: `Map it by running:\n  ${await linkCommandFor(detectedKey, projectRoot)}\n${KEEP_OTHER_LINKS_NOTE}`,
       },
     );
   }

@@ -20,13 +20,13 @@
 
 import { statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
-import { cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
+import { cloudRegionToUrl, isCloudRegion } from '@/core/server/sonarcloud-region.ts';
 import type { CloudRegion } from '@/core/state/state.ts';
 
 export interface SharedProjectConfigMapping {
@@ -59,66 +59,77 @@ export type CustomCloudProjectConfigEntry = {
 export type SharedProjectConfigEntry =
   SonarCloudProjectConfigEntry | SonarQubeServerProjectConfigEntry | CustomCloudProjectConfigEntry;
 
+/** The fields the schema knows; an entry may carry others, such as `settings`, which are kept. */
+export const SHARED_PROJECT_CONFIG_ENTRY_FIELDS: readonly string[] = [
+  'projectKey',
+  'path',
+  'serverUrl',
+  'region',
+  'organization',
+];
+
+/** One project of the file's list, with the canonical folder its path names, existing or not. */
+export interface ConfigItem {
+  entry: SharedProjectConfigEntry;
+  root: string;
+}
+
+/** Something in `.sonar-config.json` that is not valid config. */
+export class InvalidSharedProjectConfigError extends CommandFailedError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidSharedProjectConfigError';
+  }
+}
+
+/**
+ * Told about each problem in the file. Throwing stops the read; returning skips what the problem
+ * concerns: the whole file, or one item.
+ */
+export type OnInvalidConfig = (error: InvalidSharedProjectConfigError) => void;
+
+/** The `.sonar-config.json` file format. */
+export interface SharedProjectConfigFile {
+  /**
+   * The items of the `projects` array, or the lone `project`; a missing file holds none. An absolute
+   * path inside `dir` is read as relative to it. A file that is not valid JSON, an item outside the
+   * schema, a path outside `dir` and a repeat of an already listed folder each go to `onInvalid`.
+   */
+  readItems(dir: string, onInvalid: OnInvalidConfig): Promise<ConfigItem[]>;
+  /**
+   * Makes `items` the projects `dir`'s config links, each entry as it was read or built: one is
+   * written as `project`, several as a `projects` array. Other keys in the file are kept, including
+   * a `project` that sits beside a `projects` array, which readers ignore. Throws
+   * {@link InvalidSharedProjectConfigError} without writing when the file is not valid JSON or two
+   * items name the same folder.
+   */
+  writeItems(dir: string, items: readonly ConfigItem[]): Promise<void>;
+}
+
+/** For edits, which must not overwrite what they could not read. */
+export const throwOnInvalidConfig: OnInvalidConfig = (error) => {
+  throw error;
+};
+
+export interface LoadOptions {
+  /** Told why a file or an item was ignored. Defaults to the log. */
+  warn?: (message: string) => void;
+}
+
+/** The projects a config links, as discovery uses them. */
 export interface SharedProjectConfigRepository {
-  load(dir: string): Promise<SharedProjectConfigMapping[]>;
-  /** Resolves to whether a `projects` array already exists, which shadows the written `project`. */
-  set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean>;
-  /** Adds (or updates, by canonical directory) an entry in the `projects` array, leaving `project` untouched. */
-  addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void>;
+  /**
+   * The projects `dir`'s config links, resolved to existing directories inside `dir` and to
+   * server URLs. A file that is not valid JSON, items outside the schema and repeats of an already
+   * linked folder are ignored with a warning.
+   */
+  load(dir: string, options?: LoadOptions): Promise<SharedProjectConfigMapping[]>;
 }
 
 interface SharedProjectConfigFileDto {
   project?: unknown;
   /** Monorepo form: several mappings in one file. Takes precedence over `project` when present. */
   projects?: unknown;
-}
-
-const VALID_CLOUD_REGIONS = new Set<CloudRegion>(['eu', 'us']);
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function isCloudEntry(value: Record<string, unknown>): value is SonarCloudProjectConfigEntry {
-  return (
-    value.serverUrl === undefined &&
-    VALID_CLOUD_REGIONS.has(value.region as CloudRegion) &&
-    isNonEmptyString(value.organization)
-  );
-}
-
-function isServerEntry(value: Record<string, unknown>): value is SonarQubeServerProjectConfigEntry {
-  return (
-    value.region === undefined &&
-    value.organization === undefined &&
-    isNonEmptyString(value.serverUrl)
-  );
-}
-
-function isCustomCloudEntry(
-  value: Record<string, unknown>,
-): value is CustomCloudProjectConfigEntry {
-  return (
-    value.region === undefined &&
-    isNonEmptyString(value.organization) &&
-    isNonEmptyString(value.serverUrl)
-  );
-}
-
-function isValidEntry(value: unknown): value is SharedProjectConfigEntry {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  if (!isSingleLineString(record.projectKey) || !isSingleLineString(record.path)) {
-    return false;
-  }
-  return isCloudEntry(record) || isServerEntry(record) || isCustomCloudEntry(record);
-}
-
-/** A committed config is untrusted: a line break in a key or path would let it forge lines in hook and agent output. */
-function isSingleLineString(value: unknown): value is string {
-  return isNonEmptyString(value) && !/[\r\n]/.test(value);
 }
 
 /**
@@ -143,59 +154,60 @@ export function resolveContainedPath(dir: string, rawPath: string): string | nul
   return isAncestorOrSelf(canonicalDir, resolved) ? resolved : null;
 }
 
-export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
-  async load(dir: string): Promise<SharedProjectConfigMapping[]> {
-    const root = await this.readRawRoot(dir);
-    if (root === null) {
+export class SharedProjectConfigFileImpl implements SharedProjectConfigFile {
+  async readItems(dir: string, onInvalid: OnInvalidConfig): Promise<ConfigItem[]> {
+    let root: SharedProjectConfigFileDto;
+    try {
+      root = await this.readRoot(dir);
+    } catch (error) {
+      if (!(error instanceof InvalidSharedProjectConfigError)) throw error;
+      onInvalid(error);
       return [];
     }
-
-    let rawEntries: unknown[];
+    let rawItems: unknown[] = [];
     if (Array.isArray(root.projects)) {
-      rawEntries = root.projects;
+      rawItems = root.projects;
     } else if (root.project !== undefined) {
-      rawEntries = [root.project];
-    } else {
-      rawEntries = [];
+      rawItems = [root.project];
     }
-
-    const mappings: SharedProjectConfigMapping[] = [];
-    for (const rawEntry of rawEntries) {
-      const mapping = this.resolveEntry(dir, rawEntry);
-      if (mapping !== null) {
-        mappings.push(mapping);
+    const items: ConfigItem[] = [];
+    for (const [index, raw] of rawItems.entries()) {
+      const item = this.isValidEntry(raw) ? this.toItem(dir, raw) : undefined;
+      const problem = this.problemOf(dir, item, items);
+      if (item !== undefined && problem === undefined) {
+        items.push(item);
+        continue;
       }
+      onInvalid(
+        new InvalidSharedProjectConfigError(
+          `Project ${this.nameOf(raw, index)} in ${this.configPath(dir)} ${problem}`,
+        ),
+      );
     }
-    return mappings;
+    return items;
   }
 
-  async set(dir: string, entry: SharedProjectConfigEntry): Promise<boolean> {
-    const existing = await this.readExistingRootForWrite(dir);
-    const file: SharedProjectConfigFileDto = { ...existing, project: entry };
-    await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
-    return Array.isArray(existing.projects);
-  }
-
-  async addProject(dir: string, entry: SharedProjectConfigEntry): Promise<void> {
-    const existing = await this.readExistingRootForWrite(dir);
-    if (existing.projects !== undefined && !Array.isArray(existing.projects)) {
-      throw new CommandFailedError(`${this.configPath(dir)} must contain a projects array`);
-    }
-    const canonicalDir = canonicalizePath(dir);
-    const projectRoot = canonicalizePath(join(dir, entry.path));
-    const normalizedEntry = {
-      ...entry,
-      path: relative(canonicalDir, projectRoot).split(sep).join('/') || '.',
-    };
-    const entries: unknown[] = existing.projects ?? [];
-    const index = entries.findIndex(
-      (value) => isValidEntry(value) && canonicalizePath(join(dir, value.path)) === projectRoot,
+  async writeItems(dir: string, items: readonly ConfigItem[]): Promise<void> {
+    const repeated = items.find((item, index) =>
+      items.slice(0, index).some((earlier) => earlier.root === item.root),
     );
-    const projects =
-      index === -1
-        ? [...entries, normalizedEntry]
-        : entries.map((value, position) => (position === index ? normalizedEntry : value));
-    const file: SharedProjectConfigFileDto = { ...existing, projects };
+    if (repeated !== undefined) {
+      throw new InvalidSharedProjectConfigError(
+        `${this.configPath(dir)} would link ${this.relativePath(dir, repeated.root)} more than once`,
+      );
+    }
+    const { project, projects, ...rest } = await this.readRoot(dir);
+    const values = items.map((item) => item.entry);
+    let linked: SharedProjectConfigFileDto = {};
+    if (Array.isArray(projects) && project !== undefined) {
+      // Readers ignore a `project` beside a `projects` array; keeping both keeps it ignored.
+      linked = { project, projects: values };
+    } else if (values.length === 1) {
+      linked = { project: values[0] };
+    } else if (values.length > 1) {
+      linked = { projects: values };
+    }
+    const file: SharedProjectConfigFileDto = { ...rest, ...linked };
     await writeFile(this.configPath(dir), JSON.stringify(file, null, 2), 'utf-8');
   }
 
@@ -203,12 +215,8 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
     return join(dir, SHARED_PROJECT_CONFIG_FILE_NAME);
   }
 
-  /**
-   * Unlike `readRawRoot()` (used by `load()`), a write must not silently clobber
-   * content it failed to read: only a genuinely absent file is treated as empty —
-   * any other read or parse failure aborts the write instead.
-   */
-  private async readExistingRootForWrite(dir: string): Promise<SharedProjectConfigFileDto> {
+  /** A missing file is empty; one that is not valid JSON config throws, as a write must not clobber it. */
+  private async readRoot(dir: string): Promise<SharedProjectConfigFileDto> {
     let content: string;
     try {
       content = await readFile(this.configPath(dir), 'utf-8');
@@ -219,73 +227,160 @@ export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRep
       throw error;
     }
 
-    const parsed: unknown = JSON.parse(content);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error(`${this.configPath(dir)} does not contain a JSON object`);
-    }
-    return parsed;
-  }
-
-  private async readRawRoot(dir: string): Promise<SharedProjectConfigFileDto | null> {
-    let content: string;
+    let parsed: unknown;
     try {
-      content = await readFile(this.configPath(dir), 'utf-8');
-    } catch {
-      return null;
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(content);
-      return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-        ? parsed
-        : null;
+      parsed = JSON.parse(content);
     } catch (error) {
-      logger.debug(`Failed to parse ${this.configPath(dir)}: ${(error as Error).message}`);
-      return null;
+      throw new InvalidSharedProjectConfigError(
+        `${this.configPath(dir)} is not valid JSON: ${(error as Error).message}`,
+      );
     }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new InvalidSharedProjectConfigError(
+        `${this.configPath(dir)} does not contain a JSON object`,
+      );
+    }
+    const root: SharedProjectConfigFileDto = parsed;
+    if (root.projects !== undefined && !Array.isArray(root.projects)) {
+      throw new InvalidSharedProjectConfigError(
+        `${this.configPath(dir)} must contain a projects array`,
+      );
+    }
+    return root;
   }
 
-  private resolveEntry(dir: string, raw: unknown): SharedProjectConfigMapping | null {
-    if (!isValidEntry(raw)) {
-      logger.debug(`Dropping invalid ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}`);
-      return null;
-    }
+  /** The item's project key when it has a usable one, else its position in the list. */
+  private nameOf(raw: unknown, index: number): string {
+    const key =
+      typeof raw === 'object' && raw !== null
+        ? (raw as Record<string, unknown>).projectKey
+        : undefined;
+    return this.isSingleLineString(key) ? key : `#${index + 1}`;
+  }
 
-    const projectRoot = resolveContainedPath(dir, raw.path);
+  private toItem(dir: string, entry: SharedProjectConfigEntry): ConfigItem {
+    const root = canonicalizePath(resolve(dir, entry.path));
+    if (!isAbsolute(entry.path) || !this.contains(dir, root)) {
+      return { entry, root };
+    }
+    return { entry: { ...entry, path: this.relativePath(dir, root) }, root };
+  }
+
+  private problemOf(
+    dir: string,
+    item: ConfigItem | undefined,
+    earlier: readonly ConfigItem[],
+  ): string | undefined {
+    if (item === undefined) {
+      return 'does not match the expected format';
+    }
+    if (!this.contains(dir, item.root)) {
+      return `links ${item.entry.path}, which is outside ${canonicalizePath(dir)}`;
+    }
+    if (earlier.some((other) => other.root === item.root)) {
+      return `links ${this.relativePath(dir, item.root)}, which an earlier project already links`;
+    }
+    return undefined;
+  }
+
+  private contains(dir: string, root: string): boolean {
+    return isAncestorOrSelf(canonicalizePath(dir), root);
+  }
+
+  private relativePath(dir: string, root: string): string {
+    return relative(canonicalizePath(dir), root).split(sep).join('/') || '.';
+  }
+
+  private isValidEntry(value: unknown): value is SharedProjectConfigEntry {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return false;
+    }
+    const record = value as Record<string, unknown>;
+    if (!this.isSingleLineString(record.projectKey) || !this.isSingleLineString(record.path)) {
+      return false;
+    }
+    return (
+      this.isCloudEntry(record) || this.isServerEntry(record) || this.isCustomCloudEntry(record)
+    );
+  }
+
+  private isCloudEntry(value: Record<string, unknown>): boolean {
+    return (
+      value.serverUrl === undefined &&
+      isCloudRegion(value.region) &&
+      this.isNonEmptyString(value.organization)
+    );
+  }
+
+  private isServerEntry(value: Record<string, unknown>): boolean {
+    return (
+      value.region === undefined &&
+      value.organization === undefined &&
+      this.isNonEmptyString(value.serverUrl)
+    );
+  }
+
+  private isCustomCloudEntry(value: Record<string, unknown>): boolean {
+    return (
+      value.region === undefined &&
+      this.isNonEmptyString(value.organization) &&
+      this.isNonEmptyString(value.serverUrl)
+    );
+  }
+
+  /** A committed config is untrusted: a line break in a key or path would let it forge lines in hook and agent output. */
+  private isSingleLineString(value: unknown): value is string {
+    return this.isNonEmptyString(value) && !/[\r\n]/.test(value);
+  }
+
+  private isNonEmptyString(value: unknown): value is string {
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+}
+
+export class SharedProjectConfigRepositoryImpl implements SharedProjectConfigRepository {
+  constructor(private readonly file: SharedProjectConfigFile = new SharedProjectConfigFileImpl()) {}
+
+  async load(dir: string, options: LoadOptions = {}): Promise<SharedProjectConfigMapping[]> {
+    const warn =
+      options.warn ??
+      ((message: string) => {
+        logger.warn(message);
+      });
+    const items = await this.file.readItems(dir, (error) => {
+      warn(`${error.message}; ignoring it.`);
+    });
+    return items.flatMap((item) => this.resolveEntry(dir, item.entry) ?? []);
+  }
+
+  private resolveEntry(
+    dir: string,
+    entry: SharedProjectConfigEntry,
+  ): SharedProjectConfigMapping | null {
+    const projectRoot = resolveContainedPath(dir, entry.path);
     if (projectRoot === null) {
       logger.debug(
         `Dropping ${SHARED_PROJECT_CONFIG_FILE_NAME} entry in ${dir}: "path" does not exist or escapes it`,
       );
       return null;
     }
-
-    if (isServerEntry(raw)) {
+    const { projectKey } = entry;
+    if ('region' in entry) {
       return {
         projectRoot,
-        projectKey: raw.projectKey,
-        serverUrl: raw.serverUrl,
-        organization: undefined,
+        projectKey,
+        serverUrl: cloudRegionToUrl(entry.region),
+        organization: entry.organization,
       };
     }
-
-    if (isCustomCloudEntry(raw)) {
-      return {
-        projectRoot,
-        projectKey: raw.projectKey,
-        serverUrl: raw.serverUrl,
-        organization: raw.organization,
-      };
-    }
-
-    return {
-      projectRoot,
-      projectKey: raw.projectKey,
-      serverUrl: cloudRegionToUrl(raw.region),
-      organization: raw.organization,
-    };
+    const organization = 'organization' in entry ? entry.organization : undefined;
+    return { projectRoot, projectKey, serverUrl: entry.serverUrl, organization };
   }
 }
 
 /** Shared singleton so `project-info.ts` and `link/index.ts` mock the same instance in tests via `spyOn`. */
 export const sharedProjectConfigRepository: SharedProjectConfigRepository =
   new SharedProjectConfigRepositoryImpl();
+
+/** Shared singleton for writers, which their tests `spyOn`. */
+export const sharedProjectConfigFile: SharedProjectConfigFile = new SharedProjectConfigFileImpl();

@@ -24,10 +24,11 @@
 import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
+import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
+import type { ConfigItem } from '@/core/project-discovery/shared-project-config.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { SonarQubeProject } from '@/core/server/types.ts';
 
@@ -59,33 +60,34 @@ function cancelled(): CommandFailedError {
 }
 
 /**
- * Resolves the key to link `projectRoot` to, or `null` when it is already linked and the user
+ * Resolves the key to link `projectRoot` to, or `null` when `items` already link it and the user
  * keeps that link. Throws when the terminal cannot prompt or the user cancels. With `monorepo`,
- * an existing mapping above `projectRoot` does not count as linking it.
+ * an existing link above `projectRoot` does not count as linking it.
  */
 export async function chooseProjectKey(
   projectRoot: string,
   monorepo: boolean,
+  items: readonly ConfigItem[],
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<string | null> {
   assertCanChooseProject(ctx);
   const { auth, console } = ctx;
   const projects = new ProjectsClient(ctx.connection.httpClient);
-
-  const discovered = await discoverProjects(projectRoot, { auth, silent: true, console });
   const root = canonicalizePath(projectRoot);
-  const covering = discovered.scope(root).filter((mapping) => mapping.contains);
 
-  if (discovered.fromSharedConfig) {
-    // Other directories' mappings are never proposed again; only one covering this directory counts.
-    const owner = discovered.groupByMapping([root]).groups.at(0)?.mapping;
-    const linked =
-      owner && (!monorepo || canonicalizePath(owner.projectRoot) === root) ? owner : undefined;
-    return linked
-      ? relinkOrKeep(projectRoot, linked.projectKey, projects, ctx)
+  if (items.length > 0) {
+    // Other folders' links are never proposed again; only the nearest one covering this folder counts.
+    const owner = items
+      .filter((item) => isAncestorOrSelf(item.root, root))
+      .sort((a, b) => b.root.length - a.root.length)
+      .at(0);
+    return owner && (!monorepo || owner.root === root)
+      ? relinkOrKeep(projectRoot, owner.entry.projectKey, projects, ctx)
       : searchForProject(projects, ctx);
   }
 
+  const discovered = await discoverProjects(projectRoot, { auth, silent: true, console });
+  const covering = discovered.scope(root).filter((mapping) => mapping.contains);
   const proposed = await findProposal(covering, projects, ctx);
   if (proposed) {
     const accepted = await console.confirmPrompt(
