@@ -76,7 +76,7 @@ import {
   type StubResponse,
 } from './recording-stub.ts';
 
-function resolveBinaryFixturePath(fixture: BinarySpec): string {
+export function resolveBinaryFixturePath(fixture: BinarySpec): string {
   const platform = detectPlatform();
   const extension = resolveDownloadExtension(fixture, platform);
   const downloadUrl = buildDownloadUrl(
