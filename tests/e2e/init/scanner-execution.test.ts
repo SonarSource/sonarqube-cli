@@ -301,6 +301,8 @@ public class Batch {
         'scanner.engineJarPath=payload.jar\nuserHome=.repository-cache\n',
       );
       copyFileSync(join(fixtures, 'payload.jar'), join(harness.cwd.path, 'sonar', 'payload.jar'));
+    } else if (variant === 'same-base') {
+      properties.push('sonar.modules=module', 'module.sonar.projectBaseDir=.');
     } else {
       const missingJava = join(harness.cwd.path, 'missing-java').replaceAll('\\', '/');
       properties.push(
@@ -336,6 +338,60 @@ public class Batch {
     return url;
   }
 
+  it.each(
+    [
+      ['proxy', 'sonar.scanner.proxyHost=untrusted.invalid'],
+      ['truststore', 'sonar.scanner.truststorePath=untrusted.p12'],
+      ['keystore', 'sonar.scanner.keystorePath=untrusted.p12'],
+      ['dump', 'sonar.scanner.internal.dumpToFile=repository-dump.properties'],
+    ].flatMap(([name, property]) =>
+      [false, true].flatMap((detach) =>
+        ['root', 'module', 'prefix', 'nested'].map(
+          (scope) =>
+            [
+              `${name} ${detach ? 'detached' : 'foreground'} ${scope}`,
+              property,
+              detach,
+              scope,
+            ] as const,
+        ),
+      ),
+    ),
+  )(
+    'refuses repository %s settings',
+    async (_name, property, detach, scope) => {
+      if (scope === 'root') {
+        harness.cwd.writeFile('sonar-project.properties', property);
+      } else if (scope === 'nested') {
+        harness.cwd.writeFile('sonar-project.properties', 'sonar.modules=sonar');
+        harness.cwd.writeFile('sonar/sonar-project.properties', 'sonar.modules=scanner');
+        harness.cwd.writeFile(
+          'sonar/scanner/sonar-project.properties',
+          property.replace('sonar.scanner.', ''),
+        );
+      } else {
+        const id = scope === 'prefix' ? 'sonar.scanner' : 'sonar';
+        harness.cwd.writeFile('sonar-project.properties', `sonar.modules=${id}`);
+        harness.cwd.writeFile(
+          `${id}/sonar-project.properties`,
+          scope === 'prefix' ? property.replace('sonar.scanner.', '') : property,
+        );
+      }
+      const result = await harness.run(
+        `init --non-interactive --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
+        { timeoutMs: 30_000 },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(
+        'Repository scanner proxy, TLS and diagnostic-dump settings are not allowed.',
+      );
+      expect(completed).toHaveLength(0);
+      expect(existsSync(join(harness.cwd.path, 'repository-dump.properties'))).toBe(false);
+      expect(result.stdout + result.stderr).not.toContain(token);
+    },
+    60_000,
+  );
+
   it('demonstrates an unpinned legacy scanner executes a poisoned cache without downloading it', async () => {
     const url = plantLegacyCache('root');
     await command(
@@ -360,6 +416,8 @@ public class Batch {
   it.each([
     ['modern escaped/continued foreground', false, 'escaped', false],
     ['modern module detached', false, 'module', true],
+    ['modern same-base foreground', false, 'same-base', false],
+    ['modern same-base detached', false, 'same-base', true],
     ['legacy root foreground', true, 'root', false],
     ['legacy module detached', true, 'module', true],
   ] as const)(
