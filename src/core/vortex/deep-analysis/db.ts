@@ -106,9 +106,9 @@ export function openAnalysisDb(): Database {
       if (!isCorruptionError(error)) {
         throw error;
       }
-      logger.debug('Vortex analysis state corrupted, quarantining and starting fresh', error);
+      logger.debug('Vortex analysis state corrupted, quarantining', error);
       quarantineAnalysisFiles(dbPath);
-      return openAndMigrate(dbPath);
+      throw error;
     }
   } catch (cause) {
     throw new CommandFailedError('Could not open Vortex analysis state.', { cause });
