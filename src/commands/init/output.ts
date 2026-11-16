@@ -22,6 +22,11 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, MonorepoRootResult } from './init-outcome.ts';
+import {
+  isUnavailable,
+  type LinkedProjectIssue,
+  reportLinkedProjectIssues,
+} from './steps/linked-projects.ts';
 import { projectDashboardUrl } from './steps/mapping.ts';
 
 const NO_MONOREPO_ROOTS = [
@@ -32,22 +37,29 @@ const MONOREPO_RESUME =
   "To resume, run 'sonar init --monorepo' again with the same --root options: roots that are already configured are left as they are.";
 
 /** In display order; a root belongs to the section of its outcome, so a line does not repeat it. */
-const MONOREPO_SECTIONS: { title: string; kind: MonorepoRootResult['kind'] }[] = [
-  { title: 'Created and bound to the repository', kind: 'bound' },
-  { title: 'Created', kind: 'unbound' },
-  { title: 'Mapped to the existing project', kind: 'linked' },
-  { title: 'Already configured', kind: 'configured' },
-  { title: 'Skipped', kind: 'skipped' },
-  { title: 'Failed', kind: 'failed' },
+const MONOREPO_SECTIONS: { title: string; kinds: MonorepoRootResult['kind'][] }[] = [
+  { title: 'Created and bound to the repository', kinds: ['bound'] },
+  { title: 'Created', kinds: ['unbound'] },
+  { title: 'Mapped to the existing project', kinds: ['linked'] },
+  { title: 'Already configured', kinds: ['configured'] },
+  // The warnings printed while checking the roots say why a root was left as it is.
+  { title: 'Skipped', kinds: ['skipped', 'unavailable', 'conflict'] },
+  { title: 'Failed', kinds: ['failed'] },
 ];
+
+const UNAVAILABLE_REASONS = {
+  missing: 'not found on the remote',
+  'other-org': 'in another organization or not accessible',
+  unverified: 'could not be checked',
+} as const;
 
 function describeMonorepo(
   roots: readonly MonorepoRootResult[],
   auth: ResolvedAuth | undefined,
 ): string[] {
   const lines = ['', 'Monorepo onboarding summary:'];
-  for (const { title, kind } of MONOREPO_SECTIONS) {
-    const matching = roots.filter((root) => root.kind === kind);
+  for (const { title, kinds } of MONOREPO_SECTIONS) {
+    const matching = roots.filter((root) => kinds.includes(root.kind));
     if (matching.length > 0) {
       lines.push(
         `  ${title} (${matching.length}):`,
@@ -55,6 +67,7 @@ function describeMonorepo(
       );
     }
   }
+  // A missing project or a conflicting key stays as it is until the file or the command changes.
   if (roots.some((root) => root.kind === 'skipped' || root.kind === 'failed')) {
     lines.push(MONOREPO_RESUME);
   }
@@ -73,6 +86,10 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
     }
     case 'skipped':
       return root.path;
+    case 'unavailable':
+      return `${root.path}: ${root.projectKey} (${UNAVAILABLE_REASONS[root.problem]})`;
+    case 'conflict':
+      return `${root.path}: ${root.projectKey} (already mapped to '${root.recordedKey}')`;
     case 'failed':
       return `${root.path}: ${root.reason.replaceAll('\n', '\n      ')}`;
   }
@@ -84,8 +101,10 @@ function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined): string[
       const noun = outcome.projectKeys.length === 1 ? 'project' : 'projects';
       const keys = outcome.projectKeys.map((key) => `'${key}'`).join(', ');
       return [
-        `This directory is already linked to the Sonar ${noun} ${keys} in .sonar-config.json.`,
-        'Nothing left to set up.',
+        ...(outcome.projectKeys.length > 0
+          ? [`This directory is already linked to the Sonar ${noun} ${keys} in .sonar-config.json.`]
+          : []),
+        ...(outcome.issues.some(isUnavailable) ? [] : ['Nothing left to set up.']),
       ];
     }
     case 'linked':
@@ -113,8 +132,14 @@ export function renderInitOutcome(
     console.print(line);
   }
   if (auth) {
+    reportLinkedProjectIssues(linkedProjectIssues(outcome), auth, console);
     renderProjectDashboards(outcome, auth, console);
   }
+}
+
+/** A monorepo reports its own problems when it finds them, before it onboards anything. */
+function linkedProjectIssues(outcome: InitOutcome): readonly LinkedProjectIssue[] {
+  return outcome.kind === 'complete' ? outcome.issues : [];
 }
 
 function mappedProjectKeys(outcome: InitOutcome): readonly string[] {

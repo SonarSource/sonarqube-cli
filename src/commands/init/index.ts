@@ -22,6 +22,7 @@ import { findInstalledIntegrationIds } from '@/commands/integrate/_common/instal
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -41,6 +42,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
 import { runMonorepo } from './steps/monorepo.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
@@ -166,8 +168,27 @@ async function runDetectedPath(
     case 'unbound-new':
       return runUnboundNew(detected, deps, unboundNewOptions);
     case 'complete':
-      return { kind: 'complete', projectKeys: detected.projectKeys };
+      return checkCompleteLinks(detected, deps);
   }
+}
+
+/** The file says the directory is set up; the remote may disagree, which is reported but never repaired. */
+async function checkCompleteLinks(
+  { projectRoot, projects }: Extract<InitPath, { path: 'complete' }>,
+  deps: DetectDeps,
+): Promise<InitOutcome> {
+  const issues = await findLinkedProjectIssues(
+    projects.map((project) => ({
+      projectKey: project.projectKey,
+      path: relativeProjectPath(projectRoot, project.projectRoot),
+    })),
+    deps,
+  );
+  const unavailable = new Set(issues.filter(isUnavailable).map(({ projectKey }) => projectKey));
+  const projectKeys = projects
+    .map(({ projectKey }) => projectKey)
+    .filter((projectKey) => !unavailable.has(projectKey));
+  return { kind: 'complete', projectKeys, issues };
 }
 
 function fallBack(
