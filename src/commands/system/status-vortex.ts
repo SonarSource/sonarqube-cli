@@ -19,6 +19,7 @@
  */
 
 import type { Console } from '@/core/ui/console.ts';
+import { VORTEX_SERVER_UNSUPPORTED_MESSAGE } from '@/core/vortex/availability-messages.ts';
 import {
   isVortexEntitlementLoss,
   type VortexEntitlementResult,
@@ -32,6 +33,7 @@ const VORTEX_STATUS_LABELS: Record<VortexEntitlementStatus, string> = {
   organization_not_accessible: 'Configured organization is not accessible with this token',
   check_failed: 'Unknown (check failed)',
   not_applicable: 'Not available',
+  unsupported: `Unsupported. ${VORTEX_SERVER_UNSUPPORTED_MESSAGE}`,
 };
 
 function formatVortexUsage(consumption: { consumed: number; limit: number }): string {
