@@ -101,18 +101,6 @@ export function shellQuoteBash(value: string): string {
 }
 
 /**
- * Double-quoted Bash literal that still allows `$var`/`${var}` expansion, unlike
- * {@link shellQuoteBash}. Needed when `value` embeds an agent-substituted placeholder (e.g.
- * Claude Code's `${CLAUDE_PROJECT_DIR}`) that must still expand — single-quoting it would leave
- * the literal, unexpanded token in the path. Only escapes what remains meaningful inside double
- * quotes (`\`, `"`, `` ` ``); `$` is left alone on purpose.
- */
-export function shellDoubleQuoteBash(value: string): string {
-  const escaped = value.replaceAll(/[\\"`]/g, String.raw`\$&`);
-  return `"${escaped}"`;
-}
-
-/**
  * Quote a path for PowerShell's `-File` argument on Windows so it stays a single
  * argument when it contains **spaces**. Double quotes are used because Windows
  * paths cannot contain `"` (so no escaping is needed) and both cmd.exe and
@@ -141,16 +129,9 @@ export function resolveAgentHookScriptPath(
   return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${hookScriptExtension()}`);
 }
 
-function resolveHookCommandPath(
-  context: IntegrationContext,
-  relativePath: string,
-  projectDirPlaceholder?: string,
-): string {
+function resolveHookCommandPath(context: IntegrationContext, relativePath: string): string {
   if (context.scope === 'global') {
     return join(context.targetRoot, relativePath);
-  }
-  if (projectDirPlaceholder) {
-    return `${projectDirPlaceholder}/${relativePath.replaceAll('\\', '/')}`;
   }
   return relativePath;
 }
@@ -161,38 +142,24 @@ function resolveHookCommandPath(
  * argument when the agent runs the command through a shell, even when the
  * project root or `$HOME` contains spaces or (on Unix) other shell
  * metacharacters (`$`, backticks, apostrophes, globs). Absolute path for global
- * scope. For project scope, `projectDirPlaceholder` (e.g. Claude Code's
- * `${CLAUDE_PROJECT_DIR}`) anchors the path to the agent's own project-root
- * variable instead of the process cwd, so the hook still resolves when cwd
- * diverges from the project root (worktrees, cwd changes); omit it for agents
- * with no such placeholder, which keeps the plain cwd-relative path.
- *
- * Windows already double-quotes unconditionally, which lets `${CLAUDE_PROJECT_DIR}` expand.
- * On Unix, a path using the placeholder is double-quoted too (`shellDoubleQuoteBash`) for the
- * same reason — single-quoting it (Bash's usual, stricter default) would leave the literal,
- * unexpanded token in the path instead of the real project root. Every other Unix path (global
- * scope, or project scope with no placeholder) keeps the stricter single-quoting.
+ * scope; cwd-relative path for legacy project scope.
  */
 export function resolveAgentHookCommand(
   context: IntegrationContext,
   configDir: string,
   scriptPath: string,
-  projectDirPlaceholder?: string,
 ): string {
   const extension = process.platform === 'win32' ? '.ps1' : '.sh';
   const relativePath = join(configDir, HOOKS_DIR, `${scriptPath}${extension}`);
-  const commandPath = resolveHookCommandPath(context, relativePath, projectDirPlaceholder);
+  const commandPath = resolveHookCommandPath(context, relativePath);
 
   if (process.platform === 'win32') {
     return `powershell -NoProfile -ExecutionPolicy Bypass -File ${quoteWindowsHookScriptPath(commandPath.replaceAll('\\', '/'))}`;
   }
-  const usesPlaceholder = context.scope !== 'global' && Boolean(projectDirPlaceholder);
-  return usesPlaceholder ? shellDoubleQuoteBash(commandPath) : shellQuoteBash(commandPath);
+  return shellQuoteBash(commandPath);
 }
 
 export interface AgentHookEntryOptions {
-  /** e.g. Claude Code's `${CLAUDE_PROJECT_DIR}`; see {@link resolveAgentHookCommand}. */
-  projectDirPlaceholder?: string;
   timeoutSec?: number;
   additionalContextLimit?: number;
 }
@@ -206,11 +173,11 @@ export function createAgentHookEntry(
   scriptPath: string,
   options: AgentHookEntryOptions = {},
 ): ManagedHookEntry {
-  const { projectDirPlaceholder, timeoutSec = HOOK_TIMEOUT_SEC, additionalContextLimit } = options;
+  const { timeoutSec = HOOK_TIMEOUT_SEC, additionalContextLimit } = options;
 
   const hookCommand: HookCommand = {
     type: 'command',
-    command: resolveAgentHookCommand(context, configDir, scriptPath, projectDirPlaceholder),
+    command: resolveAgentHookCommand(context, configDir, scriptPath),
     timeout: timeoutSec,
   };
   if (additionalContextLimit !== undefined) {
