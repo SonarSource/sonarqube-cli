@@ -55,7 +55,7 @@ const missingTools = [
   .map(([name]) => name);
 
 if (missingTools.length > 0) {
-  const message = `Scanner e2e prerequisites missing from PATH: ${missingTools.join(', ')}. Install JDK 21 and ${archiveToolName}.`;
+  const message = `Scanner e2e prerequisites missing from PATH: ${missingTools.join(', ')}. Install JDK 25 and ${archiveToolName}.`;
   if (process.env.CI === 'true') throw new Error(message);
   console.warn(`Skipping scanner e2e tests. ${message}`);
 }

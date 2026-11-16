@@ -127,10 +127,11 @@ runs:
 
     - name: Set up Java for scanner e2e tests
       if: ${{ inputs.skip-e2e != 'true' }}
-      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
       with:
-        distribution: temurin
-        java-version: '21'
+        version: 2026.11.9
+        tool_versions: |
+          java temurin-25.0.5+8.0.LTS
 
     - name: Run e2e tests (Windows)
       if: ${{ inputs.os == 'windows' && inputs.skip-e2e != 'true' }}
