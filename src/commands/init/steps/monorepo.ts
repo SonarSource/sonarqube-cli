@@ -18,10 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { join } from 'node:path';
+
 import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
 import { remediationHintFor } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectOrganizationError } from '@/core/errors.ts';
+import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
@@ -283,12 +286,30 @@ export async function runMonorepo(projectRoot: string, deps: DetectDeps): Promis
   }
 
   const repositoryRoot = discovered.repoRoot ?? projectRoot;
+  warnOnNestedConfig(discovered.configDir, repositoryRoot, console);
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
     Promise.all(mappings.map((mapping) => inspectRoot(mapping, repositoryRoot, deps))),
   );
   const selected = await selectRoots(roots, console);
 
   return { kind: 'monorepo', roots: await onboardInOrder(roots, selected, deps) };
+}
+
+/** Mappings are always saved at the repository root, so a nested or main-worktree file stays as it is. */
+function warnOnNestedConfig(
+  configDir: string | undefined,
+  repositoryRoot: string,
+  console: Console,
+): void {
+  if (
+    configDir === undefined ||
+    pathComparisonKey(configDir) === pathComparisonKey(repositoryRoot)
+  ) {
+    return;
+  }
+  console.warn(
+    `The project roots come from ${join(configDir, SHARED_PROJECT_CONFIG_FILE_NAME)}, but their mappings will be saved to the ${SHARED_PROJECT_CONFIG_FILE_NAME} at the repository root (${repositoryRoot}).`,
+  );
 }
 
 /** One root finishes, prompts included, before the next starts. */
