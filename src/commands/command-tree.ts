@@ -1277,7 +1277,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   hookCommand
     .command('agent-stop')
     .description('Run deep Vortex analysis before an agent finishes')
-    .requiredOption('--agent <agent>', 'Agent whose hook input and output format to use (claude)')
+    .requiredOption(
+      '--agent <agent>',
+      'Agent whose hook input and output format to use (claude|codex)',
+    )
     .anonymousAction(
       handleHookInvocation((ctx, options: { agent: string }) => agentStop(ctx, options.agent)),
     );
