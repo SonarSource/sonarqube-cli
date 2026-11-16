@@ -410,6 +410,25 @@ describe('AuthResolver cloud server URL validation', () => {
     });
   });
 
+  it.each(['https://sonarqube.au', 'https://au-sc-staging.io'])(
+    'accepts SonarQube Cloud AU %s with token+org',
+    async (serverUrl) => {
+      process.env[ENV_TOKEN] = FAKE_TOKEN_ENV;
+      process.env[ENV_ORG] = 'my-org';
+      process.env[ENV_SERVER] = serverUrl;
+
+      const result = await new AuthResolver().resolveAuth();
+      expect(result.isOk()).toBe(true);
+      expect(result._unsafeUnwrap()).toMatchObject({ serverUrl, connectionType: 'cloud' });
+    },
+  );
+
+  it('lists all three Cloud hosts when the host is wrong', () => {
+    expect(invalidCloudServerUrlMessage()).toBe(
+      'The SonarQube Cloud server URL host must be sonarcloud.io, sonarqube.us, or sonarqube.au.',
+    );
+  });
+
   it('rejects a saved cloud connection with a non-canonical host', async () => {
     const state = getDefaultState('test');
     state.auth.connections = [
@@ -484,6 +503,16 @@ describe('resolveBaseUrl', () => {
   });
 });
 
+describe('resolveFromEndpoint (AU)', () => {
+  it.each([
+    ['https://sonarqube.au', 'https://sonarqube.au', 'https://api.sonarqube.au'],
+    ['https://au-sc-staging.io', 'https://au-sc-staging.io', 'https://api.au-sc-staging.io'],
+  ])('routes %s to its web and API hosts', (serverUrl, webUrl, apiUrl) => {
+    expect(resolveFromEndpoint(serverUrl, '/api/system/status')).toBe(webUrl);
+    expect(resolveFromEndpoint(serverUrl, '/organizations/search')).toBe(apiUrl);
+  });
+});
+
 describe('normalizeCloudV2Endpoint', () => {
   it('strips the /api/v2 prefix for SonarCloud EU', () => {
     const result = normalizeCloudV2Endpoint('https://sonarcloud.io', '/api/v2/sca/issues-releases');
@@ -516,6 +545,20 @@ describe('cloudRegionFromUrl', () => {
 
   it("returns 'us' for SonarCloud US", () => {
     expect(cloudRegionFromUrl('https://sonarqube.us')).toBe('us');
+  });
+
+  it.each(['https://sonarqube.au', 'https://au-sc-staging.io'])(
+    "returns 'au' for SonarCloud AU %s",
+    (serverUrl) => {
+      expect(cloudRegionFromUrl(serverUrl)).toBe('au');
+    },
+  );
+
+  it.each([
+    ['https://sc-staging.io', 'eu'],
+    ['https://us-sc-staging.io', 'us'],
+  ] as const)("keeps %s as '%s'", (serverUrl, region) => {
+    expect(cloudRegionFromUrl(serverUrl)).toBe(region);
   });
 
   it('returns undefined for a self-hosted SonarQube Server', () => {

@@ -196,12 +196,17 @@ export const UPDATE_SCRIPT_BASE_URL =
 export const SONARCLOUD_URL = process.env.SONARQUBE_CLI_SONARCLOUD_URL ?? 'https://sonarcloud.io';
 export const SONARCLOUD_US_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_URL ?? 'https://sonarqube.us';
+export const SONARCLOUD_AU_URL =
+  process.env.SONARQUBE_CLI_SONARCLOUD_AU_URL ?? 'https://sonarqube.au';
 export const SONARCLOUD_HOSTNAME = new URL(SONARCLOUD_URL).hostname;
 export const SONARCLOUD_US_HOSTNAME = new URL(SONARCLOUD_US_URL).hostname;
+export const SONARCLOUD_AU_HOSTNAME = new URL(SONARCLOUD_AU_URL).hostname;
 export const SONARCLOUD_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_API_URL ?? 'https://api.sonarcloud.io';
 export const SONARCLOUD_US_API_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_US_API_URL ?? 'https://api.sonarqube.us';
+export const SONARCLOUD_AU_API_URL =
+  process.env.SONARQUBE_CLI_SONARCLOUD_AU_API_URL ?? 'https://api.sonarqube.au';
 export const SONARCLOUD_SCA_SCANNER_CDN_URL =
   process.env.SONARQUBE_CLI_SONARCLOUD_SCA_SCANNER_CDN_URL ??
   'https://scanner.sonarcloud.io/tidelift-cli';
