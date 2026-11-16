@@ -104,7 +104,10 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
     return {
       path: 'complete',
       projectRoot,
-      projectKeys: linked.map((p) => p.projectKey),
+      projects: linked.map(({ projectKey, projectRoot: root }) => ({
+        projectKey,
+        projectRoot: root,
+      })),
     };
   }
 

@@ -22,7 +22,6 @@ import { join } from 'node:path';
 
 import { InvalidOptionError, remediationHintFor } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
-import { ProjectOrganizationError } from '@/core/errors.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import { relativeProjectPath, resolveProjectTarget } from '@/core/project-discovery/link-target.ts';
@@ -32,24 +31,30 @@ import {
   resolveContainedPath,
   sharedProjectConfigRepository,
 } from '@/core/project-discovery/shared-project-config.ts';
-import { UnexpectedApiError } from '@/core/server/errors.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
-import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { OnboardingCancelledError } from '../answer.ts';
 import type { InitOutcome, MonorepoRootResult } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
+import {
+  findLinkedProjectIssues,
+  isRunFatal,
+  type LinkedProjectIssue,
+  type LinkedProjectProblem,
+  reportLinkedProjectIssues,
+} from './linked-projects.ts';
 import { writeMapping } from './mapping.ts';
 import { runUnboundNew } from './unbound.ts';
 
 /** Where a mapped root stands against the active connection, before anything runs for it. */
 type RootStatus =
-  /** The directory is already linked in `.sonar-config.json`, which counts as complete: nothing to do. */
+  /** The directory is linked in `.sonar-config.json` and the remote has the project: nothing to do. */
   | { kind: 'configured' }
+  /** The file links the directory, but the remote cannot confirm the project. Never created. */
+  | { kind: 'unavailable'; problem: LinkedProjectProblem }
   /** `--root` names a key whose project exists in the active organization, but the file does not map it. */
   | { kind: 'existing' }
   /** No project has the mapped key yet. */
@@ -60,22 +65,16 @@ type RootStatus =
   /** The lookup failed for this root only. */
   | { kind: 'unchecked'; reason: string };
 
-type OnboardableStatus = Exclude<RootStatus, { kind: 'configured' | 'unchecked' | 'conflict' }>;
+type OnboardableStatus = Exclude<
+  RootStatus,
+  { kind: 'configured' | 'unavailable' | 'unchecked' | 'conflict' }
+>;
 
 interface MonorepoRoot {
   mapping: CompleteProjectMapping;
   /** Relative to the repository root, for display and the summary. */
   path: string;
   status: RootStatus;
-}
-
-/** What no later root can recover from: the answer to a prompt is gone, or the credentials or organization are wrong. */
-function isRunFatal(error: unknown): boolean {
-  return (
-    error instanceof OnboardingCancelledError ||
-    error instanceof ProjectOrganizationError ||
-    (error instanceof UnexpectedApiError && error.status === HTTP_STATUS_UNAUTHORIZED)
-  );
 }
 
 function describeFailure(error: unknown): string {
@@ -101,13 +100,29 @@ async function classifyRoot(
   }
 }
 
+/** A root the file links is only checked, never created: a project the remote lacks is reported. */
+async function classifyLinkedRoot(
+  mapping: CompleteProjectMapping,
+  path: string,
+  deps: DetectDeps,
+): Promise<RootStatus> {
+  const issue = (
+    await findLinkedProjectIssues([{ projectKey: mapping.projectKey, path }], deps)
+  ).at(0);
+  return issue === undefined
+    ? { kind: 'configured' }
+    : { kind: 'unavailable', problem: issue.problem };
+}
+
 /**
  * A `--root` mapping carries the active connection, so the file, not the mapping, tells whether the
- * directory is already linked. A directory the file links to this key is complete, without a lookup.
+ * directory is already linked. A directory the file links to this key is checked like any other
+ * linked root, so naming it again never creates its project.
  */
 async function classifyExplicitRoot(
   mapping: CompleteProjectMapping,
   repositoryRoot: string,
+  path: string,
   deps: DetectDeps,
 ): Promise<RootStatus> {
   const recorded = (await sharedProjectConfigRepository.load(repositoryRoot)).find(
@@ -117,11 +132,11 @@ async function classifyExplicitRoot(
     return classifyRoot(mapping, deps);
   }
   return recorded.projectKey === mapping.projectKey
-    ? { kind: 'configured' }
+    ? classifyLinkedRoot(mapping, path, deps)
     : { kind: 'conflict', recordedKey: recorded.projectKey };
 }
 
-/** Roots read from the file are complete as they are; only roots named with `--root` are looked up. */
+/** Roots read from the file are checked on the remote; roots named with `--root` may also be created or mapped. */
 async function inspectRoot(
   mapping: CompleteProjectMapping,
   repositoryRoot: string,
@@ -130,10 +145,14 @@ async function inspectRoot(
 ): Promise<MonorepoRoot> {
   const path = relativeProjectPath(repositoryRoot, mapping.projectRoot);
   if (!explicit) {
-    return { mapping, path, status: { kind: 'configured' } };
+    return { mapping, path, status: await classifyLinkedRoot(mapping, path, deps) };
   }
   try {
-    return { mapping, path, status: await classifyExplicitRoot(mapping, repositoryRoot, deps) };
+    return {
+      mapping,
+      path,
+      status: await classifyExplicitRoot(mapping, repositoryRoot, path, deps),
+    };
   } catch (error) {
     if (isRunFatal(error)) {
       throw error;
@@ -192,14 +211,18 @@ async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<Monore
   if (status.kind === 'configured') {
     return { path, kind: 'configured', projectKey: mapping.projectKey };
   }
+  if (status.kind === 'unavailable') {
+    return { path, kind: 'unavailable', projectKey: mapping.projectKey, problem: status.problem };
+  }
   if (status.kind === 'unchecked') {
     return { path, kind: 'failed', reason: status.reason };
   }
   if (status.kind === 'conflict') {
     return {
       path,
-      kind: 'failed',
-      reason: `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}'. Remap it with 'sonar link --monorepo ${mapping.projectKey} --path ${path}'.`,
+      kind: 'conflict',
+      projectKey: mapping.projectKey,
+      recordedKey: status.recordedKey,
     };
   }
   deps.console.print(`Onboarding ${path}`);
@@ -240,7 +263,23 @@ export async function runMonorepo(
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
     Promise.all(mappings.map((mapping) => inspectRoot(mapping, repositoryRoot, deps, explicit))),
   );
+  reportRootProblems(roots, deps);
   return { kind: 'monorepo', roots: await onboardInOrder(roots, deps) };
+}
+
+/** Said before any root is onboarded, while the user can still stop: these roots are left as they are. */
+function reportRootProblems(roots: readonly MonorepoRoot[], { auth, console }: DetectDeps): void {
+  const issues: LinkedProjectIssue[] = [];
+  for (const { path, mapping, status } of roots) {
+    if (status.kind === 'conflict') {
+      console.warn(
+        `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}', so it was left as it is. Remap it with 'sonar link --monorepo ${mapping.projectKey} --path ${path}'.`,
+      );
+    } else if (status.kind === 'unavailable') {
+      issues.push({ projectKey: mapping.projectKey, path, problem: status.problem });
+    }
+  }
+  reportLinkedProjectIssues(issues, auth, console);
 }
 
 interface GeneratedKey {

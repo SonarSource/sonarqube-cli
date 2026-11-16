@@ -130,7 +130,7 @@ describe('sonar init', () => {
   it(
     'reports setup as complete when .sonar-config.json already maps a project',
     async () => {
-      const serverUrl = await signInToCloud(() => {});
+      const serverUrl = await signInToCloud((server) => server.withProject('mapped'));
       initGitRepo(harness.cwd.path);
       writeSonarConfig(serverUrl);
 
@@ -140,6 +140,67 @@ describe('sonar init', () => {
       expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
       expect(result.stdout).not.toContain("'sonar integrate'");
       expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'warns, creates nothing and exits 0 when the linked project does not exist on the remote',
+    async () => {
+      const serverUrl = await signInToCloud(() => {});
+      initGitRepo(harness.cwd.path);
+      writeSonarConfig(serverUrl);
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        `.sonar-config.json links 'mapped', but no such project exists in organization ${ORG}.`,
+      );
+      expect(result.stderr).toContain("Relink with 'sonar link <project key>'");
+      expect(result.stderr).toContain("or delete .sonar-config.json, then run 'sonar init' again");
+      expect(result.stdout).not.toContain('Nothing left to set up');
+      expect(result.stdout).not.toContain("linked to the Sonar project 'mapped'");
+      expect(result.stdout).not.toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Project dashboard:');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'warns separately when the linked project belongs to another organization',
+    async () => {
+      const serverUrl = await signInToCloud((server) =>
+        server.withProject('mapped', (project) => project.withOrganization('other-org')),
+      );
+      initGitRepo(harness.cwd.path);
+      writeSonarConfig(serverUrl);
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(
+        "links 'mapped', which belongs to another organization or is not accessible with this token",
+      );
+      expect(result.stderr).not.toContain('no such project exists');
+      expect(result.stdout).not.toContain(UNBOUND);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'only notes that the link could not be checked when the lookup fails, and still reports setup as complete',
+    async () => {
+      const serverUrl = await signInToCloud((server) => server.withComponentShowStatus(500));
+      initGitRepo(harness.cwd.path);
+      writeSonarConfig(serverUrl);
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain("Could not check whether 'mapped' exists on the remote");
+      expect(result.stderr).not.toContain('no such project exists');
+      expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
     },
     TIMEOUT,
   );
@@ -196,7 +257,7 @@ describe('sonar init', () => {
   it(
     'reports setup as complete when .sonar-config.json sits in a directory between --path and the repository root',
     async () => {
-      const serverUrl = await signInToCloud(() => {});
+      const serverUrl = await signInToCloud((server) => server.withProject('mapped'));
       initGitRepo(harness.cwd.path);
       harness.cwd.writeFile('services/api/.keep', '');
       harness.cwd.writeFile(
@@ -642,6 +703,7 @@ describe('sonar init', () => {
       harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
       const server = await newCloudServer()
         .withOrganizations([{ key: ORG, name: 'My Org' }])
+        .withProject('p')
         .start();
       harness.cwd.writeFile(
         '.sonar-config.json',
@@ -1646,9 +1708,9 @@ describe('sonar init', () => {
     );
 
     it(
-      'treats every root of the file as configured, whatever its connection or project, without a terminal',
+      'confirms each root of the file on the remote and warns, without creating anything, about one it lacks, even without a terminal',
       async () => {
-        const serverUrl = await signInToCloud(() => {});
+        const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
         writeMonorepoConfig(serverUrl, [
           { path: 'api', key: 'api-key', stale: true },
           { path: 'web', key: 'web-key' },
@@ -1658,12 +1720,75 @@ describe('sonar init', () => {
         const result = await harness.run('init --monorepo --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('Already configured (2):');
+        expect(result.stdout).toContain('Already configured (1):');
         expect(result.stdout).toContain('api: api-key');
-        expect(result.stdout).toContain('web: web-key');
         expect(result.stdout).not.toContain('Created');
+        expect(result.stdout).toContain('Skipped (1):');
+        expect(result.stdout).toContain('web: web-key (not found on the remote)');
         expect(result.stdout).not.toContain('To resume');
+        expect(result.stderr).toContain(
+          `.sonar-config.json links 'web-key' (web), but no such project exists in organization ${ORG}.`,
+        );
+        expect(result.stderr).toContain("Relink with 'sonar link <project key>'");
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns about a missing linked root before it asks anything about the roots it creates',
+      async () => {
+        const serverUrl = await signInToCloud(() => {});
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const session = harness.runInteractive(
+          'init --monorepo --root api=api-key --root web=web-key',
+        );
+        await session.waitText('Project name');
+        const beforeFirstPrompt = session.output();
+        session.keyEnter();
+        await session.waitText('Project visibility');
+        session.keyEnter();
+        await session.accept('Create this project');
+        await session.decline(INTEGRATE_PROMPT);
+        await session.waitFinish();
+
+        expect(beforeFirstPrompt).toContain("links 'api-key' (api), but no such project exists");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns separately about a root whose project belongs to another organization',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('foreign-key', (project) => project.withOrganization('other-org')),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'foreign-key' }]);
+
+        const result = await harness.run('init --monorepo --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(
+          "links 'foreign-key' (api), which belongs to another organization",
+        );
+        expect(result.stdout).not.toContain('Already configured');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'only notes a root it could not check when the lookup fails',
+      async () => {
+        const serverUrl = await signInToCloud((server) => server.withComponentShowStatus(500));
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+
+        const result = await harness.run('init --monorepo --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain("Could not check whether 'api-key' (api) exists");
+        expect(result.stderr).not.toContain('no such project exists');
       },
       TIMEOUT,
     );
@@ -1691,7 +1816,9 @@ describe('sonar init', () => {
     it(
       'reads the roots of a nested config, reports them as configured and warns where mappings are saved',
       async () => {
-        const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
         initGitRepo(harness.cwd.path);
         harness.cwd.writeFile(
           '.sonar-config.json',
@@ -1837,6 +1964,10 @@ describe('sonar init', () => {
 
           const output = result.stdout + result.stderr;
           expect(output).toContain("api is already mapped to 'other-key'");
+          expect(output).not.toContain('Failed');
+          expect(output).toContain('Skipped (1):');
+          expect(output).toContain("api: api-key (already mapped to 'other-key')");
+          expect(output).not.toContain('To resume');
           expect(readConfig().projects.find(({ path }) => path === 'api')?.projectKey).toBe(
             'other-key',
           );
