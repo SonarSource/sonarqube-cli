@@ -110,11 +110,13 @@ function stepOf(step: Step) {
 function stoppedTrialOf(group: string, trialDir: string) {
   const name = basename(trialDir);
   const suffixStart = name.lastIndexOf('__');
-  const config = readJson<{ agent?: { name?: string | null; model_name?: string | null } }>(
-    join(trialDir, 'config.json'),
-  );
+  const config = readJson<{
+    task?: { path?: string | null };
+    agent?: { name?: string | null; model_name?: string | null };
+  }>(join(trialDir, 'config.json'));
   const modelName = config?.agent?.model_name;
-  const task = suffixStart > 0 ? name.slice(0, suffixStart) : name;
+  const fromDir = suffixStart > 0 ? name.slice(0, suffixStart) : name;
+  const task = config?.task?.path ? lastSegment(config.task.path.replace(/\/+$/, '')) : fromDir;
   return {
     group,
     name,
