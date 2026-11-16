@@ -96,9 +96,9 @@ describe('VortexEntitlementClient', () => {
       expect((await checkHubEntitlement(cloudHttp, CLOUD_SQAA)).status).toBe('check_failed');
     });
 
-    it("returns 'not_applicable' when a Server hub is absent (HTTP 404)", async () => {
+    it("returns 'unsupported' when a Server hub is absent (HTTP 404)", async () => {
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect((await checkHubEntitlement(serverHttp, SERVER_SQAA)).status).toBe('not_applicable');
+      expect((await checkHubEntitlement(serverHttp, SERVER_SQAA)).status).toBe('unsupported');
     });
 
     it("returns 'check_failed' when the hub is unavailable (HTTP 503)", async () => {
@@ -184,14 +184,14 @@ describe('VortexEntitlementClient', () => {
       ]);
     });
 
-    it("returns 'not_applicable' when both Server hubs are absent", async () => {
+    it("returns 'unsupported' when both Server hubs are absent", async () => {
       const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
       fetchSpy = mockFetch({}, { ok: false, status: 404 });
-      expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+      expect((await serverClient.hasVortexEntitlement()).status).toBe('unsupported');
     });
 
     it.each(['/a3s/', '/cag/'] as const)(
-      "returns 'not_applicable' when the Server %s hub is absent even if the other is entitled",
+      "returns 'unsupported' when the Server %s hub is absent even if the other is entitled",
       async (missingPath) => {
         const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
         fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
@@ -207,9 +207,30 @@ describe('VortexEntitlementClient', () => {
           } as Response);
         }) as typeof fetch);
 
-        expect((await serverClient.hasVortexEntitlement()).status).toBe('not_applicable');
+        expect((await serverClient.hasVortexEntitlement()).status).toBe('unsupported');
       },
     );
+
+    it.each([
+      [{ allowed: true, hasEntitlement: true }, 'enabled'],
+      [{ allowed: false, hasEntitlement: false }, 'not_entitled'],
+      [{ allowed: false, hasEntitlement: true }, 'over_consumption'],
+    ] as const)('maps a Server CAG response %j without consumption to %s', async (cag, status) => {
+      const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));
+      fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL) => {
+        const body = new URL(url).pathname.includes('/cag/')
+          ? cag
+          : { allowed: true, hasEntitlement: true };
+        return Promise.resolve(new Response(JSON.stringify(body)));
+      }) as typeof fetch);
+      const result = await serverClient.hasVortexEntitlement('ignored-cloud-org');
+      expect(result.status).toBe(status);
+      expect(result.consumption).toBeUndefined();
+      expect(fetchPathnames(fetchSpy)).toEqual([
+        `/api/v2/a3s/org-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
+        `/api/v2/cag/cag-entitlement/${SERVER_ORGANIZATION_ID_PLACEHOLDER}`,
+      ]);
+    });
 
     it("returns 'check_failed' when the Server Hub is unavailable", async () => {
       const serverClient = new VortexEntitlementClient(new SonarHttpClient(SERVER_URL, TOKEN));

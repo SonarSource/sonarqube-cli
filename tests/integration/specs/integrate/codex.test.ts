@@ -583,7 +583,7 @@ describe('integrate codex', () => {
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
-        // is not_applicable. Secrets hooks and MCP each ask.
+        // is unsupported. Secrets hooks and MCP each ask.
         const session = harness.runInteractive('integrate codex');
         await chooseCustomize(session);
         await session.accept('Install secrets detection?');
