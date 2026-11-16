@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { LinkedProjectIssue, LinkedProjectProblem } from './steps/linked-projects.ts';
+
 /**
  * The onboarding path `sonar init` selected, before anything ran.
  * `projectRoot` is always the directory `init` was pointed at (`--path`, default the current one).
@@ -26,9 +28,13 @@
 export type InitPath =
   /**
    * Nothing to do: `.sonar-config.json` already links this directory to the active connection.
-   * `projectKeys` is a list because `.sonar-config.json` can map several projects, for a monorepo.
+   * `projects` is a list because `.sonar-config.json` can map several projects, for a monorepo.
    */
-  | { path: 'complete'; projectRoot: string; projectKeys: readonly string[] }
+  | {
+      path: 'complete';
+      projectRoot: string;
+      projects: readonly { projectKey: string; projectRoot: string }[];
+    }
   /**
    * A project of the active organization already exists for this repository: the server binds the
    * git remote to it, or it is the project an earlier run generated the key of (then `remote` may
@@ -54,10 +60,35 @@ export type InitPath =
    */
   | { path: 'unbound-new'; projectRoot: string; remote?: string };
 
+/**
+ * What happened to one mapped root of a monorepo. `path` is relative to the repository root. The
+ * kinds that carry a `projectKey` mirror `InitOutcome`: the root ended up mapped to that project.
+ */
+export type MonorepoRootResult =
+  | {
+      path: string;
+      /**
+       * `configured`: nothing to do; `linked`: an existing project was mapped; `bound`: a project
+       * bound to the repository was created and mapped; `unbound`: one without binding was.
+       */
+      kind: 'configured' | 'linked' | 'bound' | 'unbound';
+      projectKey: string;
+    }
+  /** The file links the root, but the remote cannot confirm the project; nothing was created. */
+  | { path: string; kind: 'unavailable'; projectKey: string; problem: LinkedProjectProblem }
+  /** `--root` names another key than the one the file maps the root to; the file was left as it is. */
+  | { path: string; kind: 'conflict'; projectKey: string; recordedKey: string }
+  /** The user left the root out, or declined the confirmation for it. */
+  | { path: string; kind: 'skipped' }
+  | { path: string; kind: 'failed'; reason: string };
+
 /** What `sonar init` ended with once the selected path ran. */
 export type InitOutcome =
-  /** `.sonar-config.json` already linked this directory to the active connection. */
-  | { kind: 'complete'; projectKeys: readonly string[] }
+  /**
+   * `.sonar-config.json` already linked this directory to the active connection. `projectKeys` are
+   * those the remote did not rule out; `issues` are the links it could not confirm.
+   */
+  | { kind: 'complete'; projectKeys: readonly string[]; issues: readonly LinkedProjectIssue[] }
   /** The directory was mapped to a project that already existed on the server. */
   | { kind: 'linked'; projectKey: string }
   /** A project bound to the repository was created and mapped. */
@@ -67,7 +98,11 @@ export type InitOutcome =
   /** The user declined the creation: nothing was created. */
   | { kind: 'declined' }
   /** The account has no organization and the user declined to create one: nothing was created. */
-  | { kind: 'no-organization' };
+  | { kind: 'no-organization' }
+  /** The user is onboarding a monorepo: each mapped root ran its own path, in file order. */
+  | { kind: 'monorepo'; roots: readonly MonorepoRootResult[] }
+  /** The user is onboarding a monorepo, but `.sonar-config.json` maps no root. */
+  | { kind: 'no-monorepo-roots' };
 
 export type LinkExistingPath = Extract<InitPath, { path: 'link-existing' }>;
 export type BoundNewPath = Extract<InitPath, { path: 'bound-new' }>;
