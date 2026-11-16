@@ -179,7 +179,7 @@
   },
   "overrides": {
     "flatted": "3.4.4",
-    "follow-redirects": "1.16.2",
+    "follow-redirects": "1.16.3",
     "node-forge": "1.4.3",
     "picomatch": "4.0.7"
   },
