@@ -24,21 +24,30 @@
  * Verify that our JSON stdout parser correctly handles the actual binary
  * output format. If the binary changes its output format, these tests catch it.
  *
- * Skipped when the binary is not installed.
+ * Requires the binary fixture prepared by `bun run pretest:integration`.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from 'bun:test';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { EXIT_CODE_SECRETS_FOUND } from '@/core/config-constants.ts';
-import { resolveSecretsBinaryPath } from '@/core/host/install/secrets.ts';
+import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 
 import { parseSecretsJson, runSecretsBinary } from '../../src/commands/analyze/secrets.ts';
 import { FakeSonarQubeServerBuilder } from '../integration/harness';
+import { resolveBinaryFixturePath } from '../integration/harness/environment-builder.ts';
 
 const TEST_TIMEOUT_MS = 30_000;
 setDefaultTimeout(TEST_TIMEOUT_MS);
@@ -46,14 +55,20 @@ setDefaultTimeout(TEST_TIMEOUT_MS);
 // sonar-ignore-next-line
 const GITHUB_TEST_TOKEN = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef1234';
 
-const binaryPath = resolveSecretsBinaryPath();
-// Non-null path used in tests: safe because describe.skipIf guards against null.
-const installedBinaryPath = binaryPath ?? '';
+const binaryPath = resolveBinaryFixturePath(SECRETS_SPEC);
 
-describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
+describe('parseSecretsJson — real binary', () => {
   let tempDir: string;
   let auth: ResolvedAuth;
   let server: Awaited<ReturnType<InstanceType<typeof FakeSonarQubeServerBuilder>['start']>>;
+
+  beforeAll(() => {
+    if (!existsSync(binaryPath)) {
+      throw new Error(
+        `Missing sonar-secrets fixture: ${binaryPath}. Run bun run pretest:integration first.`,
+      );
+    }
+  });
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `sonar-e2e-secrets-parser-${crypto.randomUUID()}`);
@@ -83,7 +98,7 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
     const filePath = join(tempDir, 'leaked.ts');
     writeFileSync(filePath, `const token = "${GITHUB_TEST_TOKEN}";`);
 
-    const result = await runSecretsBinary(installedBinaryPath, [filePath], auth, 'pipe');
+    const result = await runSecretsBinary(binaryPath, [filePath], auth, 'pipe');
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
@@ -101,7 +116,7 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
     const filePath = join(tempDir, 'clean.ts');
     writeFileSync(filePath, 'const x = 1;');
 
-    const result = await runSecretsBinary(installedBinaryPath, [filePath], auth, 'pipe');
+    const result = await runSecretsBinary(binaryPath, [filePath], auth, 'pipe');
 
     expect(result.exitCode).toBe(0);
 
@@ -115,7 +130,7 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
     writeFileSync(file1, `const a = "${GITHUB_TEST_TOKEN}";`);
     writeFileSync(file2, `const b = "${GITHUB_TEST_TOKEN}";`);
 
-    const result = await runSecretsBinary(installedBinaryPath, [file1, file2], auth, 'pipe');
+    const result = await runSecretsBinary(binaryPath, [file1, file2], auth, 'pipe');
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
@@ -131,7 +146,7 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
     const filePath = join(tempDir, 'schema-check.ts');
     writeFileSync(filePath, `const token = "${GITHUB_TEST_TOKEN}";`);
 
-    const result = await runSecretsBinary(installedBinaryPath, [filePath], auth, 'pipe');
+    const result = await runSecretsBinary(binaryPath, [filePath], auth, 'pipe');
 
     expect(result.exitCode).toBe(EXIT_CODE_SECRETS_FOUND);
 
@@ -156,6 +171,9 @@ describe.skipIf(binaryPath === null)('parseSecretsJson — real binary', () => {
         },
       ],
       errors: [],
+      skippedFiles: {
+        count: expect.any(Number),
+      },
       configuration: {
         skippedFilters: expect.any(Array),
       },
