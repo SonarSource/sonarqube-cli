@@ -36,7 +36,7 @@ import type { CliState, InstalledIntegrationFeature } from '@/core/state/state.t
 
 import { version as CURRENT_CLI_VERSION } from '../../../../package.json';
 import { POST_UPDATE_TRIGGER_COMMAND } from '../../../_common/isolated-cli-env.js';
-import { type CliResult, TestHarness } from '../../harness';
+import { type CliResult, hookScriptName, TestHarness } from '../../harness';
 
 const TEST_TIMEOUT = 60000;
 const STALE_CLI_VERSION = '0.5.0';
@@ -116,6 +116,56 @@ describe('global-integrations migration', () => {
       expect(recordedScopes('codex')).not.toContain('project');
       expect(recordedScopes('codex')).toContain('global');
       expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
+    },
+    { timeout: TEST_TIMEOUT },
+  );
+
+  it.each(['unix', 'windows'] as const)(
+    'removes legacy %s placeholder-based Claude hooks while preserving user hooks',
+    async (platform) => {
+      await authenticateAgainstFakeServer();
+      seedProjectScopedInstall(claudeIntegration);
+      const userHook = {
+        matcher: 'Read',
+        hooks: [{ type: 'command', command: 'my-custom-hook', timeout: 30 }],
+      };
+      const legacyHook = (marker: string) => {
+        const path = '${CLAUDE_PROJECT_DIR}/.claude/hooks/' + marker + '/build-scripts/legacy';
+        return {
+          hooks: [
+            {
+              type: 'command',
+              command:
+                platform === 'windows'
+                  ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${path}.ps1"`
+                  : `"${path}.sh"`,
+              timeout: 60,
+            },
+          ],
+        };
+      };
+      harness.cwd.writeFile(
+        '.claude/settings.json',
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [legacyHook('sonar-secrets'), userHook],
+            PostToolUse: [legacyHook('sonar-sqaa'), userHook],
+            Stop: [legacyHook('sonar-stop'), userHook],
+          },
+        }),
+      );
+      const scriptPath = `.claude/hooks/sonar-secrets/build-scripts/${hookScriptName('pretool-secrets')}`;
+      harness.cwd.writeFile(scriptPath, 'legacy');
+
+      const result = await runAsUpgrade();
+
+      expect(result.exitCode).toBe(0);
+      expect(harness.cwd.file('.claude', 'settings.json').asJson()).toEqual({
+        hooks: { PreToolUse: [userHook], PostToolUse: [userHook], Stop: [userHook] },
+      });
+      expect(harness.cwd.exists(scriptPath)).toBe(false);
+      expect(recordedScopes('claude-code')).toContain('global');
+      expect(recordedScopes('claude-code')).not.toContain('project');
     },
     { timeout: TEST_TIMEOUT },
   );
