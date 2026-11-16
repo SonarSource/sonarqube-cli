@@ -1966,5 +1966,165 @@ describe('sonar init', () => {
       },
       TIMEOUT,
     );
+
+    describe('with --root', () => {
+      function createdKeys(server: FakeSonarQubeServer) {
+        return server
+          .getRecordedRequests()
+          .filter((request) => request.path === '/api/projects/create')
+          .map((request) => new URLSearchParams(request.body).get('project'));
+      }
+
+      async function startServer(configure: (s: FakeSonarQubeServerBuilder) => void) {
+        const builder = newCloudServer();
+        configure(builder);
+        const server = await builder.start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        return server;
+      }
+
+      /** A file with one link holds it as `project`, with several as a `projects` array. */
+      function linkedRoots() {
+        const { project, projects } = readConfig() as { project?: object; projects?: object[] };
+        return projects ?? (project ? [project] : []);
+      }
+
+      function makeRepository(...directories: string[]) {
+        initGitRepo(harness.cwd.path);
+        for (const directory of directories) {
+          harness.cwd.writeFile(`${directory}/.keep`, '');
+        }
+      }
+
+      it(
+        'maps an existing project and creates a missing one without a config file or a prompt',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(createdKeys(server)).toEqual(['web-key']);
+          expect(
+            readConfig()
+              .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
+              .sort(),
+          ).toEqual(['api=api-key', 'web=web-key']);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'leaves a root that the file already links to the same project as it is',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api');
+          const command = 'init --monorepo --non-interactive --root api=api-key';
+
+          await harness.run(command);
+          const rerun = await harness.run(command);
+
+          expect(rerun.exitCode).toBe(0);
+          expect(rerun.stdout).toContain('Already configured (1)');
+          expect(createdKeys(server)).toEqual([]);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'fails only the root that the file maps to another project',
+        async () => {
+          const serverUrl = await signInToCloud((s) => s.withProject('api-key'));
+          writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'other-key' }]);
+          harness.cwd.writeFile('web/.keep', '');
+
+          const result = await harness.run(
+            'init --monorepo --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          const output = result.stdout + result.stderr;
+          expect(output).toContain("api is already mapped to 'other-key'");
+          expect(readConfig().projects.find(({ path }) => path === 'api')?.projectKey).toBe(
+            'other-key',
+          );
+          expect(readConfig().projects.some(({ projectKey }) => projectKey === 'web-key')).toBe(
+            true,
+          );
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'generates, prints and records the key of a root named without one',
+        async () => {
+          const server = await startServer(() => {});
+          makeRepository('web');
+          const command = 'init --monorepo --non-interactive --root web';
+
+          const first = await harness.run(command);
+
+          expect(first.exitCode).toBe(0);
+          const [key] = createdKeys(server);
+          expect(key).toMatch(/^my-org_web-[0-9a-f]{12}$/);
+          expect(first.stdout).toContain(`Generated project key for web: ${key}`);
+          expect(linkedRoots()).toMatchObject([{ path: 'web', projectKey: key }]);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'reuses the key the file already records for a root named without one',
+        async () => {
+          const serverUrl = await signInToCloud((s) => s.withProject('api-key'));
+          writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key', stale: true }]);
+
+          const result = await harness.run('init --monorepo --non-interactive --root api');
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).not.toContain('Generated project key');
+          expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'rejects a path that is not a directory of the repository before touching anything',
+        async () => {
+          const server = await startServer(() => {});
+          makeRepository('api');
+
+          const result = await harness.run(
+            'init --monorepo --non-interactive --root api=api-key --root missing=web-key',
+          );
+
+          expect(result.exitCode).toBe(2);
+          expect(result.stdout + result.stderr).toContain(
+            '--root path "missing" must point to an existing directory',
+          );
+          expect(createdKeys(server)).toEqual([]);
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'is refused without --monorepo',
+        async () => {
+          await startServer(() => {});
+          makeRepository('api');
+
+          const result = await harness.run('init --non-interactive --root api=api-key');
+
+          expect(result.exitCode).toBe(2);
+          expect(result.stdout + result.stderr).toContain(
+            '--root only applies together with --monorepo',
+          );
+        },
+        TIMEOUT,
+      );
+    });
   });
 });

@@ -26,7 +26,7 @@ import { projectDashboardUrl } from './steps/mapping.ts';
 
 const NO_MONOREPO_ROOTS = [
   'No project root is mapped in .sonar-config.json, so nothing was changed.',
-  "Map each root with 'sonar link --monorepo' (add --path to name its directory), then run 'sonar init --monorepo' again.",
+  "Name the roots with 'sonar init --monorepo --root <path>[=<project key>]', or map each one with 'sonar link --monorepo' (add --path to name its directory) and run 'sonar init --monorepo' again.",
 ];
 const MONOREPO_RESUME =
   "To resume, run 'sonar init --monorepo' again: roots that are already configured are left as they are.";
