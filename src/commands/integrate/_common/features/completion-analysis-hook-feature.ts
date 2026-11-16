@@ -31,6 +31,8 @@ import {
 } from '../hooks.ts';
 import type { IntegrateAgentOptions } from '../types.ts';
 
+export const COMPLETION_ANALYSIS_HOOK_FEATURE_ID = 'completion-analysis-hook';
+
 const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
 
 interface CompletionAnalysisHookConfig {
@@ -45,7 +47,7 @@ export function createCompletionAnalysisHookSubfeature<TOptions extends Integrat
   settingsPath,
 }: CompletionAnalysisHookConfig): SubfeatureDeclaration<TOptions> {
   return {
-    id: 'completion-analysis-hook',
+    id: COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
     displayName: 'Vortex completion analysis hook',
     required: true,
     resources: [
