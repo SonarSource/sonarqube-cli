@@ -42,11 +42,16 @@ import type { Console } from '@/core/ui/console.ts';
 /** Follows a `sonar link` hint: a plain link replaces the other links, which init would keep. */
 export const KEEP_OTHER_LINKS_NOTE = `Add --monorepo to keep the other links in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`;
 
-export function linkCommand(projectKey: string, path: string, runFrom: string | undefined): string {
-  const link =
-    path === '.'
-      ? `sonar link ${shellQuote(projectKey)}`
-      : `sonar link ${shellQuote(projectKey)} --path ${shellQuote(path)}`;
+/** With `monorepo`, the command adds the link to the existing ones instead of replacing them. */
+export function linkCommand(
+  projectKey: string,
+  path: string,
+  runFrom: string | undefined,
+  monorepo = false,
+): string {
+  const monorepoOption = monorepo ? ' --monorepo' : '';
+  const pathOption = path === '.' ? '' : ` --path ${shellQuote(path)}`;
+  const link = `sonar link${monorepoOption} ${shellQuote(projectKey)}${pathOption}`;
   // Windows PowerShell 5.1, the default shell there, has no `&&`.
   const separator = process.platform === 'win32' ? '; ' : ' && ';
   return runFrom === undefined ? link : `cd ${shellQuote(runFrom)}${separator}${link}`;
@@ -64,25 +69,34 @@ export class MappingWriteError extends CommandFailedError {
  * The `sonar link` command that maps `projectKey` to `projectRoot`, prefixed with a `cd` when it has
  * to run from another repository than the current directory's.
  */
-export async function linkCommandFor(projectKey: string, projectRoot: string): Promise<string> {
+export async function linkCommandFor(
+  projectKey: string,
+  projectRoot: string,
+  monorepo = false,
+): Promise<string> {
   const { targetDir } = await resolveProjectTarget(projectRoot);
   const { targetDir: linkRoot } = await resolveConfigDir(process.cwd());
   return linkCommand(
     projectKey,
     relativeProjectPath(targetDir, projectRoot),
     linkRoot === targetDir ? undefined : targetDir,
+    monorepo,
   );
 }
 
 const PROJECT_ORIGIN_LEAD = { created: 'Created', found: 'Found' } as const;
 
-/** The project already exists on the server by now, so a failure here has to say how to finish. */
+/**
+ * The project already exists on the server by now, so a failure here has to say how to finish.
+ * The link always joins the existing ones; `monorepo` only puts `--monorepo` in the hint.
+ */
 export async function writeMapping(
   auth: ResolvedAuth,
   projectKey: string,
   projectRoot: string,
   console: Console,
   origin: keyof typeof PROJECT_ORIGIN_LEAD,
+  monorepo = false,
 ): Promise<void> {
   const target = await resolveProjectTarget(projectRoot);
 
@@ -93,7 +107,8 @@ export async function writeMapping(
     const replaced = items.find((existing) => existing.root === item.root);
     await sharedProjectConfigFile.writeItems(target.targetDir, withLink(items, item));
     const replacedKey = replaced?.entry.projectKey;
-    if (replacedKey !== undefined) {
+    // Re-mapping the same key only refreshes the recorded connection, so there is nothing to warn about.
+    if (replacedKey !== undefined && replacedKey !== projectKey) {
       console.warn(
         `Replacing the mapping of this directory to '${replacedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       );
@@ -107,9 +122,11 @@ export async function writeMapping(
       throw error;
     }
     const reason = error instanceof Error ? error.message : String(error);
+    const command = await linkCommandFor(projectKey, projectRoot, monorepo);
+    const note = monorepo ? '' : `\n${KEEP_OTHER_LINKS_NOTE}`;
     throw new MappingWriteError(
       `${PROJECT_ORIGIN_LEAD[origin]} project '${projectKey}', but could not save ${SHARED_PROJECT_CONFIG_FILE_NAME}: ${reason}`,
-      `Fix the file, then map the project by running:\n  ${await linkCommandFor(projectKey, projectRoot)}\n${KEEP_OTHER_LINKS_NOTE}`,
+      `Fix the file, then map the project by running:\n  ${command}${note}`,
     );
   }
 }
