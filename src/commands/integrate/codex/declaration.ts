@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
+import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -37,9 +38,9 @@ import { createMcpServerFeature } from '../_common/features/mcp-server-feature.t
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
-  createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
+  createSqaaInstructionsRemover,
   SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildUnixHookScript,
@@ -68,6 +69,34 @@ const CODEX_DISPLAY_NAME = 'Codex';
 
 export type CodexIntegrationOptions = IntegrateAgentOptions;
 
+const codexVortexFeature = (() => {
+  const feature = createVortexFeature<CodexIntegrationOptions>(
+    [
+      createSqaaPostToolUseHookSubfeature(),
+      createCompletionAnalysisHookSubfeature<CodexIntegrationOptions>({
+        agent: 'codex',
+        configDir: CODEX_CONFIG_DIR,
+        settingsPath: resolveCodexHooksPath,
+      }),
+      createContextAugmentationSubfeature<CodexIntegrationOptions>({
+        agent: 'codex',
+        scriptPath: (context) =>
+          resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+        hookConfigResource: createCagHookConfigResource(),
+      }),
+    ],
+    resolveCodexSkillPath,
+  );
+  return {
+    ...feature,
+    replacedIds: [...(feature.replacedIds ?? []), SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+    legacyCleanups: [
+      ...(feature.legacyCleanups ?? []),
+      createSqaaInstructionsRemover(resolveCodexAgentsMdPath),
+    ],
+  };
+})();
+
 export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> = {
   id: CODEX_INTEGRATION_ID,
   displayName: CODEX_DISPLAY_NAME,
@@ -84,19 +113,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
         }),
       ],
     }),
-    createVortexFeature<CodexIntegrationOptions>(
-      [
-        createSqaaHookSubfeature(),
-        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveCodexAgentsMdPath)]),
-        createContextAugmentationSubfeature<CodexIntegrationOptions>({
-          agent: 'codex',
-          scriptPath: (context) =>
-            resolveAgentHookScriptPath(context, CODEX_CONFIG_DIR, SESSION_START_SCRIPT_REL),
-          hookConfigResource: createCagHookConfigResource(),
-        }),
-      ],
-      resolveCodexSkillPath,
-    ),
+    codexVortexFeature,
     createMcpServerFeature<CodexIntegrationOptions>({
       resolveConfigPath: resolveCodexMcpConfigPath,
       format: 'toml',
@@ -135,7 +152,7 @@ function createSessionStartHookEntry(
   );
 }
 
-function createSqaaHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptions> {
+function createSqaaPostToolUseHookSubfeature(): SubfeatureDeclaration<CodexIntegrationOptions> {
   return {
     id: SQAA_HOOK_FEATURE_ID,
     displayName: 'Vortex analysis hook',

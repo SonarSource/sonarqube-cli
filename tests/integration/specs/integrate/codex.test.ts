@@ -54,6 +54,7 @@ import { chooseCustomize } from './integrate-test-helpers';
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const PROMPT_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-secrets', 'build-scripts'];
+const STOP_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-stop', 'build-scripts'];
 const SQAA_SCRIPT_DIRS = ['.codex', 'hooks', 'sonar-sqaa', 'build-scripts'];
 const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
 // Codex reads project guidance from `AGENTS.md` at the repository root, and
@@ -61,19 +62,17 @@ const HOOKS_JSON_DIRS = ['.codex', 'hooks.json'];
 const PROJECT_AGENTS_MD_DIRS = ['AGENTS.md'];
 const GLOBAL_AGENTS_MD_DIRS = ['.codex', 'AGENTS.md'];
 const CONFIG_TOML_DIRS = ['.codex', 'config.toml'];
-const SQAA_HEADING = '# Vortex analysis protocol';
 
 interface CodexHooksFile {
-  hooks?: {
-    UserPromptSubmit?: Array<{
-      matcher?: string;
-      hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
-    }>;
-    PostToolUse?: Array<{
-      matcher?: string;
-      hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
-    }>;
-  };
+  hooks?: Partial<
+    Record<
+      'UserPromptSubmit' | 'PostToolUse' | 'Stop' | 'SubagentStop',
+      Array<{
+        matcher?: string;
+        hooks?: Array<{ type?: string; command?: string; timeout?: number }>;
+      }>
+    >
+  >;
 }
 
 function findCodexFeature(harness: TestHarness, featureId: string, scope?: string) {
@@ -376,6 +375,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(harness.userHome.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
+        expect(harness.userHome.exists(...STOP_SCRIPT_DIRS)).toBe(false);
         const hooks: CodexHooksFile = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
         expect(
           hooks.hooks?.PostToolUse?.find((entry) =>
@@ -390,7 +390,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'installs PostToolUse SQAA hook on apply_patch and writes the AGENTS.md SQAA protocol when Vortex entitled',
+      'installs per-edit and main-agent completion hooks without DEEP instructions when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -411,20 +411,10 @@ describe('integrate codex', () => {
         });
 
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(body).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
-        expect(body).toContain(SQAA_HEADING);
-        expect(body).toContain("installed by `sonar integrate` at the user's request");
-        expect(body).toContain('At the end of a turn that changed file contents');
-        expect(body).toContain('sonar analyze agentic --depth DEEP');
-        expect(body).toContain('fix them and re-run the same scope');
-        expect(body).toContain('A routine skip needs no mention');
-        expect(body).toContain('If the user asks for Vortex analysis or configures a project');
-        expect(body).toContain('run the analysis again and report any error');
-        expect(body).toContain('continue without retrying this session');
-        expect(body).not.toContain('Non-negotiable rules');
-        expect(body).not.toContain('Overrides every rule below');
-        expect(body).not.toContain('say **nothing** about it');
+        expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
+        expect(
+          findInstalledSubfeature(harness, 'codex', VORTEX_FEATURE_ID, 'completion-analysis-hook'),
+        ).toBeDefined();
         expect(
           findInstalledSubfeature(
             harness,
@@ -432,7 +422,11 @@ describe('integrate codex', () => {
             VORTEX_FEATURE_ID,
             SQAA_INSTRUCTIONS_SUBFEATURE_ID,
           ),
-        ).toBeDefined();
+        ).toBeUndefined();
+        const stopScript = harness.userHome.file(...STOP_SCRIPT_DIRS, hookScriptName('stop'));
+        expect(stopScript.exists()).toBe(true);
+        expect(stopScript.isExecutable).toBe(true);
+        expect(stopScript.asText()).toContain('sonar hook agent-stop --agent codex');
 
         const sqaaScript = harness.userHome.file(
           ...SQAA_SCRIPT_DIRS,
@@ -448,6 +442,10 @@ describe('integrate codex', () => {
         const postTool = hooks.hooks?.PostToolUse?.find((e) =>
           e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
         );
+        expect(hooks.hooks?.Stop).toHaveLength(1);
+        expect(hooks.hooks?.Stop?.[0].matcher).toBeUndefined();
+        expect(hooks.hooks?.Stop?.[0].hooks?.[0].command).toContain('sonar-stop');
+        expect(hooks.hooks?.SubagentStop).toBeUndefined();
         expect(postTool?.matcher).toBe('apply_patch');
         expect(postTool?.hooks?.[0]?.command).toContain('sonar-sqaa');
         expect(harness.cwd.exists(...SQAA_SCRIPT_DIRS)).toBe(false);
@@ -456,7 +454,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      'writes SQAA into the global AGENTS.md when a project key is discovered from sonar-project.properties',
+      'removes only managed DEEP instructions and installs completion hooks when a project is discovered',
       async () => {
         const server = await harness
           .newFakeServer()
@@ -468,6 +466,15 @@ describe('integrate codex', () => {
         const serverUrl = server.baseUrl();
         harness.withAuth(serverUrl, 'cloud-token', TEST_ORG);
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
+        harness.userHome.writeFile(
+          '.codex/AGENTS.md',
+          [
+            'Keep my guidance.',
+            '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->',
+            'Old managed DEEP instructions.',
+            '<!-- sonar:end:sonarqube-agentic-analysis-protocol -->',
+          ].join('\n'),
+        );
 
         const result = await harness.run('integrate codex --non-interactive', {
           extraEnv: {
@@ -480,7 +487,7 @@ describe('integrate codex', () => {
         expect(harness.cwd.exists(...PROJECT_AGENTS_MD_DIRS)).toBe(false);
 
         const globalBody = harness.userHome.file(...GLOBAL_AGENTS_MD_DIRS).asText();
-        expect(globalBody).toContain(SQAA_HEADING);
+        expect(globalBody.trim()).toBe('Keep my guidance.');
 
         const sqaaScript = harness.userHome.file(
           ...SQAA_SCRIPT_DIRS,
@@ -499,7 +506,7 @@ describe('integrate codex', () => {
     );
 
     it(
-      're-running does not duplicate the PostToolUse SQAA entry when Vortex entitled',
+      're-running does not duplicate per-edit or completion hooks when Vortex entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -525,12 +532,13 @@ describe('integrate codex', () => {
           e.hooks?.some((h) => h.command?.includes('sonar-sqaa')),
         );
         expect(sqaaEntries).toHaveLength(1);
+        expect(hooks.hooks?.Stop).toHaveLength(1);
       },
       { timeout: 30000 },
     );
 
     it(
-      'preserves pre-existing non-Sonar PostToolUse entries when adding SQAA hook',
+      'preserves user per-edit, Stop, and SubagentStop hooks when adding Vortex hooks',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
@@ -547,6 +555,8 @@ describe('integrate codex', () => {
           '.codex/hooks.json',
           JSON.stringify({
             hooks: {
+              Stop: [{ hooks: [{ type: 'command', command: 'user-stop' }] }],
+              SubagentStop: [{ hooks: [{ type: 'command', command: 'user-subagent-stop' }] }],
               PostToolUse: [
                 {
                   matcher: 'other_tool',
@@ -573,6 +583,11 @@ describe('integrate codex', () => {
         );
         expect(commands?.some((command) => command?.includes('other-tool'))).toBe(true);
         expect(commands?.some((command) => command?.includes('sonar-sqaa'))).toBe(true);
+        expect(hooks.hooks?.Stop).toHaveLength(2);
+        expect(hooks.hooks?.Stop?.[0].hooks?.[0].command).toBe('user-stop');
+        expect(hooks.hooks?.SubagentStop).toEqual([
+          { hooks: [{ type: 'command', command: 'user-subagent-stop' }] },
+        ]);
       },
       { timeout: 30000 },
     );
