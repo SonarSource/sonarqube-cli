@@ -131,7 +131,7 @@ runs:
       with:
         version: 2026.11.9
         tool_versions: |
-          java temurin-25.0.5+8.0.LTS
+          java temurin-25
 
     - name: Run e2e tests (Windows)
       if: ${{ inputs.os == 'windows' && inputs.skip-e2e != 'true' }}
