@@ -183,8 +183,9 @@ async function discoverProjectMappings(
 
     const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
     result.fromSharedConfig = sharedConfigProjects !== null;
+    result.configDir = sharedConfigProjects?.configDir;
     result.projects =
-      sharedConfigProjects ??
+      sharedConfigProjects?.mappings ??
       (await discoverProjectWithoutSharedConfig(
         invocationDir,
         lookupPaths,
@@ -212,6 +213,7 @@ export async function discoverProjects(
     result.repoRoot,
     result.projects.filter(isCompleteProjectMapping),
     result.fromSharedConfig,
+    result.configDir,
   );
 }
 
@@ -308,7 +310,7 @@ function printSharedProjectConfigMapping(
 async function resolveSharedProjectConfigMappings(
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
-): Promise<CompleteProjectMapping[] | null> {
+): Promise<{ mappings: CompleteProjectMapping[]; configDir: string } | null> {
   for (const { checkPath } of lookupPaths) {
     let mappings: SharedProjectConfigMapping[];
     try {
@@ -334,7 +336,7 @@ async function resolveSharedProjectConfigMappings(
     for (const mapping of mappings) {
       printSharedProjectConfigMapping(mapping, options);
     }
-    return mappings;
+    return { mappings, configDir: checkPath };
   }
 
   return null;
