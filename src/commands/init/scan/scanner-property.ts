@@ -22,6 +22,8 @@ import { InvalidOptionError } from '@/core/commands/command-error.ts';
 
 /** Keys `sonar init` sets itself or that carry connection secrets; a user value must never win. */
 const MANAGED_PROPERTIES = new Set([
+  'project.settings',
+  'scanner.settings',
   'sonar.host.url',
   'sonar.region',
   'sonar.organization',
