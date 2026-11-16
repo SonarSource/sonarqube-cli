@@ -32,11 +32,14 @@ import {
 import { formatSqaaJsonReportForHook } from '../format-sqaa-hook-context.ts';
 import type { HookCommandResult } from '../hook-command-result.ts';
 import { readStdinJson } from '../stdin.ts';
-import { claudeAdapter } from './agent-adapters/claude-adapter.ts';
+import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import type { StopAgent, StopAgentAdapter, StopInput, StopOutput } from './types.ts';
 
 const ANALYSIS_LIMIT = 3;
-const ADAPTERS: Record<StopAgent, StopAgentAdapter> = { claude: claudeAdapter };
+const ADAPTERS: Record<StopAgent, StopAgentAdapter> = {
+  claude: claudeCodexAdapter,
+  codex: claudeCodexAdapter,
+};
 
 export async function agentStop(
   ctx: CommandInvocationContext,
