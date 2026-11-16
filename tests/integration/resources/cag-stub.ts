@@ -75,7 +75,24 @@ if (args[0] === 'tool' && args[1] === 'print-skill') {
   const exitCode = Number.parseInt(process.env.CAG_STUB_PRINT_SKILL_EXIT ?? '0', RADIX);
   if (exitCode === 0 && process.env.CAG_STUB_PRINT_SKILL_EMPTY !== '1') {
     const scaEnabledArg = args.find((arg) => arg.startsWith('--sca-enabled='));
-    process.stdout.write(`# Generated CAG skill\n${scaEnabledArg ?? '--sca-enabled=false'}\n`);
+    process.stdout.write(`# Generated CAG skill
+${scaEnabledArg ?? '--sca-enabled=false'}
+
+### Before Writing or Editing Code
+
+You MUST call \`guidelines get\` before generating, editing, or refactoring any source
+code to retrieve coding standards and known project issues.
+Supports **all SonarQube languages** (Java, JavaScript, TypeScript, Python, C#,
+PHP, C, C++, Go, and more). Use \`--languages\` and \`--categories\` to narrow results.
+
+\`\`\`bash
+sonar context guidelines get
+\`\`\`
+
+### Before Adding or Updating Dependencies
+
+Preserve dependency guidance.
+`);
   }
   if (exitCode !== 0) process.stderr.write('stub print-skill failure\n');
   process.exit(exitCode);

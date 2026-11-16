@@ -148,6 +148,21 @@ export interface PrintContextAugmentationSkillParams {
 
 const PRINT_SKILL_FAILURE_MESSAGE = 'Vortex Context skill generation failed.';
 
+export const CONTEXT_GUIDELINES_INSTRUCTIONS = `Before writing or editing code, run \`sonar context guidelines get --categories "<category>" --languages <language>\`. Choose categories that fit the task and use Sonar language keys for the files you will edit. Repeat the query for each edited language. Category names are listed in [resources/intent_classes.json](https://github.com/SonarSource/sonar-context-augmentation/blob/master/resources/intent_classes.json). For example, for shell code:
+
+\`\`\`bash
+sonar context guidelines get --categories "Environment & Build Configuration" "Exception & Error Handling" "Secrets & Cryptography" --languages shell
+\`\`\``;
+
+const LEGACY_GUIDELINES_INSTRUCTIONS = `You MUST call \`guidelines get\` before generating, editing, or refactoring any source
+code to retrieve coding standards and known project issues.
+Supports **all SonarQube languages** (Java, JavaScript, TypeScript, Python, C#,
+PHP, C, C++, Go, and more). Use \`--languages\` and \`--categories\` to narrow results.
+
+\`\`\`bash
+sonar context guidelines get
+\`\`\``;
+
 export async function printContextAugmentationSkill({
   binaryPath,
   projectRoot,
@@ -184,7 +199,7 @@ export async function printContextAugmentationSkill({
     );
     throw new CommandFailedError(PRINT_SKILL_FAILURE_MESSAGE);
   }
-  return result.stdout;
+  return result.stdout.replace(LEGACY_GUIDELINES_INSTRUCTIONS, CONTEXT_GUIDELINES_INSTRUCTIONS);
 }
 
 export interface PrintSessionStartContextParams {
