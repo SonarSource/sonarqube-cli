@@ -32,6 +32,8 @@ import { isAbsolute, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { parse as parseToml } from 'smol-toml';
 
+import { COMPLETION_ANALYSIS_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/completion-analysis-hook-feature.ts';
+
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '../../../../src/commands/integrate/_common/features/context-augmentation-feature';
 import {
   SQAA_HOOK_FEATURE_ID,
@@ -413,7 +415,12 @@ describe('integrate codex', () => {
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.exists(...GLOBAL_AGENTS_MD_DIRS)).toBe(false);
         expect(
-          findInstalledSubfeature(harness, 'codex', VORTEX_FEATURE_ID, 'completion-analysis-hook'),
+          findInstalledSubfeature(
+            harness,
+            'codex',
+            VORTEX_FEATURE_ID,
+            COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
+          ),
         ).toBeDefined();
         expect(
           findInstalledSubfeature(
