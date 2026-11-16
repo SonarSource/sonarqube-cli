@@ -876,6 +876,8 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
       { session_id: 42 },
       { session_id: '' },
       { session_id: 'session', cwd: 42 },
+      { session_id: 'session', cwd: '' },
+      { session_id: 'session', cwd: '   ' },
     ])(
       'allows stopping with an invalid adapter payload: %j',
       async (payload) => {
