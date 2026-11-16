@@ -83,8 +83,10 @@ def summary(jobs: list[dict]) -> str:
 def main() -> None:
     jobs = plan(json.loads(os.environ["INPUT_SELECTION"]))
     matrix = json.dumps({"include": jobs}, separators=(",", ":"))
-    Path(os.environ.get("GITHUB_OUTPUT", "/dev/stdout")).open("a").write(f"matrix={matrix}\n")
-    Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stderr")).open("a").write(summary(jobs))
+    with Path(os.environ.get("GITHUB_OUTPUT", "/dev/stdout")).open("a", encoding="utf-8") as output:
+        output.write(f"matrix={matrix}\n")
+    with Path(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stderr")).open("a", encoding="utf-8") as output:
+        output.write(summary(jobs))
 
 
 if __name__ == "__main__":
