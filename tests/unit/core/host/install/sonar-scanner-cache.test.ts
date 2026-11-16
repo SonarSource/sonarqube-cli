@@ -28,6 +28,7 @@ import type { ScannerInstallation } from '@/core/host/install/scanner-discovery.
 import {
   cachedScannerIsUsable,
   installSonarScanner,
+  outdatedScannerWarning,
   SONAR_SCANNER_VERSION,
 } from '@/core/host/install/sonar-scanner.ts';
 
@@ -121,4 +122,18 @@ posixOnly('installSonarScanner', () => {
       `Using installed SonarScanner ${SONAR_SCANNER_VERSION} from ${launcher.home}.`,
     );
   });
+});
+
+describe('outdatedScannerWarning', () => {
+  it.each(['6.0', '8.3.0.99999', '8.3.1.1'])('names both versions for %s', (version) => {
+    const warning = outdatedScannerWarning(version);
+    expect(warning).toContain(version);
+    expect(warning).toContain(SONAR_SCANNER_VERSION);
+    expect(warning).toContain('remove it from PATH');
+  });
+
+  it.each([SONAR_SCANNER_VERSION, '8.3.1.99999', '8.10', '10.0', '', 'unknown', '8.invalid'])(
+    'does not warn for %s',
+    (version) => expect(outdatedScannerWarning(version)).toBeUndefined(),
+  );
 });
