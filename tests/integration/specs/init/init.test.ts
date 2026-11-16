@@ -1864,7 +1864,7 @@ describe('sonar init', () => {
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
-        expect(result.stdout).not.toContain('Onboard this as a monorepo');
+        expect(result.stdout).not.toContain(OFFER_MONOREPO_PROMPT);
         expect(result.stdout).toContain('Nothing left to set up');
       },
       TIMEOUT,
@@ -1942,6 +1942,9 @@ describe('sonar init', () => {
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
+        expect(result.stdout + result.stderr).toContain(
+          'mappings will be saved to the .sonar-config.json at the repository root',
+        );
         expect(result.stdout).toContain('Monorepo onboarding summary:');
       },
       TIMEOUT,
@@ -1958,7 +1961,7 @@ describe('sonar init', () => {
 
         const result = await harness.run('init --non-interactive');
 
-        expect(result.stdout + result.stderr).not.toContain('Onboard this as a monorepo');
+        expect(result.stdout + result.stderr).not.toContain(OFFER_MONOREPO_PROMPT);
         expect(result.stdout).toContain('Nothing left to set up');
       },
       TIMEOUT,
