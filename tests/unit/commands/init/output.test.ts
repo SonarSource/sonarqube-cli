@@ -175,13 +175,14 @@ describe('renderInitOutcome', () => {
     expect(printed.join('\n')).not.toContain('resume');
   });
 
-  it('points to sonar link --monorepo when no root is mapped', () => {
+  it('points to --root, and not to sonar link, when no root is mapped', () => {
     const console = new FakeConsole();
 
     renderInitOutcome({ kind: 'no-monorepo-roots' }, undefined, console);
 
     const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printed.join('\n')).toContain('sonar link --monorepo');
+    expect(printed.join('\n')).toContain('sonar init --monorepo --root <path>');
+    expect(printed.join('\n')).not.toContain('sonar link');
   });
 
   it('says in the summary when a root got a project bound to the repository', () => {

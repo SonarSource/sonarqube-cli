@@ -26,10 +26,10 @@ import { projectDashboardUrl } from './steps/mapping.ts';
 
 const NO_MONOREPO_ROOTS = [
   'No project root is mapped in .sonar-config.json, so nothing was changed.',
-  "Name the roots with 'sonar init --monorepo --root <path>[=<project key>]', or map each one with 'sonar link --monorepo' (add --path to name its directory) and run 'sonar init --monorepo' again.",
+  "Name the roots with 'sonar init --monorepo --root <path>[=<project key>]'; repeat --root for each one.",
 ];
 const MONOREPO_RESUME =
-  "To resume, run 'sonar init --monorepo' again: roots that are already configured are left as they are.";
+  "To resume, run 'sonar init --monorepo' again with the same --root options: roots that are already configured are left as they are.";
 
 /** In display order; a root belongs to the section of its outcome, so a line does not repeat it. */
 const MONOREPO_SECTIONS: { title: string; kind: MonorepoRootResult['kind'] }[] = [

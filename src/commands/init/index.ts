@@ -41,7 +41,7 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
-import { offerMonorepo, runMonorepo } from './steps/monorepo.ts';
+import { runMonorepo } from './steps/monorepo.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
   NOT_RUN,
@@ -77,12 +77,6 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const monorepoRoots = parseMonorepoRoots(options.root);
   if (monorepoRoots.length > 0 && !options.monorepo) {
     throw new InvalidOptionError('--root only applies together with --monorepo.');
-  }
-  if (options.monorepo && !interactive && monorepoRoots.length === 0) {
-    throw new InvalidOptionError(
-      '--monorepo needs to prompt for the project roots to onboard, so it cannot run without a terminal or with --non-interactive.',
-      'Name the roots with --root <path>[=<project key>] instead.',
-    );
   }
 
   const projectRoot = resolveProjectRoot(options.path ?? '.');
@@ -148,8 +142,7 @@ async function run(
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
-  // Chosen before detection: a monorepo that is already partly linked must reach its remaining roots.
-  if (monorepo || (interactive && (await offerMonorepo(projectRoot, deps)))) {
+  if (monorepo) {
     return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
   }
   const detected = await detectInitPath(projectRoot, deps);
