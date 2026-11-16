@@ -71,10 +71,9 @@ function lastSegment(value: string): string {
 }
 
 function checksOf(rewards: Record<string, number> | null): { text: string; ok: boolean }[] {
-  return Object.entries(rewards ?? {}).flatMap(([key, value]) => {
-    const text = checkSentence(key);
-    return text === null ? [] : [{ text, ok: value >= 1 }];
-  });
+  return Object.entries(rewards ?? {})
+    .filter(([key]) => key !== 'reward')
+    .map(([key, value]) => ({ text: checkSentence(key) ?? key, ok: value >= 1 }));
 }
 
 const CODEX_NON_ZERO_EXIT = /Process exited with code [1-9]/;
@@ -108,9 +107,39 @@ function stepOf(step: Step) {
   };
 }
 
+function stoppedTrialOf(group: string, trialDir: string) {
+  const name = basename(trialDir);
+  const suffixStart = name.lastIndexOf('__');
+  const config = readJson<{ agent?: { name?: string | null; model_name?: string | null } }>(
+    join(trialDir, 'config.json'),
+  );
+  const modelName = config?.agent?.model_name;
+  const task = suffixStart > 0 ? name.slice(0, suffixStart) : name;
+  return {
+    group,
+    name,
+    task,
+    leak: existsSync(join(trialDir, LEAK_MARKER_FILE)),
+    taskPage: `${TASKS_PAGE_URL}#${task}`,
+    agent: config?.agent?.name ?? null,
+    agentVersion: null,
+    model: modelName ? lastSegment(modelName) : null,
+    startedAt: null,
+    exception: 'Harbor stopped before it wrote result.json, so this trial has no verdict',
+    rewards: null,
+    checks: [],
+    costUsd: null,
+    inputTokens: null,
+    cachedTokens: null,
+    outputTokens: null,
+    seconds: { environment: null, agentSetup: null, agent: null, verifier: null },
+    steps: [],
+  };
+}
+
 function trialOf(group: string, trialDir: string) {
   const result = readJson<TrialResult>(join(trialDir, 'result.json'));
-  if (!result?.task_name) return null;
+  if (!result?.task_name) return stoppedTrialOf(group, trialDir);
   const trajectory = readJson<{ steps?: Step[] }>(join(trialDir, 'agent', 'trajectory.json'));
   const agent = result.agent_info;
   const usage = result.agent_result;
@@ -148,8 +177,7 @@ function trialsOf(jobDir: string) {
   const group = basename(jobDir);
   return readdirSync(jobDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => trialOf(group, join(jobDir, entry.name)))
-    .filter((trial) => trial !== null);
+    .map((entry) => trialOf(group, join(jobDir, entry.name)));
 }
 
 function main(): void {
