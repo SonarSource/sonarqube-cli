@@ -363,7 +363,7 @@ describe('reconcileInstalledIntegrations', () => {
     expect(savedFeature.subfeatures![0]).toMatchObject({ featureId: 'sub-a' });
   });
 
-  it('restores previously active container subfeatures from recorded state, excluding newly added ones', async () => {
+  it('restores subfeatures and adds required defaults', async () => {
     const capturedContexts: IntegrationContext[] = [];
     const now = '2026-01-01T00:00:00.000Z';
 
@@ -396,9 +396,16 @@ describe('reconcileInstalledIntegrations', () => {
       id: 'container-feature',
       displayName: 'Container feature',
       subfeatures: [
-        { id: 'sub-a', displayName: 'Sub A' },
+        { id: 'sub-a', displayName: 'Sub A', isAvailable: () => ({ available: false }) },
         { id: 'sub-b', displayName: 'Sub B' },
-        { id: 'sub-c', displayName: 'Sub C' }, // newly added, not in recorded state
+        { id: 'sub-c', displayName: 'Sub C', required: true },
+        { id: 'sub-d', displayName: 'Sub D', required: true, migrationEligible: () => false },
+        {
+          id: 'sub-e',
+          displayName: 'Sub E',
+          required: true,
+          isAvailable: () => ({ available: false }),
+        },
       ],
       defaultInstallSubfeatureIds: ['sub-b'],
       operations: [
@@ -422,10 +429,10 @@ describe('reconcileInstalledIntegrations', () => {
     expect(capturedContexts).toHaveLength(1);
     expect(
       (capturedContexts[0] as ContainerIntegrationContext).activeSubfeatures.map((s) => s.id),
-    ).toEqual(['sub-a']);
+    ).toEqual(['sub-a', 'sub-c']);
 
     const savedFeature = state.integrations.installed[0].features[0];
-    expect(savedFeature.subfeatures).toHaveLength(1);
+    expect(savedFeature.subfeatures).toHaveLength(2);
     expect(savedFeature.subfeatures![0]).toMatchObject({ featureId: 'sub-a' });
   });
 
