@@ -123,7 +123,6 @@ button:disabled { cursor: default; opacity: 0.4; }
 .step { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--select-bg); color: var(--select-ink); font-size: 12px; letter-spacing: 0; }
 .part-title { margin: 6px 0 8px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
 .sub-title { margin: 40px 0 12px; font-size: 15px; font-weight: 600; }
-.rel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
 .chart-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 12px; color: var(--ink-2); font-size: 12px; }
 .pick { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--ring); border-radius: 999px; background: var(--surface); }
 .pick select { border: 0; background: transparent; padding: 3px 4px; font-size: 13px; color: var(--ink); }
@@ -140,8 +139,6 @@ button:disabled { cursor: default; opacity: 0.4; }
 .bn-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; background: var(--wash); color: var(--ink-2); font-size: 12px; }
 .chip.latest { background: var(--select-bg); color: var(--select-ink); font-weight: 600; }
-.bn-nav { display: flex; align-items: center; gap: 8px; }
-.bn-nav select { min-width: 260px; }
 
 .summary { display: flex; flex-wrap: wrap; gap: 24px 48px; align-items: stretch; }
 .sum-main { min-width: 220px; }
@@ -159,6 +156,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 .sum-grid dd { margin: 2px 0 0; font-size: 22px; font-weight: 600; }
 
 .evo { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.release-main { min-width: 0; }
 .side { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .side h3 { margin: 0; padding: 14px 14px 8px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .measures { display: flex; flex-direction: column; border-top: 1px solid var(--grid); }
@@ -260,8 +258,6 @@ td.muted { color: var(--ink-3); font-weight: 400; }
 }
 @media (max-width: 640px) {
   .sum-avgs { border-left: 0; padding-left: 0; }
-  .sum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bn-nav select { min-width: 0; flex: 1; }
   .bn-nav { width: 100%; }
 }
 </style>
@@ -294,25 +290,28 @@ td.muted { color: var(--ink-3); font-weight: 400; }
 
   <section class="part part-two" id="release-detail" aria-labelledby="release-title">
     <div class="part-kicker"><span class="step">2</span> One release</div>
-    <div class="rel-head">
-      <div>
-        <h2 class="part-title" id="release-title">Release</h2>
-        <div class="bn-chips" id="release-chips"></div>
-      </div>
-      <div class="bn-nav" id="release-nav"></div>
-    </div>
+    <h2 class="part-title" id="release-title">Release</h2>
     <p class="note" id="scope-note"></p>
-    <div class="card summary" id="summary"></div>
+    <div class="evo">
+      <aside class="side card">
+        <h3 id="release-label">Release</h3>
+        <div class="measures" id="release-list" role="radiogroup" aria-labelledby="release-label"></div>
+      </aside>
+      <div class="release-main">
+        <div class="bn-chips" id="release-chips"></div>
+        <div class="card summary" id="summary"></div>
 
-    <h3 class="sub-title" id="attn-title">Needs attention</h3>
-    <div class="card" id="attn"></div>
+        <h3 class="sub-title" id="attn-title">Needs attention</h3>
+        <div class="card" id="attn"></div>
 
-    <h3 class="sub-title">
-      <button id="detail-toggle" class="disclosure" type="button" aria-expanded="true" aria-controls="detail">
-        <span class="chev" id="detail-chev" aria-hidden="true">▾</span><span id="detail-title">Details</span>
-      </button>
-    </h3>
-    <div class="card tablecard" id="detail"></div>
+        <h3 class="sub-title">
+          <button id="detail-toggle" class="disclosure" type="button" aria-expanded="true" aria-controls="detail">
+            <span class="chev" id="detail-chev" aria-hidden="true">▾</span><span id="detail-title">Details</span>
+          </button>
+        </h3>
+        <div class="card tablecard" id="detail"></div>
+      </div>
+    </div>
   </section>
 </div>
 <div id="tip" role="tooltip" hidden></div>
@@ -821,17 +820,37 @@ td.muted { color: var(--ink-3); font-weight: 400; }
     chips.append(h('span', { class: 'chip', text: selected.when }), h('span', { class: 'chip', text: `run ${selected.runId}` }));
     if (selected.commit) chips.append(h('span', { class: 'chip', text: `commit ${selected.commit.slice(0, COMMIT_LENGTH)}` }));
 
-    const index = rels.indexOf(selected);
-    const older = h('button', { type: 'button', 'aria-label': 'Previous release', text: '◀' });
-    const newer = h('button', { type: 'button', 'aria-label': 'Next release', text: '▶' });
-    older.disabled = index <= 0;
-    newer.disabled = index >= rels.length - 1;
-    older.addEventListener('click', () => selectRelease(rels[index - 1].runId));
-    newer.addEventListener('click', () => selectRelease(rels[index + 1].runId));
-    const menu = h('select', { 'aria-label': 'Select a release' }, ...[...rels].reverse().map((r) => h('option', { value: r.runId, text: r === latestRelease ? `${releaseTitle(r)} (latest)` : releaseTitle(r) })));
-    menu.value = selected.runId;
-    menu.addEventListener('change', () => selectRelease(menu.value));
-    byId('release-nav').replaceChildren(older, menu, newer);
+    renderReleaseList(rels, selected);
+  }
+
+  function releaseKey(event, runId, rels) {
+    const index = rels.findIndex((r) => r.runId === runId);
+    const step = ARROW_STEP[event.key];
+    if (step === undefined) {
+      if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); selectRelease(runId); }
+      return;
+    }
+    const next = rels[index + step];
+    if (!next) return;
+    event.preventDefault();
+    selectRelease(next.runId);
+    byId('release-list').querySelector('[aria-checked="true"]')?.focus();
+  }
+
+  function renderReleaseList(rels, selected) {
+    const host = byId('release-list');
+    host.replaceChildren();
+    for (const r of [...rels].reverse()) {
+      const on = r === selected;
+      const trials = scoped(r);
+      const pass = trials.filter((t) => t.status === 'PASS').length;
+      const item = h('div', { class: on ? 'measure on' : 'measure', role: 'radio', 'aria-checked': String(on), tabindex: on ? '0' : '-1' },
+        h('span', { class: 'mname', text: r === latestRelease ? `${releaseTitle(r)} (latest)` : releaseTitle(r) }),
+        h('span', { class: 'mvalue', text: trials.length ? `${pass}/${trials.length}` : '–' }));
+      item.addEventListener('click', () => selectRelease(r.runId));
+      item.addEventListener('keydown', (e) => releaseKey(e, r.runId, rels));
+      host.append(item);
+    }
   }
 
   const hexToRgb = (hex) => Object.values(HEX_CHANNELS).map((i) => Number.parseInt(hex.slice(i, i + 2), HEX_RADIX) / CHANNEL_MAX);
