@@ -71,6 +71,27 @@ describe('listAllFolders', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('leaves out submodules, still leaving out ignored folders beside them', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'folder-search-'));
+    const git = (cwd: string, ...args: string[]) => Bun.spawnSync(['git', ...args], { cwd });
+    try {
+      git(root, 'init', '-q');
+      writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+      mkdirSync(join(root, 'p', 'node_modules'), { recursive: true });
+      writeFileSync(join(root, 'p', 'node_modules', 'x.js'), '');
+      const sub = join(root, 'sub');
+      mkdirSync(join(sub, 'src'), { recursive: true });
+      writeFileSync(join(sub, 'src', 'a.ts'), '');
+      git(sub, 'init', '-q');
+      // A gitlink entry is what registers `sub` as a submodule; committing would run global hooks.
+      git(root, 'update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},sub`);
+
+      expect((await listAllFolders(root)).sort()).toEqual(['p']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('matchFolders', () => {

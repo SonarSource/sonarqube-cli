@@ -92,6 +92,22 @@ describe('TreeFolderPicker', () => {
     expect(shown?.roots[0].children?.map((node) => node.label)).toEqual(['web']);
   });
 
+  it('leaves out nested repositories, whose own root is where discovery stops', async () => {
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: root });
+    mkdirSync(join(root, 'sub'));
+    Bun.spawnSync(['git', 'init', '-q'], { cwd: join(root, 'sub') });
+    mkdirSync(join(root, 'web'));
+    let shown: TreePromptOptions<string> | undefined;
+    fake.treeMultiSelectPrompt = <T>(_message: string, options: TreePromptOptions<T>) => {
+      shown = options as unknown as TreePromptOptions<string>;
+      return Promise.resolve(null);
+    };
+
+    await new TreeFolderPicker(fake).pick(root, { message: 'Pick' });
+
+    expect(shown?.roots[0].children?.map((node) => node.label)).toEqual(['web']);
+  });
+
   it('marks folders without subfolders as leaves, and caps annotated search results at 50', async () => {
     mkdirSync(join(root, 'nested', 'inner'), { recursive: true });
     for (let i = 0; i < 60; i++) mkdirSync(join(root, `f${i}`));

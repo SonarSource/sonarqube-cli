@@ -20,6 +20,7 @@
 
 // Finds folders anywhere under the repository root by name, for the `sonar link` folder picker.
 
+import { existsSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -37,18 +38,33 @@ function isHidden(name: string): boolean {
  * Drops the folders git ignores, given as paths relative to `cwd`; outside a repository nothing
  * is dropped. Only a folder that is ignored itself is dropped, not one whose contents all are.
  */
-export async function withoutIgnored(cwd: string, folders: string[]): Promise<string[]> {
+async function withoutIgnored(cwd: string, folders: string[]): Promise<string[]> {
   if (folders.length === 0) return folders;
   // -z keeps names unquoted; exit code 1, nothing ignored, reads as `undefined` like no repository.
-  const output = await tryRunGit(['check-ignore', '-z', '--stdin'], cwd, folders.join('\0'));
+  // --no-index stops a path inside a submodule from failing the whole batch.
+  const output = await tryRunGit(
+    ['check-ignore', '--no-index', '-z', '--stdin'],
+    cwd,
+    folders.join('\0'),
+  );
   if (output === undefined) return folders;
   const ignored = new Set(output.split('\0'));
   return folders.filter((folder) => !ignored.has(folder));
 }
 
 /**
- * Every folder under `root` the tree would show, as forward-slash paths relative to it: hidden
- * and git-ignored folders are left out, empty ones (which git does not track) are kept.
+ * The folders, relative to `cwd`, that can be linked: neither git-ignored nor a submodule or other
+ * nested repository, where project discovery stops before reaching the outer `.sonar-config.json`.
+ */
+export async function linkableFolders(cwd: string, folders: string[]): Promise<string[]> {
+  const outsideRepositories = folders.filter((folder) => !existsSync(join(cwd, folder, '.git')));
+  return withoutIgnored(cwd, outsideRepositories);
+}
+
+/**
+ * Every folder under `root` the tree would show, as forward-slash paths relative to it: hidden,
+ * git-ignored and nested-repository folders are left out, empty ones (which git does not track)
+ * are kept.
  */
 export async function listAllFolders(root: string): Promise<string[]> {
   const inGit = (await tryRunGit(['rev-parse', '--is-inside-work-tree'], root)) !== undefined;
@@ -71,7 +87,7 @@ async function walkLevels(
 ): Promise<string[]> {
   if (level.length === 0 || depthLeft <= 0 || budget <= 0) return [];
   const listings = await Promise.all(level.map((rel) => subfolders(root, rel)));
-  const found = (await withoutIgnored(root, listings.flat())).slice(0, budget);
+  const found = (await linkableFolders(root, listings.flat())).slice(0, budget);
   const deeper = await walkLevels(root, found, {
     depthLeft: depthLeft - 1,
     budget: budget - found.length,

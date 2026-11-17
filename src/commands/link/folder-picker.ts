@@ -25,7 +25,7 @@ import logger from '@/core/observability/logger.ts';
 import type { Console, SearchResults } from '@/core/ui/console.ts';
 import type { TreeNode, TreePromptOptions } from '@/core/ui/tree/tree-source.ts';
 
-import { listAllFolders, matchFolders, withoutIgnored } from './folder-search.ts';
+import { linkableFolders, listAllFolders, matchFolders } from './folder-search.ts';
 
 const MAX_SEARCH_RESULTS = 50;
 
@@ -136,6 +136,6 @@ export class TreeFolderPicker implements FolderPicker {
   }
 
   private async visibleSubfolderNames(dir: string): Promise<string[]> {
-    return withoutIgnored(dir, await this.readSubfolderNames(dir));
+    return linkableFolders(dir, await this.readSubfolderNames(dir));
   }
 }
