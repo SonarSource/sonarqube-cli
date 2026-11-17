@@ -79,6 +79,10 @@ export type MonorepoRootResult =
       /** Only for `configured`: the server the file records, which may not be the active one. */
       serverUrl?: string;
     }
+  /** `--dry-run`: the root would be mapped to the existing project; nothing was written. */
+  | { path: string; kind: 'would-link'; projectKey: string }
+  /** `--dry-run`: the project would be created and mapped; nothing was created. */
+  | { path: string; kind: 'would-create'; projectKey: string }
   /** The file links the root, but the remote cannot confirm the project; nothing was created. */
   | { path: string; kind: 'unavailable'; projectKey: string; problem: LinkedProjectProblem }
   /** `--root` names another key than the one the file maps the root to; the file was left as it is. */
@@ -87,8 +91,23 @@ export type MonorepoRootResult =
   | { path: string; kind: 'skipped' }
   | { path: string; kind: 'failed'; reason: string };
 
+/** What a `--dry-run` found it would do on the selected path. */
+export type DryRunAction =
+  | { type: 'link'; projectKey: string }
+  | { type: 'create'; projectKey: string; projectName: string; visibility: string }
+  /** The project key is only known once the import creates it. */
+  | {
+      type: 'bind';
+      repositorySlug: string;
+      organization: string;
+      /** The organization is not linked to the DevOps platform yet, which takes a browser step. */
+      authorizationNeeded: boolean;
+    };
+
 /** What `sonar init` ended with once the selected path ran. */
 export type InitOutcome =
+  /** `--dry-run`: the path was followed up to its first write, and nothing was written. */
+  | { kind: 'dry-run'; action: DryRunAction }
   /**
    * `.sonar-config.json` already linked this directory to the active connection. `projectKeys` are
    * those the remote did not rule out; `issues` are the links it could not confirm.

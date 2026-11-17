@@ -123,6 +123,36 @@ describe('renderInitOutcome', () => {
     expect(printed[8]).toContain("run 'sonar init --monorepo' again");
   });
 
+  it('words a dry-run monorepo as a preview, without a resume hint', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'api', kind: 'would-create', projectKey: 'api-key' },
+          { path: 'web', kind: 'would-link', projectKey: 'web-key' },
+          { path: 'docs', kind: 'failed', reason: 'Key is taken' },
+        ],
+      },
+      undefined,
+      console,
+      true,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toEqual([
+      '',
+      'Monorepo onboarding preview:',
+      '  Would be created (1):',
+      '    api: api-key',
+      '  Would be mapped to the existing project (1):',
+      '    web: web-key',
+      '  Would fail (1):',
+      '    docs: Key is taken',
+    ]);
+  });
+
   it('puts the dashboard link on the line of each mapped root, and on none of the others', () => {
     const console = new FakeConsole();
 
