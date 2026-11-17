@@ -153,8 +153,8 @@ function applySonarLintConfig(
     return !!config.projectKey;
   }
 
-  const hadServer = config.serverUrl !== undefined;
-  const hadOrganization = config.organization !== undefined;
+  const hadServer = !!config.serverUrl;
+  const hadOrganization = !!config.organization;
   config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
