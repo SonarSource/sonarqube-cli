@@ -254,6 +254,17 @@ async function discoverProjectMappings(
   return result;
 }
 
+/**
+ * The config path is only for login, which reads the private discovery result. A project binding
+ * that still carried it would show up in `sonar link list`.
+ */
+function projectBinding(mapping: CompleteProjectMapping): CompleteProjectMapping {
+  const binding = { ...mapping };
+  delete binding.serverConfigFile;
+  delete binding.organizationConfigFile;
+  return binding;
+}
+
 /** Public counterpart to `discoverProjectMappings()` — never exposes a `PartialProjectMapping`. */
 export async function discoverProjects(
   startDir: string,
@@ -262,7 +273,7 @@ export async function discoverProjects(
   const result = await discoverProjectMappings(startDir, options);
   return new DiscoveredProjects(
     result.repoRoot,
-    result.projects.filter(isCompleteProjectMapping),
+    result.projects.filter(isCompleteProjectMapping).map(projectBinding),
     result.fromSharedConfig,
   );
 }
