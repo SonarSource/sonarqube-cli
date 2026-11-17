@@ -26,12 +26,16 @@ import { ProcessTimedOutError, spawnProcessWithTimeout } from '../../process/pro
 
 const GIT_COMMAND_TIMEOUT_MS = 15_000;
 
-export async function tryRunGit(args: string[], cwd: string): Promise<string | undefined> {
+export async function tryRunGit(
+  args: string[],
+  cwd: string,
+  stdinData?: string,
+): Promise<string | undefined> {
   try {
     const result = await spawnProcessWithTimeout(
       'git',
       args,
-      { cwd },
+      stdinData === undefined ? { cwd } : { cwd, stdin: 'pipe', stdinData },
       GIT_COMMAND_TIMEOUT_MS,
       `git ${args[0] ?? 'command'} timed out`,
     );

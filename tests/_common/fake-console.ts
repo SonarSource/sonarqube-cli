@@ -29,6 +29,7 @@ import type {
   SearchPromptOptions,
   SelectOption,
 } from '@/core/ui/console.ts';
+import type { TreeNode, TreePromptOptions } from '@/core/ui/tree/tree-source.ts';
 
 export interface UiCall {
   method: string;
@@ -47,6 +48,31 @@ function findUiCall(
 
 /** What a test types and picks in `searchPrompt`; `null` cancels, `pick` defaults to the first result. */
 export type FakeSearchAnswer = { query: string; pick?: unknown } | null;
+
+/** Labels from a root down to the node a test picks in `treePrompt`; `[]` picks the first root, `null` cancels. */
+export type FakeTreeAnswer = { labels: string[] } | null;
+
+/** One label path per node a test ticks in `treeMultiSelectPrompt`; `null` cancels. */
+export type FakeTreeMultiAnswer = { paths: string[][] } | null;
+
+async function walkTree<T>(options: TreePromptOptions<T>, path: string[]): Promise<T> {
+  let level: TreeNode<T>[] = options.roots;
+  let chosen: TreeNode<T> | undefined = options.roots.at(0);
+  for (const [i, label] of path.entries()) {
+    if (i > 0 && chosen) {
+      level = chosen.children ?? (await options.loadChildren(chosen.value));
+    }
+    chosen = level.find((node) => node.label === label);
+    if (chosen === undefined) {
+      const labels = level.map((node) => node.label).join(', ');
+      throw new Error(`No tree node labelled '${label}' among: ${labels}`);
+    }
+  }
+  if (chosen === undefined) {
+    throw new Error('The tree has no nodes to pick');
+  }
+  return chosen.value;
+}
 
 export class FakeConsole implements Console {
   readonly calls: UiCall[] = [];
@@ -174,6 +200,33 @@ export class FakeConsole implements Console {
       return answer.pick as T;
     }
     return found.length > 0 ? found[0].value : null;
+  }
+
+  /** Walks the queued label path from the roots, loading children through the real `loadChildren`. */
+  async treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null> {
+    const answer = this.dequeue<FakeTreeAnswer>({ labels: [] });
+    this.record('treePrompt', message, answer);
+    if (answer === null) {
+      return null;
+    }
+    return walkTree(options, answer.labels);
+  }
+
+  /** Walks each queued label path like {@link treePrompt} and returns every node reached. */
+  async treeMultiSelectPrompt<T>(
+    message: string,
+    options: TreePromptOptions<T>,
+  ): Promise<T[] | null> {
+    const answer = this.dequeue<FakeTreeMultiAnswer>({ paths: [[]] });
+    this.record('treeMultiSelectPrompt', message, answer);
+    if (answer === null) {
+      return null;
+    }
+    const values: T[] = [];
+    for (const labels of answer.paths) {
+      values.push(await walkTree(options, labels));
+    }
+    return values;
   }
 
   multiSelectPrompt<T>(
