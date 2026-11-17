@@ -162,6 +162,32 @@ describe('renderInitOutcome', () => {
     expect(printed.at(-1)).toContain("run 'sonar init --monorepo' again");
   });
 
+  it('links a configured root on the server the file records, not the active one', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          {
+            path: 'api',
+            kind: 'configured',
+            projectKey: 'api-key',
+            serverUrl: 'https://sq.example.com/',
+          },
+        ],
+      },
+      AUTH,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toContain(
+      '    api: api-key - https://sq.example.com/project/overview?id=api-key',
+    );
+    expect(printed.join('\n')).not.toContain('sonarcloud.io');
+  });
+
   it('does not suggest resuming when every root is configured', () => {
     const console = new FakeConsole();
 

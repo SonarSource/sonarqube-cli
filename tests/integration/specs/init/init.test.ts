@@ -1964,6 +1964,7 @@ describe('sonar init', () => {
 
           const output = result.stdout + result.stderr;
           expect(output).toContain("api is already mapped to 'other-key'");
+          expect(output).toContain("Remap it with 'sonar link --monorepo api-key --path api'.");
           expect(output).not.toContain('Failed');
           expect(output).toContain('Skipped (1):');
           expect(output).toContain("api: api-key (already mapped to 'other-key')");

@@ -46,7 +46,7 @@ import {
   type LinkedProjectProblem,
   reportLinkedProjectIssues,
 } from './linked-projects.ts';
-import { writeMapping } from './mapping.ts';
+import { linkCommand, writeMapping } from './mapping.ts';
 import { runUnboundNew } from './unbound.ts';
 
 /** Where a mapped root stands against the active connection, before anything runs for it. */
@@ -209,7 +209,12 @@ function onboardSelectedRoot(
 async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<MonorepoRootResult> {
   const { path, mapping, status } = root;
   if (status.kind === 'configured') {
-    return { path, kind: 'configured', projectKey: mapping.projectKey };
+    return {
+      path,
+      kind: 'configured',
+      projectKey: mapping.projectKey,
+      serverUrl: mapping.serverUrl,
+    };
   }
   if (status.kind === 'unavailable') {
     return { path, kind: 'unavailable', projectKey: mapping.projectKey, problem: status.problem };
@@ -273,7 +278,7 @@ function reportRootProblems(roots: readonly MonorepoRoot[], { auth, console }: D
   for (const { path, mapping, status } of roots) {
     if (status.kind === 'conflict') {
       console.warn(
-        `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}', so it was left as it is. Remap it with 'sonar link --monorepo ${mapping.projectKey} --path ${path}'.`,
+        `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}', so it was left as it is. Remap it with '${linkCommand(mapping.projectKey, path, undefined, true)}'.`,
       );
     } else if (status.kind === 'unavailable') {
       issues.push({ projectKey: mapping.projectKey, path, problem: status.problem });
