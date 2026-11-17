@@ -42,8 +42,6 @@ type LogFunction = (message: string, ...args: unknown[]) => void;
 export interface LoggerInterface {
   debug: LogFunction;
   info: LogFunction;
-  log: LogFunction;
-  success: LogFunction;
   warn: LogFunction;
   error: LogFunction;
 }
@@ -115,12 +113,6 @@ class DefaultLogger implements LoggerInterface {
   info(message: string, ...args: unknown[]): void {
     writeToFile('INFO', message, args);
   }
-  log(message: string, ...args: unknown[]): void {
-    writeToFile('INFO', message, args);
-  }
-  success(message: string, ...args: unknown[]): void {
-    writeToFile('INFO', message, args);
-  }
   warn(message: string, ...args: unknown[]): void {
     writeToFile('WARN', message, args);
   }
@@ -141,12 +133,6 @@ class Logger {
   }
   info(message: string, ...args: unknown[]): void {
     if (shouldLog('INFO')) this.impl.info(message, ...args);
-  }
-  log(message: string, ...args: unknown[]): void {
-    if (shouldLog('INFO')) this.impl.log(message, ...args);
-  }
-  success(message: string, ...args: unknown[]): void {
-    if (shouldLog('INFO')) this.impl.success(message, ...args);
   }
   warn(message: string, ...args: unknown[]): void {
     if (shouldLog('WARN')) this.impl.warn(message, ...args);

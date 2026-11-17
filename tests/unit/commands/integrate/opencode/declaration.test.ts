@@ -150,7 +150,7 @@ describe('openCodeIntegration', () => {
     }
     expect(contextAugmentation.dependencies).toHaveLength(1);
     expect(contextAugmentation.resources).toHaveLength(2);
-    expect(contextAugmentation.operations).toHaveLength(1);
+    expect(contextAugmentation.operations).toBeUndefined();
   });
 
   it('has no legacy CAG skill cleanup, since OpenCode never shipped one', () => {

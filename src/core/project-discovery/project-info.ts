@@ -49,7 +49,6 @@ import {
 import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
 export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
 
 export interface DiscoveredProject {
