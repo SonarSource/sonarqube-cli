@@ -90,6 +90,7 @@ jobs:
             development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
             development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
             development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
+            development/team/sonarlint/kv/data/sonarcloud-it token | HB_SONAR_ADMIN_TOKEN;
 
       - name: Run benchmark as an unprivileged user
         env:
@@ -97,7 +98,9 @@ jobs:
           MODEL: ${{ matrix.agent.provider }}/${{ matrix.agent.model }}
           JOB_NAME: ${{ matrix.os }}
           TASK: ${{ matrix.task }}
-          HB_SONAR_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
+          HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
+          HB_SONAR_PROJECT: SonarSource_sonarqube-cli
+          SONAR_RUN_TOKEN_FILE: ${{ runner.temp }}/sonar-run-token
           HB_SONAR_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
           HB_SONAR_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           HB_SONAR_API_URL: https://api.sc-staging.io
@@ -123,8 +126,14 @@ jobs:
           SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
           SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
+          HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
+          SONAR_RUN_TOKEN_FILE: ${{ runner.temp }}/sonar-run-token
           SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
         run: |
+          if [[ -f "${SONAR_RUN_TOKEN_FILE}" ]]; then
+            SONAR_RUN_TOKEN="$(cat "${SONAR_RUN_TOKEN_FILE}")"
+            export SONAR_RUN_TOKEN
+          fi
           python3 -I benchmarks/harbor/ci/scan-secrets.py harbor-jobs
 
       - name: Upload Harbor jobs
