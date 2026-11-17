@@ -916,13 +916,13 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
     )
     .option(
+      '--scan',
+      'Run the first analysis of a newly created unbound project without asking; --scanner-property and --detach only apply when the analysis runs',
+    )
+    .option(
       '--scanner-property <key=value>',
       'Extra property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable; the value is never logged)',
       collectScannerProperty,
-    )
-    .option(
-      '--scan',
-      'Run the first analysis of a newly created unbound project without asking; implied by --detach and --scanner-property',
     )
     .option('--verbose', 'Stream the scanner logs while the first analysis runs')
     .option(
