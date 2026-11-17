@@ -463,6 +463,7 @@ describe('integrate codex', () => {
     it(
       'removes only managed DEEP instructions and installs completion hooks when a project is discovered',
       async () => {
+        harness.state().withContextAugmentationBinaryInstalled();
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')

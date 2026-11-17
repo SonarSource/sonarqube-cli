@@ -869,12 +869,25 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
       expect(analyses()).toHaveLength(0);
     }, 15000);
 
+    it.each([undefined, null, 42, '', '   '])(
+      'allows stopping with an invalid session ID: %j',
+      async (sessionId) => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectSilentStop(
+          await harness.runWithStdin(
+            COMMAND,
+            JSON.stringify({ session_id: sessionId, cwd: harness.cwd.path }),
+          ),
+        );
+        expect(analyses()).toHaveLength(0);
+        expect(harness.cliHome.exists('db', 'hooks', 'stop-hook-vortex-analysis.db')).toBe(false);
+      },
+      15000,
+    );
+
     it.each([
       null,
       {},
-      { session_id: null },
-      { session_id: 42 },
-      { session_id: '' },
       { session_id: 'session', cwd: 42 },
       { session_id: 'session', cwd: '' },
       { session_id: 'session', cwd: '   ' },
