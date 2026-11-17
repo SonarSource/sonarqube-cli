@@ -21,11 +21,7 @@
 import { UNRESOLVED_PROJECT_RECOVERY } from '@/commands/hook/agent-session-start/multi-project-context.ts';
 import type { SessionStartAgent } from '@/commands/hook/agent-session-start/types.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type {
-  FeatureOperation,
-  IntegrationContext,
-  SubfeatureDeclaration,
-} from '@/core/framework/features/types.ts';
+import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features/types.ts';
 import type { ResourceDeclaration } from '@/core/framework/resources';
 import { textSnippet, wholeFile } from '@/core/framework/resources';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
@@ -35,7 +31,6 @@ import { getOptionalStringAttr } from '../attrs.ts';
 import {
   isContextAugmentationSkipped,
   printContextAugmentationSkill,
-  runToolIntegrateCommand,
 } from '../context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../context-augmentation-dependency.ts';
 import { buildUnixHookScript, buildWindowsHookScript } from '../hooks.ts';
@@ -44,8 +39,6 @@ import type { IntegrateAgentOptions } from '../types.ts';
 
 export const CONTEXT_AUGMENTATION_FEATURE_ID = 'context-augmentation';
 export const CONTEXT_AUGMENTATION_SKILL_FILE_RESOURCE_ID = 'context-augmentation-skill';
-export const CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID =
-  'context-augmentation-tool-integrate';
 
 export const VORTEX_HOOK_MARKER = 'sonar-vortex';
 export const SESSION_START_SCRIPT_REL = `${VORTEX_HOOK_MARKER}/build-scripts/session-start-vortex`;
@@ -84,7 +77,6 @@ function buildContextAugmentationSubfeature<TOptions extends IntegrateAgentOptio
     isAvailable: () => ({ available: !isContextAugmentationSkipped() }),
     dependencies: [contextAugmentationBinaryDependency],
     resources,
-    operations: [createToolIntegrationOperation()],
   };
 }
 
@@ -113,26 +105,6 @@ export function createContextAugmentationSkillSubfeature<TOptions extends Integr
     createSkillResource(options),
     createInstructionsResource(options),
   ]);
-}
-
-function createToolIntegrationOperation(): FeatureOperation {
-  return {
-    id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
-    displayName: 'Vortex Context tool integration',
-    shouldApply: (context) =>
-      context.executionMode === 'install' &&
-      context.scope === 'project' &&
-      getOptionalStringAttr(context, 'projectKey') !== undefined,
-    apply: (context) =>
-      runToolIntegrateCommand({
-        auth: getRequiredAuth(context),
-        binaryPath: resolveContextAugmentationBinaryPath(context),
-        projectRoot: context.targetRoot,
-        projectKey: getOptionalStringAttr(context, 'projectKey'),
-        scaEnabled: context.attrs?.scaEnabled === true,
-        console: context.console,
-      }),
-  };
 }
 
 function createInstructionsResource(
@@ -186,11 +158,4 @@ function resolveContextAugmentationBinaryPath(context: IntegrationContext): stri
     throw new CommandFailedError('Vortex Context binary path is unavailable.');
   }
   return binaryPath;
-}
-
-function getRequiredAuth(context: IntegrationContext) {
-  if (!context.auth) {
-    throw new CommandFailedError('Authentication is unavailable for Vortex Context.');
-  }
-  return context.auth;
 }

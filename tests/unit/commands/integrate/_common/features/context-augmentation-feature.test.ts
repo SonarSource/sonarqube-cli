@@ -26,7 +26,6 @@ import {
   createContextAugmentationSkillSubfeature,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import type { IntegrateAgentOptions } from '@/commands/integrate/_common/types.ts';
-import type { IntegrationContext } from '@/core/framework/features/types.ts';
 
 const SKIP_ENV = '__SQCLI_DEV_SKIP_CAG';
 
@@ -63,19 +62,6 @@ describe('createContextAugmentationSkillSubfeature', () => {
     process.env[SKIP_ENV] = '1';
 
     expect(await subfeature.isAvailable?.({} as never)).toEqual({ available: false });
-  });
-
-  it('runs the tool integration only for a project-scope install with a project key', () => {
-    const operation = subfeature.operations?.[0];
-    const context = (
-      scope: IntegrationContext['scope'],
-      attrs: Record<string, unknown>,
-    ): IntegrationContext =>
-      ({ scope, attrs, executionMode: 'install', targetRoot: '/project' }) as never;
-
-    expect(operation?.shouldApply?.(context('project', { projectKey: 'proj' }))).toBe(true);
-    expect(operation?.shouldApply?.(context('project', {}))).toBe(false);
-    expect(operation?.shouldApply?.(context('global', { projectKey: 'proj' }))).toBe(false);
   });
 });
 

@@ -89,11 +89,3 @@ export function detectInstalledAgents(
     AGENT_MARKERS[agentId]({ home, env, platform }).some((marker) => existsSync(marker)),
   );
 }
-
-/** True when `value` is one of the agents actually detected as installed on this machine. */
-export function isDetectedAgentId(
-  value: string,
-  home: string = homedir(),
-): value is DetectedAgentId {
-  return (detectInstalledAgents(home) as readonly string[]).includes(value);
-}

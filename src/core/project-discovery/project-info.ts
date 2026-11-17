@@ -59,8 +59,6 @@ import {
 import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
-
 /** A server or organization read from a project file, with the absolute path of that file. */
 export interface DiscoveredConfigValue {
   value: string;
