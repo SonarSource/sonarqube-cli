@@ -88,11 +88,12 @@ export async function authLogin(
   }
   const invocationAuth = authResult.value;
   await warnIfEnvAuthPresent(ctx, invocationAuth);
-  const server = await resolveServer(options.server, console);
+  const resolved = await resolveServer(options.server, console);
+  const server = resolved.server;
   assertNoCleartextTokenDowngrade(server);
   const isCloud = isSonarQubeCloud(server);
   if (!isCloud) {
-    await confirmServerTrust(server, console);
+    await confirmServerTrust(server, console, resolved.configFile);
   }
 
   // SonarQube Server has no organizations, so --org cannot mean anything there. Dropping it here

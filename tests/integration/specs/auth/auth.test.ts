@@ -21,6 +21,7 @@
 // Integration tests for `sonar auth login`, `auth logout`, and `auth status`
 
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -1581,7 +1582,7 @@ describe('auth login — organization validation', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain(
-        "You are not a member of organization 'stale-org' from project config",
+        `You are not a member of organization 'stale-org' from ${join(harness.cwd.path, 'sonar-project.properties')}`,
       );
       expect(result.stdout).toContain('Using organization (only member): my-org');
     },
