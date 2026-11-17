@@ -233,10 +233,12 @@ ${projectKeyExtraHelp}`;
 
 const linkExtraHelp = `
 'sonar link <projectKey>' replaces the existing links with this one.
-Without a project key or --path, in an interactive terminal, 'sonar link' offers the folders to
-link: the repository root or folders at any depth (Tab ticks one; typing searches folder names).
-Each ticked folder then gets a project, either one verified on the server or one found by search,
-and is added to the existing links. Scripts and CI must pass the key.
+Without a project key or --path, in an interactive terminal, 'sonar link' first asks whether to
+link the repository root (the default) or choose another folder. Linking the root alone replaces
+a single existing link. Choosing another, or passing --monorepo, or having several links already,
+opens a tree of the repository root and folders at any depth (Tab ticks one; typing searches
+folder names). Each ticked folder then gets a project, either one verified on the server or one
+found by search, and is added to the existing links. Scripts and CI must pass the key.
 'sonar link list --path <path>' lists the projects at, under or enclosing a file or directory.
 
 For a monorepo, use --monorepo to add directories to the existing links:
