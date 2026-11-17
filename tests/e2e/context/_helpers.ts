@@ -26,7 +26,6 @@ import { dirname, join } from 'node:path';
 
 import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
-  CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
   SESSION_START_SCRIPT_RESOURCE_ID,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { SQAA_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/sqaa-instructions-feature.ts';
@@ -163,7 +162,7 @@ function seedDeclarativeContextAugmentationFeature(state: CliState, skill: SeedS
     updatedAt: SEEDED_UPDATED_AT,
   };
   const operation = {
-    id: CONTEXT_AUGMENTATION_TOOL_INTEGRATION_OPERATION_ID,
+    id: 'context-augmentation-tool-integrate',
     updatedByCliVersion: STALE_CLI_VERSION,
     updatedAt: SEEDED_UPDATED_AT,
   };
