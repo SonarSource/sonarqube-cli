@@ -41,7 +41,10 @@ import type {
  * Warnings, errors, prompts and spinners still print as normal through the wrapped console.
  */
 export class QuietConsole implements Console {
-  constructor(private readonly delegate: Console) {}
+  constructor(
+    private readonly delegate: Console,
+    private readonly options: { spinnerChannel?: OutputChannel } = {},
+  ) {}
 
   canPrompt(): boolean {
     return this.delegate.canPrompt();
@@ -102,7 +105,7 @@ export class QuietConsole implements Console {
   }
 
   withSpinner<T>(message: string, task: () => Promise<T>, channel?: OutputChannel): Promise<T> {
-    return this.delegate.withSpinner(message, task, channel);
+    return this.delegate.withSpinner(message, task, this.options.spinnerChannel ?? channel);
   }
 
   textPrompt(message: string): Promise<string | null> {
@@ -113,8 +116,12 @@ export class QuietConsole implements Console {
     return this.delegate.passwordPrompt(message);
   }
 
-  confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
-    return this.delegate.confirmPrompt(message, defaultValue);
+  confirmPrompt(
+    message: string,
+    defaultValue: boolean,
+    channel?: OutputChannel,
+  ): Promise<boolean | null> {
+    return this.delegate.confirmPrompt(message, defaultValue, channel);
   }
 
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {

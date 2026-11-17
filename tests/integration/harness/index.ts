@@ -289,6 +289,7 @@ export class TestHarness {
       cwd: options?.cwd ?? this.cwd.path,
       timeoutMs: options?.timeoutMs,
       waitTimeoutMs: options?.waitTimeoutMs,
+      promptChannel: options?.promptChannel,
       binaryPath: options?.binaryPath,
       browserToken: options?.browserToken,
       browserTokenName: options?.browserTokenName,

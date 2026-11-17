@@ -208,9 +208,13 @@ export interface Console {
   passwordPrompt(message: string): Promise<string | null>;
 
   /**
-   * Yes/No prompt. Returns `null` if cancelled (Ctrl+C).
+   * Yes/No prompt. Defaults to stdout. Returns `null` if cancelled (Ctrl+C).
    */
-  confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null>;
+  confirmPrompt(
+    message: string,
+    defaultValue: boolean,
+    channel?: OutputChannel,
+  ): Promise<boolean | null>;
 
   /**
    * Single-select prompt. Returns `null` if cancelled (Ctrl+C).
