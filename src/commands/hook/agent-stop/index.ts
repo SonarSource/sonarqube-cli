@@ -32,11 +32,14 @@ import {
 import { formatSqaaJsonReportForHook } from '../format-sqaa-hook-context.ts';
 import type { HookCommandResult } from '../hook-command-result.ts';
 import { readStdinJson } from '../stdin.ts';
-import { claudeAdapter } from './agent-adapters/claude-adapter.ts';
+import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import type { StopAgent, StopAgentAdapter, StopInput, StopOutput } from './types.ts';
 
 const ANALYSIS_LIMIT = 3;
-const ADAPTERS: Record<StopAgent, StopAgentAdapter> = { claude: claudeAdapter };
+const ADAPTERS: Record<StopAgent, StopAgentAdapter> = {
+  claude: claudeCodexAdapter,
+  codex: claudeCodexAdapter,
+};
 
 export async function agentStop(
   ctx: CommandInvocationContext,
@@ -64,7 +67,17 @@ async function resolveStopAnalysis(
   agent: string,
   input: StopInput,
 ): Promise<StopOutput | null> {
+  if (typeof input.sessionId !== 'string' || input.sessionId.trim() === '') {
+    logger.debug('Vortex stop analysis skipped: no session id');
+    return null;
+  }
   const session = { agent, session_id: input.sessionId };
+  // An empty cwd would resolve to the hook process's own directory instead of the agent's.
+  if (typeof input.cwd !== 'string' || input.cwd.trim() === '') {
+    logger.debug('Vortex stop analysis skipped: no working directory');
+    resetAnalysisCounterIfIdle(session);
+    return null;
+  }
   const connection = await ctx.resolveConnection();
   if (!connection) {
     logger.debug('Vortex stop analysis skipped: no connection');
