@@ -1921,10 +1921,10 @@ describe('discoverServer', () => {
         const fake = new FakeConsole();
         expect(await discoverServer(fake)).toBe(cases[i].expectedUrl);
         const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-        const lintFile = join(canonicalizePath(testDir), '.sonarlint', 'connectedMode.json');
-        expect(prints.some((m) => m.includes(`.sonarlint/connectedMode.json (${lintFile})`))).toBe(
-          true,
-        );
+        const sonarlintFile = join(canonicalizePath(testDir), '.sonarlint', 'connectedMode.json');
+        expect(
+          prints.some((m) => m.includes(`.sonarlint/connectedMode.json (${sonarlintFile})`)),
+        ).toBe(true);
         expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(false);
       });
     }

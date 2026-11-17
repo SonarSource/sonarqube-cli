@@ -2166,14 +2166,14 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
 
-      const lintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
       expect(result.exitCode).toBe(0);
       expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
       expectVisibleLine(
         result.stdout,
-        `Found .sonarlint/connectedMode.json (${lintFile}): project=my-project, server=${server.baseUrl()}`,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=my-project, server=${server.baseUrl()}`,
       );
-      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${lintFile}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${sonarlintFile}?`);
       expectVisibleLine(result.stdout, `✅ Authentication successful for: ${server.baseUrl()}`);
     },
     { timeout: 15000 },
@@ -2334,7 +2334,7 @@ describe('auth login — connection source', () => {
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
         .start();
       const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
-      const lintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
       harness.cwd.writeFile(
         'sonar-project.properties',
         `sonar.host.url=${server.baseUrl()}\nsonar.projectKey=from-props\n`,
@@ -2356,9 +2356,9 @@ describe('auth login — connection source', () => {
       );
       expectVisibleLine(
         result.stdout,
-        `Found .sonarlint/connectedMode.json (${lintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
       );
-      expectVisibleLine(result.stdout, `Using organization from ${lintFile}: my-org`);
+      expectVisibleLine(result.stdout, `Using organization from ${sonarlintFile}: my-org`);
       expect(stripControlSequences(result.stdout)).not.toContain(
         `Using organization from ${propertiesFile}`,
       );
@@ -2376,7 +2376,7 @@ describe('auth login — connection source', () => {
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
         .start();
       const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
-      const lintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
       harness.cwd.writeFile(
         'sonar-project.properties',
         `sonar.host.url=${server.baseUrl()}\nsonar.organization=\nsonar.projectKey=from-props\n`,
@@ -2398,9 +2398,9 @@ describe('auth login — connection source', () => {
       );
       expectVisibleLine(
         result.stdout,
-        `Found .sonarlint/connectedMode.json (${lintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
       );
-      expectVisibleLine(result.stdout, `Using organization from ${lintFile}: my-org`);
+      expectVisibleLine(result.stdout, `Using organization from ${sonarlintFile}: my-org`);
       expect(stripControlSequences(result.stdout)).not.toContain('from project config');
       expect(stripControlSequences(result.stdout)).not.toContain(
         `Using organization from ${propertiesFile}`,

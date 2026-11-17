@@ -146,7 +146,7 @@ function applyLocalSonarProperties(
 function applySonarLintConfig(
   config: PartialProjectMapping,
   local: LocalProjectConfig,
-  lintFile: string | undefined,
+  sonarlintFile: string | undefined,
   options: DiscoverProjectOptions,
 ): boolean {
   if (!local.hasSonarLintConfig || !local.sonarLintData || !local.sonarLintConfigPath) {
@@ -158,12 +158,12 @@ function applySonarLintConfig(
   config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
-  if (lintFile) {
+  if (sonarlintFile) {
     if (!hadServer && config.serverUrl) {
-      config.serverConfigFile = lintFile;
+      config.serverConfigFile = sonarlintFile;
     }
     if (!hadOrganization && config.organization) {
-      config.organizationConfigFile = lintFile;
+      config.organizationConfigFile = sonarlintFile;
     }
   }
 
@@ -175,7 +175,7 @@ function applySonarLintConfig(
     );
     if (fields) {
       options.console.print(
-        formatFoundConfig(local.sonarLintConfigPath.replaceAll('\\', '/'), lintFile, fields),
+        formatFoundConfig(local.sonarLintConfigPath.replaceAll('\\', '/'), sonarlintFile, fields),
       );
     }
   }
@@ -207,11 +207,11 @@ export async function applyLocalConfigAcrossLookupPaths(
     }
 
     const propertiesFile = join(checkPath, 'sonar-project.properties');
-    const lintFile = local.sonarLintConfigPath
+    const sonarlintFile = local.sonarLintConfigPath
       ? join(checkPath, local.sonarLintConfigPath)
       : undefined;
     applyLocalSonarProperties(config, local, propertiesFile, options);
-    if (applySonarLintConfig(config, local, lintFile, options)) {
+    if (applySonarLintConfig(config, local, sonarlintFile, options)) {
       // A key with no connection info of its own borrows the caller's whole active connection.
       if (!config.serverUrl && options.auth?.serverUrl) {
         config.serverUrl = options.auth.serverUrl;
