@@ -2409,7 +2409,7 @@ describe('auth login — connection source', () => {
     { timeout: 15000 },
   );
 
-  it(
+  it.skipIf(IS_WINDOWS)(
     'omits a config path that contains a terminal control character',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();
