@@ -446,6 +446,7 @@ jobs:
         with:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+          java-version: ${{ matrix.shard == 0 && 'temurin-25' || '' }}
 
       - uses: ./.github/actions/run-integration-and-e2e
         with:
@@ -480,6 +481,7 @@ jobs:
         with:
           artifactory-username: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_USER }}
           artifactory-password: ${{ fromJSON(steps.secrets.outputs.vault).ARTIFACTORY_ACCESS_TOKEN }}
+          java-version: ${{ matrix.shard == 0 && 'temurin-25' || '' }}
 
       - uses: ./.github/actions/run-integration-and-e2e
         with:

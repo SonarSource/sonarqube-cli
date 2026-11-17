@@ -125,14 +125,6 @@ runs:
         echo '::1 api.localhost' | sudo tee -a /etc/hosts
         getent hosts api.localhost
 
-    - name: Set up Java for scanner e2e tests
-      if: ${{ inputs.skip-e2e != 'true' }}
-      uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
-      with:
-        version: 2026.11.9
-        tool_versions: |
-          java temurin-25
-
     - name: Run e2e tests (Windows)
       if: ${{ inputs.os == 'windows' && inputs.skip-e2e != 'true' }}
       shell: bash
