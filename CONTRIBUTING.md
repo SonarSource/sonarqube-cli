@@ -100,6 +100,12 @@ E2E tests cover dependencies that the isolated integration harness does not repl
 
 The context E2E suites use real context-augmentation binaries and fake servers. They need access to `binaries.sonarsource.com`, but no real SonarQube Server or Cloud account. See [the test guide](tests/AGENTS.md) for harness, coverage, and telemetry isolation requirements.
 
+### GitHub CI onboarding credentials
+
+The GitHub onboarding API client accepts a user-supplied personal access token through `GITHUB_TOKEN` or a hidden prompt. A fine-grained PAT needs access to the selected repositories with **Contents**, **Workflows**, and **Pull requests** write permissions. A classic PAT needs the `repo` and `workflow` scopes. See GitHub's [repository contents API permissions](https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents) and [pull request API permissions](https://docs.github.com/en/rest/pulls/pulls#create-a-pull-request).
+
+This PAT is separate from the CLI's SonarQube Server credential and the Sonar analysis secret referenced by the workflow. Successful reads, permission headers, and dry runs do not prove write access; organization and repository policies can still reject writes. Do not create probe branches or PRs to test permissions.
+
 ## macOS code signing (optional)
 
 On macOS, the CLI stores authentication tokens in the system Keychain. macOS ties Keychain ACL entries to the identity of the binary that created them. For unsigned binaries, this identity is derived from the file hash — so every `bun run build:binary` produces a new identity, and macOS will prompt for the Keychain password on the first `sonar` invocation after each rebuild.
