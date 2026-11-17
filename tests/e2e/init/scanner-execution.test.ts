@@ -34,19 +34,33 @@ import { delimiter, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
-import { parseProperties } from '@/core/io/properties.ts';
 
 import { TestHarness } from '../../integration/harness';
 
 const java = Bun.which('java');
 const javac = Bun.which('javac');
 const jar = Bun.which('jar');
-const archiveTool = Bun.which(process.platform === 'win32' ? 'powershell.exe' : 'unzip');
+const archiveToolName = process.platform === 'win32' ? 'powershell.exe' : 'unzip';
+const archiveTool = Bun.which(archiveToolName);
 const token = 'dummy-scanner-token';
 const windows = process.platform === 'win32';
+const missingTools = [
+  ['java', java],
+  ['javac', javac],
+  ['jar', jar],
+  [archiveToolName, archiveTool],
+]
+  .filter(([, path]) => !path)
+  .map(([name]) => name);
+
+if (missingTools.length > 0) {
+  const message = `Scanner e2e prerequisites missing from PATH: ${missingTools.join(', ')}. Install JDK 25 and ${archiveToolName}.`;
+  if (process.env.CI === 'true') throw new Error(message);
+  console.warn(`Skipping scanner e2e tests. ${message}`);
+}
 
 // External Java tools and the pinned public scanner distribution are the e2e prerequisites.
-describe.skipIf(!java || !javac || !jar || !archiveTool)('init with the real scanner', () => {
+describe.skipIf(missingTools.length > 0)('init with the real scanner', () => {
   let fixtures: string;
   let scannerHome: string;
   let harness: TestHarness;
@@ -164,21 +178,23 @@ public interface LogOutput {
 }`,
       'Batch.java': `
 package org.sonar.batch.bootstrapper;
-import java.io.*;
 import java.net.*;
 import java.net.http.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 public class Batch {
   private Map<String, String> properties;
   public static Builder builder() { return new Builder(); }
   public Batch execute() throws Exception {
     Thread.sleep(2000);
-    Properties values = new Properties();
-    values.putAll(properties);
-    StringWriter input = new StringWriter();
-    values.store(input, null);
+    String input = properties.entrySet().stream()
+      .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "="
+        + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+      .collect(Collectors.joining("&"));
     var request = HttpRequest.newBuilder(URI.create(System.getenv("ENGINE_BACKEND") + "?legacy"))
-      .POST(HttpRequest.BodyPublishers.ofString(input.toString())).build();
+      .header("Content-Type", "application/x-www-form-urlencoded")
+      .POST(HttpRequest.BodyPublishers.ofString(input)).build();
     if (HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.discarding()).statusCode() != 200)
       throw new IllegalStateException("Fixture backend rejected legacy analysis");
     return this;
@@ -241,7 +257,7 @@ public class Batch {
         }
         if (url.pathname === '/engine-complete') {
           const properties = url.searchParams.has('legacy')
-            ? Object.fromEntries(parseProperties(await request.text()))
+            ? Object.fromEntries(new URLSearchParams(await request.text()))
             : Object.fromEntries(
                 (
                   (await request.json()) as { scannerProperties: { key: string; value: string }[] }
@@ -338,6 +354,7 @@ public class Batch {
 
   it('demonstrates an unpinned legacy scanner executes a poisoned cache without downloading it', async () => {
     const url = plantLegacyCache('root');
+    const windowsPath = String.raw`C:\scanner workspace\project=fixture`;
     await command(
       [
         java!,
@@ -345,6 +362,7 @@ public class Batch {
         join(scannerHome, 'lib', `sonar-scanner-cli-${SONAR_SCANNER_VERSION}.jar`),
         `-Dsonar.host.url=${url}`,
         `-Dsonar.scanner.metadataFilePath=${join(harness.cwd.path, 'report-task.txt')}`,
+        `-Dsonar.test.windowsPath=${windowsPath}`,
       ],
       harness.cwd.path,
       {
@@ -353,6 +371,7 @@ public class Batch {
         EXECUTION_MARKER: join(harness.cwd.path, 'repository-executed'),
       },
     );
+    expect(completed[0]['sonar.test.windowsPath']).toBe(windowsPath);
     expect(readFileSync(join(harness.cwd.path, 'repository-executed'), 'utf8')).toBe(token);
     expect(engineRequests).toEqual(['/batch/index']);
   }, 30_000);
