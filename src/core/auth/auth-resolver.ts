@@ -40,12 +40,7 @@ import { resolveTelemetryIdentity } from '../telemetry/identity-fetch.ts';
 export { isValidServerUrl } from '../server/server-url-validation.ts';
 
 // Re-exported for backward compatibility (lives in server/sonarcloud-region.ts to avoid an import cycle).
-export {
-  cloudRegionFromUrl,
-  isSonarQubeCloud,
-  normalizeCloudV2Endpoint,
-  resolveFromEndpoint,
-} from '@/core/server/sonarcloud-region.ts';
+export { isSonarQubeCloud, resolveFromEndpoint } from '@/core/server/sonarcloud-region.ts';
 
 export const ENV_TOKEN = 'SONARQUBE_CLI_TOKEN';
 export const ENV_SERVER = 'SONARQUBE_CLI_SERVER';

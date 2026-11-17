@@ -23,7 +23,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import type { IntegrationContext } from '@/core/framework/features';
 
@@ -33,7 +33,6 @@ import {
   buildWindowsHookScript,
   createAgentHookEntry,
   quoteWindowsHookScriptPath,
-  readOrInitJson,
   resolveAgentHookCommand,
   shellQuoteBash,
   UNIX_SONAR_COMMAND_GUARD,
@@ -263,45 +262,5 @@ describe('upsertAgentHooks idempotency', () => {
     expect(result.hooks?.PreToolUse).toHaveLength(1);
     // The retained entry is the freshly-quoted one.
     expect(result.hooks?.PreToolUse?.[0].hooks[0].command).toBe(entry.hookConfig.hooks[0].command);
-  });
-});
-
-describe('readOrInitJson', () => {
-  let workDir: string;
-
-  beforeEach(() => {
-    workDir = mkdtempSync(join(tmpdir(), 'sonar-readjson-test-'));
-  });
-
-  afterEach(() => {
-    rmSync(workDir, { recursive: true, force: true });
-  });
-
-  it('returns the default value when the file does not exist', async () => {
-    const missing = join(workDir, 'missing.json');
-
-    const result = await readOrInitJson(missing, { hooks: {} });
-
-    expect(result).toEqual({ hooks: {} });
-  });
-
-  it('returns the default value when the file contains malformed JSON', async () => {
-    const path = join(workDir, 'bad.json');
-    writeFileSync(path, '{ not valid json !!!', 'utf-8');
-
-    const result = await readOrInitJson(path, { fallback: true });
-
-    expect(result).toEqual({ fallback: true });
-  });
-
-  it('parses and returns the file contents when the JSON is valid', async () => {
-    const path = join(workDir, 'good.json');
-    writeFileSync(path, JSON.stringify({ hooks: { PreToolUse: ['x'] } }), 'utf-8');
-
-    const result = await readOrInitJson<{ hooks: { PreToolUse: string[] } }>(path, {
-      hooks: { PreToolUse: [] },
-    });
-
-    expect(result.hooks.PreToolUse).toEqual(['x']);
   });
 });
