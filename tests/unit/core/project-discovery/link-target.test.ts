@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import {
   InvalidLinkPathError,
@@ -101,6 +102,26 @@ describe('linkItem and withLink', () => {
     expect(item('api', 'services/api')).toEqual({
       entry: { projectKey: 'api', path: 'services/api', serverUrl: auth.serverUrl },
       root: join(dir, 'services', 'api'),
+    });
+  });
+
+  it.each([
+    [SONARCLOUD_URL, 'eu'],
+    [SONARCLOUD_US_URL, 'us'],
+    [SONARCLOUD_AU_URL, 'au'],
+  ] as const)('serializes production Cloud %s as region %s', (serverUrl, region) => {
+    const cloudAuth = new ResolvedAuth({
+      token: 't',
+      serverUrl,
+      connectionType: 'cloud',
+      source: 'state',
+      orgKey: 'org',
+    });
+    expect(linkItem(cloudAuth, dir, dir, 'project').entry).toEqual({
+      region,
+      organization: 'org',
+      projectKey: 'project',
+      path: '.',
     });
   });
 

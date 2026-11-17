@@ -21,10 +21,9 @@
 import { relative, sep } from 'node:path';
 
 import { requireCloudOrganization, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { resolveGitRepoRoot } from '@/core/host/git/worktree.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
-import { cloudRegionFromUrl } from '@/core/server/sonarcloud-region.ts';
+import { cloudRegionFromUrl, cloudRegionToUrl } from '@/core/server/sonarcloud-region.ts';
 
 import {
   type ConfigItem,
@@ -69,7 +68,7 @@ function deriveEntry(
 
   const region = cloudRegionFromUrl(auth.serverUrl);
   const origin = region ? new URL(auth.serverUrl).origin : undefined;
-  if (!region || (origin !== SONARCLOUD_URL && origin !== SONARCLOUD_US_URL)) {
+  if (!region || origin !== cloudRegionToUrl(region)) {
     return { projectKey, path, serverUrl: auth.serverUrl, organization };
   }
   return { projectKey, path, region, organization };

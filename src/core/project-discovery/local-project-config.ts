@@ -43,6 +43,7 @@ export interface SonarProperties {
   projectKey: string;
   projectName: string;
   organization: string;
+  region?: string;
 }
 
 /** Local config files found at exactly one directory — no git, no root resolution. */
@@ -73,11 +74,10 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
   const content = await fs.readFile(propPath, 'utf-8');
 
   const props: Partial<SonarProperties> = {};
-  let region: string | undefined;
 
   for (const [key, value] of parseProperties(content)) {
     if (key === 'sonar.region') {
-      region = value;
+      props.region = value;
       continue;
     }
     const field = SONAR_PROPERTY_FIELDS.get(key);
@@ -92,7 +92,7 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
 
   // Cloud scanners conventionally omit sonar.host.url — the region's URL is well-known.
   if (!props.hostURL && props.organization) {
-    props.hostURL = sonarCloudBaseUrlFromRegion(region);
+    props.hostURL = sonarCloudBaseUrlFromRegion(props.region) ?? '';
   }
 
   return props as SonarProperties;
@@ -188,7 +188,14 @@ export async function applyLocalConfigAcrossLookupPaths(
     applyLocalSonarProperties(config, local, options);
     if (applySonarLintConfig(config, local, options)) {
       // A key with no connection info of its own borrows the caller's whole active connection.
-      if (!config.serverUrl && options.auth?.serverUrl) {
+      const region = local.sonarPropsData?.region;
+      const hasUnknownRegion = region !== undefined && !sonarCloudBaseUrlFromRegion(region);
+      if (
+        !config.serverUrl &&
+        !config.organization &&
+        !hasUnknownRegion &&
+        options.auth?.serverUrl
+      ) {
         config.serverUrl = options.auth.serverUrl;
         config.organization = options.auth.orgKey;
       }

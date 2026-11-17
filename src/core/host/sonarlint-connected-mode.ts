@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { cloudRegionToUrl } from '../server/sonarcloud-region.ts';
+import { cloudRegionToUrl, isCloudRegion } from '../server/sonarcloud-region.ts';
 
 export interface SonarLintConfig {
   serverURL: string;
@@ -46,9 +46,10 @@ function isSonarLintConnectedModeFileName(fileName: string): boolean {
   return fileName.toLowerCase() === CONNECTED_MODE_FILE_LOWER;
 }
 
-export function sonarCloudBaseUrlFromRegion(region: unknown): string {
-  const isUs = typeof region === 'string' && region.trim().toUpperCase() === 'US';
-  return cloudRegionToUrl(isUs ? 'us' : 'eu');
+export function sonarCloudBaseUrlFromRegion(region: unknown): string | undefined {
+  if (region === undefined) return cloudRegionToUrl('eu');
+  const normalized = typeof region === 'string' ? region.trim().toLowerCase() : region;
+  return isCloudRegion(normalized) ? cloudRegionToUrl(normalized) : undefined;
 }
 
 function parseStringValue(value: unknown): string {
@@ -84,7 +85,7 @@ function parseSonarLintConfig(data: string): SonarLintConfig | null {
       const projectKey = parseStringValue(jsonPropInsensitive(generic, 'projectkey')).trim();
       if (organization && projectKey) {
         return {
-          serverURL: sonarCloudBaseUrlFromRegion(jsonPropInsensitive(generic, 'region')),
+          serverURL: sonarCloudBaseUrlFromRegion(jsonPropInsensitive(generic, 'region')) ?? '',
           projectKey,
           organization,
         };
