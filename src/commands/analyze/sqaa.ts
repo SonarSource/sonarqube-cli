@@ -38,15 +38,19 @@ export {
   VALID_FORMATS,
 } from './sqaa-types.ts';
 
+export function assertNoStagedWithBase(options: { staged?: boolean; base?: string }): void {
+  if (options.staged && options.base !== undefined) {
+    throw new InvalidOptionError('--staged and --base cannot be used together');
+  }
+}
+
 export async function analyzeSqaa(
   options: AnalyzeSqaaOptions,
   ctx: CommandAuthenticatedInvocationContext,
   runOptions: AnalyzeSqaaRunOptions = {},
 ): Promise<void> {
   const format = resolveFormatOption(options.format, VALID_FORMATS, 'text');
-  if (options.staged && options.base !== undefined) {
-    throw new InvalidOptionError('--staged and --base cannot be used together');
-  }
+  assertNoStagedWithBase(options);
   const telemetryCtx = runOptions.telemetryCtx ?? ctx;
   const { console } = telemetryCtx;
   const execution = {
