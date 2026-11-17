@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { lastSegment, readJson } from './read-json.ts';
 
 interface TrialResult {
   task_name: string;
@@ -53,20 +54,12 @@ interface ReleaseReport {
 
 const LEAK_MARKER_FILE = 'secrets-leak.json';
 
-function readJson<T>(path: string): T | null {
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : null;
-}
-
 function secondsBetween(
   start: string | null | undefined,
   end: string | null | undefined,
 ): number | null {
   if (!start || !end) return null;
   return (Date.parse(end) - Date.parse(start)) / 1000;
-}
-
-function lastSegment(value: string): string {
-  return value.slice(value.lastIndexOf('/') + 1);
 }
 
 function statusOf(trial: TrialResult): Status {
