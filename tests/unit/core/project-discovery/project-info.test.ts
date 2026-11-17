@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, Mock, spyOn } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import * as gitDiscover from '@/core/host/git/discover.ts';
 import * as lookupPathResolver from '@/core/host/git/lookup-path-resolver.ts';
 import * as gitWorktree from '@/core/host/git/worktree.ts';
@@ -316,6 +316,37 @@ describe('discoverProject', () => {
     expect(result.serverUrl).toBe('https://sonarcloud.io');
     expect(result.projectKey).toBe('my_project');
   });
+
+  it.each([
+    ['', SONARCLOUD_URL],
+    ['  ', SONARCLOUD_URL],
+    ['US', SONARCLOUD_US_URL],
+    ['Au', SONARCLOUD_AU_URL],
+  ])('resolves sonar.region=%p without using active auth', async (region, serverUrl) => {
+    fakeFs.writeFile(
+      join(testDir, 'sonar-project.properties'),
+      `sonar.projectKey=project\nsonar.organization=org\nsonar.region=${region}\n`,
+    );
+    const result = await discoverProject(testDir, { console: new FakeConsole(), auth: MOCK_AUTH });
+    expect(result.serverUrl).toBe(serverUrl);
+    expect(result.projectKey).toBe('project');
+  });
+
+  it.each(['sonar.organization=org\n', ''])(
+    'drops properties with an unknown region and organization setting %p',
+    async (organization) => {
+      fakeFs.writeFile(
+        join(testDir, 'sonar-project.properties'),
+        `sonar.projectKey=project\n${organization}sonar.region=mars\n`,
+      );
+      const result = await discoverProject(testDir, {
+        console: new FakeConsole(),
+        auth: MOCK_AUTH,
+      });
+      expect(result.serverUrl).toBeUndefined();
+      expect(result.projectKey).toBeUndefined();
+    },
+  );
 
   it('ignores a property line without an equals sign', async () => {
     fakeFs.writeFile(
