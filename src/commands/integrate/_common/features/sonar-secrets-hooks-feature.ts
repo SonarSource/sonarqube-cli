@@ -68,10 +68,9 @@ export interface SonarSecretsHooksWriter {
 
 /**
  * Default writer: the nested `{ matcher, hooks: [{ type, command, timeout }] }` schema used by
- * Claude and Codex. `projectDirPlaceholder` is Claude-specific (its `${CLAUDE_PROJECT_DIR}`); pass
- * it in `SonarSecretsHooksResourcesConfig` only for Claude so Codex keeps its cwd-relative path.
+ * Claude and Codex.
  */
-function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHooksWriter {
+function createAgentHooksWriter(): SonarSecretsHooksWriter {
   return {
     defaultValue: { hooks: {} },
     patch: (document, context, entries, configDir) =>
@@ -85,7 +84,6 @@ function createAgentHooksWriter(projectDirPlaceholder?: string): SonarSecretsHoo
             entry.matcher ?? '*',
             entry.marker,
             entry.scriptPath,
-            { projectDirPlaceholder },
           ),
         ),
       ),
@@ -101,12 +99,6 @@ export interface SonarSecretsHooksResourcesConfig {
   hookEntries: SonarSecretsHookEntrySpec[];
   /** Hook-config serializer. Defaults to the Claude/Codex schema; agents like Cursor inject their own. */
   hookWriter?: SonarSecretsHooksWriter;
-  /**
-   * Agent-specific path placeholder (e.g. Claude Code's `${CLAUDE_PROJECT_DIR}`) to anchor
-   * project-scope hook commands to, instead of a bare cwd-relative path. Omit for agents with no
-   * such placeholder. Ignored when `hookWriter` is set.
-   */
-  projectDirPlaceholder?: string;
   /**
    * Re-roots the context the hook scripts, hook commands and hook config are resolved against, for
    * agents whose config directory is not `<targetRoot>/<configDir>` (e.g. Windows `%APPDATA%`).
@@ -125,7 +117,7 @@ export function resolveAgentHooksConfigPath(
 export function createSonarSecretsHooksResources(
   config: SonarSecretsHooksResourcesConfig,
 ): ResourceDeclaration[] {
-  const writer = config.hookWriter ?? createAgentHooksWriter(config.projectDirPlaceholder);
+  const writer = config.hookWriter ?? createAgentHooksWriter();
   const rootContext = config.resolveContext ?? ((context: IntegrationContext) => context);
   const resolveHooksConfigPath = (context: IntegrationContext) =>
     resolveAgentHooksConfigPath(rootContext(context), config.configDir, config.hooksConfigFileName);

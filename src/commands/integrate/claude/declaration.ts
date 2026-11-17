@@ -63,10 +63,7 @@ import {
   VORTEX_FEATURE_ID,
 } from '../_common/vortex.ts';
 import type { ClaudeHookSubfeature } from './hook-container-feature.ts';
-import {
-  CLAUDE_PROJECT_DIR_PLACEHOLDER,
-  createPostToolUseDispatchResources,
-} from './hook-container-feature.ts';
+import { createPostToolUseDispatchResources } from './hook-container-feature.ts';
 
 const CLAUDE_CONFIG_DIR = '.claude';
 const SETTINGS_FILE = 'settings.json';
@@ -227,7 +224,6 @@ function createSqaaStopHookSubfeature(): SubfeatureDeclaration<ClaudeIntegration
               undefined,
               'sonar-stop',
               STOP_SCRIPT_REL,
-              { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
             ),
           ]),
         removePatch: (document) => removeAgentHooks(document, ['sonar-stop']),
@@ -248,7 +244,6 @@ function createSessionStartHookEntry(
     matcher,
     VORTEX_HOOK_MARKER,
     SESSION_START_SCRIPT_REL,
-    { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
   );
 }
 
@@ -286,7 +281,6 @@ function createContextAugmentationFailureHookSubfeature(): SubfeatureDeclaration
               CONTEXT_AUGMENTATION_TOOL_MATCHER,
               'sonar-posttoolusefailure',
               POSTTOOLUSEFAILURE_SCRIPT_REL,
-              { projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER },
             ),
           ]),
         removePatch: (document) => removeAgentHooks(document, ['sonar-posttoolusefailure']),
@@ -323,7 +317,6 @@ function createClaudeSecretsDetectionResources(): ResourceDeclaration[] {
   return createSonarSecretsHooksResources({
     configDir: CLAUDE_CONFIG_DIR,
     hooksConfigFileName: SETTINGS_FILE,
-    projectDirPlaceholder: CLAUDE_PROJECT_DIR_PLACEHOLDER,
     scripts: [
       {
         id: 'pretool-secrets-script',
