@@ -97,7 +97,7 @@ export class ComponentsClient {
    * Uses /api/navigation/component - same endpoint the web UI uses; `id` is always present there.
    * Only a 404 resolves to `null` - every other failure propagates, matching `getComponent`.
    * `timeoutMs` overrides the default GET budget for callers with a tighter deadline (e.g.
-   * telemetry's `resolveProjectUuid`, which must not stall a hook past its own budget).
+   * telemetry's `resolveProjectUuids`, which must not stall a hook past its own budget).
    */
   getComponentId(
     componentKey: string,

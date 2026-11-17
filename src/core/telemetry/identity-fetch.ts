@@ -138,7 +138,7 @@ export function mergeIdentity(
   };
 }
 
-function cacheKey(auth: ResolvedAuth): string {
+export function identityCacheKey(auth: ResolvedAuth): string {
   const fingerprint = createHash('sha256')
     .update(auth.token)
     .digest('hex')
@@ -277,7 +277,7 @@ export async function resolveTelemetryIdentity(
   auth: ResolvedAuth,
   seed: TelemetryIdentity = EMPTY_IDENTITY,
 ): Promise<TelemetryIdentity> {
-  const entryKey = cacheKey(auth);
+  const entryKey = identityCacheKey(auth);
   const diskCache = readDiskCache();
   const diskEntry = entryKey in diskCache.entries ? diskCache.entries[entryKey] : undefined;
 
