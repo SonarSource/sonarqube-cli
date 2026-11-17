@@ -9,8 +9,10 @@ SOURCE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_PATH="${WORKDIR}/harbor/scripts/run-isolated.sh"
 AGENT_PATH="${AGENT_HOME}/.local/bin:${AGENT_HOME}/.local/share/sonarqube-cli/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 INSTALL_ENV=ARTIFACTORY_USER,ARTIFACTORY_ACCESS_TOKEN,HARBOR_VERSION,HARBOR_PYTHON_VERSION,UV_VERSION,AGENT,CODEX_VERSION
-RUN_ENV=PORTKEY_API_KEY,AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
+RUN_ENV=AGENT,MODEL,JOB_NAME,TASK,HB_SONAR_TOKEN,HB_SONAR_ORG,HB_SONAR_SERVER,HB_SONAR_API_URL,HARBOR_HOST_ENVIRONMENT_ALLOW
 ROOT_DIR_NAMES=(app logs tests solution installed-agent)
+PORTKEY_PROXY_PORT=8787
+PORTKEY_PROXY_PID=
 
 as_agent() {
   local preserved_env="$1"
@@ -102,12 +104,10 @@ run_benchmark() {
       expected_integration=claude-code
       prompt_hook=claude-prompt-submit
       file_hook=claude-pre-tool-use
-      export ANTHROPIC_BASE_URL=https://api.portkey.ai
+      export ANTHROPIC_BASE_URL="http://127.0.0.1:${PORTKEY_PROXY_PORT}"
       export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
-      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
       ;;
     codex)
-      : "${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
       expected_integration=codex
       prompt_hook=codex-prompt-submit
       file_hook=""
@@ -136,12 +136,31 @@ run_benchmark() {
     --env host_environment:HostEnvironment
 }
 
+start_portkey_proxy() {
+  python3 -I "${SOURCE_ROOT}/scripts/portkey-proxy.py" --port "${PORTKEY_PROXY_PORT}" &
+  PORTKEY_PROXY_PID=$!
+  for _ in $(seq 50); do
+    if (echo > "/dev/tcp/127.0.0.1/${PORTKEY_PROXY_PORT}") 2>/dev/null && kill -0 "${PORTKEY_PROXY_PID}" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.2
+  done
+  echo "The Portkey proxy did not start on port ${PORTKEY_PROXY_PORT}" >&2
+  exit 1
+}
+
+stop_and_collect() {
+  kill "${PORTKEY_PROXY_PID}" 2>/dev/null || true
+  collect_results
+}
+
 main() {
   export HARBOR_HOST_ENVIRONMENT_ALLOW=1
   prepare
-  trap collect_results EXIT
+  trap stop_and_collect EXIT
   assert_agent_cannot_sudo
   as_agent "${INSTALL_ENV}" bash "${SCRIPT_PATH}" install
+  start_portkey_proxy
   as_agent "${RUN_ENV}" bash "${SCRIPT_PATH}" run
 }
 
