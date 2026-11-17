@@ -44,6 +44,7 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandExecutedFact } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { QuietConsole } from '@/core/ui/quiet-console.ts';
 import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
@@ -96,6 +97,8 @@ import {
   type AuthStatusOptions,
   VALID_FORMATS as AUTH_STATUS_VALID_FORMATS,
 } from './auth/status.ts';
+import { badge, type BadgeOptions } from './badge/index.ts';
+import { BADGE_FORMATS, METRIC_NAMES } from './badge/render.ts';
 import {
   type ConfigGetOptions,
   getConfig,
@@ -351,6 +354,34 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Show active authentication connection with token verification')
     .addOption(formatOption(AUTH_STATUS_VALID_FORMATS, 'text'))
     .anonymousAction((ctx, options: AuthStatusOptions) => authStatus(options, ctx));
+
+  const badgeCommand = COMMAND_TREE.command('badge')
+    .description('Print status badges for a project, ready to paste into a README')
+    .rootHelp({ category: 'data' })
+    .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
+    .option(
+      '-m, --metric <metric>',
+      `Badges to print, comma-separated or repeatable. Defaults to quality-gate. Values: ${METRIC_NAMES.join(', ')}. Security hotspots are Server-only.`,
+      (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    )
+    .option('--branch <branch>', 'Branch name. Defaults to the main branch')
+    .addOption(formatOption(BADGE_FORMATS, 'markdown'))
+    .option('--allow-private', 'Confirm that private-project badge URLs may expose project metrics')
+    .option('--non-interactive', 'Do not prompt; private projects require --allow-private')
+    .addHelpText(
+      'after',
+      `
+Private-project badge URLs contain a token that exposes project metrics, including the security rating.
+Only use them in trusted environments, such as a private repository.
+
+Examples:
+  sonar badge
+  sonar badge -m quality-gate,coverage
+  sonar badge --format json
+  sonar badge --allow-private --non-interactive >> README.md
+`,
+    )
+    .authenticatedAction((ctx, options: BadgeOptions) => badge(options, ctx));
 
   // List Sonar resources
   const list = COMMAND_TREE.command('list')
@@ -1387,10 +1418,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
-  COMMAND_TREE.hook('preAction', async () => {
+  let badgePreviousOutputMode: boolean | undefined;
+  COMMAND_TREE.hook('preAction', async (_thisCommand, actionCommand) => {
+    const isBadge = actionCommand === badgeCommand;
+    if (isBadge) {
+      badgePreviousOutputMode = console.isFormattedOutputMode();
+      console.setFormattedOutputMode(true);
+    }
     // Safely: a throw from a Commander hook would abort the user's command.
     // Before Sentry init, which reads the telemetry opt-out this migrates.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    await runPostUpdateActionsSafely(
+      isBadge
+        ? { ...postUpdateDeps, console: new QuietConsole(console, { spinnerChannel: 'stderr' }) }
+        : postUpdateDeps,
+    );
   });
 
   // Defer Sentry initialization until a command action is about to run, so that
@@ -1405,17 +1446,24 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   // Emit handler facts plus CliCommandExecuted in one commit.
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
-    const command = actionCommand as SonarCommand;
-    commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
-    const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
-    await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
-      agentSessionId: resolveAgentSessionId(
-        command.invocationContext?.currentAgentSessionId() ?? capturedAgentSessionId,
-      ),
-      auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
-      command: command.commandAndSubcommand().command,
-    });
-    await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
+    try {
+      const command = actionCommand as SonarCommand;
+      commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
+      const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];
+      await commitTelemetryFacts([...handlerFacts, await buildCommandExecutedFact(command)], {
+        agentSessionId: resolveAgentSessionId(
+          command.invocationContext?.currentAgentSessionId() ?? capturedAgentSessionId,
+        ),
+        auth: await resolveInvocationAuthForTelemetry(command.invocationContext),
+        command: command.commandAndSubcommand().command,
+      });
+      await COMMAND_TREE.updateNotifier.maybeNotify(actionCommand);
+    } finally {
+      if (badgePreviousOutputMode !== undefined) {
+        console.setFormattedOutputMode(badgePreviousOutputMode);
+        badgePreviousOutputMode = undefined;
+      }
+    }
   });
 
   return COMMAND_TREE;

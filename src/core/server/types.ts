@@ -195,6 +195,7 @@ export interface ComponentTreeMeasure {
 }
 
 export interface ComponentSummary {
+  visibility?: string;
   organization?: string;
   key: string;
   name?: string;
