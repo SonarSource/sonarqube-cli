@@ -76,7 +76,13 @@ export interface CopilotHookEntry {
 
 export interface CopilotHooksJson {
   version: number;
-  hooks: { preToolUse?: CopilotHookEntry[]; userPromptTransformed?: CopilotHookEntry[] };
+  hooks: {
+    preToolUse?: CopilotHookEntry[];
+    userPromptTransformed?: CopilotHookEntry[];
+    agentStop?: CopilotHookEntry[];
+    subagentStop?: CopilotHookEntry[];
+    userPromptSubmitted?: CopilotHookEntry[];
+  };
 }
 
 export interface McpJson {
