@@ -757,8 +757,3 @@ export class SonarCommand extends Command {
     }
   }
 }
-
-/** Returns Private Beta flag keys recorded while building `root`. */
-export function collectPrivateBetaFlagKeys(root: SonarCommand): string[] {
-  return [...root.runtime.privateBetaFlags.flagKeys()];
-}

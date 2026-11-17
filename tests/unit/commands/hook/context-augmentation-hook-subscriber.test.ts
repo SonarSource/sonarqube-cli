@@ -76,8 +76,6 @@ describe('contextAugmentationPostToolUseSubscriber', () => {
       debug: () => {},
       error: () => {},
       info: () => {},
-      log: () => {},
-      success: () => {},
       warn: (message) => warnings.push(message),
     });
     const runContextPassthroughMock = mock(() => Promise.reject(new Error('Not authenticated.')));
