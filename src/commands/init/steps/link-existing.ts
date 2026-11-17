@@ -101,8 +101,11 @@ async function assertProjectExists(
 async function linkProject(
   projectKey: string,
   projectRoot: string,
-  { auth, http, console }: DetectDeps,
+  { auth, http, console, dryRun }: DetectDeps,
 ): Promise<InitOutcome> {
+  if (dryRun) {
+    return { kind: 'dry-run', action: { type: 'link', projectKey } };
+  }
   await writeMapping(auth, projectKey, projectRoot, console, 'found');
 
   console.success(
