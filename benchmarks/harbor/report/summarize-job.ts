@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
 
 interface TrialResult {
   task_name: string;
@@ -25,6 +26,7 @@ const LEAK_MARKER_FILE = 'secrets-leak.json';
 
 interface Row {
   label: string;
+  trialName: string | null;
   task: string;
   agent: string | null;
   model: string | null;
@@ -62,6 +64,7 @@ function lastSegment(value: string): string {
 function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
   return {
     label,
+    trialName: null,
     task,
     agent,
     model,
@@ -98,6 +101,7 @@ function rowFor(label: string, trialDir: string, trialName: string): Row {
   const metrics = trajectory?.final_metrics;
   return {
     label,
+    trialName,
     task: lastSegment(trial.task_name),
     agent: trial.agent_info?.name ?? null,
     model: trial.agent_info?.model_info?.name ?? null,
@@ -135,20 +139,86 @@ function cell(value: number | null, format: (n: number) => string = String): str
   return value === null ? '-' : format(value);
 }
 
-function renderTrial(row: Row): string[] {
+const PASSED_ICON = '✅';
+const FAILED_ICON = '❌';
+
+const STATUS_ICON: Record<Status, string> = {
+  PASS: PASSED_ICON,
+  FAIL: FAILED_ICON,
+  ERROR: '⚠️',
+  LEAK: '🚨',
+};
+
+function present(value: number | null, format: (n: number) => string): string | null {
+  return value === null ? null : format(value);
+}
+
+function trajectoryLink(row: Row): string | null {
+  const pageUrl = process.env.TRAJECTORY_PAGE_URL;
+  if (!pageUrl || row.trialName === null) return null;
+  const trialKey = encodeURIComponent(row.label + '/' + row.trialName);
+  return `[trajectory](${pageUrl}#${trialKey})`;
+}
+
+const TOKENS_PER_THOUSAND = 1000;
+const TOKENS_WITHOUT_DECIMAL = 10000;
+
+function compactNumber(value: number): string {
+  if (value < TOKENS_PER_THOUSAND) return String(value);
+  const thousands = value / TOKENS_PER_THOUSAND;
+  return `${thousands.toFixed(value < TOKENS_WITHOUT_DECIMAL ? 1 : 0)}k`;
+}
+
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+function tokensOf(row: Row): string | null {
+  if (row.promptTokens === null || row.completionTokens === null) return null;
+  return `${compactNumber(row.promptTokens)} in / ${compactNumber(row.completionTokens)} out`;
+}
+
+interface Column {
+  header: string;
+  cell: (row: Row) => string | null;
+}
+
+const TRIAL_COLUMNS: Column[] = [
+  { header: '', cell: (row) => STATUS_ICON[row.status] },
+  { header: 'Time', cell: (row) => present(row.agentSeconds, (n) => `⏱ ${n.toFixed(0)} s`) },
+  { header: 'Steps', cell: (row) => present(row.steps, String) },
+  { header: 'Tokens', cell: tokensOf },
+  { header: 'Cost', cell: (row) => present(row.costUsd, (n) => `$${n.toFixed(4)}`) },
+  { header: '', cell: trajectoryLink },
+];
+
+function renderTrialsTable(rows: Row[]): string[] {
+  const columns = TRIAL_COLUMNS.filter(
+    (column, index) => index === 0 || rows.some((row) => column.cell(row) !== null),
+  );
   return [
-    row.label,
-    row.task,
-    row.agent ?? '-',
-    row.model ?? '-',
-    row.status,
-    cell(row.agentSeconds, (n) => `${n.toFixed(0)}s`),
-    cell(row.steps),
-    cell(row.promptTokens),
-    cell(row.completionTokens),
-    cell(row.cachedTokens),
-    cell(row.costUsd, (n) => `$${n.toFixed(4)}`),
+    `| ${columns.map((column) => column.header).join(' | ')} |`,
+    `|${columns.map(() => '---').join('|')}|`,
+    ...rows.map((row) => `| ${columns.map((column) => column.cell(row) ?? '').join(' | ')} |`),
   ];
+}
+
+const INDENT = '&emsp;&emsp;';
+const GAP = '&emsp;';
+
+function indented(level: number, line: string): string {
+  return INDENT.repeat(level) + line;
+}
+
+function hardBreaks(lines: string[]): string[] {
+  return lines.map((line, index) => (index < lines.length - 1 ? `${line}  ` : line));
+}
+
+function failuresFirst(rows: Row[]): Row[] {
+  return [...rows].sort(
+    (a, b) =>
+      Number(a.status === 'PASS') - Number(b.status === 'PASS') || a.task.localeCompare(b.task),
+  );
 }
 
 function total(values: (number | null)[]): number | null {
@@ -172,62 +242,114 @@ function groupTrials(rows: Row[]): Row[][] {
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group);
 }
 
-function renderGroup(group: Row[]): string[] {
+function agentLabel(agent: string | null): string {
+  if (agent === 'claude-code') return 'Claude Code';
+  if (agent === 'codex') return 'Codex';
+  return agent ?? 'Unknown agent';
+}
+
+const TASKS_PER_MODEL_BEFORE_FOLD = 6;
+
+const FOLD_DEPTH = 5;
+const OPEN_INDENT = '<dl><dd>'.repeat(FOLD_DEPTH);
+const CLOSE_INDENT = '</dd></dl>'.repeat(FOLD_DEPTH);
+
+function renderTaskSection(group: Row[]): string[] {
   const [first] = group;
   const passed = group.filter((row) => row.status === 'PASS').length;
+  const time = present(
+    average(group.map((row) => row.agentSeconds)),
+    (n) => `Avg time ${n.toFixed(0)} s`,
+  );
+  const cost = present(
+    average(group.map((row) => row.costUsd)),
+    (n) => `Avg cost $${n.toFixed(4)}`,
+  );
+  const mark = passed === group.length ? PASSED_ICON : FAILED_ICON;
+  const result = `${mark} ${passed} of ${group.length} passed`;
+  const figures = [result, time, cost].filter(Boolean).join(GAP);
   return [
-    first.label,
-    first.task,
-    first.agent ?? '-',
-    first.model ?? '-',
-    `${passed}/${group.length}`,
-    cell(average(group.map((row) => row.agentSeconds)), (n) => `${n.toFixed(0)}s`),
-    cell(average(group.map((row) => row.steps)), (n) => n.toFixed(1)),
-    cell(average(group.map((row) => row.promptTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.completionTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.cachedTokens)), (n) => n.toFixed(0)),
-    cell(average(group.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`),
+    ...hardBreaks([
+      indented(1, `\`${first.task}\` ([link](${TASKS_PAGE_URL}#${first.task}))`),
+      indented(2, taskTitle(first.task)),
+      indented(2, figures),
+    ]),
+    '',
+    OPEN_INDENT,
+    '<details>',
+    `<summary>${plural(group.length, 'trial')}, open one to read its trajectory</summary>`,
+    '',
+    ...renderTrialsTable(failuresFirst(group)),
+    '',
+    '</details>',
+    CLOSE_INDENT,
+    '',
   ];
 }
 
-function renderTable(header: string[], lines: string[][]): string[] {
+function renderTaskSections(groups: Row[][]): string[] {
+  const sections = groups.flatMap(renderTaskSection);
+  if (groups.length <= TASKS_PER_MODEL_BEFORE_FOLD) return sections;
   return [
-    `| ${header.join(' | ')} |`,
-    `|${header.map(() => '---').join('|')}|`,
-    ...lines.map((line) => `| ${line.join(' | ')} |`),
+    '<details>',
+    `<summary>Show the ${groups.length} tasks</summary>`,
+    '',
+    ...sections,
+    '</details>',
+    '',
   ];
+}
+
+function renderAgentSection(sectionRows: Row[]): string[] {
+  const [first] = sectionRows;
+  const passed = sectionRows.filter((row) => row.status === 'PASS').length;
+  const groups = groupTrials(sectionRows);
+  const mark = passed === sectionRows.length ? PASSED_ICON : FAILED_ICON;
+  const cost = present(total(sectionRows.map((row) => row.costUsd)), (n) => `$${n.toFixed(4)}`);
+  const result = `${passed} of ${plural(sectionRows.length, 'trial')} passed`;
+  const figures = [result, cost && `${cost} in total`, plural(groups.length, 'task')];
+  return [
+    `### ${mark} Agent: ${agentLabel(first.agent)} (${first.model ?? 'unknown model'})`,
+    '',
+    figures.filter(Boolean).join(GAP),
+    '',
+    '#### Tasks',
+    '',
+    ...renderTaskSections(groups),
+  ];
+}
+
+function renderAgentSections(rows: Row[]): string[] {
+  const sections = new Map<string, Row[]>();
+  for (const row of rows) {
+    const key = [row.agent ?? '-', row.model ?? '-'].join('|');
+    sections.set(key, [...(sections.get(key) ?? []), row]);
+  }
+  return [...sections.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([, sectionRows]) => renderAgentSection(sectionRows));
+}
+
+function renderIntro(): string[] {
+  const pageUrl = process.env.TRAJECTORY_PAGE_URL;
+  const sentence =
+    'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail.';
+  if (!pageUrl) return [sentence, ''];
+  return [...hardBreaks([sentence, `[Read every trajectory, step by step](${pageUrl})`]), ''];
 }
 
 function renderReport(rows: Row[]): string {
-  const metrics = [
-    'Agent time',
-    'Steps',
-    'Prompt tokens',
-    'Completion tokens',
-    'Cached tokens',
-    'Cost',
-  ];
+  const passed = rows.filter((row) => row.status === 'PASS').length;
   const lines = [
     '## Harbor benchmark',
     '',
-    'Averages over the trials of each task, agent, model and OS.',
-    '',
-    ...renderTable(
-      ['OS', 'Task', 'Agent', 'Model', 'Passed', ...metrics],
-      groupTrials(rows).map(renderGroup),
-    ),
-    '',
-    `Total cost of the ${rows.filter((row) => row.costUsd !== null).length} trials with a cost: ${cell(
+    ...renderIntro(),
+    `${passed === rows.length ? PASSED_ICON : FAILED_ICON} ${passed} of ${plural(rows.length, 'trial')} passed, ${cell(
       total(rows.map((row) => row.costUsd)),
       (n) => `$${n.toFixed(4)}`,
-    )}`,
+    )} in total`,
     '',
-    '<details>',
-    '<summary>Trials</summary>',
-    '',
-    ...renderTable(['OS', 'Task', 'Agent', 'Model', 'Status', ...metrics], rows.map(renderTrial)),
-    '',
-    '</details>',
+    ...renderAgentSections(rows),
   ];
   return lines.join('\n') + '\n';
 }
