@@ -20,6 +20,13 @@
 
 import { createHash } from 'node:crypto';
 
+import type {
+  GitHubBranch,
+  GitHubPullRequest,
+  GitHubRepo,
+  GitHubTreeEntry,
+} from '@/core/github/client.ts';
+
 import type { RecordedRequest } from './types.js';
 
 export interface FakeGitHubRepository {
@@ -33,21 +40,13 @@ interface Branch {
   files: Map<string, string>;
 }
 
-interface PullRequest {
-  number: number;
-  html_url: string;
-  state: 'open';
-  head: { ref: string; sha: string };
-  base: { ref: string };
-}
-
 interface Repository {
   id: number;
   name: string;
   fullName: string;
   defaultBranch: string;
   branches: Map<string, Branch>;
-  pullRequests: PullRequest[];
+  pullRequests: GitHubPullRequest[];
 }
 
 export class FakeGitHubServer {
@@ -190,7 +189,7 @@ export class FakeGitHubServerBuilder {
             ? Response.json({
                 ref: `refs/heads/${branchName}`,
                 object: { type: 'commit', sha: branch.sha },
-              })
+              } satisfies GitHubBranch)
             : Response.json({ message: 'Not Found' }, { status: 404 });
         }
 
@@ -211,7 +210,10 @@ export class FakeGitHubServerBuilder {
           }
           repo.branches.set(name, { sha: source.sha, files: new Map(source.files) });
           return Response.json(
-            { ref: payload.ref, object: { type: 'commit', sha: source.sha } },
+            {
+              ref: payload.ref,
+              object: { type: 'commit', sha: source.sha },
+            } satisfies GitHubBranch,
             { status: 201 },
           );
         }
@@ -305,7 +307,7 @@ export class FakeGitHubServerBuilder {
                 { status: 422 },
               );
             }
-            const pr: PullRequest = {
+            const pr: GitHubPullRequest = {
               number: repo.pullRequests.length + 1,
               html_url: `https://github.com/${fullName}/pull/${repo.pullRequests.length + 1}`,
               state: 'open',
@@ -324,7 +326,7 @@ export class FakeGitHubServerBuilder {
   }
 }
 
-function metadata(repo: Repository) {
+function metadata(repo: Repository): GitHubRepo {
   return {
     id: repo.id,
     name: repo.name,
@@ -342,9 +344,9 @@ function blobSha(content: string): string {
     .digest('hex');
 }
 
-function directoryEntries(branch: Branch, path: string) {
+function directoryEntries(branch: Branch, path: string): GitHubTreeEntry[] {
   const prefix = path ? `${path}/` : '';
-  const entries = new Map<string, { name: string; path: string; type: string; sha: string }>();
+  const entries = new Map<string, GitHubTreeEntry>();
   for (const [filePath, content] of branch.files) {
     if (!filePath.startsWith(prefix)) continue;
     const [name, ...rest] = filePath.slice(prefix.length).split('/');
