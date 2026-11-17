@@ -76,9 +76,9 @@ export type ScanResult =
       issueBreakdown: IssueBreakdown | null;
     };
 
-/** Without a terminal there is nobody to ask, so only a scan flag counts as the request. */
+/** Without a terminal there is nobody to ask, so only an option that is meaningless without a scan counts as the request. */
 function scanRequested(flags: ScanOptions): boolean {
-  return flags.scan || flags.detach || flags.verbose || flags.scannerProperties.size > 0;
+  return flags.scan || flags.detach || flags.scannerProperties.size > 0;
 }
 
 export const NOT_RUN: ScanResult = { status: 'not-run' };
