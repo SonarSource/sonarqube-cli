@@ -42,32 +42,19 @@ const AUTH = new ResolvedAuth({
   source: 'state' as const,
 });
 
-async function commandEventAuth(): Promise<ResolvedAuth | undefined> {
-  const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
-  const [executed] = await buildCommandFacts(command);
-  return executed.auth;
-}
-
 beforeEach(() => {
   resetProjectUuidContextForTests();
 });
 
 describe('buildCommandFacts() command event auth', () => {
-  it('falls back to the invocation auth when no target project was noted', async () => {
-    expect(await commandEventAuth()).toBeUndefined();
-  });
-
-  it('falls back to the invocation auth for a single target project', async () => {
-    noteProject(AUTH, 'proj-a');
-
-    expect(await commandEventAuth()).toBeUndefined();
-  });
-
-  it('falls back to the invocation auth for several target projects', async () => {
+  it('carries no auth of its own, even with several target projects', async () => {
     noteProject(AUTH, 'proj-a');
     noteProject(AUTH, 'proj-b');
+    const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
 
-    expect(await commandEventAuth()).toBeUndefined();
+    const [executed] = await buildCommandFacts(command);
+
+    expect(executed.auth).toBeUndefined();
   });
 });
 
