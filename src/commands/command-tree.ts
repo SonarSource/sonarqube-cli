@@ -898,15 +898,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--link [key]',
-      'Link this directory to an existing project: the one found for the repository, or the project named by key. Required to link without prompting',
+      'Link this directory to an existing project without prompting: the one found for the repository, or the project named by key',
     )
     .option(
       '--bind',
-      'Create a new project bound to the repository (SonarQube Cloud, with the organization linked to your DevOps platform). Required to bind without prompting',
+      'Create a new project bound to the repository without prompting (SonarQube Cloud, with the organization linked to your DevOps platform)',
     )
     .option(
       '--create',
-      'Create a new project without repository binding, configured by --project, --name and --visibility. Required to create without prompting',
+      'Create a new unbound project (without repository binding) without prompting, optionally configured by --project, --name and --visibility',
     )
     .option(
       '--project <key>',
@@ -927,7 +927,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--scan',
-      'Run the first analysis of a project created with --create, without asking; implied by --detach, --verbose and --scanner-property',
+      'Run the first analysis of a newly created unbound project without asking; implied by --detach and --scanner-property',
     )
     .option('--verbose', 'Stream the scanner logs while the first analysis runs')
     .option(
