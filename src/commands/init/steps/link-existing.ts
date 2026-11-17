@@ -22,19 +22,15 @@ import {
   ProjectSelectionCancelledError,
   searchForProject,
 } from '@/commands/link/choose-project.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
 
 import { requireAnswer } from '../answer.ts';
+import { missingDecision } from '../decision.ts';
 import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
-import {
-  KEEP_OTHER_LINKS_NOTE,
-  linkCommandFor,
-  showAnalysisResults,
-  writeMapping,
-} from './mapping.ts';
+import { showAnalysisResults, writeMapping } from './mapping.ts';
 
 /**
  * Asks to link the directory to the project that already exists for the repository: the one the
@@ -42,42 +38,71 @@ import {
  * user declines, they are asked whether to link another existing project, picked with the
  * `sonar link` picker. Declining that continues as `unbound-new`, and leaving the picker asks
  * whether to abandon linking (default no, which reopens the picker) before doing the same. The
- * chosen project is mapped in `.sonar-config.json` and its existing results are shown. Only the
- * user's own decision continues as `unbound-new`: when no answer can be asked, or the mapping
- * cannot be written, it fails with a `sonar link` hint, so no second project is created for a
- * repository that already has one.
+ * chosen project is mapped in `.sonar-config.json` and its existing results are shown.
+ * `--link` answers the first question, and `--link <key>` names the project instead. Only the
+ * user's own decision continues as `unbound-new`: `--create` or `--bind`, or no answer to ask,
+ * fail instead, so no second project is created for a repository that already has one.
  */
 export async function runLinkExisting(
-  { projectRoot, remote, projectKey: detectedKey }: LinkExistingPath,
-  { auth, http, console, interactive }: DetectDeps,
+  { projectRoot, remote, projectKey: foundKey, requested }: LinkExistingPath,
+  deps: DetectDeps,
 ): Promise<InitOutcome | UnboundNewPath> {
-  if (!interactive) {
-    throw new CommandFailedError(
-      `A Sonar project already exists for this repository: '${detectedKey}'. Linking it needs an answer, and none can be asked.`,
-      {
-        remediationHint: `Map it by running:\n  ${await linkCommandFor(detectedKey, projectRoot)}\n${KEEP_OTHER_LINKS_NOTE}`,
-      },
+  const { auth, http, console, interactive, intent } = deps;
+  if (requested) {
+    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
+    return linkProject(foundKey, projectRoot, deps);
+  }
+  const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
+  if (intent?.kind === 'link') {
+    return linkProject(foundKey, projectRoot, deps);
+  }
+  if (intent) {
+    throw new InvalidOptionError(
+      `${situation} --${intent.kind} would create a second project for it.`,
+      "Run 'sonar init' again with --link to link it.",
     );
+  }
+  if (!interactive) {
+    throw missingDecision(situation, ['--link']);
   }
 
   const unbound: UnboundNewPath = { path: 'unbound-new', projectRoot, remote };
   const link = requireAnswer(
-    await console.confirmPrompt(
-      `A Sonar project already exists for this repository: '${detectedKey}'. Link this directory to it?`,
-      true,
-    ),
+    await console.confirmPrompt(`${situation} Link this directory to it?`, true),
   );
   if (!link && !(await confirmAnotherProject(console))) {
     return unbound;
   }
 
   const projectKey = link
-    ? detectedKey
+    ? foundKey
     : await pickProject(new ProjectsClient(http), { auth, console });
   if (projectKey === null) {
     return unbound;
   }
+  return linkProject(projectKey, projectRoot, deps);
+}
 
+/** `--link <key>` is checked before it is written, since nothing found it on the server. */
+async function assertProjectExists(
+  projects: ProjectsClient,
+  projectKey: string,
+  organization: string | undefined,
+): Promise<void> {
+  if (!(await projects.findProject(projectKey, organization).orThrow())) {
+    const where = organization ? ` in organization '${organization}'` : '';
+    throw new InvalidOptionError(
+      `--link names project '${projectKey}', which does not exist${where}.`,
+      "Check the key, or run 'sonar init' again with --create to create a new project.",
+    );
+  }
+}
+
+async function linkProject(
+  projectKey: string,
+  projectRoot: string,
+  { auth, http, console }: DetectDeps,
+): Promise<InitOutcome> {
   await writeMapping(auth, projectKey, projectRoot, console, 'found');
 
   console.success(
