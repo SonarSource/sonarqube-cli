@@ -2410,6 +2410,33 @@ describe('auth login — connection source', () => {
   );
 
   it(
+    'omits a config path that contains a terminal control character',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const hostileDir = `evil\u001b[2Kname`;
+      harness.cwd.writeFile(
+        `${hostileDir}/sonar-project.properties`,
+        `sonar.host.url=${server.baseUrl()}\n`,
+      );
+
+      const result = await confirmTrust(harness, 'auth login', {
+        browserToken: 'my-token',
+        cwd: join(harness.cwd.path, hostileDir),
+      });
+
+      const output = result.stdout + result.stderr;
+      expect(result.exitCode).toBe(0);
+      expect(output).not.toContain(`evil\u001b[2Kname`);
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties: server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'names the ancestor .sonar-config.json when login starts in a subdirectory',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('my-token').start();

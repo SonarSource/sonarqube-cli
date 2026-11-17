@@ -32,6 +32,7 @@ import {
 import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
 import {
+  displayConfigPath,
   formatConfigFields,
   formatFoundConfig,
   selectValidServerUrl,
@@ -177,8 +178,9 @@ function applySonarLintConfig(
       local.sonarLintData.organization,
     );
     if (fields) {
+      const relativeLabel = local.sonarLintConfigPath.replaceAll('\\', '/');
       options.console.print(
-        formatFoundConfig(local.sonarLintConfigPath.replaceAll('\\', '/'), sonarlintFile, fields),
+        formatFoundConfig(displayConfigPath(relativeLabel) ?? '.sonarlint', sonarlintFile, fields),
       );
     }
   }
