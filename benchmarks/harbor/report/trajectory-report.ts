@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TASKS_PAGE_URL, checkSentence } from './tasks.ts';
+import { lastSegment, readJson } from './read-json.ts';
 
 interface Span {
   started_at: string | null;
@@ -57,17 +58,9 @@ interface Step {
 const LEAK_MARKER_FILE = 'secrets-leak.json';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-function readJson<T>(path: string): T | null {
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : null;
-}
-
 function seconds(span: Span | null): number | null {
   if (!span?.started_at || !span.finished_at) return null;
   return (Date.parse(span.finished_at) - Date.parse(span.started_at)) / 1000;
-}
-
-function lastSegment(value: string): string {
-  return value.slice(value.lastIndexOf('/') + 1);
 }
 
 function checksOf(rewards: Record<string, number> | null): { text: string; ok: boolean }[] {
