@@ -23,7 +23,8 @@ import type {
   ResourceDeclaration,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
-import { textSnippet, wholeFile } from '@/core/framework/features';
+import { textSnippet, textSnippetRemover, wholeFile } from '@/core/framework/features';
+import type { RemovableResource, ResourceIdentity } from '@/core/framework/resources';
 import type { IntegrationScope } from '@/core/state/state.ts';
 
 import { sonarBeginMarker, sonarEndMarker } from '../instructions-templates.ts';
@@ -33,6 +34,7 @@ export const SQAA_HOOK_FEATURE_ID = 'sonar-sqaa-hook';
 export const SQAA_INSTRUCTIONS_SUBFEATURE_ID = 'sqaa-instructions';
 export const SQAA_INSTRUCTIONS_GLOBAL_SUBFEATURE_ID = 'sqaa-instructions-global';
 const SQAA_INSTRUCTIONS_MARKER = 'sonarqube-agentic-analysis-protocol';
+const SQAA_INSTRUCTIONS_RESOURCE_ID = 'sqaa-instructions-file';
 
 export const SQAA_INSTRUCTIONS_BODY = `# Vortex analysis protocol
 
@@ -87,12 +89,23 @@ export function createSqaaInstructionsSnippet(
   targetPath: (context: IntegrationContext) => string,
 ): ResourceDeclaration {
   return textSnippet({
-    id: 'sqaa-instructions-file',
+    id: SQAA_INSTRUCTIONS_RESOURCE_ID,
     displayName: 'Vortex analysis instructions',
     targetPath,
     startMarker: sonarBeginMarker(SQAA_INSTRUCTIONS_MARKER),
     endMarker: sonarEndMarker(SQAA_INSTRUCTIONS_MARKER),
     content: SQAA_INSTRUCTIONS_BODY,
+  });
+}
+
+export function createSqaaInstructionsRemover(
+  targetPath: (context: IntegrationContext) => string,
+): ResourceIdentity & RemovableResource {
+  return textSnippetRemover({
+    id: SQAA_INSTRUCTIONS_RESOURCE_ID,
+    targetPath,
+    startMarker: sonarBeginMarker(SQAA_INSTRUCTIONS_MARKER),
+    endMarker: sonarEndMarker(SQAA_INSTRUCTIONS_MARKER),
   });
 }
 
