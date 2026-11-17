@@ -131,6 +131,7 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
     scannerProperties: new Map([['sonar.sources', '.']]),
     verbose: false,
     detach: false,
+    scan: false,
     ...overrides,
   };
 }
@@ -171,6 +172,14 @@ describe('runFirstScan without a scan', () => {
     const none = flags({ scannerProperties: new Map() });
 
     expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), none)).toBe(NOT_RUN);
+    expect(console.calls).toHaveLength(0);
+  });
+
+  it('does not scan a non-interactive run that only passed --verbose', async () => {
+    const console = new FakeConsole();
+    const verbose = flags({ scannerProperties: new Map(), verbose: true });
+
+    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), verbose)).toBe(NOT_RUN);
     expect(console.calls).toHaveLength(0);
   });
 
@@ -243,6 +252,23 @@ describe('runFirstScan failures', () => {
     expect(error.remediationHint).toContain(
       "Project 'my-key' and .sonar-config.json were kept, so the setup is intact.",
     );
+  });
+
+  it('starts the analysis without asking when --scan was passed', async () => {
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
+    clearNetworkConfigCache();
+    const console = new FakeConsole();
+
+    await failureOf(
+      runFirstScan(
+        projectRoot,
+        'my-key',
+        depsFor(console, { interactive: true }),
+        flags({ scan: true }),
+      ),
+    );
+
+    expect(console.calls.some((call) => call.method === 'confirmPrompt')).toBe(false);
   });
 
   it('refuses --detach with a PEM client key before downloading the scanner', async () => {

@@ -54,6 +54,8 @@ export interface ScanOptions {
   scannerProperties: Map<string, string>;
   verbose: boolean;
   detach: boolean;
+  /** `--scan`: run the analysis without asking. */
+  scan: boolean;
 }
 
 /**
@@ -74,9 +76,9 @@ export type ScanResult =
       issueBreakdown: IssueBreakdown | null;
     };
 
-/** Without a terminal there is nobody to ask, so only a scan flag counts as the request. */
+/** Without a terminal there is nobody to ask, so only an option that is meaningless without a scan counts as the request. */
 function scanRequested(flags: ScanOptions): boolean {
-  return flags.detach || flags.verbose || flags.scannerProperties.size > 0;
+  return flags.scan || flags.detach || flags.scannerProperties.size > 0;
 }
 
 export const NOT_RUN: ScanResult = { status: 'not-run' };
@@ -188,7 +190,8 @@ export async function runFirstScan(
   flags: ScanOptions,
 ): Promise<ScanResult> {
   const { auth, console, interactive } = deps;
-  if (interactive ? !(await confirmScan(console)) : !scanRequested(flags)) {
+  const requested = interactive ? flags.scan || (await confirmScan(console)) : scanRequested(flags);
+  if (!requested) {
     return NOT_RUN;
   }
 
