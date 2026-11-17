@@ -492,7 +492,7 @@ describe('sonar hook git-pre-commit', () => {
           const [command] = readCommandEvents(harness.sonarUserHome.path);
           expect(command.event_payload.target_project_count).toBe(2);
           expect(command.event_payload.project_uuid).toBeNull();
-          expect(command.event_payload.connection_type).toBeNull();
+          expect(command.event_payload.connection_type).not.toBeNull();
           const targetProjects = readTargetProjectResolvedEvents(harness.sonarUserHome.path);
           expect(
             targetProjects.map((targetProject) => targetProject.event_payload.project_uuid),

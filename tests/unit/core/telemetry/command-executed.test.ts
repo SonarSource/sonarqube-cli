@@ -42,7 +42,7 @@ const AUTH = new ResolvedAuth({
   source: 'state' as const,
 });
 
-async function commandEventAuth(): Promise<ResolvedAuth | null | undefined> {
+async function commandEventAuth(): Promise<ResolvedAuth | undefined> {
   const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
   const [executed] = await buildCommandFacts(command);
   return executed.auth;
@@ -63,11 +63,11 @@ describe('buildCommandFacts() command event auth', () => {
     expect(await commandEventAuth()).toBeUndefined();
   });
 
-  it('has no server identity for several target projects, even on one connection', async () => {
+  it('falls back to the invocation auth for several target projects', async () => {
     noteProject(AUTH, 'proj-a');
     noteProject(AUTH, 'proj-b');
 
-    expect(await commandEventAuth()).toBeNull();
+    expect(await commandEventAuth()).toBeUndefined();
   });
 });
 

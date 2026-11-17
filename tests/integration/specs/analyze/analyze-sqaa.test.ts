@@ -3489,10 +3489,7 @@ describe('analyze agentic — monorepo with several mapped projects', () => {
       const [command] = commands;
       expect(command.event_payload.target_project_count).toBe(2);
       expect(command.event_payload.project_uuid).toBeNull();
-      expect(command.event_payload.connection_type).toBeNull();
-      expect(command.event_payload.organization_uuid_v4).toBeNull();
-      expect(command.event_payload.sqs_installation_id).toBeNull();
-      expect(command.event_payload.user_uuid).toBeNull();
+      expect(command.event_payload.connection_type).not.toBeNull();
 
       const targetProjects = readTargetProjectResolvedEvents(harness.sonarUserHome.path);
       expect(

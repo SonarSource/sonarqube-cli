@@ -58,20 +58,15 @@ export type TargetProjectResolvedPayload = {
 export async function buildCommandFacts(command: SonarCommand): Promise<TelemetryFact[]> {
   const { command: commandName, subcommand } = command.commandAndSubcommand();
   const targetProjects = await resolveTelemetryTargetProjects();
-  const executed = new TelemetryFact<CommandExecutedPayload>(
-    CLI_COMMAND_EXECUTED,
-    {
-      command: commandName,
-      subcommand,
-      result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
-      distribution: DISTRIBUTION,
-      project_uuid: targetProjects.length === 1 ? targetProjects[0].projectUuid : null,
-      target_project_count: targetProjects.length,
-      arguments: command.describeInvocationArguments(),
-    },
-    // Several target projects cannot be attributed to one server, so the command event carries none.
-    targetProjects.length > 1 ? { auth: null } : undefined,
-  );
+  const executed = new TelemetryFact<CommandExecutedPayload>(CLI_COMMAND_EXECUTED, {
+    command: commandName,
+    subcommand,
+    result: (process.exitCode ?? 0) === 0 ? 'success' : 'failure',
+    distribution: DISTRIBUTION,
+    project_uuid: targetProjects.length === 1 ? targetProjects[0].projectUuid : null,
+    target_project_count: targetProjects.length,
+    arguments: command.describeInvocationArguments(),
+  });
   // A target whose id did not resolve identifies no project; target_project_count still counts it.
   const targetProjectFacts = targetProjects.flatMap(({ auth, projectUuid }) =>
     projectUuid === null

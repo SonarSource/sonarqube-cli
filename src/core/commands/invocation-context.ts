@@ -37,17 +37,16 @@ import type { Console } from '@/core/ui/console.ts';
  * - `name` — short event name (no shared domain prefix)
  * - `payload` — business data; typed at the producer, opaque here
  * - `timestamp` — ms since epoch, defaulted at construction, overridable
- * - `auth` — command auth to resolve identity at drain; omit for the invocation's auth, `null`
- *   for no server identity at all
+ * - `auth` — command auth to resolve identity at drain; omit for store-event identity
  */
 export type TelemetryFactOptions = {
   timestamp?: number;
-  auth?: ResolvedAuth | null;
+  auth?: ResolvedAuth;
 };
 
 export class TelemetryFact<TPayload = unknown> {
   readonly timestamp: number;
-  readonly auth?: ResolvedAuth | null;
+  readonly auth?: ResolvedAuth;
 
   constructor(
     readonly name: string,
