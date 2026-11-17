@@ -59,7 +59,6 @@ export async function agentStop(
   return { agentSessionId: sessionId ?? null };
 }
 
-/** Return feedback only after analysis and its state changes have succeeded. */
 async function resolveStopAnalysis(
   ctx: CommandInvocationContext,
   agent: string,

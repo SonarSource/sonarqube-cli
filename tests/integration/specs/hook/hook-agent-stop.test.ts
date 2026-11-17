@@ -243,7 +243,6 @@ describe('agent stop hook', () => {
       expect(replacement.exitCode).toBe(0);
       expect(JSON.parse(replacement.stdout).decision).toBe('block');
       expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
-      // A late failed run must not reset the replacement session's counter or overwrite its cache.
       withDb((db) => db.run('UPDATE vortex_successful_analyses SET analyzed_at = ?', [savedAt]));
     } finally {
       release.resolve();
@@ -370,19 +369,26 @@ describe('agent stop hook', () => {
   }, 15000);
 
   it('allows stopping without a connection', async () => {
-    harness.state().clearAuth();
     harness.cwd.writeFile('src/new.ts', BAD);
+    expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+    expect(queryState().count).toBe(1);
+    harness.state().clearAuth();
     const result = await invoke();
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe('');
-    expect(analyses()).toHaveLength(0);
+    expect(analyses()).toHaveLength(1);
+    expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
   }, 15000);
 
   it('allows stopping outside a Git repository', async () => {
+    harness.cwd.writeFile('src/new.ts', BAD);
+    expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+    expect(queryState().count).toBe(1);
     const result = await invoke({ cwd: harness.userHome.path });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe('');
-    expect(analyses()).toHaveLength(0);
+    expect(analyses()).toHaveLength(1);
+    expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
   }, 15000);
 
   it('allows stopping for an unknown agent', async () => {
