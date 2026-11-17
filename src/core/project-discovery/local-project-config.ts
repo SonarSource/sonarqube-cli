@@ -91,8 +91,10 @@ async function loadSonarProperties(projectRoot: string): Promise<SonarProperties
   }
 
   // Cloud scanners conventionally omit sonar.host.url — the region's URL is well-known.
-  if (!props.hostURL && props.organization) {
-    props.hostURL = sonarCloudBaseUrlFromRegion(region);
+  if (!props.hostURL && (props.organization || region?.trim())) {
+    const hostURL = sonarCloudBaseUrlFromRegion(region);
+    if (!hostURL) return null;
+    props.hostURL = hostURL;
   }
 
   return props as SonarProperties;
