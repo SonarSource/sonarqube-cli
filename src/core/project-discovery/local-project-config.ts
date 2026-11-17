@@ -174,7 +174,9 @@ function applySonarLintConfig(
       local.sonarLintData.organization,
     );
     if (fields) {
-      options.console.print(formatFoundConfig(local.sonarLintConfigPath, lintFile, fields));
+      options.console.print(
+        formatFoundConfig(local.sonarLintConfigPath.replaceAll('\\', '/'), lintFile, fields),
+      );
     }
   }
 
