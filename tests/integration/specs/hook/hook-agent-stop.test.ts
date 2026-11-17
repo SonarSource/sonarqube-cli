@@ -409,9 +409,12 @@ describe('agent stop hook', () => {
       30000,
     );
 
-    it('quarantines corrupt storage and runs analysis with fresh state', async () => {
+    it('allows stopping after corruption and analyzes on a later invocation', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
       harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', 'corrupt database');
+      expectSilentStop(await invoke());
+      expect(analyses()).toHaveLength(0);
+      expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
       const result = await invoke();
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).decision).toBe('block');
@@ -423,6 +426,16 @@ describe('agent stop hook', () => {
         ),
       ).toBe(true);
     }, 15000);
+
+    it('allows stopping when corruption recurs across hook invocations', async () => {
+      harness.cwd.writeFile('src/new.ts', BAD);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', 'corrupt database');
+        expectSilentStop(await invoke());
+        expect(analyses()).toHaveLength(0);
+        expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
+      }
+    }, 30000);
   });
 
   describe('session counters and cached analyses', () => {
