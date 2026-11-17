@@ -113,10 +113,16 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
   };
 }
 
+export interface LocalConfigFiles {
+  server?: string;
+  organization?: string;
+}
+
 function applyLocalSonarProperties(
   config: PartialProjectMapping,
   local: LocalProjectConfig,
   propertiesFile: string,
+  configFiles: LocalConfigFiles,
   options: DiscoverProjectOptions,
 ): void {
   if (!local.hasSonarProps || !local.sonarPropsData) {
@@ -126,12 +132,8 @@ function applyLocalSonarProperties(
   config.serverUrl = selectValidServerUrl(undefined, local.sonarPropsData.hostURL);
   config.projectKey = local.sonarPropsData.projectKey;
   config.organization = local.sonarPropsData.organization;
-  if (config.serverUrl) {
-    config.serverConfigFile = propertiesFile;
-  }
-  if (config.organization) {
-    config.organizationConfigFile = propertiesFile;
-  }
+  configFiles.server = config.serverUrl ? propertiesFile : undefined;
+  configFiles.organization = config.organization ? propertiesFile : undefined;
 
   if (options.silent) {
     return;
@@ -147,6 +149,7 @@ function applySonarLintConfig(
   config: PartialProjectMapping,
   local: LocalProjectConfig,
   sonarlintFile: string | undefined,
+  configFiles: LocalConfigFiles,
   options: DiscoverProjectOptions,
 ): boolean {
   if (!local.hasSonarLintConfig || !local.sonarLintData || !local.sonarLintConfigPath) {
@@ -160,10 +163,10 @@ function applySonarLintConfig(
   config.organization = config.organization || local.sonarLintData.organization;
   if (sonarlintFile) {
     if (!hadServer && config.serverUrl) {
-      config.serverConfigFile = sonarlintFile;
+      configFiles.server = sonarlintFile;
     }
     if (!hadOrganization && config.organization) {
-      config.organizationConfigFile = sonarlintFile;
+      configFiles.organization = sonarlintFile;
     }
   }
 
@@ -188,6 +191,7 @@ export async function applyLocalConfigAcrossLookupPaths(
   config: PartialProjectMapping,
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
+  configFiles: LocalConfigFiles,
 ): Promise<boolean> {
   for (const { checkPath, projectRoot } of lookupPaths) {
     let local: LocalProjectConfig;
@@ -210,8 +214,8 @@ export async function applyLocalConfigAcrossLookupPaths(
     const sonarlintFile = local.sonarLintConfigPath
       ? join(checkPath, local.sonarLintConfigPath)
       : undefined;
-    applyLocalSonarProperties(config, local, propertiesFile, options);
-    if (applySonarLintConfig(config, local, sonarlintFile, options)) {
+    applyLocalSonarProperties(config, local, propertiesFile, configFiles, options);
+    if (applySonarLintConfig(config, local, sonarlintFile, configFiles, options)) {
       // A key with no connection info of its own borrows the caller's whole active connection.
       if (!config.serverUrl && options.auth?.serverUrl) {
         config.serverUrl = options.auth.serverUrl;

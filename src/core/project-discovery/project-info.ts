@@ -35,7 +35,10 @@ import {
   type KnownMappingsResult,
   loadKnownMappings,
 } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
-import { applyLocalConfigAcrossLookupPaths } from '@/core/project-discovery/local-project-config.ts';
+import {
+  applyLocalConfigAcrossLookupPaths,
+  type LocalConfigFiles,
+} from '@/core/project-discovery/local-project-config.ts';
 import {
   displayConfigPath,
   formatConfigFields,
@@ -105,8 +108,10 @@ async function discoverLocalConfig(
   silent: boolean,
   console: Console,
 ): Promise<
-  Pick<DiscoveredProject, 'serverUrl' | 'organization'> &
-    Pick<PartialProjectMapping, 'serverConfigFile' | 'organizationConfigFile'>
+  Pick<DiscoveredProject, 'serverUrl' | 'organization'> & {
+    serverConfigFile?: string;
+    organizationConfigFile?: string;
+  }
 > {
   const invocationDir = canonicalizePath(startDir);
   const result = await discoverProjectMappings(startDir, {
@@ -121,8 +126,8 @@ async function discoverLocalConfig(
   return {
     serverUrl: mapping?.serverUrl,
     organization: mapping?.organization,
-    serverConfigFile: mapping?.serverUrl ? mapping.serverConfigFile : undefined,
-    organizationConfigFile: mapping?.organization ? mapping.organizationConfigFile : undefined,
+    serverConfigFile: mapping?.serverUrl ? result.serverConfigFile : undefined,
+    organizationConfigFile: mapping?.organization ? result.organizationConfigFile : undefined,
   };
 }
 
@@ -186,6 +191,7 @@ async function discoverProjectWithoutSharedConfig(
   knownMappings: KnownMappingsResult | undefined,
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
+  configFiles: LocalConfigFiles,
 ): Promise<PartialProjectMapping[]> {
   const single: PartialProjectMapping = { projectRoot: invocationDir };
 
@@ -193,7 +199,7 @@ async function discoverProjectWithoutSharedConfig(
     (options.useKnownMappings !== false &&
       knownMappings !== undefined &&
       applyKnownServerProjectMapping(single, lookupPaths, knownMappings, options)) ||
-    (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options));
+    (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options, configFiles));
 
   if (!resolved && options.useGitRemoteBinding !== false) {
     await applyGitRemoteBinding(single, repoRoot, options);
@@ -233,17 +239,25 @@ async function discoverProjectMappings(
       `Project discovery lookup paths (nearest first): ${lookupPaths.map((p) => p.checkPath).join(', ')}`,
     );
 
-    const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
-    result.fromSharedConfig = sharedConfigProjects !== null;
-    result.projects =
-      sharedConfigProjects ??
-      (await discoverProjectWithoutSharedConfig(
+    const sharedConfig = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    result.fromSharedConfig = sharedConfig !== null;
+    if (sharedConfig) {
+      result.projects = sharedConfig.mappings;
+      result.serverConfigFile = sharedConfig.configFile;
+      result.organizationConfigFile = sharedConfig.configFile;
+    } else {
+      const configFiles: LocalConfigFiles = {};
+      result.projects = await discoverProjectWithoutSharedConfig(
         invocationDir,
         lookupPaths,
         knownMappings,
         repoRoot,
         options,
-      ));
+        configFiles,
+      );
+      result.serverConfigFile = configFiles.server;
+      result.organizationConfigFile = configFiles.organization;
+    }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
     // rather than throwing out of a git hook, agent hook, or long-running MCP server.
@@ -254,17 +268,6 @@ async function discoverProjectMappings(
   return result;
 }
 
-/**
- * The config path is only for login, which reads the private discovery result. A project binding
- * that still carried it would show up in `sonar link list`.
- */
-function projectBinding(mapping: CompleteProjectMapping): CompleteProjectMapping {
-  const binding = { ...mapping };
-  delete binding.serverConfigFile;
-  delete binding.organizationConfigFile;
-  return binding;
-}
-
 /** Public counterpart to `discoverProjectMappings()` — never exposes a `PartialProjectMapping`. */
 export async function discoverProjects(
   startDir: string,
@@ -273,7 +276,7 @@ export async function discoverProjects(
   const result = await discoverProjectMappings(startDir, options);
   return new DiscoveredProjects(
     result.repoRoot,
-    result.projects.filter(isCompleteProjectMapping).map(projectBinding),
+    result.projects.filter(isCompleteProjectMapping),
     result.fromSharedConfig,
   );
 }
@@ -356,6 +359,7 @@ export function assertSingleLineProjectKey(projectKey: string): void {
 
 function printSharedProjectConfigMapping(
   mapping: CompleteProjectMapping,
+  configFile: string,
   options: DiscoverProjectOptions,
 ): void {
   if (options.silent) {
@@ -363,7 +367,6 @@ function printSharedProjectConfigMapping(
   }
   const fields = formatConfigFields(mapping.serverUrl, mapping.projectKey, mapping.organization);
   if (fields) {
-    const configFile = mapping.serverConfigFile ?? mapping.organizationConfigFile;
     options.console.print(formatFoundConfig(SHARED_PROJECT_CONFIG_FILE_NAME, configFile, fields));
   }
 }
@@ -372,7 +375,7 @@ function printSharedProjectConfigMapping(
 async function resolveSharedProjectConfigMappings(
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
-): Promise<CompleteProjectMapping[] | null> {
+): Promise<{ mappings: CompleteProjectMapping[]; configFile: string } | null> {
   for (const { checkPath } of lookupPaths) {
     let mappings: SharedProjectConfigMapping[];
     try {
@@ -396,15 +399,10 @@ async function resolveSharedProjectConfigMappings(
 
     logger.debug(`Project discovery shared config: project resolved at ${checkPath}`);
     const configFile = join(checkPath, SHARED_PROJECT_CONFIG_FILE_NAME);
-    const stamped = mappings.map((mapping) => ({
-      ...mapping,
-      serverConfigFile: configFile,
-      organizationConfigFile: mapping.organization ? configFile : undefined,
-    }));
-    for (const mapping of stamped) {
-      printSharedProjectConfigMapping(mapping, options);
+    for (const mapping of mappings) {
+      printSharedProjectConfigMapping(mapping, configFile, options);
     }
-    return stamped;
+    return { mappings, configFile };
   }
 
   return null;
