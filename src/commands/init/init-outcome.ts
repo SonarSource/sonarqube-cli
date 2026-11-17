@@ -45,6 +45,8 @@ export type InitPath =
       projectRoot: string;
       remote?: string;
       projectKey: string;
+      /** The key came from `--link <key>`: nothing found it, so it is checked before linking. */
+      requested?: boolean;
     }
   /** No project exists yet and the user agreed to bind the new one to the repository. */
   | {
@@ -57,8 +59,9 @@ export type InitPath =
   /**
    * No project exists yet and it will not be bound to the repository: there is no git remote
    * (`remote` absent), the platform cannot be bound, or the user declined or could not be asked.
+   * `repositorySlug` is set when binding was possible but not chosen, so it can still be offered.
    */
-  | { path: 'unbound-new'; projectRoot: string; remote?: string };
+  | { path: 'unbound-new'; projectRoot: string; remote?: string; repositorySlug?: string };
 
 /**
  * What happened to one mapped root of a monorepo. `path` is relative to the repository root. The

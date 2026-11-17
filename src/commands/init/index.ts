@@ -28,11 +28,14 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
+  type InitIntent,
   type MonorepoRootOption,
   parseMonorepoRoots,
   type UnboundNewOptions,
+  validateIntentOptions,
   validateScanOptions,
   validateUnboundNewOptions,
+  warnIgnoredIntent,
   warnIgnoredScanOptions,
   warnIgnoredUnboundNewOptions,
 } from './options.ts';
@@ -59,12 +62,17 @@ export interface InitOptions {
   nonInteractive?: boolean;
   monorepo?: boolean;
   root?: string[];
+  /** `true` for a bare `--link`, the key for `--link <key>`. */
+  link?: string | boolean;
+  bind?: boolean;
+  create?: boolean;
   project?: string;
   name?: string;
   visibility?: string;
   scannerProperty?: string[];
   verbose?: boolean;
   detach?: boolean;
+  scan?: boolean;
 }
 
 /**
@@ -81,19 +89,21 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     throw new InvalidOptionError('--root only applies together with --monorepo.');
   }
 
+  const intent = validateIntentOptions(options);
   const projectRoot = resolveProjectRoot(options.path ?? '.');
   const unboundNewOptions = validateUnboundNewOptions(options);
   const scanOptions = validateScanOptions(options);
 
-  const { outcome, auth, deps } = await run(
-    projectRoot,
-    ctx,
-    console,
+  const { outcome, auth, deps } = await run(projectRoot, ctx, console, {
     interactive,
+    intent,
     unboundNewOptions,
-    options.monorepo === true,
+    monorepo: options.monorepo === true,
     monorepoRoots,
-  );
+  });
+  if (outcome.kind === 'complete') {
+    warnIgnoredIntent(intent, console);
+  }
   const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
   if (outcome.kind !== 'unbound' && !declined) {
     warnIgnoredUnboundNewOptions(unboundNewOptions, console);
@@ -124,14 +134,19 @@ async function scanCreatedProject(
   return scan;
 }
 
+interface RunSettings {
+  interactive: boolean;
+  intent: InitIntent | undefined;
+  unboundNewOptions: UnboundNewOptions;
+  monorepo: boolean;
+  monorepoRoots: readonly MonorepoRootOption[];
+}
+
 async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   console: Console,
-  interactive: boolean,
-  unboundNewOptions: UnboundNewOptions,
-  monorepo: boolean,
-  monorepoRoots: readonly MonorepoRootOption[],
+  { interactive, intent, unboundNewOptions, monorepo, monorepoRoots }: RunSettings,
 ): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
   let auth: ResolvedAuth;
   try {
@@ -143,7 +158,7 @@ async function run(
     throw error;
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
-  const deps: DetectDeps = { auth, http, console, interactive };
+  const deps: DetectDeps = { auth, http, console, interactive, intent };
   if (monorepo) {
     return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
   }
