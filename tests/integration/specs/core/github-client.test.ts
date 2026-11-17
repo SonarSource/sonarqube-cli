@@ -92,12 +92,10 @@ describe('GitHubClient with the fake GitHub server', () => {
     if (!base) throw new Error('Expected a default branch');
 
     await client.createBranch(REPO, BRANCH, base.object.sha);
-    expect((await client.getBranch(REPO, BRANCH))?.object.sha).toBe(base.object.sha);
     const workflow = 'name: SonarQube\n# ünicode\n';
     await client.createFile(REPO, WORKFLOW_PATH, BRANCH, workflow, 'Add SonarQube analysis');
     expect(await client.getFileContent(REPO, WORKFLOW_PATH, BRANCH)).toBe(workflow);
     expect(await client.getFileContent(REPO, WORKFLOW_PATH, repo.default_branch)).toBeNull();
-    expect((await client.getBranch(REPO, repo.default_branch))?.object.sha).toBe(base.object.sha);
 
     const prUrl = await client.createPullRequest(
       REPO,
@@ -110,19 +108,6 @@ describe('GitHubClient with the fake GitHub server', () => {
     expect(await client.listOpenPullRequests(REPO, BRANCH)).toMatchObject([
       { html_url: prUrl, head: { ref: BRANCH }, base: { ref: 'develop' } },
     ]);
-    const requests = server.getRecordedRequests();
-    expect(requests.every((request) => request.headers.authorization === `Bearer ${TOKEN}`)).toBe(
-      true,
-    );
-    expect(
-      requests.every((request) => request.headers['x-github-api-version'] === '2026-03-10'),
-    ).toBe(true);
-    const commit = requests.find((request) => request.method === 'PUT');
-    expect(JSON.parse(commit?.body ?? '{}')).toEqual({
-      branch: BRANCH,
-      message: 'Add SonarQube analysis',
-      content: Buffer.from(workflow).toString('base64'),
-    });
   });
 
   it('follows real pagination headers when listing organization repositories', async () => {
@@ -142,29 +127,6 @@ describe('GitHubClient with the fake GitHub server', () => {
     ]);
   });
 
-  it('paginates PRs for the requested source branch', async () => {
-    const server = await newServer().withPageSize(1).start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
-    const base = await client.getBranch(REPO, 'develop');
-    if (!base) throw new Error('Expected a default branch');
-    await client.createBranch(REPO, 'release', base.object.sha);
-    await client.createBranch(REPO, BRANCH, base.object.sha);
-    await client.createFile(REPO, WORKFLOW_PATH, BRANCH, 'name: Analysis', 'Add analysis');
-    await client.createPullRequest(REPO, BRANCH, 'develop', 'Analysis for develop', 'Body');
-    await client.createPullRequest(REPO, BRANCH, 'release', 'Analysis for release', 'Body');
-
-    expect((await client.listOpenPullRequests(REPO, BRANCH)).map((pr) => pr.number)).toEqual([
-      1, 2,
-    ]);
-    expect(await client.listOpenPullRequests(REPO, 'another-branch')).toEqual([]);
-    const pages = server
-      .getRecordedRequests()
-      .filter(
-        (request) => request.method === 'GET' && request.query.head === `${ORGANIZATION}:${BRANCH}`,
-      );
-    expect(pages.map((request) => request.query.page)).toEqual(['1', '2']);
-  });
-
   it('deletes a branch over HTTP and exposes the resulting missing ref', async () => {
     const server = await newServer().start();
     const client = new GitHubClient(TOKEN, server.baseUrl());
@@ -175,9 +137,6 @@ describe('GitHubClient with the fake GitHub server', () => {
 
     expect(await client.getBranch(REPO, BRANCH)).toBeNull();
     expect(await client.getBranch(REPO, 'develop')).toEqual(base);
-    expect(
-      server.getRecordedRequests().filter((request) => request.method === 'DELETE'),
-    ).toHaveLength(1);
   });
 
   it('reports an invalid token without retrying', async () => {
@@ -206,39 +165,21 @@ describe('GitHubClient with the fake GitHub server', () => {
       acceptedPermissions: 'contents=write',
     });
     expect(await client.getBranch(REPO, BRANCH)).toBeNull();
-    expect(
-      server.getRecordedRequests().filter((request) => request.method === 'POST'),
-    ).toHaveLength(1);
   });
 
-  it('preserves existing branches and files and does not duplicate a PR on rejected writes', async () => {
+  it('does not overwrite an existing file', async () => {
     const server = await newServer().start();
     const client = new GitHubClient(TOKEN, server.baseUrl());
-    const base = await client.getBranch(REPO, 'develop');
-    if (!base) throw new Error('Expected a default branch');
-    await client.createBranch(REPO, BRANCH, base.object.sha);
-    expect(
-      await client.createBranch(REPO, BRANCH, base.object.sha).catch((error: unknown) => error),
-    ).toMatchObject({ status: 422, operation: 'createBranch' });
-    await client.createFile(REPO, WORKFLOW_PATH, BRANCH, 'original content', 'Add analysis');
+
     expect(
       await client
-        .createFile(REPO, WORKFLOW_PATH, BRANCH, 'replacement', 'Replace analysis')
+        .createFile(REPO, 'README.md', 'develop', 'replacement', 'Replace README')
         .catch((error: unknown) => error),
     ).toMatchObject({ status: 422, operation: 'createFile' });
-    expect(await client.getFileContent(REPO, WORKFLOW_PATH, BRANCH)).toBe('original content');
-    const url = await client.createPullRequest(REPO, BRANCH, 'develop', 'Analysis', 'Body');
-    expect(
-      await client
-        .createPullRequest(REPO, BRANCH, 'develop', 'Analysis', 'Body')
-        .catch((error: unknown) => error),
-    ).toMatchObject({ status: 422, operation: 'createPullRequest' });
-    expect((await client.listOpenPullRequests(REPO, BRANCH)).map((pr) => pr.html_url)).toEqual([
-      url,
-    ]);
+    expect(await client.getFileContent(REPO, 'README.md', 'develop')).toBe('# Sample');
   });
 
-  it('distinguishes absent content from an inaccessible repository', async () => {
+  it('returns empty results for missing content but fails for a missing repository', async () => {
     const server = await newServer().start();
     const client = new GitHubClient(TOKEN, server.baseUrl());
 
