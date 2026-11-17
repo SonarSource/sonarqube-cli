@@ -12,7 +12,8 @@ from collections import Counter
 from pathlib import Path
 
 KNOWN_SECRETS_FILE = Path(__file__).with_name("known-secrets.txt")
-CREDENTIAL_ENV_VARS = ("SONARQUBE_CLI_TOKEN", "PORTKEY_API_KEY")
+REDACTION_ONLY_ENV_VARS = ("PORTKEY_API_KEY", "HB_SONAR_ADMIN_TOKEN", "SONAR_RUN_TOKEN")
+CREDENTIAL_ENV_VARS = ("SONARQUBE_CLI_TOKEN", *REDACTION_ONLY_ENV_VARS)
 MIN_CREDENTIAL_LENGTH = 8
 MARKER_FILE = "secrets-leak.json"
 REDACTION = "[REDACTED]"
@@ -48,11 +49,20 @@ def list_files(root: Path, target: Path) -> list[Path]:
     )
 
 
+def child_environment() -> dict[str, str]:
+    return {name: value for name, value in os.environ.items() if name not in REDACTION_ONLY_ENV_VARS}
+
+
 def secrets_binary() -> Path:
     bin_dir = Path(os.environ.get("SONAR_USER_HOME") or Path.home() / ".sonar") / "sonarqube-cli" / "bin"
     if not list(bin_dir.glob("sonar-secrets-*")):
         with tempfile.NamedTemporaryFile() as probe:
-            subprocess.run(["sonar", "analyze", "secrets", probe.name], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(
+                ["sonar", "analyze", "secrets", probe.name],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                env=child_environment(),
+            )
     return max(bin_dir.glob("sonar-secrets-*"))
 
 
@@ -74,7 +84,7 @@ def write_scan_copy(root: Path, files: list[Path], destination: Path) -> None:
 
 def scan(root: Path, files: list[Path]) -> list[Issue]:
     environment = {
-        **os.environ,
+        **child_environment(),
         "SONAR_SECRETS_AUTH_URL": os.environ["SONARQUBE_CLI_SERVER"],
         "SONAR_SECRETS_TOKEN": os.environ["SONARQUBE_CLI_TOKEN"],
     }
