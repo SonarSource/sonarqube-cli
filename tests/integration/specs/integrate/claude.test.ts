@@ -1927,35 +1927,33 @@ ${result.stderr}`).not.toContain('Keep?');
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, 'cloud-token', 'my-org');
-      // The container's five subfeatures (SQAA instructions/hook, CAG
-      // session-start/hook) install and remove together as one unit.
-      harness
-        .state()
-        .withInstalledIntegrationFeature(
-          claudeIntegration,
-          'secrets-detection',
-          'global',
-          harness.userHome.path,
-        )
-        .withInstalledIntegrationFeature(
-          claudeIntegration,
-          CLAUDE_VORTEX_FEATURE_ID,
-          'global',
-          harness.userHome.path,
-        )
-        .withInstalledIntegrationFeature(
-          claudeIntegration,
-          'mcp-server',
-          'global',
-          harness.userHome.path,
-        );
       harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=my-project');
 
+      const extraEnv = {
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+      };
+      const installed = await harness.run('integrate claude --non-interactive', { extraEnv });
+      expect(installed.exitCode).toBe(0);
+      // The harness rewrites state before each command, so retain the actual installation.
+      harness.state().withRawState(harness.stateJsonFile.asText());
+      const settingsFile = harness.userHome.file('.claude', 'settings.json');
+      const settings = settingsFile.asJson();
+      expect(settings.hooks.Stop).toBeDefined();
+      const stopScript = harness.userHome.file(
+        '.claude',
+        'hooks',
+        'sonar-stop',
+        'build-scripts',
+        hookScriptName('stop'),
+      );
+      expect(stopScript.exists()).toBe(true);
+      const userStopHook = { hooks: [{ type: 'command', command: 'echo user-stop' }] };
+      settings.hooks.Stop.push(userStopHook);
+      harness.userHome.writeFile('.claude/settings.json', JSON.stringify(settings));
+
       const session = harness.runInteractive('integrate claude', {
-        extraEnv: {
-          SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
-        },
+        extraEnv,
       });
       await chooseCustomize(session);
       await session.accept('secrets detection (currently installed)  Keep?');
@@ -1974,6 +1972,8 @@ ${result.stderr}`).not.toContain('Keep?');
 
       // The single merged container — and everything nested under it — is gone.
       expect(findClaudeFeature(harness, CLAUDE_VORTEX_FEATURE_ID)).toBeUndefined();
+      expect(settingsFile.asJson().hooks.Stop).toEqual([userStopHook]);
+      expect(stopScript.exists()).toBe(false);
     },
     { timeout: 30000 },
   );
