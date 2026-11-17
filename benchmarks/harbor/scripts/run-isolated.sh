@@ -115,7 +115,7 @@ run_benchmark() {
       file_hook=claude-pre-tool-use
       export ANTHROPIC_BASE_URL=https://api.portkey.ai
       export ANTHROPIC_AUTH_TOKEN=placeholder-portkey-handles-auth
-      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"$'\n'"x-portkey-provider: @claude-code"
+      export ANTHROPIC_CUSTOM_HEADERS="x-portkey-api-key: ${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
       ;;
     codex)
       : "${PORTKEY_API_KEY:?PORTKEY_API_KEY is required}"
