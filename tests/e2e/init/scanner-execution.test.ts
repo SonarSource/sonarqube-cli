@@ -25,9 +25,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 
@@ -216,7 +216,15 @@ public class Batch {
     await command([jar!, '--create', '--file', 'legacy-payload.jar', '-C', 'legacy', '.']);
   }, 120_000);
 
-  afterAll(() => rmSync(fixtures, { recursive: true, force: true }));
+  // The scanner still holds this directory open on Windows when the suite ends.
+  afterAll(async () => {
+    await rm(fixtures, {
+      recursive: true,
+      force: true,
+      maxRetries: windows ? 15 : 5,
+      retryDelay: windows ? 200 : 100,
+    }).catch(() => undefined);
+  });
 
   beforeEach(async () => {
     harness = await TestHarness.create();
