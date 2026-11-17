@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { TASKS_PAGE_URL, taskTitle } from './tasks.ts';
+import { lastSegment, readJson } from './read-json.ts';
 
 interface TrialResult {
   task_name: string;
@@ -39,10 +40,6 @@ interface Row {
   costUsd: number | null;
 }
 
-function readJson<T>(path: string): T | null {
-  return existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as T) : null;
-}
-
 function secondsBetween(
   start: string | null | undefined,
   end: string | null | undefined,
@@ -55,10 +52,6 @@ function statusOf(trial: TrialResult): Status {
   const reward = trial.verifier_result?.rewards?.reward;
   if (trial.exception_info || reward === undefined) return 'ERROR';
   return reward >= 1 ? 'PASS' : 'FAIL';
-}
-
-function lastSegment(value: string): string {
-  return value.slice(value.lastIndexOf('/') + 1);
 }
 
 function errorRow(label: string, task: string, agent: string | null, model: string | null): Row {
