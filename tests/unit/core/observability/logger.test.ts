@@ -38,8 +38,6 @@ describe('Logger', () => {
     const mockLogger = {
       debug: (msg: string) => logOutput.push(`[DEBUG] ${msg}`),
       info: (msg: string) => logOutput.push(`[INFO] ${msg}`),
-      log: (msg: string) => logOutput.push(`[LOG] ${msg}`),
-      success: (msg: string) => logOutput.push(`[SUCCESS] ${msg}`),
       warn: (msg: string) => errorOutput.push(`[WARN] ${msg}`),
       error: (msg: string) => errorOutput.push(`[ERROR] ${msg}`),
     };
@@ -60,11 +58,6 @@ describe('Logger', () => {
   it('should log error messages', () => {
     logger.error('Error message');
     expect(errorOutput).toContain('[ERROR] Error message');
-  });
-
-  it('should log success messages', () => {
-    logger.success('Success message');
-    expect(logOutput).toContain('[SUCCESS] Success message');
   });
 
   it('should log warn messages', () => {
@@ -95,11 +88,6 @@ describe('Logger', () => {
     expect(getLogLevelConfig()).toBe('ERROR');
   });
 
-  it('should support log as alias for info', () => {
-    logger.log('Log message');
-    expect(logOutput).toContain('[LOG] Log message');
-  });
-
   it('should handle SILENT level', () => {
     configureLogger({ level: 'SILENT' });
     logger.error('Silent error');
@@ -113,8 +101,6 @@ describe('Logger', () => {
     const mockLogger2 = {
       debug: (msg: string, ..._args: unknown[]) => logOutput.push(msg),
       info: (msg: string, ..._args: unknown[]) => logOutput.push(msg),
-      log: (msg: string, ..._args: unknown[]) => logOutput.push(msg),
-      success: (msg: string, ..._args: unknown[]) => logOutput.push(msg),
       warn: (msg: string, ..._args: unknown[]) => errorOutput.push(msg),
       error: (msg: string, ..._args: unknown[]) => errorOutput.push(msg),
     };
