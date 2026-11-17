@@ -234,6 +234,7 @@ export function warnIgnoredScanOptions(flags: ScanOptions, console: Console): vo
   const ignored = [
     flags.scannerProperties.size === 0 ? null : '--scanner-property',
     flags.detach ? '--detach' : null,
+    flags.verbose ? '--verbose' : null,
     flags.scan ? '--scan' : null,
   ].filter((flag) => flag !== null);
   if (ignored.length > 0) {

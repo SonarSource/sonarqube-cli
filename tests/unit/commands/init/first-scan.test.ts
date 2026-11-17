@@ -175,6 +175,14 @@ describe('runFirstScan without a scan', () => {
     expect(console.calls).toHaveLength(0);
   });
 
+  it('does not scan a non-interactive run that only passed --verbose', async () => {
+    const console = new FakeConsole();
+    const verbose = flags({ scannerProperties: new Map(), verbose: true });
+
+    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), verbose)).toBe(NOT_RUN);
+    expect(console.calls).toHaveLength(0);
+  });
+
   it('does not scan when the user declines the offer', async () => {
     const console = new FakeConsole();
     console.queueResponse(false);
