@@ -1,5 +1,5 @@
 name: Setup Bun Environment
-description: Setup mise and install Bun dependencies
+description: Setup mise tools and install Bun dependencies
 
 inputs:
   artifactory-username:
@@ -9,12 +9,18 @@ inputs:
     description: Artifactory private reader access token
     required: true
 
+  java-version:
+    description: Optional Java version to install alongside Bun
+    required: false
+    default: ''
+
 runs:
   using: composite
   steps:
-    - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+    - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
       with:
-        version: 2026.10.21
+        version: 2026.11.9
+        tool_versions: ${{ inputs.java-version != '' && format('java {0}', inputs.java-version) || '' }}
 
     - name: Install dependencies
       shell: bash
