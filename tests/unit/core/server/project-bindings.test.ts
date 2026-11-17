@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { SONARCLOUD_API_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
-import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
+import { type DopSetting, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
 import { lastFetchUrl, mockFetch } from '../../helpers/mock-fetch.ts';
 
@@ -269,22 +269,29 @@ describe('ProjectBindingsClient', () => {
     });
   });
 
-  describe('listGitlabDopSettings', () => {
-    it('returns only gitlab-type settings', async () => {
-      fetchSpy = mockFetch({
-        dopSettings: [
-          { id: 'g1', key: 'my-gitlab', type: 'gitlab', url: 'https://gitlab.com' },
-          { id: 'gh1', key: 'my-github', type: 'github', url: 'https://github.com' },
-        ],
-      });
-      const result = await client.listGitlabDopSettings().orThrow();
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ id: 'g1', key: 'my-gitlab', url: 'https://gitlab.com' });
+  describe('listDopSettings', () => {
+    it('filters settings by platform', async () => {
+      const gitlab = {
+        id: 'g1',
+        key: 'my-gitlab',
+        type: 'gitlab',
+        url: 'https://gitlab.com',
+      } satisfies DopSetting;
+      const github = {
+        id: 'gh1',
+        key: 'my-github',
+        type: 'github',
+        url: 'https://api.github.com',
+      } satisfies DopSetting;
+      fetchSpy = mockFetch({ dopSettings: [gitlab, github] });
+
+      expect(await client.listDopSettings('gitlab').orThrow()).toEqual([gitlab]);
+      expect(await client.listDopSettings('github').orThrow()).toEqual([github]);
     });
 
-    it('returns empty array when no gitlab settings exist', async () => {
+    it('returns an empty list when nothing is configured', async () => {
       fetchSpy = mockFetch({ dopSettings: [] });
-      expect(await client.listGitlabDopSettings().orThrow()).toEqual([]);
+      expect(await client.listDopSettings('github').orThrow()).toEqual([]);
     });
   });
 
