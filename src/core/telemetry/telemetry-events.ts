@@ -31,11 +31,19 @@ import { INVOCATION_ID } from '@/core/telemetry/invocation-id.ts';
 
 import { version as VERSION } from '../../../package.json';
 import { getTelemetryDir, TELEMETRY_ENDPOINT } from '../config-constants.ts';
-import type { StoredTelemetryEvent, TelemetryEventIdentityPayload } from '../state/state.ts';
+import type {
+  CliState,
+  StoredTelemetryEvent,
+  TelemetryEventIdentityPayload,
+} from '../state/state.ts';
 import { getActiveConnection, tryLoadState } from '../state/state-manager.ts';
 import { resolveAgentSessionIdFromHookOrEnv } from './agent-session.ts';
 import { isTelemetryEnabled } from './enabled.ts';
-import { resolveCommandTelemetryIdentity, resolveStoreEventTelemetryIdentity } from './identity.ts';
+import {
+  type CommandTelemetryIdentity,
+  resolveCommandTelemetryIdentity,
+  resolveStoreEventTelemetryIdentity,
+} from './identity.ts';
 import { TELEMETRY_API_KEY } from './telemetry-ingest-key.ts';
 import { getOrCreateUserId } from './user.ts';
 
@@ -63,22 +71,31 @@ export function appendTelemetryEvent(event: StoredTelemetryEvent): void {
   }
 }
 
-/**
- * Resolves shared identity fields for telemetry events.
- * Returns null when telemetry is disabled or installationId is absent.
- */
-async function buildIdentityBase(
-  identityOptions?: IdentityEmitOptions,
-): Promise<TelemetryEventIdentityPayload | null> {
+/** Null when telemetry is disabled or installationId is absent, so nothing may be emitted. */
+function loadEmitState(): { state: CliState; installationId: string } | null {
   const state = tryLoadState();
   if (!state || !isTelemetryEnabled()) return null;
   const installationId = state.telemetry.installationId;
-  if (!installationId) return null;
+  return installationId ? { state, installationId } : null;
+}
+
+export function canEmitTelemetryEvents(): boolean {
+  return loadEmitState() !== null;
+}
+
+/** Resolves shared identity fields for telemetry events, or null when nothing may be emitted. */
+async function buildIdentityBase(
+  identityOptions?: TelemetryEmitOptions,
+): Promise<TelemetryEventIdentityPayload | null> {
+  const emitState = loadEmitState();
+  if (!emitState) return null;
+  const { state, installationId } = emitState;
 
   const { connectionType, identity } =
-    identityOptions?.auth !== undefined
+    identityOptions?.identity ??
+    (identityOptions?.auth !== undefined
       ? await resolveCommandTelemetryIdentity(identityOptions.auth)
-      : resolveStoreEventTelemetryIdentity(getActiveConnection(state));
+      : resolveStoreEventTelemetryIdentity(getActiveConnection(state)));
 
   return {
     cli_installation_id: installationId,
@@ -116,6 +133,8 @@ export type IdentityEmitOptions = {
 
 export type TelemetryEmitOptions = IdentityEmitOptions & {
   eventTimestampMs?: number;
+  /** Identity already resolved for `auth`, so a batch sharing one connection looks it up once. */
+  identity?: CommandTelemetryIdentity;
 };
 
 /**

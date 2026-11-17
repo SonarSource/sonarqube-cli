@@ -18,12 +18,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { disableHandleInheritance } from '@/core/host/windows-handle-inheritance.ts';
 
 import { resolveTelemetryEgress } from './egress.ts';
 import { isTelemetryEnabled } from './enabled.ts';
+import { type CommandTelemetryIdentity, resolveCommandTelemetryIdentity } from './identity.ts';
+import { identityCacheKey } from './identity-fetch.ts';
 import {
+  canEmitTelemetryEvents,
   emitTelemetryEvent,
   flushTelemetryEvents,
   type IdentityEmitOptions,
@@ -48,19 +52,56 @@ export async function commitTelemetryFacts(
 ): Promise<void> {
   if (process.env[TELEMETRY_FLUSH_MODE_ENV]) return;
 
-  for (const fact of facts) {
-    try {
-      await emitTelemetryEvent(fact.name, fact.payload as object, {
-        eventTimestampMs: fact.timestamp,
-        agentSessionId: options?.agentSessionId,
-        auth: fact.auth ?? options?.auth,
-      });
-    } catch {
-      // Telemetry is strictly fire-and-forget.
-    }
+  // Sequential: identity lookups for different connections would race on identity-cache.json.
+  for (const { auth, facts: connectionFacts } of groupByConnection(facts, options?.auth)) {
+    const identity = await resolveConnectionIdentity(auth);
+    await Promise.allSettled(
+      connectionFacts.map((fact) =>
+        emitTelemetryEvent(fact.name, fact.payload as object, {
+          eventTimestampMs: fact.timestamp,
+          agentSessionId: options?.agentSessionId,
+          auth,
+          identity,
+        }),
+      ),
+    );
   }
 
   scheduleTelemetryFlush(options?.command);
+}
+
+type ConnectionFacts = { auth: ResolvedAuth | null | undefined; facts: TelemetryFact[] };
+
+function groupByConnection(
+  facts: readonly TelemetryFact[],
+  invocationAuth: ResolvedAuth | null | undefined,
+): ConnectionFacts[] {
+  const groups = new Map<string, ConnectionFacts>();
+  for (const fact of facts) {
+    const auth = fact.auth ?? invocationAuth;
+    const key = connectionKey(auth);
+    const group = groups.get(key);
+    if (group) group.facts.push(fact);
+    else groups.set(key, { auth, facts: [fact] });
+  }
+  return [...groups.values()];
+}
+
+function connectionKey(auth: ResolvedAuth | null | undefined): string {
+  if (auth === undefined) return 'store-event';
+  if (auth === null) return 'unauthenticated';
+  return identityCacheKey(auth);
+}
+
+async function resolveConnectionIdentity(
+  auth: ResolvedAuth | null | undefined,
+): Promise<CommandTelemetryIdentity | undefined> {
+  if (!auth || !canEmitTelemetryEvents()) return undefined;
+  try {
+    return await resolveCommandTelemetryIdentity(auth);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
