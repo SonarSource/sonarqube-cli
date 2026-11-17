@@ -339,7 +339,7 @@ describe('integrate copilot', () => {
       'omits the SQAA section when Server Vortex hubs are absent',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so both
-        // hubs 404 and Vortex is not_applicable.
+        // hubs 404 and Vortex is unsupported.
         const result = await harness.run('integrate copilot --non-interactive');
 
         expect(result.exitCode).toBe(0);
@@ -407,7 +407,7 @@ describe('integrate copilot', () => {
       'prompts per feature, installs accepted features, and shows the Vortex promotion when not entitled',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so Vortex
-        // is not_applicable.
+        // is unsupported.
         const session = harness.runInteractive('integrate copilot');
         await chooseCustomize(session);
         await session.accept('Install secrets detection?');

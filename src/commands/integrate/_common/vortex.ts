@@ -33,6 +33,7 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import type { InstalledIntegrationFeature } from '@/core/state/state.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { VORTEX_SERVER_UNSUPPORTED_MESSAGE } from '@/core/vortex/availability-messages.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import { isContextAugmentationSkipped } from './context-augmentation.ts';
@@ -108,8 +109,6 @@ function vortexAvailability<TOptions extends IntegrateAgentOptions>({
 
 export const VORTEX_PROMOTION_MESSAGE = `Vortex is not enabled for this organization. Learn more: ${VORTEX_PRODUCT_URL}`;
 
-export const VORTEX_SERVER_UNAVAILABLE_MESSAGE = `Vortex requires SonarQube Server 2026.5 Enterprise or later. Learn more: ${VORTEX_PRODUCT_URL}`;
-
 export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE = `Vortex is not licensed on this SonarQube Server. Ask your administrator. Learn more: ${VORTEX_PRODUCT_URL}`;
 
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
@@ -157,11 +156,12 @@ export async function resolveVortexSetup(
     unavailableReason?: string,
   ): ResolvedVortexSetup => ({ disposition: { action, unavailableReason } });
 
+  if (status === 'unsupported') {
+    return settled('remove', VORTEX_SERVER_UNSUPPORTED_MESSAGE);
+  }
+
   if (status === 'not_applicable') {
-    return settled(
-      'remove',
-      isServer ? VORTEX_SERVER_UNAVAILABLE_MESSAGE : VORTEX_PROMOTION_MESSAGE,
-    );
+    return settled('remove', VORTEX_PROMOTION_MESSAGE);
   }
 
   if (status === 'check_failed' || status === 'organization_not_accessible') {

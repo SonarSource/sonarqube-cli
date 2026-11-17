@@ -26,10 +26,10 @@ import {
   VORTEX_OVER_CONSUMPTION_MESSAGE,
   VORTEX_PROMOTION_MESSAGE,
   VORTEX_SERVER_NOT_ENTITLED_MESSAGE,
-  VORTEX_SERVER_UNAVAILABLE_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CONTEXT_AUGMENTATION_BINARY_NAME } from '@/core/host/install/install-types.ts';
 import type { CliState } from '@/core/state/state.ts';
+import { VORTEX_SERVER_UNSUPPORTED_MESSAGE } from '@/core/vortex/availability-messages.ts';
 import {
   SERVER_ORGANIZATION_ID_PLACEHOLDER,
   type VortexEntitlementStatus,
@@ -121,7 +121,7 @@ describe('integrate claude — Vortex entitlement', () => {
     }
     if (sqaa === 'check_failed') {
       builder.withSqaaEntitlementStatusCode(500);
-    } else if (sqaa === 'not_applicable') {
+    } else if (sqaa === 'unsupported') {
       builder.withSqaaEntitlementStatusCode(404);
     } else {
       const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
@@ -129,7 +129,7 @@ describe('integrate claude — Vortex entitlement', () => {
     }
     if (cag === 'check_failed') {
       builder.withCagEntitlementStatusCode(500);
-    } else if (cag === 'not_applicable') {
+    } else if (cag === 'unsupported') {
       builder.withCagEntitlementStatusCode(404);
     } else {
       const uuid = cloud ? ORG_UUID : SERVER_ORGANIZATION_ID_PLACEHOLDER;
@@ -260,14 +260,14 @@ describe('integrate claude — Vortex entitlement', () => {
     'skips Vortex on a SonarQube Server with neither hub',
     async () => {
       const result = await runIntegrateClaude({
-        sqaa: 'not_applicable',
-        cag: 'not_applicable',
+        sqaa: 'unsupported',
+        cag: 'unsupported',
         cloud: false,
       });
 
       expect(result.exitCode).toBe(0);
       expect(isVortexInstalled()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNSUPPORTED_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -312,8 +312,8 @@ describe('integrate claude — Vortex entitlement', () => {
   );
 
   it.each([
-    ['A3S', 'not_applicable', 'enabled'],
-    ['CAG', 'enabled', 'not_applicable'],
+    ['A3S', 'unsupported', 'enabled'],
+    ['CAG', 'enabled', 'unsupported'],
   ] as const)(
     'does not install Vortex on a Server whose %s hub is absent',
     async (_hub, sqaa, cag) => {
@@ -330,7 +330,7 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
       expect(postToolUseHooks()).not.toContain('sonar-sqaa');
       expect(sqaaHookScriptExists()).toBe(false);
-      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_SERVER_UNSUPPORTED_MESSAGE);
     },
     { timeout: 30000 },
   );
@@ -343,7 +343,7 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(isVortexInstalled()).toBe(true);
 
       const repointed = await runIntegrateClaude({
-        sqaa: 'not_applicable',
+        sqaa: 'unsupported',
         cag: 'enabled',
         scaEnabled: true,
         cloud: false,
@@ -357,7 +357,7 @@ describe('integrate claude — Vortex entitlement', () => {
       expect(harness.userHome.file('.claude', 'CLAUDE.md').exists()).toBe(false);
       expectVortexHookAbsent(harness.userHome, 'claude');
       const output = `${repointed.stdout}\n${repointed.stderr}`;
-      expect(output).toContain(VORTEX_SERVER_UNAVAILABLE_MESSAGE);
+      expect(output).toContain(VORTEX_SERVER_UNSUPPORTED_MESSAGE);
       expect(output).toContain(VORTEX_REMOVED_MESSAGE);
     },
     { timeout: 30000 },
