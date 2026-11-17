@@ -787,12 +787,16 @@ describe('post-update migration', () => {
       );
       expect(cursor?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
       expect(cursor?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
-      expect(harness.cwd.file('.cursor', 'rules', 'sonar-agentic-analysis.mdc').asText()).toContain(
-        '# Vortex analysis protocol',
+      expect(harness.cwd.file('.cursor', 'rules', 'sonar-agentic-analysis.mdc').exists()).toBe(
+        false,
       );
+      const hooks = harness.cwd.file('.cursor', 'hooks.json').asJson().hooks;
+      expect(hooks.stop).toEqual([
+        expect.objectContaining({ command: expect.stringContaining('sonar-stop') }),
+      ]);
       expectVortexHookInstalled(harness.cwd, 'cursor');
     },
     { timeout: 30000 },
