@@ -33,6 +33,7 @@ import { createOrganizationHook } from './organization.ts';
 export async function resolveInitAuth(
   ctx: CommandInvocationContext,
   interactive: boolean,
+  dryRun = false,
 ): Promise<ResolvedAuth> {
   const current = await ctx.resolveAuth({ silent: true });
   if (current.isErr()) {
@@ -40,6 +41,17 @@ export async function resolveInitAuth(
   }
   if (current.value) {
     return current.value;
+  }
+
+  // Signing in saves credentials, and the preview needs the server to check keys and projects.
+  if (dryRun) {
+    throw new CommandFailedError(
+      'Not signed in: a dry run cannot sign in, since that saves credentials.',
+      {
+        remediationHint:
+          "Run 'sonar auth login', or set SONARQUBE_CLI_TOKEN together with SONARQUBE_CLI_SERVER or SONARQUBE_CLI_ORG.",
+      },
+    );
   }
 
   if (!interactive) {
