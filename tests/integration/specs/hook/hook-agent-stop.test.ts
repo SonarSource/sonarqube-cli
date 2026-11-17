@@ -32,15 +32,27 @@ import type {
 import { parseSqaaRequestBody } from '../analyze/sqaa-request-helpers.ts';
 import { git, initGitRepo } from './git-test-helpers.ts';
 
-const AGENTS = ['claude', 'codex'] as const;
+const CLAUDE_CODEX_PROTOCOL = {
+  sessionIdField: 'session_id',
+  expectedLimitOutput: {
+    systemMessage: expect.stringMatching(
+      /Vortex analysis reached its limit of 3 attempts\.[\s\S]*Use Number\.isNaN\./,
+    ),
+  },
+};
+const AGENTS = [
+  { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
+  { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
+  { name: 'copilot', sessionIdField: 'sessionId', expectedLimitOutput: {} },
+] as const;
 const ISSUE = { rule: 'typescript:S2688', message: 'Use Number.isNaN.', startLine: 2 };
 const BAD = 'export function invalid(value: number): boolean {\n  return value === NaN;\n}\n';
 const GOOD =
   'export function invalid(value: number): boolean {\n  return Number.isNaN(value);\n}\n';
 
-describe.each(AGENTS)('%s stop hook', (agent) => {
-  const COMMAND = `hook agent-stop --agent ${agent}`;
-  const otherAgent = AGENTS.find((candidate) => candidate !== agent);
+describe.each(AGENTS)('$name stop hook', (agent) => {
+  const COMMAND = `hook agent-stop --agent ${agent.name}`;
+  const otherAgent = AGENTS.find((candidate) => candidate.name !== agent.name)?.name;
   if (!otherAgent) throw new Error('Agent isolation tests require at least two agents.');
   let harness: TestHarness;
   let response: SqaaResponseConfig;
@@ -63,16 +75,17 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
   afterEach(async () => {
     await harness.dispose();
   });
+  function payload(extra: Record<string, unknown> = {}) {
+    const { sessionId = 'session', ...rest } = extra;
+    return {
+      [agent.sessionIdField]: sessionId,
+      cwd: harness.cwd.path,
+      hook_event_name: 'Stop',
+      ...rest,
+    };
+  }
   function invoke(extra = {}) {
-    return harness.runWithStdin(
-      COMMAND,
-      JSON.stringify({
-        session_id: 'session',
-        cwd: harness.cwd.path,
-        hook_event_name: 'Stop',
-        ...extra,
-      }),
-    );
+    return harness.runWithStdin(COMMAND, JSON.stringify(payload(extra)));
   }
   function analyses() {
     return server
@@ -101,7 +114,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
           (SELECT count(*) FROM vortex_successful_analyses) AS successful
       `,
         )
-        .get(agent, sessionId);
+        .get(agent.name, sessionId);
       return { count: row?.count ?? undefined, locks: row?.locks, successful: row?.successful };
     });
   }
@@ -113,7 +126,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
           .query<{ session_id: string; analysis_count: number }, [string]>(
             'SELECT session_id, analysis_count FROM vortex_analysis_counters WHERE agent = ?',
           )
-          .all(agent)
+          .all(agent.name)
           .map(({ session_id, analysis_count }) => [session_id, analysis_count]),
       ),
     );
@@ -198,7 +211,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
           expect(() =>
             db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-              agent,
+              agent.name,
               'invalid',
               count,
               1,
@@ -217,7 +230,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         }
         expect(() =>
           db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-            agent,
+            agent.name,
             'invalid',
             1,
             -1,
@@ -234,7 +247,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
             'invalid',
             'owner',
             -1,
-            agent,
+            agent.name,
             'invalid',
           ]),
         ).toThrow();
@@ -243,7 +256,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
             'invalid',
             '',
             1,
-            agent,
+            agent.name,
             'invalid',
           ]),
         ).toThrow();
@@ -444,7 +457,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
   describe('session counters and cached analyses', () => {
     it('treats SQL in session IDs as data and keeps agent counters separate', async () => {
       const sessionId = "session'); DROP TABLE vortex_analysis_locks; --";
-      await invoke({ session_id: sessionId });
+      await invoke({ sessionId: sessionId });
       withDb((db) =>
         db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
           otherAgent,
@@ -454,7 +467,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         ]),
       );
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke({ session_id: sessionId })).stdout).decision).toBe('block');
+      expect(JSON.parse((await invoke({ sessionId: sessionId })).stdout).decision).toBe('block');
       expect(
         withDb((db) =>
           db
@@ -463,11 +476,11 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         ),
       ).toEqual(
         [
-          { agent, analysis_count: 1 },
+          { agent: agent.name, analysis_count: 1 },
           { agent: otherAgent, analysis_count: 2 },
         ].sort((a, b) => a.agent.localeCompare(b.agent)),
       );
-      await invoke({ session_id: sessionId });
+      await invoke({ sessionId: sessionId });
       expect(
         withDb((db) =>
           db
@@ -476,7 +489,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         ),
       ).toEqual(
         [
-          { agent, analysis_count: 0 },
+          { agent: agent.name, analysis_count: 0 },
           { agent: otherAgent, analysis_count: 2 },
         ].sort((a, b) => a.agent.localeCompare(b.agent)),
       );
@@ -494,7 +507,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
           ['live', now + 3600],
         ] as const) {
           db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-            agent,
+            agent.name,
             session,
             2,
             1,
@@ -503,18 +516,18 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
             session,
             session,
             expires,
-            agent,
+            agent.name,
             session,
           ]);
         }
         db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-          agent,
+          agent.name,
           'fresh',
           2,
           now,
         ]);
         db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-          agent,
+          agent.name,
           'abandoned',
           3,
           1,
@@ -557,7 +570,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
     it('shares saved findings across sessions', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
       expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
-      const other = await invoke({ session_id: 'other' });
+      const other = await invoke({ sessionId: 'other' });
       expectSilentStop(other);
       expect(analyses()).toHaveLength(1);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
@@ -568,9 +581,9 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
       harness.cwd.writeFile('src/new.ts', BAD);
       await invoke();
       harness.cwd.writeFile('src/new.ts', BAD + '// another change\n');
-      await invoke({ session_id: 'other' });
+      await invoke({ sessionId: 'other' });
       expect(readSessionCounters()).toEqual({ session: 1, other: 1 });
-      await invoke({ session_id: 'other' });
+      await invoke({ sessionId: 'other' });
       expect(readSessionCounters()).toEqual({ session: 1, other: 0 });
       harness.cwd.writeFile('src/new.ts', BAD + '// third change\n');
       expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
@@ -604,14 +617,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         const result = await invoke({ stop_hook_active: attempt > 1 });
         expect(result.exitCode).toBe(0);
         if (attempt < 3) expect(JSON.parse(result.stdout).decision).toBe('block');
-        else
-          expect(JSON.parse(result.stdout)).toEqual({
-            systemMessage: expect.stringContaining(
-              'Vortex analysis reached its limit of 3 attempts.',
-            ),
-          });
-        if (attempt === 3)
-          expect(JSON.parse(result.stdout).systemMessage).toContain('Use Number.isNaN.');
+        else expect(JSON.parse(result.stdout)).toEqual(agent.expectedLimitOutput);
       }
       expect(analyses()).toHaveLength(3);
       expect(queryState()).toEqual({ count: 0, locks: 0, successful: 3 });
@@ -632,7 +638,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
             'in-flight',
             'owner',
             Math.floor(Date.now() / 1000) + 3600,
-            agent,
+            agent.name,
             'session',
           ]);
         });
@@ -699,7 +705,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
         if (outcome === 'failed') response.errors = [{ code: 'failure', message: 'Incomplete' }];
         const result = await whileAnalysisRuns(() => {
           const [lock] = readLocks();
-          expect(lock).toMatchObject({ agent, session_id: 'session' });
+          expect(lock).toMatchObject({ agent: agent.name, session_id: 'session' });
           expect(lock.lock_token).toBeString();
           const remaining = lock.lock_expires_at - Math.floor(Date.now() / 1000);
           expect(remaining).toBeGreaterThan(60);
@@ -709,7 +715,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
               'another-fingerprint',
               'another-token',
               Math.floor(Date.now() / 1000) + 3600,
-              agent,
+              agent.name,
               'session',
             ]);
             db.run('UPDATE vortex_analysis_counters SET analysis_count = 2');
@@ -777,7 +783,7 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
       const savedAt = Math.floor(Date.now() / 1000) + 3600;
       const first = await whileAnalysisRuns(async () => {
         withDb((db) => db.run('UPDATE vortex_analysis_locks SET lock_expires_at = 1'));
-        const replacement = await invoke({ session_id: 'other' });
+        const replacement = await invoke({ sessionId: 'other' });
         expect(replacement.exitCode).toBe(0);
         expect(JSON.parse(replacement.stdout).decision).toBe('block');
         expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
@@ -803,15 +809,9 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
   describe('payloads and skipped analysis', () => {
     it('uses the payload working directory for Git and project discovery', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await harness.runWithStdin(
-        COMMAND,
-        JSON.stringify({
-          session_id: 'session',
-          cwd: harness.cwd.path,
-          hook_event_name: 'Stop',
-        }),
-        { cwd: harness.userHome.path },
-      );
+      const result = await harness.runWithStdin(COMMAND, JSON.stringify(payload()), {
+        cwd: harness.userHome.path,
+      });
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).decision).toBe('block');
       expect(analyses()).toHaveLength(1);
@@ -866,12 +866,12 @@ describe.each(AGENTS)('%s stop hook', (agent) => {
     it.each([
       null,
       {},
-      { session_id: null },
-      { session_id: 42 },
-      { session_id: '' },
-      { session_id: 'session', cwd: 42 },
-      { session_id: 'session', cwd: '' },
-      { session_id: 'session', cwd: '   ' },
+      { [agent.sessionIdField]: null },
+      { [agent.sessionIdField]: 42 },
+      { [agent.sessionIdField]: '' },
+      { [agent.sessionIdField]: 'session', cwd: 42 },
+      { [agent.sessionIdField]: 'session', cwd: '' },
+      { [agent.sessionIdField]: 'session', cwd: '   ' },
     ])(
       'allows stopping with an invalid adapter payload: %j',
       async (payload) => {
