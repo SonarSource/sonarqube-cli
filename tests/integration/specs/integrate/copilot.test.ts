@@ -276,6 +276,7 @@ describe('integrate copilot', () => {
     async function setupCloudWithEntitlement(
       options: { allowed?: boolean; hasEntitlement?: boolean } = {},
     ): Promise<{ extraEnv: Record<string, string> }> {
+      harness.state().withContextAugmentationBinaryInstalled();
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -296,7 +297,6 @@ describe('integrate copilot', () => {
     it(
       'installs prompt scanning alongside the completion hook when the org is entitled',
       async () => {
-        harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
