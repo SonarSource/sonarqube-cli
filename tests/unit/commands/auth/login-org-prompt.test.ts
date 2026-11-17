@@ -89,7 +89,7 @@ describe('authLogin organization prompt', () => {
     );
     // This repository has its own sonar-project.properties; without these the discovered key
     // would short-circuit the prompt under test.
-    discoverOrgSpy = spyOn(projectInfo, 'discoverOrganization').mockResolvedValue(null);
+    discoverOrgSpy = spyOn(projectInfo, 'discoverOrganizationFromConfig').mockResolvedValue(null);
     revokeSpy = spyOn(UsersClient.prototype, 'revokeUserToken').mockReturnValue(okAsync(undefined));
     spies = [
       spyOn(process.stdin, 'pause').mockReturnValue(process.stdin),
@@ -98,7 +98,7 @@ describe('authLogin organization prompt', () => {
         token: 'minted-token',
         tokenName: 'cli-browser-token',
       }),
-      spyOn(projectInfo, 'discoverServer').mockResolvedValue(null),
+      spyOn(projectInfo, 'discoverServerFromConfig').mockResolvedValue(null),
       discoverOrgSpy,
       listOrgsSpy,
       checkMembershipSpy,
@@ -192,7 +192,7 @@ describe('authLogin organization prompt', () => {
   });
 
   it('falls back to the organization list when the project config key does not exist', async () => {
-    discoverOrgSpy.mockResolvedValue('stale-org');
+    discoverOrgSpy.mockResolvedValue({ value: 'stale-org' });
     fake.queueResponse('unreachable-org');
     checkMembershipSpy
       .mockResolvedValueOnce({ status: 'not_member' })
@@ -209,7 +209,7 @@ describe('authLogin organization prompt', () => {
   });
 
   it('aborts when the project config key could not be looked up', async () => {
-    discoverOrgSpy.mockResolvedValue('stale-org');
+    discoverOrgSpy.mockResolvedValue({ value: 'stale-org' });
     checkMembershipSpy.mockResolvedValue({ status: 'check_failed', reason: 'connection refused' });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
@@ -294,9 +294,9 @@ describe('authLogin organization prompt', () => {
   });
 
   it('rejects a multiline server discovered from project configuration before token generation', async () => {
-    spyOn(projectInfo, 'discoverServer').mockResolvedValue(
-      'https://example.org\nhttps://other.example',
-    );
+    spyOn(projectInfo, 'discoverServerFromConfig').mockResolvedValue({
+      value: 'https://example.org\nhttps://other.example',
+    });
 
     // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
     await expect(authLogin({}, new CommandInvocationContext(fake))).rejects.toMatchObject({
