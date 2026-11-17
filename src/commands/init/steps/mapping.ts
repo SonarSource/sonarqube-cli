@@ -140,7 +140,12 @@ export function serverBaseUrl(auth: ResolvedAuth): string {
 }
 
 export function projectDashboardUrl(auth: ResolvedAuth, projectKey: string): string {
-  return `${serverBaseUrl(auth)}/project/overview?id=${encodeURIComponent(projectKey)}`;
+  return dashboardUrlOn(serverBaseUrl(auth), projectKey);
+}
+
+/** For a project that lives on a server other than the active one. */
+export function dashboardUrlOn(serverUrl: string, projectKey: string): string {
+  return `${serverUrl.replace(/\/$/, '')}/project/overview?id=${encodeURIComponent(projectKey)}`;
 }
 
 export async function showAnalysisResults(

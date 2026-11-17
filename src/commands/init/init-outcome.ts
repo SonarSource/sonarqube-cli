@@ -73,6 +73,8 @@ export type MonorepoRootResult =
        */
       kind: 'configured' | 'linked' | 'bound' | 'unbound';
       projectKey: string;
+      /** Only for `configured`: the server the file records, which may not be the active one. */
+      serverUrl?: string;
     }
   /** The file links the root, but the remote cannot confirm the project; nothing was created. */
   | { path: string; kind: 'unavailable'; projectKey: string; problem: LinkedProjectProblem }

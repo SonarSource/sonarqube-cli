@@ -27,7 +27,7 @@ import {
   type LinkedProjectIssue,
   reportLinkedProjectIssues,
 } from './steps/linked-projects.ts';
-import { projectDashboardUrl } from './steps/mapping.ts';
+import { dashboardUrlOn, projectDashboardUrl } from './steps/mapping.ts';
 
 const NO_MONOREPO_ROOTS = [
   'No project root is mapped in .sonar-config.json, so nothing was changed.',
@@ -82,6 +82,10 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
     case 'bound':
     case 'unbound': {
       const line = `${root.path}: ${root.projectKey}`;
+      // A configured root may be recorded for another server than the active one.
+      if (root.serverUrl) {
+        return `${line} - ${dashboardUrlOn(root.serverUrl, root.projectKey)}`;
+      }
       return auth ? `${line} - ${projectDashboardUrl(auth, root.projectKey)}` : line;
     }
     case 'skipped':
