@@ -29,7 +29,7 @@ import type { Console } from '@/core/ui/console.ts';
 import type { SecretsJsonIssue } from './secrets.ts';
 import { analyzeSecrets, parseSecretsJson, runSecretsBinary } from './secrets.ts';
 import type { OutputFormat } from './sqaa.ts';
-import { analyzeSqaa, buildSqaaJsonReport } from './sqaa.ts';
+import { analyzeSqaa, assertNoStagedWithBase, buildSqaaJsonReport } from './sqaa.ts';
 import { resolveChangeSet } from './sqaa-changeset.ts';
 import { applyExitCode, makeReport, type SqaaJsonReport } from './sqaa-display.ts';
 import { resolveSqaaFileArgs } from './sqaa-file-arg.ts';
@@ -88,6 +88,7 @@ export async function analyzeAll(
   options: AnalyzeAllOptions,
   ctx: CommandAuthenticatedInvocationContext,
 ): Promise<void> {
+  assertNoStagedWithBase(options);
   const { console } = ctx;
   if (options.format === 'json') {
     return analyzeAllJson(options, ctx);
