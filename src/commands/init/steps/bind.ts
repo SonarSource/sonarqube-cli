@@ -144,9 +144,20 @@ export async function runBoundNew(
   const { auth, http, console, intent } = deps;
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
-  const almKey =
-    (await resolveAlmKey(api, org.key, org.almKey)) ??
-    (await authorizeOrganization(api, auth, org.key, deps));
+  const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
+  // The browser authorization and the import both change things, so a preview stops short of them.
+  if (deps.dryRun) {
+    return {
+      kind: 'dry-run',
+      action: {
+        type: 'bind',
+        repositorySlug,
+        organization: org.key,
+        authorizationNeeded: !linkedAlmKey,
+      },
+    };
+  }
+  const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
   if (!almKey) {
     return intent?.kind === 'bind'
       ? { kind: 'declined' }

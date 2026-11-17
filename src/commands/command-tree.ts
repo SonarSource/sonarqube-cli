@@ -929,6 +929,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--detach',
       'Run the first analysis in the background and return without waiting for the results',
     )
+    .option(
+      '--dry-run',
+      'Preview what init would do without making any changes: nothing is created, linked or saved and no analysis runs. Requires being signed in already',
+      false,
+    )
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .anonymousAction((ctx, options: InitOptions) => init(options, ctx));
 
