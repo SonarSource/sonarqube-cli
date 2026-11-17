@@ -26,6 +26,10 @@ export interface CompleteProjectMapping {
   projectKey: string;
   serverUrl: string;
   organization?: string;
+  /** Absolute path of the file that supplied `serverUrl`. The CLI computed it; it is not file content. */
+  serverConfigFile?: string;
+  /** Absolute path of the file that supplied `organization`. */
+  organizationConfigFile?: string;
 }
 
 /** `projectKey`/`serverUrl` not guaranteed — `discoverServer()`/`discoverOrganization()` never need `projectKey`, so they accept this directly. */
@@ -36,6 +40,10 @@ export interface PartialProjectMapping {
   projectKey?: string;
   serverUrl?: string;
   organization?: string;
+  /** Absolute path of the file that supplied `serverUrl`. The CLI computed it; it is not file content. */
+  serverConfigFile?: string;
+  /** Absolute path of the file that supplied `organization`. */
+  organizationConfigFile?: string;
 }
 
 export type ProjectMapping = CompleteProjectMapping | PartialProjectMapping;

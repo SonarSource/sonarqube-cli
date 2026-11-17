@@ -29,6 +29,20 @@ export function selectValidServerUrl(
   return currentServerUrl ?? (isValidServerUrl(candidate) ? candidate : undefined);
 }
 
+/** A path the CLI opened. A line break would let that path write its own line into a prompt. */
+export function displayConfigPath(configFile: string): string | undefined {
+  return /[\r\n]/.test(configFile) ? undefined : configFile;
+}
+
+export function formatFoundConfig(
+  label: string,
+  configFile: string | undefined,
+  fields: string,
+): string {
+  const path = configFile ? displayConfigPath(configFile) : undefined;
+  return path ? `Found ${label} (${path}): ${fields}` : `Found ${label}: ${fields}`;
+}
+
 export function formatConfigFields(
   serverUrl?: string,
   projectKey?: string,
