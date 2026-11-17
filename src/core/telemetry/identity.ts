@@ -60,9 +60,14 @@ export function resolveStoreEventTelemetryIdentity(conn: AuthConnection | undefi
   };
 }
 
+export type CommandTelemetryIdentity = {
+  connectionType: TelemetryConnectionType;
+  identity: TelemetryIdentity;
+};
+
 export async function resolveCommandTelemetryIdentity(
   auth: ResolvedAuth | null,
-): Promise<{ connectionType: TelemetryConnectionType; identity: TelemetryIdentity }> {
+): Promise<CommandTelemetryIdentity> {
   if (!auth) {
     return { connectionType: null, identity: EMPTY_IDENTITY };
   }

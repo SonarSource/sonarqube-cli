@@ -37,6 +37,8 @@ interface ApiStep {
 
 interface ProjectUuidApiMockOptions {
   component?: ApiStep[];
+  /** Keyed answers keep concurrent requests deterministic. */
+  idByProjectKey?: Record<string, string>;
 }
 
 function shiftStep(queue: ApiStep[] | undefined, fallback: ApiStep): ApiStep {
@@ -57,11 +59,12 @@ export function mockProjectUuidGetSafe(
   return spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(
     <TValue>(
       endpoint: string,
-      _params?: Record<string, string | number | boolean>,
+      params?: Record<string, string | number | boolean>,
       _timeoutMs?: number,
     ): ResultAsync<SafeGetResult<TValue>, HttpClientError> => {
       if (endpoint === '/api/navigation/component') {
-        const step = shiftStep(componentSteps, { ok: true });
+        const keyedId = options.idByProjectKey?.[String(params?.component)];
+        const step = keyedId ? { ok: true, id: keyedId } : shiftStep(componentSteps, { ok: true });
         if (step.throws) {
           return errAsync(new TransportError('network error'));
         }

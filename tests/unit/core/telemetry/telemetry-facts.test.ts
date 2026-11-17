@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { TelemetryFact } from '@/core/commands/invocation-context.ts';
 import { commitTelemetryFacts, TELEMETRY_FLUSH_MODE_ENV } from '@/core/telemetry';
+import * as identity from '@/core/telemetry/identity.ts';
 import * as telemetryEvents from '@/core/telemetry/telemetry-events.ts';
 
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
@@ -38,6 +39,21 @@ const ANALYSIS_PAYLOAD = {
   scan_duration_ms: 1,
   details: '',
 };
+
+const IDENTITY = {
+  connectionType: 'sqc' as const,
+  identity: { user_uuid: 'u', organization_uuid_v4: 'o', sqs_installation_id: null },
+};
+
+function cloudAuth(token: string): ResolvedAuth {
+  return new ResolvedAuth({
+    connectionType: 'cloud',
+    source: 'state' as const,
+    serverUrl: 'https://sonarcloud.io',
+    token,
+    orgKey: 'my-org',
+  });
+}
 
 function fact(
   name: string,
@@ -82,19 +98,16 @@ describe('commitTelemetryFacts', () => {
       eventTimestampMs: analysis.timestamp,
       agentSessionId: 'sess-1',
       auth: undefined,
+      identity: undefined,
     });
     expect(emitSpy.mock.calls[1][0]).toBe('CliIntegrationConfigured');
   });
 
-  it('forwards fact.auth to emitTelemetryEvent', async () => {
+  it('forwards fact.auth with its resolved identity to emitTelemetryEvent', async () => {
     const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
-    const auth = new ResolvedAuth({
-      connectionType: 'cloud',
-      source: 'state' as const,
-      serverUrl: 'https://sonarcloud.io',
-      token: 'test-token',
-      orgKey: 'my-org',
-    });
+    spyOn(telemetryEvents, 'canEmitTelemetryEvents').mockReturnValue(true);
+    spyOn(identity, 'resolveCommandTelemetryIdentity').mockResolvedValue(IDENTITY);
+    const auth = cloudAuth('test-token');
     const analysis = fact('CliAnalysisCompleted', ANALYSIS_PAYLOAD, auth);
 
     await commitTelemetryFacts([analysis]);
@@ -103,7 +116,42 @@ describe('commitTelemetryFacts', () => {
       eventTimestampMs: analysis.timestamp,
       agentSessionId: undefined,
       auth,
+      identity: IDENTITY,
     });
+  });
+
+  it('resolves identity once per connection, however many facts share it', async () => {
+    const emitSpy = spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
+    spyOn(telemetryEvents, 'canEmitTelemetryEvents').mockReturnValue(true);
+    const resolveSpy = spyOn(identity, 'resolveCommandTelemetryIdentity').mockResolvedValue(
+      IDENTITY,
+    );
+
+    await commitTelemetryFacts(
+      [
+        fact('CliCommandExecuted'),
+        fact('CliTargetProjectResolved', {}, cloudAuth('invocation-token')),
+        fact('CliTargetProjectResolved', {}, cloudAuth('other-token')),
+        fact('CliTargetProjectResolved', {}, cloudAuth('other-token')),
+      ],
+      { auth: cloudAuth('invocation-token') },
+    );
+
+    expect(emitSpy).toHaveBeenCalledTimes(4);
+    expect(resolveSpy.mock.calls.map(([auth]) => auth?.token)).toEqual([
+      'invocation-token',
+      'other-token',
+    ]);
+  });
+
+  it('resolves no identity when telemetry events cannot be emitted', async () => {
+    spyOn(telemetryEvents, 'emitTelemetryEvent').mockResolvedValue();
+    spyOn(telemetryEvents, 'canEmitTelemetryEvents').mockReturnValue(false);
+    const resolveSpy = spyOn(identity, 'resolveCommandTelemetryIdentity');
+
+    await commitTelemetryFacts([fact('CliCommandExecuted')], { auth: cloudAuth('token') });
+
+    expect(resolveSpy).not.toHaveBeenCalled();
   });
 
   it('swallows emit failures', async () => {
