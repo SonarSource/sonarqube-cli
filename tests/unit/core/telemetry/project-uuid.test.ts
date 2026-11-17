@@ -459,31 +459,66 @@ describe('noteProject() / resolveTelemetryTargetProjects()', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('starts every lookup at once with the same budget, however many projects', async () => {
-    let release!: () => void;
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
+  describe('parallel lookups', () => {
+    let now: number;
+    let releases: (() => void)[];
+    let dateNowSpy: ReturnType<typeof spyOn<DateConstructor, 'now'>>;
+    let getSafeSpy: ReturnType<typeof spyOn<SonarHttpClient, 'getSafe'>>;
+
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const budgets = () => getSafeSpy.mock.calls.map((call) => call[2]);
+    const releaseInFlight = () => {
+      for (const release of releases.splice(0)) release();
+    };
+
+    beforeEach(() => {
+      now = 1_000_000;
+      releases = [];
+      dateNowSpy = spyOn(Date, 'now').mockImplementation(() => now);
+      getSafeSpy = spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(<TValue>() =>
+        ResultAsync.fromSafePromise(
+          new Promise<{ response: Response; value: TValue }>((resolve) => {
+            releases.push(() => {
+              resolve({ response: { ok: true, status: 200 } as Response, value: {} as TValue });
+            });
+          }),
+        ),
+      );
     });
-    const getSafeSpy = spyOn(SonarHttpClient.prototype, 'getSafe').mockImplementation(<TValue>() =>
-      ResultAsync.fromSafePromise(
-        released.then(() => ({
-          response: { ok: true, status: 200 } as Response,
-          value: {} as TValue,
-        })),
-      ),
-    );
-    const keys = Array.from({ length: 12 }, (_, index) => `proj-concurrent-${index}`);
-    for (const key of keys) noteProject(auth(), key);
 
-    const resolving = resolveTelemetryTargetProjects();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    afterEach(() => {
+      getSafeSpy.mockRestore();
+      dateNowSpy.mockRestore();
+    });
 
-    expect(getSafeSpy).toHaveBeenCalledTimes(keys.length);
-    expect(new Set(getSafeSpy.mock.calls.map((call) => call[2]))).toEqual(new Set([3_000]));
+    it('caps lookups in flight, and later ones get what is left of the shared budget', async () => {
+      for (let index = 0; index < 12; index++) noteProject(auth(), `proj-concurrent-${index}`);
 
-    release();
-    await resolving;
-    getSafeSpy.mockRestore();
+      const resolving = resolveTelemetryTargetProjects();
+      await flush();
+      expect(budgets()).toEqual(Array.from({ length: 8 }, () => 3_000));
+
+      now += 1_000;
+      releaseInFlight();
+      await flush();
+      expect(budgets().slice(8)).toEqual([2_000, 2_000, 2_000, 2_000]);
+
+      releaseInFlight();
+      await resolving;
+    });
+
+    it('starts no lookup once the shared budget is spent', async () => {
+      for (let index = 0; index < 9; index++) noteProject(auth(), `proj-late-${index}`);
+
+      const resolving = resolveTelemetryTargetProjects();
+      await flush();
+      now += 3_000;
+      releaseInFlight();
+      const targetProjects = await resolving;
+
+      expect(getSafeSpy).toHaveBeenCalledTimes(8);
+      expect(targetProjects[8].projectUuid).toBeNull();
+    });
   });
 
   it('re-resolves when a project is noted after an earlier read', async () => {
