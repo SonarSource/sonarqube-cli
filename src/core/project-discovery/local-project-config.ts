@@ -33,6 +33,7 @@ import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
 import {
   formatConfigFields,
+  formatFoundConfig,
   selectValidServerUrl,
 } from '@/core/project-discovery/project-discovery-format.ts';
 import type { PartialProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
@@ -112,9 +113,16 @@ async function loadLocalProjectConfig(dir: string): Promise<LocalProjectConfig> 
   };
 }
 
+export interface LocalConfigFiles {
+  server?: string;
+  organization?: string;
+}
+
 function applyLocalSonarProperties(
   config: PartialProjectMapping,
   local: LocalProjectConfig,
+  propertiesFile: string,
+  configFiles: LocalConfigFiles,
   options: DiscoverProjectOptions,
 ): void {
   if (!local.hasSonarProps || !local.sonarPropsData) {
@@ -124,13 +132,15 @@ function applyLocalSonarProperties(
   config.serverUrl = selectValidServerUrl(undefined, local.sonarPropsData.hostURL);
   config.projectKey = local.sonarPropsData.projectKey;
   config.organization = local.sonarPropsData.organization;
+  configFiles.server = config.serverUrl ? propertiesFile : undefined;
+  configFiles.organization = config.organization ? propertiesFile : undefined;
 
   if (options.silent) {
     return;
   }
   const fields = formatConfigFields(config.serverUrl, config.projectKey, config.organization);
   if (fields) {
-    options.console.print(`Found sonar-project.properties: ${fields}`);
+    options.console.print(formatFoundConfig('sonar-project.properties', propertiesFile, fields));
   }
 }
 
@@ -138,15 +148,27 @@ function applyLocalSonarProperties(
 function applySonarLintConfig(
   config: PartialProjectMapping,
   local: LocalProjectConfig,
+  sonarlintFile: string | undefined,
+  configFiles: LocalConfigFiles,
   options: DiscoverProjectOptions,
 ): boolean {
   if (!local.hasSonarLintConfig || !local.sonarLintData || !local.sonarLintConfigPath) {
     return !!config.projectKey;
   }
 
+  const hadServer = !!config.serverUrl;
+  const hadOrganization = !!config.organization;
   config.serverUrl = selectValidServerUrl(config.serverUrl, local.sonarLintData.serverURL);
   config.projectKey = config.projectKey || local.sonarLintData.projectKey;
   config.organization = config.organization || local.sonarLintData.organization;
+  if (sonarlintFile) {
+    if (!hadServer && config.serverUrl) {
+      configFiles.server = sonarlintFile;
+    }
+    if (!hadOrganization && config.organization) {
+      configFiles.organization = sonarlintFile;
+    }
+  }
 
   if (!options.silent) {
     const fields = formatConfigFields(
@@ -155,7 +177,9 @@ function applySonarLintConfig(
       local.sonarLintData.organization,
     );
     if (fields) {
-      options.console.print(`Found ${local.sonarLintConfigPath}: ${fields}`);
+      options.console.print(
+        formatFoundConfig(local.sonarLintConfigPath.replaceAll('\\', '/'), sonarlintFile, fields),
+      );
     }
   }
 
@@ -167,6 +191,7 @@ export async function applyLocalConfigAcrossLookupPaths(
   config: PartialProjectMapping,
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
+  configFiles: LocalConfigFiles,
 ): Promise<boolean> {
   for (const { checkPath, projectRoot } of lookupPaths) {
     let local: LocalProjectConfig;
@@ -185,8 +210,12 @@ export async function applyLocalConfigAcrossLookupPaths(
       continue;
     }
 
-    applyLocalSonarProperties(config, local, options);
-    if (applySonarLintConfig(config, local, options)) {
+    const propertiesFile = join(checkPath, 'sonar-project.properties');
+    const sonarlintFile = local.sonarLintConfigPath
+      ? join(checkPath, local.sonarLintConfigPath)
+      : undefined;
+    applyLocalSonarProperties(config, local, propertiesFile, configFiles, options);
+    if (applySonarLintConfig(config, local, sonarlintFile, configFiles, options)) {
       // A key with no connection info of its own borrows the caller's whole active connection.
       if (!config.serverUrl && options.auth?.serverUrl) {
         config.serverUrl = options.auth.serverUrl;

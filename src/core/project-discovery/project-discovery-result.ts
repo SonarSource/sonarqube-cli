@@ -144,6 +144,10 @@ export class ProjectDiscoveryResult {
   repoRoot?: string;
   fromSharedConfig = false;
   projects: ProjectMapping[] = [];
+  /** File that supplied `serverUrl` for login. Not part of a project binding. */
+  serverConfigFile?: string;
+  /** File that supplied `organization` for login. Not part of a project binding. */
+  organizationConfigFile?: string;
 
   scope(path: string): ScopedProjectMapping<ProjectMapping>[] {
     return scopeByAncestry(this.projects, path);

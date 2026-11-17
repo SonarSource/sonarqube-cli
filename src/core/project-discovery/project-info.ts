@@ -20,8 +20,11 @@
 
 // Project workspace: git root, sonar-project.properties, SonarLint connected mode
 
+import { join } from 'node:path';
+
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { findGitRoot } from '@/core/host/git/discover.ts';
 import { type LookupPath, resolveLookupPaths } from '@/core/host/git/lookup-path-resolver.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
@@ -32,8 +35,15 @@ import {
   type KnownMappingsResult,
   loadKnownMappings,
 } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
-import { applyLocalConfigAcrossLookupPaths } from '@/core/project-discovery/local-project-config.ts';
-import { formatConfigFields } from '@/core/project-discovery/project-discovery-format.ts';
+import {
+  applyLocalConfigAcrossLookupPaths,
+  type LocalConfigFiles,
+} from '@/core/project-discovery/local-project-config.ts';
+import {
+  displayConfigPath,
+  formatConfigFields,
+  formatFoundConfig,
+} from '@/core/project-discovery/project-discovery-format.ts';
 import {
   type CompleteProjectMapping,
   DiscoveredProjects,
@@ -50,7 +60,12 @@ import { applyGitRemoteBinding } from '@/core/server/discover-project-by-remote.
 import type { Console } from '@/core/ui/console.ts';
 
 export { KNOWN_SERVER_PROJECT_MAPPING_SOURCE } from '@/core/project-discovery/known-server-project-mapping-resolution.ts';
-export const SHARED_PROJECT_CONFIG_SOURCE = 'shared project config';
+
+/** A server or organization read from a project file, with the absolute path of that file. */
+export interface DiscoveredConfigValue {
+  value: string;
+  configFile?: string;
+}
 
 export interface DiscoveredProject {
   hasSonarConfig?: boolean;
@@ -92,7 +107,12 @@ async function discoverLocalConfig(
   startDir: string,
   silent: boolean,
   console: Console,
-): Promise<Pick<DiscoveredProject, 'serverUrl' | 'organization'>> {
+): Promise<
+  Pick<DiscoveredProject, 'serverUrl' | 'organization'> & {
+    serverConfigFile?: string;
+    organizationConfigFile?: string;
+  }
+> {
   const invocationDir = canonicalizePath(startDir);
   const result = await discoverProjectMappings(startDir, {
     auth: null,
@@ -103,14 +123,40 @@ async function discoverLocalConfig(
   const scoped = result.scope(invocationDir);
   // Several scoped mappings aren't ambiguous here the way they are for discoverProject(): projectKey is never read.
   const mapping = scoped.length <= 1 || isSameConnection(scoped) ? scoped.at(0) : undefined;
-  return { serverUrl: mapping?.serverUrl, organization: mapping?.organization };
+  return {
+    serverUrl: mapping?.serverUrl,
+    organization: mapping?.organization,
+    serverConfigFile: mapping?.serverUrl ? result.serverConfigFile : undefined,
+    organizationConfigFile: mapping?.organization ? result.organizationConfigFile : undefined,
+  };
+}
+
+function toDiscoveredConfigValue(
+  value: string | undefined,
+  configFile: string | undefined,
+): DiscoveredConfigValue | null {
+  if (!value) {
+    return null;
+  }
+  return { value, configFile: configFile ? displayConfigPath(configFile) : undefined };
 }
 
 /** Try to find server URL from project configs. */
 export async function discoverServer(console: Console): Promise<string | null> {
+  return (await discoverServerFromConfig(console))?.value ?? null;
+}
+
+/** Server URL from a project file, including the absolute path of that file. */
+export async function discoverServerFromConfig(
+  console: Console,
+): Promise<DiscoveredConfigValue | null> {
   try {
-    const { serverUrl } = await discoverLocalConfig(process.cwd(), false, console);
-    return serverUrl ?? null;
+    const { serverUrl, serverConfigFile } = await discoverLocalConfig(
+      process.cwd(),
+      false,
+      console,
+    );
+    return toDiscoveredConfigValue(serverUrl, serverConfigFile);
   } catch (error) {
     logger.debug(`Error finding server in configs: ${(error as Error).message}`);
     return null;
@@ -119,9 +165,20 @@ export async function discoverServer(console: Console): Promise<string | null> {
 
 /** Try to find organization from project configs. */
 export async function discoverOrganization(console: Console): Promise<string | null> {
+  return (await discoverOrganizationFromConfig(console))?.value ?? null;
+}
+
+/** Organization from a project file, including the absolute path of that file. */
+export async function discoverOrganizationFromConfig(
+  console: Console,
+): Promise<DiscoveredConfigValue | null> {
   try {
-    const { organization } = await discoverLocalConfig(process.cwd(), true, console);
-    return organization ?? null;
+    const { organization, organizationConfigFile } = await discoverLocalConfig(
+      process.cwd(),
+      true,
+      console,
+    );
+    return toDiscoveredConfigValue(organization, organizationConfigFile);
   } catch {
     return null;
   }
@@ -134,6 +191,7 @@ async function discoverProjectWithoutSharedConfig(
   knownMappings: KnownMappingsResult | undefined,
   repoRoot: string | undefined,
   options: DiscoverProjectOptions,
+  configFiles: LocalConfigFiles,
 ): Promise<PartialProjectMapping[]> {
   const single: PartialProjectMapping = { projectRoot: invocationDir };
 
@@ -141,7 +199,7 @@ async function discoverProjectWithoutSharedConfig(
     (options.useKnownMappings !== false &&
       knownMappings !== undefined &&
       applyKnownServerProjectMapping(single, lookupPaths, knownMappings, options)) ||
-    (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options));
+    (await applyLocalConfigAcrossLookupPaths(single, lookupPaths, options, configFiles));
 
   if (!resolved && options.useGitRemoteBinding !== false) {
     await applyGitRemoteBinding(single, repoRoot, options);
@@ -181,17 +239,25 @@ async function discoverProjectMappings(
       `Project discovery lookup paths (nearest first): ${lookupPaths.map((p) => p.checkPath).join(', ')}`,
     );
 
-    const sharedConfigProjects = await resolveSharedProjectConfigMappings(lookupPaths, options);
-    result.fromSharedConfig = sharedConfigProjects !== null;
-    result.projects =
-      sharedConfigProjects ??
-      (await discoverProjectWithoutSharedConfig(
+    const sharedConfig = await resolveSharedProjectConfigMappings(lookupPaths, options);
+    result.fromSharedConfig = sharedConfig !== null;
+    if (sharedConfig) {
+      result.projects = sharedConfig.mappings;
+      result.serverConfigFile = sharedConfig.configFile;
+      result.organizationConfigFile = sharedConfig.configFile;
+    } else {
+      const configFiles: LocalConfigFiles = {};
+      result.projects = await discoverProjectWithoutSharedConfig(
         invocationDir,
         lookupPaths,
         knownMappings,
         repoRoot,
         options,
-      ));
+        configFiles,
+      );
+      result.serverConfigFile = configFiles.server;
+      result.organizationConfigFile = configFiles.organization;
+    }
   } catch (error) {
     // No caller treats this as fallible — degrade to whatever was already resolved
     // rather than throwing out of a git hook, agent hook, or long-running MCP server.
@@ -293,6 +359,7 @@ export function assertSingleLineProjectKey(projectKey: string): void {
 
 function printSharedProjectConfigMapping(
   mapping: CompleteProjectMapping,
+  configFile: string,
   options: DiscoverProjectOptions,
 ): void {
   if (options.silent) {
@@ -300,7 +367,7 @@ function printSharedProjectConfigMapping(
   }
   const fields = formatConfigFields(mapping.serverUrl, mapping.projectKey, mapping.organization);
   if (fields) {
-    options.console.print(`Found ${SHARED_PROJECT_CONFIG_SOURCE}: ${fields}`);
+    options.console.print(formatFoundConfig(SHARED_PROJECT_CONFIG_FILE_NAME, configFile, fields));
   }
 }
 
@@ -308,7 +375,7 @@ function printSharedProjectConfigMapping(
 async function resolveSharedProjectConfigMappings(
   lookupPaths: LookupPath[],
   options: DiscoverProjectOptions,
-): Promise<CompleteProjectMapping[] | null> {
+): Promise<{ mappings: CompleteProjectMapping[]; configFile: string } | null> {
   for (const { checkPath } of lookupPaths) {
     let mappings: SharedProjectConfigMapping[];
     try {
@@ -331,10 +398,11 @@ async function resolveSharedProjectConfigMappings(
     }
 
     logger.debug(`Project discovery shared config: project resolved at ${checkPath}`);
+    const configFile = join(checkPath, SHARED_PROJECT_CONFIG_FILE_NAME);
     for (const mapping of mappings) {
-      printSharedProjectConfigMapping(mapping, options);
+      printSharedProjectConfigMapping(mapping, configFile, options);
     }
-    return mappings;
+    return { mappings, configFile };
   }
 
   return null;

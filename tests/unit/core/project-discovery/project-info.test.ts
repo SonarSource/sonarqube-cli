@@ -1818,7 +1818,10 @@ describe('discoverServer', () => {
       const fake = new FakeConsole();
       expect(await discoverServer(fake)).toBe('https://from-props.integration.test');
       const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-      expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(true);
+      const propertiesFile = join(canonicalizePath(testDir), 'sonar-project.properties');
+      expect(prints.some((m) => m.includes(`sonar-project.properties (${propertiesFile})`))).toBe(
+        true,
+      );
     });
   });
 
@@ -1857,7 +1860,12 @@ describe('discoverServer', () => {
 
     try {
       await withCwd(cwdSpy, testDir, async () => {
-        expect(await discoverServer(new FakeConsole())).toBe('https://shared.example.com');
+        const fake = new FakeConsole();
+        expect(await discoverServer(fake)).toBe('https://shared.example.com');
+        const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+        const configFile = join(canonicalizePath(testDir), '.sonar-config.json');
+        expect(prints.some((m) => m.includes(`.sonar-config.json (${configFile})`))).toBe(true);
+        expect(prints.some((m) => m.includes('shared project config'))).toBe(false);
       });
     } finally {
       loadSpy.mockRestore();
@@ -1913,7 +1921,10 @@ describe('discoverServer', () => {
         const fake = new FakeConsole();
         expect(await discoverServer(fake)).toBe(cases[i].expectedUrl);
         const prints = fake.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-        expect(prints.some((m) => m.includes('.sonarlint'))).toBe(true);
+        const sonarlintFile = join(canonicalizePath(testDir), '.sonarlint', 'connectedMode.json');
+        expect(
+          prints.some((m) => m.includes(`.sonarlint/connectedMode.json (${sonarlintFile})`)),
+        ).toBe(true);
         expect(prints.some((m) => m.includes('sonar-project.properties'))).toBe(false);
       });
     }
