@@ -18,14 +18,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONAR_CONTEXT_INVOCATION } from '@/core/config-constants.ts';
 import {
   buildContextAugmentationEnv,
   type ContextAugmentationEnvContext,
 } from '@/core/host/context-augmentation-env.ts';
-import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import logger from '@/core/observability/logger.ts';
 import { ProcessTimedOutError, spawnProcessWithTimeout } from '@/core/process/process.ts';
 import type { IntegrationStateAttribute } from '@/core/state/state.ts';
@@ -35,7 +33,6 @@ import type { Console, OutputChannel } from '@/core/ui/console.ts';
 import type { ResolvedVortexSetup } from './vortex.ts';
 
 const COMMAND_TIMEOUT_MS = 30_000;
-const INTEGRATE_TIMEOUT_MS = 2 * 60 * 1000;
 
 export const ENV_SKIP_CAG = '__SQCLI_DEV_SKIP_CAG';
 
@@ -83,15 +80,6 @@ export function buildRecordedIntegrationAttrs(params: {
     : {};
 }
 
-export interface ApplyContextAugmentationToolIntegrationParams {
-  auth: ResolvedAuth;
-  binaryPath: string;
-  projectRoot: string;
-  projectKey: string | undefined;
-  scaEnabled: boolean;
-  console: Console;
-}
-
 export interface CagSubprocessResult {
   ok: boolean;
   failureMessage?: string;
@@ -103,39 +91,6 @@ interface CagSubprocessOptions {
   projectRoot: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
-}
-
-export class CagStepFailedError extends Error {
-  constructor(readonly result: CagSubprocessResult) {
-    super(result.failureMessage ?? 'sonar-context-augmentation step failed');
-  }
-}
-
-export async function runToolIntegrateCommand(
-  p: ApplyContextAugmentationToolIntegrationParams,
-): Promise<void> {
-  const console = p.console;
-  console.text('     Installing Vortex Context...');
-
-  const initEnv = await buildContextAugmentationEnv({
-    organization: p.auth.orgKey,
-    projectKey: p.projectKey,
-    serverUrl: p.auth.serverUrl,
-    token: p.auth.token,
-    workspaceDir: p.projectRoot,
-  });
-
-  await runCagStepOrThrow(
-    `sonar-context-augmentation ${SONAR_CONTEXT_AUGMENTATION_VERSION}`,
-    'Vortex Context tool integration failed.',
-    p.binaryPath,
-    ['tool', 'integrate', '--invocation-prefix', SONAR_CONTEXT_INVOCATION],
-    p.projectRoot,
-    console,
-    initEnv,
-    INTEGRATE_TIMEOUT_MS,
-  );
-  console.discreetSuccess('Vortex Context configured');
 }
 
 export interface PrintContextAugmentationSkillParams {
@@ -222,49 +177,6 @@ export async function stopAllContextAugmentationTools(binaryPath: string): Promi
   return true;
 }
 
-async function runCagStepOrThrow(
-  successMessage: string,
-  failureMessage: string,
-  binaryPath: string,
-  args: string[],
-  projectRoot: string,
-  console: Console,
-  env?: NodeJS.ProcessEnv,
-  timeoutMs?: number,
-): Promise<void> {
-  if (process.stdout.isTTY) {
-    try {
-      await console.withSpinner(successMessage, async () => {
-        const result = await runCagSubprocess(binaryPath, args, {
-          projectRoot,
-          env,
-          timeoutMs,
-        });
-        if (!result.ok) {
-          throw new CagStepFailedError(result);
-        }
-      });
-    } catch (error) {
-      reportCagFailureFromError(error, console);
-      throw new CommandFailedError(failureMessage, {
-        cause: error instanceof Error ? error : undefined,
-      });
-    }
-    return;
-  }
-
-  const result = await runCagSubprocess(binaryPath, args, {
-    projectRoot,
-    env,
-    timeoutMs,
-  });
-  if (!result.ok) {
-    reportCagFailure(result, console);
-    throw new CommandFailedError(failureMessage);
-  }
-  console.discreetSuccess(successMessage);
-}
-
 async function runCagSubprocess(
   binaryPath: string,
   args: string[],
@@ -320,14 +232,6 @@ function reportCagFailure(result: CagSubprocessResult, console: Console): void {
   }
   printIndented(result.stdout, 'stdout', console);
   printIndented(result.stderr, 'stderr', console);
-}
-
-function reportCagFailureFromError(error: unknown, console: Console): void {
-  if (error instanceof CagStepFailedError) {
-    reportCagFailure(error.result, console);
-    return;
-  }
-  console.warn((error as Error).message);
 }
 
 function printIndented(buffer: string, channel: OutputChannel, console: Console): void {
