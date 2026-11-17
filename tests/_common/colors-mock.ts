@@ -29,7 +29,6 @@ const base = {
   cyan: identity,
   yellow: identity,
   gray: identity,
-  white: identity,
   blue: identity,
   softBlue: identity,
   stripAnsi: (s: string) => s.replace(/\x1b\[[0-9;]*m/g, ''),

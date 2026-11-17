@@ -28,12 +28,7 @@ import { createCommandTree } from '@/commands/command-tree.ts';
 import { AuthResolver, ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { type CliRuntime, createCliRuntime } from '@/core/commands/cli-runtime.ts';
 import { PrivateBetaFlagRegistry } from '@/core/commands/private-beta-flag-registry.ts';
-import {
-  collectPrivateBetaFlagKeys,
-  SonarCommand,
-  SonarOption,
-  Stage,
-} from '@/core/commands/sonar-command.ts';
+import { SonarCommand, SonarOption, Stage } from '@/core/commands/sonar-command.ts';
 import {
   FEATURE_FLAG_CACHE_TTL_MS,
   type FeatureFlagFetcher,
@@ -501,7 +496,7 @@ describe('Private Beta command registration', () => {
       .command('with-option')
       .addOption(new SonarOption('--gated', 'Gated option').stage(Stage.Beta('cli.beta.option')));
 
-    expect(collectPrivateBetaFlagKeys(root).sort()).toEqual([
+    expect([...root.runtime.privateBetaFlags.flagKeys()].sort()).toEqual([
       'cli.beta.a',
       'cli.beta.b',
       'cli.beta.option',

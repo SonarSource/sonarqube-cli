@@ -36,11 +36,6 @@ import {
 import type { AuthConnection, ServerType, TelemetryConnectionType } from '../state/state.ts';
 
 export type { TelemetryIdentity } from '@/core/telemetry/identity-fetch.ts';
-export {
-  activeConnectionForIdentitySeed,
-  identityFromConnection,
-  isIdentityCompleteForConnection,
-} from '@/core/telemetry/identity-fetch.ts';
 
 function toTelemetryConnectionType(type: ServerType): Exclude<TelemetryConnectionType, null> {
   return type === 'cloud' ? 'sqc' : 'sqs';
