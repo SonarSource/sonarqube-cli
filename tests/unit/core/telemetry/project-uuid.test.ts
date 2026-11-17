@@ -39,7 +39,7 @@ import * as stateRepository from '@/core/state/state-repository.ts';
 import {
   noteProject,
   resetProjectUuidContextForTests,
-  resolveProjectUuid,
+  resolveProjectUuids,
   resolveTelemetryTargetProjects,
   type TelemetryTargetProject,
 } from '@/core/telemetry/project-uuid.ts';
@@ -58,6 +58,11 @@ function auth(overrides: Partial<ResolvedAuth> = {}): ResolvedAuth {
     source: 'state' as const,
     ...overrides,
   });
+}
+
+async function resolveProjectUuid(auth: ResolvedAuth, projectKey: string) {
+  const [uuid] = await resolveProjectUuids([{ auth, projectKey }]);
+  return uuid;
 }
 
 /** Replicates project-uuid.ts#cacheKey so tests can seed the disk cache directly. */
@@ -115,9 +120,9 @@ afterEach(() => {
   loadStateSpy.mockRestore();
 });
 
-// ─── resolveProjectUuid ─────────────────────────────────────────────────────
+// ─── resolveProjectUuids ─────────────────────────────────────────────────────
 
-describe('resolveProjectUuid()', () => {
+describe('resolveProjectUuids() for one project', () => {
   it('serves a cached value from disk without hitting the API', async () => {
     seedDiskCache('https://sonarcloud.io', 'proj-disk-cached', 'AV-disk-cached');
     const getSafeSpy = mockProjectUuidGetSafe();

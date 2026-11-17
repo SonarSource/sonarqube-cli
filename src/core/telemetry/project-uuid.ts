@@ -115,21 +115,13 @@ function writeDiskCache(cache: ProjectUuidCacheFile): void {
 }
 
 /**
- * Resolves SonarQube's legacy internal project identifier for `projectKey`, caching the
- * result permanently under `{SONAR_USER_HOME}/sonarqube-cli/telemetry/project-uuid-cache.json`.
+ * Resolves SonarQube's legacy internal project identifier for each project, caching resolved
+ * ids permanently under `{SONAR_USER_HOME}/sonarqube-cli/telemetry/project-uuid-cache.json`.
  *
- * Never rejects — always resolves to `string | null`. Skips entirely (no cache lookup, no API
- * call) when telemetry is disabled.
+ * Never rejects — always resolves to `string | null` per project. Skips entirely (no cache
+ * lookup, no API call) when telemetry is disabled. One cache read and write per batch, so
+ * concurrent misses cannot drop each other's entries.
  */
-export async function resolveProjectUuid(
-  auth: ResolvedAuth,
-  projectKey: string,
-): Promise<string | null> {
-  const [uuid] = await resolveProjectUuids([{ auth, projectKey }]);
-  return uuid;
-}
-
-/** One cache read and write per batch, so concurrent misses cannot drop each other's entries. */
 export async function resolveProjectUuids(
   projects: readonly NotedProject[],
 ): Promise<(string | null)[]> {
