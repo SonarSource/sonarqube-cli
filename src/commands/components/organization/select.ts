@@ -20,7 +20,7 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { toOrganizationSummary } from '@/core/domain/organization.ts';
-import { discoverOrganization } from '@/core/project-discovery/project-info.ts';
+import { discoverOrganizationFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import {
   type Organization,
@@ -88,11 +88,13 @@ export async function validateOrSelectOrganization(
   }
 
   // Try to find organization in project configs first (skip the org listing)
-  const configOrg = await discoverOrganization(console);
-  if (configOrg) {
+  const discovered = await discoverOrganizationFromConfig(console);
+  if (discovered) {
+    const configOrg = discovered.value;
+    const source = discovered.configFile ? `from ${discovered.configFile}` : 'from project config';
     const membership = await client.checkMembership(configOrg);
     if (membership.status === 'member') {
-      console.print(`Using organization from config: ${configOrg}`);
+      console.print(`Using organization ${source}: ${configOrg}`);
       return configOrg;
     }
     // A stale key in a checked-in file cannot be corrected from here, so fall through to the
@@ -101,7 +103,7 @@ export async function validateOrSelectOrganization(
     if (membership.status === 'check_failed') {
       throw organizationMembershipError(configOrg, membership);
     }
-    console.warn(`You are not a member of organization '${configOrg}' from project config.`);
+    console.warn(`You are not a member of organization '${configOrg}' ${source}.`);
   }
 
   return await getUserSelectedOrganization(client, console, activeOrgKey, onNoMemberships);
