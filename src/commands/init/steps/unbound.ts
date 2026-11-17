@@ -222,6 +222,9 @@ export async function runUnboundNew(
     options,
     deps,
   );
+  if (deps.dryRun) {
+    return { kind: 'dry-run', action: { type: 'create', ...newProject } };
+  }
   if (!(await confirmCreation(newProject, deps))) {
     return { kind: 'declined' };
   }

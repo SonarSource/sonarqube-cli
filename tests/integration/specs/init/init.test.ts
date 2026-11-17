@@ -1136,6 +1136,103 @@ describe('sonar init', () => {
     );
   });
 
+  describe('--dry-run', () => {
+    function createRequests(
+      server: Awaited<ReturnType<ReturnType<typeof newCloudServer>['start']>>,
+    ) {
+      return server.getRecordedRequests().filter((r) => r.path === '/api/projects/create');
+    }
+
+    it(
+      'previews the project it would create without creating or saving anything',
+      async () => {
+        const server = await newCloudServer().start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run(
+          'init --non-interactive --create --project my-key --name "My Project" --dry-run',
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('DRY RUN: no changes will be made');
+        expect(result.stdout).toContain("Would create the project 'My Project' (key 'my-key'");
+        expect(result.stdout).toContain('Dry run: nothing was written');
+        expect(result.stdout).not.toContain('Project dashboard:');
+        expect(result.stderr).not.toContain('ignored');
+        expect(createRequests(server)).toHaveLength(0);
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'previews binding the repository without importing it',
+      async () => {
+        const server = await newCloudServer()
+          .withOrganizations([
+            { key: ORG, name: ORG, alm: { key: 'github' }, actions: { admin: true } },
+          ])
+          .withDopRepositories(ORG, [
+            { id: 'repo-1', name: 'repository', slug: 'example/repository' },
+          ])
+          .start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        withRemote(GITHUB_REMOTE);
+
+        const result = await harness.run(
+          'init --non-interactive --bind --project unused-key --dry-run',
+        );
+
+        expect(result.exitCode).toBe(0);
+        // A bound project takes its key from the import, so the real run ignores --project too.
+        expect(result.stderr).toContain('--project ignored');
+        expect(result.stdout).toContain(
+          "Would create a project bound to the repository 'example/repository'",
+        );
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'still asks for the missing consent a real run would need',
+      async () => {
+        const server = await newCloudServer().start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive --dry-run');
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('No Sonar project exists for this directory yet.');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not sign in, since that saves credentials',
+      async () => {
+        const result = await harness.run('init --non-interactive --dry-run');
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr).toContain('a dry run cannot sign in');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'rejects the options that shape the first analysis',
+      async () => {
+        const result = await harness.run('init --non-interactive --dry-run --scan --detach');
+
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('--scan, --detach cannot be combined with --dry-run');
+      },
+      TIMEOUT,
+    );
+  });
+
   describe('first analysis flags', () => {
     it(
       'rejects --detach together with --verbose before signing in',
@@ -2177,6 +2274,29 @@ describe('sonar init', () => {
               .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
               .sort(),
           ).toEqual(['api=api-key', 'web=web-key']);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'previews the roots as a preview, creating and mapping nothing',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --non-interactive --dry-run --root api=api-key --root web=web-key',
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain('Previewing web');
+          expect(result.stdout).not.toContain('Onboarding web');
+          expect(result.stdout).toContain('Monorepo onboarding preview:');
+          expect(result.stdout).toContain('Would be created (1):');
+          expect(result.stdout).toContain('Would be mapped to the existing project (1):');
+          expect(result.stdout).not.toContain('To resume');
+          expect(createdKeys(server)).toEqual([]);
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
         },
         TIMEOUT,
       );
