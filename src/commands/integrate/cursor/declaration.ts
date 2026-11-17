@@ -26,8 +26,12 @@ import type {
   IntegrationDeclaration,
   ResourceDeclaration,
 } from '@/core/framework/features';
-import { jsonPatch } from '@/core/framework/features';
+import { jsonPatch, wholeFileRemover } from '@/core/framework/features';
 
+import {
+  createCompletionAnalysisHookSubfeature,
+  STOP_SCRIPT_REL,
+} from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -39,10 +43,7 @@ import {
   createSonarSecretsHooksResources,
   resolveAgentHooksConfigPath,
 } from '../_common/features/sonar-secrets-hooks-feature.ts';
-import {
-  createSqaaInstructionsRule,
-  createSqaaInstructionsSubfeature,
-} from '../_common/features/sqaa-instructions-feature.ts';
+import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildUnixHookScript,
   buildWindowsHookScript,
@@ -56,7 +57,6 @@ import {
   removeCursorHooks,
   upsertCursorHooks,
 } from './hooks.ts';
-import { buildCursorAlwaysOnRule } from './rules.ts';
 
 const HOOKS_JSON = 'hooks.json';
 const MCP_JSON = 'mcp.json';
@@ -122,25 +122,59 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
     createSecretsDetectionFeature<CursorIntegrationOptions>({
       resources: createCursorSecretsDetectionResources(),
     }),
-    createVortexFeature<CursorIntegrationOptions>(
-      [
-        createSqaaInstructionsSubfeature([
-          createSqaaInstructionsRule(resolveCursorSqaaRulePath, buildCursorAlwaysOnRule),
-        ]),
-        createContextAugmentationSubfeature<CursorIntegrationOptions>({
-          agent: 'cursor',
-          scriptPath: (context) =>
-            resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, SESSION_START_SCRIPT_REL),
-          hookConfigResource: createSessionStartHookConfigResource(),
-        }),
-      ],
-      resolveCursorCagSkillPath,
-    ),
+    createCursorVortexFeature(),
     createMcpServerFeature<CursorIntegrationOptions>({
       resolveConfigPath: resolveCursorMcpConfigPath,
     }),
   ],
 };
+
+function createCursorVortexFeature() {
+  const feature = createVortexFeature<CursorIntegrationOptions>(
+    [
+      createCompletionAnalysisHookSubfeature<CursorIntegrationOptions>({
+        agent: 'cursor',
+        configDir: CURSOR_CONFIG_DIR,
+        settingsPath: resolveCursorHooksJsonPath,
+        hookConfigResource: createCompletionHookConfigResource(),
+      }),
+      createContextAugmentationSubfeature<CursorIntegrationOptions>({
+        agent: 'cursor',
+        scriptPath: (context) =>
+          resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, SESSION_START_SCRIPT_REL),
+        hookConfigResource: createSessionStartHookConfigResource(),
+      }),
+    ],
+    resolveCursorCagSkillPath,
+  );
+  return {
+    ...feature,
+    replacedIds: [...(feature.replacedIds ?? []), SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+    legacyCleanups: [
+      ...(feature.legacyCleanups ?? []),
+      wholeFileRemover({
+        id: 'sqaa-instructions-rule',
+        targetPath: resolveCursorSqaaRulePath,
+      }),
+    ],
+  };
+}
+
+function createCompletionHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: 'completion-analysis-hook-config',
+    displayName: 'Cursor completion analysis hook configuration',
+    targetPath: resolveCursorHooksJsonPath,
+    defaultValue: { version: 1, hooks: {} },
+    patch: (document, context) =>
+      upsertCursorHooks(document, [
+        buildCursorHookEntry(context, CURSOR_CONFIG_DIR, 'stop', STOP_SCRIPT_REL, {
+          marker: 'sonar-stop',
+        }),
+      ]),
+    removePatch: (document) => removeCursorHooks(document, ['sonar-stop']),
+  });
+}
 
 function createCursorSecretsDetectionResources(): ResourceDeclaration[] {
   return createSonarSecretsHooksResources({

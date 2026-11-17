@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-export type StopAgent = 'claude' | 'codex' | 'copilot';
+export type StopAgent = 'claude' | 'codex' | 'copilot' | 'cursor';
 
 export interface StopInput {
   sessionId: string;
