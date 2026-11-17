@@ -46,7 +46,10 @@ export const SQAA_OPENCODE_POST_TOOL_USE_CALLER_COMMAND = 'opencode-post-tool-us
 export const SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND = 'devin-post-tool-use';
 export const SQAA_PI_POST_TOOL_USE_CALLER_COMMAND = 'pi-post-tool-use';
 
+export const SQAA_AGENT_STOP_CALLER_COMMAND = 'agent-stop';
+
 export type SqaaTelemetryCallerCommand =
+  | typeof SQAA_AGENT_STOP_CALLER_COMMAND
   | typeof SQAA_ANALYZE_CALLER_COMMAND
   | typeof SQAA_ANALYZE_AGENTIC_CALLER_COMMAND
   | typeof SQAA_VERIFY_CALLER_COMMAND
