@@ -229,6 +229,21 @@ export function validateScanOptions(options: {
   };
 }
 
+/** A dry run never starts the first analysis, so the options that shape it can only be a mistake. */
+export function assertDryRunOptions(flags: ScanOptions): void {
+  const conflicting = [
+    flags.scan ? '--scan' : null,
+    flags.detach ? '--detach' : null,
+    flags.verbose ? '--verbose' : null,
+    flags.scannerProperties.size === 0 ? null : '--scanner-property',
+  ].filter((flag) => flag !== null);
+  if (conflicting.length > 0) {
+    throw new InvalidOptionError(
+      `${conflicting.join(', ')} cannot be combined with --dry-run: a dry run starts no analysis.`,
+    );
+  }
+}
+
 /** Warns when scan-only flags were given but no scan ran. Never names a property value. */
 export function warnIgnoredScanOptions(flags: ScanOptions, console: Console): void {
   const ignored = [
