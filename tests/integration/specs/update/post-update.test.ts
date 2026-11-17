@@ -755,12 +755,15 @@ describe('post-update migration', () => {
       );
       expect(copilot?.features.map((feature) => feature.featureId)).toEqual([VORTEX_FEATURE_ID]);
       expect(copilot?.features[0].subfeatures?.map((subfeature) => subfeature.featureId)).toEqual([
-        SQAA_INSTRUCTIONS_SUBFEATURE_ID,
+        COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
         CONTEXT_AUGMENTATION_FEATURE_ID,
       ]);
-      expect(
-        harness.cwd.file('.github', 'instructions', 'sonarqube.instructions.md').asText(),
-      ).toContain('# Vortex analysis protocol');
+      const hooks = harness.cwd.file('.github', 'hooks', 'hooks.json').asJson().hooks;
+      expect(hooks.agentStop).toEqual([
+        expect.objectContaining({
+          [IS_WINDOWS ? 'powershell' : 'bash']: expect.stringContaining('sonar-stop'),
+        }),
+      ]);
       expectVortexHookInstalled(harness.cwd, 'copilot');
     },
     { timeout: 30000 },
