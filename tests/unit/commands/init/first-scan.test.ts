@@ -131,6 +131,7 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
     scannerProperties: new Map([['sonar.sources', '.']]),
     verbose: false,
     detach: false,
+    scan: false,
     ...overrides,
   };
 }
@@ -243,6 +244,23 @@ describe('runFirstScan failures', () => {
     expect(error.remediationHint).toContain(
       "Project 'my-key' and .sonar-config.json were kept, so the setup is intact.",
     );
+  });
+
+  it('starts the analysis without asking when --scan was passed', async () => {
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
+    clearNetworkConfigCache();
+    const console = new FakeConsole();
+
+    await failureOf(
+      runFirstScan(
+        projectRoot,
+        'my-key',
+        depsFor(console, { interactive: true }),
+        flags({ scan: true }),
+      ),
+    );
+
+    expect(console.calls.some((call) => call.method === 'confirmPrompt')).toBe(false);
   });
 
   it('refuses --detach with a PEM client key before downloading the scanner', async () => {

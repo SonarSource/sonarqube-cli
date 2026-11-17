@@ -22,11 +22,15 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   parseMonorepoRoots,
+  validateIntentOptions,
   validateProjectKey,
   validateProjectName,
   validateVisibility,
+  warnIgnoredIntent,
 } from '@/commands/init/options.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
+
+import { FakeConsole } from '../../../_common/fake-console.ts';
 
 describe('validation', () => {
   it('accepts a SonarQube key and trims it', () => {
@@ -102,5 +106,59 @@ describe('parseMonorepoRoots', () => {
     expect(() => parseMonorepoRoots(['api=one', './api=two'])).toThrow(/"api" more than once/);
     expect(() => parseMonorepoRoots(['api=one', 'web=one'])).toThrow(/'one' more than once/);
     expect(() => parseMonorepoRoots(['api', './api'])).toThrow(/"api" more than once/);
+  });
+});
+
+describe('validateIntentOptions', () => {
+  it('reads each intent option, and a bare --link as linking the project found', () => {
+    expect(validateIntentOptions({})).toBeUndefined();
+    expect(validateIntentOptions({ bind: true })).toEqual({ kind: 'bind' });
+    expect(validateIntentOptions({ create: true })).toEqual({ kind: 'create' });
+    expect(validateIntentOptions({ link: true })).toEqual({ kind: 'link' });
+    expect(validateIntentOptions({ link: ' my-key ' })).toEqual({
+      kind: 'link',
+      projectKey: 'my-key',
+    });
+  });
+
+  it('rejects an invalid --link key, naming the option', () => {
+    expect(() => validateIntentOptions({ link: 'has space' })).toThrow(/^--link must contain/);
+  });
+
+  it('rejects more than one intent, naming each', () => {
+    expect(() => validateIntentOptions({ link: true, bind: true, create: true })).toThrow(
+      '--link, --bind, --create cannot be combined',
+    );
+  });
+
+  it('rejects an intent with --monorepo, whose roots are named with --root', () => {
+    expect(() => validateIntentOptions({ bind: true, monorepo: true })).toThrow(
+      '--bind does not apply with --monorepo',
+    );
+    expect(validateIntentOptions({ monorepo: true })).toBeUndefined();
+  });
+});
+
+describe('warnIgnoredIntent', () => {
+  function warnings(console: FakeConsole): string[] {
+    return console.calls
+      .filter((call) => call.method === 'warn')
+      .map((call) => String(call.args[0]));
+  }
+
+  it('says nothing without an intent', () => {
+    const console = new FakeConsole();
+    warnIgnoredIntent(undefined, console);
+    expect(warnings(console)).toEqual([]);
+  });
+
+  it('names the ignored option, and how to relink to a named key', () => {
+    const console = new FakeConsole();
+    warnIgnoredIntent({ kind: 'create' }, console);
+    warnIgnoredIntent({ kind: 'link', projectKey: 'other' }, console);
+    expect(warnings(console)).toEqual([
+      '--create ignored: this directory is already linked in .sonar-config.json.',
+      "--link ignored: this directory is already linked in .sonar-config.json. To link it to 'other' instead, run 'sonar link other'.",
+    ]);
   });
 });
