@@ -24,12 +24,10 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   AuthResolver,
-  cloudRegionFromUrl,
   ENV_ORG,
   ENV_SERVER,
   ENV_TOKEN,
   isValidServerUrl,
-  normalizeCloudV2Endpoint,
   type ResolveAuthOptions,
   ResolvedAuth,
   resolveFromEndpoint,
@@ -38,6 +36,7 @@ import {
   INVALID_SERVER_URL_MESSAGE,
   invalidCloudServerUrlMessage,
 } from '@/core/server/server-url-validation.ts';
+import { cloudRegionFromUrl, normalizeCloudV2Endpoint } from '@/core/server/sonarcloud-region.ts';
 import { getDefaultState } from '@/core/state/state.ts';
 import * as stateRepository from '@/core/state/state-repository.ts';
 import * as identityFetch from '@/core/telemetry/identity-fetch.ts';
