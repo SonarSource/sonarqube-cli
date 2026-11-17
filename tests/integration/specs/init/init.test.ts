@@ -1196,6 +1196,27 @@ describe('sonar init', () => {
     );
 
     it(
+      'fails like the real run when --bind needs a browser authorization without a terminal',
+      async () => {
+        const server = await newCloudServer()
+          .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }])
+          .start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        withRemote(GITHUB_REMOTE);
+
+        const result = await harness.run('init --non-interactive --bind --dry-run');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(
+          `Organization '${ORG}' is not linked to your DevOps platform`,
+        );
+        expect(result.stderr).toContain(`/organizations/${ORG}/edit?category=binding`);
+        expect(result.stdout).not.toContain('Would create a project bound');
+      },
+      TIMEOUT,
+    );
+
+    it(
       'still asks for the missing consent a real run would need',
       async () => {
         const server = await newCloudServer().start();
