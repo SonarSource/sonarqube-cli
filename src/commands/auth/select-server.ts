@@ -25,15 +25,26 @@ import {
 } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
-import { discoverServer } from '@/core/project-discovery/project-info.ts';
+import { discoverServerFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-export async function confirmServerTrust(server: string, console: Console): Promise<void> {
+export interface ResolvedServer {
+  server: string;
+  /** Absolute path of the project file that supplied `server`, when one did. */
+  configFile?: string;
+}
+
+export async function confirmServerTrust(
+  server: string,
+  console: Console,
+  configFile?: string,
+): Promise<void> {
   if (isSonarQubeCloud(server)) {
     return;
   }
   console.warn('Only connect to servers you trust.');
-  const confirmed = await console.confirmPrompt(`Connect to: ${server}?`, false);
+  const fromFile = configFile ? ` from ${configFile}` : '';
+  const confirmed = await console.confirmPrompt(`Connect to: ${server}${fromFile}?`, false);
   if (!confirmed) {
     throw new CommandFailedError('Login cancelled');
   }
@@ -42,26 +53,30 @@ export async function confirmServerTrust(server: string, console: Console): Prom
 export async function resolveServer(
   serverOption: string | undefined,
   console: Console,
-): Promise<string> {
-  let server: string;
+): Promise<ResolvedServer> {
   if (serverOption) {
-    server = serverOption;
-  } else {
-    const configServer = await discoverServer(console);
-    if (configServer) {
-      assertValidServerUrl(
-        configServer,
-        'Fix serverUrl in .sonar-config.json or pass --server <url>.',
-      );
-      return configServer;
-    }
-    server = await selectServerFromPrompt(console);
+    assertValidServerUrl(
+      serverOption,
+      "Run 'sonar auth login' again and enter an HTTP(S) URL with a host.",
+    );
+    return { server: serverOption };
   }
+
+  const discovered = await discoverServerFromConfig(console);
+  if (discovered) {
+    assertValidServerUrl(
+      discovered.value,
+      'Fix serverUrl in .sonar-config.json or pass --server <url>.',
+    );
+    return { server: discovered.value, configFile: discovered.configFile };
+  }
+
+  const server = await selectServerFromPrompt(console);
   assertValidServerUrl(
     server,
     "Run 'sonar auth login' again and enter an HTTP(S) URL with a host.",
   );
-  return server;
+  return { server };
 }
 
 async function selectServerFromPrompt(console: Console): Promise<string> {
