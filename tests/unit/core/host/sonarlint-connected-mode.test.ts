@@ -24,8 +24,11 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
-import { loadSonarLintConfig } from '@/core/host/sonarlint-connected-mode.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import {
+  loadSonarLintConfig,
+  sonarCloudBaseUrlFromRegion,
+} from '@/core/host/sonarlint-connected-mode.ts';
 
 function tempProject(name: string): string {
   return join(tmpdir(), `sonarlint-ut-${name}-${Date.now()}`);
@@ -57,10 +60,11 @@ describe('loadSonarLintConfig', () => {
     }
   });
 
-  it('loads Cloud binding; EU and US regions map to the right base URL', async () => {
+  it('loads Cloud binding; EU, US and AU regions map to the right base URL', async () => {
     for (const { region, url } of [
       { region: 'EU', url: SONARCLOUD_URL },
       { region: 'US', url: SONARCLOUD_US_URL },
+      { region: 'AU', url: SONARCLOUD_AU_URL },
     ]) {
       const root = tempProject(`sqc-${region}`);
       mkdirSync(join(root, '.sonarlint'), { recursive: true });
@@ -264,4 +268,20 @@ describe('loadSonarLintConfig', () => {
       }
     },
   );
+});
+
+describe('sonarCloudBaseUrlFromRegion', () => {
+  it.each([
+    [undefined, SONARCLOUD_URL],
+    ['EU', SONARCLOUD_URL],
+    ['us', SONARCLOUD_US_URL],
+    [' AU ', SONARCLOUD_AU_URL],
+    ['au', SONARCLOUD_AU_URL],
+  ])('resolves region %p', (region, expected) => {
+    expect(sonarCloudBaseUrlFromRegion(region)).toBe(expected);
+  });
+
+  it.each(['mars', '', ' ', null, 1, {}, false])('does not resolve invalid region %p', (region) => {
+    expect(sonarCloudBaseUrlFromRegion(region)).toBeUndefined();
+  });
 });
