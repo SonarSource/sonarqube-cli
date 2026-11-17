@@ -131,7 +131,7 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
     scannerProperties: new Map([['sonar.sources', '.']]),
     verbose: false,
     detach: false,
-    scan: false,
+    scan: true,
     ...overrides,
   };
 }
@@ -167,19 +167,16 @@ function printed(console: FakeConsole): string[] {
 }
 
 describe('runFirstScan without a scan', () => {
-  it('does not scan a non-interactive run that passed no scan flag', async () => {
+  it.each([
+    ['no other flag', {}],
+    ['--verbose', { verbose: true }],
+    ['--detach', { detach: true }],
+    ['--scanner-property', { scannerProperties: new Map([['sonar.sources', '.']]) }],
+  ] as const)('does not scan a non-interactive run without --scan, given %s', async (_, extra) => {
     const console = new FakeConsole();
-    const none = flags({ scannerProperties: new Map() });
+    const options = flags({ scan: false, scannerProperties: new Map(), ...extra });
 
-    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), none)).toBe(NOT_RUN);
-    expect(console.calls).toHaveLength(0);
-  });
-
-  it('does not scan a non-interactive run that only passed --verbose', async () => {
-    const console = new FakeConsole();
-    const verbose = flags({ scannerProperties: new Map(), verbose: true });
-
-    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), verbose)).toBe(NOT_RUN);
+    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), options)).toBe(NOT_RUN);
     expect(console.calls).toHaveLength(0);
   });
 
@@ -191,7 +188,7 @@ describe('runFirstScan without a scan', () => {
       projectRoot,
       'my-key',
       depsFor(console, { interactive: true }),
-      flags(),
+      flags({ scan: false }),
     );
 
     expect(result).toBe(NOT_RUN);
@@ -208,7 +205,7 @@ describe('runFirstScan without a scan', () => {
       projectRoot,
       'my-key',
       depsFor(console, { interactive: true }),
-      flags(),
+      flags({ scan: false }),
     ).catch((cause: unknown) => cause);
 
     expect((error as Error).message).toBe('Onboarding cancelled.');
