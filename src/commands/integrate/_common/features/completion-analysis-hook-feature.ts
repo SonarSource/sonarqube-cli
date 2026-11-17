@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { StopAgent } from '@/commands/hook/agent-stop/types.ts';
 import type {
   IntegrationContext,
   ResourceDeclaration,
@@ -40,7 +41,7 @@ export const COMPLETION_ANALYSIS_HOOK_FEATURE_ID = 'completion-analysis-hook';
 export const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
 
 interface CompletionAnalysisHookConfig {
-  agent: 'claude' | 'codex' | 'copilot';
+  agent: StopAgent;
   configDir: string;
   settingsPath: (context: IntegrationContext) => string;
   hookConfigResource?: ResourceDeclaration;
