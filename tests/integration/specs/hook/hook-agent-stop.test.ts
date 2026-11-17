@@ -32,7 +32,15 @@ import type {
 import { parseSqaaRequestBody } from '../analyze/sqaa-request-helpers.ts';
 import { git, initGitRepo } from './git-test-helpers.ts';
 
+const BLOCKING_STOP_PROTOCOL = {
+  payloadFields: (cwd: unknown) => ({ cwd, hook_event_name: 'Stop' }),
+  expectedContinuationOutput: {
+    decision: 'block',
+    reason: expect.stringContaining('Use Number.isNaN.'),
+  },
+};
 const CLAUDE_CODEX_PROTOCOL = {
+  ...BLOCKING_STOP_PROTOCOL,
   sessionIdField: 'session_id',
   expectedLimitOutput: {
     systemMessage: expect.stringMatching(
@@ -43,7 +51,26 @@ const CLAUDE_CODEX_PROTOCOL = {
 const AGENTS = [
   { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
   { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
-  { name: 'copilot', sessionIdField: 'sessionId', expectedLimitOutput: {} },
+  {
+    name: 'copilot',
+    ...BLOCKING_STOP_PROTOCOL,
+    sessionIdField: 'sessionId',
+    expectedLimitOutput: {},
+  },
+  {
+    name: 'cursor',
+    sessionIdField: 'conversation_id',
+    payloadFields: (cwd: unknown) => ({
+      workspace_roots: [cwd],
+      hook_event_name: 'stop',
+      status: 'completed',
+      loop_count: 0,
+    }),
+    expectedContinuationOutput: {
+      followup_message: expect.stringContaining('Use Number.isNaN.'),
+    },
+    expectedLimitOutput: {},
+  },
 ] as const;
 const ISSUE = { rule: 'typescript:S2688', message: 'Use Number.isNaN.', startLine: 2 };
 const BAD = 'export function invalid(value: number): boolean {\n  return value === NaN;\n}\n';
@@ -76,16 +103,18 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
     await harness.dispose();
   });
   function payload(extra: Record<string, unknown> = {}) {
-    const { sessionId = 'session', ...rest } = extra;
+    const { sessionId = 'session', cwd = harness.cwd.path, ...rest } = extra;
     return {
       [agent.sessionIdField]: sessionId,
-      cwd: harness.cwd.path,
-      hook_event_name: 'Stop',
+      ...agent.payloadFields(cwd),
       ...rest,
     };
   }
   function invoke(extra = {}) {
     return harness.runWithStdin(COMMAND, JSON.stringify(payload(extra)));
+  }
+  function expectContinuation(result: CliResult) {
+    expect(JSON.parse(result.stdout)).toEqual(agent.expectedContinuationOutput);
   }
   function analyses() {
     return server
@@ -200,7 +229,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       expect(created.journal).toEqual({ journal_mode: 'wal' });
       expect(created.tables).toHaveLength(3);
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(metadata()).toEqual(created);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
     }, 30000);
@@ -374,7 +403,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         blocker.run('ROLLBACK');
         blocker.close();
       }
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
     }, 30000);
 
@@ -390,7 +419,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       expect(analyses()).toHaveLength(0);
       expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
       withDb((db) => db.run('DROP TRIGGER fail_counter'));
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
     }, 30000);
 
@@ -433,7 +462,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
       const result = await invoke();
       expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout).decision).toBe('block');
+      expectContinuation(result);
       expect(analyses()).toHaveLength(1);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
       expect(
@@ -467,7 +496,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         ]),
       );
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke({ sessionId: sessionId })).stdout).decision).toBe('block');
+      expectContinuation(await invoke({ sessionId: sessionId }));
       expect(
         withDb((db) =>
           db
@@ -497,7 +526,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
 
     it('reanalyzes expired results and removes stale state while preserving recent and running sessions', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       const now = Math.floor(Date.now() / 1000);
       withDb((db) => {
         db.run('UPDATE vortex_successful_analyses SET analyzed_at = 1');
@@ -534,7 +563,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         ]);
         db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['fresh', now]);
       });
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(analyses()).toHaveLength(2);
       expect(readSessionCounters()).toEqual({ session: 1, live: 2, fresh: 2 });
       expect(queryState()).toEqual({ count: 1, locks: 1, successful: 2 });
@@ -562,14 +591,14 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       response.errors = [];
       const retried = await invoke();
       expect(retried.exitCode).toBe(0);
-      expect(JSON.parse(retried.stdout).decision).toBe('block');
+      expectContinuation(retried);
       expect(analyses()).toHaveLength(2);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
     }, 30000);
 
     it('shares saved findings across sessions', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       const other = await invoke({ sessionId: 'other' });
       expectSilentStop(other);
       expect(analyses()).toHaveLength(1);
@@ -586,7 +615,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       await invoke({ sessionId: 'other' });
       expect(readSessionCounters()).toEqual({ session: 1, other: 0 });
       harness.cwd.writeFile('src/new.ts', BAD + '// third change\n');
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(readSessionCounters()).toEqual({ session: 2, other: 0 });
       expect(analyses()).toHaveLength(3);
     }, 30000);
@@ -595,10 +624,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       harness.cwd.writeFile('src/tracked.ts', BAD + '\n');
       const first = await invoke();
       expect(first.exitCode).toBe(0);
-      expect(JSON.parse(first.stdout)).toMatchObject({
-        decision: 'block',
-        reason: expect.stringContaining('Use Number.isNaN.'),
-      });
+      expectContinuation(first);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
       expect(parseSqaaRequestBody(analyses()[0].body).analysisDepth).toBe('DEEP');
       harness.cwd.writeFile('src/tracked.ts', GOOD);
@@ -616,7 +642,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         harness.cwd.writeFile('src/new.ts', BAD + `// attempt ${attempt}\n`);
         const result = await invoke({ stop_hook_active: attempt > 1 });
         expect(result.exitCode).toBe(0);
-        if (attempt < 3) expect(JSON.parse(result.stdout).decision).toBe('block');
+        if (attempt < 3) expectContinuation(result);
         else expect(JSON.parse(result.stdout)).toEqual(agent.expectedLimitOutput);
       }
       expect(analyses()).toHaveLength(3);
@@ -722,7 +748,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
           });
         });
         expect(result.exitCode).toBe(0);
-        if (outcome === 'continue') expect(JSON.parse(result.stdout).decision).toBe('block');
+        if (outcome === 'continue') expectContinuation(result);
         else expectSilentStop(result);
         expect(queryState()).toEqual({
           count: 2,
@@ -748,7 +774,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         };
         const second = await invoke();
         expect(second.exitCode).toBe(0);
-        expect(JSON.parse(second.stdout).decision).toBe('block');
+        expectContinuation(second);
         expect(queryState()).toEqual({ count: 2, locks: 1, successful: 1 });
         expect(readLocks()).toEqual([first]);
         harness.cwd.writeFile('src/new.ts', BAD);
@@ -774,7 +800,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         expect(analyses()).toHaveLength(1);
         expect(queryState()).toEqual({ count: 1, locks: 1, successful: 0 });
       });
-      expect(JSON.parse(first.stdout).decision).toBe('block');
+      expectContinuation(first);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
     }, 30000);
 
@@ -785,7 +811,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         withDb((db) => db.run('UPDATE vortex_analysis_locks SET lock_expires_at = 1'));
         const replacement = await invoke({ sessionId: 'other' });
         expect(replacement.exitCode).toBe(0);
-        expect(JSON.parse(replacement.stdout).decision).toBe('block');
+        expectContinuation(replacement);
         expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
         withDb((db) => db.run('UPDATE vortex_successful_analyses SET analyzed_at = ?', [savedAt]));
       });
@@ -812,13 +838,37 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         cwd: harness.userHome.path,
       });
       expect(result.exitCode).toBe(0);
-      expect(JSON.parse(result.stdout).decision).toBe('block');
+      expectContinuation(result);
       expect(analyses()).toHaveLength(1);
     }, 15000);
 
+    if (agent.name === 'cursor') {
+      it.each(
+        [undefined, null, [], [null], [42], [''], ['   ']].map((workspaceRoots) => ({
+          workspaceRoots,
+        })),
+      )(
+        'allows stopping with invalid workspace roots: $workspaceRoots',
+        async ({ workspaceRoots }) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(await invoke({ workspace_roots: workspaceRoots }));
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
+
+      it('normalizes Cursor drive paths and uses the first workspace root', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const root = process.platform === 'win32' ? '/' + harness.cwd.path : harness.cwd.path;
+        const result = await invoke({ workspace_roots: [root, harness.userHome.path] });
+        expectContinuation(result);
+        expect(analyses()).toHaveLength(1);
+      }, 15000);
+    }
+
     it('allows stopping without a connection', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(queryState().count).toBe(1);
       harness.state().clearAuth();
       const result = await invoke();
@@ -829,7 +879,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
 
     it('allows stopping outside a Git repository', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      expect(JSON.parse((await invoke()).stdout).decision).toBe('block');
+      expectContinuation(await invoke());
       expect(queryState().count).toBe(1);
       const result = await invoke({ cwd: harness.userHome.path });
       expectSilentStop(result);
@@ -876,7 +926,10 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         expectSilentStop(
           await harness.runWithStdin(
             COMMAND,
-            JSON.stringify({ [agent.sessionIdField]: sessionId, cwd: harness.cwd.path }),
+            JSON.stringify({
+              [agent.sessionIdField]: sessionId,
+              ...agent.payloadFields(harness.cwd.path),
+            }),
           ),
         );
         expect(analyses()).toHaveLength(0);
