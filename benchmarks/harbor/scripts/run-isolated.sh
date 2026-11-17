@@ -153,18 +153,34 @@ start_portkey_proxy() {
   exit 1
 }
 
+mint_sonar_run_token() {
+  local created
+  created="$(python3 -I "${SOURCE_ROOT}/scripts/sonar-run-token.py" create --name "harbor-${JOB_NAME}-${TASK}-$(date +%s)-$$")"
+  SONAR_RUN_TOKEN_ID="$(jq -r .id <<<"${created}")"
+  HB_SONAR_TOKEN="$(jq -r .token <<<"${created}")"
+  export HB_SONAR_TOKEN
+  (umask 077 && printf '%s' "${HB_SONAR_TOKEN}" >"${SONAR_RUN_TOKEN_FILE}")
+}
+
 stop_and_collect() {
+  local status=0
   kill "${PORTKEY_PROXY_PID}" 2>/dev/null || true
-  collect_results
+  collect_results || status=$?
+  if [[ -n "${SONAR_RUN_TOKEN_ID:-}" ]]; then
+    python3 -I "${SOURCE_ROOT}/scripts/sonar-run-token.py" delete --id "${SONAR_RUN_TOKEN_ID}" || status=$?
+  fi
+  return "${status}"
 }
 
 main() {
+  : "${SONAR_RUN_TOKEN_FILE:?SONAR_RUN_TOKEN_FILE must be set}"
   export HARBOR_HOST_ENVIRONMENT_ALLOW=1
   prepare
   trap stop_and_collect EXIT
   assert_agent_cannot_sudo
   as_agent "${INSTALL_ENV}" bash "${SCRIPT_PATH}" install
   start_portkey_proxy
+  mint_sonar_run_token
   as_agent "${RUN_ENV}" bash "${SCRIPT_PATH}" run
 }
 
