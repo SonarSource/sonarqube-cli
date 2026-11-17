@@ -21,6 +21,7 @@
 import { isAbsolute, posix } from 'node:path';
 
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { isValidProjectKey } from '@/core/project-key.ts';
 import type { ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -79,6 +80,67 @@ export function validateUnboundNewOptions(rawOptions: {
     visibility:
       rawOptions.visibility === undefined ? undefined : validateVisibility(rawOptions.visibility),
   };
+}
+
+/**
+ * The onboarding path the caller consented to up front. It answers the matching prompts, and is
+ * the only consent a non-interactive run has: without it, nothing is linked, bound or created.
+ */
+export type InitIntent =
+  /** Link an existing project: the one found for the directory, or `projectKey`. */
+  | { kind: 'link'; projectKey?: string }
+  /** Create a project bound to the repository. */
+  | { kind: 'bind' }
+  /** Create a project without repository binding. */
+  | { kind: 'create' };
+
+export function validateIntentOptions(rawOptions: {
+  link?: string | boolean;
+  bind?: boolean;
+  create?: boolean;
+  monorepo?: boolean;
+}): InitIntent | undefined {
+  const given = [
+    rawOptions.link === undefined ? null : '--link',
+    rawOptions.bind ? '--bind' : null,
+    rawOptions.create ? '--create' : null,
+  ].filter((option) => option !== null);
+  if (given.length > 1) {
+    throw new InvalidOptionError(
+      `${given.join(', ')} cannot be combined: each picks a different onboarding path.`,
+    );
+  }
+  if (given.length === 1 && rawOptions.monorepo) {
+    throw new InvalidOptionError(
+      `${given[0]} does not apply with --monorepo: name the roots to onboard with --root instead.`,
+    );
+  }
+  if (rawOptions.bind) {
+    return { kind: 'bind' };
+  }
+  if (rawOptions.create) {
+    return { kind: 'create' };
+  }
+  if (rawOptions.link === undefined) {
+    return undefined;
+  }
+  return typeof rawOptions.link === 'string'
+    ? { kind: 'link', projectKey: validateProjectKey(rawOptions.link, '--link') }
+    : { kind: 'link' };
+}
+
+/** An intent only goes unused when the directory was already linked, which is never changed. */
+export function warnIgnoredIntent(intent: InitIntent | undefined, console: Console): void {
+  if (!intent) {
+    return;
+  }
+  const relink =
+    intent.kind === 'link' && intent.projectKey
+      ? ` To link it to '${intent.projectKey}' instead, run 'sonar link ${intent.projectKey}'.`
+      : '';
+  console.warn(
+    `--${intent.kind} ignored: this directory is already linked in ${SHARED_PROJECT_CONFIG_FILE_NAME}.${relink}`,
+  );
 }
 
 export function warnIgnoredUnboundNewOptions(options: UnboundNewOptions, console: Console): void {
@@ -142,6 +204,7 @@ export function parseMonorepoRoots(raw: readonly string[] | undefined): Monorepo
 }
 
 export function validateScanOptions(options: {
+  scan?: boolean;
   scannerProperty?: string[];
   verbose?: boolean;
   detach?: boolean;
@@ -162,6 +225,7 @@ export function validateScanOptions(options: {
     scannerProperties,
     verbose: options.verbose === true,
     detach: options.detach === true,
+    scan: options.scan === true,
   };
 }
 
@@ -170,6 +234,8 @@ export function warnIgnoredScanOptions(flags: ScanOptions, console: Console): vo
   const ignored = [
     flags.scannerProperties.size === 0 ? null : '--scanner-property',
     flags.detach ? '--detach' : null,
+    flags.verbose ? '--verbose' : null,
+    flags.scan ? '--scan' : null,
   ].filter((flag) => flag !== null);
   if (ignored.length > 0) {
     console.warn(`${ignored.join(', ')} ignored: only applicable when the first analysis runs.`);

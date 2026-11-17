@@ -19,12 +19,13 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { BadRequestError } from '@/core/server/errors.ts';
 import { ProjectsClient, type ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
+import { missingDecision } from '../decision.ts';
 import type { InitOutcome, UnboundNewPath } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import { type UnboundNewOptions, validateProjectKey, validateProjectName } from '../options.ts';
@@ -88,14 +89,25 @@ async function chooseNewProject(
   };
 }
 
+/** Only `--create` or the user's answer creates a project; a non-interactive run has `--create` by now. */
 async function confirmCreation(
   { projectKey, projectName, visibility }: NewProject,
-  { console, interactive }: DetectDeps,
+  { console, intent }: DetectDeps,
 ): Promise<boolean> {
   console.print(`Proposed project: ${projectName}`);
   console.print(`Project key: ${projectKey}`);
   console.print(`Visibility: ${visibility}`);
-  return !interactive || requireAnswer(await console.confirmPrompt('Create this project?', true));
+  return (
+    intent?.kind === 'create' ||
+    requireAnswer(await console.confirmPrompt('Create this project?', true))
+  );
+}
+
+/** The options that resolve a run that found no project; `--bind` only when binding is possible. */
+function newProjectOptions(path: UnboundNewPath): string[] {
+  return [path.repositorySlug ? '--bind' : null, '--create', '--link <key>'].filter(
+    (option) => option !== null,
+  );
 }
 
 async function createProject(
@@ -169,7 +181,7 @@ export async function runUnboundNew(
   monorepo = false,
 ): Promise<InitOutcome> {
   const { projectRoot, remote } = path;
-  const { auth, http, console } = deps;
+  const { auth, http, console, interactive, intent } = deps;
   const generated = generateProjectProposal(projectRoot, remote, auth.orgKey);
   const projects = new ProjectsClient(http);
 
@@ -179,6 +191,12 @@ export async function runUnboundNew(
     if (options.projectKey !== undefined) {
       rejectTakenKey(existing.key);
     }
+    if (intent?.kind === 'create') {
+      throw new InvalidOptionError(
+        `Project '${existing.key}', the key generated for this directory, already exists.`,
+        `Run 'sonar init' again with --link to link it, or add --project <key> to create another project.`,
+      );
+    }
     const linked = await runLinkExisting(
       { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
       deps,
@@ -187,6 +205,16 @@ export async function runUnboundNew(
       return linked;
     }
     projectKey = await askProjectKey(console, projects, auth.orgKey, existing.key);
+  } else if (intent?.kind === 'link') {
+    throw new InvalidOptionError(
+      '--link found no Sonar project for this directory.',
+      "Name the project with --link <key>, or run 'sonar init' again with --create.",
+    );
+  } else if (!interactive && intent?.kind !== 'create') {
+    throw missingDecision(
+      'No Sonar project exists for this directory yet.',
+      newProjectOptions(path),
+    );
   }
 
   const newProject = await chooseNewProject(
