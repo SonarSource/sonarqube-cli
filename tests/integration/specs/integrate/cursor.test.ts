@@ -440,7 +440,7 @@ describe('integrate cursor', () => {
     );
   });
 
-  describe('Vortex entitlement and SQAA instructions', () => {
+  describe('Vortex entitlement and completion hooks', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
 
@@ -468,49 +468,34 @@ describe('integrate cursor', () => {
     }
 
     it(
-      'writes an always-applied ~/.cursor/rules/sonar-agentic-analysis.mdc when entitled, with a discovered project key',
+      'installs a main-agent stop hook and removes the legacy managed rule when entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
+        harness.userHome.writeFile(SQAA_RULE_DIRS.join('/'), 'Old DEEP rule');
         const result = await harness.run('integrate cursor --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.exists(...SQAA_RULE_DIRS)).toBe(true);
+        expect(harness.userHome.exists(...SQAA_RULE_DIRS)).toBe(false);
+        const hooks = harness.userHome.file(...HOOKS_JSON_DIRS).asJson();
+        expect(hooks.hooks.stop).toEqual([
+          expect.objectContaining({
+            command: expect.stringContaining('sonar-stop'),
+            failClosed: false,
+          }),
+        ]);
+        const script = harness.userHome.file(
+          '.cursor',
+          'hooks',
+          'sonar-stop',
+          'build-scripts',
+          hookScriptName('stop'),
+        );
+        expect(script.isExecutable).toBe(true);
+        expect(script.asText()).toContain('sonar hook agent-stop --agent cursor');
 
-        const body = harness.userHome.file(...SQAA_RULE_DIRS).asText();
-        // Cursor auto-loads the rule in every session via the front-matter.
-        expect(body).toContain('alwaysApply: true');
-        expect(body).toContain('# Vortex analysis protocol');
-        expect(body).toContain('sonar analyze agentic --depth DEEP');
-        expect(body).toContain('--file');
-
-        expect(findInstalledFeature(harness, 'cursor', 'vortex', 'global')).toBeDefined();
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'prompts to install Vortex and writes the rule when accepted (entitled org, interactive)',
-      async () => {
-        const { extraEnv } = await setupCloudWithEntitlement();
-        harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
-
-        const session = harness.runInteractive('integrate cursor', {
-          extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
-        });
-        await chooseCustomize(session);
-        await session.accept('Install secrets detection?');
-        await session.accept('Install Vortex?');
-        await session.accept('Install MCP server?');
-        const result = await session.waitFinish();
-
-        expect(result.exitCode).toBe(0);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('Install Vortex?');
-        const body = harness.userHome.file(...SQAA_RULE_DIRS).asText();
-        expect(body).toContain('# Vortex analysis protocol');
         expect(findInstalledFeature(harness, 'cursor', 'vortex', 'global')).toBeDefined();
       },
       { timeout: 30000 },
@@ -557,22 +542,6 @@ describe('integrate cursor', () => {
     );
 
     it(
-      'writes the SQAA rule when no project key is provided or discoverable',
-      async () => {
-        const { extraEnv } = await setupCloudWithEntitlement();
-
-        const result = await harness.run('integrate cursor --non-interactive', { extraEnv });
-
-        expect(result.exitCode).toBe(0);
-        expect(harness.userHome.file(...SQAA_RULE_DIRS).asText()).toContain(
-          '# Vortex analysis protocol',
-        );
-        expect(findInstalledFeature(harness, 'cursor', 'vortex')?.scope).toBe('global');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
       'skips Vortex and shows the promotion message when the org is not entitled',
       async () => {
         const { extraEnv } = await setupCloudWithEntitlement({
@@ -585,32 +554,31 @@ describe('integrate cursor', () => {
 
         expect(result.exitCode).toBe(0);
         expect(`${result.stdout}\n${result.stderr}`).toContain(VORTEX_PROMOTION_MESSAGE);
-        expect(harness.userHome.file(...SQAA_RULE_DIRS).exists()).toBe(false);
         expect(findInstalledFeature(harness, 'cursor', 'vortex')).toBeUndefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      're-running is idempotent — rule body is unchanged',
+      're-running is idempotent — stop hook configuration is unchanged',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
         harness.cwd.writeFile('sonar-project.properties', `sonar.projectKey=${TEST_PROJECT}\n`);
 
         await harness.run('integrate cursor --non-interactive', { extraEnv });
-        const firstBody = harness.userHome.file(...SQAA_RULE_DIRS).asText();
+        const firstBody = harness.userHome.file(...HOOKS_JSON_DIRS).asText();
 
         const result = await harness.run('integrate cursor --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.file(...SQAA_RULE_DIRS).asText()).toBe(firstBody);
+        expect(harness.userHome.file(...HOOKS_JSON_DIRS).asText()).toBe(firstBody);
       },
       { timeout: 30000 },
     );
 
     it(
-      'system reset removes the SQAA rule file',
+      'system reset removes the stop hook and script',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
@@ -620,7 +588,7 @@ describe('integrate cursor', () => {
           extraEnv,
         });
         expect(integrateResult.exitCode).toBe(0);
-        expect(harness.userHome.exists(...SQAA_RULE_DIRS)).toBe(true);
+        expect(harness.userHome.file(...HOOKS_JSON_DIRS).asJson().hooks.stop).toHaveLength(1);
 
         // Preserve the post-integrate state so reset sees the installed features.
         const stateAfterIntegrate = readFileSync(harness.stateJsonFile.path, 'utf-8');
@@ -629,7 +597,16 @@ describe('integrate cursor', () => {
         const result = await harness.run('system reset --force');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.exists(...SQAA_RULE_DIRS)).toBe(false);
+        expect(
+          harness.userHome.exists(
+            '.cursor',
+            'hooks',
+            'sonar-stop',
+            'build-scripts',
+            hookScriptName('stop'),
+          ),
+        ).toBe(false);
+        expect(harness.userHome.exists(...HOOKS_JSON_DIRS)).toBe(false);
       },
       { timeout: 30000 },
     );
