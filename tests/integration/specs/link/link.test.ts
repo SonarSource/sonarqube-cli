@@ -24,7 +24,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 
 import { TestHarness } from '../../harness';
 import { initGitRepo } from '../hook/git-test-helpers.ts';
@@ -137,6 +137,8 @@ describe('sonar link', () => {
     it.each([
       [`${SONARCLOUD_URL}/`, 'eu'],
       [`${SONARCLOUD_US_URL}/`, 'us'],
+      [SONARCLOUD_AU_URL, 'au'],
+      [`${SONARCLOUD_AU_URL.toUpperCase()}/`, 'au'],
       [`${SONARCLOUD_URL.toUpperCase()}/`, 'eu'],
     ] as const)('keeps a region entry for production Cloud URL %s', async (serverUrl, region) => {
       harness.withAuth(serverUrl, 'test-token', 'my-org');

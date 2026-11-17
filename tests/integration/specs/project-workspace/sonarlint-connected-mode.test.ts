@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL } from '@/core/config-constants.ts';
 import {
   discoverOrganization,
   discoverProject,
@@ -115,6 +115,68 @@ describe('Project workspace + SonarLint (harness)', () => {
     },
     { timeout: 15000 },
   );
+
+  it.each(['connected-mode', 'properties'])('resolves AU from %s', async (source) => {
+    const root = projectRoot(`au-${source}`);
+    mkdirSync(join(root, '.sonarlint'), { recursive: true });
+    if (source === 'properties') {
+      writeFileSync(
+        join(root, 'sonar-project.properties'),
+        'sonar.projectKey=au-project\nsonar.organization=au-org\nsonar.region=AU\n',
+      );
+    } else {
+      writeFileSync(
+        join(root, '.sonarlint', 'connectedMode.json'),
+        JSON.stringify({
+          projectKey: 'au-project',
+          sonarCloudOrganization: 'au-org',
+          region: 'AU',
+        }),
+      );
+    }
+    const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
+    expect(discovered.serverUrl).toBe(SONARCLOUD_AU_URL);
+    expect(discovered.organization).toBe('au-org');
+    expect(discovered.projectKey).toBe('au-project');
+  });
+
+  it.each(['connected-mode', 'properties'])(
+    'keeps an unknown region unresolved from %s with active EU auth',
+    async (source) => {
+      const root = projectRoot(`unknown-${source}`);
+      mkdirSync(join(root, '.sonarlint'), { recursive: true });
+      if (source === 'properties') {
+        writeFileSync(
+          join(root, 'sonar-project.properties'),
+          'sonar.projectKey=unknown-project\nsonar.organization=config-org\nsonar.region=mars\n',
+        );
+      } else {
+        writeFileSync(
+          join(root, '.sonarlint', 'connectedMode.json'),
+          JSON.stringify({
+            projectKey: 'unknown-project',
+            sonarCloudOrganization: 'config-org',
+            region: 'mars',
+          }),
+        );
+      }
+      const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
+      expect(discovered.serverUrl).toBeUndefined();
+      expect(discovered.projectKey).toBeUndefined();
+      expect(fake.calls.filter((call) => call.method === 'print')).toHaveLength(0);
+    },
+  );
+
+  it('does not borrow active auth when an unknown sonar.region has no organization', async () => {
+    const root = projectRoot('unknown-region-no-org');
+    mkdirSync(root, { recursive: true });
+    writeFileSync(
+      join(root, 'sonar-project.properties'),
+      'sonar.projectKey=unknown-project\nsonar.region=mars\n',
+    );
+    const discovered = await discoverProject(root, { console: fake, auth: MOCK_AUTH });
+    expect(discovered.serverUrl).toBeUndefined();
+  });
 
   it(
     'discoverProject picks solution-style JSON when there is no connectedMode.json (any property name casing)',
