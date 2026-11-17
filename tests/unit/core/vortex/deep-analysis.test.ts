@@ -102,7 +102,7 @@ describe('deep analysis database', () => {
   );
 
   it.each(['SQLITE_NOTADB', 'SQLITE_CORRUPT', 'SQLITE_CORRUPT_VTAB'])(
-    'quarantines database files and retries after %s',
+    'quarantines database files and rejects the current operation after %s',
     (code) => {
       stubs.migrate.mockImplementationOnce(() => {
         throw Object.assign(new Error('Corrupt database'), { code });
@@ -112,7 +112,7 @@ describe('deep analysis database', () => {
         closesAtRename.push(fake.close.mock.calls.length);
       });
       try {
-        expect(db.openAnalysisDb()).toBe(fake.db);
+        expect(() => db.openAnalysisDb()).toThrow(CommandFailedError);
         expect(closesAtRename).toEqual([1, 1, 1]);
         expect(rename.mock.calls).toEqual(
           [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`].map((path) => [
@@ -120,15 +120,15 @@ describe('deep analysis database', () => {
             `${path}.corrupted-${NOW * 1000 + 123}`,
           ]),
         );
-        expect(stubs.construct).toHaveBeenCalledTimes(2);
-        expect(stubs.migrate).toHaveBeenCalledTimes(2);
+        expect(stubs.construct).toHaveBeenCalledTimes(1);
+        expect(stubs.migrate).toHaveBeenCalledTimes(1);
       } finally {
         rename.mockRestore();
       }
     },
   );
 
-  it('retries only once even when quarantining files fails', () => {
+  it('does not retry when quarantining files fails', () => {
     const failure = Object.assign(new Error('Corrupt database'), { code: 'SQLITE_CORRUPT' });
     stubs.migrate.mockImplementation(() => {
       throw failure;
@@ -138,8 +138,8 @@ describe('deep analysis database', () => {
     });
     try {
       expect(() => db.openAnalysisDb()).toThrow(CommandFailedError);
-      expect(stubs.construct).toHaveBeenCalledTimes(2);
-      expect(fake.close).toHaveBeenCalledTimes(2);
+      expect(stubs.construct).toHaveBeenCalledTimes(1);
+      expect(fake.close).toHaveBeenCalledTimes(1);
       expect(rename).toHaveBeenCalledTimes(3);
     } finally {
       rename.mockRestore();
