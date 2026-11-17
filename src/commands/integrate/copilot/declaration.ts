@@ -28,6 +28,10 @@ import type {
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
 import {
+  createCompletionAnalysisHookSubfeature,
+  STOP_SCRIPT_REL,
+} from '../_common/features/completion-analysis-hook-feature.ts';
+import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
   VORTEX_HOOK_MARKER,
@@ -35,13 +39,14 @@ import {
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
-  createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
+  createSqaaInstructionsRemover,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildUnixHookScript,
   buildWindowsHookScript,
   hookScriptExtension,
+  resolveAgentHookScriptPath,
   SONAR_SECRETS_MARKER,
 } from '../_common/hooks.ts';
 import { sonarBeginMarker, sonarEndMarker } from '../_common/instructions-templates.ts';
@@ -83,22 +88,58 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
         }),
       ],
     }),
-    createVortexFeature<CopilotIntegrationOptions>(
-      [
-        createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveInstructionsPath)]),
-        createContextAugmentationSubfeature<CopilotIntegrationOptions>({
-          agent: 'copilot',
-          scriptPath: resolveCagHookScriptPath,
-          hookConfigResource: createCagHookConfigResource(),
-        }),
-      ],
-      resolveCopilotSkillPath,
-    ),
+    createCopilotVortexFeature(),
     createMcpServerFeature<CopilotIntegrationOptions>({
       resolveConfigPath: resolveCopilotMcpConfigPath,
     }),
   ],
 };
+
+function createCopilotVortexFeature() {
+  const feature = createVortexFeature<CopilotIntegrationOptions>(
+    [
+      createCompletionAnalysisHookSubfeature<CopilotIntegrationOptions>({
+        agent: 'copilot',
+        configDir: '.copilot',
+        settingsPath: resolveHooksJsonPath,
+        hookConfigResource: createCompletionHookConfigResource(),
+      }),
+      createContextAugmentationSubfeature<CopilotIntegrationOptions>({
+        agent: 'copilot',
+        scriptPath: resolveCagHookScriptPath,
+        hookConfigResource: createCagHookConfigResource(),
+      }),
+    ],
+    resolveCopilotSkillPath,
+  );
+  return {
+    ...feature,
+    replacedIds: [...(feature.replacedIds ?? []), SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+    legacyCleanups: [
+      ...(feature.legacyCleanups ?? []),
+      createSqaaInstructionsRemover(resolveInstructionsPath),
+    ],
+  };
+}
+
+function createCompletionHookConfigResource(): ResourceDeclaration {
+  return jsonPatch({
+    id: 'completion-analysis-hook-config',
+    displayName: 'Copilot completion analysis hook configuration',
+    targetPath: resolveHooksJsonPath,
+    defaultValue: { version: 1, hooks: {} },
+    patch: (document, context) =>
+      upsertCopilotHooks(document, 'sonar-stop', {
+        agentStop: buildCopilotHookEntry(
+          resolveCopilotHookCommandPath(
+            context,
+            resolveAgentHookScriptPath(context, '.copilot', STOP_SCRIPT_REL),
+          ),
+        ),
+      }),
+    removePatch: (document) => removeCopilotHooks(document, ['sonar-stop']),
+  });
+}
 
 function createCagHookConfigResource(): ResourceDeclaration {
   return jsonPatch({

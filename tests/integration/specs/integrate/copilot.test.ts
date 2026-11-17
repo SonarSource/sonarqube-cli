@@ -28,7 +28,7 @@ import {
   expectAgentPromptHint,
   expectNoAgentPromptHint,
 } from '../../../_common/agent-hint-assertions.js';
-import { type CliResult, normalizePath, TestHarness } from '../../harness';
+import { type CliResult, hookScriptName, normalizePath, TestHarness } from '../../harness';
 import {
   CopilotHookEntry,
   CopilotHooksJson,
@@ -222,12 +222,50 @@ describe('integrate copilot', () => {
     );
   });
 
-  // ─── SQAA section in the instructions file ──────────────────────────────────
+  // ─── Vortex ────────────────────────────────────────────────────────────────
 
-  describe('SQAA section in the instructions file', () => {
+  describe('Vortex', () => {
     const TEST_ORG = 'my-org';
     const TEST_PROJECT = 'my-project';
     const HTTP_SERVICE_UNAVAILABLE = 503;
+    const STOP_SCRIPT_PATH = [
+      '.copilot',
+      'hooks',
+      'sonar-stop',
+      'build-scripts',
+      hookScriptName('stop'),
+    ] as const;
+
+    function expectCompletionHookInstalled(): void {
+      const hooks = (harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson)
+        .hooks;
+      expect(hooks.agentStop).toHaveLength(1);
+      expect(hooks.agentStop?.[0]?.type).toBe('command');
+      expect(hooks.agentStop?.[0]?.timeoutSec).toBe(60);
+      const script = harness.userHome.file(...STOP_SCRIPT_PATH);
+      expect(normalizePath(hooks.agentStop?.[0]?.[HOOK_FIELD] ?? '')).toContain(
+        normalizePath(script.path),
+      );
+      expect(script.exists()).toBe(true);
+      expect(script.isExecutable).toBe(true);
+      expect(script.asText()).toContain('sonar hook agent-stop --agent copilot');
+      expect(hooks.subagentStop).toBeUndefined();
+      const feature = findCopilotFeature(harness, 'vortex');
+      expect(feature?.scope).toBe('global');
+      expect(feature?.subfeatures?.map(({ featureId }) => featureId)).toContain(
+        'completion-analysis-hook',
+      );
+    }
+
+    function expectNoCompletionHook(): void {
+      const hooks = (harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson)
+        .hooks;
+      expect(hooks.agentStop).toBeUndefined();
+      expect(harness.userHome.exists(...STOP_SCRIPT_PATH)).toBe(false);
+      expect(findCopilotFeature(harness, 'vortex')).toBeUndefined();
+      expect(hooks.preToolUse).toHaveLength(1);
+      expect(hooks.userPromptTransformed).toHaveLength(1);
+    }
     /**
      * Stand up a fake SonarQube Cloud server with Vortex entitlement configured
      * for the test org, swap the harness auth to a cloud connection, and
@@ -256,7 +294,7 @@ describe('integrate copilot', () => {
     }
 
     it(
-      'installs prompt scanning alongside SQAA instructions when the org is entitled',
+      'installs prompt scanning alongside the completion hook when the org is entitled',
       async () => {
         harness.state().withContextAugmentationBinaryInstalled();
         const { extraEnv } = await setupCloudWithEntitlement();
@@ -265,92 +303,103 @@ describe('integrate copilot', () => {
         const result = await harness.run('integrate copilot --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).not.toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).toContain('# Vortex analysis protocol');
-        expect(body).toContain('sonar analyze agentic --depth DEEP');
-        expect(body).toContain('--file');
+        expectCompletionHookInstalled();
 
         const promptSecrets = findCopilotFeature(harness, 'secrets-detection');
         expect(promptSecrets?.scope).toBe('global');
-        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
       },
       { timeout: 30000 },
     );
 
-    it(
-      'prompts to install Vortex and writes the SQAA section when accepted (entitled org, interactive)',
-      async () => {
-        const { extraEnv } = await setupCloudWithEntitlement();
-
-        // Interactive (no --non-interactive): the entitled org makes Vortex an ask.
-        const session = harness.runInteractive('integrate copilot', {
-          extraEnv: { ...extraEnv, __SQCLI_DEV_SKIP_CAG: '1' },
-        });
-        await chooseCustomize(session);
-        await session.accept('Install secrets detection?');
-        await session.accept('Install Vortex?');
-        await session.accept('Install MCP server?');
-        const result = await session.waitFinish();
-
-        expect(result.exitCode).toBe(0);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain('Install Vortex?');
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).toContain('# Vortex analysis protocol');
-        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
-      },
-      { timeout: 30000 },
-    );
-
-    it(
-      'writes the SQAA section when no project key is discoverable',
-      async () => {
-        const { extraEnv } = await setupCloudWithEntitlement();
-
+    it('removes managed instructions and preserves user content and hooks on reinstall', async () => {
+      const { extraEnv } = await setupCloudWithEntitlement();
+      harness.userHome.writeFile(
+        GLOBAL_INSTRUCTIONS_PATH.join('/'),
+        'User instructions\n<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->\nOld DEEP instructions\n<!-- sonar:end:sonarqube-agentic-analysis-protocol -->\n',
+      );
+      harness.userHome.writeFile(
+        GLOBAL_HOOKS_JSON_PATH.join('/'),
+        JSON.stringify({
+          version: 1,
+          hooks: {
+            agentStop: [makeHookEntry('/user/stop')],
+            userPromptSubmitted: [makeHookEntry('/user/prompt')],
+            subagentStop: [makeHookEntry('/user/subagent')],
+          },
+        }),
+      );
+      for (let install = 0; install < 2; install++) {
         const result = await harness.run('integrate copilot --non-interactive', { extraEnv });
-
         expect(result.exitCode).toBe(0);
-        const body = harness.userHome.file(...GLOBAL_INSTRUCTIONS_PATH).asText();
-        expect(body).not.toContain('# SonarQube secrets scanning for prompts protocol');
-        expect(body).toContain('# Vortex analysis');
-        expect(findCopilotFeature(harness, 'vortex')?.scope).toBe('global');
-      },
-      { timeout: 30000 },
-    );
+      }
+      expect(
+        harness.userHome
+          .file(...GLOBAL_INSTRUCTIONS_PATH)
+          .asText()
+          .trim(),
+      ).toBe('User instructions');
+      const hooks = (harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson)
+        .hooks;
+      expect(hooks.agentStop).toHaveLength(2);
+      expect(hooks.agentStop?.[0]?.[HOOK_FIELD]).toBe('/user/stop');
+      expect(hooks.userPromptSubmitted).toEqual([makeHookEntry('/user/prompt')]);
+      expect(hooks.subagentStop).toEqual([makeHookEntry('/user/subagent')]);
+      const stop = harness.userHome.file(...STOP_SCRIPT_PATH);
+      expect(stop.isExecutable).toBe(true);
+      expect(stop.asText()).toContain('sonar hook agent-stop --agent copilot');
+    }, 60000);
 
-    it(
-      'omits the SQAA section when the org is not entitled to Vortex',
-      async () => {
+    it.each([false, true])(
+      'does not retain completion hooks without Vortex entitlement (previously installed: %s)',
+      async (previouslyInstalled) => {
+        if (previouslyInstalled) {
+          const { extraEnv } = await setupCloudWithEntitlement();
+          const installed = await harness.run('integrate copilot --non-interactive', { extraEnv });
+          expect(installed.exitCode).toBe(0);
+          expectCompletionHookInstalled();
+          harness.state().withRawState(harness.stateJsonFile.asText());
+        }
         const { extraEnv } = await setupCloudWithEntitlement({
           allowed: false,
           hasEntitlement: false,
         });
-
         const result = await harness.run('integrate copilot --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
+        expectNoCompletionHook();
       },
       { timeout: 30000 },
     );
 
     it(
-      'omits the SQAA section when Server Vortex hubs are absent',
+      'does not install completion hooks when Server Vortex hubs are absent',
       async () => {
         // Default beforeEach is on-premise with no entitlement stubs, so both
         // hubs 404 and Vortex is unsupported.
         const result = await harness.run('integrate copilot --non-interactive');
 
         expect(result.exitCode).toBe(0);
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
+        expectNoCompletionHook();
       },
       { timeout: 30000 },
     );
 
-    it(
-      'omits the SQAA section and still succeeds when the entitlement API returns a 5xx',
-      async () => {
+    it.each([false, true])(
+      'preserves the completion hook installation state when entitlement lookup fails (previously installed: %s)',
+      async (previouslyInstalled) => {
+        if (previouslyInstalled) {
+          const { extraEnv } = await setupCloudWithEntitlement();
+          const installed = await harness.run('integrate copilot --non-interactive', { extraEnv });
+          expect(installed.exitCode).toBe(0);
+          expectCompletionHookInstalled();
+          harness.state().withRawState(harness.stateJsonFile.asText());
+        }
+        const featureBefore = previouslyInstalled
+          ? findCopilotFeature(harness, 'vortex')
+          : undefined;
+        const scriptBefore = previouslyInstalled
+          ? harness.userHome.file(...STOP_SCRIPT_PATH).asText()
+          : undefined;
         const server = await harness
           .newFakeServer()
           .withAuthToken('cloud-token')
@@ -366,10 +415,14 @@ describe('integrate copilot', () => {
           },
         });
 
-        // Command must not abort — degraded success.
         expect(result.exitCode).toBe(0);
-
-        expect(harness.userHome.exists(...GLOBAL_INSTRUCTIONS_PATH)).toBe(false);
+        if (previouslyInstalled) {
+          expectCompletionHookInstalled();
+          expect(findCopilotFeature(harness, 'vortex')).toEqual(featureBefore);
+          expect(scriptBefore).toBe(harness.userHome.file(...STOP_SCRIPT_PATH).asText());
+        } else {
+          expectNoCompletionHook();
+        }
         expect(harness.userHome.exists(...GLOBAL_PROMPT_HOOK_SCRIPT_PATH)).toBe(true);
       },
       { timeout: 30000 },
