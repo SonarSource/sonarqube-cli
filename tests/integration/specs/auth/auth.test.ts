@@ -21,6 +21,7 @@
 // Integration tests for `sonar auth login`, `auth logout`, and `auth status`
 
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -33,6 +34,8 @@ import {
   type RunInteractiveOptions,
   TestHarness,
 } from '../../harness';
+import { stripControlSequences } from '../../harness/interactive-session.ts';
+import { initGitRepo } from '../hook/git-test-helpers.ts';
 
 const CALLBACK_VALIDATION_TIMEOUT_MS = 5000;
 const CALLBACK_POLL_INTERVAL_MS = 10;
@@ -60,6 +63,23 @@ async function declineTrust(
   const session = harness.runInteractive(command, options);
   await session.decline('Connect to:');
   return session.waitFinish();
+}
+
+function visibleLines(text: string): string[] {
+  return stripControlSequences(text)
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function expectVisibleLine(text: string, line: string): void {
+  expect(visibleLines(text)).toContain(line);
+}
+
+/** The question is a whole prompt, so a longer question that merely starts the same way does not match. */
+function expectQuestion(text: string, message: string): void {
+  const pattern = new RegExp(`(?:^|\\s)${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`);
+  expect(visibleLines(text).some((line) => pattern.test(line))).toBe(true);
 }
 
 type PickerRow = [name: string, key: string, status: 'active' | 'Admin' | 'Member'];
@@ -830,7 +850,7 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
@@ -847,7 +867,7 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -862,7 +882,7 @@ describe('auth login', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -1480,6 +1500,7 @@ describe('auth login — organization selection', () => {
         .withOrganizations([{ key: 'my-org', name: 'My Org' }])
         .start();
 
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
       harness.cwd.writeFile(
         'sonar-project.properties',
         `sonar.host.url=${server.baseUrl()}\nsonar.organization=my-org\n`,
@@ -1494,7 +1515,17 @@ describe('auth login — organization selection', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('my-org');
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): server=${server.baseUrl()}, org=my-org`,
+      );
+      expectVisibleLine(result.stdout, `Using organization from ${propertiesFile}: my-org`);
+      expectVisibleLine(
+        result.stdout,
+        `✅ Authentication successful for: ${server.baseUrl()} (my-org)`,
+      );
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain('Connect to:');
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain('from config:');
     },
     { timeout: 15000 },
   );
@@ -1568,6 +1599,7 @@ describe('auth login — organization validation', () => {
         .withVisibleOrganizations([{ key: 'stale-org', name: 'Public Org' }])
         .start();
 
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
       harness.cwd.writeFile(
         'sonar-project.properties',
         `sonar.host.url=${server.baseUrl()}\nsonar.organization=stale-org\n`,
@@ -1580,10 +1612,15 @@ describe('auth login — organization validation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain(
-        "You are not a member of organization 'stale-org' from project config",
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): server=${server.baseUrl()}, org=stale-org`,
       );
-      expect(result.stdout).toContain('Using organization (only member): my-org');
+      expectVisibleLine(
+        result.stderr,
+        `⚠️ You are not a member of organization 'stale-org' from ${propertiesFile}.`,
+      );
+      expectVisibleLine(result.stdout, 'Using organization (only member): my-org');
     },
     { timeout: 15000 },
   );
@@ -2020,7 +2057,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
     },
     { timeout: 15000 },
   );
@@ -2042,7 +2079,7 @@ describe('auth login — server selection', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
       expect(result.stderr).toContain('Login cancelled');
     },
     { timeout: 15000 },
@@ -2058,9 +2095,15 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
 
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${propertiesFile}?`);
+      expect(stripControlSequences(result.stdout)).not.toContain('shared project config');
     },
     { timeout: 15000 },
   );
@@ -2076,10 +2119,15 @@ describe('auth login — server selection', () => {
       session.keyEnter();
       const result = await session.waitFinish();
 
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
-      expect(result.stderr).toContain('Login cancelled');
+      expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${propertiesFile}?`);
+      expectVisibleLine(result.stderr, '❌ Login cancelled');
     },
     { timeout: 15000 },
   );
@@ -2092,10 +2140,15 @@ describe('auth login — server selection', () => {
 
       const result = await declineTrust(harness, 'auth login');
 
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
       expect(result.exitCode).toBe(1);
-      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
-      expect(result.stderr).toContain('Login cancelled');
+      expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${propertiesFile}?`);
+      expectVisibleLine(result.stderr, '❌ Login cancelled');
     },
     { timeout: 15000 },
   );
@@ -2113,9 +2166,304 @@ describe('auth login — server selection', () => {
         browserToken: 'my-token',
       });
 
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout + result.stderr).toContain('Only connect to servers you trust');
-      expect(result.stdout + result.stderr).toContain(`Connect to: ${server.baseUrl()}?`);
+      expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=my-project, server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${sonarlintFile}?`);
+      expectVisibleLine(result.stdout, `✅ Authentication successful for: ${server.baseUrl()}`);
+    },
+    { timeout: 15000 },
+  );
+});
+
+describe('auth login — connection source', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function cloudEnv(baseUrl: string) {
+    return {
+      SONARQUBE_CLI_SONARCLOUD_URL: baseUrl,
+      SONARQUBE_CLI_SONARCLOUD_API_URL: baseUrl,
+    };
+  }
+
+  it(
+    'names .sonar-config.json in the self-hosted trust prompt',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const configFile = join(harness.cwd.path, '.sonar-config.json');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: { projectKey: 'sample', path: '.', serverUrl: server.baseUrl() },
+        }),
+      );
+
+      const result = await confirmTrust(harness, 'auth login', { browserToken: 'my-token' });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(result.stderr, '⚠️ Only connect to servers you trust.');
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonar-config.json (${configFile}): project=sample, server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${configFile}?`);
+      expectVisibleLine(result.stdout, `✅ Authentication successful for: ${server.baseUrl()}`);
+      expect(stripControlSequences(result.stdout)).not.toContain('shared project config');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'names .sonar-config.json for a Cloud organization and skips the trust prompt',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      const configFile = join(harness.cwd.path, '.sonar-config.json');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: {
+            projectKey: 'sample',
+            path: '.',
+            serverUrl: server.baseUrl(),
+            organization: 'my-org',
+          },
+        }),
+      );
+
+      const result = await harness.run('auth login', {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonar-config.json (${configFile}): project=sample, server=${server.baseUrl()}, org=my-org`,
+      );
+      expectVisibleLine(result.stdout, `Using organization from ${configFile}: my-org`);
+      expectVisibleLine(
+        result.stdout,
+        `✅ Authentication successful for: ${server.baseUrl()} (my-org)`,
+      );
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain('Connect to:');
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain(
+        'shared project config',
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'does not attribute an explicit --server to a project file',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        'sonar.host.url=https://from-file.example.test\nsonar.projectKey=from-file\n',
+      );
+
+      const result = await confirmTrust(harness, `auth login --server ${server.baseUrl()}`, {
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain(
+        `from ${propertiesFile}`,
+      );
+      expect(stripControlSequences(result.stdout)).not.toContain('Found sonar-project.properties');
+      expectVisibleLine(result.stdout, `✅ Authentication successful for: ${server.baseUrl()}`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'names the organization file when --server is explicit',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        'sonar.host.url=https://ignored.example.test\nsonar.organization=my-org\nsonar.projectKey=sample\n',
+      );
+
+      const result = await harness.run(`auth login --server ${server.baseUrl()}`, {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(result.stdout, `Using organization from ${propertiesFile}: my-org`);
+      expectVisibleLine(
+        result.stdout,
+        `✅ Authentication successful for: ${server.baseUrl()} (my-org)`,
+      );
+      expect(stripControlSequences(result.stdout)).not.toContain('Found ');
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain('Connect to:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'names each file when the server and organization come from different files',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.baseUrl()}\nsonar.projectKey=from-props\n`,
+      );
+      harness.cwd.writeFile(
+        '.sonarlint/connectedMode.json',
+        JSON.stringify({ sonarCloudOrganization: 'my-org', projectKey: 'from-lint' }),
+      );
+
+      const result = await harness.run('auth login', {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): project=from-props, server=${server.baseUrl()}`,
+      );
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
+      );
+      expectVisibleLine(result.stdout, `Using organization from ${sonarlintFile}: my-org`);
+      expect(stripControlSequences(result.stdout)).not.toContain(
+        `Using organization from ${propertiesFile}`,
+      );
+      expect(stripControlSequences(result.stdout + result.stderr)).not.toContain('Connect to:');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'names the SonarLint file when sonar.organization is empty',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'my-org', name: 'My Org' }])
+        .start();
+      const propertiesFile = join(harness.cwd.path, 'sonar-project.properties');
+      const sonarlintFile = join(harness.cwd.path, '.sonarlint', 'connectedMode.json');
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.baseUrl()}\nsonar.organization=\nsonar.projectKey=from-props\n`,
+      );
+      harness.cwd.writeFile(
+        '.sonarlint/connectedMode.json',
+        JSON.stringify({ sonarCloudOrganization: 'my-org', projectKey: 'from-lint' }),
+      );
+
+      const result = await harness.run('auth login', {
+        extraEnv: cloudEnv(server.baseUrl()),
+        browserToken: 'my-token',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties (${propertiesFile}): project=from-props, server=${server.baseUrl()}, org=`,
+      );
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonarlint/connectedMode.json (${sonarlintFile}): project=from-lint, server=${server.baseUrl()}, org=my-org`,
+      );
+      expectVisibleLine(result.stdout, `Using organization from ${sonarlintFile}: my-org`);
+      expect(stripControlSequences(result.stdout)).not.toContain('from project config');
+      expect(stripControlSequences(result.stdout)).not.toContain(
+        `Using organization from ${propertiesFile}`,
+      );
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'omits a config path that contains a terminal control character',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      const hostileDir = `evil\u001b[2Kname`;
+      harness.cwd.writeFile(
+        `${hostileDir}/sonar-project.properties`,
+        `sonar.host.url=${server.baseUrl()}\n`,
+      );
+
+      const result = await confirmTrust(harness, 'auth login', {
+        browserToken: 'my-token',
+        cwd: join(harness.cwd.path, hostileDir),
+      });
+
+      const output = result.stdout + result.stderr;
+      expect(result.exitCode).toBe(0);
+      expect(output).not.toContain(`evil\u001b[2Kname`);
+      expectVisibleLine(
+        result.stdout,
+        `Found sonar-project.properties: server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()}?`);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'names the ancestor .sonar-config.json when login starts in a subdirectory',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('my-token').start();
+      initGitRepo(harness.cwd.path);
+      const configFile = join(harness.cwd.path, '.sonar-config.json');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: { projectKey: 'sample', path: '.', serverUrl: server.baseUrl() },
+        }),
+      );
+      harness.cwd.writeFile('pkg/.keep', '');
+
+      const result = await confirmTrust(harness, 'auth login', {
+        browserToken: 'my-token',
+        cwd: join(harness.cwd.path, 'pkg'),
+      });
+
+      expect(result.exitCode).toBe(0);
+      expectVisibleLine(
+        result.stdout,
+        `Found .sonar-config.json (${configFile}): project=sample, server=${server.baseUrl()}`,
+      );
+      expectQuestion(result.stdout, `Connect to: ${server.baseUrl()} from ${configFile}?`);
+      expect(stripControlSequences(result.stdout)).not.toContain(
+        join(harness.cwd.path, 'pkg', '.sonar-config.json'),
+      );
     },
     { timeout: 15000 },
   );

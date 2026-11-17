@@ -29,6 +29,26 @@ export function selectValidServerUrl(
   return currentServerUrl ?? (isValidServerUrl(candidate) ? candidate : undefined);
 }
 
+/**
+ * C0, DEL, and C1. ESC and the C1 CSI character start terminal sequences, so a directory name
+ * could rewrite the hostname in the trust prompt. Reject the path instead of printing it.
+ */
+const TERMINAL_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
+
+/** A path the CLI opened. Undefined when the path is not safe to echo into a prompt. */
+export function displayConfigPath(configFile: string): string | undefined {
+  return TERMINAL_CONTROL.test(configFile) ? undefined : configFile;
+}
+
+export function formatFoundConfig(
+  label: string,
+  configFile: string | undefined,
+  fields: string,
+): string {
+  const path = configFile ? displayConfigPath(configFile) : undefined;
+  return path ? `Found ${label} (${path}): ${fields}` : `Found ${label}: ${fields}`;
+}
+
 export function formatConfigFields(
   serverUrl?: string,
   projectKey?: string,
