@@ -59,6 +59,7 @@ function c(fn: (s: string) => string): ColorFn {
   return (s: string) => (isTTY ? fn(s) : s);
 }
 
+const PURPLE = 135; // #AF5FFF
 const SOFT_BLUE = 69; // #5F87FF
 
 function ansi256(n: number): ColorFn {
@@ -76,6 +77,7 @@ export const underline = c(pc.underline);
 export const white = c(pc.white);
 export const blue = c(pc.blue);
 export const softBlue = ansi256(SOFT_BLUE);
+export const purple = ansi256(PURPLE);
 
 export const STATUS_COLORS: Record<StepStatus, ColorFn> = {
   done: green,
