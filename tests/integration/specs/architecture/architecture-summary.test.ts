@@ -82,6 +82,63 @@ describe('current architecture summary', () => {
     expect(summaries[1].smells).toEqual({ total: 2, weakTangle: 1, splitResponsibility: 1 });
   });
 
+  it('shows numeric coverage and weighted totals in JSON and text', async () => {
+    const counts = {
+      deviations: { total: 0, structuralDeviation: 0, relationshipDeviation: 0 },
+      flaws: { total: 0, tangle: 0, oversizedComponent: 0 },
+      smells: { total: 0, weakTangle: 0, splitResponsibility: 0 },
+    };
+    await configured(true, (api) =>
+      api.withStatus(
+        'project-summaries',
+        200,
+        JSON.stringify({
+          projectSummaries: [
+            {
+              language: 'java',
+              ...counts,
+              coverage: { coverage: 50, coveredArtifacts: 1, totalArtifacts: 2 },
+            },
+            {
+              language: 'py',
+              ...counts,
+              coverage: { coverage: 90, coveredArtifacts: 9, totalArtifacts: 10 },
+            },
+          ],
+        }),
+      ),
+    );
+    const json = await h.run('arch current get --summary -p shop --format json');
+    expect(json.exitCode).toBe(0);
+    expect(JSON.parse(json.stdout).overallCoverage).toEqual({
+      coverage: (10 / 12) * 100,
+      coveredArtifacts: 10,
+      totalArtifacts: 12,
+    });
+    const text = await h.run('arch current get --summary -p shop --format text');
+    expect(text.exitCode).toBe(0);
+    expect(text.stdout).toContain('coverage: 50% (1/2 artifacts)');
+    expect(text.stdout).toContain('Overall coverage:');
+  });
+
+  it('does not label mapped artifacts as overall coverage for weighted scores', async () => {
+    const row = {
+      language: 'java',
+      deviations: { total: 0, structuralDeviation: 0, relationshipDeviation: 0 },
+      flaws: { total: 0, tangle: 0, oversizedComponent: 0 },
+      smells: { total: 0, weakTangle: 0, splitResponsibility: 0 },
+      coverage: { coverage: 41, coveredArtifacts: 10, totalArtifacts: 10 },
+    };
+    await configured(true, (api) =>
+      api.withStatus('project-summaries', 200, JSON.stringify({ projectSummaries: [row] })),
+    );
+    const result = await h.run('arch current get --summary -p shop --format json');
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    expect(payload.summaries[0].coverage.coverage).toBe(41);
+    expect(payload.overallCoverage).toBeUndefined();
+  });
+
   it('reports unavailable summary data without inventing zero counts', async () => {
     await configured(true, (api) => api.withFindings([]));
     const result = await h.run('arch current get --summary -p shop --format json');
