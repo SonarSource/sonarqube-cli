@@ -2623,7 +2623,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'aborts without writing the configuration when the tree is cancelled',
+      'fails with the onboarding cancelled message, without writing the configuration, when the tree is cancelled',
       async () => {
         await signInToCloud(() => {});
 
@@ -2633,7 +2633,9 @@ describe('sonar init', () => {
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain('Folder selection cancelled');
+        expect(result.stdout + result.stderr).toContain('Onboarding cancelled.');
+        expect(result.stdout + result.stderr).not.toContain('Folder selection cancelled');
+        expect(result.stdout).not.toContain(INTEGRATE_PROMPT);
         expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
       },
       TIMEOUT,

@@ -19,6 +19,7 @@
  */
 
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
+import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -26,6 +27,7 @@ import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { OnboardingCancelledError } from './answer.ts';
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
   assertDryRunOptions,
@@ -208,8 +210,12 @@ async function monorepoRootsToOnboard(
   if (named.length > 0 || !interactive) {
     return named;
   }
-  const selection = await pickFolders(projectRoot, true, deps);
-  return selection?.kind === 'monorepo' ? selection.roots : named;
+  try {
+    const selection = await pickFolders(projectRoot, true, deps);
+    return selection?.kind === 'monorepo' ? selection.roots : named;
+  } catch (error) {
+    throw error instanceof FolderSelectionCancelledError ? new OnboardingCancelledError() : error;
+  }
 }
 
 /** Interactive, and neither `--path`, a project key nor `--root` already says which folder to link. */
