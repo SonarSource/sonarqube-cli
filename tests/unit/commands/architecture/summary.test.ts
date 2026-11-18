@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { parseSummaries } from '@/commands/architecture/_common/summary.ts';
+import { aggregateCoverage, parseSummaries } from '@/commands/architecture/_common/summary.ts';
 
 const summary = {
   language: 'java' as const,
@@ -30,6 +30,78 @@ const summary = {
 };
 
 describe('architecture summary response', () => {
+  it('reads per-language coverage and returns combined artifact counts without inventing a cross-language score', () => {
+    const rows = parseSummaries({
+      projectSummaries: [
+        { ...summary, coverage: { coverage: 50, coveredArtifacts: 1, totalArtifacts: 2 } },
+        {
+          ...summary,
+          language: 'py',
+          coverage: { coverage: 90, coveredArtifacts: 9, totalArtifacts: 10 },
+        },
+      ],
+    }).summaries;
+    expect(rows[0].coverage).toEqual({ coverage: 50, coveredArtifacts: 1, totalArtifacts: 2 });
+    expect(aggregateCoverage(rows)).toEqual({
+      coveredArtifacts: 10,
+      totalArtifacts: 12,
+    });
+    expect(aggregateCoverage(rows, 1)).toBeUndefined();
+    expect(
+      aggregateCoverage([
+        { ...rows[0], coverage: { coverage: 41, coveredArtifacts: 10, totalArtifacts: 10 } },
+      ]),
+    ).toBeUndefined();
+    expect(
+      aggregateCoverage([{ ...rows[0], coverage: { coveredArtifacts: 1, totalArtifacts: 2 } }]),
+    ).toBeUndefined();
+    expect(aggregateCoverage([rows[0], { ...rows[1], coverage: undefined }])).toBeUndefined();
+    const huge = {
+      ...rows[0],
+      coverage: {
+        coverage: 100,
+        coveredArtifacts: Number.MAX_SAFE_INTEGER,
+        totalArtifacts: Number.MAX_SAFE_INTEGER,
+      },
+    };
+    expect(() => aggregateCoverage([huge, rows[0]])).toThrow(
+      'Invalid public architecture summary response',
+    );
+  });
+
+  it('distinguishes unavailable data and zero totals, and refuses incomplete aggregates', () => {
+    const rows = parseSummaries({
+      projectSummaries: [
+        { ...summary, coverage: { coverage: null, coveredArtifacts: 0, totalArtifacts: 0 } },
+      ],
+    }).summaries;
+    expect(aggregateCoverage(rows)).toEqual({
+      coveredArtifacts: 0,
+      totalArtifacts: 0,
+    });
+    const missing = parseSummaries({
+      projectSummaries: [
+        { ...summary, coverage: { coverage: null, coveredArtifacts: null, totalArtifacts: null } },
+      ],
+    }).summaries;
+    expect(missing[0].coverage?.coverage).toBeUndefined();
+    expect(aggregateCoverage(missing)).toBeUndefined();
+  });
+
+  it('rejects malformed coverage and impossible counts', () => {
+    for (const coverage of [
+      { coverage: '50' },
+      { coverage: 101 },
+      { coveredArtifacts: -1 },
+      { coveredArtifacts: 1.5 },
+      { coveredArtifacts: 2, totalArtifacts: 1 },
+    ]) {
+      expect(() => parseSummaries({ projectSummaries: [{ ...summary, coverage }] })).toThrow(
+        'Invalid public architecture summary response',
+      );
+    }
+  });
+
   it('returns per-language counts and ignores coverage', () => {
     expect(
       parseSummaries({

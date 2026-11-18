@@ -32,8 +32,14 @@ export interface SummaryCounts {
   total: number;
   [type: string]: number;
 }
+export interface Coverage {
+  coverage?: number;
+  coveredArtifacts?: number;
+  totalArtifacts?: number;
+}
 export interface ProjectSummary {
   language: Ecosystem;
+  coverage?: Coverage;
   deviations: SummaryCounts;
   flaws: SummaryCounts;
   smells: SummaryCounts;
@@ -55,6 +61,62 @@ function parseCounts(value: unknown, types: readonly FindingType[]): SummaryCoun
     result[key] = count;
   }
   return result;
+}
+
+function parseCoverage(value: unknown): Coverage | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const source = value as Record<string, unknown>;
+  const percentage = source.coverage ?? null;
+  const covered = source.coveredArtifacts ?? null;
+  const total = source.totalArtifacts ?? null;
+  if (
+    percentage !== null &&
+    (typeof percentage !== 'number' ||
+      !Number.isFinite(percentage) ||
+      percentage < 0 ||
+      percentage > 100)
+  )
+    throw invalid();
+  for (const count of [covered, total]) {
+    if (count !== null && (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0))
+      throw invalid();
+  }
+  if (typeof covered === 'number' && typeof total === 'number' && covered > total) throw invalid();
+  return {
+    ...(percentage !== null ? { coverage: percentage } : {}),
+    ...(covered !== null ? { coveredArtifacts: covered as number } : {}),
+    ...(total !== null ? { totalArtifacts: total as number } : {}),
+  };
+}
+
+export function aggregateCoverage(
+  summaries: ProjectSummary[],
+  skippedSummaries?: number,
+): Coverage | undefined {
+  if (!summaries.length || skippedSummaries) return undefined;
+  let covered = 0;
+  let total = 0;
+  let nonEmptyLanguages = 0;
+  for (const summary of summaries) {
+    const data = summary.coverage;
+    if (data?.coveredArtifacts == null || data.totalArtifacts == null) return undefined;
+    if (
+      data.totalArtifacts > 0 &&
+      (data.coverage == null ||
+        Math.abs(data.coverage - (data.coveredArtifacts / data.totalArtifacts) * 100) > 1e-8)
+    )
+      return undefined;
+    if (data.totalArtifacts > 0) nonEmptyLanguages++;
+    covered += data.coveredArtifacts;
+    total += data.totalArtifacts;
+    if (!Number.isSafeInteger(covered) || !Number.isSafeInteger(total)) throw invalid();
+  }
+  return {
+    ...(total === 0 || nonEmptyLanguages > 1 ? {} : { coverage: (covered / total) * 100 }),
+    coveredArtifacts: covered,
+    totalArtifacts: total,
+  };
 }
 
 export function parseSummaries(value: unknown, language?: string): SummaryResult {
@@ -85,8 +147,10 @@ export function parseSummaries(value: unknown, language?: string): SummaryResult
       continue;
     }
     const row = item as Record<string, unknown>;
+    const coverage = parseCoverage(row.coverage);
     summaries.push({
       language: ecosystem,
+      ...(coverage ? { coverage } : {}),
       deviations: parseCounts(row.deviations, SUMMARY_CATEGORIES.deviations),
       flaws: parseCounts(row.flaws, SUMMARY_CATEGORIES.flaws),
       smells: parseCounts(row.smells, SUMMARY_CATEGORIES.smells),
