@@ -37,6 +37,7 @@ export interface OpenCodePluginOptions {
   sessions?: Record<string, Record<string, unknown>>;
   failSessionGet?: boolean;
   failSessionPrompt?: boolean;
+  disposeWhenFileExists?: string;
 }
 
 export interface OpenCodePluginStepResult {
@@ -90,6 +91,7 @@ export async function runOpenCodePlugin(
     sessions: options.sessions,
     failSessionGet: options.failSessionGet,
     failSessionPrompt: options.failSessionPrompt,
+    disposeWhenFileExists: options.disposeWhenFileExists,
   };
   const proc = Bun.spawn([process.execPath, DRIVER_PATH], {
     cwd: options.processCwd ?? harness.cwd.path,
