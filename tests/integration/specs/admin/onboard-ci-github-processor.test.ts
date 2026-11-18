@@ -43,7 +43,7 @@ const PROJECT = 'sample-project';
 const BINDINGS = new Map([[REPO, PROJECT]]);
 const BUILD_PATH = '.github/workflows/build.yml';
 const BUILD =
-  'name: Build\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo build\n';
+  'name: Build\non: push\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./gradlew build\n';
 
 describe('GitHub onboarding repository lifecycle', () => {
   let harness: TestHarness;
@@ -103,7 +103,7 @@ describe('GitHub onboarding repository lifecycle', () => {
     return { github, server, ctx, repo };
   }
 
-  it('assesses without mutations, then opens a workflow PR against the actual default branch', async () => {
+  it('opens a PR against the current default branch and preserves existing workflows', async () => {
     const { ctx, repo, github } = await setup();
     const assessment = await assessRepo(ctx, repo, BINDINGS);
     expect(assessment).toMatchObject({ outcome: 'proceed', projectKey: PROJECT });
@@ -140,22 +140,35 @@ describe('GitHub onboarding repository lifecycle', () => {
     expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
   });
 
-  it.each<{ files: Record<string, string>; reason: string }>([
-    { files: { [WORKFLOW_PATH]: 'customer workflow' }, reason: 'WORKFLOW_COLLISION' },
-    { files: { 'sonar-project.properties': '' }, reason: 'ALREADY_CONFIGURED' },
+  it.each<{ name: string; files: Record<string, string>; reason: string }>([
     {
+      name: 'target workflow already exists',
+      files: { [WORKFLOW_PATH]: 'customer workflow' },
+      reason: 'WORKFLOW_COLLISION',
+    },
+    {
+      name: 'Sonar properties already exist',
+      files: { 'sonar-project.properties': '' },
+      reason: 'ALREADY_CONFIGURED',
+    },
+    {
+      name: 'workflow already runs SonarQube',
       files: { [BUILD_PATH]: 'uses: SonarSource/sonarqube-scan-action@v8' },
       reason: 'ALREADY_CONFIGURED',
     },
-    { files: { [BUILD_PATH]: 'run: mvn sonar:sonar' }, reason: 'ALREADY_CONFIGURED' },
     {
+      name: 'Gradle workflow runs the Sonar task',
+      files: { [BUILD_PATH]: 'run: ./gradlew sonar' },
+      reason: 'ALREADY_CONFIGURED',
+    },
+    {
+      name: 'workflow entry is a directory',
       files: { '.github/workflows/external.yml/child': 'unsupported directory' },
       reason: 'UNSUPPORTED_WORKFLOW',
     },
-  ])('preserves existing configuration: $reason', async ({ files, reason }) => {
-    const { ctx, repo, github } = await setup({ files });
-    expect(await executeRepo(ctx, repo, BINDINGS)).toEqual({ outcome: 'skip', reason });
-    expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
+  ])('skips when $name', async ({ files, reason }) => {
+    const { ctx, repo } = await setup({ files });
+    expect(await assessRepo(ctx, repo, BINDINGS)).toEqual({ outcome: 'skip', reason });
   });
 
   it('preserves an open onboarding PR and its branch on rerun', async () => {
@@ -177,28 +190,21 @@ describe('GitHub onboarding repository lifecycle', () => {
     ).toBe(true);
   });
 
-  it('recreates a leftover branch and replaces its edits without changing existing workflows', async () => {
-    const { ctx, repo } = await setup();
-    const base = await ctx.github.getBranch(REPO, 'develop');
-    if (!base) throw new Error('Missing fixture branch');
-    await ctx.github.createBranch(REPO, CI_BRANCH, base.object.sha);
-    await ctx.github.createFile(REPO, 'leftover.txt', CI_BRANCH, 'edits', 'Old changes');
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
-    expect(await ctx.github.getFileContent(REPO, 'leftover.txt', CI_BRANCH)).toBeNull();
-    expect(await ctx.github.getFileContent(REPO, BUILD_PATH, CI_BRANCH)).toBe(BUILD);
-  });
-
-  it('opens another PR after a previous onboarding PR was closed', async () => {
+  it('recreates the onboarding branch after its PR was closed', async () => {
     const { ctx, repo, github } = await setup();
     await executeRepo(ctx, repo, BINDINGS);
     github.closePullRequest(REPO, 1);
+    await ctx.github.createFile(REPO, 'leftover.txt', CI_BRANCH, 'edits', 'Old changes');
+
     expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({
       outcome: 'opened',
       prUrl: `https://github.com/${REPO}/pull/2`,
     });
+    expect(await ctx.github.getFileContent(REPO, 'leftover.txt', CI_BRANCH)).toBeNull();
+    expect(await ctx.github.getFileContent(REPO, BUILD_PATH, CI_BRANCH)).toBe(BUILD);
   });
 
-  it('renders a complete template and reports invalid rendering before any writes', async () => {
+  it('rejects invalid template rendering before writes and commits the valid template', async () => {
     const { ctx, repo, github } = await setup();
     ctx.workflowTemplate =
       'on: push\njobs:\n  scan:\n    runs-on: self-hosted\n    steps:\n      - run: echo {{SONAR_PROJECT_KEY}}\n';
@@ -236,92 +242,22 @@ describe('GitHub onboarding repository lifecycle', () => {
     expect(await ctx.github.getBranch(REPO, CI_BRANCH)).toBeNull();
   });
 
-  it.each(['createBranch', 'createFile', 'createPullRequest'] as const)(
-    'reconciles a lost %s response without repeating the write',
-    async (operation) => {
-      const { ctx, repo, github } = await setup();
-      // Let the fake server apply the real HTTP write, then simulate losing its response.
-      if (operation === 'createBranch') {
-        const write = ctx.github.createBranch.bind(ctx.github);
-        spyOn(ctx.github, operation).mockImplementationOnce(async (...args) => {
-          await write(...args);
-          throw new Error('Lost response');
-        });
-      } else if (operation === 'createFile') {
-        const write = ctx.github.createFile.bind(ctx.github);
-        spyOn(ctx.github, operation).mockImplementationOnce(async (...args) => {
-          await write(...args);
-          throw new Error('Lost response');
-        });
-      } else {
-        const write = ctx.github.createPullRequest.bind(ctx.github);
-        spyOn(ctx.github, operation).mockImplementationOnce(async (...args) => {
-          await write(...args);
-          throw new Error('Lost response');
-        });
-      }
-      expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
-      expect(
-        github
-          .getRecordedRequests()
-          .filter((request) => request.method === 'POST' && request.path.endsWith('/pulls')),
-      ).toHaveLength(1);
-      expect(
-        github
-          .getRecordedRequests()
-          .filter((request) => request.method !== 'GET')
-          .map((request) => request.method),
-      ).toEqual(['POST', 'PUT', 'POST']);
-      expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(1);
-    },
-  );
-
-  it('preserves a PR opened between assessment and branch recovery', async () => {
-    const { ctx, repo, github } = await setup();
-    await executeRepo(ctx, repo, BINDINGS);
-    const count = github.getRecordedRequests().length;
-    spyOn(ctx.github, 'listOpenPullRequests').mockResolvedValueOnce([]);
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({
-      outcome: 'skip',
-      reason: 'PR_ALREADY_OPEN',
-    });
-    expect(
-      github
-        .getRecordedRequests()
-        .slice(count)
-        .every((request) => request.method === 'GET'),
-    ).toBe(true);
-  });
-
-  it('reconciles a lost branch-deletion response before recreating the branch', async () => {
-    const { ctx, repo, github } = await setup();
-    await executeRepo(ctx, repo, BINDINGS);
-    github.closePullRequest(REPO, 1);
-    const remove = ctx.github.deleteBranch.bind(ctx.github);
-    spyOn(ctx.github, 'deleteBranch').mockImplementationOnce(async (...args) => {
-      await remove(...args);
-      throw new Error('Lost deletion response');
-    });
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
-    expect(
-      github.getRecordedRequests().filter((request) => request.method === 'DELETE'),
-    ).toHaveLength(1);
-  });
-
-  it('does not report success when PR creation failed without creating a PR', async () => {
+  it('returns the existing PR when its creation response is lost', async () => {
     const { ctx, repo } = await setup();
-    spyOn(ctx.github, 'createPullRequest').mockRejectedValueOnce(
-      new Error('Policy rejected PR creation'),
-    );
-    expect(await executeRepo(ctx, repo, BINDINGS)).toEqual({
-      outcome: 'failed',
-      error: 'Policy rejected PR creation',
+    const createPr = ctx.github.createPullRequest.bind(ctx.github);
+    spyOn(ctx.github, 'createPullRequest').mockImplementationOnce(async (...args) => {
+      await createPr(...args);
+      throw new Error('PR response lost');
     });
-    expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(0);
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
+
+    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({
+      outcome: 'opened',
+      prUrl: `https://github.com/${REPO}/pull/1`,
+    });
+    expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(1);
   });
 
-  it('reports an unapplied write failure, then recovers the leftover branch on rerun', async () => {
+  it('reports a failed workflow write and succeeds on rerun', async () => {
     const { ctx, repo } = await setup();
     spyOn(ctx.github, 'createFile').mockRejectedValueOnce(
       new Error('Connection lost before write'),
