@@ -224,7 +224,10 @@ function projectChooser(
   };
 }
 
-/** Without `--root`, an interactive `--monorepo` run asks which folders to onboard. */
+/**
+ * Without `--root`, an interactive `--monorepo` run asks which folders to onboard. Nothing is
+ * pre-ticked: `runMonorepo` reports the roots `.sonar-config.json` maps that the user leaves unticked.
+ */
 async function monorepoRootsToOnboard(
   projectRoot: string,
   named: readonly MonorepoRootOption[],
@@ -236,7 +239,7 @@ async function monorepoRootsToOnboard(
   }
   try {
     const selection = await pickFolders(projectRoot, true, deps);
-    return selection?.kind === 'monorepo' ? selection.roots : named;
+    return selection.kind === 'monorepo' ? selection.roots : named;
   } catch (error) {
     throw error instanceof FolderSelectionCancelledError ? new OnboardingCancelledError() : error;
   }

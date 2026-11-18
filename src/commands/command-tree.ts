@@ -898,7 +898,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--link [key]',
-      'Link this directory to an existing project without prompting: the one found for the repository, or the project named by key. With --monorepo, a bare --link only maps roots whose project already exists and never creates one (name each root with --root <path>=<key>)',
+      'Link a directory to an existing project: the one found for the repository, or the project named by key. With --monorepo, a bare --link only maps roots whose project already exists and never creates one (name each root with --root <path>=<key>)',
     )
     .option(
       '--bind',

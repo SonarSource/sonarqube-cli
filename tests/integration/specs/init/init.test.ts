@@ -20,6 +20,8 @@
 
 // Integration tests for `sonar init`
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
@@ -1909,6 +1911,32 @@ describe('sonar init', () => {
     );
 
     it(
+      'links the repository root, not the current subdirectory, when keeping the default folder',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('services/api/.keep', '');
+
+        const session = harness.runInteractive('init', {
+          cwd: join(harness.cwd.path, 'services', 'api'),
+        });
+        await session.accept('Link this directory');
+        await chooseRepositoryRoot(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const config = JSON.parse(harness.cwd.file('.sonar-config.json').asText()) as {
+          project: { projectKey: string; path: string };
+        };
+        expect(config.project).toMatchObject({ projectKey: 'bound_project', path: '.' });
+      },
+      TIMEOUT,
+    );
+
+    it(
       'lets the user pick another existing project with the sonar link picker when declining',
       async () => {
         await signInToCloud((server) =>
@@ -2228,7 +2256,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'leaves an already configured root alone, asks nothing and runs no scan',
+      'leaves an already configured root alone and runs no scan',
       async () => {
         const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
         writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
@@ -2244,6 +2272,58 @@ describe('sonar init', () => {
         expect(result.stdout).toContain('api: api-key');
         expect(result.stdout).not.toContain(SCAN_PROMPT);
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'still reports a mapped root the user did not tick, without ticking it for them',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['web']);
+        await session.waitText('Choose a project');
+        session.write('web-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(result.stdout).toContain('api: api-key');
+        expect(result.stdout).toContain("Mapped web to project 'web-key'.");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'still reports a mapped root that --root does not name, without touching it',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const result = await harness.run(
+          'init --monorepo --link --non-interactive --root web=web-key',
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(result.stdout).toContain('api: api-key');
+        expect(result.stdout).toContain("Mapped web to project 'web-key'.");
+        const { projects } = readConfig();
+        expect(projects.map(({ path, projectKey }) => `${path}:${projectKey}`).sort()).toEqual([
+          'api:api-key',
+          'web:web-key',
+        ]);
       },
       TIMEOUT,
     );

@@ -276,7 +276,8 @@ async function onboardRoot(
 
 /**
  * Reports the project roots that `.sonar-config.json` maps as configured, and onboards the ones named
- * with `--root`, each on its own path. A root's mapping is merged into the file as soon as that root
+ * with `--root`, each on its own path. The mapped roots that were not named are reported too, so a
+ * run always shows every root the file maps. A root's mapping is merged into the file as soon as that root
  * completes, so what finished stays in place when a later root fails or the run stops, and a rerun
  * skips it. The roots run one after the other because each may prompt.
  */
@@ -287,10 +288,21 @@ export async function runMonorepo(
   linkOnly = false,
 ): Promise<InitOutcome> {
   const { console } = deps;
-  const explicit = explicitRoots.length > 0;
-  const { mappings, repositoryRoot, configDir, generatedKeys, remote, relinked } = explicit
-    ? await mapExplicitRoots(projectRoot, explicitRoots, deps, linkOnly)
-    : await discoverMappedRoots(projectRoot, deps);
+  const named =
+    explicitRoots.length > 0
+      ? await mapExplicitRoots(projectRoot, explicitRoots, deps, linkOnly)
+      : undefined;
+  // Read after the named roots are mapped, so the file's roots include them.
+  const mapped = await discoverMappedRoots(projectRoot, deps);
+  const { repositoryRoot, generatedKeys, relinked, remote } = named ?? mapped;
+  const configDir = named?.configDir ?? mapped.configDir;
+  const namedRoots = new Set(
+    (named?.mappings ?? []).map(({ projectRoot: root }) => pathComparisonKey(root)),
+  );
+  const mappings = [
+    ...(named?.mappings ?? []),
+    ...mapped.mappings.filter(({ projectRoot: root }) => !namedRoots.has(pathComparisonKey(root))),
+  ];
   if (mappings.length === 0) {
     return { kind: 'no-monorepo-roots' };
   }
@@ -301,10 +313,13 @@ export async function runMonorepo(
   });
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
     Promise.all(
-      mappings.map(async (mapping) => ({
-        ...(await inspectRoot(mapping, repositoryRoot, deps, explicit, relinked ?? new Set())),
-        remote,
-      })),
+      mappings.map(async (mapping) => {
+        const isNamed = namedRoots.has(pathComparisonKey(mapping.projectRoot));
+        return {
+          ...(await inspectRoot(mapping, repositoryRoot, deps, isNamed, relinked ?? new Set())),
+          remote: isNamed ? remote : undefined,
+        };
+      }),
     ),
   );
   reportRootProblems(roots, deps);

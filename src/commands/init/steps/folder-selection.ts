@@ -53,15 +53,15 @@ async function readLinkedItems(targetDir: string): Promise<ConfigItem[]> {
 
 /**
  * Lets the user tick the folders to link under the directory `.sonar-config.json` goes in.
- * Resolves to `undefined` to carry on with `projectRoot` as is. Cancelling the picker fails the
- * run, before anything is written.
+ * Keeping the default resolves to that directory itself, which is the repository root even when
+ * `projectRoot` is a subdirectory. Cancelling the picker fails the run, before anything is written.
  */
 export async function pickFolders(
   projectRoot: string,
   monorepo: boolean,
   { console }: Pick<DetectDeps, 'console'>,
   picker: FolderPicker = new TreeFolderPicker(console),
-): Promise<FolderSelection | undefined> {
+): Promise<FolderSelection> {
   const { targetDir, inGitRepository } = await resolveProjectTarget(projectRoot);
   const items = await readLinkedItems(targetDir);
   const folders = await chooseProjectFolders(
@@ -71,7 +71,7 @@ export async function pickFolders(
     console,
   );
   if (folders === undefined) {
-    return undefined;
+    return { kind: 'project', projectRoot: targetDir };
   }
   if (folders.length === 1 && !monorepo) {
     return { kind: 'project', projectRoot: folders[0] };
@@ -96,7 +96,7 @@ export async function chooseLinkFolder(
     return { projectRoot };
   }
   for (;;) {
-    let selection: FolderSelection | undefined;
+    let selection: FolderSelection;
     try {
       selection = await pickFolders(projectRoot, false, deps);
     } catch (error) {
@@ -105,8 +105,8 @@ export async function chooseLinkFolder(
       }
       throw error;
     }
-    if (selection?.kind !== 'monorepo') {
-      return { projectRoot: selection?.projectRoot ?? projectRoot };
+    if (selection.kind === 'project') {
+      return { projectRoot: selection.projectRoot };
     }
     deps.console.warn(
       "A project links to one folder. Tick a single folder, or use 'sonar init --monorepo' to onboard several.",
