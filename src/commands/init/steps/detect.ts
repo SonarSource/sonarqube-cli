@@ -48,6 +48,8 @@ export interface DetectDeps {
   http: SonarHttpClient;
   console: Console;
   interactive: boolean;
+  /** `--dry-run`: every step stops before its first write and reports what it would do. */
+  dryRun?: boolean;
   /** The path the caller consented to with `--link`, `--bind` or `--create`. */
   intent?: InitIntent;
 }

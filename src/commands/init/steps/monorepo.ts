@@ -165,8 +165,11 @@ async function inspectRoot(
 
 async function mapExistingRoot(
   { mapping, path }: MonorepoRoot,
-  { auth, console }: DetectDeps,
+  { auth, console, dryRun }: DetectDeps,
 ): Promise<MonorepoRootResult> {
+  if (dryRun) {
+    return { path, kind: 'would-link', projectKey: mapping.projectKey };
+  }
   await writeMapping(auth, mapping.projectKey, mapping.projectRoot, console, 'found', true);
   console.success(`Mapped ${path} to project '${mapping.projectKey}'.`);
   return { path, kind: 'linked', projectKey: mapping.projectKey };
@@ -183,6 +186,10 @@ async function createRootProject(
     { projectKey: mapping.projectKey },
     true,
   );
+  if (outcome.kind === 'dry-run') {
+    // The root's key is explicit or generated, so the preview always names it.
+    return { path, kind: 'would-create', projectKey: mapping.projectKey };
+  }
   return outcome.kind === 'unbound'
     ? { path, kind: 'unbound', projectKey: outcome.projectKey }
     : { path, kind: 'skipped' };
@@ -233,7 +240,7 @@ async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<Monore
       recordedKey: status.recordedKey,
     };
   }
-  deps.console.print(`Onboarding ${path}`);
+  deps.console.print(`${deps.dryRun ? 'Previewing' : 'Onboarding'} ${path}`);
   try {
     return await onboardSelectedRoot(root, status, deps);
   } catch (error) {
