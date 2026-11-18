@@ -2639,6 +2639,10 @@ describe('sonar init', () => {
         TIMEOUT,
       );
 
+      function generatedKey(folder: string, remote?: string) {
+        return generateProjectProposal(`${harness.cwd.path}/${folder}`, remote, ORG).projectKey;
+      }
+
       describe('on a repository that can be bound', () => {
         function batches(server: FakeSonarQubeServer) {
           return server
@@ -2835,6 +2839,49 @@ describe('sonar init', () => {
         );
 
         it(
+          'creates a generated-key project without asking when --create is given',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --create --root web');
+            await session.waitText('Project name');
+            session.keyEnter();
+            await session.waitText('Project visibility');
+            session.keyEnter();
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout + result.stderr).not.toContain('Create this project');
+            expect(createdKeys(server)).toEqual([generatedKey('web', GITHUB_REMOTE)]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'fails a root whose taken generated key is not linked under --bind instead of creating an unbound project',
+          async () => {
+            makeBindableRepository('web');
+            // The key depends on the remote, so the repository must exist before it is generated.
+            const server = await startServer((s) =>
+              bindable(s.withProject(generatedKey('web', GITHUB_REMOTE))),
+            );
+
+            const session = harness.runInteractive('init --monorepo --bind --root web');
+            await session.decline('Link this directory to it?');
+            await session.decline('another existing project');
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).not.toBe(0);
+            expect(result.stdout + result.stderr).toContain('--bind never creates an unbound');
+            expect(createdKeys(server)).toEqual([]);
+            expect(batches(server)).toHaveLength(0);
+          },
+          TIMEOUT,
+        );
+
+        it(
           'creates nothing in a dry run and previews the bound projects',
           async () => {
             const server = await startServer((s) => bindable(s));
@@ -2889,11 +2936,6 @@ describe('sonar init', () => {
       );
 
       describe('a generated key that names an existing project', () => {
-        function generatedKey(folder: string) {
-          return generateProjectProposal(`${harness.cwd.path}/${folder}`, undefined, ORG)
-            .projectKey;
-        }
-
         it(
           'asks before mapping it, and maps it once the user agrees',
           async () => {
@@ -2912,7 +2954,7 @@ describe('sonar init', () => {
         );
 
         it(
-          'maps nothing when the user declines every offer',
+          'creates another project when the user declines the existing one',
           async () => {
             const server = await startServer((s) => s.withProject(generatedKey('web')));
             makeRepository('web');
@@ -2928,6 +2970,9 @@ describe('sonar init', () => {
 
             expect(result.exitCode).toBe(0);
             expect(createdKeys(server)).toEqual([`${generatedKey('web')}-2`]);
+            expect(linkedRoots()).toMatchObject([
+              { path: 'web', projectKey: `${generatedKey('web')}-2` },
+            ]);
           },
           TIMEOUT,
         );

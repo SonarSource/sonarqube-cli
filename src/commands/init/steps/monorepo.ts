@@ -193,24 +193,35 @@ async function mapExistingRoot(
 async function createRootProject(
   { mapping, path, remote, generated }: MonorepoRoot,
   deps: DetectDeps,
+  takenGenerated = false,
 ): Promise<MonorepoRootResult> {
   // Without a terminal, naming the root with --root is the consent to create its project.
   const flowDeps: DetectDeps = deps.interactive
-    ? { ...deps, intent: generated ? undefined : deps.intent }
+    ? { ...deps, intent: takenGenerated ? undefined : deps.intent }
     : { ...deps, intent: { kind: 'create' } };
+  // --bind is the consent to bind, so a declined link offer is reported, never replaced by an unbound project.
+  const bindRequired = takenGenerated && deps.interactive && deps.intent?.kind === 'bind';
   const outcome = await runUnboundNew(
     { path: 'unbound-new', projectRoot: mapping.projectRoot, remote },
     flowDeps,
     generated ? {} : { projectKey: mapping.projectKey },
     true,
+    bindRequired,
   );
+  if (bindRequired && outcome.kind === 'declined') {
+    return {
+      path,
+      kind: 'failed',
+      reason: `Project '${mapping.projectKey}' already exists and was not linked, and --bind never creates an unbound project. Name it with --root ${path}=<project key> to map it.`,
+    };
+  }
   if (outcome.kind === 'linked' || outcome.kind === 'unbound') {
     return { path, kind: outcome.kind, projectKey: outcome.projectKey };
   }
   if (outcome.kind === 'dry-run') {
-    return outcome.action.type === 'link'
-      ? { path, kind: 'would-link', projectKey: outcome.action.projectKey }
-      : { path, kind: 'would-create', projectKey: mapping.projectKey };
+    const { action } = outcome;
+    const projectKey = action.type === 'bind' ? mapping.projectKey : action.projectKey;
+    return { path, kind: action.type === 'link' ? 'would-link' : 'would-create', projectKey };
   }
   return { path, kind: 'skipped' };
 }
@@ -228,7 +239,7 @@ function onboardSelectedRoot(
         return mapExistingRoot(root, deps);
       }
       return deps.interactive
-        ? createRootProject(root, deps)
+        ? createRootProject(root, deps, true)
         : Promise.resolve({
             path: root.path,
             kind: 'failed',
