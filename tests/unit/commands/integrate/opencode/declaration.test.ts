@@ -130,7 +130,7 @@ describe('openCodeIntegration', () => {
     expect(feature?.resources).toHaveLength(1);
   });
 
-  it('declares the shared Vortex container with the SQAA plugin, instructions and the CAG skill as subfeatures', () => {
+  it('declares the shared Vortex container with the SQAA plugin and the CAG skill as subfeatures', () => {
     const feature = openCodeIntegration.features.find(
       (candidate) => candidate.id === VORTEX_FEATURE_ID,
     );
@@ -140,24 +140,22 @@ describe('openCodeIntegration', () => {
 
     expect(feature.subfeatures.map((subfeature) => subfeature.id)).toEqual([
       'sonar-sqaa-hook',
-      'sqaa-instructions',
       'context-augmentation',
     ]);
-    const [sqaaHook, sqaaInstructions, contextAugmentation] = feature.subfeatures;
-    for (const subfeature of [sqaaHook, sqaaInstructions]) {
-      expect(subfeature.dependencies).toBeUndefined();
-      expect(subfeature.resources).toHaveLength(1);
-    }
+    const [sqaaHook, contextAugmentation] = feature.subfeatures;
+    expect(sqaaHook.dependencies).toBeUndefined();
+    expect(sqaaHook.resources).toHaveLength(1);
     expect(contextAugmentation.dependencies).toHaveLength(1);
     expect(contextAugmentation.resources).toHaveLength(2);
     expect(contextAugmentation.operations).toHaveLength(1);
   });
 
-  it('has no legacy CAG skill cleanup, since OpenCode never shipped one', () => {
+  it('cleans up the legacy SQAA instructions', () => {
     const feature = openCodeIntegration.features.find(
       (candidate) => candidate.id === VORTEX_FEATURE_ID,
     );
 
-    expect(feature?.legacyCleanups).toEqual([]);
+    expect(feature?.legacyCleanups).toHaveLength(1);
+    expect(feature?.replacedIds).toContain('sqaa-instructions');
   });
 });
