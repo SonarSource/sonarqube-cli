@@ -149,6 +149,9 @@ describe('complete workflow templates', () => {
   it.each([
     '',
     'jobs: {}',
+    'name: {{SONAR_PROJECT_KEY}}',
+    'on: push\n# {{SONAR_PROJECT_KEY}}',
+    'on: push\njobs: {}\n# {{SONAR_PROJECT_KEY}}',
     'on: [\n{{SONAR_PROJECT_KEY}}',
     '{{SONAR_PROJECT_KEY}}',
     '- {{SONAR_PROJECT_KEY}}',
