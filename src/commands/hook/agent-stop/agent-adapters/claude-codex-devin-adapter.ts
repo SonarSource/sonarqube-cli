@@ -20,16 +20,16 @@
 
 import type { StopAgentAdapter } from '../types.ts';
 
-interface ClaudeCodexStopPayload {
+interface ClaudeCodexDevinStopPayload {
   session_id: string;
   cwd: string;
 }
 
-export const claudeCodexAdapter: StopAgentAdapter = {
+export const claudeCodexDevinAdapter: StopAgentAdapter = {
   parse: (payload) => {
-    const p = payload as ClaudeCodexStopPayload;
+    const p = payload as ClaudeCodexDevinStopPayload;
     return { sessionId: p.session_id, cwd: p.cwd };
   },
   emit: ({ findings, shouldContinue }) =>
-    shouldContinue ? { decision: 'block', reason: findings } : { systemMessage: findings },
+    shouldContinue ? { decision: 'block', reason: findings } : {},
 };
