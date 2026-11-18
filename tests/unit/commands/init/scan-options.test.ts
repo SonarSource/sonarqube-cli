@@ -106,7 +106,13 @@ describe('warnIgnoredScanOptions', () => {
 
   it('stays silent when no scan-only flag was given', () => {
     const console = new FakeConsole();
-    warnIgnoredScanOptions(validateScanOptions({ verbose: true }), console);
+    warnIgnoredScanOptions(validateScanOptions({}), console);
     expect(warnings(console)).toBe('');
+  });
+
+  it('names --verbose, which tunes a scan but does not ask for one', () => {
+    const console = new FakeConsole();
+    warnIgnoredScanOptions(validateScanOptions({ verbose: true }), console);
+    expect(warnings(console)).toContain('--verbose');
   });
 });

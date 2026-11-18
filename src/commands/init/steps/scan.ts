@@ -54,6 +54,8 @@ export interface ScanOptions {
   scannerProperties: Map<string, string>;
   verbose: boolean;
   detach: boolean;
+  /** `--scan`: run the analysis without asking. */
+  scan: boolean;
 }
 
 /**
@@ -73,11 +75,6 @@ export type ScanResult =
       openIssues: number | null;
       issueBreakdown: IssueBreakdown | null;
     };
-
-/** Without a terminal there is nobody to ask, so only a scan flag counts as the request. */
-function scanRequested(flags: ScanOptions): boolean {
-  return flags.detach || flags.verbose || flags.scannerProperties.size > 0;
-}
 
 export const NOT_RUN: ScanResult = { status: 'not-run' };
 
@@ -178,7 +175,7 @@ async function confirmScan(console: Console): Promise<boolean> {
 
 /**
  * Offers the first analysis of a freshly created project, downloads the scanner when it is not
- * installed, runs it and reads the results. Non-interactive runs scan only when a scan flag asks
+ * installed, runs it and reads the results. Non-interactive runs scan only when `--scan` asks
  * for it, since downloading and running a scanner is not something to do unasked.
  */
 export async function runFirstScan(
@@ -188,7 +185,8 @@ export async function runFirstScan(
   flags: ScanOptions,
 ): Promise<ScanResult> {
   const { auth, console, interactive } = deps;
-  if (interactive ? !(await confirmScan(console)) : !scanRequested(flags)) {
+  const requested = flags.scan || (interactive && (await confirmScan(console)));
+  if (!requested) {
     return NOT_RUN;
   }
 
