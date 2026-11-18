@@ -82,6 +82,8 @@ interface MonorepoRoot {
   status: RootStatus;
   /** The git remote the keys were generated from, so a created project is named from the same input. */
   remote?: string;
+  /** The key was guessed, not named by the user, so an existing project under it needs their say. */
+  generated?: boolean;
 }
 
 async function classifyRoot(
@@ -183,24 +185,34 @@ async function mapExistingRoot(
   return { path, kind: 'linked', projectKey: mapping.projectKey };
 }
 
+/**
+ * Runs the single-project creation flow for a root. A generated key is left to that flow, so a
+ * project already under it is offered for linking, as for one directory, instead of being rejected
+ * as a taken key; the flow then runs without `--bind`/`--create`, which refuse to touch it.
+ */
 async function createRootProject(
-  { mapping, path, remote }: MonorepoRoot,
+  { mapping, path, remote, generated }: MonorepoRoot,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult> {
   // Without a terminal, naming the root with --root is the consent to create its project.
+  const flowDeps: DetectDeps = deps.interactive
+    ? { ...deps, intent: generated ? undefined : deps.intent }
+    : { ...deps, intent: { kind: 'create' } };
   const outcome = await runUnboundNew(
     { path: 'unbound-new', projectRoot: mapping.projectRoot, remote },
-    deps.interactive ? deps : { ...deps, intent: { kind: 'create' } },
-    { projectKey: mapping.projectKey },
+    flowDeps,
+    generated ? {} : { projectKey: mapping.projectKey },
     true,
   );
-  if (outcome.kind === 'dry-run') {
-    // The root's key is explicit or generated, so the preview always names it.
-    return { path, kind: 'would-create', projectKey: mapping.projectKey };
+  if (outcome.kind === 'linked' || outcome.kind === 'unbound') {
+    return { path, kind: outcome.kind, projectKey: outcome.projectKey };
   }
-  return outcome.kind === 'unbound'
-    ? { path, kind: 'unbound', projectKey: outcome.projectKey }
-    : { path, kind: 'skipped' };
+  if (outcome.kind === 'dry-run') {
+    return outcome.action.type === 'link'
+      ? { path, kind: 'would-link', projectKey: outcome.action.projectKey }
+      : { path, kind: 'would-create', projectKey: mapping.projectKey };
+  }
+  return { path, kind: 'skipped' };
 }
 
 function onboardSelectedRoot(
@@ -211,7 +223,17 @@ function onboardSelectedRoot(
 ): Promise<MonorepoRootResult> {
   switch (status.kind) {
     case 'existing':
-      return mapExistingRoot(root, deps);
+      // A key the user named is consent to map it; one the CLI guessed is asked about, as for a single project.
+      if (!root.generated || linkOnly) {
+        return mapExistingRoot(root, deps);
+      }
+      return deps.interactive
+        ? createRootProject(root, deps)
+        : Promise.resolve({
+            path: root.path,
+            kind: 'failed',
+            reason: `Project '${root.mapping.projectKey}' already exists, and nothing says whether ${root.path} belongs to it. Name it with --root ${root.path}=<project key> to map it.`,
+          });
     case 'new':
       return linkOnly
         ? Promise.resolve({
@@ -295,7 +317,7 @@ export async function runMonorepo(
       : undefined;
   // Read after the named roots are mapped, so the file's roots include them.
   const mapped = await discoverMappedRoots(projectRoot, deps);
-  const { repositoryRoot, generatedKeys, relinked, remote } = named ?? mapped;
+  const { repositoryRoot, generatedKeys, relinked, remote, generatedRoots } = named ?? mapped;
   const configDir = named?.configDir ?? mapped.configDir;
   const namedRoots = new Set(
     (named?.mappings ?? []).map(({ projectRoot: root }) => pathComparisonKey(root)),
@@ -319,6 +341,7 @@ export async function runMonorepo(
         return {
           ...(await inspectRoot(mapping, repositoryRoot, deps, isNamed, relinked ?? new Set())),
           remote: isNamed ? remote : undefined,
+          generated: generatedRoots?.has(pathComparisonKey(mapping.projectRoot)) ?? false,
         };
       }),
     ),
@@ -385,6 +408,8 @@ interface MappedRoots {
   generatedKeys?: GeneratedKey[];
   /** Credential-free git remote of the repository; only read for `--root` roots. */
   remote?: string;
+  /** Roots whose key was generated, by `pathComparisonKey`. */
+  generatedRoots?: Set<string>;
   /** Roots the user pointed at another project than the one recorded, at the project prompt. */
   relinked?: Set<string>;
 }
@@ -479,6 +504,7 @@ async function mapExplicitRoots(
       : new Map<string, string>();
 
   const generatedKeys: GeneratedKey[] = [];
+  const generatedRoots = new Set<string>();
   const mappings = roots.map(({ path, projectKey, resolved }) => {
     const named = projectKey ?? picked.get(resolved);
     const key =
@@ -494,6 +520,7 @@ async function mapExplicitRoots(
     }
     if (key.generated) {
       generatedKeys.push({ path, projectKey: key.projectKey });
+      generatedRoots.add(pathComparisonKey(resolved));
     }
     return {
       projectRoot: resolved,
@@ -520,7 +547,7 @@ async function mapExplicitRoots(
       'Name a different key for one of them with --root <path>=<project key>.',
     );
   }
-  return { mappings, repositoryRoot: targetDir, generatedKeys, remote, relinked };
+  return { mappings, repositoryRoot: targetDir, generatedKeys, remote, relinked, generatedRoots };
 }
 
 /** Mappings are always saved at the repository root, so a nested or main-worktree file stays as it is. */
