@@ -28,6 +28,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
+  assertDryRunOptions,
   type InitIntent,
   type MonorepoRootOption,
   parseMonorepoRoots,
@@ -73,6 +74,7 @@ export interface InitOptions {
   verbose?: boolean;
   detach?: boolean;
   scan?: boolean;
+  dryRun?: boolean;
 }
 
 /**
@@ -93,9 +95,15 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const projectRoot = resolveProjectRoot(options.path ?? '.');
   const unboundNewOptions = validateUnboundNewOptions(options);
   const scanOptions = validateScanOptions(options);
+  const dryRun = options.dryRun === true;
+  if (dryRun) {
+    assertDryRunOptions(scanOptions);
+    console.info('DRY RUN: no changes will be made.');
+  }
 
   const { outcome, auth, deps } = await run(projectRoot, ctx, console, {
     interactive,
+    dryRun,
     intent,
     unboundNewOptions,
     monorepo: options.monorepo === true,
@@ -105,14 +113,21 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     warnIgnoredIntent(intent, console);
   }
   const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
-  if (outcome.kind !== 'unbound' && !declined) {
+  // A dry run that would create the project uses these options just as the real run does.
+  const createsUnbound =
+    outcome.kind === 'unbound' || (outcome.kind === 'dry-run' && outcome.action.type === 'create');
+  if (!createsUnbound && !declined) {
     warnIgnoredUnboundNewOptions(unboundNewOptions, console);
   }
   const scan = await scanCreatedProject(outcome, projectRoot, deps, scanOptions);
   if (scan.status === 'not-run') {
     warnIgnoredScanOptions(scanOptions, console);
   }
-  renderInitOutcome(outcome, auth, console);
+  renderInitOutcome(outcome, auth, console, dryRun);
+  if (dryRun) {
+    console.info('Dry run: nothing was written. Run without --dry-run to apply.');
+    return;
+  }
   // Without a session (the user declined to create an organization) there is nothing to integrate with.
   if (interactive && auth && findInstalledIntegrationIds().length === 0) {
     await offerIntegrate(ctx, auth);
@@ -136,6 +151,7 @@ async function scanCreatedProject(
 
 interface RunSettings {
   interactive: boolean;
+  dryRun: boolean;
   intent: InitIntent | undefined;
   unboundNewOptions: UnboundNewOptions;
   monorepo: boolean;
@@ -146,11 +162,11 @@ async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   console: Console,
-  { interactive, intent, unboundNewOptions, monorepo, monorepoRoots }: RunSettings,
+  { interactive, dryRun, intent, unboundNewOptions, monorepo, monorepoRoots }: RunSettings,
 ): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
   let auth: ResolvedAuth;
   try {
-    auth = await resolveInitAuth(ctx, interactive);
+    auth = await resolveInitAuth(ctx, interactive, dryRun);
   } catch (error) {
     if (error instanceof OrganizationCreationDeclined) {
       return { outcome: { kind: 'no-organization' } };
@@ -158,7 +174,7 @@ async function run(
     throw error;
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
-  const deps: DetectDeps = { auth, http, console, interactive, intent };
+  const deps: DetectDeps = { auth, http, console, interactive, dryRun, intent };
   if (monorepo) {
     return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
   }
