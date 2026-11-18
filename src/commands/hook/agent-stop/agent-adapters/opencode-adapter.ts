@@ -33,5 +33,5 @@ export const openCodeAdapter: StopAgentAdapter = {
       cwd: p.cwd,
     };
   },
-  emit: ({ findings, shouldContinue }) => ({ findings, shouldContinue }),
+  emit: ({ findings }) => ({ findings }),
 };

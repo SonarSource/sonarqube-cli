@@ -30,6 +30,5 @@ export const copilotAdapter: StopAgentAdapter = {
     const p = payload as CopilotStopPayload;
     return { sessionId: p.sessionId, cwd: p.cwd };
   },
-  emit: ({ findings, shouldContinue }) =>
-    shouldContinue ? { decision: 'block', reason: findings } : {},
+  emit: ({ findings }) => ({ decision: 'block', reason: findings }),
 };
