@@ -190,7 +190,8 @@ async function run(
   const deps: DetectDeps = { auth, http, console, interactive, dryRun, intent };
   if (monorepo) {
     const roots = await monorepoRootsToOnboard(projectRoot, monorepoRoots, deps, interactive);
-    return { outcome: await runMonorepo(projectRoot, deps, roots), auth, deps };
+    const linkOnly = intent?.kind === 'link';
+    return { outcome: await runMonorepo(projectRoot, deps, roots, linkOnly), auth, deps };
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)

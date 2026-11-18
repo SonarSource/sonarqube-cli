@@ -199,12 +199,19 @@ function onboardSelectedRoot(
   root: MonorepoRoot,
   status: OnboardableStatus,
   deps: DetectDeps,
+  linkOnly: boolean,
 ): Promise<MonorepoRootResult> {
   switch (status.kind) {
     case 'existing':
       return mapExistingRoot(root, deps);
     case 'new':
-      return createRootProject(root, deps);
+      return linkOnly
+        ? Promise.resolve({
+            path: root.path,
+            kind: 'failed',
+            reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
+          })
+        : createRootProject(root, deps);
     case 'other-org': {
       const active = deps.auth.orgKey ?? 'the active one';
       return Promise.resolve({
@@ -216,7 +223,11 @@ function onboardSelectedRoot(
   }
 }
 
-async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<MonorepoRootResult> {
+async function onboardRoot(
+  root: MonorepoRoot,
+  deps: DetectDeps,
+  linkOnly: boolean,
+): Promise<MonorepoRootResult> {
   const { path, mapping, status } = root;
   if (status.kind === 'configured') {
     return {
@@ -242,7 +253,7 @@ async function onboardRoot(root: MonorepoRoot, deps: DetectDeps): Promise<Monore
   }
   deps.console.print(`${deps.dryRun ? 'Previewing' : 'Onboarding'} ${path}`);
   try {
-    return await onboardSelectedRoot(root, status, deps);
+    return await onboardSelectedRoot(root, status, deps, linkOnly);
   } catch (error) {
     if (isRunFatal(error)) {
       throw error;
@@ -261,11 +272,12 @@ export async function runMonorepo(
   projectRoot: string,
   deps: DetectDeps,
   explicitRoots: readonly MonorepoRootOption[] = [],
+  linkOnly = false,
 ): Promise<InitOutcome> {
   const { console } = deps;
   const explicit = explicitRoots.length > 0;
   const { mappings, repositoryRoot, configDir, generatedKeys, remote } = explicit
-    ? await mapExplicitRoots(projectRoot, explicitRoots, deps)
+    ? await mapExplicitRoots(projectRoot, explicitRoots, deps, linkOnly)
     : await discoverMappedRoots(projectRoot, deps);
   if (mappings.length === 0) {
     return { kind: 'no-monorepo-roots' };
@@ -284,7 +296,7 @@ export async function runMonorepo(
     ),
   );
   reportRootProblems(roots, deps);
-  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps) };
+  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps, linkOnly) };
 }
 
 /** Said before any root is onboarded, while the user can still stop: these roots are left as they are. */
@@ -357,7 +369,8 @@ function keyForUnkeyedRoot(
 async function mapExplicitRoots(
   projectRoot: string,
   explicitRoots: readonly MonorepoRootOption[],
-  { auth }: DetectDeps,
+  { auth, interactive }: DetectDeps,
+  linkOnly: boolean,
 ): Promise<MappedRoots> {
   const { targetDir } = await resolveProjectTarget(projectRoot);
   const needsKey = explicitRoots.some(({ projectKey }) => projectKey === undefined);
@@ -378,6 +391,13 @@ async function mapExplicitRoots(
       projectKey === undefined
         ? keyForUnkeyedRoot(resolved, recorded, remote, auth)
         : { projectKey, generated: false };
+    // Scripts get no say in a guessed key, so link-only wants it named; the user at a prompt sees it printed.
+    if (linkOnly && !interactive && key.generated) {
+      throw new InvalidOptionError(
+        `--link needs an existing project for ${path}, but no key is recorded for it.`,
+        `Name it with --root ${path}=<project key>.`,
+      );
+    }
     if (key.generated) {
       generatedKeys.push({ path, projectKey: key.projectKey });
     }
@@ -422,10 +442,11 @@ function warnOnNestedConfig(
 function onboardInOrder(
   roots: readonly MonorepoRoot[],
   deps: DetectDeps,
+  linkOnly: boolean,
 ): Promise<MonorepoRootResult[]> {
   return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const results = await previous;
-    results.push(await onboardRoot(root, deps));
+    results.push(await onboardRoot(root, deps, linkOnly));
     return results;
   }, Promise.resolve([]));
 }

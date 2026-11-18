@@ -1357,12 +1357,15 @@ describe('sonar init', () => {
     );
 
     it(
-      'rejects an intent option together with --monorepo',
+      'rejects --bind and --link <key> together with --monorepo',
       async () => {
-        const result = await harness.run('init --monorepo --non-interactive --create');
+        const bind = await harness.run('init --monorepo --non-interactive --bind');
+        const link = await harness.run('init --monorepo --non-interactive --link api-key');
 
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--create does not apply with --monorepo');
+        expect(bind.exitCode).toBe(2);
+        expect(bind.stderr).toContain('--bind does not apply with --monorepo');
+        expect(link.exitCode).toBe(2);
+        expect(link.stderr).toContain('--link <key> does not apply with --monorepo');
       },
       TIMEOUT,
     );
@@ -2324,6 +2327,54 @@ describe('sonar init', () => {
               .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
               .sort(),
           ).toEqual(['api=api-key', 'web=web-key']);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --link maps the existing project, and reports a missing one without creating it',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --link --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          expect(result.stdout + result.stderr).toContain("Project 'web-key' does not exist");
+          expect(createdKeys(server)).toEqual([]);
+          expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --link needs the key of a root that the file does not record',
+        async () => {
+          await startServer(() => {});
+          makeRepository('web');
+
+          const result = await harness.run('init --monorepo --link --non-interactive --root web');
+
+          expect(result.exitCode).toBe(2);
+          expect(result.stderr).toContain('--root web=<project key>');
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --create behaves like the default: it creates the missing project without a prompt',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --create --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(createdKeys(server)).toEqual(['web-key']);
         },
         TIMEOUT,
       );
