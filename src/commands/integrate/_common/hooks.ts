@@ -18,12 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Shared hook helpers used by the agent integrations. Keeps the hook script
-// builders and JSON config read-or-init helper
-// in one place so every integration stays behaviorally aligned.
+// Shared hook helpers used by the agent integrations.
 
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
@@ -51,20 +47,6 @@ export function buildWindowsHookScript(subcommand: string): string {
 
 function sonarHookCommand(subcommand: string): string {
   return `sonar hook ${subcommand}`;
-}
-
-/**
- * Read a JSON file at `path`, returning `defaultValue` when the file does
- * not exist or cannot be parsed. Used for hook config files that may be
- * missing or corrupted on a fresh install.
- */
-export async function readOrInitJson<T>(path: string, defaultValue: T): Promise<T> {
-  if (!existsSync(path)) return defaultValue;
-  try {
-    return JSON.parse(await readFile(path, 'utf-8')) as T;
-  } catch {
-    return defaultValue;
-  }
 }
 
 // ---------------------------------------------------------------------------

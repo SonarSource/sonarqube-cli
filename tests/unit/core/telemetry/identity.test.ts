@@ -37,13 +37,13 @@ import { ENV_SONAR_USER_HOME, getTelemetryDir } from '@/core/config-constants.ts
 import type { AuthConnection, CliState } from '@/core/state/state.ts';
 import { addOrUpdateConnection, loadState, updateState } from '@/core/state/state-manager.ts';
 import {
-  activeConnectionForIdentitySeed,
-  identityFromConnection,
-  isIdentityCompleteForConnection,
   resolveCommandTelemetryIdentity,
   resolveStoreEventTelemetryIdentity,
 } from '@/core/telemetry/identity.ts';
 import {
+  activeConnectionForIdentitySeed,
+  identityFromConnection,
+  isIdentityCompleteForConnection,
   needsIdentityEnrichment,
   resolveTelemetryIdentity,
 } from '@/core/telemetry/identity-fetch.ts';

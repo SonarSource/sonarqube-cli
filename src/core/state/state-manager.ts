@@ -31,7 +31,6 @@ import logger from '@/core/observability/logger.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { pathComparisonKey } from '../io/fs-utils.ts';
 import { updateState } from './state-repository.ts';
 
 export { loadState, tryLoadState, updateState } from './state-repository.ts';
@@ -53,10 +52,6 @@ export function getActiveConnection(state: CliState): AuthConnection | undefined
     return undefined;
   }
   return state.auth.connections.find((c) => c.id === state.auth.activeConnectionId);
-}
-
-export function canonicalProjectRoot(projectRoot: string): string {
-  return pathComparisonKey(projectRoot);
 }
 
 /**
