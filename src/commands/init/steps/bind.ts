@@ -51,14 +51,23 @@ function pause(ms: number): Promise<void> {
 /**
  * Asks for consent, then sends the user to the browser to link the organization to its DevOps
  * platform and waits until the server reports the link. Resolves to the platform key, or
- * undefined when consent is declined.
+ * undefined when consent is declined. Without a terminal it fails, since `--bind` cannot stand in
+ * for a browser authorization.
  */
 async function authorizeOrganization(
   api: ImportApiClient,
   auth: ResolvedAuth,
   orgKey: string,
-  console: Console,
+  { console, interactive }: Pick<DetectDeps, 'console' | 'interactive'>,
 ): Promise<string | undefined> {
+  if (!interactive) {
+    throw new CommandFailedError(
+      `Organization '${orgKey}' is not linked to your DevOps platform, which binding the repository needs.`,
+      {
+        remediationHint: `Link it in the browser at ${devOpsBindingUrl(auth, orgKey)}, then run 'sonar init --bind' again.`,
+      },
+    );
+  }
   const consent = requireAnswer(
     await console.confirmPrompt(
       `Organization '${orgKey}' is not linked to your DevOps platform. Authorize it in the browser now?`,
@@ -125,20 +134,23 @@ async function importRepository(
 
 /**
  * Creates the project bound to the repository with the `sonar import --repo` logic and maps it in
- * `.sonar-config.json`. Falls back to the unbound path when the user declines the DevOps
- * platform authorization.
+ * `.sonar-config.json`. When the user declines the DevOps platform authorization, it falls back
+ * to the unbound path, unless `--bind` asked for binding: then nothing is created.
  */
 export async function runBoundNew(
   { projectRoot, remote, repositorySlug }: BoundNewPath,
-  { auth, http, console }: DetectDeps,
+  deps: DetectDeps,
 ): Promise<InitOutcome | UnboundNewPath> {
+  const { auth, http, console, intent } = deps;
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const almKey =
     (await resolveAlmKey(api, org.key, org.almKey)) ??
-    (await authorizeOrganization(api, auth, org.key, console));
+    (await authorizeOrganization(api, auth, org.key, deps));
   if (!almKey) {
-    return { path: 'unbound-new', projectRoot, remote };
+    return intent?.kind === 'bind'
+      ? { kind: 'declined' }
+      : { path: 'unbound-new', projectRoot, remote };
   }
 
   console.info(`Organization: ${org.key}`);

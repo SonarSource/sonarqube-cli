@@ -131,6 +131,7 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
     scannerProperties: new Map([['sonar.sources', '.']]),
     verbose: false,
     detach: false,
+    scan: true,
     ...overrides,
   };
 }
@@ -166,11 +167,16 @@ function printed(console: FakeConsole): string[] {
 }
 
 describe('runFirstScan without a scan', () => {
-  it('does not scan a non-interactive run that passed no scan flag', async () => {
+  it.each([
+    ['no other flag', {}],
+    ['--verbose', { verbose: true }],
+    ['--detach', { detach: true }],
+    ['--scanner-property', { scannerProperties: new Map([['sonar.sources', '.']]) }],
+  ] as const)('does not scan a non-interactive run without --scan, given %s', async (_, extra) => {
     const console = new FakeConsole();
-    const none = flags({ scannerProperties: new Map() });
+    const options = flags({ scan: false, scannerProperties: new Map(), ...extra });
 
-    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), none)).toBe(NOT_RUN);
+    expect(await runFirstScan(projectRoot, 'my-key', depsFor(console), options)).toBe(NOT_RUN);
     expect(console.calls).toHaveLength(0);
   });
 
@@ -182,7 +188,7 @@ describe('runFirstScan without a scan', () => {
       projectRoot,
       'my-key',
       depsFor(console, { interactive: true }),
-      flags(),
+      flags({ scan: false }),
     );
 
     expect(result).toBe(NOT_RUN);
@@ -199,7 +205,7 @@ describe('runFirstScan without a scan', () => {
       projectRoot,
       'my-key',
       depsFor(console, { interactive: true }),
-      flags(),
+      flags({ scan: false }),
     ).catch((cause: unknown) => cause);
 
     expect((error as Error).message).toBe('Onboarding cancelled.');
@@ -243,6 +249,23 @@ describe('runFirstScan failures', () => {
     expect(error.remediationHint).toContain(
       "Project 'my-key' and .sonar-config.json were kept, so the setup is intact.",
     );
+  });
+
+  it('starts the analysis without asking when --scan was passed', async () => {
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
+    clearNetworkConfigCache();
+    const console = new FakeConsole();
+
+    await failureOf(
+      runFirstScan(
+        projectRoot,
+        'my-key',
+        depsFor(console, { interactive: true }),
+        flags({ scan: true }),
+      ),
+    );
+
+    expect(console.calls.some((call) => call.method === 'confirmPrompt')).toBe(false);
   });
 
   it('refuses --detach with a PEM client key before downloading the scanner', async () => {
