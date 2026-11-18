@@ -63,7 +63,7 @@ function pause(ms: number): Promise<void> {
  * undefined when consent is declined. Without a terminal it fails, since `--bind` cannot stand in
  * for a browser authorization.
  */
-async function authorizeOrganization(
+export async function authorizeOrganization(
   api: ImportApiClient,
   auth: ResolvedAuth,
   orgKey: string,
