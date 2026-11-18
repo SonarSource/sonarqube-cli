@@ -59,7 +59,10 @@ function failure(error: unknown): FailedResult {
   return { outcome: 'failed', error: error instanceof Error ? error.message : String(error) };
 }
 
-async function openPr(ctx: ProcessRepoContext, repo: string): Promise<string | undefined> {
+async function retrieveOpenPrUrl(
+  ctx: ProcessRepoContext,
+  repo: string,
+): Promise<string | undefined> {
   const prs = await ctx.github.listOpenPullRequests(repo, CI_BRANCH);
   return prs[0]?.html_url;
 }
@@ -85,7 +88,7 @@ export async function assessRepo(
     if (await ctx.components.hasProjectBeenAnalyzed(projectKey).orThrow()) {
       return { outcome: 'skip', reason: 'ALREADY_ANALYZED' };
     }
-    const prUrl = await openPr(ctx, repo.full_name);
+    const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
     if (prUrl) {
       return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
     }
@@ -121,7 +124,7 @@ export async function assessRepo(
         );
       }
       if (
-        /sonar-scanner|sonarscanner|sonar:sonar|gradlew?\s+sonar|sonarqube-scan-action|sonarcloud-github-action|sonarqube-github-action|SONAR_HOST_URL|SONAR_TOKEN|sonar\.projectKey/.test(
+        /sonar-scanner|sonarscanner|sonar:sonar|(?:gradle|gradlew)\s+sonar\b|sonarqube-scan-action|sonarcloud-github-action|sonarqube-github-action|SONAR_HOST_URL|SONAR_TOKEN|sonar\.projectKey/.test(
           content,
         )
       ) {
@@ -129,15 +132,20 @@ export async function assessRepo(
       }
     }
     validateWorkflowOptions(ctx.options, ctx.workflowTemplate);
-    const workflow =
-      ctx.workflowTemplate !== undefined
-        ? renderWorkflowTemplate(ctx.workflowTemplate, projectKey)
-        : generateWorkflow(projectKey, ctx.serverUrl, repo.default_branch, ctx.options);
-    const content =
-      ctx.workflowTemplate !== undefined
-        ? generateTemplatePrContent(projectKey)
-        : generatePrContent(projectKey, ctx.serverUrl, ctx.options);
-    return { outcome: 'proceed', projectKey, workflow, ...content };
+    if (ctx.workflowTemplate !== undefined) {
+      return {
+        outcome: 'proceed',
+        projectKey,
+        workflow: renderWorkflowTemplate(ctx.workflowTemplate, projectKey),
+        ...generateTemplatePrContent(projectKey),
+      };
+    }
+    return {
+      outcome: 'proceed',
+      projectKey,
+      workflow: generateWorkflow(projectKey, ctx.serverUrl, repo.default_branch, ctx.options),
+      ...generatePrContent(projectKey, ctx.serverUrl, ctx.options),
+    };
   } catch (error) {
     return failure(error);
   }
@@ -162,7 +170,7 @@ export async function executeRepo(
     }
     if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
       // Recheck before deleting: preserve a PR opened since assessment.
-      const prUrl = await openPr(ctx, repo.full_name);
+      const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
       if (prUrl) {
         return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
       }
@@ -201,7 +209,7 @@ export async function executeRepo(
         body,
       );
     } catch (error) {
-      const existing = await openPr(ctx, repo.full_name);
+      const existing = await retrieveOpenPrUrl(ctx, repo.full_name);
       if (!existing) {
         throw error;
       }
