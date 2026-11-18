@@ -395,7 +395,7 @@ public class Batch {
       if (legacyBootstrap) plantLegacyCache(variant);
       else plantModernProperties(variant);
       const result = await harness.run(
-        `init --non-interactive --scan --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
+        `init --non-interactive --create --scan --project fixture-project --name Fixture --scanner-property sonar.exclusions=ignored/**${detach ? ' --detach' : ''}`,
         {
           timeoutMs: 30_000,
           extraEnv: legacyBootstrap
