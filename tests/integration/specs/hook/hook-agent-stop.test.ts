@@ -39,18 +39,15 @@ const BLOCKING_STOP_PROTOCOL = {
     reason: expect.stringContaining('Use Number.isNaN.'),
   },
 };
-const CLAUDE_CODEX_PROTOCOL = {
+const CLAUDE_CODEX_DEVIN_PROTOCOL = {
   ...BLOCKING_STOP_PROTOCOL,
   sessionIdField: 'session_id',
-  expectedLimitOutput: {
-    systemMessage: expect.stringMatching(
-      /Vortex analysis reached its limit of 3 attempts\.[\s\S]*Use Number\.isNaN\./,
-    ),
-  },
+  expectedLimitOutput: {},
 };
 const AGENTS = [
-  { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
-  { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
+  { name: 'claude', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
+  { name: 'codex', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
+  { name: 'devin', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
   {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
