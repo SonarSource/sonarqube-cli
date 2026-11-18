@@ -19,9 +19,10 @@
  */
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { InitOutcome, MonorepoRootResult } from './init-outcome.ts';
+import type { DryRunAction, InitOutcome, MonorepoRootResult } from './init-outcome.ts';
 import {
   isUnavailable,
   type LinkedProjectIssue,
@@ -41,6 +42,8 @@ const MONOREPO_SECTIONS: { title: string; kinds: MonorepoRootResult['kind'][] }[
   { title: 'Created and bound to the repository', kinds: ['bound'] },
   { title: 'Created', kinds: ['unbound'] },
   { title: 'Mapped to the existing project', kinds: ['linked'] },
+  { title: 'Would be created', kinds: ['would-create'] },
+  { title: 'Would be mapped to the existing project', kinds: ['would-link'] },
   { title: 'Already configured', kinds: ['configured'] },
   // The warnings printed while checking the roots say why a root was left as it is.
   { title: 'Skipped', kinds: ['skipped', 'unavailable', 'conflict'] },
@@ -56,19 +59,23 @@ const UNAVAILABLE_REASONS = {
 function describeMonorepo(
   roots: readonly MonorepoRootResult[],
   auth: ResolvedAuth | undefined,
+  dryRun: boolean,
 ): string[] {
-  const lines = ['', 'Monorepo onboarding summary:'];
+  const lines = ['', dryRun ? 'Monorepo onboarding preview:' : 'Monorepo onboarding summary:'];
   for (const { title, kinds } of MONOREPO_SECTIONS) {
     const matching = roots.filter((root) => kinds.includes(root.kind));
     if (matching.length > 0) {
+      // A real run would fail on these roots too, which a plain "Failed" would not say of a preview.
+      const heading = dryRun && title === 'Failed' ? 'Would fail' : title;
       lines.push(
-        `  ${title} (${matching.length}):`,
+        `  ${heading} (${matching.length}):`,
         ...matching.map((root) => `    ${describeMonorepoRoot(root, auth)}`),
       );
     }
   }
+  // A dry run ran nothing, so there is nothing to resume: the closing line says how to apply it.
   // A missing project or a conflicting key stays as it is until the file or the command changes.
-  if (roots.some((root) => root.kind === 'skipped' || root.kind === 'failed')) {
+  if (!dryRun && roots.some((root) => root.kind === 'skipped' || root.kind === 'failed')) {
     lines.push(MONOREPO_RESUME);
   }
   return lines;
@@ -88,6 +95,9 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
       }
       return auth ? `${line} - ${projectDashboardUrl(auth, root.projectKey)}` : line;
     }
+    case 'would-link':
+    case 'would-create':
+      return `${root.path}: ${root.projectKey}`;
     case 'skipped':
       return root.path;
     case 'unavailable':
@@ -99,8 +109,32 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
   }
 }
 
-function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined): string[] {
+function describeDryRun(action: DryRunAction): string[] {
+  switch (action.type) {
+    case 'link':
+      return [
+        `Would link this directory to the existing project '${action.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+      ];
+    case 'create':
+      return [
+        `Would create the project '${action.projectName}' (key '${action.projectKey}', ${action.visibility}) without repository binding, and save it in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+      ];
+    case 'bind':
+      return [
+        `Would create a project bound to the repository '${action.repositorySlug}' in organization '${action.organization}', and save it in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
+        ...(action.authorizationNeeded
+          ? [
+              `Organization '${action.organization}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
+            ]
+          : []),
+      ];
+  }
+}
+
+function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined, dryRun: boolean): string[] {
   switch (outcome.kind) {
+    case 'dry-run':
+      return describeDryRun(outcome.action);
     case 'complete': {
       const noun = outcome.projectKeys.length === 1 ? 'project' : 'projects';
       const keys = outcome.projectKeys.map((key) => `'${key}'`).join(', ');
@@ -120,7 +154,7 @@ function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined): string[
     case 'no-organization':
       return ['No organization was created.'];
     case 'monorepo':
-      return describeMonorepo(outcome.roots, auth);
+      return describeMonorepo(outcome.roots, auth, dryRun);
     case 'no-monorepo-roots':
       return NO_MONOREPO_ROOTS;
   }
@@ -131,8 +165,9 @@ export function renderInitOutcome(
   outcome: InitOutcome,
   auth: ResolvedAuth | undefined,
   console: Console,
+  dryRun = false,
 ): void {
-  for (const line of describe(outcome, auth)) {
+  for (const line of describe(outcome, auth, dryRun)) {
     console.print(line);
   }
   if (auth) {
@@ -154,6 +189,7 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'bound':
     case 'unbound':
       return [outcome.projectKey];
+    case 'dry-run': // Nothing was mapped, so there is no dashboard to link.
     case 'monorepo': // Each root's link is already on its summary line.
     case 'declined':
     case 'no-organization':

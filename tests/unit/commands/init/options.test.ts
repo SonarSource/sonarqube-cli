@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  assertDryRunOptions,
   parseMonorepoRoots,
   validateIntentOptions,
   validateProjectKey,
@@ -160,5 +161,32 @@ describe('warnIgnoredIntent', () => {
       '--create ignored: this directory is already linked in .sonar-config.json.',
       "--link ignored: this directory is already linked in .sonar-config.json. To link it to 'other' instead, run 'sonar link other'.",
     ]);
+  });
+});
+
+describe('assertDryRunOptions', () => {
+  const none = {
+    scannerProperties: new Map<string, string>(),
+    verbose: false,
+    detach: false,
+    scan: false,
+  };
+
+  it('accepts a run without first-analysis options', () => {
+    expect(() => assertDryRunOptions(none)).not.toThrow();
+  });
+
+  it('names each first-analysis option given, never a property value', () => {
+    const flags = {
+      ...none,
+      scan: true,
+      scannerProperties: new Map([['sonar.exclusions', 'secret']]),
+    };
+
+    expect(() => assertDryRunOptions(flags)).toThrow(InvalidOptionError);
+    expect(() => assertDryRunOptions(flags)).toThrow(
+      '--scan, --scanner-property cannot be combined with --dry-run',
+    );
+    expect(() => assertDryRunOptions(flags)).not.toThrow('secret');
   });
 });

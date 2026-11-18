@@ -44,6 +44,15 @@ function devOpsBindingUrl(auth: ResolvedAuth, orgKey: string): string {
   return `${serverBaseUrl(auth)}/organizations/${orgKey}/edit?category=binding`;
 }
 
+function notLinkedError(auth: ResolvedAuth, orgKey: string): CommandFailedError {
+  return new CommandFailedError(
+    `Organization '${orgKey}' is not linked to your DevOps platform, which binding the repository needs.`,
+    {
+      remediationHint: `Link it in the browser at ${devOpsBindingUrl(auth, orgKey)}, then run 'sonar init --bind' again.`,
+    },
+  );
+}
+
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -61,12 +70,7 @@ async function authorizeOrganization(
   { console, interactive }: Pick<DetectDeps, 'console' | 'interactive'>,
 ): Promise<string | undefined> {
   if (!interactive) {
-    throw new CommandFailedError(
-      `Organization '${orgKey}' is not linked to your DevOps platform, which binding the repository needs.`,
-      {
-        remediationHint: `Link it in the browser at ${devOpsBindingUrl(auth, orgKey)}, then run 'sonar init --bind' again.`,
-      },
-    );
+    throw notLinkedError(auth, orgKey);
   }
   const consent = requireAnswer(
     await console.confirmPrompt(
@@ -144,9 +148,24 @@ export async function runBoundNew(
   const { auth, http, console, intent } = deps;
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
-  const almKey =
-    (await resolveAlmKey(api, org.key, org.almKey)) ??
-    (await authorizeOrganization(api, auth, org.key, deps));
+  const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
+  // The browser authorization and the import both change things, so a preview stops short of them.
+  if (deps.dryRun) {
+    // A real run without a terminal fails here, so its preview must fail too.
+    if (!linkedAlmKey && !deps.interactive) {
+      throw notLinkedError(auth, org.key);
+    }
+    return {
+      kind: 'dry-run',
+      action: {
+        type: 'bind',
+        repositorySlug,
+        organization: org.key,
+        authorizationNeeded: !linkedAlmKey,
+      },
+    };
+  }
+  const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
   if (!almKey) {
     return intent?.kind === 'bind'
       ? { kind: 'declined' }
