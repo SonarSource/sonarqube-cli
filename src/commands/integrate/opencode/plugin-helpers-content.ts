@@ -24,9 +24,9 @@ import { join, resolve } from 'node:path';
 
 const MAX_HOOK_OUTPUT_BYTES = 64 * 1024 * 1024;
 
-function runHook(subcommand: string, payload: unknown, timeout: number, cwd: string, args: string[] = []): Promise<any> {
+function runHook(subcommand: string, payload: unknown, timeout: number, cwd: string, args: string[] = [], signal?: AbortSignal): Promise<any> {
   return new Promise((resolvePromise, reject) => {
-    const options = { timeout, cwd, maxBuffer: MAX_HOOK_OUTPUT_BYTES };
+    const options = { timeout, cwd, maxBuffer: MAX_HOOK_OUTPUT_BYTES, signal };
     const child = execFile('sonar', ['hook', subcommand, ...args], options, (error, stdout) => {
       if (error) return reject(error);
       try {

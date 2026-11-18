@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 type Handler = (event: unknown) => unknown;
@@ -34,6 +35,7 @@ interface DriverInput {
   sessions?: Record<string, Record<string, unknown>>;
   failSessionGet?: boolean;
   failSessionPrompt?: boolean;
+  disposeWhenFileExists?: string;
 }
 
 const input = JSON.parse(await Bun.stdin.text()) as DriverInput;
@@ -87,34 +89,47 @@ const cleanup = await loaded.default.setup({
   },
 });
 
+async function disposeWhenReady(path: string) {
+  while (!existsSync(path)) {
+    await Bun.sleep(10);
+  }
+  await cleanup?.();
+}
+
 const results: { error: string | null; event: unknown }[] = [];
-for (const step of input.steps) {
-  if (step.hook === 'event') {
-    await new Promise<void>((resolve) => {
-      eventHandled = resolve;
-      if (!deliverEvent) throw new Error('The plugin did not subscribe to events');
-      deliverEvent(step.event);
-    });
-    results.push({ error: null, event: step.event });
-    continue;
-  }
-  const handler = handlers.get(step.hook);
-  if (!handler) {
-    throw new Error(`The plugin registered no handler for ${step.hook}`);
-  }
-  try {
-    await handler(step.event);
-    results.push({ error: null, event: step.event });
-  } catch (error) {
-    results.push({
-      error: error instanceof Error ? error.message : String(error),
-      event: step.event,
-    });
+async function processSteps() {
+  for (const step of input.steps) {
+    if (step.hook === 'event') {
+      await new Promise<void>((resolve) => {
+        eventHandled = resolve;
+        if (!deliverEvent) throw new Error('The plugin did not subscribe to events');
+        deliverEvent(step.event);
+      });
+      results.push({ error: null, event: step.event });
+      continue;
+    }
+    const handler = handlers.get(step.hook);
+    if (!handler) {
+      throw new Error(`The plugin registered no handler for ${step.hook}`);
+    }
+    try {
+      await handler(step.event);
+      results.push({ error: null, event: step.event });
+    } catch (error) {
+      results.push({
+        error: error instanceof Error ? error.message : String(error),
+        event: step.event,
+      });
+    }
   }
 }
 
+await Promise.all([
+  processSteps(),
+  input.disposeWhenFileExists ? disposeWhenReady(input.disposeWhenFileExists) : undefined,
+]);
 await new Promise((resolve) => setTimeout(resolve, LATE_ERROR_WINDOW_MS));
-await cleanup?.();
+if (!input.disposeWhenFileExists) await cleanup?.();
 
 process.stdout.write(
   JSON.stringify({
