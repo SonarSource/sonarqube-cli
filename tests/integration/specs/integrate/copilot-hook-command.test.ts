@@ -40,19 +40,41 @@ describe('Copilot hook command execution', () => {
       async () => {
         harness = await TestHarness.create({ homeName: "home with spaces ' ‘ ’ ‚ ‛ and $dollar" });
         harness.state().withSecretsBinaryInstalled();
-        const server = await harness.newFakeServer().withAuthToken('tok').start();
-        harness.withAuth(server.baseUrl(), 'tok');
-        const result = await harness.run('integrate copilot --non-interactive');
+        const server = await harness
+          .newFakeServer()
+          .withAuthToken('tok')
+          .withVortexEntitlement('org', 'test-uuid')
+          .start();
+        harness.withAuth(server.baseUrl(), 'tok', 'org');
+        const result = await harness.run('integrate copilot --non-interactive', {
+          extraEnv: {
+            SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+            SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+            __SQCLI_DEV_SKIP_CAG: '1',
+          },
+        });
         expect(result.exitCode).toBe(0);
         const hooks = harness.userHome.file(...GLOBAL_HOOKS_JSON_PATH).asJson() as CopilotHooksJson;
-        const entries = [hooks.hooks.preToolUse?.[0], hooks.hooks.userPromptTransformed?.[0]];
         harness.withCliInPath().clearAuth();
         harness.cwd.writeFile('clean.js', 'const greeting = "hello world";');
-        const inputs = [
-          { toolName: 'view', toolArgs: { path: harness.cwd.file('clean.js').path } },
-          { transformedPrompt: 'input payload' },
+        const cases = [
+          {
+            entry: hooks.hooks.preToolUse?.[0],
+            input: { toolName: 'view', toolArgs: { path: harness.cwd.file('clean.js').path } },
+            assertOutput: expectSecretsInactive,
+          },
+          {
+            entry: hooks.hooks.userPromptTransformed?.[0],
+            input: { transformedPrompt: 'input payload' },
+            assertOutput: expectSecretsInactive,
+          },
+          {
+            entry: hooks.hooks.agentStop?.[0],
+            input: { sessionId: 'session', cwd: harness.cwd.path },
+            assertOutput: (stdout: string) => expect(stdout.trim()).toBe(''),
+          },
         ];
-        for (const [index, entry] of entries.entries()) {
+        for (const { entry, input, assertOutput } of cases) {
           const invocation = entry?.[HOOK_FIELD];
           expect(invocation).toBeDefined();
           const args = IS_WINDOWS
@@ -69,7 +91,7 @@ describe('Copilot hook command execution', () => {
           const child = Bun.spawn(args, {
             cwd: harness.cwd.path,
             env: harness.env(),
-            stdin: new Blob([JSON.stringify(inputs[index])]),
+            stdin: new Blob([JSON.stringify(input)]),
             stdout: 'pipe',
             stderr: 'pipe',
           });
@@ -79,8 +101,7 @@ describe('Copilot hook command execution', () => {
             child.exited,
           ]);
           expect(stderr).toBe('');
-          const output = JSON.parse(stdout) as Record<string, unknown>;
-          expect(Object.values(output).join(' ')).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
+          assertOutput(stdout);
           expect(exitCode).toBe(0);
         }
       },
@@ -88,3 +109,8 @@ describe('Copilot hook command execution', () => {
     );
   }
 });
+
+function expectSecretsInactive(stdout: string): void {
+  const output = JSON.parse(stdout) as Record<string, unknown>;
+  expect(Object.values(output).join(' ')).toContain(SECRETS_INACTIVE_UNAUTHENTICATED);
+}

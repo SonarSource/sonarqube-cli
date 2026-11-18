@@ -18,7 +18,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { IntegrationContext, SubfeatureDeclaration } from '@/core/framework/features';
+import type {
+  IntegrationContext,
+  ResourceDeclaration,
+  SubfeatureDeclaration,
+} from '@/core/framework/features';
 import { jsonPatch, wholeFile } from '@/core/framework/features';
 
 import {
@@ -33,18 +37,20 @@ import type { IntegrateAgentOptions } from '../types.ts';
 
 export const COMPLETION_ANALYSIS_HOOK_FEATURE_ID = 'completion-analysis-hook';
 
-const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
+export const STOP_SCRIPT_REL = 'sonar-stop/build-scripts/stop';
 
 interface CompletionAnalysisHookConfig {
-  agent: 'claude' | 'codex';
+  agent: 'claude' | 'codex' | 'copilot';
   configDir: string;
   settingsPath: (context: IntegrationContext) => string;
+  hookConfigResource?: ResourceDeclaration;
 }
 
 export function createCompletionAnalysisHookSubfeature<TOptions extends IntegrateAgentOptions>({
   agent,
   configDir,
   settingsPath,
+  hookConfigResource,
 }: CompletionAnalysisHookConfig): SubfeatureDeclaration<TOptions> {
   return {
     id: COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
@@ -61,24 +67,25 @@ export function createCompletionAnalysisHookSubfeature<TOptions extends Integrat
         },
         executable: true,
       }),
-      jsonPatch({
-        id: 'completion-analysis-hook-config',
-        displayName: 'Completion analysis hook configuration',
-        targetPath: settingsPath,
-        defaultValue: { hooks: {} },
-        patch: (document, context) =>
-          upsertAgentHooks(document, [
-            createAgentHookEntry(
-              context,
-              configDir,
-              'Stop',
-              undefined,
-              'sonar-stop',
-              STOP_SCRIPT_REL,
-            ),
-          ]),
-        removePatch: (document) => removeAgentHooks(document, ['sonar-stop']),
-      }),
+      hookConfigResource ??
+        jsonPatch({
+          id: 'completion-analysis-hook-config',
+          displayName: 'Completion analysis hook configuration',
+          targetPath: settingsPath,
+          defaultValue: { hooks: {} },
+          patch: (document, context) =>
+            upsertAgentHooks(document, [
+              createAgentHookEntry(
+                context,
+                configDir,
+                'Stop',
+                undefined,
+                'sonar-stop',
+                STOP_SCRIPT_REL,
+              ),
+            ]),
+          removePatch: (document) => removeAgentHooks(document, ['sonar-stop']),
+        }),
     ],
   };
 }
