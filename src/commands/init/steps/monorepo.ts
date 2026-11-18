@@ -176,9 +176,10 @@ async function createRootProject(
   { mapping, path, remote }: MonorepoRoot,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult> {
+  // Without a terminal, naming the root with --root is the consent to create its project.
   const outcome = await runUnboundNew(
     { path: 'unbound-new', projectRoot: mapping.projectRoot, remote },
-    deps,
+    deps.interactive ? deps : { ...deps, intent: { kind: 'create' } },
     { projectKey: mapping.projectKey },
     true,
   );

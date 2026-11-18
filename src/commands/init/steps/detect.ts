@@ -26,7 +26,7 @@ import {
   authMatchesRecordedConnection,
   authMatchesRecordedServer,
 } from '@/core/auth/recorded-connection.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -39,6 +39,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
 import type { InitPath } from '../init-outcome.ts';
+import type { InitIntent } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
@@ -47,6 +48,8 @@ export interface DetectDeps {
   http: SonarHttpClient;
   console: Console;
   interactive: boolean;
+  /** The path the caller consented to with `--link`, `--bind` or `--create`. */
+  intent?: InitIntent;
 }
 
 export function resolveProjectRoot(pathOption: string): string {
@@ -112,10 +115,23 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   }
 
   const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
-  if (!rawRemote) {
+  const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
+  const { intent } = deps;
+  if (intent?.kind === 'link' && intent.projectKey) {
+    return {
+      path: 'link-existing',
+      projectRoot,
+      remote,
+      projectKey: intent.projectKey,
+      requested: true,
+    };
+  }
+  if (!remote) {
+    if (intent?.kind === 'bind') {
+      throw bindingUnavailable('this directory has no git remote.');
+    }
     return { path: 'unbound-new', projectRoot };
   }
-  const remote = stripGitRemoteUrlUserinfo(rawRemote);
 
   // Only the server binding proves the project exists; a key in local config may name none.
   const binding = await lookupRemoteBinding(deps, remote);
@@ -171,29 +187,44 @@ function otherOrganizationError(
   );
 }
 
+function bindingUnavailable(reason: string): InvalidOptionError {
+  return new InvalidOptionError(
+    `--bind is unavailable: ${reason}`,
+    "Run 'sonar init' again with --create, or with --link <key> to link an existing project.",
+  );
+}
+
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive }: DetectDeps,
+  { auth, console, interactive, intent }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {
+    if (intent?.kind === 'bind') {
+      throw bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
+    }
     return { path: 'unbound-new', projectRoot, remote };
   }
   if (auth.connectionType !== 'cloud') {
-    console.info(
-      'Creating a bound project is only available on SonarQube Cloud for now.',
-      'stderr',
-    );
+    if (intent?.kind === 'bind') {
+      throw bindingUnavailable('creating a bound project is only available on SonarQube Cloud.');
+    }
+    if (!intent) {
+      console.info(
+        'Creating a bound project is only available on SonarQube Cloud for now.',
+        'stderr',
+      );
+    }
     return { path: 'unbound-new', projectRoot, remote };
   }
-  if (!interactive) {
-    console.info(
-      'Not binding the repository: this needs an answer, and none can be asked.',
-      'stderr',
-    );
-    return { path: 'unbound-new', projectRoot, remote };
+  if (intent?.kind === 'bind') {
+    return { path: 'bound-new', projectRoot, remote, repositorySlug };
+  }
+  if (intent || !interactive) {
+    // Without an intent, the unbound step asks for one once it knows no project exists.
+    return { path: 'unbound-new', projectRoot, remote, repositorySlug };
   }
 
   const bind = requireAnswer(
