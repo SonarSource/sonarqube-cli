@@ -110,8 +110,8 @@ export function validateIntentOptions(rawOptions: {
       `${given.join(', ')} cannot be combined: each picks a different onboarding path.`,
     );
   }
-  if (rawOptions.monorepo) {
-    assertMonorepoIntent(rawOptions);
+  if (rawOptions.monorepo && typeof rawOptions.link === 'string') {
+    assertMonorepoLinkKey();
   }
   if (rawOptions.bind) {
     return { kind: 'bind' };
@@ -127,20 +127,12 @@ export function validateIntentOptions(rawOptions: {
     : { kind: 'link' };
 }
 
-/** A monorepo run maps many roots, so only the modes that need no single project key or binding apply. */
-function assertMonorepoIntent(rawOptions: { link?: string | boolean; bind?: boolean }): void {
-  if (rawOptions.bind) {
-    throw new InvalidOptionError(
-      '--bind does not apply with --monorepo: a repository binds to a single project.',
-      'Name the roots to onboard with --root instead.',
-    );
-  }
-  if (typeof rawOptions.link === 'string') {
-    throw new InvalidOptionError(
-      '--link <key> does not apply with --monorepo: one key cannot serve several roots.',
-      'Use a bare --link, and name each root with --root <path>=<project key>.',
-    );
-  }
+/** A monorepo run maps many roots, so one project key cannot serve them. */
+function assertMonorepoLinkKey(): never {
+  throw new InvalidOptionError(
+    '--link <key> does not apply with --monorepo: one key cannot serve several roots.',
+    'Use a bare --link, and name each root with --root <path>=<project key>.',
+  );
 }
 
 /** An intent only goes unused when the directory was already linked, which is never changed. */
