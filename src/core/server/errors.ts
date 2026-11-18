@@ -25,6 +25,7 @@
  * built from an actual HTTP response.
  */
 import { NetworkConfigError } from '@/core/errors.ts';
+import { HTTP_STATUS_FORBIDDEN } from '@/core/server/http-constants.ts';
 
 export class TransportError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -92,6 +93,14 @@ export class AccessDeniedError extends Error {
     this.name = 'AccessDeniedError';
     this.status = status;
   }
+}
+
+/**
+ * A GET the token may not make. On SonarQube Cloud that is how a project of an organization the
+ * token cannot read answers, so it reads as "not in my organization" rather than as a failure.
+ */
+export function isForbiddenRead(error: unknown): error is AccessDeniedError {
+  return error instanceof AccessDeniedError && error.status === HTTP_STATUS_FORBIDDEN;
 }
 
 /** Thrown by the API client on any response status not classified by one of the above. */
