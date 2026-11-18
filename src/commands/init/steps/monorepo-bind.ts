@@ -45,13 +45,14 @@ export interface BindableRoot {
 
 /**
  * The repository slug the new roots can be bound through, or null when they cannot be: binding
- * needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on.
+ * needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on, unless
+ * `--bind` already gave the consent.
  */
 function bindableSlug(
   remote: string | undefined,
-  { auth, interactive }: DetectDeps,
+  { auth, interactive, intent }: DetectDeps,
 ): string | null {
-  if (!remote || !interactive || auth.connectionType !== 'cloud') {
+  if (!remote || (!interactive && intent?.kind !== 'bind') || auth.connectionType !== 'cloud') {
     return null;
   }
   return remoteRepositorySlug(remote);
@@ -71,18 +72,30 @@ export async function bindNewRoots(
   remote: string | undefined,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult[] | undefined> {
-  const slug = bindableSlug(remote, deps);
-  if (roots.length === 0 || slug === null) {
+  if (roots.length === 0) {
     return undefined;
+  }
+  // `--bind` is the consent to bind, so what it cannot do is reported, never replaced by an unbound project.
+  const required = deps.intent?.kind === 'bind';
+  const slug = bindableSlug(remote, deps);
+  if (slug === null) {
+    return required
+      ? allFailed(
+          roots,
+          '--bind is unavailable: it needs SonarQube Cloud and a GitHub or Azure DevOps git remote. Nothing was created.',
+        )
+      : undefined;
   }
   const { auth, http, console, dryRun } = deps;
   const noun = roots.length === 1 ? 'project' : 'projects';
-  const consent = requireAnswer(
-    await console.confirmPrompt(
-      `Bind the ${roots.length} new ${noun} to the repository '${slug}'?`,
-      true,
-    ),
-  );
+  const consent =
+    required ||
+    requireAnswer(
+      await console.confirmPrompt(
+        `Bind the ${roots.length} new ${noun} to the repository '${slug}'?`,
+        true,
+      ),
+    );
   if (!consent) {
     return undefined;
   }
@@ -102,7 +115,9 @@ export async function bindNewRoots(
   // One authorization serves every root: the batch below reuses the key it returns.
   const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
   if (!almKey) {
-    return undefined;
+    return required
+      ? allFailed(roots, 'The organization authorization was declined. Nothing was created.')
+      : undefined;
   }
   return importBatch(roots, slug, { ...org, almKey }, api, deps);
 }

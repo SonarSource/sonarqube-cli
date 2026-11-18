@@ -1359,13 +1359,10 @@ describe('sonar init', () => {
     );
 
     it(
-      'rejects --bind and --link <key> together with --monorepo',
+      'rejects --link <key> together with --monorepo',
       async () => {
-        const bind = await harness.run('init --monorepo --non-interactive --bind');
         const link = await harness.run('init --monorepo --non-interactive --link api-key');
 
-        expect(bind.exitCode).toBe(2);
-        expect(bind.stderr).toContain('--bind does not apply with --monorepo');
         expect(link.exitCode).toBe(2);
         expect(link.stderr).toContain('--link <key> does not apply with --monorepo');
       },
@@ -2687,6 +2684,24 @@ describe('sonar init', () => {
                 .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
                 .sort(),
             ).toEqual(['api=api-key', 'docs=docs-key', 'web=web-key']);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'binds every new root without asking with --bind, even without a terminal',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web', 'docs');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --bind --root web=web-key --root docs=docs-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Created and bound to the repository (2):');
           },
           TIMEOUT,
         );
