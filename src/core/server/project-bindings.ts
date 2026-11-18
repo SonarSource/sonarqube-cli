@@ -27,6 +27,17 @@ import { stripGitRemoteUrlUserinfo } from './git-remote-url.ts';
 import type { SonarHttpClient } from './http-client.ts';
 import { hasNextPage, type Paging } from './paging.ts';
 
+const DOP_PLATFORMS = ['github', 'gitlab', 'azure', 'bitbucket', 'bitbucketcloud'] as const;
+
+export type DopPlatform = (typeof DOP_PLATFORMS)[number];
+
+export interface DopSetting {
+  id: string;
+  key: string;
+  type: DopPlatform;
+  url?: string;
+}
+
 /** `unknown` covers every lookup that failed or answered unusably, so callers never read it as `unbound`. */
 export type GitRemoteBinding =
   | { kind: 'unbound' }
@@ -178,15 +189,16 @@ export class ProjectBindingsClient {
   // Admin / CI setup — SonarQube Server only (SQS v2 endpoints)
   // ---------------------------------------------------------------------------
 
-  listGitlabDopSettings(): ResultAsync<
-    Array<{ id: string; key: string; url: string }>,
-    HttpClientError
-  > {
+  listDopSettings(platform?: DopPlatform): ResultAsync<DopSetting[], HttpClientError> {
     return this.client
-      .get<{
-        dopSettings: Array<{ id: string; key: string; type: string; url: string }>;
-      }>('/api/v2/dop-translation/dop-settings')
-      .map((result) => result.dopSettings.filter((s) => s.type === 'gitlab'));
+      .get<DopSettingsResponse>('/api/v2/dop-translation/dop-settings')
+      .map((result) =>
+        result.dopSettings.flatMap(({ id, key, type, url }) =>
+          isDopPlatform(type) && (!platform || type === platform)
+            ? [{ id, key, type, ...(url ? { url } : {}) }]
+            : [],
+        ),
+      );
   }
 
   // filters by dopSettingId to avoid cross-ALM collisions (GitHub, Azure also populate `repository`)
@@ -214,6 +226,10 @@ export class ProjectBindingsClient {
   }
 }
 
+interface DopSettingsResponse {
+  dopSettings: Array<{ id: string; key: string; type: string; url?: string | null }>;
+}
+
 interface ProjectBindingsPageResponse {
   projectBindings: Array<{ projectKey: string; repository: string }>;
   page: Paging;
@@ -226,6 +242,10 @@ function mergeBindingsPage(
   for (const binding of result.projectBindings) {
     bindingMap.set(binding.repository, binding.projectKey);
   }
+}
+
+function isDopPlatform(type: string): type is DopPlatform {
+  return (DOP_PLATFORMS as readonly string[]).includes(type);
 }
 
 function isLastPage(
