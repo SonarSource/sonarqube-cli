@@ -31,7 +31,6 @@ import {
   throwOnInvalidConfig,
 } from '@/core/project-discovery/shared-project-config.ts';
 
-import type { InitOutcome } from '../init-outcome.ts';
 import type { MonorepoRootOption } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
 
@@ -84,29 +83,33 @@ export async function pickFolders(
 }
 
 /**
- * Asked once the user has agreed to link: the directory to link, or the outcome of onboarding
- * several folders instead, or `cancelled` when the user left the prompts so the caller can step
- * back. Without `deps.onboardPickedFolders` nothing is asked and `projectRoot` stays.
+ * Asked once the user has agreed to link: the one directory to link, or `cancelled` when the user
+ * left the prompts so the caller can step back. The agreed project maps to a single folder, so
+ * ticking several asks again; onboarding several folders is what `--monorepo` is for. Without
+ * `deps.pickLinkFolder` nothing is asked and `projectRoot` stays.
  */
 export async function chooseLinkFolder(
   projectRoot: string,
   deps: DetectDeps,
-): Promise<{ projectRoot: string } | { outcome: InitOutcome } | { cancelled: true }> {
-  const { onboardPickedFolders } = deps;
-  if (!onboardPickedFolders) {
+): Promise<{ projectRoot: string } | { cancelled: true }> {
+  if (!deps.pickLinkFolder) {
     return { projectRoot };
   }
-  let selection: FolderSelection | undefined;
-  try {
-    selection = await pickFolders(projectRoot, false, deps);
-  } catch (error) {
-    if (error instanceof FolderSelectionCancelledError) {
-      return { cancelled: true };
+  for (;;) {
+    let selection: FolderSelection | undefined;
+    try {
+      selection = await pickFolders(projectRoot, false, deps);
+    } catch (error) {
+      if (error instanceof FolderSelectionCancelledError) {
+        return { cancelled: true };
+      }
+      throw error;
     }
-    throw error;
+    if (selection?.kind !== 'monorepo') {
+      return { projectRoot: selection?.projectRoot ?? projectRoot };
+    }
+    deps.console.warn(
+      "A project links to one folder. Tick a single folder, or use 'sonar init --monorepo' to onboard several.",
+    );
   }
-  if (selection?.kind === 'monorepo') {
-    return { outcome: await onboardPickedFolders(selection.roots) };
-  }
-  return { projectRoot: selection?.projectRoot ?? projectRoot };
 }

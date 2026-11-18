@@ -1871,6 +1871,44 @@ describe('sonar init', () => {
     );
 
     it(
+      'asks again when several folders are ticked, since the agreed project links one folder',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('api/.keep', '');
+        harness.cwd.writeFile('web/.keep', '');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        await session.waitText('Choose another');
+        session.keyDown();
+        session.keyEnter();
+        await session.waitText('Choose the project folders');
+        for (const [index, name] of ['api', 'web'].entries()) {
+          session.write(name);
+          await session.waitText('1 match');
+          session.keyTab();
+          await session.waitText(`${index + 1} selected`);
+          session.write('\x7f'.repeat(name.length));
+        }
+        session.keyEnter();
+        await chooseRepositoryRoot(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
+        expect(result.stderr).toContain('A project links to one folder');
+        expect(result.stdout).not.toContain('Generated project key');
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config.match(/"projectKey"/g)).toHaveLength(1);
+      },
+      TIMEOUT,
+    );
+
+    it(
       'lets the user pick another existing project with the sonar link picker when declining',
       async () => {
         await signInToCloud((server) =>

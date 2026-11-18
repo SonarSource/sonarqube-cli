@@ -39,8 +39,8 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitOutcome, InitPath } from '../init-outcome.ts';
-import type { InitIntent, MonorepoRootOption } from '../options.ts';
+import type { InitPath } from '../init-outcome.ts';
+import type { InitIntent } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
@@ -54,15 +54,12 @@ export interface DetectDeps {
   /** The path the caller consented to with `--link`, `--bind` or `--create`. */
   intent?: InitIntent;
   /**
-   * Onboards several picked folders as monorepo roots, as `--root` would. Set only while the user
-   * may still be asked which folders to link; a callback because the steps cannot import `runMonorepo`.
-   */
-  /**
    * `--monorepo --link`: picks the existing project for a root named without a key, as
    * `sonar link --monorepo` does. Resolves to `null` when the root keeps its link.
    */
   chooseProject?: (projectRoot: string, items: readonly ConfigItem[]) => Promise<string | null>;
-  onboardPickedFolders?: (roots: readonly MonorepoRootOption[]) => Promise<InitOutcome>;
+  /** Set only while the user may still be asked which single folder to link. */
+  pickLinkFolder?: boolean;
 }
 
 export function resolveProjectRoot(pathOption: string): string {

@@ -90,17 +90,14 @@ export async function runLinkExisting(
   return (await linkInChosenFolder(projectKey, projectRoot, deps)) ?? unbound;
 }
 
-/** The user has agreed to link, so this is when they say which folder, or several, to link. */
+/** The user has agreed to link, so this is when they say which folder to link. */
 async function linkInChosenFolder(
   projectKey: string,
   projectRoot: string,
   deps: DetectDeps,
 ): Promise<InitOutcome | null> {
   const target = await chooseLinkFolder(projectRoot, deps);
-  if ('cancelled' in target) {
-    return null;
-  }
-  return 'outcome' in target ? target.outcome : linkProject(projectKey, target.projectRoot, deps);
+  return 'cancelled' in target ? null : linkProject(projectKey, target.projectRoot, deps);
 }
 
 /** `--link <key>` is checked before it is written, since nothing found it on the server. */

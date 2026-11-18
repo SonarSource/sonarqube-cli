@@ -201,7 +201,7 @@ async function run(
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)
-    ? { ...deps, onboardPickedFolders: (roots) => runMonorepo(projectRoot, deps, roots) }
+    ? { ...deps, pickLinkFolder: true }
     : deps;
   const detected = await detectInitPath(projectRoot, pickingDeps);
   return { outcome: await runDetectedPath(detected, pickingDeps, unboundNewOptions), auth, deps };
