@@ -102,7 +102,7 @@ async function resolveStopAnalysis(
   if (!acquired) {
     return skipStopAnalysis(session, 'fingerprint lock was not acquired');
   }
-  let shouldContinue: boolean | null = null;
+  let outcome: 'continue' | 'stop' | 'failed' = 'failed';
   try {
     const run = await runSqaaAnalysis(
       { cwd: input.cwd, forcedDepth: 'DEEP', format: 'json' },
@@ -146,18 +146,14 @@ async function resolveStopAnalysis(
       run.tally.totalIssues > 0
         ? formatSqaaJsonReportForHook(buildSqaaRunReport(run.prepared, run.tally))
         : null;
-    shouldContinue = Boolean(feedback) && acquired.analysisCount < ANALYSIS_LIMIT;
+    outcome = feedback ? 'continue' : 'stop';
     if (!feedback) {
       logger.debug('Vortex stop analysis completed without feedback');
       return null;
     }
-    const message = shouldContinue
-      ? 'Vortex analysis found the following issues. Fix them:'
-      : `Vortex analysis reached its limit of ${ANALYSIS_LIMIT} attempts. These issues remain:`;
-    return { findings: `${message}\n\n${feedback}`, shouldContinue };
+    return { findings: `Vortex analysis found the following issues. Fix them:\n\n${feedback}` };
   } finally {
     // Expired ownership rejects late results before continuation can reach the agent.
-    if (shouldContinue === null) finishAnalysis(acquired.lock, 'failed');
-    else finishAnalysis(acquired.lock, shouldContinue ? 'continue' : 'stop');
+    finishAnalysis(acquired.lock, outcome);
   }
 }
