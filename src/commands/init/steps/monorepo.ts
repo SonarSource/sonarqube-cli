@@ -20,7 +20,7 @@
 
 import { join } from 'node:path';
 
-import { InvalidOptionError, remediationHintFor } from '@/core/commands/command-error.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
 import { pathComparisonKey } from '@/core/io/fs-utils.ts';
@@ -43,6 +43,7 @@ import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
 import type { DetectDeps } from './detect.ts';
 import {
+  describeFailure,
   findLinkedProjectIssues,
   isRunFatal,
   type LinkedProjectIssue,
@@ -50,6 +51,7 @@ import {
   reportLinkedProjectIssues,
 } from './linked-projects.ts';
 import { linkCommand, writeMapping } from './mapping.ts';
+import { type BindableRoot, bindNewRoots } from './monorepo-bind.ts';
 import { runUnboundNew } from './unbound.ts';
 
 /** Where a mapped root stands against the active connection, before anything runs for it. */
@@ -80,12 +82,6 @@ interface MonorepoRoot {
   status: RootStatus;
   /** The git remote the keys were generated from, so a created project is named from the same input. */
   remote?: string;
-}
-
-function describeFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : 'Unexpected failure.';
-  const hint = remediationHintFor(error);
-  return hint ? `${message}\n${hint}` : message;
 }
 
 async function classifyRoot(
@@ -239,8 +235,13 @@ async function onboardRoot(
   root: MonorepoRoot,
   deps: DetectDeps,
   linkOnly: boolean,
+  bound: ReadonlyMap<string, MonorepoRootResult>,
 ): Promise<MonorepoRootResult> {
   const { path, mapping, status } = root;
+  const batched = bound.get(path);
+  if (batched) {
+    return batched;
+  }
   if (status.kind === 'configured') {
     return {
       path,
@@ -323,7 +324,36 @@ export async function runMonorepo(
     ),
   );
   reportRootProblems(roots, deps);
-  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps, linkOnly) };
+  // `--link` never creates a project, and binding is a way of creating one.
+  const bound = linkOnly ? new Map() : await bindNewRootsTogether(roots, repositoryRoot, deps);
+  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps, linkOnly, bound) };
+}
+
+/**
+ * The roots that need a new project are bound to the repository in one call, asked once, before
+ * any root runs. A root left out of it (the user declined, or the repository cannot be bound) is
+ * created without binding by its own path afterwards.
+ */
+async function bindNewRootsTogether(
+  roots: readonly MonorepoRoot[],
+  repositoryRoot: string,
+  deps: DetectDeps,
+): Promise<Map<string, MonorepoRootResult>> {
+  const newRoots = roots.filter(({ status }) => status.kind === 'new');
+  if (newRoots.length === 0) {
+    return new Map();
+  }
+  const { gitRoot, isGit } = findGitRoot(repositoryRoot);
+  const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
+  const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
+  const bindable = newRoots.map(({ path, mapping }): BindableRoot => ({
+    path,
+    projectRoot: mapping.projectRoot,
+    projectKey: mapping.projectKey,
+    projectName: generateProjectProposal(mapping.projectRoot, remote, deps.auth.orgKey).projectName,
+  }));
+  const results = (await bindNewRoots(bindable, remote, deps)) ?? [];
+  return new Map(results.map((result) => [result.path, result]));
 }
 
 /** Said before any root is onboarded, while the user can still stop: these roots are left as they are. */
@@ -515,10 +545,11 @@ function onboardInOrder(
   roots: readonly MonorepoRoot[],
   deps: DetectDeps,
   linkOnly: boolean,
+  bound: ReadonlyMap<string, MonorepoRootResult>,
 ): Promise<MonorepoRootResult[]> {
   return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const results = await previous;
-    results.push(await onboardRoot(root, deps, linkOnly));
+    results.push(await onboardRoot(root, deps, linkOnly, bound));
     return results;
   }, Promise.resolve([]));
 }
