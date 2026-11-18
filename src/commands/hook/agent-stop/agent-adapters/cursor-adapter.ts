@@ -18,11 +18,24 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-/**
- * Render a Cursor rule (`.cursor/rules/*.mdc`) with always-on activation. The
- * `alwaysApply: true` front-matter makes Cursor inject the body into every
- * session without the user attaching it manually.
- */
-export function buildCursorAlwaysOnRule(body: string): string {
-  return `---\nalwaysApply: true\n---\n\n${body.trimEnd()}\n`;
+import { workspaceRootToPath } from '../../cursor-ignore.ts';
+import type { StopAgentAdapter } from '../types.ts';
+
+interface CursorStopPayload {
+  conversation_id: string;
+  workspace_roots: string[];
+  status: 'completed' | 'aborted' | 'error';
 }
+
+export const cursorAdapter: StopAgentAdapter = {
+  parse: (payload) => {
+    const p = payload as CursorStopPayload;
+    const root = p.workspace_roots[0];
+    return {
+      sessionId: p.conversation_id,
+      cwd: root ? workspaceRootToPath(root) : '',
+      skipAnalysisReason: p.status !== 'completed' ? `agent status is ${p.status}` : undefined,
+    };
+  },
+  emit: ({ findings, shouldContinue }) => (shouldContinue ? { followup_message: findings } : {}),
+};
