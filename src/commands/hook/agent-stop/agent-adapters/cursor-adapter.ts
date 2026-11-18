@@ -24,6 +24,7 @@ import type { StopAgentAdapter } from '../types.ts';
 interface CursorStopPayload {
   conversation_id: string;
   workspace_roots: string[];
+  status: 'completed' | 'aborted' | 'error';
 }
 
 export const cursorAdapter: StopAgentAdapter = {
@@ -33,6 +34,7 @@ export const cursorAdapter: StopAgentAdapter = {
     return {
       sessionId: p.conversation_id,
       cwd: root ? workspaceRootToPath(root) : '',
+      skipAnalysisReason: p.status !== 'completed' ? `agent status is ${p.status}` : undefined,
     };
   },
   emit: ({ findings, shouldContinue }) => (shouldContinue ? { followup_message: findings } : {}),

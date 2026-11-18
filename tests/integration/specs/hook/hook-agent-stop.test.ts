@@ -843,6 +843,16 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
     }, 15000);
 
     if (agent.name === 'cursor') {
+      it.each(['aborted', 'error', undefined, null, 'unknown'])(
+        'skips analysis for Cursor status %j',
+        async (status) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(await invoke({ status }));
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
+
       it.each(
         [undefined, null, [], [null], [42], [''], ['   ']].map((workspaceRoots) => ({
           workspaceRoots,

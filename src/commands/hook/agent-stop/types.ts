@@ -23,6 +23,7 @@ export type StopAgent = 'claude' | 'codex' | 'copilot' | 'cursor';
 export interface StopInput {
   sessionId: string;
   cwd: string;
+  skipAnalysisReason?: string;
 }
 
 export interface StopOutput {

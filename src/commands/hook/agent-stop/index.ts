@@ -23,6 +23,7 @@ import { fingerprintGitChangeSet } from '@/commands/analyze/sqaa-fingerprint.ts'
 import { buildSqaaRunReport, runSqaaAnalysis } from '@/commands/analyze/sqaa-run.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
+import type { AnalysisSession } from '@/core/vortex/deep-analysis/state.ts';
 import {
   acquireAnalysisLock,
   finishAnalysis,
@@ -66,6 +67,12 @@ export async function agentStop(
   return { agentSessionId: sessionId ?? null };
 }
 
+function skipStopAnalysis(session: AnalysisSession, reason: string): null {
+  logger.debug(`Vortex stop analysis skipped: ${reason}`);
+  resetAnalysisCounterIfIdle(session);
+  return null;
+}
+
 async function resolveStopAnalysis(
   ctx: CommandInvocationContext,
   agent: string,
@@ -76,24 +83,21 @@ async function resolveStopAnalysis(
     return null;
   }
   const session = { agent, session_id: input.sessionId };
+  if (input.skipAnalysisReason) {
+    return skipStopAnalysis(session, input.skipAnalysisReason);
+  }
   // An empty cwd would resolve to the hook process's own directory instead of the agent's.
   if (typeof input.cwd !== 'string' || input.cwd.trim() === '') {
-    logger.debug('Vortex stop analysis skipped: no working directory');
-    resetAnalysisCounterIfIdle(session);
-    return null;
+    return skipStopAnalysis(session, 'no working directory');
   }
   const connection = await ctx.resolveConnection();
   if (!connection) {
-    logger.debug('Vortex stop analysis skipped: no connection');
-    resetAnalysisCounterIfIdle(session);
-    return null;
+    return skipStopAnalysis(session, 'no connection');
   }
   const fingerprint = await fingerprintGitChangeSet(input.cwd);
   const acquired = acquireAnalysisLock({ ...session, fingerprint, analysisLimit: ANALYSIS_LIMIT });
   if (!acquired) {
-    logger.debug('Vortex stop analysis skipped: fingerprint lock was not acquired');
-    resetAnalysisCounterIfIdle(session);
-    return null;
+    return skipStopAnalysis(session, 'fingerprint lock was not acquired');
   }
   let shouldContinue: boolean | null = null;
   try {
