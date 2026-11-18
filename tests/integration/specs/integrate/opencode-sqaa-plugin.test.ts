@@ -127,6 +127,38 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
   );
 
   it(
+    'cancels an in-flight completion analysis when the plugin is disposed',
+    async () => {
+      const started = harness.userHome.file('analysis-started');
+      let releaseAnalysis!: () => void;
+      const analysisBlocked = new Promise<void>((resolve) => {
+        releaseAnalysis = resolve;
+      });
+      await setUp({
+        sqaa: {
+          beforeSqaaResponse: async () => {
+            harness.userHome.writeFile('analysis-started', 'ready');
+            await analysisBlocked;
+          },
+        },
+      });
+      harness.cwd.writeFile('a.ts', 'const unused = 1;');
+      try {
+        // The server stays blocked until disposal finishes, so cleanup must cancel the hook.
+        const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')], {
+          disposeWhenFileExists: started.path,
+        });
+        expect(sqaaCalls()).toBe(1);
+        expect(run.prompts).toEqual([]);
+        expect(run.results[0].error).toBeNull();
+      } finally {
+        releaseAnalysis();
+      }
+    },
+    { timeout: 60000 },
+  );
+
+  it(
     'skips subagents, unrelated locations, and malformed completion events',
     async () => {
       await setUp();

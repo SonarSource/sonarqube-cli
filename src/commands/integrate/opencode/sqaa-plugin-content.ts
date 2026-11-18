@@ -90,6 +90,7 @@ export default {
               COMPLETION_TIMEOUT_MS,
               directory,
               ['--agent', 'opencode'],
+              controller.signal,
             );
             if (controller.signal.aborted || response.shouldContinue !== true ||
                 typeof response.findings !== 'string' || !response.findings.trim()) continue;
