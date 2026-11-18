@@ -19,5 +19,17 @@
         "executionMode": "branch"
       }
     }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^src/commands/admin/onboard-ci/github/templates\\.ts$/"
+      ],
+      "matchStrings": [
+        "const (?:CHECKOUT|SCAN)_ACTION = '(?<depName>[^'@]+)@(?<currentValue>[^']+)'"
+      ],
+      "datasourceTemplate": "github-tags"
+    }
   ]
 }
