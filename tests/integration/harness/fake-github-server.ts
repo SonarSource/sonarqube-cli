@@ -53,6 +53,7 @@ export class FakeGitHubServer {
   constructor(
     private readonly server: ReturnType<typeof Bun.serve>,
     private readonly requests: RecordedRequest[],
+    private readonly repositories: Map<string, Repository>,
   ) {}
 
   baseUrl(): string {
@@ -61,6 +62,14 @@ export class FakeGitHubServer {
 
   getRecordedRequests(): RecordedRequest[] {
     return [...this.requests];
+  }
+
+  closePullRequest(repo: string, number: number): void {
+    const pr = this.repositories.get(repo)?.pullRequests.find((pr) => pr.number === number);
+    if (!pr) {
+      throw new Error(`Pull request ${repo}#${number} not found.`);
+    }
+    pr.state = 'closed';
   }
 
   async stop(): Promise<void> {
@@ -299,7 +308,10 @@ export class FakeGitHubServerBuilder {
               head.sha === base.sha ||
               !payload.title ||
               repo.pullRequests.some(
-                (pr) => pr.head.ref === payload.head && pr.base.ref === payload.base,
+                (pr) =>
+                  pr.state === 'open' &&
+                  pr.head.ref === payload.head &&
+                  pr.base.ref === payload.base,
               )
             ) {
               return Response.json(
@@ -322,7 +334,7 @@ export class FakeGitHubServerBuilder {
         return Response.json({ message: 'Not Found' }, { status: 404 });
       },
     });
-    return Promise.resolve(new FakeGitHubServer(server, requests));
+    return Promise.resolve(new FakeGitHubServer(server, requests, repositories));
   }
 }
 
