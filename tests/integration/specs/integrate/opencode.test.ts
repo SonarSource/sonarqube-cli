@@ -209,8 +209,12 @@ describe('integrate opencode — Vortex SQAA feature', () => {
   });
 
   it(
-    'writes the SQAA plugin and the AGENTS.md protocol when Vortex is entitled',
+    'installs completion analysis and removes the old managed protocol when Vortex is entitled',
     async () => {
+      harness.userHome.writeFile(
+        '.config/opencode/AGENTS.md',
+        '# My instructions\n\n<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->\nOld DEEP instructions\n<!-- sonar:end:sonarqube-agentic-analysis-protocol -->\n',
+      );
       const server = await harness
         .newFakeServer()
         .withAuthToken('cloud-token')
@@ -233,9 +237,10 @@ describe('integrate opencode — Vortex SQAA feature', () => {
       expect(plugin.exists()).toBe(true);
       expect(plugin.asText()).toContain('opencode-post-tool-use');
       const agentsMd = harness.userHome.file('.config', 'opencode', 'AGENTS.md').asText();
-      expect(agentsMd).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
-      expect(agentsMd).toContain('# Vortex analysis protocol');
-      expect(agentsMd).toContain('sonar analyze agentic --depth DEEP');
+      expect(plugin.asText()).toContain('session.execution.succeeded');
+      expect(agentsMd).toContain('# My instructions');
+      expect(agentsMd).not.toContain('sonarqube-agentic-analysis-protocol');
+      expect(agentsMd).not.toContain('Old DEEP instructions');
       expect(
         findInstalledSubfeature(harness, 'opencode', VORTEX_FEATURE_ID, SQAA_HOOK_FEATURE_ID),
       ).toBeDefined();
@@ -246,7 +251,7 @@ describe('integrate opencode — Vortex SQAA feature', () => {
           VORTEX_FEATURE_ID,
           SQAA_INSTRUCTIONS_SUBFEATURE_ID,
         ),
-      ).toBeDefined();
+      ).toBeUndefined();
     },
     { timeout: 30000 },
   );
@@ -334,7 +339,7 @@ describe('integrate opencode — Vortex Context feature', () => {
       expect(agentsMd).toContain(CONTEXT_AUGMENTATION_INSTRUCTIONS_BODY.trim());
       expect(agentsMd).toContain('In a repository with several SonarQube projects');
       expect(agentsMd).toContain('sonar link list --path <path>');
-      expect(agentsMd).toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
+      expect(agentsMd).not.toContain('<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->');
       expect(
         findInstalledSubfeature(
           harness,
