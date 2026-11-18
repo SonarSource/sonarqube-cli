@@ -83,6 +83,7 @@ function parseCoverage(value: unknown): Coverage | undefined {
       throw invalid();
   }
   if (typeof covered === 'number' && typeof total === 'number' && covered > total) throw invalid();
+  if (percentage === null && covered === null && total === null) return undefined;
   return {
     ...(percentage !== null ? { coverage: percentage } : {}),
     ...(covered !== null ? { coveredArtifacts: covered as number } : {}),
@@ -98,6 +99,7 @@ export function aggregateCoverage(
   let covered = 0;
   let total = 0;
   let nonEmptyLanguages = 0;
+  let singleCoverage: number | undefined;
   for (const summary of summaries) {
     const data = summary.coverage;
     if (data?.coveredArtifacts == null || data.totalArtifacts == null) return undefined;
@@ -107,13 +109,16 @@ export function aggregateCoverage(
         Math.abs(data.coverage - (data.coveredArtifacts / data.totalArtifacts) * 100) > 1e-8)
     )
       return undefined;
-    if (data.totalArtifacts > 0) nonEmptyLanguages++;
+    if (data.totalArtifacts > 0) {
+      nonEmptyLanguages++;
+      singleCoverage = data.coverage;
+    }
     covered += data.coveredArtifacts;
     total += data.totalArtifacts;
     if (!Number.isSafeInteger(covered) || !Number.isSafeInteger(total)) throw invalid();
   }
   return {
-    ...(total === 0 || nonEmptyLanguages > 1 ? {} : { coverage: (covered / total) * 100 }),
+    ...(total === 0 || nonEmptyLanguages > 1 ? {} : { coverage: singleCoverage }),
     coveredArtifacts: covered,
     totalArtifacts: total,
   };

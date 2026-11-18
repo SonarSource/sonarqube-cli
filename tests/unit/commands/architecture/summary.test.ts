@@ -84,8 +84,17 @@ describe('architecture summary response', () => {
         { ...summary, coverage: { coverage: null, coveredArtifacts: null, totalArtifacts: null } },
       ],
     }).summaries;
-    expect(missing[0].coverage?.coverage).toBeUndefined();
+    expect(missing[0].coverage).toBeUndefined();
     expect(aggregateCoverage(missing)).toBeUndefined();
+  });
+
+  it('preserves the API score for one language', () => {
+    const rows = parseSummaries({
+      projectSummaries: [
+        { ...summary, coverage: { coverage: 33.33333333, coveredArtifacts: 1, totalArtifacts: 3 } },
+      ],
+    }).summaries;
+    expect(aggregateCoverage(rows)?.coverage).toBe(33.33333333);
   });
 
   it('rejects malformed coverage and impossible counts', () => {
