@@ -32,6 +32,7 @@ import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
+import type { ConfigItem } from '@/core/project-discovery/shared-project-config.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
@@ -56,6 +57,11 @@ export interface DetectDeps {
    * Onboards several picked folders as monorepo roots, as `--root` would. Set only while the user
    * may still be asked which folders to link; a callback because the steps cannot import `runMonorepo`.
    */
+  /**
+   * `--monorepo --link`: picks the existing project for a root named without a key, as
+   * `sonar link --monorepo` does. Resolves to `null` when the root keeps its link.
+   */
+  chooseProject?: (projectRoot: string, items: readonly ConfigItem[]) => Promise<string | null>;
   onboardPickedFolders?: (roots: readonly MonorepoRootOption[]) => Promise<InitOutcome>;
 }
 

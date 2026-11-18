@@ -20,6 +20,10 @@
 
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
+import {
+  chooseProjectKey,
+  ProjectSelectionCancelledError,
+} from '@/commands/link/choose-project.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -191,7 +195,9 @@ async function run(
   if (monorepo) {
     const roots = await monorepoRootsToOnboard(projectRoot, monorepoRoots, deps, interactive);
     const linkOnly = intent?.kind === 'link';
-    return { outcome: await runMonorepo(projectRoot, deps, roots, linkOnly), auth, deps };
+    const monorepoDeps: DetectDeps =
+      linkOnly && interactive ? { ...deps, chooseProject: projectChooser(ctx, auth) } : deps;
+    return { outcome: await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly), auth, deps };
   }
   // The folders are asked about only once the user agrees to link, so the steps do the asking.
   const pickingDeps: DetectDeps = askFolders(settings, intent)
@@ -199,6 +205,23 @@ async function run(
     : deps;
   const detected = await detectInitPath(projectRoot, pickingDeps);
   return { outcome: await runDetectedPath(detected, pickingDeps, unboundNewOptions), auth, deps };
+}
+
+/** The project prompts of `sonar link`, with leaving them ending the onboarding. */
+function projectChooser(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+): NonNullable<DetectDeps['chooseProject']> {
+  const authenticated = ctx.withAuth(auth);
+  return async (projectRoot, items) => {
+    try {
+      return await chooseProjectKey(projectRoot, true, items, authenticated);
+    } catch (error) {
+      throw error instanceof ProjectSelectionCancelledError
+        ? new OnboardingCancelledError()
+        : error;
+    }
+  };
 }
 
 /** Without `--root`, an interactive `--monorepo` run asks which folders to onboard. */

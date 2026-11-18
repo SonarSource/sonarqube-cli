@@ -2211,6 +2211,83 @@ describe('sonar init', () => {
     );
 
     it(
+      'with --link asks which existing project each picked folder gets, and never creates one',
+      async () => {
+        await signInToCloud((server) => server.withProject('api-key'));
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile('api/.keep', '');
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('Choose a project');
+        session.write('api-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('Generated project key');
+        expect(result.stdout).toContain("Mapped api to project 'api-key'.");
+        expect(harness.cwd.file('.sonar-config.json').asText()).toContain(
+          '"projectKey": "api-key"',
+        );
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'with --link offers a picked root that is already mapped another project, and keeps it when declined',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        const before = harness.cwd.file('.sonar-config.json').asText();
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('is already linked to project api-key');
+        await session.decline('Link it to another project instead?');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'with --link remaps a picked root that is already mapped when the user chooses another project',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('Link it to another project instead?');
+        session.write('y');
+        await session.waitText('Choose a project');
+        session.write('web-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Mapped api to project 'web-key'.");
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config).toContain('"projectKey": "web-key"');
+        expect(config).not.toContain('api-key');
+      },
+      TIMEOUT,
+    );
+
+    it(
       'reads the roots of a nested config, reports them as configured and warns where mappings are saved',
       async () => {
         const serverUrl = await signInToCloud((server) =>

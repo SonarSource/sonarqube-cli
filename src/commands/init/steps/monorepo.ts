@@ -28,8 +28,11 @@ import { relativeProjectPath, resolveProjectTarget } from '@/core/project-discov
 import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
 import { discoverProjects } from '@/core/project-discovery/project-info.ts';
 import {
+  type ConfigItem,
   resolveContainedPath,
+  sharedProjectConfigFile,
   sharedProjectConfigRepository,
+  throwOnInvalidConfig,
 } from '@/core/project-discovery/shared-project-config.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
 import { ProjectsClient } from '@/core/server/projects.ts';
@@ -126,11 +129,13 @@ async function classifyExplicitRoot(
   repositoryRoot: string,
   path: string,
   deps: DetectDeps,
+  relinked: boolean,
 ): Promise<RootStatus> {
   const recorded = (await sharedProjectConfigRepository.load(repositoryRoot)).find(
     ({ projectRoot }) => projectRoot === mapping.projectRoot,
   );
-  if (recorded === undefined) {
+  // A relink was asked for at the prompt, so the recorded key is replaced, not a conflict.
+  if (recorded === undefined || relinked) {
     return classifyRoot(mapping, deps);
   }
   return recorded.projectKey === mapping.projectKey
@@ -144,6 +149,7 @@ async function inspectRoot(
   repositoryRoot: string,
   deps: DetectDeps,
   explicit: boolean,
+  relinked: ReadonlySet<string>,
 ): Promise<MonorepoRoot> {
   const path = relativeProjectPath(repositoryRoot, mapping.projectRoot);
   if (!explicit) {
@@ -153,7 +159,13 @@ async function inspectRoot(
     return {
       mapping,
       path,
-      status: await classifyExplicitRoot(mapping, repositoryRoot, path, deps),
+      status: await classifyExplicitRoot(
+        mapping,
+        repositoryRoot,
+        path,
+        deps,
+        relinked.has(mapping.projectRoot),
+      ),
     };
   } catch (error) {
     if (isRunFatal(error)) {
@@ -276,7 +288,7 @@ export async function runMonorepo(
 ): Promise<InitOutcome> {
   const { console } = deps;
   const explicit = explicitRoots.length > 0;
-  const { mappings, repositoryRoot, configDir, generatedKeys, remote } = explicit
+  const { mappings, repositoryRoot, configDir, generatedKeys, remote, relinked } = explicit
     ? await mapExplicitRoots(projectRoot, explicitRoots, deps, linkOnly)
     : await discoverMappedRoots(projectRoot, deps);
   if (mappings.length === 0) {
@@ -290,7 +302,7 @@ export async function runMonorepo(
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
     Promise.all(
       mappings.map(async (mapping) => ({
-        ...(await inspectRoot(mapping, repositoryRoot, deps, explicit)),
+        ...(await inspectRoot(mapping, repositoryRoot, deps, explicit, relinked ?? new Set())),
         remote,
       })),
     ),
@@ -328,6 +340,8 @@ interface MappedRoots {
   generatedKeys?: GeneratedKey[];
   /** Credential-free git remote of the repository; only read for `--root` roots. */
   remote?: string;
+  /** Roots the user pointed at another project than the one recorded, at the project prompt. */
+  relinked?: Set<string>;
 }
 
 async function discoverMappedRoots(projectRoot: string, deps: DetectDeps): Promise<MappedRoots> {
@@ -365,13 +379,35 @@ function keyForUnkeyedRoot(
       };
 }
 
+/**
+ * Exactly 'sonar link --monorepo': a linked root is offered a relink, the others a detected
+ * project or a search. One root's prompts finish before the next root's start. A root the user
+ * keeps as it is stays out of the result.
+ */
+function pickProjects(
+  roots: readonly { path: string; resolved: string }[],
+  { chooseProject, console }: Pick<DetectDeps, 'chooseProject' | 'console'>,
+  items: readonly ConfigItem[],
+): Promise<Map<string, string>> {
+  return roots.reduce(async (previous, { path, resolved }) => {
+    const picked = await previous;
+    console.info(`Choosing the project for ${path}`);
+    const projectKey = await chooseProject?.(resolved, items);
+    if (projectKey) {
+      picked.set(resolved, projectKey);
+    }
+    return picked;
+  }, Promise.resolve(new Map<string, string>()));
+}
+
 /** Turns `--root` values into mappings on the active connection, before any root is touched. */
 async function mapExplicitRoots(
   projectRoot: string,
   explicitRoots: readonly MonorepoRootOption[],
-  { auth, interactive }: DetectDeps,
+  deps: DetectDeps,
   linkOnly: boolean,
 ): Promise<MappedRoots> {
+  const { auth } = deps;
   const { targetDir } = await resolveProjectTarget(projectRoot);
   const needsKey = explicitRoots.some(({ projectKey }) => projectKey === undefined);
   const recorded = needsKey ? await sharedProjectConfigRepository.load(targetDir) : [];
@@ -379,20 +415,33 @@ async function mapExplicitRoots(
   const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
   const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
 
-  const generatedKeys: GeneratedKey[] = [];
-  const mappings = explicitRoots.map(({ path, projectKey }) => {
-    const resolved = resolveContainedPath(targetDir, path);
+  const roots = explicitRoots.map((root) => {
+    const resolved = resolveContainedPath(targetDir, root.path);
     if (resolved === null) {
       throw new InvalidOptionError(
-        `--root path "${path}" must point to an existing directory inside ${targetDir}.`,
+        `--root path "${root.path}" must point to an existing directory inside ${targetDir}.`,
       );
     }
+    return { ...root, resolved };
+  });
+  const picked =
+    linkOnly && deps.chooseProject
+      ? await pickProjects(
+          roots.filter(({ projectKey }) => projectKey === undefined),
+          deps,
+          await sharedProjectConfigFile.readItems(targetDir, throwOnInvalidConfig),
+        )
+      : new Map<string, string>();
+
+  const generatedKeys: GeneratedKey[] = [];
+  const mappings = roots.map(({ path, projectKey, resolved }) => {
+    const named = projectKey ?? picked.get(resolved);
     const key =
-      projectKey === undefined
+      named === undefined
         ? keyForUnkeyedRoot(resolved, recorded, remote, auth)
-        : { projectKey, generated: false };
-    // Scripts get no say in a guessed key, so link-only wants it named; the user at a prompt sees it printed.
-    if (linkOnly && !interactive && key.generated) {
+        : { projectKey: named, generated: false };
+    // Scripts get no say in a guessed key, so link-only wants it named.
+    if (linkOnly && key.generated && !deps.interactive) {
       throw new InvalidOptionError(
         `--link needs an existing project for ${path}, but no key is recorded for it.`,
         `Name it with --root ${path}=<project key>.`,
@@ -408,6 +457,14 @@ async function mapExplicitRoots(
       organization: auth.orgKey,
     };
   });
+  // A key picked at the prompt that differs from the recorded one is a relink, not a conflict.
+  const relinked = new Set(
+    [...picked]
+      .filter(
+        ([root, key]) => recorded.find(({ projectRoot: r }) => r === root)?.projectKey !== key,
+      )
+      .map(([root]) => root),
+  );
   const repeated = mappings.find(
     ({ projectKey }, index) =>
       mappings.findIndex((other) => other.projectKey === projectKey) !== index,
@@ -418,7 +475,7 @@ async function mapExplicitRoots(
       'Name a different key for one of them with --root <path>=<project key>.',
     );
   }
-  return { mappings, repositoryRoot: targetDir, generatedKeys, remote };
+  return { mappings, repositoryRoot: targetDir, generatedKeys, remote, relinked };
 }
 
 /** Mappings are always saved at the repository root, so a nested or main-worktree file stays as it is. */
