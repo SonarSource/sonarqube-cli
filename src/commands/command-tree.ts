@@ -897,6 +897,18 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       collectRoot,
     )
     .option(
+      '--link [key]',
+      'Link this directory to an existing project without prompting: the one found for the repository, or the project named by key',
+    )
+    .option(
+      '--bind',
+      'Create a new project bound to the repository without prompting (SonarQube Cloud, with the organization linked to your DevOps platform)',
+    )
+    .option(
+      '--create',
+      'Create a new unbound project (without repository binding) without prompting, optionally configured by --project, --name and --visibility',
+    )
+    .option(
       '--project <key>',
       'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
     )
@@ -907,6 +919,10 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option(
       '--visibility <visibility>',
       'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
+    )
+    .option(
+      '--scan',
+      'Run the first analysis of a newly created unbound project without asking; --scanner-property and --detach only apply when the analysis runs',
     )
     .option(
       '--scanner-property <key=value>',
