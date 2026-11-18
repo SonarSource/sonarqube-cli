@@ -1980,6 +1980,23 @@ describe('sonar init', () => {
       );
 
       it(
+        'names a created root from the git remote, as it does when generating its key',
+        async () => {
+          const server = await startServer(() => {});
+          withRemote(GITLAB_REMOTE);
+
+          const result = await harness.run('init --monorepo --non-interactive --root .=web-key');
+
+          expect(result.exitCode).toBe(0);
+          const [request] = server
+            .getRecordedRequests()
+            .filter(({ path }) => path === '/api/projects/create');
+          expect(new URLSearchParams(request.body).get('name')).toBe('repository');
+        },
+        TIMEOUT,
+      );
+
+      it(
         'generates, prints and records the key of a root named without one',
         async () => {
           const server = await startServer(() => {});

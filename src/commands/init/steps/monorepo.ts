@@ -75,6 +75,8 @@ interface MonorepoRoot {
   /** Relative to the repository root, for display and the summary. */
   path: string;
   status: RootStatus;
+  /** The git remote the keys were generated from, so a created project is named from the same input. */
+  remote?: string;
 }
 
 function describeFailure(error: unknown): string {
@@ -171,11 +173,11 @@ async function mapExistingRoot(
 }
 
 async function createRootProject(
-  { mapping, path }: MonorepoRoot,
+  { mapping, path, remote }: MonorepoRoot,
   deps: DetectDeps,
 ): Promise<MonorepoRootResult> {
   const outcome = await runUnboundNew(
-    { path: 'unbound-new', projectRoot: mapping.projectRoot },
+    { path: 'unbound-new', projectRoot: mapping.projectRoot, remote },
     deps,
     { projectKey: mapping.projectKey },
     true,
@@ -254,7 +256,7 @@ export async function runMonorepo(
 ): Promise<InitOutcome> {
   const { console } = deps;
   const explicit = explicitRoots.length > 0;
-  const { mappings, repositoryRoot, configDir, generatedKeys } = explicit
+  const { mappings, repositoryRoot, configDir, generatedKeys, remote } = explicit
     ? await mapExplicitRoots(projectRoot, explicitRoots, deps)
     : await discoverMappedRoots(projectRoot, deps);
   if (mappings.length === 0) {
@@ -266,7 +268,12 @@ export async function runMonorepo(
     console.print(`Generated project key for ${path}: ${projectKey}`);
   });
   const roots = await console.withSpinner('Checking the mapped project roots', () =>
-    Promise.all(mappings.map((mapping) => inspectRoot(mapping, repositoryRoot, deps, explicit))),
+    Promise.all(
+      mappings.map(async (mapping) => ({
+        ...(await inspectRoot(mapping, repositoryRoot, deps, explicit)),
+        remote,
+      })),
+    ),
   );
   reportRootProblems(roots, deps);
   return { kind: 'monorepo', roots: await onboardInOrder(roots, deps) };
@@ -299,6 +306,8 @@ interface MappedRoots {
   configDir?: string;
   /** Roots named without a key, with the one generated for each. */
   generatedKeys?: GeneratedKey[];
+  /** Credential-free git remote of the repository; only read for `--root` roots. */
+  remote?: string;
 }
 
 async function discoverMappedRoots(projectRoot: string, deps: DetectDeps): Promise<MappedRoots> {
@@ -346,7 +355,7 @@ async function mapExplicitRoots(
   const needsKey = explicitRoots.some(({ projectKey }) => projectKey === undefined);
   const recorded = needsKey ? await sharedProjectConfigRepository.load(targetDir) : [];
   const { gitRoot, isGit } = findGitRoot(targetDir);
-  const rawRemote = needsKey && isGit ? await getGitRemote(gitRoot) : '';
+  const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
   const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
 
   const generatedKeys: GeneratedKey[] = [];
@@ -381,7 +390,7 @@ async function mapExplicitRoots(
       'Name a different key for one of them with --root <path>=<project key>.',
     );
   }
-  return { mappings, repositoryRoot: targetDir, generatedKeys };
+  return { mappings, repositoryRoot: targetDir, generatedKeys, remote };
 }
 
 /** Mappings are always saved at the repository root, so a nested or main-worktree file stays as it is. */
