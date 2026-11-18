@@ -20,10 +20,18 @@
 
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 
+/** Its own type so a loop over several roots can tell a cancellation from a failure of one root. */
+export class OnboardingCancelledError extends CommandFailedError {
+  constructor() {
+    super('Onboarding cancelled.');
+    this.name = 'OnboardingCancelledError';
+  }
+}
+
 /** A prompt answers `null` on Ctrl+C or EOF, which ends the onboarding. */
 export function requireAnswer<T>(answer: T | null): T {
   if (answer === null) {
-    throw new CommandFailedError('Onboarding cancelled.');
+    throw new OnboardingCancelledError();
   }
   return answer;
 }

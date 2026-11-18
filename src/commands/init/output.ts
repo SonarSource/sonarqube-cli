@@ -21,19 +21,94 @@
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import type { InitOutcome } from './init-outcome.ts';
-import { projectDashboardUrl } from './steps/mapping.ts';
+import type { InitOutcome, MonorepoRootResult } from './init-outcome.ts';
+import {
+  isUnavailable,
+  type LinkedProjectIssue,
+  reportLinkedProjectIssues,
+} from './steps/linked-projects.ts';
+import { dashboardUrlOn, projectDashboardUrl } from './steps/mapping.ts';
 
-const INTEGRATE_SUGGESTION = "Next, run 'sonar integrate' to set up your coding agents.";
-const NO_ORGANIZATION_NOTE = "A project needs an organization. Secrets scanning doesn't.";
-function describe(outcome: InitOutcome): string[] {
+const NO_MONOREPO_ROOTS = [
+  'No project root is mapped in .sonar-config.json, so nothing was changed.',
+  "Name the roots with 'sonar init --monorepo --root <path>[=<project key>]'; repeat --root for each one.",
+];
+const MONOREPO_RESUME =
+  "To resume, run 'sonar init --monorepo' again with the same --root options: roots that are already configured are left as they are.";
+
+/** In display order; a root belongs to the section of its outcome, so a line does not repeat it. */
+const MONOREPO_SECTIONS: { title: string; kinds: MonorepoRootResult['kind'][] }[] = [
+  { title: 'Created and bound to the repository', kinds: ['bound'] },
+  { title: 'Created', kinds: ['unbound'] },
+  { title: 'Mapped to the existing project', kinds: ['linked'] },
+  { title: 'Already configured', kinds: ['configured'] },
+  // The warnings printed while checking the roots say why a root was left as it is.
+  { title: 'Skipped', kinds: ['skipped', 'unavailable', 'conflict'] },
+  { title: 'Failed', kinds: ['failed'] },
+];
+
+const UNAVAILABLE_REASONS = {
+  missing: 'not found on the remote',
+  'other-org': 'in another organization or not accessible',
+  unverified: 'could not be checked',
+} as const;
+
+function describeMonorepo(
+  roots: readonly MonorepoRootResult[],
+  auth: ResolvedAuth | undefined,
+): string[] {
+  const lines = ['', 'Monorepo onboarding summary:'];
+  for (const { title, kinds } of MONOREPO_SECTIONS) {
+    const matching = roots.filter((root) => kinds.includes(root.kind));
+    if (matching.length > 0) {
+      lines.push(
+        `  ${title} (${matching.length}):`,
+        ...matching.map((root) => `    ${describeMonorepoRoot(root, auth)}`),
+      );
+    }
+  }
+  // A missing project or a conflicting key stays as it is until the file or the command changes.
+  if (roots.some((root) => root.kind === 'skipped' || root.kind === 'failed')) {
+    lines.push(MONOREPO_RESUME);
+  }
+  return lines;
+}
+
+/** The dashboard link sits on the root's own line, so the summary does not repeat each project. */
+function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | undefined): string {
+  switch (root.kind) {
+    case 'configured':
+    case 'linked':
+    case 'bound':
+    case 'unbound': {
+      const line = `${root.path}: ${root.projectKey}`;
+      // A configured root may be recorded for another server than the active one.
+      if (root.serverUrl) {
+        return `${line} - ${dashboardUrlOn(root.serverUrl, root.projectKey)}`;
+      }
+      return auth ? `${line} - ${projectDashboardUrl(auth, root.projectKey)}` : line;
+    }
+    case 'skipped':
+      return root.path;
+    case 'unavailable':
+      return `${root.path}: ${root.projectKey} (${UNAVAILABLE_REASONS[root.problem]})`;
+    case 'conflict':
+      return `${root.path}: ${root.projectKey} (already mapped to '${root.recordedKey}')`;
+    case 'failed':
+      return `${root.path}: ${root.reason.replaceAll('\n', '\n      ')}`;
+  }
+}
+
+function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined): string[] {
   switch (outcome.kind) {
     case 'complete': {
       const noun = outcome.projectKeys.length === 1 ? 'project' : 'projects';
       const keys = outcome.projectKeys.map((key) => `'${key}'`).join(', ');
       return [
-        `This directory is already linked to the Sonar ${noun} ${keys} in .sonar-config.json.`,
-        'Nothing left to set up.',
+        ...(outcome.projectKeys.length > 0
+          ? [`This directory is already linked to the Sonar ${noun} ${keys} in .sonar-config.json.`]
+          : []),
+        ...(outcome.issues.some(isUnavailable) ? [] : ['Nothing left to set up.']),
       ];
     }
     case 'linked':
@@ -44,31 +119,31 @@ function describe(outcome: InitOutcome): string[] {
       return ['No project was created.'];
     case 'no-organization':
       return ['No organization was created.'];
+    case 'monorepo':
+      return describeMonorepo(outcome.roots, auth);
+    case 'no-monorepo-roots':
+      return NO_MONOREPO_ROOTS;
   }
 }
 
-/**
- * Prints what the run did, then the project dashboard link, then the `sonar integrate` hint. The
- * link comes before anything about integrating, so a run reads: result, where to see it, next step.
- */
+/** Prints what the run did, then the project dashboard link. The integrate offer follows it. */
 export function renderInitOutcome(
   outcome: InitOutcome,
   auth: ResolvedAuth | undefined,
   console: Console,
-  { suggestIntegrate }: { suggestIntegrate: boolean },
 ): void {
-  for (const line of describe(outcome)) {
+  for (const line of describe(outcome, auth)) {
     console.print(line);
   }
   if (auth) {
+    reportLinkedProjectIssues(linkedProjectIssues(outcome), auth, console);
     renderProjectDashboards(outcome, auth, console);
   }
-  if (suggestIntegrate) {
-    if (outcome.kind === 'no-organization') {
-      console.info(NO_ORGANIZATION_NOTE);
-    }
-    console.print(INTEGRATE_SUGGESTION);
-  }
+}
+
+/** A monorepo reports its own problems when it finds them, before it onboards anything. */
+function linkedProjectIssues(outcome: InitOutcome): readonly LinkedProjectIssue[] {
+  return outcome.kind === 'complete' ? outcome.issues : [];
 }
 
 function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
@@ -79,8 +154,10 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
     case 'bound':
     case 'unbound':
       return [outcome.projectKey];
+    case 'monorepo': // Each root's link is already on its summary line.
     case 'declined':
     case 'no-organization':
+    case 'no-monorepo-roots':
       return [];
   }
 }

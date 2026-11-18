@@ -39,12 +39,12 @@ describe('renderProjectDashboards', () => {
   it.each<[string, InitOutcome, string[]]>([
     [
       'an already set up directory',
-      { kind: 'complete', projectKeys: ['k'] },
+      { kind: 'complete', projectKeys: ['k'], issues: [] },
       [`Project dashboard: ${URL('k')}`],
     ],
     [
       'a monorepo with several projects',
-      { kind: 'complete', projectKeys: ['a', 'b'] },
+      { kind: 'complete', projectKeys: ['a', 'b'], issues: [] },
       [`Project dashboard (a): ${URL('a')}`, `Project dashboard (b): ${URL('b')}`],
     ],
     [
@@ -74,17 +74,223 @@ describe('renderProjectDashboards', () => {
   it('prints nothing when the account has no organization', () => {
     expect(render({ kind: 'no-organization' })).toEqual([]);
   });
+
+  it('prints no separate links for a monorepo, whose summary carries them', () => {
+    expect(
+      render({ kind: 'monorepo', roots: [{ path: 'a', kind: 'configured', projectKey: 'a' }] }),
+    ).toEqual([]);
+  });
 });
 
 describe('renderInitOutcome', () => {
-  it('renders a no-organization run without credentials, ending on the integrate hint', () => {
+  it('renders a no-organization run without credentials and without any integrate hint', () => {
     const console = new FakeConsole();
 
-    renderInitOutcome({ kind: 'no-organization' }, undefined, console, { suggestIntegrate: true });
+    renderInitOutcome({ kind: 'no-organization' }, undefined, console);
 
     const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
-    expect(printed[0]).toBe('No organization was created.');
-    expect(printed.at(-1)).toContain('sonar integrate');
-    expect(printed.some((line) => line.includes('Project dashboard'))).toBe(false);
+    expect(printed).toEqual(['No organization was created.']);
+  });
+
+  it('summarizes a monorepo run by outcome and explains how to resume', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'api', kind: 'unbound', projectKey: 'api-key' },
+          { path: 'web', kind: 'skipped' },
+          { path: 'docs', kind: 'failed', reason: 'Key is taken\nChoose another key.' },
+        ],
+      },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.slice(0, 8)).toEqual([
+      '',
+      'Monorepo onboarding summary:',
+      '  Created (1):',
+      '    api: api-key',
+      '  Skipped (1):',
+      '    web',
+      '  Failed (1):',
+      '    docs: Key is taken\n      Choose another key.',
+    ]);
+    expect(printed).toHaveLength(9);
+    expect(printed[8]).toContain("run 'sonar init --monorepo' again");
+  });
+
+  it('puts the dashboard link on the line of each mapped root, and on none of the others', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'a', kind: 'configured', projectKey: 'a' },
+          { path: 'b', kind: 'linked', projectKey: 'b' },
+          { path: 'c', kind: 'bound', projectKey: 'c' },
+          { path: 'f', kind: 'unbound', projectKey: 'f' },
+          { path: 'd', kind: 'skipped' },
+          { path: 'e', kind: 'failed', reason: 'boom' },
+        ],
+      },
+      AUTH,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.slice(0, -1)).toEqual([
+      '',
+      'Monorepo onboarding summary:',
+      '  Created and bound to the repository (1):',
+      `    c: c - ${URL('c')}`,
+      '  Created (1):',
+      `    f: f - ${URL('f')}`,
+      '  Mapped to the existing project (1):',
+      `    b: b - ${URL('b')}`,
+      '  Already configured (1):',
+      `    a: a - ${URL('a')}`,
+      '  Skipped (1):',
+      '    d',
+      '  Failed (1):',
+      '    e: boom',
+    ]);
+    expect(printed.at(-1)).toContain("run 'sonar init --monorepo' again");
+  });
+
+  it('links a configured root on the server the file records, not the active one', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          {
+            path: 'api',
+            kind: 'configured',
+            projectKey: 'api-key',
+            serverUrl: 'https://sq.example.com/',
+          },
+        ],
+      },
+      AUTH,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toContain(
+      '    api: api-key - https://sq.example.com/project/overview?id=api-key',
+    );
+    expect(printed.join('\n')).not.toContain('sonarcloud.io');
+  });
+
+  it('does not suggest resuming when every root is configured', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      { kind: 'monorepo', roots: [{ path: '.', kind: 'configured', projectKey: 'k' }] },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.join('\n')).not.toContain('resume');
+  });
+
+  it('warns about a linked project the remote lacks and does not claim nothing is left to do', () => {
+    const console = new FakeConsole();
+    const auth = { orgKey: 'my-org', serverUrl: 'https://sonarcloud.io' } as ResolvedAuth;
+
+    renderInitOutcome(
+      {
+        kind: 'complete',
+        projectKeys: [],
+        issues: [{ projectKey: 'gone', path: '.', problem: 'missing' }],
+      },
+      auth,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    const warned = console.calls.filter((c) => c.method === 'warn').map((c) => String(c.args[0]));
+    expect(warned).toEqual([
+      ".sonar-config.json links 'gone', but no such project exists in organization my-org.",
+    ]);
+    expect(printed.join('\n')).not.toContain('Nothing left to set up');
+    expect(printed.join('\n')).toContain("Relink with 'sonar link <project key>'");
+    expect(printed.join('\n')).toContain("then run 'sonar init' again");
+  });
+
+  it('only notes, and still completes, when a linked project could not be checked', () => {
+    const console = new FakeConsole();
+    const auth = { orgKey: 'my-org', serverUrl: 'https://sonarcloud.io' } as ResolvedAuth;
+
+    renderInitOutcome(
+      {
+        kind: 'complete',
+        projectKeys: ['k'],
+        issues: [{ projectKey: 'k', path: '.', problem: 'unverified' }],
+      },
+      auth,
+      console,
+    );
+
+    expect(console.calls.some((c) => c.method === 'warn')).toBe(false);
+    expect(console.calls.some((c) => c.method === 'info')).toBe(true);
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.join('\n')).toContain('Nothing left to set up');
+  });
+
+  it('lists the roots left as they are under Skipped with a short reason, without repeating the warnings', () => {
+    const console = new FakeConsole();
+    const auth = { orgKey: 'my-org', serverUrl: 'https://sonarcloud.io' } as ResolvedAuth;
+
+    renderInitOutcome(
+      {
+        kind: 'monorepo',
+        roots: [
+          { path: 'api', kind: 'unavailable', projectKey: 'api-key', problem: 'missing' },
+          { path: 'web', kind: 'conflict', projectKey: 'new-key', recordedKey: 'old-key' },
+        ],
+      },
+      auth,
+      console,
+    );
+
+    expect(console.calls.some((c) => c.method === 'warn')).toBe(false);
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toContain('  Skipped (2):');
+    expect(printed).toContain('    api: api-key (not found on the remote)');
+    expect(printed).toContain("    web: new-key (already mapped to 'old-key')");
+    expect(printed.join('\n')).not.toContain('Failed');
+    expect(printed.join('\n')).not.toContain('To resume');
+  });
+
+  it('points to --root, and not to sonar link, when no root is mapped', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome({ kind: 'no-monorepo-roots' }, undefined, console);
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed.join('\n')).toContain('sonar init --monorepo --root <path>');
+    expect(printed.join('\n')).not.toContain('sonar link');
+  });
+
+  it('says in the summary when a root got a project bound to the repository', () => {
+    const console = new FakeConsole();
+
+    renderInitOutcome(
+      { kind: 'monorepo', roots: [{ path: 'api', kind: 'bound', projectKey: 'api-key' }] },
+      undefined,
+      console,
+    );
+
+    const printed = console.calls.filter((c) => c.method === 'print').map((c) => String(c.args[0]));
+    expect(printed).toContain('  Created and bound to the repository (1):');
+    expect(printed).toContain('    api: api-key');
   });
 });

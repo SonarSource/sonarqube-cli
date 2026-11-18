@@ -143,6 +143,7 @@ function groupPathsByMapping<T extends { projectRoot: string }>(
 export class ProjectDiscoveryResult {
   repoRoot?: string;
   fromSharedConfig = false;
+  configDir?: string;
   projects: ProjectMapping[] = [];
   /** File that supplied `serverUrl` for login. Not part of a project binding. */
   serverConfigFile?: string;
@@ -161,6 +162,8 @@ export class DiscoveredProjects {
     public readonly projects: CompleteProjectMapping[],
     /** Whether the projects came from `.sonar-config.json` rather than a single-project source. */
     public readonly fromSharedConfig = false,
+    /** The directory whose `.sonar-config.json` supplied the projects; only set with `fromSharedConfig`. */
+    public readonly configDir?: string,
   ) {}
 
   scope(path: string): ScopedProjectMapping<CompleteProjectMapping>[] {

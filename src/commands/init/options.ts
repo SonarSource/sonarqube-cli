@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { isAbsolute, posix } from 'node:path';
+
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { isValidProjectKey } from '@/core/project-key.ts';
 import type { ProjectVisibility } from '@/core/server/projects.ts';
@@ -90,6 +92,53 @@ export function warnIgnoredUnboundNewOptions(options: UnboundNewOptions, console
       `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,
     );
   }
+}
+
+/** A project root named on the command line: a directory of the repository, and its project's key unless left to be generated. */
+export interface MonorepoRootOption {
+  /** Forward-slash path relative to the repository root, without a leading `./`. */
+  path: string;
+  projectKey?: string;
+}
+
+/** Commander accumulator for the repeatable `--root` option. */
+export function collectRoot(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function parseMonorepoRoot(raw: string): MonorepoRootOption {
+  // A key has no "=" or separator, a path may: only a last "=" followed by a key-like tail names one.
+  const separator = raw.lastIndexOf('=');
+  const keyed = separator >= 0 && !/[\\/]/.test(raw.slice(separator + 1));
+  const rawPath = (keyed ? raw.slice(0, separator) : raw).trim();
+  if (!rawPath || CONTROL_CHARACTERS.test(rawPath) || isAbsolute(rawPath)) {
+    throw new InvalidOptionError(
+      `--root must be <path> or <path>=<project key>, with a path relative to the repository root (got "${raw}").`,
+    );
+  }
+  const path = posix.normalize(rawPath.replaceAll('\\', '/')).replace(/\/$/, '');
+  if (path === '..' || path.startsWith('../')) {
+    throw new InvalidOptionError(`--root path "${rawPath}" must stay inside the repository.`);
+  }
+  return {
+    path,
+    projectKey: keyed ? validateProjectKey(raw.slice(separator + 1), '--root key') : undefined,
+  };
+}
+
+/** Parses every `--root`, rejecting a directory or a key named twice. */
+export function parseMonorepoRoots(raw: readonly string[] | undefined): MonorepoRootOption[] {
+  const roots = (raw ?? []).map(parseMonorepoRoot);
+  for (const [index, root] of roots.entries()) {
+    const earlier = roots.slice(0, index);
+    if (earlier.some(({ path }) => path === root.path)) {
+      throw new InvalidOptionError(`--root names "${root.path}" more than once.`);
+    }
+    if (root.projectKey && earlier.some(({ projectKey }) => projectKey === root.projectKey)) {
+      throw new InvalidOptionError(`--root names project '${root.projectKey}' more than once.`);
+    }
+  }
+  return roots;
 }
 
 export function validateScanOptions(options: {
