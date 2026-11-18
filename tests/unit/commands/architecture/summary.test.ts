@@ -30,7 +30,7 @@ const summary = {
 };
 
 describe('architecture summary response', () => {
-  it('reads per-language coverage and calculates a weighted aggregate', () => {
+  it('reads per-language coverage and returns combined artifact counts without inventing a cross-language score', () => {
     const rows = parseSummaries({
       projectSummaries: [
         { ...summary, coverage: { coverage: 50, coveredArtifacts: 1, totalArtifacts: 2 } },
@@ -43,7 +43,6 @@ describe('architecture summary response', () => {
     }).summaries;
     expect(rows[0].coverage).toEqual({ coverage: 50, coveredArtifacts: 1, totalArtifacts: 2 });
     expect(aggregateCoverage(rows)).toEqual({
-      coverage: (10 / 12) * 100,
       coveredArtifacts: 10,
       totalArtifacts: 12,
     });

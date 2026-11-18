@@ -82,7 +82,7 @@ describe('current architecture summary', () => {
     expect(summaries[1].smells).toEqual({ total: 2, weakTangle: 1, splitResponsibility: 1 });
   });
 
-  it('shows numeric coverage and weighted totals in JSON and text', async () => {
+  it('shows per-language coverage and combined artifact counts in JSON and text', async () => {
     const counts = {
       deviations: { total: 0, structuralDeviation: 0, relationshipDeviation: 0 },
       flaws: { total: 0, tangle: 0, oversizedComponent: 0 },
@@ -111,7 +111,6 @@ describe('current architecture summary', () => {
     const json = await h.run('arch current get --summary -p shop --format json');
     expect(json.exitCode).toBe(0);
     expect(JSON.parse(json.stdout).overallCoverage).toEqual({
-      coverage: (10 / 12) * 100,
       coveredArtifacts: 10,
       totalArtifacts: 12,
     });

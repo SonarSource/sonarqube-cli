@@ -97,6 +97,7 @@ export function aggregateCoverage(
   if (!summaries.length || skippedSummaries) return undefined;
   let covered = 0;
   let total = 0;
+  let nonEmptyLanguages = 0;
   for (const summary of summaries) {
     const data = summary.coverage;
     if (data?.coveredArtifacts == null || data.totalArtifacts == null) return undefined;
@@ -106,12 +107,13 @@ export function aggregateCoverage(
         Math.abs(data.coverage - (data.coveredArtifacts / data.totalArtifacts) * 100) > 1e-8)
     )
       return undefined;
+    if (data.totalArtifacts > 0) nonEmptyLanguages++;
     covered += data.coveredArtifacts;
     total += data.totalArtifacts;
     if (!Number.isSafeInteger(covered) || !Number.isSafeInteger(total)) throw invalid();
   }
   return {
-    ...(total === 0 ? {} : { coverage: (covered / total) * 100 }),
+    ...(total === 0 || nonEmptyLanguages > 1 ? {} : { coverage: (covered / total) * 100 }),
     coveredArtifacts: covered,
     totalArtifacts: total,
   };
