@@ -38,8 +38,8 @@ import { type GitRemoteBinding, ProjectBindingsClient } from '@/core/server/proj
 import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitPath } from '../init-outcome.ts';
-import type { InitIntent } from '../options.ts';
+import type { InitOutcome, InitPath } from '../init-outcome.ts';
+import type { InitIntent, MonorepoRootOption } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
 
 export interface DetectDeps {
@@ -52,6 +52,11 @@ export interface DetectDeps {
   dryRun?: boolean;
   /** The path the caller consented to with `--link`, `--bind` or `--create`. */
   intent?: InitIntent;
+  /**
+   * Onboards several picked folders as monorepo roots, as `--root` would. Set only while the user
+   * may still be asked which folders to link; a callback because the steps cannot import `runMonorepo`.
+   */
+  onboardPickedFolders?: (roots: readonly MonorepoRootOption[]) => Promise<InitOutcome>;
 }
 
 export function resolveProjectRoot(pathOption: string): string {
