@@ -170,22 +170,21 @@ th button { all: unset; cursor: pointer; display: inline-flex; gap: 4px; align-i
 tr.row td { color: var(--ink-2); }
 .charttable { overflow-x: auto; }
 
-.heat { display: grid; gap: 2px; align-items: stretch; overflow-x: auto; }
-.heat .corner, .heat .rowhead { position: sticky; left: 0; z-index: 1; background: var(--surface); }
-.heat .rowhead { display: flex; align-items: center; padding-right: 12px; color: var(--ink); }
-.heat .colhead { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0 2px 6px; color: var(--ink-2); font-size: 11px; text-align: center; overflow-wrap: anywhere; border-bottom: 2px solid transparent; }
-.heat .colhead .sub { color: var(--ink-3); font-weight: 400; }
-.heat .colhead.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
-.heat .colhead:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
-.heat.compact .colhead { writing-mode: vertical-rl; transform: rotate(180deg); flex-direction: row; justify-content: flex-end; height: 96px; }
-.cell { display: flex; align-items: center; justify-content: center; min-height: 40px; border-radius: 4px; font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.heat.compact .cell { font-size: 0; }
-.cell.empty { color: var(--ink-3); background: transparent; border: 1px solid var(--grid); }
-.cell.sel { box-shadow: inset 0 0 0 2px var(--ink); }
-.cell:focus-visible { outline: 2px solid var(--s1); outline-offset: 1px; }
-.cell:hover { box-shadow: inset 0 0 0 2px var(--ink); }
-.scale { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--ink-3); font-size: 12px; }
-.scale i { display: block; width: 140px; height: 8px; border-radius: 4px; }
+.runs-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.runs-note { flex: 1 1 280px; margin: 0; color: var(--ink-3); font-size: 12px; }
+.runs-search { width: 230px; max-width: 100%; padding: 6px 10px; border: 1px solid var(--ring); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.runs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.runs th { padding: 8px 10px; border-bottom: 1px solid var(--grid); color: var(--ink-2); font-size: 12px; font-weight: 600; text-align: left; }
+.runs td { padding: 9px 10px; border-bottom: 1px solid var(--grid); color: var(--ink); }
+.runs a { color: var(--ink-2); }
+.runs .muted { margin-left: 4px; color: var(--ink-3); font-size: 12px; }
+.runs td.muted { margin-left: 0; font-size: 13px; }
+.rate { display: inline-flex; align-items: center; gap: 10px; }
+.bar { display: inline-block; flex: none; width: 72px; height: 6px; overflow: hidden; border-radius: 3px; background: var(--wash); }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--select-bar); }
+.rate-text { white-space: nowrap; }
+.runs-empty { padding: 12px 10px; color: var(--ink-3); font-size: 13px; }
+.runs-more { margin-top: 12px; padding: 7px 14px; border: 1px solid var(--ring); border-radius: 6px; background: var(--wash); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
 .empty-state { display: flex; align-items: center; gap: 10px; padding: 8px 4px; color: var(--ink-2); }
 
 #tip {
@@ -237,8 +236,19 @@ tr.row td { color: var(--ink-2); }
       </aside>
       <div id="chart"></div>
     </div>
-    <h3 class="sub-title">Use cases across releases</h3>
-    <div class="card" id="heat"></div>
+    <h3 class="sub-title">Runs</h3>
+    <div class="card">
+      <div class="runs-top">
+        <p class="runs-note">Pass rate: trials that passed out of all trials of the run, with the current filters. FAIL, ERROR and LEAK count as failed.</p>
+        <input class="runs-search" id="runs-search" type="search" placeholder="Search a run id, a commit or a date" aria-label="Search runs">
+      </div>
+      <table class="runs">
+        <thead><tr><th>Date</th><th>Run</th><th>Commit</th><th>Pass rate</th></tr></thead>
+        <tbody id="runs-body"></tbody>
+      </table>
+      <div class="runs-empty" id="runs-empty" hidden>No run matches this search</div>
+      <button class="runs-more" id="runs-more" type="button" hidden></button>
+    </div>
   </section>
 
 </div>
@@ -250,7 +260,6 @@ tr.row td { color: var(--ink-2); }
   'use strict';
 
   const SVGNS = 'http://www.w3.org/2000/svg';
-  const SEQ = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
   const SHAPES = ['circle', 'square', 'diamond'];
   const COST_DECIMALS = 3;
   const TIP_OFFSET = 14;
@@ -270,26 +279,12 @@ tr.row td { color: var(--ink-2); }
   const JITTER_PX = 3;
   const MIN_LABEL_GAP = 13;
   const LABEL_OFFSET = 11;
-  const COMPACT_AFTER = 12;
-  const COLUMN_MIN = { normal: 52, compact: 28 };
   const LABEL_ROWS = { primary: 26, secondary: 11 };
   const COMMIT_LENGTH = 7;
-  const AVERAGE_LABELS = { steps: 'Steps', tokens: 'Tokens', seconds: 'Agent time', cost: 'Cost' };
+  const REPO_URL = 'https://github.com/SonarSource/sonarqube-cli';
+  const RUNS_PAGE = 8;
   const SPANS = [['8', 'Last 8 releases'], ['12', 'Last 12 releases'], ['26', 'Last 26 releases'], ['all', 'All releases']];
-  const HEX_CHANNELS = { red: 1, green: 3, blue: 5 };
-  const HEX_RADIX = 16;
-  const CHANNEL_MAX = 255;
-  const SRGB = { threshold: 0.03928, divisor: 12.92, offset: 0.055, scale: 1.055, gamma: 2.4 };
-  const LUMA = { red: 0.2126, green: 0.7152, blue: 0.0722 };
-  const CONTRAST_OFFSET = 0.05;
   const ARROW_STEP = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
-  const FAILURES = ['LEAK', 'FAIL', 'ERROR'];
-  const STATUS = {
-    LEAK: { label: 'Leak', color: 'var(--st-critical)', rank: 0, hint: 'A secret appeared in the output (the scan redacted it)' },
-    FAIL: { label: 'Fail', color: 'var(--st-serious)', rank: 1, hint: 'The verifier rejected the result' },
-    ERROR: { label: 'Error', color: 'var(--st-warning)', rank: 2, hint: 'The trial crashed or has no score' },
-    PASS: { label: 'Pass', color: 'var(--st-good)', rank: 3, hint: 'The verifier accepted the result' },
-  };
 
   const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
   function secondsText(v) {
@@ -330,7 +325,6 @@ tr.row td { color: var(--ink-2); }
 
   const fmtDay = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-  const fmtInt = (v) => (v === null ? '–' : Math.round(v).toLocaleString('en'));
 
   const releases = JSON.parse(decodeURIComponent(byId('data').textContent))
     .map((report) => ({
@@ -338,7 +332,6 @@ tr.row td { color: var(--ink-2); }
       trials: report.trials.map((trial) => ({ ...trial, agent: trial.agent ?? 'unknown', model: trial.model ?? 'unknown' })),
     }))
     .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-  const latestRelease = releases[releases.length - 1];
 
   const versionsUsable = releases.every((r) => r.cliVersion && r.cliVersion !== 'unknown') && new Set(releases.map((r) => r.cliVersion)).size === releases.length;
   const dayLabels = releases.map((r) => fmtDay(r.date));
@@ -695,64 +688,43 @@ tr.row td { color: var(--ink-2); }
     }
   }
 
-  const hexToRgb = (hex) => Object.values(HEX_CHANNELS).map((i) => Number.parseInt(hex.slice(i, i + 2), HEX_RADIX) / CHANNEL_MAX);
-  const linearize = (c) => (c <= SRGB.threshold ? c / SRGB.divisor : ((c + SRGB.offset) / SRGB.scale) ** SRGB.gamma);
-  const luminance = (hex) => {
-    const [r, g, b] = hexToRgb(hex).map(linearize);
-    return LUMA.red * r + LUMA.green * g + LUMA.blue * b;
-  };
-  const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + CONTRAST_OFFSET) / (Math.min(luminance(a), luminance(b)) + CONTRAST_OFFSET);
-  const ramp = () => (isDark() ? [...SEQ].reverse() : SEQ);
-  const rampColor = (rate) => ramp()[Math.round(rate * (SEQ.length - 1))];
-  const textOn = (hex) => (contrast(hex, '#ffffff') >= contrast(hex, '#0b0b0b') ? '#ffffff' : '#0b0b0b');
+  const runsView = { query: '', expanded: false };
 
-  function heatTip(task, release, trials, pass) {
-    const box = h('div', {}, h('div', { class: 'tip-h', text: `${task} · ${releaseTitle(release)}` }), h('div', { class: 'tip-row' }, h('b', { text: `${pass} of ${trials.length}` }), h('span', { text: 'trials passed' })));
-    for (const status of FAILURES) {
-      const count = trials.filter((t) => t.status === status).length;
-      if (count) box.append(h('div', { class: 'tip-row' }, h('b', { text: String(count) }), h('span', { text: STATUS[status].label.toLowerCase() })));
-    }
-    return box;
+  function runLink(path, text) {
+    return h('a', { href: `${REPO_URL}/${path}`, target: '_blank', rel: 'noopener noreferrer', text });
   }
 
-  function heatCell(task, release, selected) {
-    const trials = scoped(release).filter((t) => t.task === task);
-    if (trials.length === 0) return h('div', { class: 'cell empty', text: '–', 'aria-label': `${task}, ${release.label}: no data` });
+  function rateCell(release) {
+    const trials = scoped(release);
+    if (trials.length === 0) return h('td', { class: 'muted', text: '\u2013' });
     const pass = trials.filter((t) => t.status === 'PASS').length;
-    const color = rampColor(pass / trials.length);
-    const cell = h('div', { class: release === selected ? 'cell sel' : 'cell', tabindex: 0, text: `${pass}/${trials.length}`, 'aria-label': `${task}, ${release.label}: ${pass} of ${trials.length} trials passed` });
-    cell.style.background = color;
-    cell.style.color = textOn(color);
-    const content = () => heatTip(task, release, trials, pass);
-    cell.addEventListener('pointermove', (e) => showTip(content(), e.clientX, e.clientY));
-    cell.addEventListener('pointerleave', hideTip);
-    cell.addEventListener('focus', () => showTip(content(), ...centerOf(cell)));
-    cell.addEventListener('blur', hideTip);
-    return cell;
+    const percent = Math.round((pass / trials.length) * 100);
+    const fill = h('i');
+    fill.style.width = `${percent}%`;
+    return h('td', {}, h('span', { class: 'rate' },
+      h('span', { class: 'bar', 'aria-hidden': 'true' }, fill),
+      h('span', { class: 'rate-text' }, `${percent}% `, h('span', { class: 'muted', text: `${pass} of ${trials.length}` }))));
   }
 
-  function heatHead(release, selected) {
-    const head = h('button', { type: 'button', class: release === selected ? 'colhead on' : 'colhead', title: releaseTitle(release), 'aria-pressed': String(release === selected) }, h('span', { text: release.label }));
-    if (release.sub) head.append(h('span', { class: 'sub', text: release.sub }));
-    return head;
+  function runRow(release) {
+    return h('tr', {},
+      h('td', { text: release.when }),
+      h('td', {}, runLink(`actions/runs/${encodeURIComponent(release.runId)}`, `Run ${release.runId}`)),
+      h('td', {}, runLink(`commit/${encodeURIComponent(release.commit)}`, release.commit.slice(0, COMMIT_LENGTH))),
+      rateCell(release));
   }
 
-  function renderHeat(rels, selected) {
-    const host = byId('heat');
-    host.replaceChildren();
-    const tasks = TASKS.filter((task) => hasTrial(rels, (t) => t.task === task));
-    if (tasks.length === 0) { host.append(h('div', { class: 'empty-state', text: 'No data in this selection' })); return; }
-    const dense = rels.length > COMPACT_AFTER;
-    const grid = h('div', { class: dense ? 'heat compact' : 'heat', role: 'group', 'aria-label': 'Pass rate by use case and release' });
-    const minColumn = dense ? COLUMN_MIN.compact : COLUMN_MIN.normal;
-    grid.style.gridTemplateColumns = `minmax(104px, 220px) repeat(${rels.length}, minmax(${minColumn}px, 1fr))`;
-    grid.append(h('div', { class: 'corner' }), ...rels.map((r) => heatHead(r, selected)));
-    for (const task of tasks) {
-      grid.append(h('div', { class: 'rowhead', text: task }), ...rels.map((r) => heatCell(task, r, selected)));
-    }
-    const scale = h('div', { class: 'scale' }, h('span', { text: 'Pass rate' }), h('span', { text: '0%' }), h('i'), h('span', { text: '100%' }));
-    scale.querySelector('i').style.background = `linear-gradient(90deg, ${ramp().join(', ')})`;
-    host.append(grid, scale);
+  function renderRuns() {
+    const newest = [...releases].reverse();
+    const query = runsView.query.trim().toLowerCase();
+    const matches = query ? newest.filter((r) => [r.when, r.runId, r.commit].join(' ').toLowerCase().includes(query)) : newest;
+    const shown = query || runsView.expanded ? matches : matches.slice(0, RUNS_PAGE);
+    byId('runs-body').replaceChildren(...shown.map(runRow));
+    byId('runs-empty').hidden = matches.length > 0;
+    const hiddenCount = newest.length - RUNS_PAGE;
+    const more = byId('runs-more');
+    more.hidden = Boolean(query) || hiddenCount <= 0;
+    more.textContent = runsView.expanded ? 'Show fewer' : `Show ${hiddenCount} more`;
   }
 
   const FILTERS = [
@@ -792,12 +764,6 @@ tr.row td { color: var(--ink-2); }
       ...(filtered ? [reset] : []));
   }
 
-  function scopeText() {
-    const agent = state.agent === 'all' ? 'all agents' : state.agent;
-    const task = state.task === 'all' ? 'all use cases' : state.task;
-    return [agent, task, `${state.models.size} of ${MODELS.length} models`].join(' \u00b7 ');
-  }
-
   function render() {
     hideTip();
     const rels = windowed();
@@ -810,13 +776,15 @@ tr.row td { color: var(--ink-2); }
     renderMeasures(selected);
     renderModels();
     renderChart(rels, models, selected);
-    renderHeat(rels, selected);
+    renderRuns();
   }
 
   byId('theme').addEventListener('click', () => {
     document.documentElement.dataset.theme = isDark() ? 'light' : 'dark';
     render();
   });
+  byId('runs-search').addEventListener('input', (e) => { runsView.query = e.target.value; renderRuns(); });
+  byId('runs-more').addEventListener('click', () => { runsView.expanded = !runsView.expanded; renderRuns(); });
   media.addEventListener('change', render);
   let lastWidth = 0;
   new ResizeObserver(([entry]) => {
