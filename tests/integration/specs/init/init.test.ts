@@ -20,13 +20,18 @@
 
 // Integration tests for `sonar init`
 
+import { chmodSync } from 'node:fs';
+import { delimiter, join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
+import { SONAR_SCANNER_VERSION } from '@/core/host/install/sonar-scanner.ts';
 
 import type { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../../harness';
 import { TestHarness } from '../../harness';
+import { installRecordingStub } from '../../harness/recording-stub.ts';
 import { git, initGitRepo } from '../hook/git-test-helpers.ts';
 
 const TOKEN = 'init-token';
@@ -1019,6 +1024,104 @@ describe('sonar init', () => {
   });
 
   describe('first analysis flags', () => {
+    function installPathScanner(version: string) {
+      const home = join(harness.cwd.path, 'scanner');
+      const javaHome = join(home, 'jre');
+      const java = join(javaHome, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+      const jar = join(home, 'lib', `sonar-scanner-cli-${version}.jar`);
+      harness.cwd.writeFile(`scanner/lib/sonar-scanner-cli-${version}.jar`, '');
+      const launcher = join(
+        home,
+        'bin',
+        process.platform === 'win32' ? 'sonar-scanner.bat' : 'sonar-scanner',
+      );
+      const script = [
+        '#!/bin/sh',
+        `if [ "$1" = "--version" ]; then echo "SonarScanner CLI ${version}"; exit 0; fi`,
+        'for arg in "$@"; do case "$arg" in -Dsonar.scanner.internal.dumpToFile=*) dump="${arg#*=}";; esac; done',
+        `printf 'scanner.home=%s\\njava.home=%s\\njava.class.path=%s\\n' '${home}' '${javaHome}' '${jar}' > "$dump"`,
+      ].join('\n');
+      harness.cwd.writeFile(
+        `scanner/bin/${process.platform === 'win32' ? 'sonar-scanner.bat' : 'sonar-scanner'}`,
+        script,
+      );
+      chmodSync(launcher, 0o755);
+      installRecordingStub(java, {
+        invocationsFile: join(home, 'java-invocations.jsonl'),
+        responses: {
+          '-XshowSettings:properties': { stdout: '    java.specification.version = 21' },
+        },
+        fallback: { stdout: `SonarScanner CLI ${version}` },
+      });
+      harness.withExtraEnv({ PATH: `${join(home, 'bin')}${delimiter}${process.env.PATH ?? ''}` });
+    }
+
+    it.each(['--verbose', '--scanner-property sonar.sources=.'])(
+      'warns for an older PATH scanner with %s and keeps the advice on failure',
+      async (scanFlag) => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        installPathScanner('7.0.0.1');
+
+        const result = await harness.run(`init --non-interactive ${scanFlag}`);
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain(`older than the expected version ${SONAR_SCANNER_VERSION}`);
+        expect(result.stderr).toContain('Update sonar-scanner, or remove it from PATH');
+        expect(result.stderr).toContain('The first analysis did not complete');
+        expect(result.stderr).toContain('were kept');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'warns for a detached analysis request even when engine provisioning fails',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        installPathScanner('7.0.0.1');
+
+        const result = await harness.run('init --non-interactive --detach');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('The first analysis did not complete');
+        expect(result.stderr).toContain('SonarScanner 7.0.0.1 on PATH');
+      },
+      TIMEOUT,
+    );
+
+    it.each([SONAR_SCANNER_VERSION, '10.0.0.1'])(
+      'does not warn for PATH scanner %s',
+      async (version) => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        installPathScanner(version);
+
+        const result = await harness.run('init --non-interactive --verbose');
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toContain(`Using installed SonarScanner ${version}`);
+        expect(result.stderr).not.toContain('older than the expected version');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not probe or warn about an old PATH scanner when no scan runs',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+        installPathScanner('7.0.0.1');
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stderr).not.toContain('older than the expected version');
+        expect(harness.cwd.file('scanner/java-invocations.jsonl').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
     it(
       'rejects --detach together with --verbose before signing in',
       async () => {

@@ -115,12 +115,17 @@ function newWorkDirectory(detached: boolean): string {
 }
 
 /** The project and its mapping exist by now, so a failure has to say they were kept. */
-function keepProjectNote(projectKey: string, error: unknown): CommandFailedError {
+function keepProjectNote(
+  projectKey: string,
+  error: unknown,
+  outdatedWarning?: string,
+): CommandFailedError {
   const message = error instanceof Error ? error.message : 'unknown error';
   const wrapped = new CommandFailedError(`The first analysis did not complete: ${message}`, {
     remediationHint: [
       `Project '${projectKey}' and ${SHARED_PROJECT_CONFIG_FILE_NAME} were kept, so the setup is intact.`,
       remediationHintFor(error),
+      outdatedWarning,
     ]
       .filter(Boolean)
       .join('\n'),
@@ -194,9 +199,11 @@ export async function runFirstScan(
 
   let directory: string | undefined;
   let handedOff = false;
+  let outdatedWarning: string | undefined;
   try {
     await assertScannerNetworkUsable(auth.serverUrl, flags.detach);
     const scanner = await installSonarScanner(console);
+    outdatedWarning = scanner.outdatedWarning;
     directory = newWorkDirectory(flags.detach);
     const run = {
       scanner,
@@ -246,7 +253,7 @@ export async function runFirstScan(
       ...(await readResults(deps, projectKey, analysisId)),
     };
   } catch (error) {
-    throw keepProjectNote(projectKey, error);
+    throw keepProjectNote(projectKey, error, outdatedWarning);
   } finally {
     if (directory && !handedOff) {
       rmSync(directory, { recursive: true, force: true });
