@@ -20,12 +20,16 @@
 
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
+import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
+  type MonorepoRootOption,
+  parseMonorepoRoots,
   type UnboundNewOptions,
   validateScanOptions,
   validateUnboundNewOptions,
@@ -38,6 +42,8 @@ import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
+import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
+import { runMonorepo } from './steps/monorepo.ts';
 import { OrganizationCreationDeclined } from './steps/organization.ts';
 import {
   NOT_RUN,
@@ -51,6 +57,8 @@ import { runUnboundNew } from './steps/unbound.ts';
 export interface InitOptions {
   path?: string;
   nonInteractive?: boolean;
+  monorepo?: boolean;
+  root?: string[];
   project?: string;
   name?: string;
   visibility?: string;
@@ -68,6 +76,11 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   const interactive = !options.nonInteractive && ctx.console.canPrompt();
   const { console } = ctx;
 
+  const monorepoRoots = parseMonorepoRoots(options.root);
+  if (monorepoRoots.length > 0 && !options.monorepo) {
+    throw new InvalidOptionError('--root only applies together with --monorepo.');
+  }
+
   const projectRoot = resolveProjectRoot(options.path ?? '.');
   const unboundNewOptions = validateUnboundNewOptions(options);
   const scanOptions = validateScanOptions(options);
@@ -78,6 +91,8 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     console,
     interactive,
     unboundNewOptions,
+    options.monorepo === true,
+    monorepoRoots,
   );
   const declined = outcome.kind === 'declined' || outcome.kind === 'no-organization';
   if (outcome.kind !== 'unbound' && !declined) {
@@ -87,11 +102,9 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
   if (scan.status === 'not-run') {
     warnIgnoredScanOptions(scanOptions, console);
   }
-  const suggestIntegrate = findInstalledIntegrationIds().length === 0;
-  renderInitOutcome(outcome, auth, console, {
-    suggestIntegrate: suggestIntegrate && (declined || !interactive),
-  });
-  if (suggestIntegrate && interactive && !declined && auth) {
+  renderInitOutcome(outcome, auth, console);
+  // Without a session (the user declined to create an organization) there is nothing to integrate with.
+  if (interactive && auth && findInstalledIntegrationIds().length === 0) {
     await offerIntegrate(ctx, auth);
   }
 }
@@ -117,6 +130,8 @@ async function run(
   console: Console,
   interactive: boolean,
   unboundNewOptions: UnboundNewOptions,
+  monorepo: boolean,
+  monorepoRoots: readonly MonorepoRootOption[],
 ): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
   let auth: ResolvedAuth;
   try {
@@ -129,6 +144,9 @@ async function run(
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive };
+  if (monorepo) {
+    return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
+  }
   const detected = await detectInitPath(projectRoot, deps);
   return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth, deps };
 }
@@ -150,8 +168,27 @@ async function runDetectedPath(
     case 'unbound-new':
       return runUnboundNew(detected, deps, unboundNewOptions);
     case 'complete':
-      return { kind: 'complete', projectKeys: detected.projectKeys };
+      return checkCompleteLinks(detected, deps);
   }
+}
+
+/** The file says the directory is set up; the remote may disagree, which is reported but never repaired. */
+async function checkCompleteLinks(
+  { projectRoot, projects }: Extract<InitPath, { path: 'complete' }>,
+  deps: DetectDeps,
+): Promise<InitOutcome> {
+  const issues = await findLinkedProjectIssues(
+    projects.map((project) => ({
+      projectKey: project.projectKey,
+      path: relativeProjectPath(projectRoot, project.projectRoot),
+    })),
+    deps,
+  );
+  const unavailable = new Set(issues.filter(isUnavailable).map(({ projectKey }) => projectKey));
+  const projectKeys = projects
+    .map(({ projectKey }) => projectKey)
+    .filter((projectKey) => !unavailable.has(projectKey));
+  return { kind: 'complete', projectKeys, issues };
 }
 
 function fallBack(

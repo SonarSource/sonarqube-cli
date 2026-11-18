@@ -30,13 +30,13 @@ import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
+import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
 import { UsersClient } from '@/core/server/users.ts';
 import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 const HTTP_STATUS_OK = 200;
-const HTTP_STATUS_UNAUTHORIZED = 401;
 const HTTP_STATUS_INTERNAL_SERVER_ERROR = 500;
 const HTTP_STATUS_METHOD_NOT_ALLOWED = 405;
 const HTTP_STATUS_PAYLOAD_TOO_LARGE = 413;

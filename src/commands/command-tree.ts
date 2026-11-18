@@ -142,6 +142,7 @@ import { importHandler, type ImportOptions } from './import';
 import { collectProjectKeyOption } from './import/monorepo-projects.ts';
 import { collectRepoOption } from './import/repo-option.ts';
 import { init, type InitOptions } from './init';
+import { collectRoot } from './init/options.ts';
 import { supportedIntegrations } from './integrate';
 import type { IntegrateAgentOptions } from './integrate/_common/types.ts';
 import { integrateAntigravity } from './integrate/antigravity';
@@ -886,6 +887,15 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Directory to onboard, relative or absolute (default: current directory)',
     )
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
+    .option(
+      '--monorepo',
+      'Onboard several project roots instead of a single project: the roots mapped in .sonar-config.json are reported as configured, and those named with --root are created or mapped',
+    )
+    .option(
+      '--root <path[=key]>',
+      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; used instead of the roots in .sonar-config.json. A root already linked in .sonar-config.json is skipped; the others are onboarded without prompting',
+      collectRoot,
+    )
     .option(
       '--project <key>',
       'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
