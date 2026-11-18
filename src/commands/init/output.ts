@@ -42,6 +42,7 @@ const MONOREPO_SECTIONS: { title: string; kinds: MonorepoRootResult['kind'][] }[
   { title: 'Created and bound to the repository', kinds: ['bound'] },
   { title: 'Created', kinds: ['unbound'] },
   { title: 'Mapped to the existing project', kinds: ['linked'] },
+  { title: 'Would be created and bound to the repository', kinds: ['would-bind'] },
   { title: 'Would be created', kinds: ['would-create'] },
   { title: 'Would be mapped to the existing project', kinds: ['would-link'] },
   { title: 'Already configured', kinds: ['configured'] },
@@ -97,6 +98,7 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
     }
     case 'would-link':
     case 'would-create':
+    case 'would-bind':
       return `${root.path}: ${root.projectKey}`;
     case 'skipped':
       return root.path;

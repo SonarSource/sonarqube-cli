@@ -1359,13 +1359,10 @@ describe('sonar init', () => {
     );
 
     it(
-      'rejects --bind and --link <key> together with --monorepo',
+      'rejects --link <key> together with --monorepo',
       async () => {
-        const bind = await harness.run('init --monorepo --non-interactive --bind');
         const link = await harness.run('init --monorepo --non-interactive --link api-key');
 
-        expect(bind.exitCode).toBe(2);
-        expect(bind.stderr).toContain('--bind does not apply with --monorepo');
         expect(link.exitCode).toBe(2);
         expect(link.stderr).toContain('--link <key> does not apply with --monorepo');
       },
@@ -2641,6 +2638,197 @@ describe('sonar init', () => {
         },
         TIMEOUT,
       );
+
+      describe('on a repository that can be bound', () => {
+        function batches(server: FakeSonarQubeServer) {
+          return server
+            .getRecordedRequests()
+            .filter(
+              (request) => request.path === '/api/alm_integration/provision_monorepo_projects',
+            );
+        }
+
+        function makeBindableRepository(...directories: string[]) {
+          for (const directory of directories) {
+            harness.cwd.writeFile(`${directory}/.keep`, '');
+          }
+          withRemote(GITHUB_REMOTE);
+        }
+
+        const bindable = (s: FakeSonarQubeServerBuilder) =>
+          withImportableRepo('github', 'example/repository')(s).withProject('api-key');
+
+        it(
+          'asks once, binds every new root in one call and merges each mapping',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('api', 'web', 'docs');
+
+            const session = harness.runInteractive(
+              'init --monorepo --root api=api-key --root web=web-key --root docs=docs-key',
+            );
+            await session.accept('Bind the 2 new projects');
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(JSON.parse(batches(server)[0].body ?? '{}').projects).toMatchObject([
+              { projectKey: 'web-key' },
+              { projectKey: 'docs-key' },
+            ]);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Created and bound to the repository (2):');
+            expect(
+              readConfig()
+                .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
+                .sort(),
+            ).toEqual(['api=api-key', 'docs=docs-key', 'web=web-key']);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'binds every new root without asking with --bind, even without a terminal',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web', 'docs');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --bind --root web=web-key --root docs=docs-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Created and bound to the repository (2):');
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'reports which projects were created and which failed, and keeps the created ones',
+          async () => {
+            const server = await startServer((s) =>
+              bindable(s).withMonorepoProvisionRefusal('docs-key', 'key is reserved'),
+            );
+            makeBindableRepository('web', 'docs');
+
+            const session = harness.runInteractive(
+              'init --monorepo --root web=web-key --root docs=docs-key',
+            );
+            await session.accept('Bind the 2 new projects');
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(result.stdout).toContain('Created and bound to the repository (1):');
+            expect(result.stdout).toContain('Failed (1):');
+            expect(result.stdout).toContain('docs: ');
+            expect(result.stdout).toContain('key is reserved');
+            expect(linkedRoots()).toMatchObject([{ path: 'web', projectKey: 'web-key' }]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'adds the new roots to a repository that already has a bound project',
+          async () => {
+            const server = await startServer((s) =>
+              s
+                .withOrganizations([
+                  { key: ORG, name: ORG, alm: { key: 'github' }, actions: { admin: true } },
+                ])
+                .withDopRepositories(ORG, [
+                  {
+                    id: 'repo-1',
+                    name: 'repository',
+                    slug: 'example/repository',
+                    boundProjectIds: ['id-existing'],
+                    importedInCurrentOrg: true,
+                  },
+                ]),
+            );
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --root web=web-key');
+            await session.accept('Bind the 1 new project');
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(result.stdout).toContain('Created and bound to the repository (1):');
+            expect(linkedRoots()).toMatchObject([{ path: 'web', projectKey: 'web-key' }]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'lists every new root as failed when the repository cannot be imported',
+          async () => {
+            const server = await startServer((s) =>
+              s
+                .withOrganizations([
+                  { key: ORG, name: ORG, alm: { key: 'github' }, actions: { admin: true } },
+                ])
+                .withDopRepositories(ORG, []),
+            );
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --root web=web-key');
+            await session.accept('Bind the 1 new project');
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(0);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Failed (1):');
+            expect(result.stdout).toContain('not found');
+            expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'falls back to an unbound project when the user declines binding',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --root web=web-key');
+            await session.decline('Bind the 1 new project');
+            await confirmNewProject(session);
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(0);
+            expect(createdKeys(server)).toEqual(['web-key']);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'creates nothing in a dry run and previews the bound projects',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --dry-run --root web=web-key');
+            await session.accept('Bind the 1 new project');
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('Would be created and bound to the repository (1):');
+            expect(batches(server)).toHaveLength(0);
+            expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+          },
+          TIMEOUT,
+        );
+      });
 
       it(
         'names a created root from the git remote, as it does when generating its key',
