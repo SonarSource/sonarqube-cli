@@ -2812,6 +2812,29 @@ describe('sonar init', () => {
         );
 
         it(
+          'never offers to bind when --create asks for projects without binding',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --create --root web=web-key');
+            // --create is the consent to create, so there is no "Create this project" confirmation.
+            await session.waitText('Project name');
+            session.keyEnter();
+            await session.waitText('Project visibility');
+            session.keyEnter();
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout + result.stderr).not.toContain('Bind the');
+            expect(batches(server)).toHaveLength(0);
+            expect(createdKeys(server)).toEqual(['web-key']);
+          },
+          TIMEOUT,
+        );
+
+        it(
           'creates nothing in a dry run and previews the bound projects',
           async () => {
             const server = await startServer((s) => bindable(s));
@@ -2864,6 +2887,70 @@ describe('sonar init', () => {
         },
         TIMEOUT,
       );
+
+      describe('a generated key that names an existing project', () => {
+        function generatedKey(folder: string) {
+          return generateProjectProposal(`${harness.cwd.path}/${folder}`, undefined, ORG)
+            .projectKey;
+        }
+
+        it(
+          'asks before mapping it, and maps it once the user agrees',
+          async () => {
+            await startServer((s) => s.withProject(generatedKey('web')));
+            makeRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --bind --root web');
+            await session.accept('Link this directory to it?');
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(linkedRoots()).toMatchObject([{ path: 'web', projectKey: generatedKey('web') }]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'maps nothing when the user declines every offer',
+          async () => {
+            const server = await startServer((s) => s.withProject(generatedKey('web')));
+            makeRepository('web');
+
+            const session = harness.runInteractive('init --monorepo --root web');
+            await session.decline('Link this directory to it?');
+            await session.decline('another existing project');
+            await session.waitText('Project key');
+            session.keyEnter();
+            await confirmNewProject(session);
+            await session.decline(INTEGRATE_PROMPT);
+            const result = await session.waitFinish();
+
+            expect(result.exitCode).toBe(0);
+            expect(createdKeys(server)).toEqual([`${generatedKey('web')}-2`]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'fails that root without a terminal, and still maps a root named with its key',
+          async () => {
+            const server = await startServer((s) =>
+              s.withProject(generatedKey('web')).withProject('api-key'),
+            );
+            makeRepository('api', 'web');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --root web --root api=api-key',
+            );
+
+            expect(result.stdout + result.stderr).toContain('--root web=<project key>');
+            expect(createdKeys(server)).toEqual([]);
+            expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
+          },
+          TIMEOUT,
+        );
+      });
 
       it(
         'reuses the key the file already records for a root named without one, and leaves it as it is',
@@ -3027,6 +3114,9 @@ describe('sonar init', () => {
         await tick(session, 'api', 1);
         await tick(session, 'web', 2);
         session.keyEnter();
+        // Both keys were generated, so each root asks before it is mapped.
+        await session.accept('Link this directory to it?');
+        await session.accept('Link this directory to it?');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 

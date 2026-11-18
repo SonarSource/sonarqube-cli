@@ -52,7 +52,13 @@ function bindableSlug(
   remote: string | undefined,
   { auth, interactive, intent }: DetectDeps,
 ): string | null {
-  if (!remote || (!interactive && intent?.kind !== 'bind') || auth.connectionType !== 'cloud') {
+  // `--create` is the consent to create without binding, so it never asks.
+  if (
+    !remote ||
+    intent?.kind === 'create' ||
+    (!interactive && intent?.kind !== 'bind') ||
+    auth.connectionType !== 'cloud'
+  ) {
     return null;
   }
   return remoteRepositorySlug(remote);
@@ -119,12 +125,13 @@ export async function bindNewRoots(
       ? allFailed(roots, 'The organization authorization was declined. Nothing was created.')
       : undefined;
   }
-  return importBatch(roots, slug, { ...org, almKey }, api, deps);
+  return importBatch(roots, slug, noun, { ...org, almKey }, api, deps);
 }
 
 async function importBatch(
   roots: readonly BindableRoot[],
   slug: string,
+  noun: string,
   org: ResolvedOrg,
   api: ImportApiClient,
   deps: DetectDeps,
@@ -152,7 +159,7 @@ async function importBatch(
   }
 
   const verdicts = new Map<string, { done: boolean; detail?: string }>();
-  await console.withSpinner(`Binding ${roots.length} projects to '${slug}'`, () =>
+  await console.withSpinner(`Binding ${roots.length} ${noun} to '${slug}'`, () =>
     plan.importMonorepo(
       selection.repos[0],
       roots.map(({ projectKey, projectName }) => ({ projectKey, projectName })),
