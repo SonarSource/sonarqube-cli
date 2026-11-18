@@ -83,6 +83,8 @@ export type MonorepoRootResult =
   | { path: string; kind: 'would-link'; projectKey: string }
   /** `--dry-run`: the project would be created and mapped; nothing was created. */
   | { path: string; kind: 'would-create'; projectKey: string }
+  /** `--dry-run`: the project would be created bound to the repository and mapped; nothing was created. */
+  | { path: string; kind: 'would-bind'; projectKey: string }
   /** The file links the root, but the remote cannot confirm the project; nothing was created. */
   | { path: string; kind: 'unavailable'; projectKey: string; problem: LinkedProjectProblem }
   /** `--root` names another key than the one the file maps the root to; the file was left as it is. */
