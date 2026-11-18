@@ -51,7 +51,7 @@ export function validateWorkflowOptions(options: WorkflowOptions, template?: str
     return;
   }
   const secret = options.sonarTokenVarName ?? DEFAULT_SONAR_TOKEN_VAR_NAME;
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(secret) || /^GITHUB_/i.test(secret)) {
+  if (!/^[a-zA-Z_]\w*$/.test(secret) || /^GITHUB_/i.test(secret)) {
     throw new InvalidOptionError(
       'Invalid analysis-secret name. Use letters, digits and underscores, without a GITHUB_ prefix.',
     );
@@ -71,6 +71,16 @@ function validateWorkflow(content: string): void {
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new InvalidOptionError('The workflow must be a YAML mapping.');
+  }
+  const { on, jobs } = parsed as Record<string, unknown>;
+  if (
+    on === undefined ||
+    jobs === null ||
+    typeof jobs !== 'object' ||
+    Array.isArray(jobs) ||
+    Object.keys(jobs).length === 0
+  ) {
+    throw new InvalidOptionError('The workflow must define on and at least one job under jobs.');
   }
 }
 
