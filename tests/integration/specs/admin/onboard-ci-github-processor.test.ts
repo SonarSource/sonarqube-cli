@@ -79,7 +79,13 @@ describe('GitHub onboarding repository lifecycle', () => {
     files = { [BUILD_PATH]: BUILD },
     analyzed = false,
     readOnly = false,
-  }: { files?: Record<string, string>; analyzed?: boolean; readOnly?: boolean } = {}) {
+    projectKey = PROJECT,
+  }: {
+    files?: Record<string, string>;
+    analyzed?: boolean;
+    readOnly?: boolean;
+    projectKey?: string;
+  } = {}) {
     const builder = harness
       .newFakeGitHubServer()
       .withOrganization('test-org', [{ name: 'sample', defaultBranch: 'develop', files }]);
@@ -90,8 +96,8 @@ describe('GitHub onboarding repository lifecycle', () => {
     const server = await harness
       .newFakeServer()
       .withAuthToken('server-token')
-      .withProject(PROJECT)
-      .withAnalyzedProjects(analyzed ? [PROJECT] : [])
+      .withProject(projectKey)
+      .withAnalyzedProjects(analyzed ? [projectKey] : [])
       .start();
     const ctx: ProcessRepoContext = {
       github: new GitHubClient('github-token', github.baseUrl()),
@@ -204,20 +210,27 @@ describe('GitHub onboarding repository lifecycle', () => {
     expect(await ctx.github.getFileContent(REPO, BUILD_PATH, CI_BRANCH)).toBe(BUILD);
   });
 
-  it('rejects invalid template rendering before writes and commits the valid template', async () => {
-    const { ctx, repo, github } = await setup();
+  it('validates rendered YAML before writes and commits a correctly quoted template', async () => {
+    const projectKey = 'sample-project:';
+    const bindings = new Map([[REPO, projectKey]]);
+    const { ctx, repo, github } = await setup({ projectKey });
     ctx.workflowTemplate =
       'on: push\njobs:\n  scan:\n    runs-on: self-hosted\n    steps:\n      - run: echo {{SONAR_PROJECT_KEY}}\n';
-    expect(await assessRepo(ctx, repo, new Map([[REPO, 'bad\nkey']]))).toMatchObject({
-      outcome: 'failed',
-    });
-    expect(await executeRepo(ctx, repo, new Map([[REPO, 'bad\nkey']]))).toMatchObject({
-      outcome: 'failed',
-    });
+    const expectedFailure = {
+      outcome: 'failed' as const,
+      error: 'The workflow must contain valid, single-document YAML.',
+    };
+    expect(await assessRepo(ctx, repo, bindings)).toEqual(expectedFailure);
+    expect(await executeRepo(ctx, repo, bindings)).toEqual(expectedFailure);
     expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
-    expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'opened' });
+
+    ctx.workflowTemplate = ctx.workflowTemplate.replace(
+      'echo {{SONAR_PROJECT_KEY}}',
+      "'echo {{SONAR_PROJECT_KEY}}'",
+    );
+    expect(await executeRepo(ctx, repo, bindings)).toMatchObject({ outcome: 'opened' });
     expect(await ctx.github.getFileContent(REPO, WORKFLOW_PATH, CI_BRANCH)).toBe(
-      ctx.workflowTemplate.replace('{{SONAR_PROJECT_KEY}}', PROJECT),
+      ctx.workflowTemplate.replace('{{SONAR_PROJECT_KEY}}', projectKey),
     );
   });
 
