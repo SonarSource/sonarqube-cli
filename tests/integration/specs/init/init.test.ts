@@ -20,6 +20,8 @@
 
 // Integration tests for `sonar init`
 
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
@@ -93,6 +95,12 @@ describe('sonar init', () => {
     const markerAt = stdout.indexOf(integrateMarker);
     expect(markerAt).toBeGreaterThan(-1);
     expect(dashboardAt).toBeLessThan(markerAt);
+  }
+
+  /** Keeps the repository root, the default, when asked which folder to link. */
+  async function chooseRepositoryRoot(session: ReturnType<typeof harness.runInteractive>) {
+    await session.waitText('Choose the folder to link');
+    session.keyEnter();
   }
 
   /** The prompts every created project goes through, up to confirming its creation. */
@@ -964,6 +972,7 @@ describe('sonar init', () => {
 
           const session = harness.runInteractive('init --name Foo --visibility public');
           await session.accept('Link this directory');
+          await chooseRepositoryRoot(session);
           await session.decline(INTEGRATE_PROMPT);
           const result = await session.waitFinish();
 
@@ -1350,12 +1359,15 @@ describe('sonar init', () => {
     );
 
     it(
-      'rejects an intent option together with --monorepo',
+      'rejects --bind and --link <key> together with --monorepo',
       async () => {
-        const result = await harness.run('init --monorepo --non-interactive --create');
+        const bind = await harness.run('init --monorepo --non-interactive --bind');
+        const link = await harness.run('init --monorepo --non-interactive --link api-key');
 
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--create does not apply with --monorepo');
+        expect(bind.exitCode).toBe(2);
+        expect(bind.stderr).toContain('--bind does not apply with --monorepo');
+        expect(link.exitCode).toBe(2);
+        expect(link.stderr).toContain('--link <key> does not apply with --monorepo');
       },
       TIMEOUT,
     );
@@ -1843,6 +1855,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
+        await chooseRepositoryRoot(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1855,6 +1868,70 @@ describe('sonar init', () => {
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey": "bound_project"');
         expect(config).not.toContain(TOKEN);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'asks again when several folders are ticked, since the agreed project links one folder',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('api/.keep', '');
+        harness.cwd.writeFile('web/.keep', '');
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        await session.waitText('Choose another');
+        session.keyDown();
+        session.keyEnter();
+        await session.waitText('Choose the project folders');
+        for (const [index, name] of ['api', 'web'].entries()) {
+          session.write(name);
+          await session.waitText('1 match');
+          session.keyTab();
+          await session.waitText(`${index + 1} selected`);
+          session.write('\x7f'.repeat(name.length));
+        }
+        session.keyEnter();
+        await chooseRepositoryRoot(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
+        expect(result.stderr).toContain('A project links to one folder');
+        expect(result.stdout).not.toContain('Generated project key');
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config.match(/"projectKey"/g)).toHaveLength(1);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'links the repository root, not the current subdirectory, when keeping the default folder',
+      async () => {
+        await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        withRemote(GITHUB_REMOTE);
+        harness.cwd.writeFile('services/api/.keep', '');
+
+        const session = harness.runInteractive('init', {
+          cwd: join(harness.cwd.path, 'services', 'api'),
+        });
+        await session.accept('Link this directory');
+        await chooseRepositoryRoot(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const config = JSON.parse(harness.cwd.file('.sonar-config.json').asText()) as {
+          project: { projectKey: string; path: string };
+        };
+        expect(config.project).toMatchObject({ projectKey: 'bound_project', path: '.' });
       },
       TIMEOUT,
     );
@@ -1876,6 +1953,7 @@ describe('sonar init', () => {
         session.write('other');
         await session.waitText('1 match');
         session.keyEnter();
+        await chooseRepositoryRoot(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1956,6 +2034,7 @@ describe('sonar init', () => {
         await session.decline('Abandon linking a project');
         await session.waitText('other_project');
         session.keyEnter();
+        await chooseRepositoryRoot(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1976,6 +2055,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
+        await chooseRepositoryRoot(session);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
@@ -2002,6 +2082,7 @@ describe('sonar init', () => {
 
         const session = harness.runInteractive('init');
         await session.accept('Link this directory');
+        await chooseRepositoryRoot(session);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(1);
@@ -2027,6 +2108,22 @@ describe('sonar init', () => {
       key: string;
       /** Records another connection than the active one, as a mapping written elsewhere would. */
       stale?: boolean;
+    }
+
+    /** Ticks the top-level folders by name in the tree, which lists them alphabetically after the root. */
+    async function tickFolders(
+      session: ReturnType<typeof harness.runInteractive>,
+      names: string[],
+    ) {
+      await session.waitText('Choose the project folders');
+      for (const name of names) {
+        session.write(name);
+        await session.waitText('1 match');
+        session.keyTab();
+        await session.waitText(`${names.indexOf(name) + 1} selected`);
+        session.write('\x7f'.repeat(name.length));
+      }
+      session.keyEnter();
     }
 
     function writeMonorepoConfig(serverUrl: string, roots: Root[]) {
@@ -2159,13 +2256,14 @@ describe('sonar init', () => {
     );
 
     it(
-      'leaves an already configured root alone, asks nothing and runs no scan',
+      'leaves an already configured root alone and runs no scan',
       async () => {
         const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
         writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
         const before = harness.cwd.file('.sonar-config.json').asText();
 
         const session = harness.runInteractive('init --monorepo');
+        await tickFolders(session, ['api']);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -2174,6 +2272,135 @@ describe('sonar init', () => {
         expect(result.stdout).toContain('api: api-key');
         expect(result.stdout).not.toContain(SCAN_PROMPT);
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'still reports a mapped root the user did not tick, without ticking it for them',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['web']);
+        await session.waitText('Choose a project');
+        session.write('web-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(result.stdout).toContain('api: api-key');
+        expect(result.stdout).toContain("Mapped web to project 'web-key'.");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'still reports a mapped root that --root does not name, without touching it',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const result = await harness.run(
+          'init --monorepo --link --non-interactive --root web=web-key',
+        );
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(result.stdout).toContain('api: api-key');
+        expect(result.stdout).toContain("Mapped web to project 'web-key'.");
+        const { projects } = readConfig();
+        expect(projects.map(({ path, projectKey }) => `${path}:${projectKey}`).sort()).toEqual([
+          'api:api-key',
+          'web:web-key',
+        ]);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'with --link asks which existing project each picked folder gets, and never creates one',
+      async () => {
+        await signInToCloud((server) => server.withProject('api-key'));
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile('api/.keep', '');
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('Choose a project');
+        session.write('api-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('Generated project key');
+        expect(result.stdout).toContain("Mapped api to project 'api-key'.");
+        expect(harness.cwd.file('.sonar-config.json').asText()).toContain(
+          '"projectKey": "api-key"',
+        );
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'with --link offers a picked root that is already mapped another project, and keeps it when declined',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+        const before = harness.cwd.file('.sonar-config.json').asText();
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('is already linked to project api-key');
+        await session.decline('Link it to another project instead?');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('Already configured (1):');
+        expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'with --link remaps a picked root that is already mapped when the user chooses another project',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withProject('api-key').withProject('web-key'),
+        );
+        writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
+
+        const session = harness.runInteractive('init --monorepo --link');
+        await tickFolders(session, ['api']);
+        await session.waitText('Link it to another project instead?');
+        session.write('y');
+        await session.waitText('Choose a project');
+        session.write('web-key');
+        await session.waitText('1 match');
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain("Mapped api to project 'web-key'.");
+        const config = harness.cwd.file('.sonar-config.json').asText();
+        expect(config).toContain('"projectKey": "web-key"');
+        expect(config).not.toContain('api-key');
       },
       TIMEOUT,
     );
@@ -2295,6 +2522,54 @@ describe('sonar init', () => {
               .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
               .sort(),
           ).toEqual(['api=api-key', 'web=web-key']);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --link maps the existing project, and reports a missing one without creating it',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --link --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          expect(result.stdout + result.stderr).toContain("Project 'web-key' does not exist");
+          expect(createdKeys(server)).toEqual([]);
+          expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --link needs the key of a root that the file does not record',
+        async () => {
+          await startServer(() => {});
+          makeRepository('web');
+
+          const result = await harness.run('init --monorepo --link --non-interactive --root web');
+
+          expect(result.exitCode).toBe(2);
+          expect(result.stderr).toContain('--root web=<project key>');
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+        },
+        TIMEOUT,
+      );
+
+      it(
+        'with --create behaves like the default: it creates the missing project without a prompt',
+        async () => {
+          const server = await startServer((s) => s.withProject('api-key'));
+          makeRepository('api', 'web');
+
+          const result = await harness.run(
+            'init --monorepo --create --non-interactive --root api=api-key --root web=web-key',
+          );
+
+          expect(result.exitCode).toBe(0);
+          expect(createdKeys(server)).toEqual(['web-key']);
         },
         TIMEOUT,
       );
@@ -2455,5 +2730,174 @@ describe('sonar init', () => {
         TIMEOUT,
       );
     });
+  });
+  describe('folder picker', () => {
+    beforeEach(() => {
+      harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('services/api/package.json', '{}');
+      harness.cwd.writeFile('web/package.json', '{}');
+    });
+
+    function linkedPaths(): string[][] {
+      const config = harness.cwd.file('.sonar-config.json').asJson() as {
+        projects: { projectKey: string; path: string }[];
+      };
+      return config.projects.map(({ projectKey, path }) => [projectKey, path]);
+    }
+
+    function keyFor(folder: string) {
+      return generateProjectProposal(`${harness.cwd.path}/${folder}`, undefined, ORG).projectKey;
+    }
+
+    /** Waits for the folder question, answers 'Choose another' and opens the tree. */
+    async function openTree(session: ReturnType<typeof harness.runInteractive>) {
+      await session.waitText('Choose another');
+      session.keyDown();
+      session.keyEnter();
+      await session.waitText('Choose the project folders');
+    }
+
+    /** Ticks the folder `name` found by search, then clears the search; `selected` is the count so far. */
+    async function tick(
+      session: ReturnType<typeof harness.runInteractive>,
+      name: string,
+      selected: number,
+    ) {
+      session.write(name);
+      await session.waitText('1 match');
+      session.keyTab();
+      await session.waitText(`${selected} selected`);
+      session.write('\x7f'.repeat(name.length));
+    }
+
+    it(
+      'asks which folder to link only after the user agrees to link, and merges it into the existing links',
+      async () => {
+        const serverUrl = await signInToCloud((server) =>
+          server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        git(['remote', 'add', 'origin', GITHUB_REMOTE], harness.cwd.path);
+        harness.cwd.writeFile(
+          '.sonar-config.json',
+          JSON.stringify({
+            project: { projectKey: 'mapped', serverUrl, organization: ORG, path: 'services/api' },
+          }),
+        );
+
+        const session = harness.runInteractive('init');
+        await session.waitText('Link this directory');
+        expect(session.output()).not.toContain('Choose the folder to link');
+        session.keyEnter();
+        await openTree(session);
+        await tick(session, 'web', 1);
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(linkedPaths()).toEqual([
+          ['mapped', 'services/api'],
+          ['bound_project', 'web'],
+        ]);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'continues as a new project when the tree is cancelled after agreeing to link',
+      async () => {
+        await signInToCloud((cloud) =>
+          cloud.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+        );
+        git(['remote', 'add', 'origin', GITHUB_REMOTE], harness.cwd.path);
+
+        const session = harness.runInteractive('init');
+        await session.accept('Link this directory');
+        await openTree(session);
+        session.keyCtrlC();
+        await createProject(session);
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).not.toContain('Folder selection cancelled');
+        expect(result.stdout).toContain(UNBOUND);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'opens the tree for --monorepo without roots and maps every ticked folder',
+      async () => {
+        const apiKey = keyFor('services/api');
+        const webKey = keyFor('web');
+        await signInToCloud((server) => server.withProject(apiKey).withProject(webKey));
+
+        const session = harness.runInteractive('init --monorepo');
+        await session.waitText('Choose the project folders');
+        await tick(session, 'api', 1);
+        await tick(session, 'web', 2);
+        session.keyEnter();
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('Choose the folder to link');
+        expect(linkedPaths()).toEqual([
+          [apiKey, 'services/api'],
+          [webKey, 'web'],
+        ]);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'skips the tree for --monorepo with explicit roots',
+      async () => {
+        await signInToCloud((server) => server.withProject('web-key'));
+
+        const session = harness.runInteractive('init --monorepo --root web=web-key');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('Choose the project folders');
+        expect(result.stdout).not.toContain('Choose the folder to link');
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'fails with the onboarding cancelled message, without writing the configuration, when the tree is cancelled',
+      async () => {
+        await signInToCloud(() => {});
+
+        const session = harness.runInteractive('init --monorepo');
+        await session.waitText('Choose the project folders');
+        session.keyCtrlC();
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout + result.stderr).toContain('Onboarding cancelled.');
+        expect(result.stdout + result.stderr).not.toContain('Folder selection cancelled');
+        expect(result.stdout).not.toContain(INTEGRATE_PROMPT);
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'does not prompt for folders without a terminal',
+      async () => {
+        await signInToCloud(() => {});
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.stdout + result.stderr).not.toContain('Choose the folder to link');
+        expect(result.stdout + result.stderr).not.toContain('Choose the project folders');
+      },
+      TIMEOUT,
+    );
   });
 });

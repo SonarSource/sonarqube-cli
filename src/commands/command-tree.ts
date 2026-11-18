@@ -889,16 +889,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
       '--monorepo',
-      'Onboard several project roots instead of a single project: without --root, the roots mapped in .sonar-config.json are only checked and reported, and nothing is onboarded; with --root, the roots named are created or mapped',
+      'Onboard several project roots instead of a single project: choose the folders in a tree, or name them with --root. Roots already linked in .sonar-config.json are reported as configured; the others are created or mapped. Without a terminal and without --root, only the roots mapped in .sonar-config.json are reported',
     )
     .option(
       '--root <path[=key]>',
-      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; used instead of the roots in .sonar-config.json. A root already linked in .sonar-config.json is skipped; the others are created or mapped',
+      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; skips the folder tree. A root already linked in .sonar-config.json is skipped; the others are created or mapped, and an interactive run asks for the name and visibility of each new project',
       collectRoot,
     )
     .option(
       '--link [key]',
-      'Link this directory to an existing project without prompting: the one found for the repository, or the project named by key',
+      'Link a directory to an existing project: the one found for the repository, or the project named by key. With --monorepo, a bare --link only maps roots whose project already exists and never creates one (name each root with --root <path>=<key>)',
     )
     .option(
       '--bind',
