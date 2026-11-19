@@ -100,7 +100,7 @@ describe('GitHub onboarding repository lifecycle', () => {
       .withAnalyzedProjects(analyzed ? [projectKey] : [])
       .start();
     const ctx: ProcessRepoContext = {
-      github: new GitHubClient('github-token', github.baseUrl()),
+      github: new GitHubClient('github-token', { baseUrl: github.baseUrl() }),
       components: new ComponentsClient(new SonarHttpClient(server.baseUrl(), 'server-token')),
       serverUrl: server.baseUrl(),
       options: {},
@@ -241,7 +241,7 @@ describe('GitHub onboarding repository lifecycle', () => {
     });
     ctx.components = new ComponentsClient(new SonarHttpClient(server.baseUrl(), 'wrong-token'));
     expect(await assessRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'failed' });
-    ctx.github = new GitHubClient('wrong-token', github.baseUrl());
+    ctx.github = new GitHubClient('wrong-token', { baseUrl: github.baseUrl() });
     expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({ outcome: 'failed' });
     expect(github.getRecordedRequests().every((request) => request.method === 'GET')).toBe(true);
   });
