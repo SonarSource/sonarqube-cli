@@ -37,5 +37,5 @@ export const cursorAdapter: StopAgentAdapter = {
       skipAnalysisReason: p.status !== 'completed' ? `agent status is ${p.status}` : undefined,
     };
   },
-  emit: ({ findings, shouldContinue }) => (shouldContinue ? { followup_message: findings } : {}),
+  emit: ({ findings }) => ({ followup_message: findings }),
 };

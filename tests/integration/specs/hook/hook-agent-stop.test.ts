@@ -42,7 +42,6 @@ const BLOCKING_STOP_PROTOCOL = {
 const CLAUDE_CODEX_DEVIN_PROTOCOL = {
   ...BLOCKING_STOP_PROTOCOL,
   sessionIdField: 'session_id',
-  expectedLimitOutput: {},
 };
 const AGENTS = [
   { name: 'claude', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
@@ -54,18 +53,12 @@ const AGENTS = [
     payloadFields: (cwd: unknown) => ({ cwd }),
     expectedContinuationOutput: {
       findings: expect.stringContaining('Use Number.isNaN.'),
-      shouldContinue: true,
-    },
-    expectedLimitOutput: {
-      findings: expect.stringContaining('Vortex analysis reached its limit of 3 attempts.'),
-      shouldContinue: false,
     },
   },
   {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
     sessionIdField: 'sessionId',
-    expectedLimitOutput: {},
   },
   {
     name: 'cursor',
@@ -79,7 +72,6 @@ const AGENTS = [
     expectedContinuationOutput: {
       followup_message: expect.stringContaining('Use Number.isNaN.'),
     },
-    expectedLimitOutput: {},
   },
 ] as const;
 const ISSUE = { rule: 'typescript:S2688', message: 'Use Number.isNaN.', startLine: 2 };
@@ -583,16 +575,6 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       ).toContainEqual({ fingerprint: 'fresh' });
     }, 30000);
 
-    it('skips analysis and resets the counter when the session has already used three attempts', async () => {
-      await invoke();
-      withDb((db) => db.run('UPDATE vortex_analysis_counters SET analysis_count = 3'));
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await invoke();
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-    }, 30000);
-
     it('retries unchanged files after analysis fails', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
       response.errors = [{ code: 'failure', message: 'Analysis incomplete' }];
@@ -647,17 +629,24 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       expect(analyses()).toHaveLength(2);
     }, 30000);
 
-    it('allows stopping at the analysis limit even with findings', async () => {
+    it('requests three fix continuations and stops on the fourth completion without analysis', async () => {
       for (let attempt = 1; attempt <= 3; attempt++) {
         harness.cwd.writeFile('src/new.ts', BAD + `// attempt ${attempt}\n`);
         const result = await invoke({ stop_hook_active: attempt > 1 });
         expect(result.exitCode).toBe(0);
-        if (attempt < 3) expectContinuation(result);
-        else expect(JSON.parse(result.stdout)).toEqual(agent.expectedLimitOutput);
+        expectContinuation(result);
+        expect(queryState()).toEqual({ count: attempt, locks: 0, successful: attempt });
       }
+      harness.cwd.writeFile('src/new.ts', BAD + '// fourth completion\n');
+      expectSilentStop(await invoke({ stop_hook_active: true }));
       expect(analyses()).toHaveLength(3);
       expect(queryState()).toEqual({ count: 0, locks: 0, successful: 3 });
-    }, 30000);
+
+      // A new turn can analyze the changes skipped at the limit because they were not cached.
+      expectContinuation(await invoke());
+      expect(analyses()).toHaveLength(4);
+      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 4 });
+    }, 45000);
   });
 
   describe('locks and concurrent analyses', () => {
