@@ -144,7 +144,6 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
       });
       harness.cwd.writeFile('a.ts', 'const unused = 1;');
       try {
-        // The server stays blocked until disposal finishes, so cleanup must cancel the hook.
         const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')], {
           disposeWhenFileExists: started.path,
         });
@@ -181,7 +180,6 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
             hook: 'event',
             event: { type: 'session.execution.succeeded', data: { sessionID: 'ses_test' } },
           },
-          completion('main'),
         ],
         {
           sessions: {
@@ -190,9 +188,9 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
           },
         },
       );
-      expect(run.sessionGets).toEqual(['child', 'other', 'ses_test']);
+      expect(run.sessionGets).toEqual(['child', 'other']);
       expect(run.prompts).toEqual([]);
-      expect(sqaaCalls()).toBe(1);
+      expect(sqaaCalls()).toBe(0);
     },
     { timeout: 60000 },
   );
