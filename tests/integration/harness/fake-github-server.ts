@@ -82,6 +82,7 @@ export class FakeGitHubServerBuilder {
   private token = 'github-token';
   private pageSize = 100;
   private readOnly = false;
+  private readonly readOnlyRepos = new Set<string>();
 
   withOrganization(organization: string, repositories: FakeGitHubRepository[]): this {
     this.organizations.set(organization, repositories);
@@ -98,8 +99,12 @@ export class FakeGitHubServerBuilder {
     return this;
   }
 
-  withReadOnlyAccess(): this {
-    this.readOnly = true;
+  withReadOnlyAccess(repo?: string): this {
+    if (repo) {
+      this.readOnlyRepos.add(repo);
+    } else {
+      this.readOnly = true;
+    }
     return this;
   }
 
@@ -125,7 +130,7 @@ export class FakeGitHubServerBuilder {
         });
       }
     }
-    const { token, pageSize, readOnly } = this;
+    const { token, pageSize, readOnly, readOnlyRepos } = this;
     let commitCounter = 0;
 
     const paginate = (items: unknown[], url: URL): Response => {
@@ -161,16 +166,6 @@ export class FakeGitHubServerBuilder {
         if (request.headers.get('authorization') !== `Bearer ${token}`) {
           return Response.json({ message: 'Bad credentials' }, { status: 401 });
         }
-        if (readOnly && request.method !== 'GET') {
-          return Response.json(
-            { message: 'Resource not accessible by personal access token' },
-            {
-              status: 403,
-              headers: { 'x-accepted-github-permissions': 'contents=write' },
-            },
-          );
-        }
-
         const organizationMatch = /^\/orgs\/([^/]+)\/repos$/.exec(path);
         if (organizationMatch && request.method === 'GET') {
           const organization = decodeURIComponent(organizationMatch[1]);
@@ -189,6 +184,15 @@ export class FakeGitHubServerBuilder {
         const repo = repositories.get(fullName);
         if (!repo) return Response.json({ message: 'Not Found' }, { status: 404 });
         const endpoint = repositoryMatch?.[3] ?? '';
+        if ((readOnly || readOnlyRepos.has(fullName)) && request.method !== 'GET') {
+          return Response.json(
+            { message: 'Resource not accessible by personal access token' },
+            {
+              status: 403,
+              headers: { 'x-accepted-github-permissions': 'contents=write' },
+            },
+          );
+        }
         if (!endpoint && request.method === 'GET') return Response.json(metadata(repo));
 
         if (endpoint.startsWith('/git/ref/heads/') && request.method === 'GET') {
