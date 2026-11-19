@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path
 
 KNOWN_SECRETS_FILE = Path(__file__).with_name("known-secrets.txt")
-CREDENTIAL_ENV_VARS = ("SONARQUBE_CLI_TOKEN", "PORTKEY_API_KEY")
+CREDENTIAL_ENV_VARS = ("SONARQUBE_CLI_TOKEN", "PORTKEY_API_KEY", "HB_SONAR_ADMIN_TOKEN", "SONAR_RUN_TOKEN")
 MIN_CREDENTIAL_LENGTH = 8
 MARKER_FILE = "secrets-leak.json"
 REDACTION = "[REDACTED]"
