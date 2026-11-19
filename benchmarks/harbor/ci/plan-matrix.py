@@ -48,6 +48,8 @@ def select_tasks(inputs: dict) -> list[str]:
     tasks = [task for task in available if inputs[task_input(task)] is True]
     if not tasks:
         fail("Select at least one task")
+    if inputs["store-report"] is True and len(tasks) != len(available):
+        fail("Publishing the report needs all the tasks: check them all or uncheck the publish box")
     return tasks
 
 
