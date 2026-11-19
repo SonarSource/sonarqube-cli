@@ -73,6 +73,12 @@ describe('CommandInvocationContext stage accessors', () => {
     ).toBe(true);
   });
 
+  it('isAlphaEnabled follows the runtime whatever the stage', () => {
+    const stage: LifecycleState = { stage: 'beta' };
+    expect(ctx(stage, { isAlphaEnabled: false }).isAlphaEnabled()).toBe(false);
+    expect(ctx(stage, { isAlphaEnabled: true }).isAlphaEnabled()).toBe(true);
+  });
+
   it('isBetaEligible is true for Open Beta without consulting entitlement', () => {
     const context = ctx({ stage: 'beta' });
     expect(context.isBetaEligible()).toBe(true);

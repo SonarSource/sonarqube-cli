@@ -191,7 +191,15 @@ async function run(
     throw error;
   }
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
-  const deps: DetectDeps = { auth, http, console, interactive, dryRun, intent };
+  const deps: DetectDeps = {
+    auth,
+    http,
+    console,
+    interactive,
+    dryRun,
+    intent,
+    allowUnbound: ctx.isAlphaEnabled(),
+  };
   if (monorepo) {
     const roots = await monorepoRootsToOnboard(projectRoot, monorepoRoots, deps, interactive);
     const linkOnly = intent?.kind === 'link';
