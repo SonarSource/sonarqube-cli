@@ -230,7 +230,7 @@ function readJobTemplateFile(jobTemplate: string): string {
 /**
  * Rejects a non-SonarQube-Server connection before any GitLab-specific work (including the
  * token prompt) happens. Exported so the command handler can call it ahead of
- * `resolveGitlabToken`, without duplicating the error message.
+ * `resolveDevOpsToken`, without duplicating the error message.
  */
 export function assertOnPremiseConnection(auth: ResolvedAuth): void {
   if (auth.connectionType !== 'on-premise') {
