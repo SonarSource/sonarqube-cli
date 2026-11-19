@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TASKS_PAGE_URL, checkSentence } from './tasks.ts';
+import { TASKS_PAGE_URL, checkSentence, taskTitle } from './tasks.ts';
 
 interface Span {
   started_at: string | null;
@@ -123,6 +123,7 @@ function stoppedTrialOf(group: string, trialDir: string) {
     task,
     leak: existsSync(join(trialDir, LEAK_MARKER_FILE)),
     taskPage: `${TASKS_PAGE_URL}#${task}`,
+    taskTitle: taskTitle(task),
     agent: config?.agent?.name ?? null,
     agentVersion: null,
     model: modelName ? lastSegment(modelName) : null,
@@ -152,6 +153,7 @@ function trialOf(group: string, trialDir: string) {
     task,
     leak: existsSync(join(trialDir, LEAK_MARKER_FILE)),
     taskPage: `${TASKS_PAGE_URL}#${task}`,
+    taskTitle: taskTitle(task),
     agent: agent?.name ?? null,
     agentVersion: agent?.version ?? null,
     model: agent?.model_info?.name ?? null,
