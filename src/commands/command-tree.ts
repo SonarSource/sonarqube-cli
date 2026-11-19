@@ -64,6 +64,7 @@ import {
 } from './allowlist/secrets/clear.ts';
 import { allowlistSecretsRemove } from './allowlist/secrets/remove.ts';
 import { allowlistSecretsShow } from './allowlist/secrets/show.ts';
+import { A3S_ALLOW_LOCAL_CONTEXT_FLAG, runA3sAnalyze } from './analyze/a3s-analyze.ts';
 import { analyzeAll, type AnalyzeAllOptions } from './analyze/analyze-all.ts';
 import type { Severity } from './analyze/dependency-risk-helpers/sca-scanner.ts';
 import { SEVERITIES } from './analyze/dependency-risk-helpers/view-model/build/severity.ts';
@@ -788,12 +789,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   function applySqaaOptions(
     cmd: SonarCommand,
     runOptions: AnalyzeSqaaRunOptions = {},
+    allowLocalContext = false,
   ): SonarCommand {
     return applyBaseAgenticOptions(cmd)
       .option('--branch <branch>', 'Branch name for analysis context')
-      .authenticatedAction((ctx, options: AnalyzeSqaaOptions) =>
-        analyzeSqaa(options, ctx, runOptions),
-      );
+      .authenticatedAction(async (ctx, options: AnalyzeSqaaOptions) => {
+        if (allowLocalContext && (await ctx.isFeatureFlagEnabled(A3S_ALLOW_LOCAL_CONTEXT_FLAG))) {
+          return runA3sAnalyze(options, ctx);
+        }
+        return analyzeSqaa(options, ctx, runOptions);
+      });
   }
 
   // Default action for `sonar analyze` (no subcommand): run all analyses (secrets + agentic).
@@ -847,6 +852,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   applySqaaOptions(
     analyze.command('agentic').description('Run server-side Vortex analysis. Limitations apply'),
     { telemetryCallerCommand: SQAA_ANALYZE_AGENTIC_CALLER_COMMAND },
+    true,
   );
 
   // Hidden compatibility alias for `sonar analyze`.
