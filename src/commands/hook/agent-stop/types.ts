@@ -22,7 +22,7 @@ export type StopAgent = 'claude' | 'codex' | 'copilot' | 'cursor' | 'devin';
 
 export interface StopInput {
   sessionId: string;
-  cwd: string;
+  cwd: string | undefined;
   skipAnalysisReason?: string;
 }
 
