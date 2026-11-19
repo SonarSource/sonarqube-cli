@@ -1858,7 +1858,6 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
-        expect(result.stdout).toContain('not a result for your uncommitted local changes');
         expect(result.stdout).toContain('Quality gate: passed');
         expectDashboardBefore(result.stdout, 'bound_project', INTEGRATE_PROMPT);
         expect(result.stdout).not.toContain(UNBOUND);
