@@ -12,12 +12,12 @@
 }
 :root {
   color-scheme: light;
-  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #898781;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6e6c68;
   --grid: #e1e0d9; --ring: rgba(11, 11, 11, 0.10); --wash: rgba(11, 11, 11, 0.05);
   --accent: #2a78d6; --accent-wash: #e4effb; --strip: #c3c2b7;
-  --good: #0ca30c; --good-text: #006300; --good-wash: #dcefdc;
-  --bad: #d03b3b; --bad-text: #b3261e; --bad-wash: #f7dede;
-  --warn: #fab219; --warn-text: #8a5a00; --warn-wash: #fbf0d6;
+  --good: #64a06b; --good-text: #3d6f45; --good-wash: #f1f6f1;
+  --bad: #d17b77; --bad-text: #a8403b; --bad-wash: #f9eeed;
+  --warn: #e0b24f; --warn-text: #7a5a1a; --warn-wash: #f6eddb;
   --term-bg: #15171b; --term-fg: #e9e7e2; --term-dim: #8d9099; --term-prompt: #7fb0f2; --term-line: #2a2d33;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Google Sans Code", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -28,9 +28,9 @@
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #898781;
     --grid: #2c2c2a; --ring: rgba(255, 255, 255, 0.10); --wash: rgba(255, 255, 255, 0.06);
     --accent: #3987e5; --accent-wash: #1c2c42; --strip: #54544e;
-    --good: #0ca30c; --good-text: #3dbb3d; --good-wash: #15301a;
-    --bad: #d03b3b; --bad-text: #e66767; --bad-wash: #3a1d1d;
-    --warn: #fab219; --warn-text: #f0c46e; --warn-wash: #3a3020;
+    --good: #4b7050; --good-text: #8bc592; --good-wash: #1b241d;
+    --bad: #99524e; --bad-text: #e08a85; --bad-wash: #2a1f1e;
+    --warn: #c9a255; --warn-text: #e3c487; --warn-wash: #302a1c;
     --term-bg: #0b0c0e; --term-fg: #e9e7e2; --term-dim: #8d9099; --term-prompt: #7fb0f2; --term-line: #24272c;
   }
 }
@@ -39,9 +39,9 @@
   --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #898781;
   --grid: #2c2c2a; --ring: rgba(255, 255, 255, 0.10); --wash: rgba(255, 255, 255, 0.06);
   --accent: #3987e5; --accent-wash: #1c2c42; --strip: #54544e;
-  --good: #0ca30c; --good-text: #3dbb3d; --good-wash: #15301a;
-  --bad: #d03b3b; --bad-text: #e66767; --bad-wash: #3a1d1d;
-  --warn: #fab219; --warn-text: #f0c46e; --warn-wash: #3a3020;
+  --good: #4b7050; --good-text: #8bc592; --good-wash: #1b241d;
+  --bad: #99524e; --bad-text: #e08a85; --bad-wash: #2a1f1e;
+  --warn: #c9a255; --warn-text: #e3c487; --warn-wash: #302a1c;
   --term-bg: #0b0c0e; --term-fg: #e9e7e2; --term-dim: #8d9099; --term-prompt: #7fb0f2; --term-line: #24272c;
 }
 * { box-sizing: border-box; }
@@ -59,28 +59,14 @@ button { font: inherit; color: inherit; }
 .btn:hover { background: var(--wash); }
 h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spacing: -0.02em; text-wrap: balance; overflow-wrap: anywhere; }
 .mono { font-family: var(--mono); }
-.lede { color: var(--ink-2); margin: 8px 0 0; max-width: 62ch; }
 .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 650; }
 .muted { color: var(--ink-3); }
 .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 16px; padding: 20px; min-width: 0; }
 .stack { display: grid; gap: 14px; margin-top: 14px; }
-
-.board { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; margin-top: 26px; }
-.donut { --p: 100; width: 124px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center;
-  background: conic-gradient(var(--good) calc(var(--p) * 1%), var(--bad) 0); }
-.donut::before { content: ""; grid-area: 1 / 1; width: 78%; aspect-ratio: 1; border-radius: 50%; background: var(--surface); }
-.donut > span { grid-area: 1 / 1; position: relative; text-align: center; line-height: 1.1; }
-.donut b { display: block; font-size: 26px; letter-spacing: -0.02em; }
-.donut small { color: var(--ink-3); font-size: 12px; }
-.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 18px 24px; }
 .figure .v { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .figure .l { color: var(--ink-3); font-size: 13px; }
 
-.agent { margin-top: 44px; }
-.agent-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.agent-head h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
 .model { font-family: var(--mono); font-size: 13px; color: var(--ink-2); background: var(--wash); border-radius: 8px; padding: 2px 9px; }
-.agent-facts { display: flex; flex-wrap: wrap; gap: 4px 20px; color: var(--ink-2); margin: 6px 0 0; font-variant-numeric: tabular-nums; }
 
 .ico { width: 20px; height: 20px; flex: none; display: inline-block; vertical-align: -4px; }
 .ico.good { color: var(--good); } .ico.bad { color: var(--bad); } .ico.warn { color: var(--warn); }
@@ -89,56 +75,26 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .pill.bad { background: var(--bad-wash); color: var(--bad-text); }
 .pill.warn { background: var(--warn-wash); color: var(--warn-text); }
 .pill .ico { width: 16px; height: 16px; vertical-align: -3px; }
-
-.task-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.task-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; }
-.ext { font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }
-.ext:hover { text-decoration: underline; }
+.task-head { display: flex; justify-content: space-between; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.task-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 0; color: var(--ink-2); font-size: 14px; }
 .task-name { font-family: var(--mono); font-size: 16px; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
-.meters { display: grid; gap: 8px; margin-top: 16px; }
-.meter { display: grid; grid-template-columns: 76px 1fr 72px; align-items: center; gap: 12px; font-size: 13px; }
-.meter .l { color: var(--ink-3); }
-.meter .track { height: 8px; border-radius: 4px; background: var(--wash); overflow: hidden; }
-.meter .fill { height: 100%; border-radius: 4px; background: var(--accent); }
-.meter .v { text-align: right; font-variant-numeric: tabular-nums; }
-.criteria { margin-top: 16px; }
-.runs-fold summary { cursor: pointer; list-style: none; padding: 8px 0; display: flex; gap: 8px; }
-.runs-fold summary::-webkit-details-marker { display: none; }
-.runs-fold summary .eyebrow::before { content: "▸"; display: inline-block; width: 14px; }
-.runs-fold[open] summary .eyebrow::before { transform: rotate(90deg); }
 .ask-n { font-size: 10px; letter-spacing: .02em; }
-.framed { padding-bottom: 20px; }
-.frame-card { padding: 16px 20px; }
-.criteria summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style: none; padding: 8px 0; }
-.criteria summary::-webkit-details-marker { display: none; }
-.criteria summary .eyebrow::before { content: "▸"; display: inline-block; width: 14px; transition: transform .15s; }
-.criteria[open] summary .eyebrow::before { transform: rotate(90deg); }
-.criteria .pill { font-size: 12px; padding: 2px 10px; }
-.crit-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
-.crit-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; }
-.crit-list .ico { width: 18px; height: 18px; }
-.cnt { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.cnt.ok { color: var(--good-text); } .cnt.ko { color: var(--bad-text); }
-.when { color: var(--ink-3); margin: 6px 0 0; }
 .runs { margin-top: 18px; border-top: 1px solid var(--grid); padding-top: 6px; }
 .run { display: grid; grid-template-columns: 28px 22px minmax(60px, 1fr) 56px 132px; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 10px; color: var(--ink); text-decoration: none; }
 .run:hover { background: var(--wash); }
 .run .nm { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--grid); display: grid; place-items: center; font-size: 12px; font-weight: 650; color: var(--ink-2); }
-.run .tm { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.run .tm { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; min-width: 64px; }
 .run .note { color: var(--ink-3); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .strip { display: flex; gap: 2px; height: 10px; }
 .strip i { display: block; height: 100%; border-radius: 3px; background: var(--strip); min-width: 4px; }
-.strip i.err { background: var(--warn); }
 .strip i.slow { background: var(--bad); }
 .strip.none { border-radius: 3px; background: repeating-linear-gradient(135deg, transparent 0 4px, var(--grid) 4px 6px); }
-
-.back { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-weight: 600; }
 .title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; }
 .sub { color: var(--ink-2); margin: 6px 0 0; }
 .verdict { margin-top: 22px; padding: 0; overflow: hidden; }
 .banner { display: flex; align-items: center; gap: 14px; padding: 18px 20px; }
 .banner.good { background: var(--good-wash); } .banner.bad { background: var(--bad-wash); } .banner.warn { background: var(--warn-wash); }
-.banner .ico { width: 34px; height: 34px; }
+.banner .ico { width: 30px; height: 30px; }
 .banner h2 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
 .banner.good h2 { color: var(--good-text); } .banner.bad h2 { color: var(--bad-text); } .banner.warn h2 { color: var(--warn-text); }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); border-top: 1px solid var(--ring); }
@@ -156,21 +112,18 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .check-list li.ok .lab { color: var(--good-text); }
 .check-list li.ko .lab { color: var(--bad-text); }
 .section { margin: 34px 0 10px; }
-.quote { border-left: 3px solid var(--grid); padding: 2px 0 2px 16px; color: var(--ink-2); }
 .timeline { margin-top: 10px; }
 .timeline .strip { height: 18px; gap: 3px; }
 .timeline .strip button { display: block; height: 100%; border: 0; padding: 0; border-radius: 5px; background: var(--strip); min-width: 6px; cursor: pointer; }
-.timeline .strip button.err { background: var(--warn); }
 .timeline .strip button.slow { background: var(--bad); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 8px; font-size: 12px; color: var(--ink-3); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; background: var(--strip); }
-.legend i.err { background: var(--warn); } .legend i.slow { background: var(--bad); }
+.legend i.slow { background: var(--bad); }
 .steps { list-style: none; margin: 18px 0 0; padding: 0; }
 .step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 14px; position: relative; padding-bottom: 20px; scroll-margin-top: 16px; }
 .step::before { content: ""; position: absolute; left: 14px; top: 30px; bottom: 0; width: 2px; background: var(--grid); }
 .step:last-child::before { display: none; }
 .step .n { width: 30px; height: 30px; border-radius: 50%; background: var(--surface); border: 2px solid var(--grid); font-size: 13px; font-weight: 650; display: grid; place-items: center; color: var(--ink-2); position: relative; }
-.step.err .n { border-color: var(--warn); }
 .step.slow .n { border-color: var(--bad); }
 .step .body { min-width: 0; padding-top: 3px; }
 .rich p { margin: 0 0 8px; overflow-wrap: anywhere; }
@@ -179,35 +132,124 @@ h1 { font-size: 30px; line-height: 1.15; margin: 0; font-weight: 650; letter-spa
 .rich code { font-family: var(--mono); font-size: 13px; background: var(--wash); padding: 1px 6px; border-radius: 5px; }
 .say { color: var(--ink); margin-bottom: 8px; }
 .call { background: var(--term-bg); color: var(--term-fg); border-radius: 12px; margin: 8px 0 0; overflow: hidden; border: 1px solid var(--term-line); }
-.call.err { border-color: var(--warn); }
 .call > button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 12px 14px; cursor: pointer; }
-.call .cmd { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.call .cmd { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; flex: 1; min-width: 0; }
 .call .cmd::before { content: "$ "; color: var(--term-prompt); }
 .call .cmd.clamp { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .call .more { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--term-line); padding: 8px 14px; color: var(--term-prompt); font: 650 12px var(--sans); cursor: pointer; }
 .call .more:hover { text-decoration: underline; }
 .call .more[hidden] { display: none; }
 .call .top { display: flex; gap: 10px; align-items: flex-start; }
-.call .cmd { flex: 1; min-width: 0; }
 .call .out { color: var(--term-dim); font-family: var(--mono); font-size: 12px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call .flag { flex: none; font: 650 11px var(--sans); text-transform: uppercase; letter-spacing: .06em; color: #15171b; background: var(--warn); border-radius: 999px; padding: 2px 8px; margin-left: 8px; }
 .call pre { margin: 0; padding: 12px 14px; border-top: 1px solid var(--term-line); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.55 var(--mono); max-height: 420px; overflow: auto; color: var(--term-fg); }
 .note { margin: 8px 0 0; font-size: 13px; font-weight: 600; }
-.note.warn { color: var(--warn-text); } .note.slow { color: var(--bad-text); }
+.note.warn { color: var(--warn-text); }
+.note.slow { color: var(--bad-text); }
 details.tech { margin-top: 34px; }
 details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
 .kv { display: grid; grid-template-columns: 12rem minmax(0, 1fr); gap: 6px 16px; margin: 14px 0 0; }
 .kv dt { color: var(--ink-3); }
 .kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) {
-  .board { grid-template-columns: 1fr; justify-items: center; }
   .run { grid-template-columns: 28px 22px minmax(40px, 1fr) 52px; }
   .run .note { grid-column: 3 / -1; }
-  .meter { grid-template-columns: 64px 1fr 64px; }
   .kv { grid-template-columns: 1fr; } .kv dd { margin-bottom: 6px; }
   .stat { border-right: 0; border-bottom: 1px solid var(--ring); }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+.summary { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 10px 0 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.summary b { color: var(--ink); }
+.picker { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 26px; align-items: stretch; }
+.group .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tab { display: inline-flex; align-items: center; gap: 8px; padding: 6px 11px; border: 1px solid var(--ring); border-radius: 999px; background: var(--page); cursor: pointer; }
+.tab:hover { background: var(--wash); }
+.tab.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.tab .ico { width: 15px; height: 15px; vertical-align: 0; }
+.tab-name { font-weight: 500; font-family: var(--mono); font-size: 13px; }
+.panel { margin-top: 22px; border-top: 0; padding-top: 0; }
+.panel h2 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.task { border: 1px solid var(--ring); border-radius: 14px; background: var(--surface); padding: 14px 16px; }
+.task.ko { border-left: 4px solid var(--bad); border-left-width: 3px; }
+.task.ok { padding: 0; }
+.task-head .facts { margin-left: auto; color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.task .runs { margin-top: 6px; border-top: 0; padding-top: 0; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--ink-3); font-size: 14px; }
+.crumbs a { font-weight: 600; text-decoration: none; }
+.crumbs a:hover { text-decoration: underline; }
+.met-fold { margin-top: 12px; }
+.met-fold summary { cursor: pointer; color: var(--ink-2); padding: 6px 0; }
+.met-fold .check-list { margin-top: 8px; }
+.task .strip { height: 8px; gap: 2px; }
+.task.ok .task-head .ico { width: 18px; height: 18px; }
+.task .run .ico { width: 18px; height: 18px; }
+.band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px 28px; margin-top: 18px; padding: 16px 22px; border: 1px solid var(--ring); border-radius: 16px; background: var(--surface); }
+.band .big { font-size: 42px; font-weight: 650; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.band .big span { color: var(--ink-3); font-size: 22px; font-weight: 500; }
+.band-label { color: var(--ink); font-size: 18px; font-weight: 650; margin: 0; }
+.band-figs { display: flex; gap: 24px; }
+.fig .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fig .l { font-size: 12px; color: var(--ink-3); }
+.harness { border: 1px solid var(--ring); border-radius: 16px; background: var(--surface); padding: 12px 14px 14px; }
+.harness.on { border-color: var(--ink-3); }
+.harness-head { display: flex; align-items: baseline; gap: 10px; }
+.harness-name { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.harness .tabs { margin-top: 10px; }
+.panel h2 .model { font-size: 14px; font-weight: 500; }
+@media (max-width: 640px) { .band { grid-template-columns: auto minmax(0, 1fr); } .band-figs { grid-column: 1 / -1; } .harness { width: 100%; } }
+@media (min-width: 641px) { .task .run { grid-template-columns: 28px minmax(60px, 1fr) auto; } }
+@media (max-width: 640px) { .task .run { grid-template-columns: 28px minmax(40px, 1fr) auto; } .task { padding-left: 12px; padding-right: 12px; } }
+.task .task-head { justify-content: flex-start; }
+.run .nm.good { background: var(--good-wash); border-color: var(--good); color: var(--good-text); }
+.run .nm.bad { background: var(--bad-wash); border-color: var(--bad); color: var(--bad-text); }
+.run .nm.warn { background: var(--bad-wash); border-color: var(--bad); color: var(--bad-text); }
+.strip i.slow, .timeline .strip button.slow, .legend i.slow { background: var(--bad); }
+.overview { margin-top: 18px; border: 1px solid var(--ring); border-radius: 16px; background: var(--surface); overflow: hidden; }
+.overview .band { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.overview .picker { margin: 0; gap: 0; border-top: 1px solid var(--grid); }
+.overview .harness { flex: 1 1 auto; border: 0; border-radius: 0; background: transparent; padding: 14px 22px 16px; }
+.overview .harness + .harness { border-left: 1px solid var(--grid); }
+.overview .harness.on { background: var(--wash); }
+.panel-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.panel-head h2 { margin: 0; }
+.panel-facts { margin-left: auto; color: var(--ink-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.panel .stack { margin-top: 14px; }
+@media (max-width: 640px) { .overview .harness + .harness { border-left: 0; border-top: 1px solid var(--grid); } }
+.task-link { color: inherit; text-decoration: none; text-underline-offset: 5px; }
+.task-link:hover, .task-link:focus-visible { color: var(--accent); text-decoration: none; }
+.task-link::after { content: " ↗"; font-size: 0.7em; opacity: 0; }
+.task-link:hover::after, .task-link:focus-visible::after { opacity: 1; }
+.band-label.bad { color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.band-date { color: var(--ink-3); font-size: 14px; margin-top: 2px; }
+.task.ok > summary { list-style: none; cursor: pointer; padding: 11px 16px; }
+.task.ok > summary::-webkit-details-marker { display: none; }
+.task.ok[open] > summary { padding-bottom: 4px; }
+.task.ok > .runs { padding: 0 16px 10px; }
+.chev::before { content: "▸"; display: inline-block; width: 18px; text-align: center; color: var(--ink-3); transition: transform .15s; }
+.task.ok[open] .chev::before { transform: rotate(90deg); }
+.passed-fold summary { cursor: pointer; list-style: none; color: var(--ink-2); font-size: 13px; padding: 8px 4px 0; }
+.passed-fold summary::-webkit-details-marker { display: none; }
+.passed-fold summary::before { content: "▸"; display: inline-block; width: 16px; transition: transform .15s; }
+.passed-fold[open] summary::before { transform: rotate(90deg); }
+.passed-fold .runs { margin-top: 4px; }
+.task-id { flex: 1 1 0; min-width: 140px; }
+@media (max-width: 640px) { .task-head .facts { flex: 0 0 100%; margin-left: 0; text-align: right; } }
+.task-id .task-name { margin: 0; }
+.run .tm.leak { color: var(--bad-text); font-weight: 650; }
+.panel > .legend { margin-top: 14px; }
+.band-label .ico { width: 20px; height: 20px; }
+.result-tag { display: inline-block; margin-bottom: 8px; padding: 1px 9px; border: 1px solid var(--grid); border-radius: 999px; color: var(--ink-3); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.verdict .banner.good, .verdict .banner.bad, .verdict .banner.warn { background: transparent; }
+.verdict .banner.good h2, .verdict .banner.bad h2, .verdict .banner.warn h2 { color: var(--ink); }
+.verdict .check-list li.ok, .verdict .check-list li.ko { background: var(--wash); }
+.verdict .check-list li.ok .lab, .verdict .check-list li.ko .lab { color: var(--ink-3); }
+.verdict .pill.good, .verdict .pill.bad { background: var(--wash); color: var(--ink-2); }
+.strip i.err, .timeline .strip button.err, .legend i.err { background: var(--warn); }
+.call.err { border-color: var(--warn); }
+.dot-bad { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; flex: none; }
+.tab .dot-bad { margin-left: 2px; }
+.verdict .check-list li.ko { grid-template-columns: minmax(0, 1fr) auto; }
 </style>
 </head>
 <body>
@@ -226,9 +268,9 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   const SHORT_SECONDS = 10;
   const MIN_STEP_SECONDS = 0.5;
   const ICONS = {
-    good: '<svg viewBox="0 0 20 20" class="ico good" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor"/><path d="M5.6 10.3l3 3 5.8-6.1" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    bad: '<svg viewBox="0 0 20 20" class="ico bad" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor"/><path d="M6.6 6.6l6.8 6.8M13.4 6.6l-6.8 6.8" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>',
-    warn: '<svg viewBox="0 0 20 20" class="ico warn" aria-hidden="true"><circle cx="10" cy="10" r="10" fill="currentColor"/><path d="M10 5.6v5.4" stroke="#15171b" stroke-width="2.2" stroke-linecap="round"/><circle cx="10" cy="14.2" r="1.3" fill="#15171b"/></svg>',
+    good: '<svg viewBox="0 0 20 20" class="ico good" aria-hidden="true"><path d="M4.5 10.5l3.6 3.6 7.4-8.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    bad: '<svg viewBox="0 0 20 20" class="ico bad" aria-hidden="true"><circle cx="10" cy="10" r="9.2" fill="var(--bad-wash)" stroke="currentColor" stroke-width="1.4"/><path d="M10 5.6v5.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="10" cy="14.2" r="1.15" fill="currentColor"/></svg>',
+    warn: '<svg viewBox="0 0 20 20" class="ico warn" aria-hidden="true"><path d="M10 2.4L18.3 16.8H1.7Z" fill="var(--warn-wash)" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 7.6v4.3" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="10" cy="14.3" r="1.05" fill="currentColor"/></svg>',
   };
 
   function el(tag, props, children) {
@@ -278,7 +320,6 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     if (rewardOf(trial) === null) return { text: 'No result', kind: 'warn' };
     return passed(trial) ? { text: 'Passed', kind: 'good' } : { text: 'Failed', kind: 'bad' };
   }
-  const failedCommands = (trial) => trial.steps.reduce((sum, step) => sum + step.results.filter((r) => r.isError).length, 0);
   function gapsOf(trial) {
     const times = trial.steps.map((step) => (step.at ? Date.parse(step.at) : null));
     return trial.steps.map((step, index) => {
@@ -397,36 +438,39 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     return el('div', { class: 'call' + (result && result.isError ? ' err' : '') }, [header, more, body]);
   }
 
-  function askNode(step) {
-    return el('div', { class: 'step framed', id: 'step-request' }, [el('span', { class: 'n ask-n', text: 'Ask' }), el('div', { class: 'card frame-card' }, [el('div', { class: 'say' }, [richText(step.message)])])]);
-  }
-  function finalNode(step, number) {
-    return el('div', { class: 'step framed' }, [el('span', { class: 'n', text: String(number) }), el('div', { class: 'card frame-card' }, [el('div', { class: 'say' }, [richText(step.message)])])]);
-  }
-  function stepNode(step, number, gap) {
+  function stepNode(step, number, gap, tag) {
     const failed = step.results.some((r) => r.isError);
     const slow = gap !== null && gap >= WAIT_SECONDS;
     const body = el('div', { class: 'body' });
+    if (tag) body.appendChild(el('span', { class: 'result-tag', text: tag }));
     if (step.message) body.appendChild(el('div', { class: 'say' }, [richText(step.message)]));
     step.calls.forEach((call) => body.appendChild(callNode(call, step.results)));
     if (failed) body.appendChild(el('p', { class: 'note warn', text: step.results.some(blockedByHook) ? 'A hook blocked this step. Click it to read why.' : 'A command failed here. Click it to read the answer.' }));
     if (slow) body.appendChild(el('p', { class: 'note slow', text: 'The agent waited ' + fmtSeconds(gap) + ' for the answer.' }));
-    return el('li', { class: 'step' + (slow ? ' slow' : failed ? ' err' : ''), id: 'step-' + step.id }, [el('span', { class: 'n', text: String(number) }), body]);
+    return el('li', { class: 'step' + (slow ? ' slow' : ''), id: 'step-' + step.id }, [el('span', { class: 'n' + (tag === 'Task' ? ' ask-n' : ''), text: String(number) }), body]);
   }
 
+  function checkItem(check) {
+    return el('li', { class: check.ok ? 'ok' : 'ko' }, [
+      check.ok ? icon('good') : null,
+      el('span', { text: check.text }),
+      el('span', { class: 'lab', text: check.ok ? 'Met' : 'Not met' }),
+    ]);
+  }
   function checksNode(trial) {
     if (!trial.checks.length) return null;
-    const met = trial.checks.filter((check) => check.ok).length;
+    const met = trial.checks.filter((check) => check.ok);
+    const missed = trial.checks.filter((check) => !check.ok);
     return el('div', { class: 'checks' }, [
       el('div', { class: 'checks-head' }, [
-        el('span', { class: 'eyebrow', text: 'What was checked' }),
-        el('span', { class: 'pill ' + (met === trial.checks.length ? 'good' : 'bad'), text: met + ' of ' + trial.checks.length + ' met' }),
+        el('span', { class: 'eyebrow', text: missed.length ? 'What failed' : 'What was checked' }),
+        el('span', { class: 'pill ' + (missed.length ? 'bad' : 'good'), text: met.length + ' of ' + trial.checks.length + ' met' }),
       ]),
-      el('ul', { class: 'check-list' }, trial.checks.map((check) => el('li', { class: check.ok ? 'ok' : 'ko' }, [
-        icon(check.ok ? 'good' : 'bad'),
-        el('span', { text: check.text }),
-        el('span', { class: 'lab', text: check.ok ? 'Met' : 'Not met' }),
-      ]))),
+      missed.length ? el('ul', { class: 'check-list' }, missed.map(checkItem)) : null,
+      met.length ? el('details', { class: 'met-fold' }, [
+        el('summary', { text: missed.length ? 'Show the ' + plural(met.length, 'check') + ' that passed' : 'Show the ' + plural(met.length, 'check') }),
+        el('ul', { class: 'check-list' }, met.map(checkItem)),
+      ]) : null,
     ]);
   }
 
@@ -453,124 +497,82 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
   function taskRequest(trial) {
     return trial.steps.find((step) => step.source === 'user' && step.message && !step.message.trimStart().startsWith('<'));
   }
-  function taskSection(request) {
-    return request ? [el('div', { class: 'section eyebrow', text: 'The task' }), askNode(request)] : [];
+  function nextFailedLink(trial) {
+    const failedOrder = combos().flatMap((combo) => combo.members.filter((t) => !passed(t)).sort((a, b) => a.task.localeCompare(b.task) || a.name.localeCompare(b.name)));
+    const next = failedOrder.length ? failedOrder[(failedOrder.indexOf(trial) + 1) % failedOrder.length] : null;
+    if (!next || next === trial) return null;
+    return el('p', { class: 'sub' }, [el('a', { href: linkTo(next), onclick: () => { selectedKey = comboKey(next); }, text: 'Next failed trial: ' + comboLabel(next) + ', ' + next.task + ' →' })]);
   }
-  function resultSection(finalAnswer, count) {
-    return finalAnswer ? [el('div', { class: 'section eyebrow', text: 'The result' }), finalNode(finalAnswer.step, count + 1)] : [];
-  }
-  function trialPage(trial) {
-    const status = statusOf(trial);
+  function trialHeader(trial) {
     const siblings = siblingsOf(trial);
-    const page = el('div');
-    page.appendChild(el('a', { class: 'back', href: '#', text: '← All results' }));
-    page.appendChild(el('div', { class: 'title-row' }, [el('h1', { class: 'mono', text: trial.task }), taskLink(trial)]));
-    page.appendChild(el('p', { class: 'sub', text: agentLabel(trial.agent) + (trial.model ? ' (' + trial.model + ')' : '') + ', trial ' + (siblings.indexOf(trial) + 1) + ' of ' + siblings.length }));
-
+    const where = comboLabel(trial) + (siblings.length > 1 ? ', trial ' + (siblings.indexOf(trial) + 1) + ' of ' + siblings.length : '');
+    const hasTitle = trial.taskTitle && trial.taskTitle !== trial.task;
+    return [
+      el('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' }, [
+        el('a', { href: '#', text: 'Results', onclick: () => { selectedKey = comboKey(trial); } }),
+        el('span', { text: '›' }),
+        el('span', { class: 'mono', text: trial.task }),
+        el('span', { text: '›' }),
+        el('span', { text: where }),
+      ]),
+      el('div', { class: 'title-row' }, [el('h1', { class: 'mono' }, [el('a', { class: 'task-link', href: trial.taskPage, target: '_blank', rel: 'noopener', title: 'What this task tests', text: trial.task })])]),
+      hasTitle ? el('p', { class: 'sub', text: trial.taskTitle }) : null,
+      nextFailedLink(trial),
+    ];
+  }
+  function verdictCard(trial) {
+    const status = statusOf(trial);
     const stats = [
       [fmtSeconds(trial.seconds.agent), 'Agent time'],
       [trial.steps.length ? String(trial.steps.filter((s) => s.source === 'agent').length) : null, 'Steps'],
       [fmtCost(trial.costUsd), 'Cost'],
       [trial.inputTokens !== null && trial.outputTokens !== null ? compact(trial.inputTokens) + ' in / ' + compact(trial.outputTokens) + ' out' : null, 'Tokens'],
     ].filter((item) => item[0] !== null);
-    const verdict = el('div', { class: 'card verdict' }, [
+    return el('div', { class: 'card verdict' }, [
       el('div', { class: 'banner ' + status.kind }, [icon(status.kind), el('h2', { text: status.text })]),
       stats.length ? el('div', { class: 'stats' }, stats.map(([value, label]) => el('div', { class: 'stat' }, [el('div', { class: 'v', text: value }), el('div', { class: 'l', text: label })]))) : null,
       trial.exception ? el('p', { class: 'note warn', style: 'padding:0 20px', text: trial.exception }) : null,
       trial.leak ? el('p', { class: 'note slow', style: 'padding:12px 20px 0', text: 'A secret was found in the files of this trial. The published copy was redacted, and the job was marked as failed.' }) : null,
       checksNode(trial),
     ]);
-    page.appendChild(verdict);
-
+  }
+  function trajectorySection(trial) {
     const request = taskRequest(trial);
-
     const gaps = gapsOf(trial);
     const agentSteps = trial.steps.map((step, index) => ({ step, gap: gaps[index] })).filter((item) => item.step.source === 'agent');
     const last = agentSteps[agentSteps.length - 1];
     const finalAnswer = last && last.step.calls.length === 0 && last.step.message ? last : null;
-    const worked = finalAnswer ? agentSteps.slice(0, -1) : agentSteps;
-
-    page.append(...taskSection(request));
-    page.appendChild(el('div', { class: 'section eyebrow', text: 'What the agent did' }));
-    if (worked.length === 0) {
-      page.appendChild(el('p', { class: 'muted', text: 'No steps were recorded for this trial.' }));
-    } else {
-      page.appendChild(el('div', { class: 'timeline' }, [
-        stripNode(trial, true),
-        el('div', { class: 'legend' }, [
-          el('span', {}, [el('i'), 'A step, as wide as it took']),
-          el('span', {}, [el('i', { class: 'err' }), 'A command failed']),
-          el('span', {}, [el('i', { class: 'slow' }), 'Waited ' + WAIT_SECONDS + ' s or more']),
-        ]),
-      ]));
-      page.appendChild(el('ol', { class: 'steps' }, worked.map((item, index) => stepNode(item.step, index + 1, item.gap))));
-    }
-    page.append(...resultSection(finalAnswer, worked.length));
-    page.appendChild(technicalDetails(trial));
-    return page;
+    const heading = el('div', { class: 'section eyebrow', text: 'Trajectory' });
+    if (agentSteps.length === 0 && !request) return [heading, el('p', { class: 'muted', text: 'No steps were recorded for this trial.' })];
+    return [
+      heading,
+      agentSteps.length > 0 ? el('div', { class: 'timeline' }, [stripNode(trial, true), legendNode()]) : null,
+      el('ol', { class: 'steps' }, [
+        request ? stepNode(request, 'Ask', null, 'Task') : null,
+        ...agentSteps.map((item, index) => stepNode(item.step, index + 1, item.gap, item === finalAnswer ? 'Result' : null)),
+      ]),
+    ];
+  }
+  function trialPage(trial) {
+    return el('div', {}, [...trialHeader(trial), verdictCard(trial), ...trajectorySection(trial), technicalDetails(trial)]);
   }
 
-  const taskLink = (trial) => el('a', { class: 'ext', href: trial.taskPage, target: '_blank', rel: 'noopener', text: 'What it tests ↗' });
-  function meterNode(label, value, text, max) {
-    const fill = el('div', { class: 'fill' });
-    fill.style.width = Math.max((value / max) * 100, 2) + '%';
-    return el('div', { class: 'meter' }, [el('span', { class: 'l', text: label }), el('div', { class: 'track' }, [fill]), el('span', { class: 'v', text })]);
-  }
   function runRow(trial, number) {
-    const failed = failedCommands(trial);
     const status = statusOf(trial);
     return el('a', { class: 'run', href: linkTo(trial), title: 'Trial ' + number + ': ' + status.text, 'aria-label': 'Trial ' + number + ': ' + status.text }, [
-      el('span', { class: 'nm', text: String(number) }),
-      icon(status.kind),
+      el('span', { class: 'nm ' + status.kind, text: String(number) }),
       stripNode(trial, false),
-      el('span', { class: 'tm', text: fmtSeconds(trial.seconds.agent) || '' }),
-      el('span', { class: 'note', text: trial.leak ? 'secret found' : failed ? plural(failed, 'failed command') : trial.steps.length ? plural(trial.steps.filter((s) => s.source === 'agent').length, 'step') : 'no steps' }),
+      el('span', { class: 'tm' + (trial.leak ? ' leak' : ''), text: trial.leak ? 'secret found' : fmtSeconds(trial.seconds.agent) || '' }),
     ]);
   }
-  function criteriaNode(members) {
-    const counts = new Map();
-    members.forEach((trial) => trial.checks.forEach((check) => {
-      const entry = counts.get(check.text) || { met: 0, total: 0 };
-      entry.total += 1;
-      if (check.ok) entry.met += 1;
-      counts.set(check.text, entry);
-    }));
-    if (counts.size === 0) return null;
-    const entries = [...counts.entries()];
-    const allMet = entries.every(([, entry]) => entry.met === entry.total);
-    const metCount = entries.filter(([, entry]) => entry.met === entry.total).length;
-    return el('details', { class: 'criteria' }, [
-      el('summary', {}, [
-        el('span', { class: 'eyebrow', text: 'What must be true' }),
-        el('span', { class: 'pill ' + (allMet ? 'good' : 'bad'), text: metCount + ' of ' + entries.length + ' always met' }),
-      ]),
-      el('ul', { class: 'crit-list' }, entries.map(([text, entry]) => el('li', {}, [
-        icon(entry.met === entry.total ? 'good' : 'bad'),
-        el('span', { text }),
-        el('span', { class: 'cnt ' + (entry.met === entry.total ? 'ok' : 'ko'), text: entry.met + ' of ' + entry.total }),
-      ]))),
-    ]);
-  }
-  function taskCard(task, members, maxTime, maxCost) {
-    const done = members.filter(passed).length;
-    const time = average(members.map((trial) => trial.seconds.agent));
-    const cost = average(members.map((trial) => trial.costUsd));
-    const ok = done === members.length;
-    const meters = [];
-    if (time !== null && maxTime > 0) meters.push(meterNode('Avg time', time, fmtSeconds(time), maxTime));
-    if (cost !== null && maxCost > 0) meters.push(meterNode('Avg cost', cost, fmtCost(cost), maxCost));
-    return el('div', { class: 'card' }, [
-      el('div', { class: 'task-head' }, [
-        el('div', { class: 'task-title' }, [el('p', { class: 'task-name', text: task }), taskLink(members[0])]),
-        el('span', { class: 'pill ' + (ok ? 'good' : 'bad') }, [icon(ok ? 'good' : 'bad'), done + ' of ' + members.length + ' passed']),
-      ]),
-      meters.length ? el('div', { class: 'meters' }, meters) : null,
-      criteriaNode(members),
-      el('details', { class: 'runs-fold' }, [el('summary', {}, [el('span', { class: 'eyebrow', text: 'Trials (' + siblingsOf(members[0]).length + ')' })]), el('div', { class: 'runs' }, siblingsOf(members[0]).map((trial, index) => runRow(trial, index + 1)))]),
-    ]);
-  }
-  function figure(value, label) {
-    return el('div', { class: 'figure' }, [el('div', { class: 'v', text: value }), el('div', { class: 'l', text: label })]);
+  let selectedKey = null;
+  const comboKey = (trial) => (trial.agent || '') + '|' + (trial.model || '');
+  const shortModel = (model) => (model ? String(model).split('/').pop() : 'unknown model');
+  const comboLabel = (trial) => agentLabel(trial.agent) + ' · ' + shortModel(trial.model);
+  function combos() {
+    return [...groupBy(trials, comboKey).entries()]
+      .map(([key, members]) => ({ key, agent: members[0].agent, model: members[0].model, members }))
+      .sort((a, b) => agentLabel(a.agent).localeCompare(agentLabel(b.agent)) || shortModel(a.model).localeCompare(shortModel(b.model)));
   }
   function failuresFirst(groups) {
     const allPassed = (key) => groups.get(key).every(passed);
@@ -582,49 +584,103 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const format = (day) => new Date(day + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     return days.length === 1 ? 'Run of ' + format(days[0]) : 'Trials from ' + format(days[0]) + ' to ' + format(days[days.length - 1]);
   }
+  function chooseCombo(key) {
+    selectedKey = key;
+    render(true);
+    const current = document.querySelector('.tab.on');
+    if (current) current.focus({ preventScroll: true });
+  }
+  function tabNode(combo) {
+    const on = combo.key === selectedKey;
+    const hasFailures = !combo.members.every(passed);
+    return el('button', { type: 'button', class: 'tab' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: () => chooseCombo(combo.key) }, [
+      el('span', { class: 'tab-name', text: shortModel(combo.model) }),
+      hasFailures ? el('i', { class: 'dot-bad', role: 'img', 'aria-label': 'has failed trials' }) : null,
+    ]);
+  }
+  function pickerNode(all) {
+    const byAgent = groupBy(all, (c) => agentLabel(c.agent));
+    return el('div', { class: 'picker', role: 'group', 'aria-label': 'Harness and model' }, [...byAgent.entries()].map(([agent, items]) => el('div', { class: 'harness' + (items.some((c) => c.key === selectedKey) ? ' on' : '') }, [
+      el('div', { class: 'harness-head' }, [
+        el('span', { class: 'harness-name', text: agent }),
+      ]),
+      el('div', { class: 'tabs' }, items.map(tabNode)),
+    ])));
+  }
+  function summaryBand() {
+    const done = trials.filter(passed).length;
+    const failed = trials.length - done;
+    const figure = (value, label) => el('div', { class: 'fig' }, [el('div', { class: 'v', text: value }), el('div', { class: 'l', text: label })]);
+    return el('div', { class: 'band' }, [
+      el('div', { class: 'big' }, [el('b', { text: String(done) }), el('span', { text: '/' + trials.length })]),
+      el('div', { class: 'band-mid' }, [
+        el('div', { class: 'band-label' + (failed ? ' bad' : '') }, [failed ? el('i', { class: 'dot-bad', role: 'img', 'aria-label': 'failed' }) : null, failed ? plural(failed, 'trial') + ' failed' : 'Every trial passed']),
+        runDate() ? el('div', { class: 'band-date', text: runDate() }) : null,
+      ]),
+      el('div', { class: 'band-figs' }, [figure(fmtCost(sumCost(trials)) || '-', 'cost'), figure(fmtSeconds(sumSeconds(trials)) || '-', 'agent time')]),
+    ]);
+  }
+  const opened = new Set();
+  function remember(node, key) {
+    node.open = opened.has(key);
+    node.addEventListener('toggle', () => { if (node.open) opened.add(key); else opened.delete(key); });
+    return node;
+  }
+  function legendNode() {
+    return el('div', { class: 'legend' }, [
+      el('span', {}, [el('i'), 'A step, as wide as it took']),
+      el('span', {}, [el('i', { class: 'err' }), 'A command failed']),
+      el('span', {}, [el('i', { class: 'slow' }), 'Waited ' + WAIT_SECONDS + ' s or more']),
+    ]);
+  }
+  function taskBlock(task, members) {
+    const foldKey = comboKey(members[0]) + '|' + task;
+    const attempts = siblingsOf(members[0]);
+    const done = members.filter(passed).length;
+    const ok = done === members.length;
+    const many = members.length > 1;
+    const facts = [done + ' of ' + members.length + ' passed', fmtSeconds(average(members.map((t) => t.seconds.agent))), fmtCost(average(members.map((t) => t.costUsd)))]
+      .filter(Boolean)
+      .map((text, index) => (many && index > 0 ? 'avg ' + text : text))
+      .join(' · ');
+    const head = [
+      ok ? el('span', { class: 'chev', 'aria-hidden': 'true' }) : null,
+      ok ? icon('good') : null,
+      el('div', { class: 'task-id' }, [
+        el('p', { class: 'task-name' }, [el('a', { class: 'task-link', href: members[0].taskPage, target: '_blank', rel: 'noopener', title: 'What this task tests', text: task })]),
+        members[0].taskTitle && members[0].taskTitle !== task ? el('p', { class: 'task-title', text: members[0].taskTitle }) : null,
+      ]),
+      el('span', { class: 'facts', text: facts }),
+    ];
+    const rows = (list) => el('div', { class: 'runs' }, list.map((trial) => runRow(trial, attempts.indexOf(trial) + 1)));
+    if (ok) return remember(el('details', { class: 'task ok' }, [el('summary', { class: 'task-head' }, head), rows(attempts)]), 'task|' + foldKey);
+    const passedAttempts = attempts.filter(passed);
+    return el('div', { class: 'task ko' }, [
+      el('div', { class: 'task-head' }, head),
+      rows(attempts.filter((trial) => !passed(trial))),
+      passedAttempts.length ? remember(el('details', { class: 'passed-fold' }, [el('summary', { text: 'Show the ' + plural(passedAttempts.length, 'passed trial') }), rows(passedAttempts)]), 'fold|' + foldKey) : null,
+    ]);
+  }
+  function comboPanel(combo) {
+    const byTask = groupBy(combo.members, (t) => t.task);
+    const failing = [...byTask.values()].filter((members) => !members.every(passed)).length;
+    const status = el('span', { class: 'pill' }, [failing ? failing + ' of ' + plural(byTask.size, 'task') + ' failed' : 'All ' + plural(byTask.size, 'task') + ' passed']);
+    return el('section', { class: 'panel' }, [
+      el('div', { class: 'panel-head' }, [
+        el('h2', {}, [agentLabel(combo.agent), el('span', { class: 'model', text: shortModel(combo.model) })]),
+        status,
+        el('span', { class: 'panel-facts', text: (fmtCost(sumCost(combo.members)) || '-') + ' · ' + (fmtSeconds(sumSeconds(combo.members)) || '-') }),
+      ]),
+      el('div', { class: 'stack' }, failuresFirst(byTask).map((task) => taskBlock(task, byTask.get(task)))),
+      legendNode(),
+    ]);
+  }
   function overviewPage() {
     const page = el('div');
-    const done = trials.filter(passed).length;
-    const rate = trials.length ? Math.round((done / trials.length) * 100) : 0;
-    page.appendChild(el('div', { class: 'eyebrow', text: 'Benchmark results' }));
-    page.appendChild(el('h1', { text: 'What the agents did with the CLI' }));
-    page.appendChild(el('p', { class: 'lede', text: 'Each trial is one attempt by an AI coding agent at a task. An automatic check decides pass or fail. Pick a trial to read what the agent did.' }));
-    if (runDate()) page.appendChild(el('p', { class: 'when', text: runDate() }));
-    const donut = el('div', { class: 'donut', role: 'img', 'aria-label': done + ' of ' + trials.length + ' trials passed' }, [el('span', {}, [el('b', { text: done + '/' + trials.length }), el('small', { text: 'passed' })])]);
-    donut.style.setProperty('--p', String(rate));
-    const agents = new Set(trials.map((t) => t.agent + '/' + t.model)).size;
-    page.appendChild(el('div', { class: 'card board' }, [
-      donut,
-      el('div', { class: 'figures' }, [
-        figure(fmtCost(sumCost(trials)) || '-', 'Total cost'),
-        figure(fmtSeconds(sumSeconds(trials)) || '-', 'Agent time'),
-        figure(String(new Set(trials.map((t) => t.task)).size), 'Tasks'),
-        figure(String(agents), 'Agents'),
-      ]),
-    ]));
-    const byAgent = groupBy(trials, (t) => agentLabel(t.agent) + '\n' + (t.model || 'unknown model'));
-    failuresFirst(byAgent).forEach((title) => {
-      const members = byAgent.get(title);
-      const [name, model] = title.split('\n');
-      const byTask = groupBy(members, (t) => t.task);
-      const ok = members.filter(passed).length;
-      const times = [...byTask.values()].map((m) => average(m.map((t) => t.seconds.agent)) || 0);
-      const costs = [...byTask.values()].map((m) => average(m.map((t) => t.costUsd)) || 0);
-      page.appendChild(el('section', { class: 'agent' }, [
-        el('div', { class: 'eyebrow', text: 'Agent' }),
-        el('div', { class: 'agent-head', style: 'margin-top:6px' }, [
-          icon(ok === members.length ? 'good' : 'bad'),
-          el('h2', { text: name }),
-          el('span', { class: 'model', text: model }),
-        ]),
-        el('div', { class: 'agent-facts' }, [
-          el('span', { text: ok + ' of ' + plural(members.length, 'trial') + ' passed' }),
-          el('span', { text: (fmtCost(sumCost(members)) || '-') + ' in total' }),
-          el('span', { text: plural(byTask.size, 'task') }),
-        ]),
-        el('div', { class: 'stack' }, failuresFirst(byTask).map((task) => taskCard(task, byTask.get(task), Math.max(...times), Math.max(...costs)))),
-      ]));
-    });
+    const all = combos();
+    if (!all.some((c) => c.key === selectedKey)) selectedKey = (all.find((c) => !c.members.every(passed)) || all[0]).key;
+    page.appendChild(el('div', { class: 'overview' }, [summaryBand(), pickerNode(all)]));
+    page.appendChild(comboPanel(all.find((c) => c.key === selectedKey)));
     return page;
   }
 
@@ -633,14 +689,23 @@ details.tech summary { cursor: pointer; font-weight: 650; color: var(--ink-2); }
     const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
     root.dataset.theme = dark ? 'light' : 'dark';
   });
-  function render() {
+  let lastView = null;
+  let overviewScroll = 0;
+  function scrollTarget(keepPosition, here, onTrial) {
+    if (keepPosition) return here;
+    return onTrial ? 0 : overviewScroll;
+  }
+  function render(keepPosition) {
     const hash = decodeURIComponent(location.hash.slice(1));
     const trial = trials.find((t) => keyOf(t) === hash);
+    const here = window.scrollY;
+    if (lastView === '') overviewScroll = here;
     main.replaceChildren(trial ? trialPage(trial) : overviewPage());
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: scrollTarget(keepPosition, here, Boolean(trial)), behavior: 'instant' });
+    lastView = trial ? hash : '';
     fitCommands();
   }
-  window.addEventListener('hashchange', render);
+  window.addEventListener('hashchange', () => render());
   window.addEventListener('resize', fitCommands);
   if (document.fonts) document.fonts.ready.then(fitCommands);
   render();

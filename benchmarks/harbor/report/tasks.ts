@@ -3,8 +3,8 @@ export const TASKS_PAGE_URL = 'https://internal.sip.sonarsource.io/apps/harbor-t
 const TITLES: Record<string, string> = {
   'integrate--happy': 'Set up SonarQube for the coding agent',
   'auth--missing-org': 'Repair the CLI, then count the open issues',
-  'secrets-context--prompt': 'A key typed directly in the prompt',
-  'secrets-context--file-read': 'A key hidden inside a file the agent reads',
+  'secrets-context--prompt': 'Send a prompt that contains a secret key (it must be blocked)',
+  'secrets-context--file-read': 'Read a file that holds a secret key, then list the services',
 };
 
 export function taskTitle(task: string): string {
