@@ -122,7 +122,7 @@ describe('GitHub bulk CI onboarding', () => {
       }),
       httpClient: new SonarHttpClient(server.baseUrl(), 'server-token'),
     };
-    const client = new GitHubClient('github-token', github.baseUrl());
+    const client = new GitHubClient('github-token', { baseUrl: github.baseUrl() });
     return {
       github,
       server,
