@@ -92,7 +92,7 @@ export default {
               ['--agent', 'opencode'],
               controller.signal,
             );
-            if (controller.signal.aborted || response.shouldContinue !== true ||
+            if (controller.signal.aborted ||
                 typeof response.findings !== 'string' || !response.findings.trim()) continue;
             await ctx.session.prompt({ sessionID, text: response.findings });
           } catch {
