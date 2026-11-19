@@ -24,6 +24,7 @@ import { OPENCODE_PLUGIN_MANAGED_HEADER } from './secrets-plugin-content.ts';
 export const OPENCODE_SQAA_PLUGIN_CONTENT = String.raw`${OPENCODE_PLUGIN_MANAGED_HEADER}
 ${OPENCODE_PLUGIN_HELPERS_CONTENT}
 const HOOK_TIMEOUT_MS = 20000;
+const COMPLETION_TIMEOUT_MS = 60000;
 const ANALYZED_TOOLS = new Set(['edit', 'write']);
 
 function toContentChunks(content: unknown): any[] {
@@ -63,6 +64,50 @@ export default {
         return;
       }
     });
+
+    const controller = new AbortController();
+    const handledEvents = new Set<string>();
+    async function observeCompletions() {
+      try {
+        for await (const event of ctx.event.subscribe({
+          types: ['session.execution.succeeded'],
+          signal: controller.signal,
+        })) {
+          try {
+            if (controller.signal.aborted) break;
+            const sessionID = event.data?.sessionID;
+            if (event.type !== 'session.execution.succeeded' ||
+                typeof event.id !== 'string' || !event.id ||
+                typeof sessionID !== 'string' || !sessionID || handledEvents.has(event.id)) continue;
+            handledEvents.add(event.id);
+
+            const session = await ctx.session.get({ sessionID });
+            if (session.parentID || session.location?.directory !== directory) continue;
+
+            const response = await runHook(
+              'agent-stop',
+              { sessionID, cwd: directory },
+              COMPLETION_TIMEOUT_MS,
+              directory,
+              ['--agent', 'opencode'],
+              controller.signal,
+            );
+            if (controller.signal.aborted || response.shouldContinue !== true ||
+                typeof response.findings !== 'string' || !response.findings.trim()) continue;
+            await ctx.session.prompt({ sessionID, text: response.findings });
+          } catch {
+            // Completion analysis must never prevent the session from finishing.
+          }
+        }
+      } catch {
+        // A failed event stream leaves sessions completed without a follow-up.
+      }
+    }
+    const completionEvents = observeCompletions();
+    return async () => {
+      controller.abort();
+      await completionEvents;
+    };
   },
 };
 `;

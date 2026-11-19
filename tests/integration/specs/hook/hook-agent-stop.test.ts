@@ -49,6 +49,19 @@ const AGENTS = [
   { name: 'codex', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
   { name: 'devin', ...CLAUDE_CODEX_DEVIN_PROTOCOL },
   {
+    name: 'opencode',
+    sessionIdField: 'sessionID',
+    payloadFields: (cwd: unknown) => ({ cwd }),
+    expectedContinuationOutput: {
+      findings: expect.stringContaining('Use Number.isNaN.'),
+      shouldContinue: true,
+    },
+    expectedLimitOutput: {
+      findings: expect.stringContaining('Vortex analysis reached its limit of 3 attempts.'),
+      shouldContinue: false,
+    },
+  },
+  {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
     sessionIdField: 'sessionId',
