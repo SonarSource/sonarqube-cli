@@ -128,15 +128,7 @@ async function linkProject(
   console.success(
     `Linked this directory to project '${projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
   );
-  console.print(
-    'The results below are the last analysis on the server, not a result for your uncommitted local changes.',
-  );
-  await showAnalysisResults(
-    http,
-    projectKey,
-    console,
-    'No analysis results on the server yet for this project.',
-  );
+  await showAnalysisResults(http, projectKey, console);
   return { kind: 'linked', projectKey };
 }
 

@@ -902,7 +902,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--bind',
-      'Create a new project bound to the repository without prompting (SonarQube Cloud, with the organization linked to your DevOps platform)',
+      'Create a new project bound to the repository without prompting (SonarQube Cloud, with the organization linked to your DevOps platform). With --monorepo, all the roots that need a new project are bound in one batch; a root whose project already exists is reported as failed unless named with --root <path>=<key>',
     )
     .option(
       '--create',
