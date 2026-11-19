@@ -114,6 +114,10 @@ export class GitHubClient {
     } = {},
   ) {}
 
+  withRetryHandler(onRetry: (message: string) => void): GitHubClient {
+    return new GitHubClient(this.token, { ...this.options, onRetry });
+  }
+
   async listOrganizationRepos(organization: string): Promise<GitHubRepo[]> {
     return this.fetchAllPages(
       `/orgs/${encodeURIComponent(organization)}/repos?type=all`,
