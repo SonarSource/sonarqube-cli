@@ -156,6 +156,43 @@ describe('integrate pi — Vortex feature', () => {
     { timeout: 30000 },
   );
 
+  it('replaces the installed DEEP reminder extension while preserving other extensions', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('cloud-token')
+      .withOrganizations([{ key: TEST_ORG, name: 'My Org' }])
+      .withVortexEntitlement(TEST_ORG, 'test-uuid-1234')
+      .withProject(TEST_PROJECT)
+      .start();
+    harness.withAuth(server.baseUrl(), 'cloud-token', TEST_ORG);
+    harness
+      .state()
+      .withInstalledIntegrationFeature(
+        piIntegration,
+        VORTEX_FEATURE_ID,
+        'global',
+        harness.userHome.path,
+      );
+    harness.userHome.writeFile(
+      SQAA_EXTENSION_PATH,
+      `// ${PI_EXTENSION_MANAGED_MARKER}\n// legacy sonar-deep-reminder\n`,
+    );
+    harness.userHome.writeFile('.pi/agent/extensions/other.ts', 'export default () => {};\n');
+    const result = await harness.run('integrate pi --non-interactive', {
+      extraEnv: {
+        SONARQUBE_CLI_SONARCLOUD_URL: server.baseUrl(),
+        SONARQUBE_CLI_SONARCLOUD_API_URL: server.baseUrl(),
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(harness.userHome.file(...SQAA_EXTENSION_PATH.split('/')).asText()).toBe(
+      PI_SQAA_EXTENSION_CONTENT,
+    );
+    expect(harness.userHome.file('.pi', 'agent', 'extensions', 'other.ts').asText()).toBe(
+      'export default () => {};\n',
+    );
+  }, 30000);
+
   it(
     'does not install Vortex when the organization is not entitled',
     async () => {
