@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
@@ -42,40 +42,32 @@ import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import { isolateNetworkEnv } from '../../../_common/network-env.ts';
-import { writeExecutable, writeFakeLauncher } from '../../core/host/install/fake-scanner.ts';
 import { createKeychainTestHandle } from '../../core/host/keychain-test-handle.ts';
 
 const TOKEN = 'squ_first_scan_token';
-const posixOnly = process.platform === 'win32' ? describe.skip : describe;
 const keychain = createKeychainTestHandle();
 
 let root: string;
 let projectRoot: string;
 let restoreNetworkEnv: () => void;
-let previousPath: string | undefined;
 let previousUserHome: string | undefined;
-let logPaths: string[];
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'first-scan-test-'));
   projectRoot = join(root, 'project');
   mkdirSync(projectRoot);
   restoreNetworkEnv = isolateNetworkEnv();
-  previousPath = process.env.PATH;
   previousUserHome = process.env[ENV_SONAR_USER_HOME];
   process.env[ENV_SONAR_USER_HOME] = join(root, 'user-home');
   clearNetworkConfigCache();
   keychain.setup();
-  logPaths = [];
 });
 
 afterEach(() => {
   clearNetworkConfigCache();
   keychain.teardown();
   restoreNetworkEnv();
-  restoreEnv('PATH', previousPath);
   restoreEnv(ENV_SONAR_USER_HOME, previousUserHome);
-  for (const logPath of logPaths) rmSync(logPath, { force: true });
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -134,24 +126,6 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
     scan: true,
     ...overrides,
   };
-}
-
-/** A scanner on the PATH whose `java` prints a line and writes the report, or fails. */
-function installScanner(exitCode = 0): void {
-  const launcher = writeFakeLauncher(root);
-  writeExecutable(launcher.javaPath, [
-    '#!/bin/sh',
-    'for arg in "$@"; do case "$arg" in',
-    '  -XshowSettings:properties) echo "    java.specification.version = 21" >&2; exit 0;;',
-    '  --version) echo "SonarScanner CLI 8.3.1.16491"; exit 0;;',
-    '  -Dsonar.scanner.metadataFilePath=*) report="${arg#*=}";;',
-    'esac; done',
-    `printf '%s\\n' "$@" > '${join(root, 'launched')}'`,
-    'echo "scanner says hello, token $SONAR_TOKEN"',
-    `if [ ${exitCode} -eq 0 ]; then printf 'ceTaskId=task-1\\nprojectKey=my-key\\n' > "$report"; fi`,
-    `exit ${exitCode}`,
-  ]);
-  process.env.PATH = `${launcher.binDir}${delimiter}${previousPath ?? ''}`;
 }
 
 async function failureOf(promise: Promise<unknown>): Promise<CommandFailedError> {
@@ -213,28 +187,6 @@ describe('runFirstScan without a scan', () => {
 });
 
 describe('runFirstScan failures', () => {
-  posixOnly('when engine provisioning fails', () => {
-    it.each([false, true])('never launches the scanner (detached: %s)', async (detach) => {
-      installScanner();
-      const error = await failureOf(
-        runFirstScan(
-          projectRoot,
-          'my-key',
-          depsFor(new FakeConsole(), {
-            routes: {
-              '/api/system/status': { version: '10.6' },
-              '/api/v2/analysis/engine': { sha256: 'invalid' },
-            },
-          }),
-          flags({ detach }),
-        ),
-      );
-      expect(error.message).toContain('invalid scanner engine metadata');
-      expect(error.remediationHint).toContain('setup is intact');
-      expect(existsSync(join(root, 'launched'))).toBe(false);
-    });
-  });
-
   it('says the project was kept when the network setup is unusable, before any download', async () => {
     process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
     clearNetworkConfigCache();
@@ -281,151 +233,41 @@ describe('runFirstScan failures', () => {
     expect(error.message).toContain('A PEM client key cannot be used with --detach.');
     expect(error.remediationHint).toContain('were kept');
   });
-
-  posixOnly('when the scanner fails', () => {
-    it('keeps the project and points to the scanner log', async () => {
-      installScanner(1);
-
-      const error = await failureOf(
-        runFirstScan(projectRoot, 'my-key', depsFor(new FakeConsole()), flags()),
-      );
-
-      expect(error.message).toBe(
-        'The first analysis did not complete: SonarScanner exited with code 1.',
-      );
-      expect(error.remediationHint).toContain("Project 'my-key'");
-      expect(error.remediationHint).toContain('sonar-scanner-');
-    });
-  });
-
-  posixOnly('when the server rejects the analysis', () => {
-    it('keeps the project and reports why processing failed', async () => {
-      installScanner();
-      const routes = {
-        '/api/ce/task': {
-          task: { id: 'task-1', componentKey: 'my-key', status: 'FAILED', errorMessage: 'bad' },
-        },
-      };
-
-      const error = await failureOf(
-        runFirstScan(projectRoot, 'my-key', depsFor(new FakeConsole(), { routes }), flags()),
-      );
-
-      expect(error.message).toBe(
-        'The first analysis did not complete: Analysis processing failed: bad',
-      );
-    });
-  });
 });
 
-posixOnly('runFirstScan in the foreground', () => {
-  async function scan(
-    routes: Routes = {},
-    scanFlags = flags(),
-    console = new FakeConsole(),
-  ): Promise<Extract<ScanResult, { status: 'completed' }>> {
+describe('runFirstScan without a SonarScanner', () => {
+  const UNAVAILABLE =
+    "SonarScanner is not available in this version of the CLI. Project 'my-key' is set up; the first analysis was skipped.";
+
+  it.each([false, true])(
+    'warns and skips the analysis when --scan is passed (detached: %s)',
+    async (detach) => {
+      const console = new FakeConsole();
+
+      const result = await runFirstScan(projectRoot, 'my-key', depsFor(console), flags({ detach }));
+
+      expect(result).toBe(NOT_RUN);
+      expect(
+        console.calls.filter((call) => call.method === 'warn').map((call) => call.args[0]),
+      ).toEqual([UNAVAILABLE]);
+    },
+  );
+
+  it('warns and skips the analysis when the user accepts the offer', async () => {
+    const console = new FakeConsole();
+    console.queueResponse(true);
+
     const result = await runFirstScan(
       projectRoot,
       'my-key',
-      depsFor(console, { routes }),
-      scanFlags,
+      depsFor(console, { interactive: true }),
+      flags({ scan: false }),
     );
-    expect(result.status).toBe('completed');
-    const completed = result as Extract<ScanResult, { status: 'completed' }>;
-    logPaths.push(completed.logPath);
-    return completed;
-  }
 
-  it('runs the scanner, waits for the server and reads the results of that analysis', async () => {
-    installScanner();
-
-    const result = await scan();
-
-    expect(result).toMatchObject({
-      taskId: 'task-1',
-      analysisId: 'an-1',
-      qualityGate: 'OK',
-      openIssues: 7,
-    });
-  });
-
-  it('shows the scanner output live, without the token, when verbose', async () => {
-    installScanner();
-    const console = new FakeConsole();
-
-    await scan({}, flags({ verbose: true }), console);
-
-    const lines = printed(console);
-    expect(lines.some((line) => line.includes('scanner says hello'))).toBe(true);
-    expect(lines.join('\n')).not.toContain(TOKEN);
-    expect(console.calls.some((call) => call.method === 'spinner')).toBe(true);
-  });
-
-  it('reports a missing quality gate as unknown, never as a pass', async () => {
-    installScanner();
-
-    const result = await scan({ '/api/qualitygates/project_status': new Error('500') });
-
-    expect(result.qualityGate).toBeNull();
-    expect(result.openIssues).toBe(7);
-  });
-
-  it('reads the issues per quality and severity for the table', async () => {
-    installScanner();
-    const facet = (counts: Record<string, number>) => ({
-      property: 'impactSeverities',
-      values: Object.entries(counts).map(([val, count]) => ({ val, count })),
-    });
-    const byQuality: Record<string, unknown> = {
-      SECURITY: { total: 4, facets: [facet({ HIGH: 4 })] },
-      RELIABILITY: { total: 2, facets: [facet({ LOW: 2 })] },
-      MAINTAINABILITY: { total: 1, facets: [facet({ INFO: 1 })] },
-    };
-
-    const result = await scan({
-      '/api/issues/search': (params?: Params) =>
-        params?.impactSoftwareQualities === undefined
-          ? { total: 7 }
-          : byQuality[params.impactSoftwareQualities as string],
-    });
-
-    expect(result.openIssues).toBe(7);
-    expect(result.issueBreakdown?.distinctIssues).toBe(7);
-    expect(result.issueBreakdown?.rows.map((row) => row.total)).toEqual([4, 2, 1]);
-  });
-
-  it('has no issue table when the server returns no severity facets', async () => {
-    installScanner();
-
-    const result = await scan();
-
-    expect(result.openIssues).toBe(7);
-    expect(result.issueBreakdown).toBeNull();
-  });
-
-  it('has no issue table, and asks for none, when the analysis found no open issues', async () => {
-    installScanner();
-    const requests: Params[] = [];
-
-    const result = await scan({
-      '/api/issues/search': (params?: Params) => {
-        requests.push(params);
-        return { total: 0 };
-      },
-    });
-
-    expect(result.openIssues).toBe(0);
-    expect(result.issueBreakdown).toBeNull();
-    expect(requests).toHaveLength(1);
-  });
-
-  it('reports a missing issue count as unknown, never as zero', async () => {
-    installScanner();
-
-    const result = await scan({ '/api/issues/search': new Error('500') });
-
-    expect(result.qualityGate).toBe('OK');
-    expect(result.openIssues).toBeNull();
+    expect(result).toBe(NOT_RUN);
+    expect(
+      console.calls.some((call) => call.method === 'warn' && call.args[0] === UNAVAILABLE),
+    ).toBe(true);
   });
 });
 

@@ -29,7 +29,7 @@ import {
   OWNER_ONLY_DIRECTORY_MODE,
   SHARED_PROJECT_CONFIG_FILE_NAME,
 } from '@/core/config-constants.ts';
-import { installSonarScanner } from '@/core/host/install/sonar-scanner.ts';
+import { installSonarScanner, ScannerUnavailableError } from '@/core/host/install/sonar-scanner.ts';
 import logger from '@/core/observability/logger.ts';
 import { ComputeEngineClient } from '@/core/server/compute-engine.ts';
 import { IssuesClient } from '@/core/server/issues.ts';
@@ -244,6 +244,12 @@ export async function runFirstScan(
       ...(await readResults(deps, projectKey, analysisId)),
     };
   } catch (error) {
+    if (error instanceof ScannerUnavailableError) {
+      console.warn(
+        `${error.message} Project '${projectKey}' is set up; the first analysis was skipped.`,
+      );
+      return NOT_RUN;
+    }
     throw keepProjectNote(projectKey, error);
   } finally {
     if (directory && !handedOff) {

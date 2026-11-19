@@ -1307,6 +1307,25 @@ describe('sonar init', () => {
     );
 
     it(
+      'creates the project and warns that no SonarScanner is available when --scan is passed',
+      async () => {
+        await signInToCloud(() => {});
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive --create --scan');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stderr).toContain(
+          'SonarScanner is not available in this version of the CLI.',
+        );
+        expect(result.stdout).not.toContain('Analysis completed');
+        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
+      },
+      TIMEOUT,
+    );
+
+    it(
       'warns that scan flags are ignored when the directory is already set up',
       async () => {
         const serverUrl = await signInToCloud(() => {});
