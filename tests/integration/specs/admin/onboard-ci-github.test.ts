@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   onboardCiGithub,
   type OnboardCiGithubOptions,
+  validateOnboardCiGithubOptions,
 } from '@/commands/admin/onboard-ci/github/index.ts';
 import { CI_BRANCH } from '@/commands/admin/onboard-ci/github/processor.ts';
 import { WORKFLOW_PATH } from '@/commands/admin/onboard-ci/github/templates.ts';
@@ -127,7 +128,8 @@ describe('GitHub bulk CI onboarding', () => {
       github,
       server,
       client,
-      run: (options = OPTIONS) => onboardCiGithub(connection, client, options, console),
+      run: (options = OPTIONS, workflowTemplate = validateOnboardCiGithubOptions(options)) =>
+        onboardCiGithub(connection, client, options, console, workflowTemplate),
     };
   }
 
@@ -144,7 +146,8 @@ describe('GitHub bulk CI onboarding', () => {
       'read-only',
     );
 
-    expect(run()).rejects.toThrow('1 repositories failed to process.');
+    const error = await run().catch((error: unknown) => error);
+    expect(error).toMatchObject({ message: '1 repositories failed to process.' });
 
     expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson()).toEqual({
       opened: [
@@ -236,12 +239,16 @@ describe('GitHub bulk CI onboarding', () => {
     ).toHaveLength(1);
   });
 
-  it('uses the selected integration and complete workflow template', async () => {
+  it('uses the validated workflow template even if its file changes', async () => {
     const { run, client } = await setup();
     harness.cwd.writeFile('workflow.yml', TEMPLATE);
     const path = harness.cwd.file('workflow.yml').path;
 
-    await run({ ...OPTIONS, bindingName: SETTING.key, workflowTemplate: path });
+    const options = { ...OPTIONS, bindingName: SETTING.key, workflowTemplate: path };
+    const workflowTemplate = validateOnboardCiGithubOptions(options);
+    harness.cwd.writeFile('workflow.yml', 'changed after validation');
+
+    await run(options, workflowTemplate);
 
     expect(await client.getFileContent(`${ORG}/sample`, WORKFLOW_PATH, CI_BRANCH)).toBe(
       TEMPLATE.replaceAll('{{SONAR_PROJECT_KEY}}', 'sample-key'),
