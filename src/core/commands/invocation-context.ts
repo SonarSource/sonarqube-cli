@@ -104,6 +104,11 @@ export class CommandInvocationContext {
     return this.lifecycle.stage === 'alpha' && this.runtime.isAlphaEnabled;
   }
 
+  /** True when alpha is enabled for this run, so a non-Alpha command can gate an Alpha path. */
+  isAlphaEnabled(): boolean {
+    return this.runtime.isAlphaEnabled;
+  }
+
   /**
    * True when this execution should be treated as beta: Open Beta, or Private
    * Beta with the user entitled for the command's LaunchDarkly flag.

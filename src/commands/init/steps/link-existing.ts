@@ -51,7 +51,7 @@ export async function runLinkExisting(
 ): Promise<InitOutcome | UnboundNewPath> {
   const { auth, http, console, interactive, intent } = deps;
   if (requested) {
-    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey);
+    await assertProjectExists(new ProjectsClient(http), foundKey, auth.orgKey, deps.allowUnbound);
     return linkProject(foundKey, projectRoot, deps);
   }
   const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
@@ -82,7 +82,7 @@ export async function runLinkExisting(
 
   const projectKey = link
     ? foundKey
-    : await pickProject(new ProjectsClient(http), { auth, console });
+    : await pickProject(new ProjectsClient(http), { auth, console }, deps.allowUnbound);
   if (projectKey === null) {
     return unbound;
   }
@@ -105,12 +105,15 @@ async function assertProjectExists(
   projects: ProjectsClient,
   projectKey: string,
   organization: string | undefined,
+  allowUnbound: boolean,
 ): Promise<void> {
   if (!(await projects.findProject(projectKey, organization).orThrow())) {
     const where = organization ? ` in organization '${organization}'` : '';
     throw new InvalidOptionError(
       `--link names project '${projectKey}', which does not exist${where}.`,
-      "Check the key, or run 'sonar init' again with --create to create a new project.",
+      allowUnbound
+        ? "Check the key, or run 'sonar init' again with --create to create a new project."
+        : 'Check the key.',
     );
   }
 }
@@ -142,6 +145,7 @@ async function confirmAnotherProject(console: DetectDeps['console']): Promise<bo
 async function pickProject(
   projects: ProjectsClient,
   ctx: Pick<DetectDeps, 'auth' | 'console'>,
+  allowUnbound: boolean,
 ): Promise<string | null> {
   for (;;) {
     try {
@@ -153,7 +157,9 @@ async function pickProject(
     }
     const abandon = requireAnswer(
       await ctx.console.confirmPrompt(
-        'Abandon linking a project and create a new project without repository binding instead?',
+        allowUnbound
+          ? 'Abandon linking a project and create a new project without repository binding instead?'
+          : 'Abandon linking a project?',
         false,
       ),
     );
