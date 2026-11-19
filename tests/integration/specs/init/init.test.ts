@@ -114,7 +114,6 @@ describe('sonar init', () => {
 
   async function createProject(session: ReturnType<typeof harness.runInteractive>) {
     await confirmNewProject(session);
-    await session.decline(SCAN_PROMPT);
   }
 
   it(
@@ -911,7 +910,6 @@ describe('sonar init', () => {
         await session.waitText('Project visibility');
         session.keyEnter();
         await session.accept('Create this project');
-        await session.decline(SCAN_PROMPT);
         await session.decline(INTEGRATE_PROMPT);
         return session.waitFinish();
       }
@@ -1307,6 +1305,20 @@ describe('sonar init', () => {
     );
 
     it(
+      'does not advertise the first-analysis flags in the help',
+      async () => {
+        const result = await harness.run('init --help');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('--dry-run');
+        for (const flag of ['--scan', '--scanner-property', '--verbose', '--detach']) {
+          expect(result.stdout).not.toContain(flag);
+        }
+      },
+      TIMEOUT,
+    );
+
+    it(
       'creates the project and warns that no SonarScanner is available when --scan is passed',
       async () => {
         await signInToCloud(() => {});
@@ -1651,7 +1663,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'prints the project dashboard once, between the first-analysis and integrate prompts',
+      'prints the project dashboard once, before the integrate prompt, without offering an analysis',
       async () => {
         await signInToCloud(() => {});
         initGitRepo(harness.cwd.path);
@@ -1664,10 +1676,9 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
         const dashboardAt = result.stdout.indexOf('Project dashboard:');
-        const scanPromptAt = result.stdout.indexOf(SCAN_PROMPT);
         const integratePromptAt = result.stdout.indexOf(INTEGRATE_PROMPT);
-        expect(scanPromptAt).toBeGreaterThan(-1);
-        expect(dashboardAt).toBeGreaterThan(scanPromptAt);
+        expect(result.stdout).not.toContain(SCAN_PROMPT);
+        expect(dashboardAt).toBeGreaterThan(-1);
         expect(integratePromptAt).toBeGreaterThan(dashboardAt);
       },
       TIMEOUT,

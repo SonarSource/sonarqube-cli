@@ -38,7 +38,6 @@ import type { QualityGateStatus } from '@/core/server/types.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { DEFAULT_STATUSES } from '../../list/issues.ts';
-import { requireAnswer } from '../answer.ts';
 import {
   formatIssueBreakdown,
   type IssueBreakdown,
@@ -54,7 +53,7 @@ export interface ScanOptions {
   scannerProperties: Map<string, string>;
   verbose: boolean;
   detach: boolean;
-  /** `--scan`: run the analysis without asking. */
+  /** `--scan`: the only way to request the analysis. */
   scan: boolean;
 }
 
@@ -167,16 +166,9 @@ async function readResults(
   return { qualityGate, openIssues, issueBreakdown };
 }
 
-async function confirmScan(console: Console): Promise<boolean> {
-  return requireAnswer(
-    await console.confirmPrompt('Run the first analysis with sonar-scanner now?', true),
-  );
-}
-
 /**
- * Offers the first analysis of a freshly created project, downloads the scanner when it is not
- * installed, runs it and reads the results. Non-interactive runs scan only when `--scan` asks
- * for it, since downloading and running a scanner is not something to do unasked.
+ * Runs the first analysis of a freshly created project and reads the results. It is never offered:
+ * only `--scan` asks for it, since the CLI ships no SonarScanner and the run ends in a warning.
  */
 export async function runFirstScan(
   projectRoot: string,
@@ -184,9 +176,8 @@ export async function runFirstScan(
   deps: DetectDeps,
   flags: ScanOptions,
 ): Promise<ScanResult> {
-  const { auth, console, interactive } = deps;
-  const requested = flags.scan || (interactive && (await confirmScan(console)));
-  if (!requested) {
+  const { auth, console } = deps;
+  if (!flags.scan) {
     return NOT_RUN;
   }
 

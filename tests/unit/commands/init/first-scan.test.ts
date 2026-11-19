@@ -154,9 +154,8 @@ describe('runFirstScan without a scan', () => {
     expect(console.calls).toHaveLength(0);
   });
 
-  it('does not scan when the user declines the offer', async () => {
+  it('never offers the analysis to an interactive run without --scan', async () => {
     const console = new FakeConsole();
-    console.queueResponse(false);
 
     const result = await runFirstScan(
       projectRoot,
@@ -166,23 +165,7 @@ describe('runFirstScan without a scan', () => {
     );
 
     expect(result).toBe(NOT_RUN);
-    expect(console.calls.find((call) => call.method === 'confirmPrompt')?.args[0]).toBe(
-      'Run the first analysis with sonar-scanner now?',
-    );
-  });
-
-  it('stops the onboarding when the user cancels the offer', async () => {
-    const console = new FakeConsole();
-    console.queueResponse(null);
-
-    const error = await runFirstScan(
-      projectRoot,
-      'my-key',
-      depsFor(console, { interactive: true }),
-      flags({ scan: false }),
-    ).catch((cause: unknown) => cause);
-
-    expect((error as Error).message).toBe('Onboarding cancelled.');
+    expect(console.calls).toHaveLength(0);
   });
 });
 
@@ -252,23 +235,6 @@ describe('runFirstScan without a SonarScanner', () => {
       ).toEqual([UNAVAILABLE]);
     },
   );
-
-  it('warns and skips the analysis when the user accepts the offer', async () => {
-    const console = new FakeConsole();
-    console.queueResponse(true);
-
-    const result = await runFirstScan(
-      projectRoot,
-      'my-key',
-      depsFor(console, { interactive: true }),
-      flags({ scan: false }),
-    );
-
-    expect(result).toBe(NOT_RUN);
-    expect(
-      console.calls.some((call) => call.method === 'warn' && call.args[0] === UNAVAILABLE),
-    ).toBe(true);
-  });
 });
 
 describe('reportScan', () => {
