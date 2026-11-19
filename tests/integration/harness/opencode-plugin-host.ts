@@ -27,13 +27,17 @@ const DRIVER_TIMEOUT_MS = 45000;
 const DEFAULT_SESSION_ID = 'ses_test';
 
 export interface OpenCodePluginStep {
-  hook: 'tool.execute.before' | 'tool.execute.after' | 'session.prompt';
+  hook: 'tool.execute.before' | 'tool.execute.after' | 'session.prompt' | 'event';
   event: Record<string, unknown>;
 }
 
 export interface OpenCodePluginOptions {
   processCwd?: string;
   env?: Record<string, string>;
+  sessions?: Record<string, Record<string, unknown>>;
+  failSessionGet?: boolean;
+  failSessionPrompt?: boolean;
+  disposeWhenFileExists?: string;
 }
 
 export interface OpenCodePluginStepResult {
@@ -45,6 +49,8 @@ export interface OpenCodePluginRun {
   id: string;
   registered: string[];
   results: OpenCodePluginStepResult[];
+  prompts: { sessionID: string; text: string }[];
+  sessionGets: string[];
 }
 
 export function readEvent(tool: string, input: Record<string, unknown>): OpenCodePluginStep {
@@ -78,7 +84,15 @@ export async function runOpenCodePlugin(
   steps: OpenCodePluginStep[],
   options: OpenCodePluginOptions = {},
 ): Promise<OpenCodePluginRun> {
-  const input = { pluginPath, directory: harness.cwd.path, steps };
+  const input = {
+    pluginPath,
+    directory: harness.cwd.path,
+    steps,
+    sessions: options.sessions,
+    failSessionGet: options.failSessionGet,
+    failSessionPrompt: options.failSessionPrompt,
+    disposeWhenFileExists: options.disposeWhenFileExists,
+  };
   const proc = Bun.spawn([process.execPath, DRIVER_PATH], {
     cwd: options.processCwd ?? harness.cwd.path,
     env: harness.env({ extraEnv: options.env }),

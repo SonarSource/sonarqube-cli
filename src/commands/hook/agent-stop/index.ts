@@ -36,6 +36,7 @@ import { readStdinJson } from '../stdin.ts';
 import { claudeCodexDevinAdapter } from './agent-adapters/claude-codex-devin-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
+import { openCodeAdapter } from './agent-adapters/opencode-adapter.ts';
 import type { StopAgent, StopAgentAdapter, StopInput, StopOutput } from './types.ts';
 
 const ANALYSIS_LIMIT = 3;
@@ -45,6 +46,7 @@ const ADAPTERS: Record<StopAgent, StopAgentAdapter> = {
   copilot: copilotAdapter,
   cursor: cursorAdapter,
   devin: claudeCodexDevinAdapter,
+  opencode: openCodeAdapter,
 };
 
 export async function agentStop(

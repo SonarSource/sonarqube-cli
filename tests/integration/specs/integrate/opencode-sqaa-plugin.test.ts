@@ -27,6 +27,7 @@ import type { SqaaResponseConfig } from '../../harness/fake-sonarqube-server';
 import { pathWithoutOpenCode } from '../../harness/opencode-path';
 import {
   completedEvent,
+  type OpenCodePluginStep,
   type OpenCodePluginStepResult,
   runOpenCodePlugin,
 } from '../../harness/opencode-plugin-host';
@@ -47,6 +48,10 @@ interface SetUpOptions {
 
 function chunksOf(result: OpenCodePluginStepResult): { type: string; text: string }[] {
   return (result.event.result as { content: { type: string; text: string }[] }).content;
+}
+
+function completion(id: string, sessionID = 'ses_test'): OpenCodePluginStep {
+  return { hook: 'event', event: { id, type: 'session.execution.succeeded', data: { sessionID } } };
 }
 
 describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () => {
@@ -95,6 +100,148 @@ describe('integrate opencode: Vortex SQAA plugin, run against the real CLI', () 
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it(
+    'requests a follow-up for completion findings and deduplicates event IDs',
+    async () => {
+      await setUp({
+        sqaa: {
+          issues: [
+            { rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 },
+          ],
+        },
+      });
+      harness.cwd.writeFile('a.ts', 'const unused = 1;');
+      const run = await runOpenCodePlugin(harness, pluginPath, [
+        completion('event-1'),
+        completion('event-1'),
+        completion('event-2'),
+      ]);
+      expect(run.prompts).toEqual([
+        { sessionID: 'ses_test', text: expect.stringContaining('Remove the unused variable') },
+      ]);
+      expect(run.sessionGets).toEqual(['ses_test', 'ses_test']);
+      expect(sqaaCalls()).toBe(1);
+    },
+    { timeout: 60000 },
+  );
+
+  it(
+    'cancels an in-flight completion analysis when the plugin is disposed',
+    async () => {
+      const started = harness.userHome.file('analysis-started');
+      let releaseAnalysis!: () => void;
+      const analysisBlocked = new Promise<void>((resolve) => {
+        releaseAnalysis = resolve;
+      });
+      await setUp({
+        sqaa: {
+          beforeSqaaResponse: async () => {
+            harness.userHome.writeFile('analysis-started', 'ready');
+            await analysisBlocked;
+          },
+        },
+      });
+      harness.cwd.writeFile('a.ts', 'const unused = 1;');
+      try {
+        // The server stays blocked until disposal finishes, so cleanup must cancel the hook.
+        const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')], {
+          disposeWhenFileExists: started.path,
+        });
+        expect(sqaaCalls()).toBe(1);
+        expect(run.prompts).toEqual([]);
+        expect(run.results[0].error).toBeNull();
+      } finally {
+        releaseAnalysis();
+      }
+    },
+    { timeout: 60000 },
+  );
+
+  it(
+    'skips subagents, unrelated locations, and malformed completion events',
+    async () => {
+      await setUp();
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      const run = await runOpenCodePlugin(
+        harness,
+        pluginPath,
+        [
+          completion('child', 'child'),
+          completion('other', 'other'),
+          {
+            hook: 'event',
+            event: {
+              id: 'failed',
+              type: 'session.execution.failed',
+              data: { sessionID: 'ses_test' },
+            },
+          },
+          {
+            hook: 'event',
+            event: { type: 'session.execution.succeeded', data: { sessionID: 'ses_test' } },
+          },
+          completion('main'),
+        ],
+        {
+          sessions: {
+            child: { parentID: 'ses_test', location: { directory: harness.cwd.path } },
+            other: { location: { directory: harness.userHome.path } },
+          },
+        },
+      );
+      expect(run.sessionGets).toEqual(['child', 'other', 'ses_test']);
+      expect(run.prompts).toEqual([]);
+      expect(sqaaCalls()).toBe(1);
+    },
+    { timeout: 60000 },
+  );
+
+  it.each([{ linked: false }, { sqaaStatusCode: 500 }, {}])(
+    'leaves completion alone without actionable findings: %j',
+    async (options) => {
+      await setUp(options);
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')]);
+      expect(run.prompts).toEqual([]);
+      expect(run.results[0].error).toBeNull();
+      expect(sqaaCalls()).toBe(options.linked === false ? 0 : 1);
+    },
+    { timeout: 60000 },
+  );
+
+  it.each(['get', 'prompt'])(
+    'leaves sessions completed when session %s fails',
+    async (operation) => {
+      await setUp({
+        sqaa: { issues: [{ rule: 'typescript:S1481', message: 'Remove unused', startLine: 1 }] },
+      });
+      harness.cwd.writeFile('a.ts', 'const unused = 1;');
+      const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')], {
+        failSessionGet: operation === 'get',
+        failSessionPrompt: operation === 'prompt',
+      });
+      expect(run.prompts).toEqual([]);
+      expect(run.results[0].error).toBeNull();
+      expect(sqaaCalls()).toBe(operation === 'get' ? 0 : 1);
+    },
+    { timeout: 60000 },
+  );
+
+  it(
+    'leaves the session completed when the completion command cannot run',
+    async () => {
+      await setUp();
+      harness.cwd.writeFile('a.ts', 'const a = 1;');
+      const run = await runOpenCodePlugin(harness, pluginPath, [completion('main')], {
+        env: { PATH: '' },
+      });
+      expect(run.prompts).toEqual([]);
+      expect(run.results[0].error).toBeNull();
+      expect(sqaaCalls()).toBe(0);
+    },
+    { timeout: 60000 },
+  );
 
   it(
     'adds the analysis result after each completed edit and write',
