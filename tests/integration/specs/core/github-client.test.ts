@@ -76,7 +76,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('reads a repository and creates a workflow PR without changing the default branch', async () => {
     const server = await newServer().start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
 
     const repo = await client.getRepository(REPO);
     expect(repo.default_branch).toBe('develop');
@@ -115,7 +115,7 @@ describe('GitHubClient with the fake GitHub server', () => {
       .withOrganization(ORGANIZATION, [FIXTURE, { name: 'second' }, { name: 'third' }])
       .withPageSize(1)
       .start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
 
     expect(
       (await client.listOrganizationRepos(ORGANIZATION)).map((repo) => repo.full_name),
@@ -129,7 +129,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('deletes a branch over HTTP and exposes the resulting missing ref', async () => {
     const server = await newServer().start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
     const base = await client.getBranch(REPO, 'develop');
     if (!base) throw new Error('Expected a default branch');
     await client.createBranch(REPO, BRANCH, base.object.sha);
@@ -141,7 +141,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('reports an invalid token without retrying', async () => {
     const server = await newServer().start();
-    const client = new GitHubClient('invalid-token', server.baseUrl());
+    const client = new GitHubClient('invalid-token', { baseUrl: server.baseUrl() });
     const error = await client.getRepository(REPO).catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(GitHubApiError);
@@ -151,7 +151,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('reports denied writes even when the same token can read', async () => {
     const server = await newServer().withReadOnlyAccess().start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
     const base = await client.getBranch(REPO, 'develop');
     if (!base) throw new Error('Expected a default branch');
     const error = await client
@@ -169,7 +169,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('does not overwrite an existing file', async () => {
     const server = await newServer().start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
 
     expect(
       await client
@@ -181,7 +181,7 @@ describe('GitHubClient with the fake GitHub server', () => {
 
   it('returns empty results for missing content but fails for a missing repository', async () => {
     const server = await newServer().start();
-    const client = new GitHubClient(TOKEN, server.baseUrl());
+    const client = new GitHubClient(TOKEN, { baseUrl: server.baseUrl() });
 
     expect(await client.getFileContent(REPO, 'missing.yml', 'develop')).toBeNull();
     expect(await client.listRepoTree(REPO, 'missing-directory', 'develop')).toEqual([]);

@@ -46,9 +46,11 @@ const METADATA = {
 describe('GitHubClient', () => {
   let client: GitHubClient;
   let fetchSpy: ReturnType<typeof spyOn>;
+  let retryNotices: string[];
 
   beforeEach(() => {
-    client = new GitHubClient(TOKEN);
+    retryNotices = [];
+    client = new GitHubClient(TOKEN, { onRetry: (message) => retryNotices.push(message) });
   });
   afterEach(() => {
     fetchSpy?.mockRestore();
@@ -225,6 +227,9 @@ describe('GitHubClient', () => {
       fetchSpy = mockFetchSeq(fakeResponse({}, { status: 503 }), fakeResponse(METADATA));
       expect(await client.getRepository(REPO)).toEqual(METADATA);
       expect(timeoutSpy.mock.calls[0][1]).toBe(2000);
+      expect(retryNotices).toEqual([
+        'GitHub request failed with HTTP 503 while reading repository details.\nRetrying in 2 seconds (retry 1 of 5).',
+      ]);
     });
 
     it.each([429, 403])('respects Retry-After on HTTP %s', async (status) => {
@@ -254,10 +259,14 @@ describe('GitHubClient', () => {
     it('doubles the delay for repeated secondary rate limits', async () => {
       const limited = () =>
         fakeResponse({ message: 'You have exceeded a secondary rate limit' }, { status: 403 });
-      fetchSpy = mockFetchSeq(limited(), limited(), fakeResponse(METADATA));
-      await client.getRepository(REPO);
+      fetchSpy = mockFetchSeq(limited(), limited(), fakeResponse([METADATA]));
+      await client.listOrganizationRepos('test-org');
       expect(timeoutSpy.mock.calls[0][1]).toBe(60000);
       expect(timeoutSpy.mock.calls[1][1]).toBe(120000);
+      expect(retryNotices).toEqual([
+        'GitHub rate limit reached while listing repositories.\nRetrying in 60 seconds (retry 1 of 5).',
+        'GitHub rate limit reached while listing repositories.\nRetrying in 120 seconds (retry 2 of 5).',
+      ]);
     });
 
     it('ignores an empty Retry-After header', async () => {
@@ -277,6 +286,7 @@ describe('GitHubClient', () => {
       const error = await client.getRepository(REPO).catch((error: unknown) => error);
       expect(error).toMatchObject({ status: 403, isRateLimited: false });
       expect(timeoutSpy).not.toHaveBeenCalled();
+      expect(retryNotices).toEqual([]);
     });
 
     it('stops after five retries and preserves the retry information', async () => {
@@ -287,6 +297,8 @@ describe('GitHubClient', () => {
       const error = await client.getRepository(REPO).catch((error: unknown) => error);
       expect(error).toMatchObject({ status: 429, retryAfter: '0', rateLimitReset: '2000000000' });
       expect(fetchSpy).toHaveBeenCalledTimes(6);
+      expect(retryNotices).toHaveLength(5);
+      expect(retryNotices[4]).toContain('(retry 5 of 5)');
     });
 
     it('does not retry a failed file write', async () => {
@@ -296,6 +308,7 @@ describe('GitHubClient', () => {
         .catch((error: unknown) => error);
       expect(error).toMatchObject({ status: 503, operation: 'createFile' });
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(retryNotices).toEqual([]);
     });
 
     it('does not retry PR creation when throttled', async () => {

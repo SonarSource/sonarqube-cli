@@ -21,9 +21,11 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+export type DevOpsPlatform = 'GitLab' | 'GitHub';
+
 export async function resolveDevOpsToken(
   console: Console,
-  platform: 'GitLab' | 'GitHub',
+  platform: DevOpsPlatform,
 ): Promise<string> {
   const envName = `${platform.toUpperCase()}_TOKEN`;
   const envToken = process.env[envName];
