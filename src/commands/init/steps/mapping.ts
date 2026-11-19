@@ -152,7 +152,7 @@ export async function showAnalysisResults(
   api: SonarHttpClient,
   projectKey: string,
   console: Console,
-  noResultsNote: string,
+  noResultsNote?: string,
 ): Promise<void> {
   const status = await new QualityGatesClient(api).getProjectStatus({ projectKey }).match(
     (value) => value?.status ?? 'NONE',
@@ -164,7 +164,9 @@ export async function showAnalysisResults(
   if (status === 'UNKNOWN') {
     console.print('Could not fetch the analysis results.');
   } else if (status === 'NONE') {
-    console.print(noResultsNote);
+    if (noResultsNote) {
+      console.print(noResultsNote);
+    }
   } else {
     console.print(
       `Quality gate: ${status === 'OK' ? 'passed' : 'failed'}. See: sonar quality-gate status -p ${projectKey}`,
