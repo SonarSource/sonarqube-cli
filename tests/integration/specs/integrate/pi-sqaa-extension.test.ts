@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -75,18 +75,11 @@ function settle(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function newPrompt() {
-  return {
-    event: 'before_agent_start',
-    payload: { type: 'before_agent_start', prompt: 'do the work', images: [] },
-  };
-}
-
 function reminderOf(result: unknown): string {
   return (result as ToolResultAnswer)?.content[1]?.text ?? '';
 }
 
-function deepReminderOf(result: unknown): string {
+function completionFeedbackOf(result: unknown): string {
   return (result as SettleAnswer)?.entries.at(-1)?.content[0].text ?? '';
 }
 
@@ -136,109 +129,151 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
     await harness.dispose();
   });
 
-  it(
-    'reports the analysis after each edit and asks once, at the end of the run, for a DEEP analysis of the analyzed files',
-    async () => {
+  it('keeps per-edit analysis and runs DEEP once for an unchanged Git change set', async () => {
+    await setUp();
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    harness.cwd.writeFile('b.ts', 'const b = 1;');
+    const run = await runPiExtension(harness, extensionPath, [
+      toolResult('a.ts'),
+      toolResult('b.ts', 'write'),
+      settle(),
+      settle(),
+    ]);
+    expect([...run.registered].sort()).toEqual(['agent_before_settle', 'tool_result']);
+    const afterEdit = run.results[0] as ToolResultAnswer;
+    expect(afterEdit?.content).toHaveLength(2);
+    expect(afterEdit?.content[0].text).toBe('Edited a.ts');
+    expect(reminderOf(afterEdit)).toContain('No issues found');
+    expect(reminderOf(afterEdit)).toContain('Sonar Vortex analysis');
+    expect(run.results.slice(2)).toEqual([null, null]);
+    expect(sqaaCalls()).toBe(3);
+  }, 60000);
+
+  it('analyzes Git changes without requiring an edit tool event and preserves other entries', async () => {
+    await setUp({
+      sqaa: {
+        issues: [{ rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 }],
+      },
+    });
+    harness.cwd.writeFile('a.ts', 'const unused = 1;');
+    const existing = { type: 'custom', customType: 'other-extension', data: 1 };
+    const run = await runPiExtension(harness, extensionPath, [
+      settle({ entries: [existing], canContinue: false }),
+      settle(),
+    ]);
+    const atEnd = run.results[0] as SettleAnswer;
+    expect(atEnd?.continue).toBe(true);
+    expect(atEnd?.entries).toHaveLength(2);
+    expect(atEnd?.entries[0]).toEqual(existing as never);
+    expect(atEnd?.entries[1]).toMatchObject({
+      type: 'custom_message',
+      customType: 'sonar-completion-analysis',
+      display: false,
+    });
+    expect(completionFeedbackOf(atEnd)).toContain('Vortex analysis');
+    expect(completionFeedbackOf(atEnd)).toContain('Remove the unused variable');
+    expect(completionFeedbackOf(atEnd)).not.toContain('sonar analyze');
+    expect(run.results[1]).toBeNull();
+    expect(sqaaCalls()).toBe(1);
+  }, 60000);
+
+  it('uses the shared retry limit across extension reloads and resets after stopping', async () => {
+    await setUp({
+      sqaa: {
+        issues: [{ rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 }],
+      },
+    });
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      harness.cwd.writeFile('a.ts', `const unused = ${attempt};`);
+      const run = await runPiExtension(harness, extensionPath, [settle()]);
+      if (attempt <= 3) {
+        expect((run.results[0] as SettleAnswer)?.continue).toBe(true);
+      } else {
+        expect(run.results[0]).toBeNull();
+      }
+    }
+    expect(sqaaCalls()).toBe(3);
+    const nextTurn = await runPiExtension(harness, extensionPath, [settle()]);
+    expect((nextTurn.results[0] as SettleAnswer)?.continue).toBe(true);
+    expect(sqaaCalls()).toBe(4);
+  }, 60000);
+
+  it('skips headless completions while preserving their per-edit analysis', async () => {
+    await setUp({
+      sqaa: {
+        issues: [{ rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 }],
+      },
+    });
+    harness.cwd.writeFile('a.ts', 'const unused = 1;');
+    const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()], {
+      hasUI: false,
+    });
+    expect(reminderOf(run.results[0])).toContain('Remove the unused variable');
+    expect(run.results[1]).toBeNull();
+    expect(sqaaCalls()).toBe(1);
+    const main = await runPiExtension(harness, extensionPath, [settle()]);
+    expect((main.results[0] as SettleAnswer)?.continue).toBe(true);
+    expect(sqaaCalls()).toBe(2);
+  }, 60000);
+
+  it.each(['error', 'aborted', undefined])(
+    'skips a non-completed outcome: %s',
+    async (outcome) => {
       await setUp();
       harness.cwd.writeFile('a.ts', 'const a = 1;');
-      harness.cwd.writeFile('b.ts', 'const b = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('a.ts'),
-        toolResult('b.ts', 'write'),
-        toolResult('a.ts'),
-        settle(),
-        settle(),
-      ]);
-
-      expect([...run.registered].sort()).toEqual([
-        'agent_before_settle',
-        'before_agent_start',
-        'tool_result',
-      ]);
-      const afterEdit = run.results[0] as ToolResultAnswer;
-      expect(afterEdit?.content).toHaveLength(2);
-      expect(afterEdit?.content[0].text).toBe('Edited a.ts');
-      expect(reminderOf(afterEdit)).toStartWith('<system-reminder>\n');
-      expect(reminderOf(afterEdit)).toContain('No issues found');
-      expect(reminderOf(afterEdit)).toContain('a.ts');
-      expect(reminderOf(afterEdit)).toContain('Sonar Vortex analysis');
-      expect(reminderOf(afterEdit)).toEndWith('\n</system-reminder>');
-      expect(sqaaCalls()).toBe(3);
-
-      const atEnd = run.results[3] as SettleAnswer;
-      expect(atEnd?.continue).toBe(true);
-      expect(atEnd?.entries).toHaveLength(1);
-      expect(atEnd?.entries[0].type).toBe('custom_message');
-      expect(atEnd?.entries[0].customType).toBe('sonar-deep-reminder');
-      expect(atEnd?.entries[0].display).toBe(false);
-      expect(deepReminderOf(atEnd)).toBe(
-        '<system-reminder>\n' +
-          "Before ending your turn, run `sonar analyze agentic --depth DEEP --file 'a.ts' --file 'b.ts'` and summarize the result for the user.\n" +
-          '</system-reminder>',
-      );
-      expect(run.results[4]).toBeNull();
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'shows the issues found by the analysis',
-    async () => {
-      await setUp({
-        sqaa: {
-          issues: [
-            { rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 },
-          ],
-        },
-      });
-      harness.cwd.writeFile('a.ts', 'const unused = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()]);
-
-      expect(reminderOf(run.results[0])).toContain('Remove the unused variable');
-      expect(reminderOf(run.results[0])).toContain('typescript:S1481');
-      expect(deepReminderOf(run.results[1])).toContain("--file 'a.ts'");
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'does nothing, and forces no extra turn, until the project is linked to Sonar',
-    async () => {
-      await setUp({ linked: false });
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-
-      const unlinked = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()]);
-
-      expect(unlinked.results).toEqual([null, null]);
+      const run = await runPiExtension(harness, extensionPath, [settle({ outcome })]);
+      expect(run.results).toEqual([null]);
       expect(sqaaCalls()).toBe(0);
-
-      harness.cwd.writeFile('sonar-project.properties', PROJECT_PROPERTIES);
-
-      const linked = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()]);
-
-      expect(reminderOf(linked.results[0])).toContain('No issues found');
-      expect(deepReminderOf(linked.results[1])).toContain("--file 'a.ts'");
+      const completed = await runPiExtension(harness, extensionPath, [settle()]);
+      expect(completed.results).toEqual([null]);
       expect(sqaaCalls()).toBe(1);
     },
-    { timeout: 60000 },
+    60000,
   );
 
-  it(
-    'stays silent, and forces no extra turn, when the analysis server fails',
-    async () => {
-      await setUp({ sqaaStatusCode: 500 });
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
+  it('skips unlinked projects and starts analysis once linked', async () => {
+    await setUp({ linked: false });
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    const unlinked = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()]);
+    expect(unlinked.results).toEqual([null, null]);
+    expect(sqaaCalls()).toBe(0);
+    harness.cwd.writeFile('sonar-project.properties', PROJECT_PROPERTIES);
+    const linked = await runPiExtension(harness, extensionPath, [settle()]);
+    expect(linked.results).toEqual([null]);
+    expect(sqaaCalls()).toBe(1);
+  }, 60000);
 
-      const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()]);
+  it('allows stopping on server failures and retries the unchanged change set', async () => {
+    await setUp({ sqaaStatusCode: 500 });
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    const run = await runPiExtension(harness, extensionPath, [settle(), settle()]);
+    expect(run.results).toEqual([null, null]);
+    expect(sqaaCalls()).toBe(2);
+  }, 60000);
 
-      expect(run.results).toEqual([null, null]);
-      expect(sqaaCalls()).toBe(1);
-    },
-    { timeout: 60000 },
-  );
+  it('runs analysis in Pi working directory rather than the process directory', async () => {
+    await setUp({
+      sqaa: {
+        issues: [{ rule: 'typescript:S1481', message: 'Remove the unused variable', startLine: 1 }],
+      },
+    });
+    harness.cwd.writeFile('a.ts', 'const unused = 1;');
+    const run = await runPiExtension(harness, extensionPath, [settle()], {
+      processCwd: harness.userHome.path,
+    });
+    expect(completionFeedbackOf(run.results[0])).toContain('Remove the unused variable');
+    expect(sqaaCalls()).toBe(1);
+  }, 60000);
 
+  it('allows stopping when the session identity is unavailable', async () => {
+    await setUp();
+    harness.cwd.writeFile('a.ts', 'const a = 1;');
+    const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()], {
+      sessionIdThrows: true,
+    });
+    expect(run.results).toEqual([null, null]);
+    expect(sqaaCalls()).toBe(0);
+  }, 60000);
   it(
     'ignores failed edits, edits without a path and tools other than edit and write',
     async () => {
@@ -281,195 +316,6 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
     { timeout: 60000 },
   );
 
-  it(
-    'single-quotes the paths of the DEEP command, so the shell expands nothing in them',
-    async () => {
-      await setUp();
-      const names = ["it's $HOME b.ts", 'back`tick.ts', 'plain.ts'];
-      for (const name of names) {
-        harness.cwd.writeFile(name, 'const x = 1;');
-      }
-
-      const run = await runPiExtension(harness, extensionPath, [
-        ...names.map((name) => toolResult(name)),
-        settle(),
-      ]);
-
-      const text = deepReminderOf(run.results[names.length]);
-      expect(text).toContain("--file 'it'\\''s $HOME b.ts'");
-      if (process.platform !== 'win32') {
-        const command = /run `(.*)` and summarize/s.exec(text)?.[1] ?? '';
-        const fileArguments = command.replace('sonar analyze agentic --depth DEEP ', '');
-        const printed = Bun.spawnSync(['sh', '-c', `printf '%s\n' ${fileArguments}`], {
-          cwd: harness.cwd.path,
-        }).stdout.toString();
-        expect(printed.trimEnd().split('\n')).toEqual(names.flatMap((name) => ['--file', name]));
-      }
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'keeps the entries proposed by other extensions',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-      const existing = { type: 'custom', customType: 'other-extension', data: 1 };
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('a.ts'),
-        settle({ entries: [existing] }),
-      ]);
-
-      const atEnd = run.results[1] as SettleAnswer;
-      expect(atEnd?.entries).toHaveLength(2);
-      expect(atEnd?.entries[0]).toEqual(existing as never);
-      expect(atEnd?.entries[1].customType).toBe('sonar-deep-reminder');
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'forces no extra turn after a run that ended in error, and forgets its files',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('a.ts'),
-        settle({ outcome: 'error' }),
-        settle(),
-      ]);
-
-      expect(reminderOf(run.results[0])).toContain('No issues found');
-      expect(run.results.slice(1)).toEqual([null, null]);
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'forgets the files of an interrupted prompt, for which Pi never reaches the end of the run',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-      harness.cwd.writeFile('b.ts', 'const b = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('a.ts'),
-        newPrompt(),
-        toolResult('b.ts'),
-        settle(),
-      ]);
-
-      expect(deepReminderOf(run.results[3])).toContain("--file 'b.ts'");
-      expect(deepReminderOf(run.results[3])).not.toContain('a.ts');
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'asks for the DEEP analysis only once per prompt, even when the agent keeps editing',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-      harness.cwd.writeFile('b.ts', 'const b = 1;');
-      harness.cwd.writeFile('c.ts', 'const c = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('a.ts'),
-        settle(),
-        toolResult('b.ts'),
-        settle(),
-        newPrompt(),
-        toolResult('c.ts'),
-        settle(),
-      ]);
-
-      expect((run.results[1] as SettleAnswer)?.continue).toBe(true);
-      expect(run.results[3]).toBeNull();
-      expect(deepReminderOf(run.results[6])).toContain("--file 'c.ts'");
-      expect(deepReminderOf(run.results[6])).not.toContain('b.ts');
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'leaves out files outside the working directory or deleted before the end of the run',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-      harness.cwd.writeFile('gone.ts', 'const g = 1;');
-      const outsideDir = mkdtempSync(join(tmpdir(), 'sonar-pi-outside-'));
-      try {
-        const outside = join(outsideDir, 'notes.ts');
-        writeFileSync(outside, 'const n = 1;');
-
-        const run = await runPiExtension(harness, extensionPath, [
-          toolResult('a.ts'),
-          toolResult(outside, 'write'),
-          toolResult('gone.ts'),
-          { remove: join(harness.cwd.path, 'gone.ts') },
-          settle(),
-        ]);
-
-        expect(deepReminderOf(run.results[4])).toContain("--file 'a.ts'");
-        expect(deepReminderOf(run.results[4])).not.toContain('notes.ts');
-        expect(deepReminderOf(run.results[4])).not.toContain('gone.ts');
-      } finally {
-        rmSync(outsideDir, { recursive: true, force: true });
-      }
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'asks for a DEEP analysis of a file whose name starts with two dots',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('..cache/x.ts', 'const x = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [
-        toolResult('..cache/x.ts'),
-        settle(),
-      ]);
-
-      expect(deepReminderOf(run.results[1])).toContain(`--file '${join('..cache', 'x.ts')}'`);
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'runs the hook in the working directory Pi reports, not in the directory of the Pi process',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()], {
-        processCwd: harness.userHome.path,
-      });
-
-      expect(reminderOf(run.results[0])).toContain('No issues found');
-      expect(deepReminderOf(run.results[1])).toContain("--file 'a.ts'");
-    },
-    { timeout: 60000 },
-  );
-
-  it(
-    'stays silent when the session id cannot be read',
-    async () => {
-      await setUp();
-      harness.cwd.writeFile('a.ts', 'const a = 1;');
-
-      const run = await runPiExtension(harness, extensionPath, [toolResult('a.ts'), settle()], {
-        sessionIdThrows: true,
-      });
-
-      expect(run.results).toEqual([null, null]);
-      expect(sqaaCalls()).toBe(0);
-    },
-    { timeout: 60000 },
-  );
-
   describe.skipIf(process.platform === 'win32')('when the sonar command misbehaves', () => {
     let stubDir: string;
 
@@ -494,6 +340,8 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
       ['something that is not JSON', 'not json'],
       ['null', 'null'],
       ['a context that is not a string', '{"context":42}'],
+      ['findings that are not a string', '{"findings":42}'],
+      ['empty findings', '{"findings":"  "}'],
     ])(
       'stays silent when sonar answers with %s',
       async (_description, stdout) => {
@@ -506,7 +354,9 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
         });
 
         expect(run.results).toEqual([null, null]);
-        expect(existsSync(join(stubDir, 'invoked.txt'))).toBe(true);
+        expect(readFileSync(join(stubDir, 'invoked.txt'), 'utf8').trim().split('\n')).toHaveLength(
+          2,
+        );
       },
       { timeout: 60000 },
     );

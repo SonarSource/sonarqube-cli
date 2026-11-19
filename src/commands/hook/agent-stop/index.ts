@@ -38,6 +38,7 @@ import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { devinAdapter } from './agent-adapters/devin-adapter.ts';
 import { openCodeAdapter } from './agent-adapters/opencode-adapter.ts';
+import { piAdapter } from './agent-adapters/pi-adapter.ts';
 import type { StopAgent, StopAgentAdapter, StopInput, StopOutput } from './types.ts';
 
 const ANALYSIS_LIMIT = 3;
@@ -48,6 +49,7 @@ const ADAPTERS: Record<StopAgent, StopAgentAdapter> = {
   cursor: cursorAdapter,
   devin: devinAdapter,
   opencode: openCodeAdapter,
+  pi: piAdapter,
 };
 
 export async function agentStop(
