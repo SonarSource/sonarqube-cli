@@ -46,6 +46,14 @@ describe('showAnalysisResults', () => {
     expect(lines[0]).toContain('Quality gate: passed');
   });
 
+  it('prints nothing for a project without analysis when no note is given', async () => {
+    const console = new FakeConsole();
+    const http = { getOrNullIf404: () => okAsync(null) } as unknown as SonarHttpClient;
+    await showAnalysisResults(http, 'k', console);
+
+    expect(printed(console)).toEqual([]);
+  });
+
   it('uses the caller note when the project has no analysis', async () => {
     expect(await show(okAsync(null))).toEqual([NO_RESULTS]);
   });
