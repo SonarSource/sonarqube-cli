@@ -97,7 +97,10 @@ async function runDryRun(
     (repo) => repo.full_name,
     async (repo, progress) => {
       const name = repo.full_name;
-      const result = await assessRepo(ctx, repo, bindings);
+      const github = ctx.github.withRetryHandler((message) => {
+        progress.warn(`${name}: ${message}`);
+      });
+      const result = await assessRepo({ ...ctx, github }, repo, bindings);
       switch (result.outcome) {
         case 'proceed':
           results.wouldOpenPr.push({ repo: name, projectKey: result.projectKey });
@@ -130,7 +133,10 @@ async function runLive(
     (repo) => repo.full_name,
     async (repo, progress) => {
       const name = repo.full_name;
-      const result = await executeRepo(ctx, repo, bindings);
+      const github = ctx.github.withRetryHandler((message) => {
+        progress.warn(`${name}: ${message}`);
+      });
+      const result = await executeRepo({ ...ctx, github }, repo, bindings);
       switch (result.outcome) {
         case 'opened':
           results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
@@ -156,8 +162,8 @@ export async function onboardCiGithub(
   github: GitHubClient,
   options: OnboardCiGithubOptions,
   console: Console,
+  workflowTemplate?: string,
 ): Promise<void> {
-  const workflowTemplate = validateOnboardCiGithubOptions(options);
   assertOnPremiseConnection(connection.auth, 'github');
   const sqs = new OnboardCiSqsClient(connection.httpClient);
   const setting = await resolveDopSetting(sqs.bindings, 'github', options.bindingName);
