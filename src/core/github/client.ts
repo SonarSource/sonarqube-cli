@@ -38,6 +38,15 @@ const WRITE_TIMEOUT_MS = 60_000;
 const RETRY_5XX_DELAY_MS = 2_000;
 const INITIAL_RATE_LIMIT_DELAY_MS = 60_000;
 
+const RETRY_OPERATIONS: Record<string, string> = {
+  listOrganizationRepos: 'listing repositories',
+  getRepository: 'reading repository details',
+  getBranch: 'reading a branch',
+  listRepoTree: 'listing repository files',
+  getFileContent: 'reading a file',
+  listOpenPullRequests: 'listing pull requests',
+};
+
 export interface GitHubRepo {
   id: number;
   name: string;
@@ -99,7 +108,10 @@ export class GitHubApiError extends CommandFailedError {
 export class GitHubClient {
   constructor(
     private readonly token: string,
-    private readonly baseUrl = GITHUB_API_URL,
+    private readonly options: {
+      baseUrl?: string;
+      onRetry?: (message: string) => void;
+    } = {},
   ) {}
 
   async listOrganizationRepos(organization: string): Promise<GitHubRepo[]> {
@@ -232,7 +244,7 @@ export class GitHubClient {
       let response: Response;
       try {
         response = await fetchAuthenticated(
-          `${this.baseUrl}${path}`,
+          `${this.options.baseUrl ?? GITHUB_API_URL}${path}`,
           buildRequest(
             method,
             {
@@ -269,6 +281,7 @@ export class GitHubClient {
       // Writes are issued once; uncertain write outcomes must be reconciled by the lifecycle.
       if (method !== 'GET' || !retryable || attempt >= MAX_RETRIES) throw error;
       const delayMs = retryDelay(error, response.headers, fallbackRateLimitDelayMs);
+      this.options.onRetry?.(retryMessage(error, delayMs, attempt + 1));
       await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
       fallbackRateLimitDelayMs *= 2;
     }
@@ -281,6 +294,15 @@ export class GitHubClient {
       throw new GitHubApiError(response, operation, 'Invalid JSON response.');
     }
   }
+}
+
+function retryMessage(error: GitHubApiError, delayMs: number, retry: number): string {
+  const reason = error.isRateLimited
+    ? 'GitHub rate limit reached'
+    : `GitHub request failed with HTTP ${error.status}`;
+  const operation = RETRY_OPERATIONS[error.operation] ?? 'accessing GitHub';
+  const seconds = Math.ceil(delayMs / 1000);
+  return `${reason} while ${operation}.\nRetrying in ${seconds} ${seconds === 1 ? 'second' : 'seconds'} (retry ${retry} of ${MAX_RETRIES}).`;
 }
 
 function retryDelay(
