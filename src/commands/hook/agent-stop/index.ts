@@ -37,6 +37,7 @@ import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
 import { cursorAdapter } from './agent-adapters/cursor-adapter.ts';
 import { devinAdapter } from './agent-adapters/devin-adapter.ts';
+import { openCodeAdapter } from './agent-adapters/opencode-adapter.ts';
 import type { StopAgent, StopAgentAdapter, StopInput, StopOutput } from './types.ts';
 
 const ANALYSIS_LIMIT = 3;
@@ -46,6 +47,7 @@ const ADAPTERS: Record<StopAgent, StopAgentAdapter> = {
   copilot: copilotAdapter,
   cursor: cursorAdapter,
   devin: devinAdapter,
+  opencode: openCodeAdapter,
 };
 
 export async function agentStop(

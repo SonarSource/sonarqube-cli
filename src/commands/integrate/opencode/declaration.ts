@@ -32,9 +32,9 @@ import { createContextAugmentationSkillSubfeature } from '../_common/features/co
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import {
-  createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
+  createSqaaInstructionsRemover,
   SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
 import { createVortexFeature } from '../_common/vortex.ts';
@@ -108,6 +108,21 @@ export function resolveOpenCodeMcpConfigPath(context: IntegrationContext): strin
     : join(context.targetRoot, CONFIG_FILE);
 }
 
+function createOpenCodeVortexFeature() {
+  const feature = createVortexFeature<OpenCodeIntegrationOptions>([
+    createSqaaPluginSubfeature(),
+    createContextAugmentationSkillSubfeature<OpenCodeIntegrationOptions>({
+      targetPath: resolveOpenCodeCagSkillPath,
+      instructionsTargetPath: resolveOpenCodeAgentsMdPath,
+    }),
+  ]);
+  return {
+    ...feature,
+    replacedIds: [...(feature.replacedIds ?? []), SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+    legacyCleanups: [createSqaaInstructionsRemover(resolveOpenCodeAgentsMdPath)],
+  };
+}
+
 export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOptions> = {
   id: OPENCODE_INTEGRATION_ID,
   displayName: OPENCODE_DISPLAY_NAME,
@@ -115,16 +130,7 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
     createSecretsDetectionFeature<OpenCodeIntegrationOptions>({
       resources: createOpenCodeSecretsDetectionResources(),
     }),
-    createVortexFeature<OpenCodeIntegrationOptions>([
-      createSqaaPluginSubfeature(),
-      createSqaaInstructionsSubfeature<OpenCodeIntegrationOptions>([
-        createSqaaInstructionsSnippet(resolveOpenCodeAgentsMdPath),
-      ]),
-      createContextAugmentationSkillSubfeature<OpenCodeIntegrationOptions>({
-        targetPath: resolveOpenCodeCagSkillPath,
-        instructionsTargetPath: resolveOpenCodeAgentsMdPath,
-      }),
-    ]),
+    createOpenCodeVortexFeature(),
     createMcpServerFeature<OpenCodeIntegrationOptions>({
       resolveConfigPath: resolveOpenCodeMcpConfigPath,
       format: 'opencode',
