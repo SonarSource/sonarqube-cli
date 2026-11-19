@@ -18,12 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-// Bun preload script for Istanbul-based unit test coverage.
+// Bun preload script for Istanbul-based coverage in the test runner.
 //
-// When COVERAGE_RAW_UNIT_DIR is set, this script registers a Bun plugin that
+// When unit or integration coverage is enabled, this registers a Bun plugin that
 // instruments every src/**/*.ts file with istanbul-lib-instrument before it is
 // loaded, then serializes globalThis.__coverage__ to a unique JSON file inside
-// COVERAGE_RAW_UNIT_DIR via a global afterAll hook.
+// the corresponding raw coverage directory via a global afterAll hook.
+// Integration tests can call src/ directly as well as spawn the instrumented CLI.
 //
 // bun test runs each test file in a separate worker process; process.on('exit')
 // does not fire in Bun 1.x workers, so we use afterAll from bun:test instead.
@@ -38,11 +39,14 @@ import { join } from 'node:path';
 import { afterAll } from 'bun:test';
 import { createInstrumenter } from 'istanbul-lib-instrument';
 
+import { COVERAGE_RAW_DIR } from './paths.js';
 import { serializeCoverageToFile } from './utils.js';
 
-const coverageRawUnitDir = process.env.COVERAGE_RAW_UNIT_DIR;
+const coverageRawDir =
+  process.env.COVERAGE_RAW_UNIT_DIR ??
+  (process.env.SONARQUBE_CLI_USE_COVERAGE === '1' ? COVERAGE_RAW_DIR : undefined);
 
-if (coverageRawUnitDir) {
+if (coverageRawDir) {
   const PROJECT_ROOT = join(import.meta.dir, '../..');
   const SRC_DIR = join(PROJECT_ROOT, 'src') + '/';
 
@@ -79,7 +83,7 @@ if (coverageRawUnitDir) {
 
   afterAll(() => {
     const unique = `${Date.now()}-${process.pid}`;
-    const outputFile = join(coverageRawUnitDir, `coverage-${unique}.json`);
+    const outputFile = join(coverageRawDir, `coverage-${unique}.json`);
     serializeCoverageToFile(outputFile);
   });
 }
