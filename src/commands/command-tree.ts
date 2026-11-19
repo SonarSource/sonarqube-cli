@@ -1414,7 +1414,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       assertOnPremiseConnection(ctx.auth, 'github');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const token = await resolveDevOpsToken(ctx.console, 'GitHub');
-      return onboardCiGithub(ctx.connection, new GitHubClient(token), options, ctx.console);
+      const github = new GitHubClient(token, {
+        onRetry: (message) => {
+          ctx.console.warn(message);
+        },
+      });
+      return onboardCiGithub(ctx.connection, github, options, ctx.console);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
