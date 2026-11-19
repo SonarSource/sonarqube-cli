@@ -56,6 +56,14 @@ const AGENTS = [
     },
   },
   {
+    name: 'pi',
+    sessionIdField: 'sessionID',
+    payloadFields: (cwd: unknown) => ({ cwd, hasUI: true }),
+    expectedContinuationOutput: {
+      findings: expect.stringContaining('Use Number.isNaN.'),
+    },
+  },
+  {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
     sessionIdField: 'sessionId',
@@ -873,6 +881,18 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
         expectContinuation(result);
         expect(analyses()).toHaveLength(1);
       }, 15000);
+    }
+
+    if (agent.name === 'pi') {
+      it.each([false, undefined, null])(
+        'skips Pi sessions without an explicit UI flag: %j',
+        async (hasUI) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(await invoke({ hasUI }));
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
     }
 
     it('allows stopping without a connection', async () => {
