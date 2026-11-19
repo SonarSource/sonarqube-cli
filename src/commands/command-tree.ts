@@ -1399,7 +1399,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       'Complete workflow YAML with {{SONAR_PROJECT_KEY}} placeholders; cannot be combined with --trigger-on, --scanner-property or --sonar-token-var-name',
     )
     .authenticatedAction(async (ctx, options: OnboardCiGithubOptions) => {
-      validateOnboardCiGithubOptions(options);
+      const workflowTemplate = validateOnboardCiGithubOptions(options);
       assertOnPremiseConnection(ctx.auth, 'github');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const token = await resolveDevOpsToken(ctx.console, 'GitHub');
@@ -1408,7 +1408,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
           ctx.console.warn(message);
         },
       });
-      return onboardCiGithub(ctx.connection, github, options, ctx.console);
+      return onboardCiGithub(ctx.connection, github, options, ctx.console, workflowTemplate);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
