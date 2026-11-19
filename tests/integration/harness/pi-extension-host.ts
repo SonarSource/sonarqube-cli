@@ -31,6 +31,7 @@ export type PiExtensionStep = { event: string; payload?: unknown } | { remove: s
 export interface PiExtensionOptions {
   processCwd?: string;
   sessionIdThrows?: boolean;
+  hasUI?: boolean;
   entries?: unknown[];
   env?: Record<string, string>;
 }
@@ -52,6 +53,7 @@ export async function runPiExtension(
     cwd: harness.cwd.path,
     sessionId: DEFAULT_SESSION_ID,
     sessionIdThrows: options.sessionIdThrows,
+    hasUI: options.hasUI ?? true,
     entries: options.entries,
     steps,
   };
