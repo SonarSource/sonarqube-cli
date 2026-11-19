@@ -31,5 +31,5 @@ export const claudeCodexAdapter: StopAgentAdapter = {
     return { sessionId: p.session_id, cwd: p.cwd };
   },
   emit: ({ findings, shouldContinue }) =>
-    shouldContinue ? { decision: 'block', reason: findings } : { systemMessage: findings },
+    shouldContinue ? { decision: 'block', reason: findings } : {},
 };
