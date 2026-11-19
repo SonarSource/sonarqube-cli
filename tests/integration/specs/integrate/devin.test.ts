@@ -26,6 +26,10 @@ import { join, relative } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import {
+  COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
+  STOP_SCRIPT_REL,
+} from '@/commands/integrate/_common/features/completion-analysis-hook-feature.ts';
+import {
   CONTEXT_AUGMENTATION_FEATURE_ID,
   SESSION_START_SCRIPT_REL,
 } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
@@ -44,7 +48,6 @@ import { buildHomeEnv, hookScriptName, hookScriptPath, SCRIPT_EXT } from '../../
 import { findInstalledFeature, findInstalledSubfeature } from './state-helpers';
 
 const TEST_ORG = 'my-org';
-const SQAA_HEADING = '# Vortex analysis protocol';
 const SQAA_BEGIN_MARKER = '<!-- sonar:begin:sonarqube-agentic-analysis-protocol -->';
 
 interface DevinConfigFile {
@@ -507,6 +510,47 @@ describe('integrate devin', () => {
       };
     }
 
+    function stopScriptRelPath(): string {
+      return devinConfigRelPath(harness, join('hooks', STOP_SCRIPT_REL)) + SCRIPT_EXT;
+    }
+
+    it(
+      'installs only a main-agent Stop hook and preserves user hooks and settings',
+      async () => {
+        const { extraEnv } = await startEntitledCloudServer();
+        const configPath = devinConfigRelPath(harness, 'config.json');
+        const userStop = { hooks: [{ type: 'command', command: 'user-stop' }] };
+        const userSubagentStop = { hooks: [{ type: 'command', command: 'user-subagent-stop' }] };
+        harness.userHome.writeFile(
+          configPath,
+          JSON.stringify({
+            theme: 'dark',
+            hooks: { Stop: [userStop], SubagentStop: [userSubagentStop] },
+          }),
+        );
+
+        const result = await harness.run('integrate devin --non-interactive', { extraEnv });
+
+        expect(result.exitCode).toBe(0);
+        const config = readConfig(configPath);
+        expect(config.theme).toBe('dark');
+        expect(config.hooks?.Stop).toHaveLength(2);
+        expect(config.hooks?.Stop?.[0]).toEqual(userStop);
+        expect(config.hooks?.SubagentStop).toEqual([userSubagentStop]);
+        const stopHook = config.hooks?.Stop?.[1];
+        expect(stopHook?.matcher).toBeUndefined();
+        expect(hookScriptPath(stopHook?.hooks?.[0].command ?? '')).toBe(
+          join(harness.userHome.path, stopScriptRelPath()).replaceAll('\\', '/'),
+        );
+        const script = harness.userHome.file(stopScriptRelPath());
+        expect(script.exists()).toBe(true);
+        expect(script.isExecutable).toBe(true);
+        expect(script.asText()).toContain('sonar hook agent-stop --agent devin');
+        expect(harness.userHome.exists(devinConfigRelPath(harness, 'AGENTS.md'))).toBe(false);
+      },
+      { timeout: 30000 },
+    );
+
     function sqaaScriptRelPath(): string {
       return devinConfigRelPath(
         harness,
@@ -567,21 +611,28 @@ describe('integrate devin', () => {
     );
 
     it(
-      'writes the Vortex analysis protocol to the global AGENTS.md and keeps the user content',
+      'removes managed DEEP instructions and keeps user content when installing completion analysis',
       async () => {
         const { extraEnv } = await startEntitledCloudServer();
         const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
         const userContent = '# My rules\n\nAlways use tabs.\n';
-        harness.userHome.writeFile(agentsPath, userContent);
+        harness.userHome.writeFile(
+          agentsPath,
+          [
+            userContent,
+            SQAA_BEGIN_MARKER,
+            'Old managed DEEP instructions.',
+            '<!-- sonar:end:sonarqube-agentic-analysis-protocol -->',
+          ].join('\n'),
+        );
 
         const result = await harness.run('integrate devin --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
         const body = harness.userHome.file(agentsPath).asText();
         expect(body.startsWith(userContent)).toBe(true);
-        expect(body).toContain(SQAA_BEGIN_MARKER);
-        expect(body).toContain(SQAA_HEADING);
-        expect(body).toContain('sonar analyze agentic --depth DEEP');
+        expect(body.trim()).toBe(userContent.trim());
+        expect(body).not.toContain(SQAA_BEGIN_MARKER);
         expect(harness.cwd.exists('AGENTS.md')).toBe(false);
         expect(
           findInstalledSubfeature(
@@ -590,27 +641,37 @@ describe('integrate devin', () => {
             VORTEX_FEATURE_ID,
             SQAA_INSTRUCTIONS_SUBFEATURE_ID,
           ),
+        ).toBeUndefined();
+        expect(
+          findInstalledSubfeature(
+            harness,
+            'devin',
+            VORTEX_FEATURE_ID,
+            COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
+          ),
         ).toBeDefined();
       },
       { timeout: 30000 },
     );
 
     it(
-      'is idempotent: re-running leaves one hook entry and one protocol block',
+      'is idempotent: re-running leaves one per-edit and one completion hook',
       async () => {
         const { extraEnv } = await startEntitledCloudServer();
         const configPath = devinConfigRelPath(harness, 'config.json');
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
 
         await harness.run('integrate devin --non-interactive', { extraEnv });
         const firstConfig = harness.userHome.file(configPath).asJson();
-        const firstAgents = harness.userHome.file(agentsPath).asText();
         const result = await harness.run('integrate devin --non-interactive', { extraEnv });
 
         expect(result.exitCode).toBe(0);
         expect(harness.userHome.file(configPath).asJson()).toEqual(firstConfig);
-        expect(harness.userHome.file(agentsPath).asText()).toBe(firstAgents);
-        expect(firstAgents.split(SQAA_BEGIN_MARKER)).toHaveLength(2);
+        expect(readConfig(configPath).hooks?.Stop).toHaveLength(1);
+        expect(
+          readConfig(configPath).hooks?.PostToolUse?.filter((entry) =>
+            entry.hooks?.some((hook) => hook.command?.includes('sonar-sqaa')),
+          ),
+        ).toHaveLength(1);
       },
       { timeout: 30000 },
     );
@@ -629,8 +690,9 @@ describe('integrate devin', () => {
         const config: DevinConfigFile = harness.userHome.file(configPath).asJson();
         expect(config.theme).toBe('dark');
         expect(config.hooks?.PostToolUse).toBeUndefined();
+        expect(config.hooks?.Stop).toBeUndefined();
+        expect(harness.userHome.exists(stopScriptRelPath())).toBe(false);
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(false);
-        expect(harness.userHome.exists(devinConfigRelPath(harness, 'AGENTS.md'))).toBe(false);
         expect(findInstalledFeature(harness, 'devin', VORTEX_FEATURE_ID)).toBeUndefined();
         expect(result.stdout + result.stderr).toContain(
           'Vortex requires SonarQube Server 2026.5 Enterprise or later.',
@@ -644,7 +706,6 @@ describe('integrate devin', () => {
       async () => {
         const { extraEnv } = await startEntitledCloudServer();
         const configPath = devinConfigRelPath(harness, 'config.json');
-        const agentsPath = devinConfigRelPath(harness, 'AGENTS.md');
         harness.userHome.writeFile(
           configPath,
           JSON.stringify({
@@ -652,12 +713,11 @@ describe('integrate devin', () => {
             hooks: { PostToolUse: [USER_HOOK], SessionStart: [USER_SESSION_START_HOOK] },
           }),
         );
-        harness.userHome.writeFile(agentsPath, '# My rules\n');
         await harness.run('integrate devin --non-interactive', { extraEnv });
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(true);
         expect(harness.userHome.exists(sessionStartScriptRelPath())).toBe(true);
         expect(sessionStartEntries(readConfig(configPath))).toHaveLength(1);
-        expect(harness.userHome.file(agentsPath).asText()).toContain(SQAA_HEADING);
+        expect(harness.userHome.exists(stopScriptRelPath())).toBe(true);
 
         const installedState = harness.stateJsonFile.asJson();
         const lostServer = await harness
@@ -688,9 +748,9 @@ describe('integrate devin', () => {
         expect(config.hooks?.SessionStart).toEqual([USER_SESSION_START_HOOK]);
         expect(config.hooks?.UserPromptSubmit?.some(isSecretsEntry)).toBe(true);
         expect(harness.userHome.exists(sqaaScriptRelPath())).toBe(false);
+        expect(harness.userHome.exists(stopScriptRelPath())).toBe(false);
+        expect(config.hooks?.Stop).toBeUndefined();
         expect(harness.userHome.exists(sessionStartScriptRelPath())).toBe(false);
-        expect(harness.userHome.file(agentsPath).asText()).not.toContain(SQAA_HEADING);
-        expect(harness.userHome.file(agentsPath).asText()).toContain('# My rules');
       },
       { timeout: 30000 },
     );
