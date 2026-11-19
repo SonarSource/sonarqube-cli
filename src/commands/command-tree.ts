@@ -917,14 +917,33 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--visibility <visibility>',
       'Visibility of the new project: private or public (default: private); not used with a bound project',
     )
-    .option('--scan', 'Run the first analysis of a newly created unbound project without asking')
-    .option(
-      '--scanner-property <key=value>',
-      'Extra scanner property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable)',
-      collectScannerProperty,
+    // Hidden while the CLI ships no SonarScanner: the first-analysis flags still parse, but are not advertised.
+    .addOption(
+      new SonarOption(
+        '--scan',
+        'Run the first analysis of a newly created unbound project without asking',
+      ).hideHelp(),
     )
-    .option('--verbose', 'Stream the scanner logs while the first analysis runs')
-    .option('--detach', 'Run the first analysis in the background without waiting for the results')
+    .addOption(
+      new SonarOption(
+        '--scanner-property <key=value>',
+        'Extra scanner property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable)',
+      )
+        .argParser(collectScannerProperty)
+        .hideHelp(),
+    )
+    .addOption(
+      new SonarOption(
+        '--verbose',
+        'Stream the scanner logs while the first analysis runs',
+      ).hideHelp(),
+    )
+    .addOption(
+      new SonarOption(
+        '--detach',
+        'Run the first analysis in the background without waiting for the results',
+      ).hideHelp(),
+    )
     .option(
       '--dry-run',
       'Preview what init would do without changing anything. Requires being signed in already',
