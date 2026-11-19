@@ -27,7 +27,7 @@ import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
 import { deleteBranchUnlessRequestOpen } from '../branch-guard.ts';
 import { hasSonarAnalysis } from '../ci-detection.ts';
-import type { OnboardCiSqsClient } from './sqs-api.ts';
+import type { OnboardCiSqsClient } from '../sqs-api.ts';
 import {
   buildUpdatedCiYml,
   generateCiYml,
