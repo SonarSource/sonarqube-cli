@@ -25,7 +25,7 @@ import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/cl
 import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
-import type { OnboardCiSqsClient } from './sqs-api.ts';
+import type { OnboardCiSqsClient } from '../sqs-api.ts';
 import {
   buildUpdatedCiYml,
   generateCiYml,

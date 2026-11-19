@@ -18,24 +18,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { ComponentsClient } from '@/core/server/components.ts';
+import type { SonarHttpClient } from '@/core/server/http-client.ts';
+import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { Console } from '@/core/ui/console.ts';
+/**
+ * The SonarQube Server APIs CI onboarding drives, built from one transport client so
+ * they share it for the whole run. Exposed as fields rather than re-declared as
+ * forwarding methods.
+ */
+export class OnboardCiSqsClient {
+  readonly bindings: ProjectBindingsClient;
+  readonly components: ComponentsClient;
 
-import type { DryRunResults, OnboardCiResults } from './types.ts';
-
-export function writeReportFile(
-  results: OnboardCiResults | DryRunResults,
-  filename: string,
-  console: Console,
-): void {
-  const dest = join(process.cwd(), filename);
-  try {
-    writeFileSync(dest, JSON.stringify(results, null, 2), 'utf8');
-  } catch (err) {
-    throw new CommandFailedError(`Failed to write report to ${dest}: ${String(err)}`);
+  constructor(client: SonarHttpClient) {
+    this.bindings = new ProjectBindingsClient(client);
+    this.components = new ComponentsClient(client);
   }
-  console.print(`Full report: ${filename}  (written to current directory)`);
 }
