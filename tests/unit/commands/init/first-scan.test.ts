@@ -115,6 +115,7 @@ function depsFor(
     http: httpAnswering(options.routes),
     console,
     interactive: options.interactive ?? false,
+    allowUnbound: true,
   };
 }
 
