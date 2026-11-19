@@ -67,6 +67,43 @@ async function retrieveOpenPrUrl(
   return prs[0]?.html_url;
 }
 
+async function assessWorkflows(
+  ctx: ProcessRepoContext,
+  repo: GitHubRepo,
+): Promise<SkippedResult | undefined> {
+  const workflows = await ctx.github.listRepoTree(
+    repo.full_name,
+    '.github/workflows',
+    repo.default_branch,
+  );
+  if (workflows.some((entry) => entry.path === WORKFLOW_PATH)) {
+    return { outcome: 'skip', reason: 'WORKFLOW_COLLISION' };
+  }
+  for (const entry of workflows.filter((entry) => /\.ya?ml$/i.test(entry.name))) {
+    if (entry.type !== 'file') {
+      return { outcome: 'skip', reason: 'UNSUPPORTED_WORKFLOW' };
+    }
+    const content = await ctx.github.getFileContent(
+      repo.full_name,
+      entry.path,
+      repo.default_branch,
+    );
+    if (content === null) {
+      throw new CommandFailedError(
+        `Workflow '${entry.path}' disappeared during assessment; run onboarding again.`,
+      );
+    }
+    if (
+      /sonar-scanner|sonarscanner|sonar:sonar|(?:gradle|gradlew)\s+sonar\b|sonarqube-scan-action|sonarcloud-github-action|sonarqube-github-action|SONAR_HOST_URL|SONAR_TOKEN|sonar\.projectKey/.test(
+        content,
+      )
+    ) {
+      return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
+    }
+  }
+  return undefined;
+}
+
 export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: GitHubRepo,
@@ -101,35 +138,9 @@ export async function assessRepo(
     ) {
       return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
     }
-    const workflows = await ctx.github.listRepoTree(
-      repo.full_name,
-      '.github/workflows',
-      repo.default_branch,
-    );
-    if (workflows.some((entry) => entry.path === WORKFLOW_PATH)) {
-      return { outcome: 'skip', reason: 'WORKFLOW_COLLISION' };
-    }
-    for (const entry of workflows.filter((entry) => /\.ya?ml$/i.test(entry.name))) {
-      if (entry.type !== 'file') {
-        return { outcome: 'skip', reason: 'UNSUPPORTED_WORKFLOW' };
-      }
-      const content = await ctx.github.getFileContent(
-        repo.full_name,
-        entry.path,
-        repo.default_branch,
-      );
-      if (content === null) {
-        throw new CommandFailedError(
-          `Workflow '${entry.path}' disappeared during assessment; run onboarding again.`,
-        );
-      }
-      if (
-        /sonar-scanner|sonarscanner|sonar:sonar|(?:gradle|gradlew)\s+sonar\b|sonarqube-scan-action|sonarcloud-github-action|sonarqube-github-action|SONAR_HOST_URL|SONAR_TOKEN|sonar\.projectKey/.test(
-          content,
-        )
-      ) {
-        return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
-      }
+    const workflowAssessment = await assessWorkflows(ctx, repo);
+    if (workflowAssessment) {
+      return workflowAssessment;
     }
     validateWorkflowOptions(ctx.options, ctx.workflowTemplate);
     if (ctx.workflowTemplate !== undefined) {
@@ -151,6 +162,36 @@ export async function assessRepo(
   }
 }
 
+async function prepareOnboardingBranch(
+  ctx: ProcessRepoContext,
+  repo: GitHubRepo,
+  baseSha: string,
+): Promise<SkippedResult | undefined> {
+  if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
+    // Recheck before deleting: preserve a PR opened since assessment.
+    const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
+    if (prUrl) {
+      return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
+    }
+    try {
+      await ctx.github.deleteBranch(repo.full_name, CI_BRANCH);
+    } catch (error) {
+      if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
+        throw error;
+      }
+    }
+  }
+  try {
+    await ctx.github.createBranch(repo.full_name, CI_BRANCH, baseSha);
+  } catch (error) {
+    const branch = await ctx.github.getBranch(repo.full_name, CI_BRANCH);
+    if (branch?.object.sha !== baseSha) {
+      throw error;
+    }
+  }
+  return undefined;
+}
+
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: GitHubRepo,
@@ -168,27 +209,9 @@ export async function executeRepo(
     if (!base) {
       throw new CommandFailedError(`Default branch '${repo.default_branch}' is missing.`);
     }
-    if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
-      // Recheck before deleting: preserve a PR opened since assessment.
-      const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
-      if (prUrl) {
-        return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
-      }
-      try {
-        await ctx.github.deleteBranch(repo.full_name, CI_BRANCH);
-      } catch (error) {
-        if (await ctx.github.getBranch(repo.full_name, CI_BRANCH)) {
-          throw error;
-        }
-      }
-    }
-    try {
-      await ctx.github.createBranch(repo.full_name, CI_BRANCH, base.object.sha);
-    } catch (error) {
-      const branch = await ctx.github.getBranch(repo.full_name, CI_BRANCH);
-      if (branch?.object.sha !== base.object.sha) {
-        throw error;
-      }
+    const branchResult = await prepareOnboardingBranch(ctx, repo, base.object.sha);
+    if (branchResult) {
+      return branchResult;
     }
     try {
       await ctx.github.createFile(repo.full_name, WORKFLOW_PATH, CI_BRANCH, workflow, title);
