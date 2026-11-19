@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -354,7 +354,9 @@ describe('integrate pi: Vortex SQAA extension, run against the real CLI', () => 
         });
 
         expect(run.results).toEqual([null, null]);
-        expect(existsSync(join(stubDir, 'invoked.txt'))).toBe(true);
+        expect(readFileSync(join(stubDir, 'invoked.txt'), 'utf8').trim().split('\n')).toHaveLength(
+          2,
+        );
       },
       { timeout: 60000 },
     );
