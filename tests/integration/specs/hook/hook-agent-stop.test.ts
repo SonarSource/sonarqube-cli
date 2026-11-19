@@ -651,7 +651,6 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       expect(analyses()).toHaveLength(3);
       expect(queryState()).toEqual({ count: 0, locks: 0, successful: 3 });
 
-      // A new turn can analyze the changes skipped at the limit because they were not cached.
       expectContinuation(await invoke());
       expect(analyses()).toHaveLength(4);
       expect(queryState()).toEqual({ count: 1, locks: 0, successful: 4 });
