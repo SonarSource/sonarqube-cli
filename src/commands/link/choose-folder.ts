@@ -51,8 +51,16 @@ function linkedDetail(linked: readonly ConfigItem[], dir: string): string | unde
   return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
+/** Thrown when the user leaves a folder prompt; `sonar init` catches it to step back to the previous choice. */
+export class FolderSelectionCancelledError extends CommandFailedError {
+  constructor() {
+    super('Folder selection cancelled');
+    this.name = 'FolderSelectionCancelledError';
+  }
+}
+
 function cancelled(): CommandFailedError {
-  return new CommandFailedError('Folder selection cancelled');
+  return new FolderSelectionCancelledError();
 }
 
 /** Opened straight away for a monorepo; otherwise only offered, defaulting to linking the root alone. */

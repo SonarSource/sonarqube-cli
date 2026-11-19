@@ -19,6 +19,11 @@
  */
 
 import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
+import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
+import {
+  chooseProjectKey,
+  ProjectSelectionCancelledError,
+} from '@/commands/link/choose-project.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -26,6 +31,7 @@ import { relativeProjectPath } from '@/core/project-discovery/link-target.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { OnboardingCancelledError } from './answer.ts';
 import type { InitOutcome, InitPath, UnboundNewPath } from './init-outcome.ts';
 import {
   assertDryRunOptions,
@@ -44,6 +50,7 @@ import { renderInitOutcome } from './output.ts';
 import { resolveInitAuth } from './steps/auth.ts';
 import { runBoundNew } from './steps/bind.ts';
 import { type DetectDeps, detectInitPath, resolveProjectRoot } from './steps/detect.ts';
+import { pickFolders } from './steps/folder-selection.ts';
 import { offerIntegrate } from './steps/integrate.ts';
 import { runLinkExisting } from './steps/link-existing.ts';
 import { findLinkedProjectIssues, isUnavailable } from './steps/linked-projects.ts';
@@ -108,6 +115,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     unboundNewOptions,
     monorepo: options.monorepo === true,
     monorepoRoots,
+    pathGiven: options.path !== undefined,
   });
   if (outcome.kind === 'complete') {
     warnIgnoredIntent(intent, console);
@@ -156,14 +164,23 @@ interface RunSettings {
   unboundNewOptions: UnboundNewOptions;
   monorepo: boolean;
   monorepoRoots: readonly MonorepoRootOption[];
+  /** `--path` fixed the directory, so there is no folder to choose. */
+  pathGiven: boolean;
+}
+
+interface RunResult {
+  outcome: InitOutcome;
+  auth?: ResolvedAuth;
+  deps?: DetectDeps;
 }
 
 async function run(
   projectRoot: string,
   ctx: CommandInvocationContext,
   console: Console,
-  { interactive, dryRun, intent, unboundNewOptions, monorepo, monorepoRoots }: RunSettings,
-): Promise<{ outcome: InitOutcome; auth?: ResolvedAuth; deps?: DetectDeps }> {
+  settings: RunSettings,
+): Promise<RunResult> {
+  const { interactive, dryRun, intent, unboundNewOptions, monorepo, monorepoRoots } = settings;
   let auth: ResolvedAuth;
   try {
     auth = await resolveInitAuth(ctx, interactive, dryRun);
@@ -176,10 +193,67 @@ async function run(
   const http = new SonarHttpClient(auth.serverUrl, auth.token);
   const deps: DetectDeps = { auth, http, console, interactive, dryRun, intent };
   if (monorepo) {
-    return { outcome: await runMonorepo(projectRoot, deps, monorepoRoots), auth, deps };
+    const roots = await monorepoRootsToOnboard(projectRoot, monorepoRoots, deps, interactive);
+    const linkOnly = intent?.kind === 'link';
+    const monorepoDeps: DetectDeps =
+      linkOnly && interactive ? { ...deps, chooseProject: projectChooser(ctx, auth) } : deps;
+    return { outcome: await runMonorepo(projectRoot, monorepoDeps, roots, linkOnly), auth, deps };
   }
-  const detected = await detectInitPath(projectRoot, deps);
-  return { outcome: await runDetectedPath(detected, deps, unboundNewOptions), auth, deps };
+  // The folders are asked about only once the user agrees to link, so the steps do the asking.
+  const pickingDeps: DetectDeps = askFolders(settings, intent)
+    ? { ...deps, pickLinkFolder: true }
+    : deps;
+  const detected = await detectInitPath(projectRoot, pickingDeps);
+  return { outcome: await runDetectedPath(detected, pickingDeps, unboundNewOptions), auth, deps };
+}
+
+/** The project prompts of `sonar link`, with leaving them ending the onboarding. */
+function projectChooser(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+): NonNullable<DetectDeps['chooseProject']> {
+  const authenticated = ctx.withAuth(auth);
+  return async (projectRoot, items) => {
+    try {
+      return await chooseProjectKey(projectRoot, true, items, authenticated);
+    } catch (error) {
+      throw error instanceof ProjectSelectionCancelledError
+        ? new OnboardingCancelledError()
+        : error;
+    }
+  };
+}
+
+/**
+ * Without `--root`, an interactive `--monorepo` run asks which folders to onboard. Nothing is
+ * pre-ticked: `runMonorepo` reports the roots `.sonar-config.json` maps that the user leaves unticked.
+ */
+async function monorepoRootsToOnboard(
+  projectRoot: string,
+  named: readonly MonorepoRootOption[],
+  deps: DetectDeps,
+  interactive: boolean,
+): Promise<readonly MonorepoRootOption[]> {
+  if (named.length > 0 || !interactive) {
+    return named;
+  }
+  try {
+    const selection = await pickFolders(projectRoot, true, deps);
+    return selection.kind === 'monorepo' ? selection.roots : named;
+  } catch (error) {
+    throw error instanceof FolderSelectionCancelledError ? new OnboardingCancelledError() : error;
+  }
+}
+
+/** Interactive, and neither `--path`, a project key nor `--root` already says which folder to link. */
+function askFolders(
+  { interactive, pathGiven, unboundNewOptions }: RunSettings,
+  intent: InitIntent | undefined,
+): boolean {
+  const keyGiven =
+    unboundNewOptions.projectKey !== undefined ||
+    (intent?.kind === 'link' && intent.projectKey !== undefined);
+  return interactive && !pathGiven && !keyGiven;
 }
 
 /**

@@ -132,11 +132,19 @@ describe('validateIntentOptions', () => {
     );
   });
 
-  it('rejects an intent with --monorepo, whose roots are named with --root', () => {
+  it('rejects --bind and --link <key> with --monorepo, whose roots are named with --root', () => {
     expect(() => validateIntentOptions({ bind: true, monorepo: true })).toThrow(
       '--bind does not apply with --monorepo',
     );
+    expect(() => validateIntentOptions({ link: 'api-key', monorepo: true })).toThrow(
+      '--link <key> does not apply with --monorepo',
+    );
     expect(validateIntentOptions({ monorepo: true })).toBeUndefined();
+  });
+
+  it('accepts a bare --link or --create with --monorepo', () => {
+    expect(validateIntentOptions({ link: true, monorepo: true })).toEqual({ kind: 'link' });
+    expect(validateIntentOptions({ create: true, monorepo: true })).toEqual({ kind: 'create' });
   });
 });
 

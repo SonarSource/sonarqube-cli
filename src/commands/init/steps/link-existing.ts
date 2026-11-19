@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { FolderSelectionCancelledError } from '@/commands/link/choose-folder.ts';
 import {
   ProjectSelectionCancelledError,
   searchForProject,
@@ -30,6 +31,7 @@ import { requireAnswer } from '../answer.ts';
 import { missingDecision } from '../decision.ts';
 import type { InitOutcome, LinkExistingPath, UnboundNewPath } from '../init-outcome.ts';
 import type { DetectDeps } from './detect.ts';
+import { chooseLinkFolder } from './folder-selection.ts';
 import { showAnalysisResults, writeMapping } from './mapping.ts';
 
 /**
@@ -54,7 +56,11 @@ export async function runLinkExisting(
   }
   const situation = `A Sonar project already exists for this repository: '${foundKey}'.`;
   if (intent?.kind === 'link') {
-    return linkProject(foundKey, projectRoot, deps);
+    const linked = await linkInChosenFolder(foundKey, projectRoot, deps);
+    if (linked === null) {
+      throw new FolderSelectionCancelledError();
+    }
+    return linked;
   }
   if (intent) {
     throw new InvalidOptionError(
@@ -80,7 +86,18 @@ export async function runLinkExisting(
   if (projectKey === null) {
     return unbound;
   }
-  return linkProject(projectKey, projectRoot, deps);
+  // Leaving the folder prompts takes back the agreement to link, like declining it.
+  return (await linkInChosenFolder(projectKey, projectRoot, deps)) ?? unbound;
+}
+
+/** The user has agreed to link, so this is when they say which folder to link. */
+async function linkInChosenFolder(
+  projectKey: string,
+  projectRoot: string,
+  deps: DetectDeps,
+): Promise<InitOutcome | null> {
+  const target = await chooseLinkFolder(projectRoot, deps);
+  return 'cancelled' in target ? null : linkProject(projectKey, target.projectRoot, deps);
 }
 
 /** `--link <key>` is checked before it is written, since nothing found it on the server. */
