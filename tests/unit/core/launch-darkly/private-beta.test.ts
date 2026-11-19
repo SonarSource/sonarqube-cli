@@ -487,6 +487,32 @@ describe('Private Beta command registration', () => {
     }
   });
 
+  it('registers and resolves a feature flag on demand', async () => {
+    const privateBetaFlags = new PrivateBetaFlagRegistry();
+    const authResolver = new AuthResolver({ silent: true });
+    const loadFlagsSpy = mock(resolvePrivateBetaFlags).mockResolvedValue({
+      'a3s-allow-local-context': true,
+    });
+    const flagsResolver = new FlagsResolver(authResolver, privateBetaFlags, loadFlagsSpy);
+    const runtime = createCliRuntime({ privateBetaFlags, authResolver, flagsResolver });
+    const resolveAuthSpy = spyOn(authResolver, 'resolveAuth').mockReturnValue(okAsync(cloudAuth));
+
+    try {
+      await flagsResolver.resolveFlags();
+      expect(loadFlagsSpy).not.toHaveBeenCalled();
+
+      expect(await runtime.resolveFeatureFlag('a3s-allow-local-context')).toBe(true);
+      expect(await runtime.resolveFeatureFlag('a3s-allow-local-context')).toBe(true);
+
+      expect(loadFlagsSpy).toHaveBeenCalledTimes(1);
+      expect(loadFlagsSpy).toHaveBeenCalledWith(cloudAuth, {
+        flagKeys: ['a3s-allow-local-context'],
+      });
+    } finally {
+      resolveAuthSpy.mockRestore();
+    }
+  });
+
   it('collects Private Beta flag keys from Stage.Beta declarations', () => {
     const root = new SonarCommand('sonar', {
       runtime: createCliRuntime({ isPrivateBetaEnabled: () => true }),
