@@ -48,6 +48,13 @@ export interface LinkedProjectIssue extends LinkedProject {
   problem: LinkedProjectProblem;
 }
 
+/** The failure as a root's `reason`: the message, then the remediation hint when there is one. */
+export function describeFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'Unexpected failure.';
+  const hint = remediationHintFor(error);
+  return hint ? `${message}\n${hint}` : message;
+}
+
 /** What no later root can recover from: the answer to a prompt is gone, or the credentials or organization are wrong. */
 export function isRunFatal(error: unknown): boolean {
   return (

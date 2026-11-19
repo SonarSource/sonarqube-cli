@@ -172,13 +172,15 @@ async function askProjectKey(
  * When the generated key is already taken (an earlier run created it), nothing is mapped without
  * the user's say: the `link-existing` step offers the project, and declining it asks for another
  * key. An explicit `--project` that is taken is never adopted. With `monorepo`, the mapping is
- * merged into the `projects` array of `.sonar-config.json`.
+ * merged into the `projects` array of `.sonar-config.json`. With `bindRequired`, declining the
+ * offer ends the flow as declined, since asking for another key would create an unbound project.
  */
 export async function runUnboundNew(
   path: UnboundNewPath,
   deps: DetectDeps,
   options: UnboundNewOptions,
   monorepo = false,
+  bindRequired = false,
 ): Promise<InitOutcome> {
   const { projectRoot, remote } = path;
   const { auth, http, console, interactive, intent } = deps;
@@ -203,6 +205,9 @@ export async function runUnboundNew(
     );
     if ('kind' in linked) {
       return linked;
+    }
+    if (bindRequired) {
+      return { kind: 'declined' };
     }
     projectKey = await askProjectKey(console, projects, auth.orgKey, existing.key);
   } else if (intent?.kind === 'link') {

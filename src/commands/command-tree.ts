@@ -882,61 +882,52 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'core',
       label: 'init',
     })
-    .option(
-      '--path <directory>',
-      'Directory to onboard, relative or absolute (default: current directory)',
-    )
+    .option('--path <directory>', 'Directory to onboard (default: current directory)')
     .option('--non-interactive', 'Never prompt; fail with a hint when an answer is needed')
     .option(
       '--monorepo',
-      'Onboard several project roots instead of a single project: choose the folders in a tree, or name them with --root. Roots already linked in .sonar-config.json are reported as configured; the others are created or mapped. Without a terminal and without --root, only the roots mapped in .sonar-config.json are reported',
+      'Onboard several project roots: choose the folders in a tree, or name them with --root. Roots already in .sonar-config.json are reported as configured',
     )
     .option(
       '--root <path[=key]>',
-      'With --monorepo: a project root, relative to the repository root, and optionally the key of its project (generated when omitted), e.g. services/api=my_api or services/web. Repeatable; skips the folder tree. A root already linked in .sonar-config.json is skipped; the others are created or mapped, and an interactive run asks for the name and visibility of each new project',
+      'With --monorepo: a project root relative to the repository root, optionally with its project key (generated when omitted), e.g. services/api=my_api. Repeatable; skips the folder tree',
       collectRoot,
     )
     .option(
       '--link [key]',
-      'Link a directory to an existing project: the one found for the repository, or the project named by key. With --monorepo, a bare --link only maps roots whose project already exists and never creates one (name each root with --root <path>=<key>)',
+      'Link a directory to an existing project: the one found for the repository, or the one named by key. With --monorepo, never creates projects (name each root with --root <path>=<key>)',
     )
     .option(
       '--bind',
-      'Create a new project bound to the repository without prompting (SonarQube Cloud, with the organization linked to your DevOps platform)',
+      'Create a project bound to the repository without prompting (SonarQube Cloud, organization linked to your DevOps platform). With --monorepo, a root whose project already exists is offered for linking, and fails when declined or without a terminal',
     )
     .option(
       '--create',
-      'Create a new unbound project (without repository binding) without prompting, optionally configured by --project, --name and --visibility',
+      'Create a project without repository binding and without prompting, optionally configured by --project, --name and --visibility',
     )
     .option(
       '--project <key>',
-      'Key of the new project (default: generated from the repository); only used when the project is not bound to the repository',
+      'Key of the new project (default: generated); not used with a bound project',
     )
     .option(
       '--name <name>',
-      'Name of the new project (default: the repository name); only used when the project is not bound to the repository',
+      'Name of the new project (default: the repository name); not used with a bound project',
     )
     .option(
       '--visibility <visibility>',
-      'Visibility of the new project: private or public (default: private); only used when the project is not bound to the repository',
+      'Visibility of the new project: private or public (default: private); not used with a bound project',
     )
-    .option(
-      '--scan',
-      'Run the first analysis of a newly created unbound project without asking; --scanner-property and --detach only apply when the analysis runs',
-    )
+    .option('--scan', 'Run the first analysis of a newly created unbound project without asking')
     .option(
       '--scanner-property <key=value>',
-      'Extra property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable; the value is never logged)',
+      'Extra scanner property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable)',
       collectScannerProperty,
     )
     .option('--verbose', 'Stream the scanner logs while the first analysis runs')
-    .option(
-      '--detach',
-      'Run the first analysis in the background and return without waiting for the results',
-    )
+    .option('--detach', 'Run the first analysis in the background without waiting for the results')
     .option(
       '--dry-run',
-      'Preview what init would do without making any changes: nothing is created, linked or saved and no analysis runs. Requires being signed in already',
+      'Preview what init would do without changing anything. Requires being signed in already',
       false,
     )
     .showUpdateNotification((opts) => !opts.nonInteractive)
