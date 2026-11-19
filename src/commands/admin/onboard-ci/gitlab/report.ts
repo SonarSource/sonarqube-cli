@@ -39,3 +39,13 @@ export function writeReportFile(
   }
   console.print(`Full report: ${filename}  (written to current directory)`);
 }
+
+export function buildOutroMessage(opened: number, skipped: number, failed: number): string {
+  return `Opened ${opened.toLocaleString()} MRs · ${skipped.toLocaleString()} skipped · ${failed.toLocaleString()} failed`;
+}
+
+export function repositoriesFailedError(failed: number): CommandFailedError {
+  return new CommandFailedError(`${failed} repositories failed to process.`, {
+    remediationHint: 'See the per-repository errors above and the report file for details.',
+  });
+}

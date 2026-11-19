@@ -1393,7 +1393,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option(
       '--repos-file <file>',
-      'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group',
+      'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group. Mutually exclusive with --repos',
+    )
+    .option(
+      '--repos <list>',
+      'Comma-separated repositories to process, relative to --group (e.g. subgroup/repo-a,repo-b); mutually exclusive with --repos-file',
     )
     .option(
       '--sonar-token-var-name <name>',
@@ -1414,6 +1418,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       "Path to a YAML file defining the full CI job body (image, tags, stage, script, variables, rules); {{SONAR_PROJECT_KEY}} is substituted with each repository's SonarQube project key. Mutually exclusive with --stage, --allow-failure, --trigger-on, --scanner-property, and --sonar-token-var-name",
     )
     .option('--dry-run', 'Preview what would be processed without making any changes', false)
+    .option(
+      '--server-side',
+      'Run on SonarQube Server and fail if it does not support it (default: use it when available)',
+    )
+    .option('--client-side', 'Run from this machine, talking to GitLab directly')
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
       assertOnPremiseConnection(ctx.auth);

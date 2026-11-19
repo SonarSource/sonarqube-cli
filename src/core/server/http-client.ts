@@ -348,6 +348,26 @@ export class SonarHttpClient {
     );
   }
 
+  /** Like `post`, for endpoints answering without a JSON body (e.g. 204); the response body is discarded. */
+  postJsonDiscardingBody(endpoint: string, body: unknown): ResultAsync<void, HttpClientError> {
+    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
+
+    return ResultAsync.fromPromise(
+      fetchAuthenticated(
+        url,
+        buildRequest(
+          'POST',
+          this.commonHeaders('json'),
+          POST_REQUEST_TIMEOUT_MS,
+          JSON.stringify(body),
+        ),
+      ),
+      toError,
+    ).andThen((response) =>
+      this.toStatusCheckedResult(response, 'POST', () => Promise.resolve(undefined)),
+    );
+  }
+
   /** Replace a JSON resource through the authenticated proxy/TLS-aware transport. */
   patch<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
     const url = `${this.apiHostFor(endpoint)}${endpoint}`;
