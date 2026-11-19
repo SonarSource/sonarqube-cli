@@ -31,10 +31,7 @@ import {
   SONARCLOUD_API_URL,
   SONARCLOUD_URL,
 } from '@/core/config-constants.ts';
-import {
-  type ScannerInstallation,
-  scannerJavaArgs,
-} from '@/core/host/install/scanner-discovery.ts';
+import { type ScannerInstallation, scannerJavaArgs } from '@/core/host/install/sonar-scanner.ts';
 import { parseProperties } from '@/core/io/properties.ts';
 import logger from '@/core/observability/logger.ts';
 import { spawnDetachedToLog, spawnProcessWithTimeout } from '@/core/process/process.ts';
