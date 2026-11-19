@@ -31,9 +31,9 @@ import {
   runFirstScan,
   type ScanOptions,
   type ScanResult,
+  UNAVAILABLE,
 } from '@/commands/init/steps/scan.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { clearNetworkConfigCache } from '@/core/host/connectivity/network-config.ts';
 import { errAsync, okAsync } from '@/core/result.ts';
@@ -128,12 +128,6 @@ function flags(overrides: Partial<ScanOptions> = {}): ScanOptions {
   };
 }
 
-async function failureOf(promise: Promise<unknown>): Promise<CommandFailedError> {
-  const error = await promise.catch((cause: unknown) => cause);
-  expect(error).toBeInstanceOf(CommandFailedError);
-  return error as CommandFailedError;
-}
-
 function printed(console: FakeConsole): string[] {
   return console.calls
     .filter((call) => call.method === 'print')
@@ -169,72 +163,62 @@ describe('runFirstScan without a scan', () => {
   });
 });
 
-describe('runFirstScan failures', () => {
-  it('says the project was kept when the network setup is unusable, before any download', async () => {
-    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
-    clearNetworkConfigCache();
-
-    const error = await failureOf(
-      runFirstScan(projectRoot, 'my-key', depsFor(new FakeConsole()), flags()),
-    );
-
-    expect(error.message).toBe(
-      'The first analysis did not complete: The SonarScanner requires an HTTP proxy URL.',
-    );
-    expect(error.remediationHint).toContain(
-      "Project 'my-key' and .sonar-config.json were kept, so the setup is intact.",
-    );
-  });
-
-  it('starts the analysis without asking when --scan was passed', async () => {
-    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
-    clearNetworkConfigCache();
-    const console = new FakeConsole();
-
-    await failureOf(
-      runFirstScan(
-        projectRoot,
-        'my-key',
-        depsFor(console, { interactive: true }),
-        flags({ scan: true }),
-      ),
-    );
-
-    expect(console.calls.some((call) => call.method === 'confirmPrompt')).toBe(false);
-  });
-
-  it('refuses --detach with a PEM client key before downloading the scanner', async () => {
-    const fixtures = join(import.meta.dir, '../../../fixtures/client-cert');
-    process.env.SONAR_TLS_CLIENT_CERT = join(fixtures, 'client-cert.pem');
-    process.env.SONAR_TLS_CLIENT_KEY_FILE = join(fixtures, 'client-key.pem');
-    clearNetworkConfigCache();
-
-    const error = await failureOf(
-      runFirstScan(projectRoot, 'my-key', depsFor(new FakeConsole()), flags({ detach: true })),
-    );
-
-    expect(error.message).toContain('A PEM client key cannot be used with --detach.');
-    expect(error.remediationHint).toContain('were kept');
-  });
-});
-
 describe('runFirstScan without a SonarScanner', () => {
-  const UNAVAILABLE =
+  const WARNING =
     "SonarScanner is not available in this version of the CLI. Project 'my-key' is set up; the first analysis was skipped.";
 
+  function warnings(console: FakeConsole): unknown[] {
+    return console.calls.filter((call) => call.method === 'warn').map((call) => call.args[0]);
+  }
+
   it.each([false, true])(
-    'warns and skips the analysis when --scan is passed (detached: %s)',
+    'warns once and skips the analysis when --scan is passed (detached: %s)',
     async (detach) => {
       const console = new FakeConsole();
 
       const result = await runFirstScan(projectRoot, 'my-key', depsFor(console), flags({ detach }));
 
-      expect(result).toBe(NOT_RUN);
-      expect(
-        console.calls.filter((call) => call.method === 'warn').map((call) => call.args[0]),
-      ).toEqual([UNAVAILABLE]);
+      expect(result).toBe(UNAVAILABLE);
+      expect(warnings(console)).toEqual([WARNING]);
     },
   );
+
+  it('does not ask when --scan was passed to an interactive run', async () => {
+    const console = new FakeConsole();
+
+    await runFirstScan(projectRoot, 'my-key', depsFor(console, { interactive: true }), flags());
+
+    expect(console.calls.some((call) => call.method === 'confirmPrompt')).toBe(false);
+  });
+
+  it('warns instead of failing when the network setup is unusable', async () => {
+    process.env.SONAR_HTTPS_PROXY_URL = 'https://proxy.local:8443';
+    clearNetworkConfigCache();
+    const console = new FakeConsole();
+
+    const result = await runFirstScan(projectRoot, 'my-key', depsFor(console), flags());
+
+    expect(result).toBe(UNAVAILABLE);
+    expect(warnings(console)).toEqual([WARNING]);
+  });
+
+  it('warns instead of failing for --detach with a PEM client key', async () => {
+    const fixtures = join(import.meta.dir, '../../../fixtures/client-cert');
+    process.env.SONAR_TLS_CLIENT_CERT = join(fixtures, 'client-cert.pem');
+    process.env.SONAR_TLS_CLIENT_KEY_FILE = join(fixtures, 'client-key.pem');
+    clearNetworkConfigCache();
+    const console = new FakeConsole();
+
+    const result = await runFirstScan(
+      projectRoot,
+      'my-key',
+      depsFor(console),
+      flags({ detach: true }),
+    );
+
+    expect(result).toBe(UNAVAILABLE);
+    expect(warnings(console)).toEqual([WARNING]);
+  });
 });
 
 describe('reportScan', () => {
@@ -250,10 +234,10 @@ describe('reportScan', () => {
       ...overrides,
     }) as ScanResult;
 
-  it('prints nothing when no scan ran', () => {
+  it.each([NOT_RUN, UNAVAILABLE])('prints nothing when no scan ran (%o)', (scan) => {
     const console = new FakeConsole();
 
-    reportScan(NOT_RUN, 'my-key', console);
+    reportScan(scan, 'my-key', console);
 
     expect(console.calls).toHaveLength(0);
   });

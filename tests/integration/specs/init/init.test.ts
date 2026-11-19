@@ -1324,13 +1324,14 @@ describe('sonar init', () => {
         await signInToCloud(() => {});
         initGitRepo(harness.cwd.path);
 
-        const result = await harness.run('init --non-interactive --create --scan');
+        const result = await harness.run('init --non-interactive --create --scan --detach');
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain(UNBOUND);
-        expect(result.stderr).toContain(
-          'SonarScanner is not available in this version of the CLI.',
-        );
+        expect(
+          result.stderr.match(/SonarScanner is not available in this version of the CLI\./g),
+        ).toHaveLength(1);
+        expect(result.stderr).not.toContain('ignored');
         expect(result.stdout).not.toContain('Analysis completed');
         expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
       },

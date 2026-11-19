@@ -64,6 +64,8 @@ export interface ScanOptions {
  */
 export type ScanResult =
   | { status: 'not-run' }
+  /** `--scan` was honoured, but the CLI has no SonarScanner to run; the warning is already shown. */
+  | { status: 'unavailable' }
   | { status: 'started'; pid: number; logPath: string }
   | {
       status: 'completed';
@@ -76,6 +78,7 @@ export type ScanResult =
     };
 
 export const NOT_RUN: ScanResult = { status: 'not-run' };
+export const UNAVAILABLE: ScanResult = { status: 'unavailable' };
 
 const DETACHED_DIRECTORY_PREFIX = 'init-';
 const STALE_WORK_DIRECTORY_MS = 24 * 60 * 60 * 1000;
@@ -184,8 +187,9 @@ export async function runFirstScan(
   let directory: string | undefined;
   let handedOff = false;
   try {
-    await assertScannerNetworkUsable(auth.serverUrl, flags.detach);
+    // The missing scanner outranks network preconditions, so every `--scan` run ends in the same warning.
     const scanner = await installSonarScanner(console);
+    await assertScannerNetworkUsable(auth.serverUrl, flags.detach);
     directory = newWorkDirectory(flags.detach);
     const run = {
       scanner,
@@ -239,7 +243,7 @@ export async function runFirstScan(
       console.warn(
         `${error.message} Project '${projectKey}' is set up; the first analysis was skipped.`,
       );
-      return NOT_RUN;
+      return UNAVAILABLE;
     }
     throw keepProjectNote(projectKey, error);
   } finally {
