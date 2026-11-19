@@ -96,11 +96,9 @@ export default {
                 typeof response.findings !== 'string' || !response.findings.trim()) continue;
             await ctx.session.prompt({ sessionID, text: response.findings });
           } catch {
-            // Completion analysis must never prevent the session from finishing.
           }
         }
       } catch {
-        // A failed event stream leaves sessions completed without a follow-up.
       }
     }
     const completionEvents = observeCompletions();

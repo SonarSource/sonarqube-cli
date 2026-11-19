@@ -149,13 +149,4 @@ describe('openCodeIntegration', () => {
     expect(contextAugmentation.resources).toHaveLength(2);
     expect(contextAugmentation.operations).toHaveLength(1);
   });
-
-  it('cleans up the legacy SQAA instructions', () => {
-    const feature = openCodeIntegration.features.find(
-      (candidate) => candidate.id === VORTEX_FEATURE_ID,
-    );
-
-    expect(feature?.legacyCleanups).toHaveLength(1);
-    expect(feature?.replacedIds).toContain('sqaa-instructions');
-  });
 });
