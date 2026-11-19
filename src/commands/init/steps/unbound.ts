@@ -284,7 +284,10 @@ export async function runUnboundNew(
     }
     projectKey = resolved;
   } else {
-    const stopped = stopBeforeCreating(path, deps);
+    const stopped =
+      monorepo && !deps.allowUnbound
+        ? ({ kind: 'declined' } as const)
+        : stopBeforeCreating(path, deps);
     if (stopped) {
       return stopped;
     }
