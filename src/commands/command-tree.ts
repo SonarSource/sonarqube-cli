@@ -33,7 +33,7 @@ import {
   Stage,
 } from '@/core/commands/sonar-command.ts';
 import { CONFIG_KEY_NAMES, type ConfigKey } from '@/core/config/config-schema.ts';
-import { resolveGitlabToken } from '@/core/gitlab/token.ts';
+import { resolveDevOpsToken } from '@/core/devops/token.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
@@ -1426,7 +1426,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
       validateOnboardCiGitlabOptions(options);
       assertOnPremiseConnection(ctx.auth);
-      const gitlabToken = await resolveGitlabToken(ctx.console);
+      const gitlabToken = await resolveDevOpsToken(ctx.console, 'GitLab');
       return onboardCiGitlab(ctx.connection, gitlabToken, options, ctx.console);
     });
 

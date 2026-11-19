@@ -35,6 +35,7 @@ import { applyLoopbackSonarCloudEnvOverrides, inferRecordedCloudRegion } from '.
 import { Dir } from './dir';
 import { EnvironmentBuilder } from './environment-builder.js';
 import { FakeBinariesServer, FakeBinariesServerBuilder } from './fake-binaries-server.js';
+import { FakeGitHubServer, FakeGitHubServerBuilder } from './fake-github-server.js';
 import { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 import { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 import { FakeUpdateScriptServer } from './fake-update-script-server.js';
@@ -43,6 +44,7 @@ import { type InteractiveSession, startInteractiveSession } from './interactive-
 import { buildHomeEnv, IS_WINDOWS } from './platform';
 import type { CliResult, RunInteractiveOptions, RunOptions } from './types.js';
 
+export { FakeGitHubServer, FakeGitHubServerBuilder } from './fake-github-server.js';
 export { FakeGitLabServer, FakeGitLabServerBuilder } from './fake-gitlab-server.js';
 export { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from './fake-sonarqube-server.js';
 export { InteractiveSession } from './interactive-session.js';
@@ -62,6 +64,7 @@ export class TestHarness {
   private readonly servers: FakeSonarQubeServer[] = [];
   private readonly binariesServers: FakeBinariesServer[] = [];
   private readonly gitlabServers: FakeGitLabServer[] = [];
+  private readonly githubServers: FakeGitHubServer[] = [];
   private readonly updateScriptServers: FakeUpdateScriptServer[] = [];
   private _envBuilder?: EnvironmentBuilder;
   private systemEnvVars: Record<string, string> = {};
@@ -195,6 +198,17 @@ export class TestHarness {
     builder.start = async () => {
       const server = await originalStart();
       this.gitlabServers.push(server);
+      return server;
+    };
+    return builder;
+  }
+
+  newFakeGitHubServer(): FakeGitHubServerBuilder {
+    const builder = new FakeGitHubServerBuilder();
+    const originalStart = builder.start.bind(builder);
+    builder.start = async () => {
+      const server = await originalStart();
+      this.githubServers.push(server);
       return server;
     };
     return builder;
@@ -385,10 +399,11 @@ export class TestHarness {
     await Promise.all(this.sessions.map((session) => session.waitFinish().catch(() => undefined)));
 
     await Promise.all(
-      [...this.servers, ...this.binariesServers, ...this.gitlabServers].map((s) =>
-        s.stop().catch(() => {
-          /* ignore stop errors */
-        }),
+      [...this.servers, ...this.binariesServers, ...this.gitlabServers, ...this.githubServers].map(
+        (s) =>
+          s.stop().catch(() => {
+            /* ignore stop errors */
+          }),
       ),
     );
     await Promise.all(this.updateScriptServers.map((s) => s.stop().catch(() => {})));
