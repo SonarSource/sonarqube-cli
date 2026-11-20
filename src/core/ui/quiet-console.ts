@@ -40,10 +40,13 @@ import type { TreePromptOptions } from './tree/tree-source.ts';
  * integrations while the user is running some unrelated command and must not print a full
  * `sonar integrate` transcript over it.
  *
- * Warnings, errors, prompts and spinners still print as normal through the wrapped console.
+ * Silent mode also suppresses warnings, errors, prompts and spinners to protect hook responses.
  */
 export class QuietConsole implements Console {
-  constructor(private readonly delegate: Console) {}
+  constructor(
+    private readonly delegate: Console,
+    private readonly options: { silent?: boolean } = {},
+  ) {}
 
   textPromptResult(message: string): PromptResult<string> {
     return this.delegate.textPromptResult(message);
@@ -93,7 +96,7 @@ export class QuietConsole implements Console {
   }
 
   canPrompt(): boolean {
-    return this.delegate.canPrompt();
+    return !this.options.silent && this.delegate.canPrompt();
   }
 
   unmeasured(): Console {
@@ -125,10 +128,18 @@ export class QuietConsole implements Console {
   }
 
   warn(message: string): void {
+    if (this.options.silent) {
+      logger.warn(message);
+      return;
+    }
     this.delegate.warn(message);
   }
 
   error(message: string): void {
+    if (this.options.silent) {
+      logger.error(message);
+      return;
+    }
     this.delegate.error(message);
   }
 
@@ -163,34 +174,45 @@ export class QuietConsole implements Console {
   }
 
   withSpinner<T>(message: string, task: () => Promise<T>, channel?: OutputChannel): Promise<T> {
+    if (this.options.silent) {
+      this.suppress('withSpinner', message);
+      return task();
+    }
     return this.delegate.withSpinner(message, task, channel);
   }
 
   textPrompt(message: string): Promise<string | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.textPrompt(message);
   }
 
   passwordPrompt(message: string): Promise<string | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.passwordPrompt(message);
   }
 
   confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.confirmPrompt(message, defaultValue);
   }
 
   selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.selectPrompt(message, options);
   }
 
   searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.searchPrompt(message, options);
   }
 
   treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.treePrompt(message, options);
   }
 
   treeMultiSelectPrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T[] | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.treeMultiSelectPrompt(message, options);
   }
 
@@ -199,6 +221,7 @@ export class QuietConsole implements Console {
     options: MultiSelectOption<T>[],
     loadMoreOpts?: MultiSelectPromptOptions<T>,
   ): Promise<T[] | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.multiSelectPrompt(message, options, loadMoreOpts);
   }
 
@@ -207,10 +230,12 @@ export class QuietConsole implements Console {
     isValid: (value: string) => boolean,
     errorMessage: string,
   ): Promise<string | null> {
+    if (this.options.silent) return Promise.resolve(null);
     return this.delegate.promptUntilValid(message, isValid, errorMessage);
   }
 
   pressEnterKeyPrompt(message: string): Promise<void> {
+    if (this.options.silent) return Promise.resolve();
     return this.delegate.pressEnterKeyPrompt(message);
   }
 
