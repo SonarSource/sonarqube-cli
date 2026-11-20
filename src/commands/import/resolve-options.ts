@@ -116,6 +116,7 @@ async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise
     (err) => {
       throw new CommandFailedError(`Failed to look up organization '${orgKey}': ${err.message}`, {
         remediationHint: 'Check your network connection and authentication, then retry.',
+        cause: err,
       });
     },
   );
@@ -160,7 +161,10 @@ export async function resolveAlmKey(
     (err) => {
       throw new CommandFailedError(
         `Failed to look up the DevOps platform for organization '${orgKey}': ${err.message}`,
-        { remediationHint: 'Check your network connection and authentication, then retry.' },
+        {
+          remediationHint: 'Check your network connection and authentication, then retry.',
+          cause: err,
+        },
       );
     },
   );
@@ -475,11 +479,10 @@ async function resolveOnboardingMode(
   // instead of ending the command, so the user can pick a different mode rather than starting
   // `sonar import` over from scratch.
   for (;;) {
-    const choice = await console.selectPrompt('How do you want to import repositories?', options);
-
-    if (choice === null) {
-      throw new CommandFailedError('Repository selection cancelled');
-    }
+    const choice = await console
+      .selectPromptResult('How do you want to import repositories?', options)
+      .onCancellation('Repository selection cancelled')
+      .orThrow();
     if (choice === RECOMMENDED) {
       return { kind: 'streaming', collection, regex: undefined };
     }

@@ -29,6 +29,7 @@ import type {
   SearchPromptOptions,
   SelectOption,
 } from '@/core/ui/console.ts';
+import { PromptResult } from '@/core/ui/prompt-result.ts';
 import type { TreeNode, TreePromptOptions } from '@/core/ui/tree/tree-source.ts';
 
 export interface UiCall {
@@ -81,6 +82,53 @@ export class FakeConsole implements Console {
 
   setCanPrompt(value: boolean): void {
     this.promptable = value;
+  }
+
+  textPromptResult(message: string): PromptResult<string> {
+    return PromptResult.fromAnswer(this.textPrompt(message));
+  }
+
+  passwordPromptResult(message: string): PromptResult<string> {
+    return PromptResult.fromAnswer(this.passwordPrompt(message));
+  }
+
+  confirmPromptResult(message: string, defaultValue: boolean): PromptResult<boolean> {
+    return PromptResult.fromAnswer(this.confirmPrompt(message, defaultValue));
+  }
+
+  selectPromptResult<T>(message: string, options: SelectOption<T>[]): PromptResult<T> {
+    return PromptResult.fromAnswer(this.selectPrompt(message, options));
+  }
+
+  searchPromptResult<T>(message: string, options: SearchPromptOptions<T>): PromptResult<T> {
+    return PromptResult.fromAnswer(this.searchPrompt(message, options));
+  }
+
+  treePromptResult<T>(message: string, options: TreePromptOptions<T>): PromptResult<T> {
+    return PromptResult.fromAnswer(this.treePrompt(message, options));
+  }
+
+  treeMultiSelectPromptResult<T>(
+    message: string,
+    options: TreePromptOptions<T>,
+  ): PromptResult<T[]> {
+    return PromptResult.fromAnswer(this.treeMultiSelectPrompt(message, options));
+  }
+
+  multiSelectPromptResult<T>(
+    message: string,
+    options: MultiSelectOption<T>[],
+    loadMoreOpts?: MultiSelectPromptOptions<T>,
+  ): PromptResult<T[]> {
+    return PromptResult.fromAnswer(this.multiSelectPrompt(message, options, loadMoreOpts));
+  }
+
+  promptUntilValidResult(
+    message: string,
+    isValid: (value: string) => boolean,
+    errorMessage: string,
+  ): PromptResult<string> {
+    return PromptResult.fromAnswer(this.promptUntilValid(message, isValid, errorMessage));
   }
 
   canPrompt(): boolean {

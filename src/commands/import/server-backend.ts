@@ -368,15 +368,14 @@ async function selectSetting(
     );
   }
 
-  const chosen = await console.selectPrompt(
-    'Which DevOps platform do you want to import from?',
-    settings.map((setting) => ({
-      value: setting,
-      label: `${setting.key} (${DOP_PLATFORM_LABELS[setting.type]})`,
-    })),
-  );
-  if (chosen === null) {
-    throw new CommandFailedError('DevOps platform selection cancelled');
-  }
-  return chosen;
+  return console
+    .selectPromptResult(
+      'Which DevOps platform do you want to import from?',
+      settings.map((setting) => ({
+        value: setting,
+        label: `${setting.key} (${DOP_PLATFORM_LABELS[setting.type]})`,
+      })),
+    )
+    .onCancellation('DevOps platform selection cancelled')
+    .orThrow();
 }

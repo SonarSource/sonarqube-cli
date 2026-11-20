@@ -18,15 +18,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { createHash } from 'node:crypto';
-
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import {
   type CommandInvocationContext,
   TelemetryFact,
 } from '@/core/commands/invocation-context.ts';
-import { canonicalizePath } from '@/core/io/fs-utils.ts';
 import type { InstalledIntegrationFeature, IntegrationScope } from '@/core/state/state.ts';
+import { hashRepoRoot } from '@/core/telemetry/repo-id.ts';
 
 export const CLI_INTEGRATION_CONFIGURED = 'CliIntegrationConfigured';
 
@@ -93,10 +91,4 @@ function collectInstalledFeatureIds(installedFeatures: InstalledIntegrationFeatu
     }
   }
   return ids;
-}
-
-/** SHA-256 hex of the repo root path. */
-function hashRepoRoot(repoRoot: string | null): string | null {
-  if (!repoRoot) return null;
-  return createHash('sha256').update(canonicalizePath(repoRoot)).digest('hex');
 }

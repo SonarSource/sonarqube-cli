@@ -19,6 +19,7 @@
  */
 
 import type { ColorFn, NoteOptions, StepStatus } from './colors.ts';
+import type { PromptResult } from './prompt-result.ts';
 import type { TreePromptOptions } from './tree/tree-source.ts';
 
 export type OutputChannel = 'stdout' | 'stderr';
@@ -272,6 +273,35 @@ export interface Console {
     isValid: (value: string) => boolean,
     errorMessage: string,
   ): Promise<string | null>;
+
+  // The `…Result` prompts are the same prompts, with a cancellation as an error instead of `null`.
+  // A caller that ends on cancel names it: `.onCancellation('Login cancelled').orThrow()`.
+
+  textPromptResult(message: string): PromptResult<string>;
+
+  passwordPromptResult(message: string): PromptResult<string>;
+
+  confirmPromptResult(message: string, defaultValue: boolean): PromptResult<boolean>;
+
+  selectPromptResult<T>(message: string, options: SelectOption<T>[]): PromptResult<T>;
+
+  searchPromptResult<T>(message: string, options: SearchPromptOptions<T>): PromptResult<T>;
+
+  treePromptResult<T>(message: string, options: TreePromptOptions<T>): PromptResult<T>;
+
+  treeMultiSelectPromptResult<T>(message: string, options: TreePromptOptions<T>): PromptResult<T[]>;
+
+  multiSelectPromptResult<T>(
+    message: string,
+    options: MultiSelectOption<T>[],
+    loadMoreOpts?: MultiSelectPromptOptions<T>,
+  ): PromptResult<T[]>;
+
+  promptUntilValidResult(
+    message: string,
+    isValid: (value: string) => boolean,
+    errorMessage: string,
+  ): PromptResult<string>;
 
   /**
    * Press-Enter-to-continue. Skipped in CI or when stdin is not a TTY.
