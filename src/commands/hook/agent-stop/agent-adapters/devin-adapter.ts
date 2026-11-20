@@ -29,6 +29,5 @@ export const devinAdapter: StopAgentAdapter = {
     const p = payload as DevinStopPayload;
     return { sessionId: p.session_id, cwd: process.env.DEVIN_PROJECT_DIR };
   },
-  emit: ({ findings, shouldContinue }) =>
-    shouldContinue ? { decision: 'block', reason: findings } : {},
+  emit: ({ findings }) => ({ decision: 'block', reason: findings }),
 };

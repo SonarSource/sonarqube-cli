@@ -30,6 +30,5 @@ export const claudeCodexAdapter: StopAgentAdapter = {
     const p = payload as ClaudeCodexStopPayload;
     return { sessionId: p.session_id, cwd: p.cwd };
   },
-  emit: ({ findings, shouldContinue }) =>
-    shouldContinue ? { decision: 'block', reason: findings } : {},
+  emit: ({ findings }) => ({ decision: 'block', reason: findings }),
 };

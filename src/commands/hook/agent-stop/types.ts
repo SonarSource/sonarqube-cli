@@ -28,7 +28,6 @@ export interface StopInput {
 
 export interface StopOutput {
   findings: string;
-  shouldContinue: boolean;
 }
 
 export interface StopAgentAdapter {
