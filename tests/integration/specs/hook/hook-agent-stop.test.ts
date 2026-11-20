@@ -43,10 +43,10 @@ const CLAUDE_CODEX_PROTOCOL = {
   ...BLOCKING_STOP_PROTOCOL,
   sessionIdField: 'session_id',
 };
-const AGENTS = [
-  { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
-  { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
-  {
+const AGENTS = {
+  claude: { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
+  codex: { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
+  devin: {
     name: 'devin',
     ...CLAUDE_CODEX_PROTOCOL,
     payloadFields: () => ({
@@ -55,7 +55,7 @@ const AGENTS = [
       stop_hook_active: false,
     }),
   },
-  {
+  opencode: {
     name: 'opencode',
     sessionIdField: 'sessionID',
     payloadFields: (cwd: unknown) => ({ cwd }),
@@ -63,7 +63,7 @@ const AGENTS = [
       findings: expect.stringContaining('Use Number.isNaN.'),
     },
   },
-  {
+  pi: {
     name: 'pi',
     sessionIdField: 'sessionID',
     payloadFields: (cwd: unknown) => ({ cwd, hasUI: true }),
@@ -71,12 +71,12 @@ const AGENTS = [
       findings: expect.stringContaining('Use Number.isNaN.'),
     },
   },
-  {
+  copilot: {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
     sessionIdField: 'sessionId',
   },
-  {
+  cursor: {
     name: 'cursor',
     sessionIdField: 'conversation_id',
     payloadFields: (cwd: unknown) => ({
@@ -89,22 +89,21 @@ const AGENTS = [
       followup_message: expect.stringContaining('Use Number.isNaN.'),
     },
   },
-] as const;
+} as const;
+type Agent = (typeof AGENTS)[keyof typeof AGENTS];
+
+const DATABASE_PATH = 'db/hooks/stop-hook-vortex-analysis.db';
 const ISSUE = { rule: 'typescript:S2688', message: 'Use Number.isNaN.', startLine: 2 };
 const BAD = 'export function invalid(value: number): boolean {\n  return value === NaN;\n}\n';
 const GOOD =
   'export function invalid(value: number): boolean {\n  return Number.isNaN(value);\n}\n';
 
-describe.each(AGENTS)('$name stop hook', (agent) => {
-  const COMMAND = `hook agent-stop --agent ${agent.name}`;
-  const otherAgent = AGENTS.find((candidate) => candidate.name !== agent.name)?.name;
-  if (!otherAgent) throw new Error('Agent isolation tests require at least two agents.');
+describe('agent stop hook', () => {
   let harness: TestHarness;
   let response: SqaaResponseConfig;
   let server: FakeSonarQubeServer;
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ DEVIN_PROJECT_DIR: agent.name === 'devin' ? harness.cwd.path : '' });
     initGitRepo(harness.cwd.path);
     harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=project\n');
     harness.cwd.writeFile('src/tracked.ts', BAD);
@@ -121,7 +120,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
   afterEach(async () => {
     await harness.dispose();
   });
-  function payload(extra: Record<string, unknown> = {}) {
+  function payloadFor(agent: Agent, extra: Record<string, unknown> = {}) {
     const { sessionId = 'session', cwd = harness.cwd.path, ...rest } = extra;
     return {
       [agent.sessionIdField]: sessionId,
@@ -129,10 +128,15 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       ...rest,
     };
   }
-  function invoke(extra = {}) {
-    return harness.runWithStdin(COMMAND, JSON.stringify(payload(extra)));
+  function invokeAgent(agent: Agent, extra = {}) {
+    return harness.runWithStdin(
+      `hook agent-stop --agent ${agent.name}`,
+      JSON.stringify(payloadFor(agent, extra)),
+      { extraEnv: agent.name === 'devin' ? { DEVIN_PROJECT_DIR: harness.cwd.path } : {} },
+    );
   }
-  function expectContinuation(result: CliResult) {
+  function expectAgentContinuation(agent: Agent, result: CliResult) {
+    expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual(agent.expectedContinuationOutput);
   }
   function analyses() {
@@ -141,7 +145,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       .filter(({ path }) => path === '/api/v2/a3s/analyses' || path === '/a3s-analysis/analyses');
   }
   function withDb<T>(operation: (db: Database) => T): T {
-    const db = new Database(harness.cliHome.file('db/hooks/stop-hook-vortex-analysis.db').path, {
+    const db = new Database(harness.cliHome.file(DATABASE_PATH).path, {
       strict: true,
     });
     try {
@@ -150,7 +154,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       db.close();
     }
   }
-  function queryState(sessionId = 'session') {
+  function readState(agent: string, sessionId = 'session') {
     return withDb((db) => {
       const row = db
         .query<{ count: number | null; locks: number; successful: number }, [string, string]>(
@@ -162,67 +166,9 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
           (SELECT count(*) FROM vortex_successful_analyses) AS successful
       `,
         )
-        .get(agent.name, sessionId);
+        .get(agent, sessionId);
       return { count: row?.count ?? undefined, locks: row?.locks, successful: row?.successful };
     });
-  }
-
-  function readSessionCounters() {
-    return withDb((db) =>
-      Object.fromEntries<number>(
-        db
-          .query<{ session_id: string; analysis_count: number }, [string]>(
-            'SELECT session_id, analysis_count FROM vortex_analysis_counters WHERE agent = ?',
-          )
-          .all(agent.name)
-          .map(({ session_id, analysis_count }) => [session_id, analysis_count]),
-      ),
-    );
-  }
-
-  async function whileAnalysisRuns(operation: () => void | Promise<void>) {
-    const received = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    response.beforeSqaaResponse = async () => {
-      received.resolve();
-      await release.promise;
-    };
-    const running = invoke();
-    try {
-      await Promise.race([
-        received.promise,
-        running.then(() => {
-          throw new Error('Analysis did not start');
-        }),
-      ]);
-      response.beforeSqaaResponse = undefined;
-      await operation();
-    } finally {
-      release.resolve();
-      await running;
-    }
-    return running;
-  }
-
-  function readLocks() {
-    return withDb((db) =>
-      db
-        .query<
-          {
-            fingerprint: string;
-            lock_token: string;
-            lock_expires_at: number;
-            agent: string;
-            session_id: string;
-          },
-          []
-        >('SELECT * FROM vortex_analysis_locks ORDER BY fingerprint')
-        .all(),
-    );
-  }
-
-  function databaseFiles() {
-    return readdirSync(harness.cliHome.file('db/hooks').path);
   }
 
   function expectSilentStop(result: CliResult): void {
@@ -230,790 +176,901 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
     expect(result.stdout.trim()).toBe('');
   }
 
-  describe('database setup and recovery', () => {
-    it('creates the analysis tables once and reuses them on later hook calls', async () => {
-      expectSilentStop(await invoke());
-      expect(analyses()).toHaveLength(0);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-      const metadata = () =>
-        withDb((db) => ({
-          version: db.query('PRAGMA user_version').get(),
-          journal: db.query('PRAGMA journal_mode').get(),
-          tables: db
-            .query("SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name")
-            .all(),
-        }));
-      const created = metadata();
-      expect(created.version).toEqual({ user_version: 1 });
-      expect(created.journal).toEqual({ journal_mode: 'wal' });
-      expect(created.tables).toHaveLength(3);
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke());
-      expect(metadata()).toEqual(created);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-    }, 30000);
+  describe('shared handler', () => {
+    const agent = 'claude';
+    const otherAgent = 'codex';
+    const command = 'hook agent-stop --agent claude';
+    function payload(extra: Record<string, unknown> = {}) {
+      return payloadFor(AGENTS.claude, extra);
+    }
+    function invoke(extra = {}) {
+      return invokeAgent(AGENTS.claude, extra);
+    }
+    function expectContinuation(result: CliResult) {
+      expectAgentContinuation(AGENTS.claude, result);
+    }
+    function queryState(sessionId = 'session') {
+      return readState(agent, sessionId);
+    }
 
-    it('prevents invalid counts, timestamps, and empty identifiers from being stored', async () => {
-      await invoke();
-      withDb((db) => {
-        for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-          expect(() =>
-            db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-              agent.name,
-              'invalid',
-              count,
-              1,
-            ]),
-          ).toThrow();
-        }
-        for (const agent of ['', null]) {
+    function readSessionCounters() {
+      return withDb((db) =>
+        Object.fromEntries<number>(
+          db
+            .query<{ session_id: string; analysis_count: number }, [string]>(
+              'SELECT session_id, analysis_count FROM vortex_analysis_counters WHERE agent = ?',
+            )
+            .all(agent)
+            .map(({ session_id, analysis_count }) => [session_id, analysis_count]),
+        ),
+      );
+    }
+
+    async function whileAnalysisRuns(operation: () => void | Promise<void>) {
+      const received = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      response.beforeSqaaResponse = async () => {
+        received.resolve();
+        await release.promise;
+      };
+      const running = invoke();
+      try {
+        await Promise.race([
+          received.promise,
+          running.then(() => {
+            throw new Error('Analysis did not start');
+          }),
+        ]);
+        response.beforeSqaaResponse = undefined;
+        await operation();
+      } finally {
+        release.resolve();
+        await running;
+      }
+      return running;
+    }
+
+    function readLocks() {
+      return withDb((db) =>
+        db
+          .query<
+            {
+              fingerprint: string;
+              lock_token: string;
+              lock_expires_at: number;
+              agent: string;
+              session_id: string;
+            },
+            []
+          >('SELECT * FROM vortex_analysis_locks ORDER BY fingerprint')
+          .all(),
+      );
+    }
+
+    function databaseFiles() {
+      return readdirSync(harness.cliHome.file('db/hooks').path);
+    }
+
+    describe('database setup and recovery', () => {
+      it('creates the analysis tables once and reuses them on later hook calls', async () => {
+        expectSilentStop(await invoke());
+        expect(analyses()).toHaveLength(0);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+        const metadata = () =>
+          withDb((db) => ({
+            version: db.query('PRAGMA user_version').get(),
+            journal: db.query('PRAGMA journal_mode').get(),
+            tables: db
+              .query("SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name")
+              .all(),
+          }));
+        const created = metadata();
+        expect(created.version).toEqual({ user_version: 1 });
+        expect(created.journal).toEqual({ journal_mode: 'wal' });
+        expect(created.tables).toHaveLength(3);
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke());
+        expect(metadata()).toEqual(created);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+      }, 30000);
+
+      it('prevents invalid counts, timestamps, and empty identifiers from being stored', async () => {
+        await invoke();
+        withDb((db) => {
+          for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+            expect(() =>
+              db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
+                agent,
+                'invalid',
+                count,
+                1,
+              ]),
+            ).toThrow();
+          }
+          for (const agent of ['', null]) {
+            expect(() =>
+              db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
+                agent,
+                'invalid',
+                1,
+                1,
+              ]),
+            ).toThrow();
+          }
           expect(() =>
             db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
               agent,
               'invalid',
               1,
-              1,
+              -1,
             ]),
           ).toThrow();
-        }
-        expect(() =>
-          db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-            agent.name,
-            'invalid',
-            1,
-            -1,
-          ]),
-        ).toThrow();
-        expect(() =>
-          db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['invalid', -1]),
-        ).toThrow();
-        expect(() =>
-          db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['', 1]),
-        ).toThrow();
-        expect(() =>
-          db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
-            'invalid',
-            'owner',
-            -1,
-            agent.name,
-            'invalid',
-          ]),
-        ).toThrow();
-        expect(() =>
-          db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
-            'invalid',
-            '',
-            1,
-            agent.name,
-            'invalid',
-          ]),
-        ).toThrow();
-      });
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-    }, 15000);
+          expect(() =>
+            db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['invalid', -1]),
+          ).toThrow();
+          expect(() =>
+            db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['', 1]),
+          ).toThrow();
+          expect(() =>
+            db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
+              'invalid',
+              'owner',
+              -1,
+              agent,
+              'invalid',
+            ]),
+          ).toThrow();
+          expect(() =>
+            db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
+              'invalid',
+              '',
+              1,
+              agent,
+              'invalid',
+            ]),
+          ).toThrow();
+        });
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+      }, 15000);
 
-    it.each([-1, 2])(
-      'skips analysis and preserves the database when its schema version is %i',
-      async (version) => {
-        await invoke();
-        withDb((db) => db.run(`PRAGMA user_version = ${version}`));
+      it.each([-1, 2])(
+        'skips analysis and preserves the database when its schema version is %i',
+        async (version) => {
+          await invoke();
+          withDb((db) => db.run(`PRAGMA user_version = ${version}`));
+          harness.cwd.writeFile('src/new.ts', BAD);
+          const result = await invoke();
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(0);
+          expect(withDb((db) => db.query('PRAGMA user_version').get())).toEqual({
+            user_version: version,
+          });
+          expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
+        },
+        30000,
+      );
+
+      it('skips analysis without overwriting data in an unversioned database', async () => {
+        harness.cliHome.writeFile(DATABASE_PATH, '');
+        withDb((db) => {
+          db.run('CREATE TABLE existing_data (value TEXT)');
+          db.run("INSERT INTO existing_data VALUES ('preserve me')");
+        });
         harness.cwd.writeFile('src/new.ts', BAD);
         const result = await invoke();
         expectSilentStop(result);
         expect(analyses()).toHaveLength(0);
+        expect(withDb((db) => db.query('SELECT * FROM existing_data').all())).toEqual([
+          { value: 'preserve me' },
+        ]);
         expect(withDb((db) => db.query('PRAGMA user_version').get())).toEqual({
-          user_version: version,
+          user_version: 0,
         });
-        expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
-      },
-      30000,
-    );
+      }, 15000);
 
-    it('skips analysis without overwriting data in an unversioned database', async () => {
-      harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', '');
-      withDb((db) => {
-        db.run('CREATE TABLE existing_data (value TEXT)');
-        db.run("INSERT INTO existing_data VALUES ('preserve me')");
-      });
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await invoke();
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
-      expect(withDb((db) => db.query('SELECT * FROM existing_data').all())).toEqual([
-        { value: 'preserve me' },
-      ]);
-      expect(withDb((db) => db.query('PRAGMA user_version').get())).toEqual({
-        user_version: 0,
-      });
-    }, 15000);
-
-    it.each([
-      ['the counter table is missing', 'DROP TABLE vortex_analysis_counters'],
-      ['the results table is missing', 'DROP TABLE vortex_successful_analyses'],
-      ['the locks table is missing', 'DROP TABLE vortex_analysis_locks'],
-      [
-        'a required column is missing',
-        'ALTER TABLE vortex_analysis_counters RENAME COLUMN updated_at TO wrong_column',
-      ],
-      [
-        'the counter table has no primary key',
-        `DROP TABLE vortex_analysis_counters;
+      it.each([
+        ['the counter table is missing', 'DROP TABLE vortex_analysis_counters'],
+        ['the results table is missing', 'DROP TABLE vortex_successful_analyses'],
+        ['the locks table is missing', 'DROP TABLE vortex_analysis_locks'],
+        [
+          'a required column is missing',
+          'ALTER TABLE vortex_analysis_counters RENAME COLUMN updated_at TO wrong_column',
+        ],
+        [
+          'the counter table has no primary key',
+          `DROP TABLE vortex_analysis_counters;
      CREATE TABLE vortex_analysis_counters (agent TEXT NOT NULL, session_id TEXT NOT NULL,
        analysis_count INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
-      ],
-      [
-        'lock tokens can be null',
-        `DROP TABLE vortex_analysis_locks;
+        ],
+        [
+          'lock tokens can be null',
+          `DROP TABLE vortex_analysis_locks;
      CREATE TABLE vortex_analysis_locks (fingerprint TEXT PRIMARY KEY NOT NULL, lock_token TEXT,
        lock_expires_at INTEGER NOT NULL, agent TEXT NOT NULL, session_id TEXT NOT NULL)`,
-      ],
-      [
-        'the attempt count column has the wrong type',
-        `DROP TABLE vortex_analysis_counters;
+        ],
+        [
+          'the attempt count column has the wrong type',
+          `DROP TABLE vortex_analysis_counters;
      CREATE TABLE vortex_analysis_counters (agent TEXT NOT NULL, session_id TEXT NOT NULL,
        analysis_count TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (agent, session_id))`,
-      ],
-    ])(
-      'skips analysis and preserves the database when %s',
-      async (_description, sql) => {
+        ],
+      ])(
+        'skips analysis and preserves the database when %s',
+        async (_description, sql) => {
+          await invoke();
+          withDb((db) => db.exec(sql));
+          const schema = () =>
+            withDb((db) => db.query('SELECT name, sql FROM sqlite_master ORDER BY name').all());
+          const before = schema();
+          harness.cwd.writeFile('src/new.ts', BAD);
+          const result = await invoke();
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(0);
+          expect(schema()).toEqual(before);
+          expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
+        },
+        30000,
+      );
+
+      it.each([
+        ['a file blocks creation of the database directory', 'db/hooks'],
+        ['the database path is a directory', 'db/hooks/stop-hook-vortex-analysis.db/marker'],
+      ])(
+        'allows stopping when %s',
+        async (_description, path) => {
+          harness.cliHome.writeFile(path, 'conflicting entry');
+          harness.cwd.writeFile('src/new.ts', BAD);
+          const result = await invoke();
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
+
+      it('skips analysis while the database is locked and retries after it is unlocked', async () => {
         await invoke();
-        withDb((db) => db.exec(sql));
-        const schema = () =>
-          withDb((db) => db.query('SELECT name, sql FROM sqlite_master ORDER BY name').all());
-        const before = schema();
+        const blocker = new Database(harness.cliHome.file(DATABASE_PATH).path);
         harness.cwd.writeFile('src/new.ts', BAD);
-        const result = await invoke();
-        expectSilentStop(result);
-        expect(analyses()).toHaveLength(0);
-        expect(schema()).toEqual(before);
-        expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
-      },
-      30000,
-    );
+        blocker.run('BEGIN IMMEDIATE');
+        try {
+          const result = await invoke();
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(0);
+          expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
+        } finally {
+          blocker.run('ROLLBACK');
+          blocker.close();
+        }
+        expectContinuation(await invoke());
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+      }, 30000);
 
-    it.each([
-      ['a file blocks creation of the database directory', 'db/hooks'],
-      ['the database path is a directory', 'db/hooks/stop-hook-vortex-analysis.db/marker'],
-    ])(
-      'allows stopping when %s',
-      async (_description, path) => {
-        harness.cliHome.writeFile(path, 'conflicting entry');
-        harness.cwd.writeFile('src/new.ts', BAD);
-        const result = await invoke();
-        expectSilentStop(result);
-        expect(analyses()).toHaveLength(0);
-      },
-      15000,
-    );
-
-    it('skips analysis while the database is locked and retries after it is unlocked', async () => {
-      await invoke();
-      const blocker = new Database(
-        harness.cliHome.file('db/hooks/stop-hook-vortex-analysis.db').path,
-      );
-      harness.cwd.writeFile('src/new.ts', BAD);
-      blocker.run('BEGIN IMMEDIATE');
-      try {
-        const result = await invoke();
-        expectSilentStop(result);
-        expect(analyses()).toHaveLength(0);
-        expect(databaseFiles().some((name) => name.includes('.corrupted-'))).toBe(false);
-      } finally {
-        blocker.run('ROLLBACK');
-        blocker.close();
-      }
-      expectContinuation(await invoke());
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-    }, 30000);
-
-    it('removes the new lock if saving the attempt count fails', async () => {
-      await invoke();
-      withDb((db) =>
-        db.run(`CREATE TRIGGER fail_counter BEFORE INSERT ON vortex_analysis_counters
+      it('removes the new lock if saving the attempt count fails', async () => {
+        await invoke();
+        withDb((db) =>
+          db.run(`CREATE TRIGGER fail_counter BEFORE INSERT ON vortex_analysis_counters
       BEGIN SELECT RAISE(ABORT, 'Test counter write failure'); END`),
-      );
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await invoke();
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-      withDb((db) => db.run('DROP TRIGGER fail_counter'));
-      expectContinuation(await invoke());
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-    }, 30000);
-
-    it.each([
-      ['analysis result', 'vortex_successful_analyses'],
-      ['attempt count', 'vortex_analysis_counters'],
-    ])(
-      'keeps the lock and cached results unchanged when saving the %s fails',
-      async (_description, table) => {
-        harness.cwd.writeFile('src/new.ts', GOOD);
-        response.issues = [];
-        expectSilentStop(await invoke());
-        const cachedResults = () =>
-          withDb((db) => db.query('SELECT * FROM vortex_successful_analyses').all());
-        const before = cachedResults();
+        );
         harness.cwd.writeFile('src/new.ts', BAD);
-        response.issues = [{ ...ISSUE }];
-        let locks: ReturnType<typeof readLocks> = [];
-        const result = await whileAnalysisRuns(() => {
-          locks = readLocks();
-          withDb((db) =>
-            db.run(`CREATE TRIGGER fail_completion BEFORE INSERT ON ${table}
-            BEGIN SELECT RAISE(ABORT, 'Test completion write failure'); END`),
-          );
-        });
+        const result = await invoke();
         expectSilentStop(result);
-        expect(analyses()).toHaveLength(2);
-        expect(queryState()).toEqual({ count: 1, locks: 1, successful: 1 });
-        expect(readLocks()).toEqual(locks);
-        expect(cachedResults()).toEqual(before);
-      },
-      30000,
-    );
+        expect(analyses()).toHaveLength(0);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+        withDb((db) => db.run('DROP TRIGGER fail_counter'));
+        expectContinuation(await invoke());
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+      }, 30000);
 
-    it('allows stopping after corruption and analyzes on a later invocation', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', 'corrupt database');
-      expectSilentStop(await invoke());
-      expect(analyses()).toHaveLength(0);
-      expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
-      const result = await invoke();
-      expect(result.exitCode).toBe(0);
-      expectContinuation(result);
-      expect(analyses()).toHaveLength(1);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-      expect(
-        readdirSync(harness.cliHome.file('db/hooks').path).some((name) =>
-          name.startsWith('stop-hook-vortex-analysis.db.corrupted-'),
-        ),
-      ).toBe(true);
-    }, 15000);
+      it.each([
+        ['analysis result', 'vortex_successful_analyses'],
+        ['attempt count', 'vortex_analysis_counters'],
+      ])(
+        'keeps the lock and cached results unchanged when saving the %s fails',
+        async (_description, table) => {
+          harness.cwd.writeFile('src/new.ts', GOOD);
+          response.issues = [];
+          expectSilentStop(await invoke());
+          const cachedResults = () =>
+            withDb((db) => db.query('SELECT * FROM vortex_successful_analyses').all());
+          const before = cachedResults();
+          harness.cwd.writeFile('src/new.ts', BAD);
+          response.issues = [{ ...ISSUE }];
+          let locks: ReturnType<typeof readLocks> = [];
+          const result = await whileAnalysisRuns(() => {
+            locks = readLocks();
+            withDb((db) =>
+              db.run(`CREATE TRIGGER fail_completion BEFORE INSERT ON ${table}
+            BEGIN SELECT RAISE(ABORT, 'Test completion write failure'); END`),
+            );
+          });
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(2);
+          expect(queryState()).toEqual({ count: 1, locks: 1, successful: 1 });
+          expect(readLocks()).toEqual(locks);
+          expect(cachedResults()).toEqual(before);
+        },
+        30000,
+      );
 
-    it('allows stopping when corruption recurs across hook invocations', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      for (let attempt = 0; attempt < 4; attempt++) {
-        harness.cliHome.writeFile('db/hooks/stop-hook-vortex-analysis.db', 'corrupt database');
+      it('allows stopping after corruption and analyzes on a later invocation', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        harness.cliHome.writeFile(DATABASE_PATH, 'corrupt database');
         expectSilentStop(await invoke());
         expect(analyses()).toHaveLength(0);
         expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
-      }
-    }, 30000);
-  });
+        const result = await invoke();
+        expectContinuation(result);
+        expect(analyses()).toHaveLength(1);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+        expect(
+          readdirSync(harness.cliHome.file('db/hooks').path).some((name) =>
+            name.startsWith('stop-hook-vortex-analysis.db.corrupted-'),
+          ),
+        ).toBe(true);
+      }, 15000);
 
-  describe('session counters and cached analyses', () => {
-    it('treats SQL in session IDs as data and keeps agent counters separate', async () => {
-      const sessionId = "session'); DROP TABLE vortex_analysis_locks; --";
-      await invoke({ sessionId: sessionId });
-      withDb((db) =>
-        db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-          otherAgent,
-          sessionId,
-          2,
-          Math.floor(Date.now() / 1000),
-        ]),
-      );
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke({ sessionId: sessionId }));
-      expect(
-        withDb((db) =>
-          db
-            .query('SELECT agent, analysis_count FROM vortex_analysis_counters ORDER BY agent')
-            .all(),
-        ),
-      ).toEqual(
-        [
-          { agent: agent.name, analysis_count: 1 },
-          { agent: otherAgent, analysis_count: 2 },
-        ].sort((a, b) => a.agent.localeCompare(b.agent)),
-      );
-      await invoke({ sessionId: sessionId });
-      expect(
-        withDb((db) =>
-          db
-            .query('SELECT agent, analysis_count FROM vortex_analysis_counters ORDER BY agent')
-            .all(),
-        ),
-      ).toEqual(
-        [
-          { agent: agent.name, analysis_count: 0 },
-          { agent: otherAgent, analysis_count: 2 },
-        ].sort((a, b) => a.agent.localeCompare(b.agent)),
-      );
-    }, 30000);
+      it('allows stopping when corruption recurs across hook invocations', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        for (let attempt = 0; attempt < 4; attempt++) {
+          harness.cliHome.writeFile(DATABASE_PATH, 'corrupt database');
+          expectSilentStop(await invoke());
+          expect(analyses()).toHaveLength(0);
+          expect(queryState()).toEqual({ count: undefined, locks: 0, successful: 0 });
+        }
+      }, 30000);
+    });
 
-    it('reanalyzes expired results and removes stale state while preserving recent and running sessions', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke());
-      const now = Math.floor(Date.now() / 1000);
-      withDb((db) => {
-        db.run('UPDATE vortex_successful_analyses SET analyzed_at = 1');
-        db.run('UPDATE vortex_analysis_counters SET updated_at = 1');
-        for (const [session, expires] of [
-          ['expired', 1],
-          ['live', now + 3600],
-        ] as const) {
+    describe('session counters and cached analyses', () => {
+      it('treats SQL in session IDs as data and keeps agent counters separate', async () => {
+        const sessionId = "session'); DROP TABLE vortex_analysis_locks; --";
+        await invoke({ sessionId });
+        withDb((db) =>
           db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-            agent.name,
-            session,
+            otherAgent,
+            sessionId,
             2,
+            Math.floor(Date.now() / 1000),
+          ]),
+        );
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke({ sessionId }));
+        expect(
+          withDb((db) =>
+            db
+              .query('SELECT agent, analysis_count FROM vortex_analysis_counters ORDER BY agent')
+              .all(),
+          ),
+        ).toEqual(
+          [
+            { agent, analysis_count: 1 },
+            { agent: otherAgent, analysis_count: 2 },
+          ].sort((a, b) => a.agent.localeCompare(b.agent)),
+        );
+        await invoke({ sessionId });
+        expect(
+          withDb((db) =>
+            db
+              .query('SELECT agent, analysis_count FROM vortex_analysis_counters ORDER BY agent')
+              .all(),
+          ),
+        ).toEqual(
+          [
+            { agent, analysis_count: 0 },
+            { agent: otherAgent, analysis_count: 2 },
+          ].sort((a, b) => a.agent.localeCompare(b.agent)),
+        );
+      }, 30000);
+
+      it('reanalyzes expired results and removes stale state while preserving recent and running sessions', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke());
+        const now = Math.floor(Date.now() / 1000);
+        withDb((db) => {
+          db.run('UPDATE vortex_successful_analyses SET analyzed_at = 1');
+          db.run('UPDATE vortex_analysis_counters SET updated_at = 1');
+          for (const [session, expires] of [
+            ['expired', 1],
+            ['live', now + 3600],
+          ] as const) {
+            db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
+              agent,
+              session,
+              2,
+              1,
+            ]);
+            db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
+              session,
+              session,
+              expires,
+              agent,
+              session,
+            ]);
+          }
+          db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
+            agent,
+            'fresh',
+            2,
+            now,
+          ]);
+          db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
+            agent,
+            'abandoned',
+            3,
             1,
           ]);
-          db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
-            session,
-            session,
-            expires,
-            agent.name,
-            session,
-          ]);
-        }
-        db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-          agent.name,
-          'fresh',
-          2,
-          now,
-        ]);
-        db.run('INSERT INTO vortex_analysis_counters VALUES (?, ?, ?, ?)', [
-          agent.name,
-          'abandoned',
-          3,
-          1,
-        ]);
-        db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['fresh', now]);
-      });
-      expectContinuation(await invoke());
-      expect(analyses()).toHaveLength(2);
-      expect(readSessionCounters()).toEqual({ session: 1, live: 2, fresh: 2 });
-      expect(queryState()).toEqual({ count: 1, locks: 1, successful: 2 });
-      expect(readLocks().map(({ fingerprint }) => fingerprint)).toEqual(['live']);
-      expect(
-        withDb((db) => db.query('SELECT fingerprint FROM vortex_successful_analyses').all()),
-      ).toContainEqual({ fingerprint: 'fresh' });
-    }, 30000);
-
-    it('retries unchanged files after analysis fails', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      response.errors = [{ code: 'failure', message: 'Analysis incomplete' }];
-      expectSilentStop(await invoke());
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-      response.errors = [];
-      const retried = await invoke();
-      expect(retried.exitCode).toBe(0);
-      expectContinuation(retried);
-      expect(analyses()).toHaveLength(2);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-    }, 30000);
-
-    it('shares saved findings across sessions', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke());
-      const other = await invoke({ sessionId: 'other' });
-      expectSilentStop(other);
-      expect(analyses()).toHaveLength(1);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-      expect(readSessionCounters().other).toBeUndefined();
-    }, 30000);
-
-    it('keeps session counters and resets separate', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      await invoke();
-      harness.cwd.writeFile('src/new.ts', BAD + '// another change\n');
-      await invoke({ sessionId: 'other' });
-      expect(readSessionCounters()).toEqual({ session: 1, other: 1 });
-      await invoke({ sessionId: 'other' });
-      expect(readSessionCounters()).toEqual({ session: 1, other: 0 });
-      harness.cwd.writeFile('src/new.ts', BAD + '// third change\n');
-      expectContinuation(await invoke());
-      expect(readSessionCounters()).toEqual({ session: 2, other: 0 });
-      expect(analyses()).toHaveLength(3);
-    }, 30000);
-
-    it('asks for fixes until analysis is clean', async () => {
-      harness.cwd.writeFile('src/tracked.ts', BAD + '\n');
-      const first = await invoke();
-      expect(first.exitCode).toBe(0);
-      expectContinuation(first);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-      expect(parseSqaaRequestBody(analyses()[0].body).analysisDepth).toBe('DEEP');
-      harness.cwd.writeFile('src/tracked.ts', GOOD);
-      response.issues = [];
-      const second = await invoke({ stop_hook_active: true });
-      expectSilentStop(second);
-      expect(analyses()).toHaveLength(2);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 2 });
-      expectSilentStop(await invoke());
-      expect(analyses()).toHaveLength(2);
-    }, 30000);
-
-    it('requests three fix continuations and stops on the fourth completion without analysis', async () => {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        harness.cwd.writeFile('src/new.ts', BAD + `// attempt ${attempt}\n`);
-        const result = await invoke({ stop_hook_active: attempt > 1 });
-        expect(result.exitCode).toBe(0);
-        expectContinuation(result);
-        expect(queryState()).toEqual({ count: attempt, locks: 0, successful: attempt });
-      }
-      harness.cwd.writeFile('src/new.ts', BAD + '// fourth completion\n');
-      expectSilentStop(await invoke({ stop_hook_active: true }));
-      expect(analyses()).toHaveLength(3);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 3 });
-
-      expectContinuation(await invoke());
-      expect(analyses()).toHaveLength(4);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 4 });
-    }, 45000);
-  });
-
-  describe('locks and concurrent analyses', () => {
-    it.each([
-      ['missing', null],
-      ['zero', 0],
-    ] as const)(
-      'skips analysis and preserves running locks when the session counter is %s',
-      async (_description, count) => {
-        await invoke();
-        withDb((db) => {
-          if (count === null) db.run('DELETE FROM vortex_analysis_counters');
-          db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
-            'in-flight',
-            'owner',
-            Math.floor(Date.now() / 1000) + 3600,
-            agent.name,
-            'session',
-          ]);
+          db.run('INSERT INTO vortex_successful_analyses VALUES (?, ?)', ['fresh', now]);
         });
-        const locks = readLocks();
-        harness.cwd.writeFile('src/new.ts', BAD);
-        const result = await invoke();
-        expectSilentStop(result);
-        expect(analyses()).toHaveLength(0);
-        expect(queryState()).toEqual({ count: count ?? undefined, locks: 1, successful: 0 });
-        expect(readLocks()).toEqual(locks);
-      },
-      30000,
-    );
-
-    it.each([
-      ['its lock was deleted', 'missing'],
-      ['its lock token changed', 'token'],
-      ['its lock belongs to another agent', 'agent'],
-      ['its lock belongs to another session', 'session'],
-      ['its lock expired', 'expired'],
-      ['its session counter was deleted', 'missing-counter'],
-      ['its session counter was reset to zero', 'zero-counter'],
-    ])(
-      'discards the analysis result when %s',
-      async (_description, scenario) => {
-        harness.cwd.writeFile('src/new.ts', BAD);
-        let locks: ReturnType<typeof readLocks> = [];
-        const result = await whileAnalysisRuns(() => {
-          withDb((db) => {
-            if (scenario === 'missing') db.run('DELETE FROM vortex_analysis_locks');
-            if (scenario === 'token')
-              db.run("UPDATE vortex_analysis_locks SET lock_token = 'replacement'");
-            if (scenario === 'agent')
-              db.run('UPDATE vortex_analysis_locks SET agent = ?', [otherAgent]);
-            if (scenario === 'session')
-              db.run("UPDATE vortex_analysis_locks SET session_id = 'replacement'");
-            if (scenario === 'expired')
-              db.run('UPDATE vortex_analysis_locks SET lock_expires_at = 1');
-            if (scenario === 'missing-counter') db.run('DELETE FROM vortex_analysis_counters');
-            if (scenario === 'zero-counter')
-              db.run('UPDATE vortex_analysis_counters SET analysis_count = 0');
-          });
-          locks = readLocks();
-        });
-        expectSilentStop(result);
-        expect(analyses()).toHaveLength(1);
+        expectContinuation(await invoke());
+        expect(analyses()).toHaveLength(2);
+        expect(readSessionCounters()).toEqual({ session: 1, live: 2, fresh: 2 });
+        expect(queryState()).toEqual({ count: 1, locks: 1, successful: 2 });
+        expect(readLocks().map(({ fingerprint }) => fingerprint)).toEqual(['live']);
         expect(
           withDb((db) => db.query('SELECT fingerprint FROM vortex_successful_analyses').all()),
-        ).toEqual([]);
-        expect(readLocks()).toEqual(scenario === 'expired' ? [] : locks);
-      },
-      20000,
-    );
+        ).toContainEqual({ fingerprint: 'fresh' });
+      }, 30000);
 
-    it.each([
-      ['finds issues', 'continue'],
-      ['finds no issues', 'stop'],
-      ['fails', 'failed'],
-    ] as const)(
-      'keeps the shared attempt count while another analysis runs, even when this analysis %s',
-      async (_description, outcome) => {
+      it('retries unchanged files after analysis fails', async () => {
         harness.cwd.writeFile('src/new.ts', BAD);
-        if (outcome === 'stop') response.issues = [];
-        if (outcome === 'failed') response.errors = [{ code: 'failure', message: 'Incomplete' }];
-        const result = await whileAnalysisRuns(() => {
-          const [lock] = readLocks();
-          expect(lock).toMatchObject({ agent: agent.name, session_id: 'session' });
-          expect(lock.lock_token).toBeString();
-          const remaining = lock.lock_expires_at - Math.floor(Date.now() / 1000);
-          expect(remaining).toBeGreaterThan(60);
-          expect(remaining).toBeLessThanOrEqual(120);
+        response.errors = [{ code: 'failure', message: 'Analysis incomplete' }];
+        expectSilentStop(await invoke());
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+        response.errors = [];
+        const retried = await invoke();
+        expectContinuation(retried);
+        expect(analyses()).toHaveLength(2);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+      }, 30000);
+
+      it('reuses a successful analysis across sessions without emitting findings again', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke());
+        const other = await invoke({ sessionId: 'other' });
+        expectSilentStop(other);
+        expect(analyses()).toHaveLength(1);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+        expect(readSessionCounters().other).toBeUndefined();
+      }, 30000);
+
+      it('keeps session counters and resets separate', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        await invoke();
+        harness.cwd.writeFile('src/new.ts', BAD + '// another change\n');
+        await invoke({ sessionId: 'other' });
+        expect(readSessionCounters()).toEqual({ session: 1, other: 1 });
+        await invoke({ sessionId: 'other' });
+        expect(readSessionCounters()).toEqual({ session: 1, other: 0 });
+        harness.cwd.writeFile('src/new.ts', BAD + '// third change\n');
+        expectContinuation(await invoke());
+        expect(readSessionCounters()).toEqual({ session: 2, other: 0 });
+        expect(analyses()).toHaveLength(3);
+      }, 30000);
+
+      it('asks for fixes until analysis is clean', async () => {
+        harness.cwd.writeFile('src/tracked.ts', BAD + '\n');
+        const first = await invoke();
+        expectContinuation(first);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+        expect(parseSqaaRequestBody(analyses()[0].body).analysisDepth).toBe('DEEP');
+        harness.cwd.writeFile('src/tracked.ts', GOOD);
+        response.issues = [];
+        const second = await invoke({ stop_hook_active: true });
+        expectSilentStop(second);
+        expect(analyses()).toHaveLength(2);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 2 });
+        expectSilentStop(await invoke());
+        expect(analyses()).toHaveLength(2);
+      }, 30000);
+
+      it('requests three fix continuations and stops on the fourth completion without analysis', async () => {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          harness.cwd.writeFile('src/new.ts', BAD + `// attempt ${attempt}\n`);
+          const result = await invoke({ stop_hook_active: attempt > 1 });
+          expectContinuation(result);
+          expect(queryState()).toEqual({ count: attempt, locks: 0, successful: attempt });
+        }
+        harness.cwd.writeFile('src/new.ts', BAD + '// fourth completion\n');
+        expectSilentStop(await invoke({ stop_hook_active: true }));
+        expect(analyses()).toHaveLength(3);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 3 });
+
+        expectContinuation(await invoke());
+        expect(analyses()).toHaveLength(4);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 4 });
+      }, 45000);
+    });
+
+    describe('locks and concurrent analyses', () => {
+      it.each([
+        ['missing', null],
+        ['zero', 0],
+      ] as const)(
+        'skips analysis and preserves running locks when the session counter is %s',
+        async (_description, count) => {
+          await invoke();
           withDb((db) => {
+            if (count === null) db.run('DELETE FROM vortex_analysis_counters');
             db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
-              'another-fingerprint',
-              'another-token',
+              'in-flight',
+              'owner',
               Math.floor(Date.now() / 1000) + 3600,
-              agent.name,
+              agent,
               'session',
             ]);
-            db.run('UPDATE vortex_analysis_counters SET analysis_count = 2');
           });
-        });
-        expect(result.exitCode).toBe(0);
-        if (outcome === 'continue') expectContinuation(result);
-        else expectSilentStop(result);
-        expect(queryState()).toEqual({
-          count: 2,
-          locks: 1,
-          successful: outcome === 'failed' ? 0 : 1,
-        });
-        expect(readLocks()[0].fingerprint).toBe('another-fingerprint');
-      },
-      20000,
-    );
-
-    it('analyzes different file changes concurrently using separate locks and a shared attempt count', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      await whileAnalysisRuns(async () => {
-        const [first] = readLocks();
-        harness.cwd.writeFile('src/new.ts', BAD + '// changed\n');
-        response.beforeSqaaResponse = () => {
           const locks = readLocks();
-          expect(locks).toHaveLength(2);
-          expect(new Set(locks.map(({ lock_token }) => lock_token)).size).toBe(2);
-          expect(readSessionCounters().session).toBe(2);
-          return Promise.resolve();
-        };
-        const second = await invoke();
-        expect(second.exitCode).toBe(0);
-        expectContinuation(second);
-        expect(queryState()).toEqual({ count: 2, locks: 1, successful: 1 });
-        expect(readLocks()).toEqual([first]);
-        harness.cwd.writeFile('src/new.ts', BAD);
-      });
-      expect(queryState()).toEqual({ count: 2, locks: 0, successful: 2 });
-    }, 30000);
-
-    it('discards results when files change during analysis', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await whileAnalysisRuns(() => {
-        harness.cwd.writeFile('src/new.ts', GOOD);
-      });
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(1);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
-    }, 15000);
-
-    it('runs only one analysis for simultaneous stops on the same files', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const first = await whileAnalysisRuns(async () => {
-        const second = await invoke();
-        expectSilentStop(second);
-        expect(analyses()).toHaveLength(1);
-        expect(queryState()).toEqual({ count: 1, locks: 1, successful: 0 });
-      });
-      expectContinuation(first);
-      expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
-    }, 30000);
-
-    it('replaces an expired lock and rejects its late result', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const savedAt = Math.floor(Date.now() / 1000) + 3600;
-      const first = await whileAnalysisRuns(async () => {
-        withDb((db) => db.run('UPDATE vortex_analysis_locks SET lock_expires_at = 1'));
-        const replacement = await invoke({ sessionId: 'other' });
-        expect(replacement.exitCode).toBe(0);
-        expectContinuation(replacement);
-        expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
-        withDb((db) => db.run('UPDATE vortex_successful_analyses SET analyzed_at = ?', [savedAt]));
-      });
-      expectSilentStop(first);
-      expect(analyses()).toHaveLength(2);
-      expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
-      expect(
-        withDb(
-          (db) =>
-            db
-              .query<{ analyzed_at: number }, []>(
-                'SELECT analyzed_at FROM vortex_successful_analyses',
-              )
-              .get()?.analyzed_at,
-        ),
-      ).toBe(savedAt);
-    }, 30000);
-  });
-
-  describe('payloads and skipped analysis', () => {
-    it('uses the agent working directory for Git and project discovery', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await harness.runWithStdin(COMMAND, JSON.stringify(payload()), {
-        cwd: harness.userHome.path,
-      });
-      expect(result.exitCode).toBe(0);
-      expectContinuation(result);
-      expect(analyses()).toHaveLength(1);
-    }, 15000);
-
-    if (agent.name === 'cursor') {
-      it.each(['aborted', 'error', undefined, null, 'unknown'])(
-        'skips analysis for Cursor status %j',
-        async (status) => {
           harness.cwd.writeFile('src/new.ts', BAD);
-          expectSilentStop(await invoke({ status }));
+          const result = await invoke();
+          expectSilentStop(result);
           expect(analyses()).toHaveLength(0);
+          expect(queryState()).toEqual({ count: count ?? undefined, locks: 1, successful: 0 });
+          expect(readLocks()).toEqual(locks);
         },
-        15000,
+        30000,
       );
 
-      it.each(
-        [undefined, null, [], [null], [42], [''], ['   ']].map((workspaceRoots) => ({
-          workspaceRoots,
-        })),
-      )(
-        'allows stopping with invalid workspace roots: $workspaceRoots',
-        async ({ workspaceRoots }) => {
+      it.each([
+        ['its lock was deleted', 'DELETE FROM vortex_analysis_locks', false],
+        [
+          'its lock token changed',
+          "UPDATE vortex_analysis_locks SET lock_token = 'replacement'",
+          false,
+        ],
+        [
+          'its lock belongs to another agent',
+          `UPDATE vortex_analysis_locks SET agent = '${otherAgent}'`,
+          false,
+        ],
+        [
+          'its lock belongs to another session',
+          "UPDATE vortex_analysis_locks SET session_id = 'replacement'",
+          false,
+        ],
+        ['its lock expired', 'UPDATE vortex_analysis_locks SET lock_expires_at = 1', true],
+        ['its session counter was deleted', 'DELETE FROM vortex_analysis_counters', false],
+        [
+          'its session counter was reset to zero',
+          'UPDATE vortex_analysis_counters SET analysis_count = 0',
+          false,
+        ],
+      ] as const)(
+        'discards the analysis result when %s',
+        async (_description, sql, expires) => {
           harness.cwd.writeFile('src/new.ts', BAD);
-          expectSilentStop(await invoke({ workspace_roots: workspaceRoots }));
-          expect(analyses()).toHaveLength(0);
+          let locks: ReturnType<typeof readLocks> = [];
+          const result = await whileAnalysisRuns(() => {
+            withDb((db) => db.run(sql));
+            locks = readLocks();
+          });
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(1);
+          expect(
+            withDb((db) => db.query('SELECT fingerprint FROM vortex_successful_analyses').all()),
+          ).toEqual([]);
+          expect(readLocks()).toEqual(expires ? [] : locks);
         },
-        15000,
+        20000,
       );
 
-      it('normalizes Cursor drive paths and uses the first workspace root', async () => {
-        harness.cwd.writeFile('src/new.ts', BAD);
-        const root = process.platform === 'win32' ? '/' + harness.cwd.path : harness.cwd.path;
-        const result = await invoke({ workspace_roots: [root, harness.userHome.path] });
-        expectContinuation(result);
-        expect(analyses()).toHaveLength(1);
-      }, 15000);
-    }
-
-    if (agent.name === 'pi') {
-      it.each([false, undefined, null])(
-        'skips Pi sessions without an explicit UI flag: %j',
-        async (hasUI) => {
+      it.each([
+        ['finds issues', 'continue'],
+        ['finds no issues', 'stop'],
+        ['fails', 'failed'],
+      ] as const)(
+        'keeps the shared attempt count while another analysis runs, even when this analysis %s',
+        async (_description, outcome) => {
           harness.cwd.writeFile('src/new.ts', BAD);
-          expectSilentStop(await invoke({ hasUI }));
-          expect(analyses()).toHaveLength(0);
+          if (outcome === 'stop') response.issues = [];
+          if (outcome === 'failed') response.errors = [{ code: 'failure', message: 'Incomplete' }];
+          const result = await whileAnalysisRuns(() => {
+            const [lock] = readLocks();
+            expect(lock).toMatchObject({ agent, session_id: 'session' });
+            expect(lock.lock_token).toBeString();
+            const remaining = lock.lock_expires_at - Math.floor(Date.now() / 1000);
+            expect(remaining).toBeGreaterThan(60);
+            expect(remaining).toBeLessThanOrEqual(120);
+            withDb((db) => {
+              db.run('INSERT INTO vortex_analysis_locks VALUES (?, ?, ?, ?, ?)', [
+                'another-fingerprint',
+                'another-token',
+                Math.floor(Date.now() / 1000) + 3600,
+                agent,
+                'session',
+              ]);
+              db.run('UPDATE vortex_analysis_counters SET analysis_count = 2');
+            });
+          });
+          expect(result.exitCode).toBe(0);
+          if (outcome === 'continue') expectContinuation(result);
+          else expectSilentStop(result);
+          expect(queryState()).toEqual({
+            count: 2,
+            locks: 1,
+            successful: outcome === 'failed' ? 0 : 1,
+          });
+          expect(readLocks()[0].fingerprint).toBe('another-fingerprint');
         },
-        15000,
+        20000,
       );
-    }
 
-    it('allows stopping without a connection', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke());
-      expect(queryState().count).toBe(1);
-      harness.state().clearAuth();
-      const result = await invoke();
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(1);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
-    }, 15000);
-
-    it('allows stopping outside a Git repository', async () => {
-      harness.cwd.writeFile('src/new.ts', BAD);
-      expectContinuation(await invoke());
-      expect(queryState().count).toBe(1);
-      const result = await harness.runWithStdin(
-        COMMAND,
-        JSON.stringify(payload({ cwd: harness.userHome.path })),
-        { extraEnv: { DEVIN_PROJECT_DIR: harness.userHome.path } },
-      );
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(1);
-      expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
-    }, 15000);
-
-    it('allows stopping for an unknown agent', async () => {
-      const result = await harness.runWithStdin('hook agent-stop --agent unknown', '{}');
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
-    }, 15000);
-
-    it.each([403, 500])(
-      'silently allows stopping when analysis returns HTTP %i',
-      async (status) => {
-        server = await harness
-          .newFakeServer()
-          .withAuthToken('test-token')
-          .withSqaaStatusCode(status, 'Analysis unavailable')
-          .start();
-        harness.withAuth(server.baseUrl(), 'test-token', 'org');
+      it('analyzes different file changes concurrently using separate locks and a shared attempt count', async () => {
         harness.cwd.writeFile('src/new.ts', BAD);
-        const result = await invoke();
+        await whileAnalysisRuns(async () => {
+          const [first] = readLocks();
+          harness.cwd.writeFile('src/new.ts', BAD + '// changed\n');
+          response.beforeSqaaResponse = () => {
+            const locks = readLocks();
+            expect(locks).toHaveLength(2);
+            expect(new Set(locks.map(({ lock_token }) => lock_token)).size).toBe(2);
+            expect(readSessionCounters().session).toBe(2);
+            return Promise.resolve();
+          };
+          const second = await invoke();
+          expectContinuation(second);
+          expect(queryState()).toEqual({ count: 2, locks: 1, successful: 1 });
+          expect(readLocks()).toEqual([first]);
+          harness.cwd.writeFile('src/new.ts', BAD);
+        });
+        expect(queryState()).toEqual({ count: 2, locks: 0, successful: 2 });
+      }, 30000);
+
+      it('discards results when files change during analysis', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const result = await whileAnalysisRuns(() => {
+          harness.cwd.writeFile('src/new.ts', GOOD);
+        });
         expectSilentStop(result);
         expect(analyses()).toHaveLength(1);
         expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+      }, 15000);
+
+      it('runs only one analysis for simultaneous stops on the same files', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const first = await whileAnalysisRuns(async () => {
+          const second = await invoke();
+          expectSilentStop(second);
+          expect(analyses()).toHaveLength(1);
+          expect(queryState()).toEqual({ count: 1, locks: 1, successful: 0 });
+        });
+        expectContinuation(first);
+        expect(queryState()).toEqual({ count: 1, locks: 0, successful: 1 });
+      }, 30000);
+
+      it('replaces an expired lock and rejects its late result', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const savedAt = Math.floor(Date.now() / 1000) + 3600;
+        const first = await whileAnalysisRuns(async () => {
+          withDb((db) => db.run('UPDATE vortex_analysis_locks SET lock_expires_at = 1'));
+          const replacement = await invoke({ sessionId: 'other' });
+          expectContinuation(replacement);
+          expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
+          withDb((db) =>
+            db.run('UPDATE vortex_successful_analyses SET analyzed_at = ?', [savedAt]),
+          );
+        });
+        expectSilentStop(first);
+        expect(analyses()).toHaveLength(2);
+        expect(queryState('other')).toEqual({ count: 1, locks: 0, successful: 1 });
+        expect(
+          withDb(
+            (db) =>
+              db
+                .query<{ analyzed_at: number }, []>(
+                  'SELECT analyzed_at FROM vortex_successful_analyses',
+                )
+                .get()?.analyzed_at,
+          ),
+        ).toBe(savedAt);
+      }, 30000);
+    });
+
+    describe('payloads and skipped analysis', () => {
+      it('uses the agent working directory for Git and project discovery', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const result = await harness.runWithStdin(command, JSON.stringify(payload()), {
+          cwd: harness.userHome.path,
+        });
+        expectContinuation(result);
+        expect(analyses()).toHaveLength(1);
+      }, 15000);
+
+      it('allows stopping without a connection', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke());
+        expect(queryState().count).toBe(1);
+        harness.state().clearAuth();
+        const result = await invoke();
+        expectSilentStop(result);
+        expect(analyses()).toHaveLength(1);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
+      }, 15000);
+
+      it('allows stopping outside a Git repository', async () => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectContinuation(await invoke());
+        expect(queryState().count).toBe(1);
+        const result = await harness.runWithStdin(
+          command,
+          JSON.stringify(payload({ cwd: harness.userHome.path })),
+        );
+        expectSilentStop(result);
+        expect(analyses()).toHaveLength(1);
+        expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
+      }, 15000);
+
+      it('allows stopping for an unknown agent', async () => {
+        const result = await harness.runWithStdin('hook agent-stop --agent unknown', '{}');
+        expectSilentStop(result);
+        expect(analyses()).toHaveLength(0);
+      }, 15000);
+
+      it.each([403, 500])(
+        'silently allows stopping when analysis returns HTTP %i',
+        async (status) => {
+          server = await harness
+            .newFakeServer()
+            .withAuthToken('test-token')
+            .withSqaaStatusCode(status, 'Analysis unavailable')
+            .start();
+          harness.withAuth(server.baseUrl(), 'test-token', 'org');
+          harness.cwd.writeFile('src/new.ts', BAD);
+          const result = await invoke();
+          expectSilentStop(result);
+          expect(analyses()).toHaveLength(1);
+          expect(queryState()).toEqual({ count: 0, locks: 0, successful: 0 });
+        },
+        15000,
+      );
+
+      it('allows stopping when no project is configured', async () => {
+        git(['rm', 'sonar-project.properties'], harness.cwd.path);
+        harness.cwd.writeFile('src/new.ts', BAD);
+        const result = await invoke();
+        expectSilentStop(result);
+        expect(analyses()).toHaveLength(0);
+      }, 15000);
+
+      it.each([undefined, 42, '   '])(
+        'allows stopping with an invalid session ID: %j',
+        async (sessionId) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(
+            await harness.runWithStdin(
+              command,
+              JSON.stringify({
+                session_id: sessionId,
+                ...CLAUDE_CODEX_PROTOCOL.payloadFields(harness.cwd.path),
+              }),
+            ),
+          );
+          expect(analyses()).toHaveLength(0);
+          expect(harness.cliHome.exists('db', 'hooks', 'stop-hook-vortex-analysis.db')).toBe(false);
+        },
+        15000,
+      );
+
+      it.each([null, {}])(
+        'allows stopping with an invalid adapter payload: %j',
+        async (payload) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(await harness.runWithStdin(command, JSON.stringify(payload)));
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
+
+      it.each([42, '   '])(
+        'allows stopping with an invalid working directory: %j',
+        async (cwd) => {
+          harness.cwd.writeFile('src/new.ts', BAD);
+          expectSilentStop(await invoke({ cwd }));
+          expect(analyses()).toHaveLength(0);
+        },
+        15000,
+      );
+
+      it('allows stopping with malformed JSON', async () => {
+        const result = await harness.runWithStdin(command, 'not json');
+        expectSilentStop(result);
+        expect(analyses()).toHaveLength(0);
+      }, 15000);
+    });
+  });
+
+  it.each(Object.values(AGENTS))(
+    '$name emits findings for its session and stops silently after the files are fixed',
+    async (agent) => {
+      harness.cwd.writeFile('src/new.ts', BAD);
+      const result = await invokeAgent(agent);
+      expectAgentContinuation(agent, result);
+      expect(readState(agent.name)).toEqual({ count: 1, locks: 0, successful: 1 });
+      expect(parseSqaaRequestBody(analyses()[0].body).analysisDepth).toBe('DEEP');
+      harness.cwd.writeFile('src/new.ts', GOOD);
+      response.issues = [];
+      expectSilentStop(await invokeAgent(agent));
+      expect(analyses()).toHaveLength(2);
+      expect(readState(agent.name)).toEqual({ count: 0, locks: 0, successful: 2 });
+    },
+    30000,
+  );
+
+  describe('Cursor', () => {
+    it.each(['aborted', 'error', undefined])(
+      'skips analysis for Cursor status %j',
+      async (status) => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectSilentStop(await invokeAgent(AGENTS.cursor, { status }));
+        expect(analyses()).toHaveLength(0);
       },
       15000,
     );
 
-    it('allows stopping when no project is configured', async () => {
-      git(['rm', 'sonar-project.properties'], harness.cwd.path);
+    it.each([
+      { name: 'missing roots', workspaceRoots: undefined },
+      { name: 'an empty array', workspaceRoots: [] },
+      { name: 'a non-string root', workspaceRoots: [42] },
+      { name: 'a blank root', workspaceRoots: ['   '] },
+    ])(
+      'allows stopping with $name',
+      async ({ workspaceRoots }) => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectSilentStop(await invokeAgent(AGENTS.cursor, { workspace_roots: workspaceRoots }));
+        expect(analyses()).toHaveLength(0);
+      },
+      15000,
+    );
+
+    it('normalizes Cursor drive paths and uses the first workspace root', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
-      const result = await invoke();
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
+      const root = process.platform === 'win32' ? '/' + harness.cwd.path : harness.cwd.path;
+      const result = await invokeAgent(AGENTS.cursor, {
+        workspace_roots: [root, harness.userHome.path],
+      });
+      expectAgentContinuation(AGENTS.cursor, result);
+      expect(analyses()).toHaveLength(1);
+    }, 15000);
+  });
+
+  describe('Pi', () => {
+    it.each([false, undefined])(
+      'skips Pi sessions without an explicit UI flag: %j',
+      async (hasUI) => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        expectSilentStop(await invokeAgent(AGENTS.pi, { hasUI }));
+        expect(analyses()).toHaveLength(0);
+      },
+      15000,
+    );
+  });
+
+  describe('Devin', () => {
+    it('uses DEVIN_PROJECT_DIR for Git and project discovery', async () => {
+      harness.cwd.writeFile('src/new.ts', BAD);
+      const result = await harness.runWithStdin(
+        'hook agent-stop --agent devin',
+        JSON.stringify({ session_id: 'session', cwd: harness.userHome.path }),
+        {
+          cwd: harness.userHome.path,
+          extraEnv: { DEVIN_PROJECT_DIR: harness.cwd.path },
+        },
+      );
+      expectAgentContinuation(AGENTS.devin, result);
+      expect(analyses()).toHaveLength(1);
     }, 15000);
 
-    it.each([undefined, null, 42, '', '   '])(
-      'allows stopping with an invalid session ID: %j',
-      async (sessionId) => {
-        harness.cwd.writeFile('src/new.ts', BAD);
-        expectSilentStop(
-          await harness.runWithStdin(
-            COMMAND,
-            JSON.stringify({
-              [agent.sessionIdField]: sessionId,
-              ...agent.payloadFields(harness.cwd.path),
-            }),
-          ),
-        );
-        expect(analyses()).toHaveLength(0);
-        expect(harness.cliHome.exists('db', 'hooks', 'stop-hook-vortex-analysis.db')).toBe(false);
-      },
-      15000,
-    );
-
-    it.each([null, {}])(
-      'allows stopping with an invalid adapter payload: %j',
-      async (payload) => {
-        harness.cwd.writeFile('src/new.ts', BAD);
-        expectSilentStop(await harness.runWithStdin(COMMAND, JSON.stringify(payload)));
-        expect(analyses()).toHaveLength(0);
-      },
-      15000,
-    );
-
-    it.each([42, '', '   '])(
-      'allows stopping with an invalid working directory: %j',
+    it.each(['missing-project-directory', '   '])(
+      'allows stopping with an invalid DEVIN_PROJECT_DIR: %j',
       async (cwd) => {
         harness.cwd.writeFile('src/new.ts', BAD);
-        let result: CliResult;
-        if (agent.name === 'devin') {
-          result = await harness.runWithStdin(COMMAND, JSON.stringify(payload()), {
-            extraEnv: { DEVIN_PROJECT_DIR: String(cwd) },
-          });
-        } else {
-          result = await harness.runWithStdin(
-            COMMAND,
-            JSON.stringify({ [agent.sessionIdField]: 'session', cwd }),
-          );
-        }
+        const result = await harness.runWithStdin(
+          'hook agent-stop --agent devin',
+          JSON.stringify({ session_id: 'session', cwd: harness.cwd.path }),
+          { extraEnv: { DEVIN_PROJECT_DIR: cwd } },
+        );
         expectSilentStop(result);
         expect(analyses()).toHaveLength(0);
       },
       15000,
     );
-
-    it('allows stopping with malformed JSON', async () => {
-      const result = await harness.runWithStdin(COMMAND, 'not json');
-      expectSilentStop(result);
-      expect(analyses()).toHaveLength(0);
-    }, 15000);
   });
 });
