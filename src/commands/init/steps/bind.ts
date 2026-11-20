@@ -22,8 +22,8 @@ import { CloudBackend } from '@/commands/import/cloud-backend.ts';
 import { ImportApiClient } from '@/commands/import/import-api.ts';
 import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/resolve-options.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { waitInBrowser } from '@/core/ui/browser-step.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
@@ -84,10 +84,10 @@ export async function authorizeOrganization(
 
   const url = devOpsBindingUrl(auth, orgKey);
   console.print(`Link the organization to your DevOps platform: ${url}`);
-  await openBrowserWithFallback(url, console);
-
-  return console.withSpinner('Waiting for the authorization', () =>
-    waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
+  return waitInBrowser(url, console, () =>
+    console.withSpinner('Waiting for the authorization', () =>
+      waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
+    ),
   );
 }
 

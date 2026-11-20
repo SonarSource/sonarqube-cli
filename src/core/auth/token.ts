@@ -25,7 +25,6 @@ import * as readline from 'node:readline';
 
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -33,6 +32,7 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
 import { UsersClient } from '@/core/server/users.ts';
+import { openBrowserWithFallback, waitInBrowser } from '@/core/ui/browser-step.ts';
 import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -182,30 +182,6 @@ export function buildAuthURL(serverURL: string, port: number, serverVersion?: st
   }
 
   return `${cleanServerURL}/sonarlint/auth?ideName=sonarqube-cli&port=${port}`;
-}
-
-/**
- * Open browser, with fallback message if it fails.
- * Skipped in CI or when automatic browser opening is explicitly disabled.
- */
-export async function openBrowserWithFallback(
-  authURL: string,
-  console: Console,
-  browserOpener: (url: string) => Promise<void> = openBrowser,
-): Promise<void> {
-  if (process.env.CI === 'true') {
-    return;
-  }
-  if (process.env.SONARQUBE_CLI_DISABLE_BROWSER === 'true') {
-    console.print('Automatic browser opening is disabled; copy the URL above and open it manually');
-    return;
-  }
-  try {
-    await browserOpener(authURL);
-  } catch (error) {
-    console.warn(`Failed to open browser automatically: ${String(error)}`);
-    console.print('Copy the URL above and open it manually');
-  }
 }
 
 /**
@@ -384,16 +360,20 @@ export async function generateTokenViaBrowser(
   if (process.env.SONARQUBE_CLI_DISABLE_BROWSER !== 'true') {
     await console.pressEnterKeyPrompt('Press Enter to open the browser');
   }
-  await openBrowserFn(authURL);
-
   let authResult: BrowserAuthResult | undefined;
   try {
     if (process.env.CI === 'true') {
-      // Non-interactive: wait for server token
+      // Non-interactive: nobody is waiting, the server delivers the token
+      await openBrowserFn(authURL);
       authResult = await tokenPromise;
     } else {
       // Interactive: race between browser delivery and manual paste
-      authResult = await waitForTokenInteractive(tokenPromise, console);
+      authResult = await waitInBrowser(
+        authURL,
+        console,
+        () => waitForTokenInteractive(tokenPromise, console),
+        openBrowserFn,
+      );
     }
   } finally {
     await server.close().catch((err: unknown) => {

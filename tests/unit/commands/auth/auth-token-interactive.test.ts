@@ -59,11 +59,8 @@ mock.module('@/core/host/browser.ts', () => ({
   openBrowser: mockOpenBrowser,
 }));
 
-import {
-  type BrowserAuthResult,
-  openBrowserWithFallback,
-  waitForTokenInteractive,
-} from '@/core/auth/token.ts';
+import { type BrowserAuthResult, waitForTokenInteractive } from '@/core/auth/token.ts';
+import { openBrowserWithFallback } from '@/core/ui/browser-step.ts';
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 
 function makeSharedSpies() {
