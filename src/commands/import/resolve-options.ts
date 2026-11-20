@@ -31,6 +31,9 @@ import {
   type SkippedRepo,
 } from './repository-collection';
 
+/** The user backed out of repository selection, as opposed to the import failing. */
+export class ImportCancelledError extends CommandFailedError {}
+
 const GITHUB_ALM_KEY = 'github';
 
 export interface ResolvedOrg {
@@ -478,7 +481,7 @@ async function resolveOnboardingMode(
     const choice = await console.selectPrompt('How do you want to import repositories?', options);
 
     if (choice === null) {
-      throw new CommandFailedError('Repository selection cancelled');
+      throw new ImportCancelledError('Repository selection cancelled');
     }
     if (choice === RECOMMENDED) {
       return { kind: 'streaming', collection, regex: undefined };
@@ -683,7 +686,7 @@ async function promptForReposFromCollection(
     return BACK;
   }
   if (result.length === 0) {
-    throw new CommandFailedError('No repositories selected.');
+    throw new ImportCancelledError('No repositories selected.');
   }
 
   return result;

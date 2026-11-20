@@ -24,6 +24,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { CloudImportPlan } from './cloud-import-plan.ts';
 import type { ImportApiClient } from './import-api.ts';
 import type { ImportBackend, ImportPlan } from './import-backend.ts';
+import type { ImportOnboardingTelemetry } from './import-onboarding-telemetry.ts';
 import type { OnlyPrivateProjects } from './repository-collection';
 import { resolveAlmKey, type ResolvedOrg, resolveOrg, resolveRepos } from './resolve-options';
 import type { ImportPlanOptions } from './types';
@@ -35,6 +36,7 @@ export class CloudBackend implements ImportBackend {
     private readonly orgKey: string | undefined,
     private readonly serverUrl: string,
     private readonly resolvedOrg?: ResolvedOrg,
+    private readonly onboarding?: ImportOnboardingTelemetry,
   ) {}
 
   async plan(options: ImportPlanOptions, console: Console): Promise<ImportPlan> {
@@ -58,6 +60,8 @@ export class CloudBackend implements ImportBackend {
         },
       ),
     ]);
+
+    this.onboarding?.appImported(almKey);
 
     const onlyPrivateProjects: OnlyPrivateProjects = {
       enabled: onlyPrivateProjectsEnabled ?? false,
