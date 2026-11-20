@@ -58,6 +58,29 @@ describe('buildCommandFacts() command event auth', () => {
   });
 });
 
+describe('buildCommandFacts() timings', () => {
+  it("reports the process uptime and the command console's time spent waiting on the user", async () => {
+    const console = new FakeConsole();
+    console.waitedMs = 1500;
+    const command = new SonarCommand('sonar', { console }).command('init');
+
+    const [executed] = await buildCommandFacts(command);
+    const payload = executed.payload as { duration_ms: number; user_wait_ms: number };
+
+    expect(payload.user_wait_ms).toBe(1500);
+    expect(payload.duration_ms).toBeGreaterThan(0);
+    expect(Number.isInteger(payload.duration_ms)).toBe(true);
+  });
+
+  it('reports no wait when nothing was asked', async () => {
+    const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
+
+    const [executed] = await buildCommandFacts(command);
+
+    expect(executed.payload).toMatchObject({ user_wait_ms: 0 });
+  });
+});
+
 describe('buildCommandFacts() target project events', () => {
   let testDir: string;
   let savedSonarUserHome: string | undefined;

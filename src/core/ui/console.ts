@@ -121,6 +121,18 @@ export interface Console {
    */
   canPrompt(): boolean;
 
+  /** Time spent waiting on the user so far, in whole milliseconds: prompts and `measureWait` steps. */
+  userWaitMs(): number;
+
+  /** Counts the time `wait` takes as time spent waiting on the user, for a wait that is not a prompt. */
+  measureWait<T>(wait: () => Promise<T>): Promise<T>;
+
+  /**
+   * The same console, but nothing it waits for counts as time spent waiting on the user. For code
+   * that already measures the wait it prompts during, so the time is not counted twice.
+   */
+  unmeasured(): Console;
+
   /**
    * Informational line with a cyan `ℹ` prefix.
    * Defaults to stdout. On stdout, participates in formatted-output buffering
