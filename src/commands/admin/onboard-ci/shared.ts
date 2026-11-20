@@ -125,24 +125,26 @@ export async function runRepos<Repo>(
   await runWithConcurrencyLimit(repos, CONCURRENCY_LIMIT, async (repo) => {
     const name = repoName(repo);
     progress.update(name, 'running');
-    const result = await processRepo(repo, progress);
-    switch (result.outcome) {
-      case 'proceed':
-        results.wouldOpen.push({ repo: name, projectKey: result.projectKey });
-        progress.update(name, 'done', `would open ${requestLabel}`);
-        break;
-      case 'opened':
-        results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
-        progress.update(name, 'done', `${requestLabel} opened`);
-        break;
-      case 'skip':
-        results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
-        progress.update(name, 'done', result.message ?? result.reason);
-        break;
-      case 'failed':
-        results.failed.push({ repo: name, error: result.error });
-        progress.update(name, 'failed', result.error);
-        break;
+    try {
+      const result = await processRepo(repo, progress);
+      switch (result.outcome) {
+        case 'proceed':
+          results.wouldOpen.push({ repo: name, projectKey: result.projectKey });
+          progress.update(name, 'done', `would open ${requestLabel}`);
+          break;
+        case 'opened':
+          results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
+          progress.update(name, 'done', `${requestLabel} opened`);
+          break;
+        case 'skip':
+          results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
+          progress.update(name, 'done', result.message ?? result.reason);
+          break;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.failed.push({ repo: name, error: message });
+      progress.update(name, 'failed', message);
     }
   });
   progress.finish();
