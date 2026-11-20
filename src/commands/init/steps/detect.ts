@@ -182,20 +182,28 @@ function lookupRemoteBinding(
   );
 }
 
+/** The repository's project belongs to another organization than the active one. */
+export class RepositoryInOtherOrganizationError extends CommandFailedError {
+  constructor(message: string, remediationHint: string) {
+    super(message, { remediationHint });
+    this.name = 'RepositoryInOtherOrganizationError';
+  }
+}
+
 function otherOrganizationError(
   auth: ResolvedAuth,
   boundOrganization: string | undefined,
-): CommandFailedError {
+): RepositoryInOtherOrganizationError {
   const active = auth.orgKey ?? 'the active one';
   if (boundOrganization) {
-    return new CommandFailedError(
+    return new RepositoryInOtherOrganizationError(
       `This repository is bound to a project in organization '${boundOrganization}', but you are connected to '${active}'.`,
-      { remediationHint: `Run 'sonar auth org ${boundOrganization}' to switch to it.` },
+      `Run 'sonar auth org ${boundOrganization}' to switch to it.`,
     );
   }
-  return new CommandFailedError(
+  return new RepositoryInOtherOrganizationError(
     `This repository is bound to a project in another organization than ${active}, so it cannot be bound from here.`,
-    { remediationHint: "Run 'sonar auth org' to switch to the organization that owns it." },
+    "Run 'sonar auth org' to switch to the organization that owns it.",
   );
 }
 
