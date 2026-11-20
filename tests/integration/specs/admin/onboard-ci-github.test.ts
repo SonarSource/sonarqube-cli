@@ -129,19 +129,19 @@ describe('GitHub bulk CI onboarding', () => {
       httpClient: new SonarHttpClient(server.baseUrl(), 'server-token'),
     };
     const client = new GitHubClient('github-token', { baseUrl: github.baseUrl() });
-    const facts: OnboardingTelemetry[] = [];
+    const telemetryEvents: OnboardingTelemetry[] = [];
     return {
       github,
       server,
       client,
-      facts,
+      telemetryEvents,
       run: (options = OPTIONS, workflowTemplate = validateOnboardCiGithubOptions(options)) => {
-        let fact: OnboardingTelemetry | null = null;
+        let telemetry: OnboardingTelemetry | null = null;
         if (!options.dryRun) {
-          fact = new OnboardingTelemetry('GitHub');
-          facts.push(fact);
+          telemetry = new OnboardingTelemetry('GitHub');
+          telemetryEvents.push(telemetry);
         }
-        return onboardCiGithub(connection, client, options, console, workflowTemplate, fact);
+        return onboardCiGithub(connection, client, options, console, workflowTemplate, telemetry);
       },
     };
   }
@@ -183,7 +183,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('reports opened, skipped and failed repositories, finishing the batch before failing', async () => {
-    const { run, server, facts } = await setup(
+    const { run, server, telemetryEvents } = await setup(
       [
         { name: 'sample' },
         {
@@ -197,7 +197,7 @@ describe('GitHub bulk CI onboarding', () => {
 
     const error = await run().catch((error: unknown) => error);
     expect(error).toMatchObject({ message: '1 repositories failed to process.' });
-    expect(facts[0].payload).toEqual({
+    expect(telemetryEvents[0].payload).toEqual({
       platform: 'GitHub',
       created_count: 1,
       failed_count: 1,
@@ -224,7 +224,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('previews rendered workflows without any GitHub or SonarQube writes', async () => {
-    const { run, github, server, facts } = await setup([
+    const { run, github, server, telemetryEvents } = await setup([
       { name: 'sample' },
       {
         name: 'configured',
@@ -233,7 +233,7 @@ describe('GitHub bulk CI onboarding', () => {
     ]);
 
     await run({ ...OPTIONS, dryRun: true });
-    expect(facts).toHaveLength(0);
+    expect(telemetryEvents).toHaveLength(0);
 
     expect(harness.cwd.file('sonar-onboard-ci-report-dry.json').asJson()).toEqual({
       wouldOpenPr: [{ repo: `${ORG}/sample`, projectKey: 'sample-key' }],
@@ -271,11 +271,11 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('does not open a second PR on a subsequent run', async () => {
-    const { run, github, facts } = await setup();
+    const { run, github, telemetryEvents } = await setup();
 
     await run();
     await run();
-    expect(facts.map(({ payload }) => payload)).toEqual([
+    expect(telemetryEvents.map(({ payload }) => payload)).toEqual([
       {
         platform: 'GitHub',
         created_count: 1,
@@ -305,11 +305,11 @@ describe('GitHub bulk CI onboarding', () => {
         .filter((request) => request.method === 'POST' && request.path.endsWith('/pulls')),
     ).toHaveLength(1);
     await run({ ...OPTIONS, dryRun: true });
-    expect(facts).toHaveLength(2);
+    expect(telemetryEvents).toHaveLength(2);
   });
 
   it('does not count a recovered PR as created when the creation response is lost', async () => {
-    const { run, client, facts } = await setup();
+    const { run, client, telemetryEvents } = await setup();
     const createPr = client.createPullRequest.bind(client);
     const spy = spyOn(GitHubClient.prototype, 'createPullRequest').mockImplementationOnce(
       async (...args) => {
@@ -319,7 +319,7 @@ describe('GitHub bulk CI onboarding', () => {
     );
     try {
       await run();
-      expect(facts[0].payload).toEqual({
+      expect(telemetryEvents[0].payload).toEqual({
         platform: 'GitHub',
         created_count: 0,
         failed_count: 0,
@@ -330,7 +330,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('uses the validated workflow template even if its file changes', async () => {
-    const { run, client, facts } = await setup();
+    const { run, client, telemetryEvents } = await setup();
     harness.cwd.writeFile('workflow.yml', TEMPLATE);
     const path = harness.cwd.file('workflow.yml').path;
 
@@ -339,7 +339,7 @@ describe('GitHub bulk CI onboarding', () => {
     harness.cwd.writeFile('workflow.yml', 'changed after validation');
 
     await run(options, workflowTemplate);
-    expect(facts[0].payload.created_count).toBe(1);
+    expect(telemetryEvents[0].payload.created_count).toBe(1);
 
     expect(await client.getFileContent(`${ORG}/sample`, WORKFLOW_PATH, CI_BRANCH)).toBe(
       TEMPLATE.replaceAll('{{SONAR_PROJECT_KEY}}', 'sample-key'),
