@@ -28,8 +28,10 @@ import type { Console } from '@/core/ui/console.ts';
 import { resolveGitlabDopSetting } from '../dop-setting.ts';
 import {
   assertOnPremiseConnection,
+  DRY_RUN_REPORT_FILE,
   readOptionFile,
   readReposFile,
+  REPORT_FILE,
   runWithRepoProgress,
   writeReportFile,
 } from '../shared.ts';
@@ -39,10 +41,13 @@ import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
 import { classifyRepo, executeRepo } from './processor.ts';
 import { normalizeJobTemplate } from './templates.ts';
-import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
+import type {
+  DryRunResults,
+  OnboardCiGitlabInput,
+  OnboardCiGitlabOptions,
+  OnboardCiResults,
+} from './types.ts';
 import { TriggerOn } from './types.ts';
-
-export type { OnboardCiGitlabOptions } from './types.ts';
 
 // GitLab CI variable names: letters, digits, underscores only, no leading digit.
 const GITLAB_VAR_NAME_RE = /^[a-zA-Z_]\w*$/;
@@ -71,7 +76,16 @@ function assertNoJobShapeFlagsWithTemplate(options: OnboardCiGitlabOptions): voi
   }
 }
 
-export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions): void {
+export function validateOnboardCiGitlabOptions(
+  input: OnboardCiGitlabInput,
+): OnboardCiGitlabOptions {
+  const options = {
+    ...input,
+    sonarTokenVarName: input.sonarTokenVarName ?? 'SONAR_TOKEN',
+    triggerOn: input.triggerOn ?? TriggerOn.Both,
+    scannerProperty: input.scannerProperty ?? [],
+  };
+
   if (options.jobTemplate !== undefined) {
     assertNoJobShapeFlagsWithTemplate(options);
   }
@@ -128,6 +142,7 @@ export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions):
       );
     }
   }
+  return options;
 }
 
 function applyReposFileFilter<T extends GitLabRepo>(
@@ -182,7 +197,7 @@ async function preflight(
     });
   }
 
-  assertOnPremiseConnection(auth, 'gitlab');
+  assertOnPremiseConnection(auth, 'GitLab');
 
   const sqsClient = new OnboardCiSqsClient(httpClient);
   const {
@@ -301,11 +316,11 @@ async function runLive(
       results.skipped.push({
         repo: repo.path_with_namespace,
         reason: classification.reason,
-        mrUrl: classification.mrUrl,
+        prUrl: classification.prUrl,
       }),
     async (repo, classification, slug, progress) => {
       const result = await executeRepo(ctx, repo, classification);
-      results.opened.push({ repo: slug, projectKey: result.projectKey, mrUrl: result.mrUrl });
+      results.opened.push({ repo: slug, projectKey: result.projectKey, prUrl: result.prUrl });
       progress.update(slug, 'done', 'MR opened');
     },
     results.failed,
@@ -367,7 +382,7 @@ export async function onboardCiGitlab(
       failed.length > 0 ? 'error' : 'success',
       'No changes were made',
     );
-    writeReportFile(dryRunResults, 'sonar-onboard-ci-report-dry.json', console);
+    writeReportFile(dryRunResults, DRY_RUN_REPORT_FILE, console);
     if (failed.length > 0) {
       throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
         remediationHint: 'See the per-repository errors above and the report file for details.',
@@ -382,7 +397,7 @@ export async function onboardCiGitlab(
     buildOutroMessage(opened.length, skipped.length, failed.length),
     failed.length > 0 ? 'error' : 'success',
   );
-  writeReportFile(results, 'sonar-onboard-ci-report.json', console);
+  writeReportFile(results, REPORT_FILE, console);
   if (failed.length > 0) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',
