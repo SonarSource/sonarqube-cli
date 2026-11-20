@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import {
   CommandFailedError,
   type CommandFailedErrorOptions,
@@ -28,6 +27,7 @@ import { getImportPatPollIntervalMs, getImportPatWaitTimeoutMs } from '@/core/co
 import { AccessDeniedError } from '@/core/server/errors.ts';
 import { HTTP_STATUS_FORBIDDEN, HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { fetchServerVersion } from '@/core/server/server-info.ts';
+import { waitInBrowser } from '@/core/ui/browser-step.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import type { DopRepository } from './import-api.ts';
@@ -181,10 +181,10 @@ export class ServerBackend implements ImportBackend {
 
     console.info(`${problem} Connect it in your browser:`);
     console.print(url);
-    await openBrowserWithFallback(url, console);
-    await console.withSpinner(
-      `Waiting for the ${label} personal access token to be connected`,
-      () => this.waitForConnectedPat(setting, status, emptyListing, url, problem),
+    await waitInBrowser(url, console, () =>
+      console.withSpinner(`Waiting for the ${label} personal access token to be connected`, () =>
+        this.waitForConnectedPat(setting, status, emptyListing, url, problem),
+      ),
     );
     console.discreetSuccess(
       `Personal access token connected for ${label} setting '${setting.key}'.`,
