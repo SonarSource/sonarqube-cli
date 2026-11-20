@@ -129,7 +129,7 @@ export class SonarHttpClient {
     if (response.status === HTTP_STATUS_SERVICE_UNAVAILABLE) {
       return new ServiceUnavailableError();
     }
-    const sendsJson = method === 'POST' || method === 'PATCH' || method === 'PUT';
+    const sendsJson = METHODS_WITH_BODY.has(method);
     if (sendsJson && response.status === HTTP_STATUS_BAD_REQUEST) {
       return await parseBadRequestError(response, this.isCloud);
     }
@@ -378,26 +378,6 @@ export class SonarHttpClient {
       toError,
     ).andThen((response) =>
       this.toStatusCheckedResult(response, 'DELETE', () => Promise.resolve(undefined)),
-    );
-  }
-
-  /** Make PUT request to SonarQube API using Bearer token, sending and parsing JSON. */
-  put<T>(endpoint: string, body: unknown): ResultAsync<T, HttpClientError> {
-    const url = `${this.apiHostFor(endpoint)}${endpoint}`;
-
-    return ResultAsync.fromPromise(
-      fetchAuthenticated(
-        url,
-        buildRequest(
-          'PUT',
-          this.commonHeaders('json'),
-          POST_REQUEST_TIMEOUT_MS,
-          JSON.stringify(body),
-        ),
-      ),
-      toError,
-    ).andThen((response) =>
-      this.toStatusCheckedResult(response, 'PUT', () => response.json() as Promise<T>),
     );
   }
 
