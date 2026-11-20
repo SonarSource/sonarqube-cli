@@ -257,13 +257,16 @@ describe('GitHubClient', () => {
     });
 
     it('doubles the delay for repeated secondary rate limits', async () => {
+      const scopedNotices: string[] = [];
+      const scopedClient = client.withRetryHandler((message) => scopedNotices.push(message));
       const limited = () =>
         fakeResponse({ message: 'You have exceeded a secondary rate limit' }, { status: 403 });
       fetchSpy = mockFetchSeq(limited(), limited(), fakeResponse([METADATA]));
-      await client.listOrganizationRepos('test-org');
+      await scopedClient.listOrganizationRepos('test-org');
       expect(timeoutSpy.mock.calls[0][1]).toBe(60000);
       expect(timeoutSpy.mock.calls[1][1]).toBe(120000);
-      expect(retryNotices).toEqual([
+      expect(retryNotices).toEqual([]);
+      expect(scopedNotices).toEqual([
         'GitHub rate limit reached while listing repositories.\nRetrying in 60 seconds (retry 1 of 5).',
         'GitHub rate limit reached while listing repositories.\nRetrying in 120 seconds (retry 2 of 5).',
       ]);

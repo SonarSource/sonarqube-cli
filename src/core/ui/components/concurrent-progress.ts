@@ -108,6 +108,16 @@ export class ConcurrentProgress {
     if (this.isTTY) this.render();
   }
 
+  warn(message: string): void {
+    if (!this.isTTY) {
+      this.console.warn(message);
+      return;
+    }
+    this.erase();
+    this.console.warn(message);
+    this.render();
+  }
+
   finish(): { succeeded: number; failed: number } {
     const states = [...this.items.values()];
     const succeeded = states.filter((s) => s.status === 'done').length;
