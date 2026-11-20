@@ -89,6 +89,14 @@ export function readIntegrationEvents(sonarUserHome: string): StoredIntegrationC
   );
 }
 
+export function readInitExecutedEvents(sonarUserHome: string): StoredTelemetryEvent[] {
+  return readTelemetryEvents(sonarUserHome, 'Analytics.Cli.CliInitExecuted');
+}
+
+export function readProjectInitEvents(sonarUserHome: string): StoredTelemetryEvent[] {
+  return readTelemetryEvents(sonarUserHome, 'Analytics.Cli.CliProjectInitCreationAttempted');
+}
+
 export function writeTelemetryEvent(sonarUserHome: string, event: StoredTelemetryEvent): void {
   const path = telemetryEventsPath(sonarUserHome);
   mkdirSync(dirname(path), { recursive: true });

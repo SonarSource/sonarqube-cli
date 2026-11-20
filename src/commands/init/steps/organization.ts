@@ -44,6 +44,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { requireAnswer } from '../answer.ts';
 import { validateProjectName } from '../options.ts';
+import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
 
 const MAX_KEY_LENGTH = 40;
 const MIN_KEY_LENGTH = 3;
@@ -359,8 +360,16 @@ function billingUrl(baseUrl: string, organizationKey: string): string {
  * that cannot prompt before the login). A decline throws `OrganizationCreationDeclined`. Anything
  * it throws ends the login, which revokes the token the login just minted.
  */
-export function createOrganizationHook(console: Console): OnNoMemberships {
+export function createOrganizationHook(
+  console: Console,
+  telemetry?: InitTelemetryRecorder,
+): OnNoMemberships {
   return async (client) => {
+    // The sign-in itself succeeded: the account only lacks an organization.
+    if (telemetry && !telemetry.has('login')) {
+      telemetry.record('login', 'success');
+    }
+    telemetry?.begin('create_org');
     console.info("You're not in a SonarQube Cloud organization yet.");
     console.print(
       "An organization holds your projects and the people you work with. Most teams have one, and it's free.",
@@ -369,6 +378,7 @@ export function createOrganizationHook(console: Console): OnNoMemberships {
       await console.confirmPrompt('Create an organization now?', true),
     );
     if (!accepted) {
+      telemetry?.record('create_org', 'declined');
       throw new OrganizationCreationDeclined();
     }
 
@@ -377,6 +387,7 @@ export function createOrganizationHook(console: Console): OnNoMemberships {
       createWithAvailableKey(client, name),
     );
     await ensureFreeSubscription(client, organization, console);
+    telemetry?.record('create_org', 'success');
     console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
     console.info(
       `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
