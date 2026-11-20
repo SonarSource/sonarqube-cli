@@ -75,7 +75,16 @@ export type RepoClassification =
       projectKey: string;
     };
 
-export type ExecuteResult = { outcome: 'opened'; projectKey: string; prUrl: string };
+type FailedResult = { outcome: 'failed'; error: string };
+export type RepoAssessment = RepoClassification | FailedResult;
+export type ExecuteResult =
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | Extract<RepoClassification, { outcome: 'skip' }>
+  | FailedResult;
+
+function failure(error: unknown): FailedResult {
+  return { outcome: 'failed', error: error instanceof Error ? error.message : String(error) };
+}
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
   return (
@@ -165,119 +174,131 @@ async function classifyNewRepo(
   return null;
 }
 
-export async function classifyRepo(
+export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
   bindingMap: Map<string, string>,
-): Promise<RepoClassification> {
-  const existingProjectKey = bindingMap.get(String(repo.id));
-  if (!existingProjectKey) {
-    return {
-      outcome: 'skip',
-      reason: SkipReason.NotInSonarQube,
-      message: 'skipped (not bound in SonarQube)',
-    };
+): Promise<RepoAssessment> {
+  try {
+    const existingProjectKey = bindingMap.get(String(repo.id));
+    if (!existingProjectKey) {
+      return {
+        outcome: 'skip',
+        reason: SkipReason.NotInSonarQube,
+        message: 'skipped (not bound in SonarQube)',
+      };
+    }
+
+    if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
+      return {
+        outcome: 'skip',
+        reason: SkipReason.AlreadyConfigured,
+        message: 'skipped (already configured)',
+      };
+    }
+
+    const ciConfigPath = await ctx.gitlab.getProjectCiConfigPath(repo.id);
+    if (ciConfigPath?.includes('@')) {
+      return {
+        outcome: 'skip',
+        reason: SkipReason.CustomCiConfigPath,
+        message: `skipped (external CI config: ${ciConfigPath})`,
+      };
+    }
+    const ciFilePath = ciConfigPath ?? DEFAULT_CI_FILE;
+
+    const rawCi = await ctx.gitlab.getFileContent(repo.id, ciFilePath, repo.default_branch);
+    const existingCi = rawCi === '' ? null : rawCi;
+
+    const skip =
+      existingCi !== null
+        ? classifyExistingCiFile(ctx, existingCi, ciFilePath)
+        : await classifyNewRepo(ctx, repo);
+    if (skip) {
+      return skip;
+    }
+
+    const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
+    if (openMrs.length > 0) {
+      return {
+        outcome: 'skip',
+        reason: SkipReason.MrAlreadyOpen,
+        message: 'skipped (MR already open)',
+        prUrl: openMrs[0].web_url,
+      };
+    }
+
+    return { outcome: 'proceed', ciFilePath, existingCi, projectKey: existingProjectKey };
+  } catch (error) {
+    return failure(error);
   }
-
-  if (await ctx.sqs.components.hasProjectBeenAnalyzed(existingProjectKey).orThrow()) {
-    return {
-      outcome: 'skip',
-      reason: SkipReason.AlreadyConfigured,
-      message: 'skipped (already configured)',
-    };
-  }
-
-  const ciConfigPath = await ctx.gitlab.getProjectCiConfigPath(repo.id);
-  if (ciConfigPath?.includes('@')) {
-    return {
-      outcome: 'skip',
-      reason: SkipReason.CustomCiConfigPath,
-      message: `skipped (external CI config: ${ciConfigPath})`,
-    };
-  }
-  const ciFilePath = ciConfigPath ?? DEFAULT_CI_FILE;
-
-  const rawCi = await ctx.gitlab.getFileContent(repo.id, ciFilePath, repo.default_branch);
-  const existingCi = rawCi === '' ? null : rawCi;
-
-  const skip =
-    existingCi !== null
-      ? classifyExistingCiFile(ctx, existingCi, ciFilePath)
-      : await classifyNewRepo(ctx, repo);
-  if (skip) {
-    return skip;
-  }
-
-  const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
-  if (openMrs.length > 0) {
-    return {
-      outcome: 'skip',
-      reason: SkipReason.MrAlreadyOpen,
-      message: 'skipped (MR already open)',
-      prUrl: openMrs[0].web_url,
-    };
-  }
-
-  return { outcome: 'proceed', ciFilePath, existingCi, projectKey: existingProjectKey };
 }
 
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  classification: Extract<RepoClassification, { outcome: 'proceed' }>,
+  bindingMap: Map<string, string>,
 ): Promise<ExecuteResult> {
-  const { ciFilePath, existingCi, projectKey } = classification;
-
   try {
-    await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
-  } catch (err) {
-    if (isBranchAlreadyExistsError(err)) {
-      await ctx.gitlab.deleteBranch(repo.id, CI_BRANCH);
-      await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
-    } else {
-      throw err;
+    const assessment = await assessRepo(ctx, repo, bindingMap);
+    if (assessment.outcome !== 'proceed') {
+      return assessment;
     }
-  }
+    const { ciFilePath, existingCi, projectKey } = assessment;
 
-  const ciYml = ctx.jobTemplateContent
-    ? renderJobTemplate(ctx.jobTemplateContent, projectKey)
-    : generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
-  const updatedCi = buildUpdatedCiYml(existingCi, ciYml);
-  if (existingCi === null) {
-    await ctx.gitlab.createFile(
-      repo.id,
-      ciFilePath,
-      CI_BRANCH,
-      updatedCi,
-      `Add ${ciFilePath} with SonarQube analysis`,
-    );
-  } else {
-    await ctx.gitlab.updateFile(
-      repo.id,
-      ciFilePath,
-      CI_BRANCH,
-      updatedCi,
-      'Add SonarQube analysis job',
-    );
-  }
+    try {
+      await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
+    } catch (err) {
+      if (isBranchAlreadyExistsError(err)) {
+        await ctx.gitlab.deleteBranch(repo.id, CI_BRANCH);
+        await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
+      } else {
+        throw err;
+      }
+    }
 
-  const mrDescription = ctx.jobTemplateContent
-    ? generateTemplateMrDescription(projectKey, ciFilePath)
-    : generateMrDescription(
-        projectKey,
-        ctx.auth.serverUrl,
+    const ciYml = ctx.jobTemplateContent
+      ? renderJobTemplate(ctx.jobTemplateContent, projectKey)
+      : generateCiYml(projectKey, ctx.auth.serverUrl, ctx.options, existingCi === null);
+    const updatedCi = buildUpdatedCiYml(existingCi, ciYml);
+    if (existingCi === null) {
+      await ctx.gitlab.createFile(
+        repo.id,
         ciFilePath,
-        ctx.options.sonarTokenVarName,
-        ctx.options.triggerOn,
+        CI_BRANCH,
+        updatedCi,
+        `Add ${ciFilePath} with SonarQube analysis`,
       );
+    } else {
+      await ctx.gitlab.updateFile(
+        repo.id,
+        ciFilePath,
+        CI_BRANCH,
+        updatedCi,
+        'Add SonarQube analysis job',
+      );
+    }
 
-  const prUrl = await ctx.gitlab.createMergeRequest(
-    repo.id,
-    CI_BRANCH,
-    repo.default_branch,
-    'Configure SonarQube CI analysis',
-    mrDescription,
-  );
+    const mrDescription = ctx.jobTemplateContent
+      ? generateTemplateMrDescription(projectKey, ciFilePath)
+      : generateMrDescription(
+          projectKey,
+          ctx.auth.serverUrl,
+          ciFilePath,
+          ctx.options.sonarTokenVarName,
+          ctx.options.triggerOn,
+        );
 
-  return { outcome: 'opened', projectKey, prUrl };
+    const prUrl = await ctx.gitlab.createMergeRequest(
+      repo.id,
+      CI_BRANCH,
+      repo.default_branch,
+      'Configure SonarQube CI analysis',
+      mrDescription,
+    );
+
+    return { outcome: 'opened', projectKey, prUrl };
+  } catch (error) {
+    return failure(error);
+  }
 }
