@@ -22,12 +22,10 @@ import { PI_EXTENSION_HELPERS } from './extension-helpers.ts';
 import { PI_EXTENSION_MANAGED_MARKER } from './secrets-extension-content.ts';
 
 export const PI_SQAA_EXTENSION_CONTENT = String.raw`// ${PI_EXTENSION_MANAGED_MARKER} — do not edit by hand.
-import { existsSync } from 'node:fs';
-import { relative } from 'node:path';
-
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 ${PI_EXTENSION_HELPERS}
 const SQAA_HOOK_TIMEOUT_MS = 20000;
+const COMPLETION_TIMEOUT_MS = 60000;
 const ANALYZED_TOOLS = new Set(['edit', 'write']);
 const REPORT_INSTRUCTION = 'You must report this to the user and say it comes from the Sonar Vortex analysis.';
 
@@ -35,24 +33,12 @@ interface PostToolUseAnswer {
   context?: string;
 }
 
-let analyzedFiles: string[] = [];
-let deepAnalysisRequested = false;
+interface StopAnswer {
+  findings?: string;
+}
 
 function systemReminder(text: string): { type: 'text'; text: string } {
   return { type: 'text', text: '<system-reminder>\n' + text + '\n</system-reminder>' };
-}
-
-function quoteForShell(value: string): string {
-  return "'" + value.replace(/'/g, "'\\''") + "'";
-}
-
-function filesToAnalyzeDeeply(cwd: string): string[] {
-  return [...new Set(analyzedFiles)].filter((file) => existsSync(file)).map((file) => relative(cwd, file));
-}
-
-function deepAnalysisReminder(files: string[]): string {
-  const fileArguments = files.map((file) => '--file ' + quoteForShell(file)).join(' ');
-  return 'Before ending your turn, run \`sonar analyze agentic --depth DEEP ' + fileArguments + '\` and summarize the result for the user.';
 }
 
 export default function (pi: ExtensionAPI) {
@@ -69,35 +55,38 @@ export default function (pi: ExtensionAPI) {
         ctx.cwd,
       );
       if (typeof context !== 'string' || !context) return;
-      analyzedFiles.push(filePath);
       return { content: [...event.content, systemReminder(context + '\n' + REPORT_INSTRUCTION)] };
     } catch {
       return;
     }
   });
 
-  pi.on('before_agent_start', () => {
-    analyzedFiles = [];
-    deepAnalysisRequested = false;
-  });
-
-  pi.on('agent_before_settle', (event, ctx) => {
-    const files = filesToAnalyzeDeeply(ctx.cwd);
-    analyzedFiles = [];
-    if (deepAnalysisRequested || files.length === 0 || (event.outcome && event.outcome !== 'completed')) return;
-    deepAnalysisRequested = true;
-    return {
-      entries: [
-        ...(event.entries ?? []),
-        {
-          type: 'custom_message',
-          customType: 'sonar-deep-reminder',
-          content: [systemReminder(deepAnalysisReminder(files))],
-          display: false,
-        },
-      ],
-      continue: true,
-    };
+  pi.on('agent_before_settle', async (event, ctx) => {
+    // UI filtering excludes JSON subagents, but also headless main agents.
+    if (ctx.hasUI !== true || event.outcome !== 'completed') return;
+    try {
+      const { findings } = await runHook<StopAnswer>(
+        'agent-stop --agent pi',
+        { sessionID: ctx.sessionManager.getSessionId(), cwd: ctx.cwd, hasUI: ctx.hasUI },
+        COMPLETION_TIMEOUT_MS,
+        ctx.cwd,
+      );
+      if (typeof findings !== 'string' || !findings.trim()) return;
+      return {
+        entries: [
+          ...(event.entries ?? []),
+          {
+            type: 'custom_message',
+            customType: 'sonar-completion-analysis',
+            content: [systemReminder(findings)],
+            display: false,
+          },
+        ],
+        continue: true,
+      };
+    } catch {
+      return;
+    }
   });
 }
 `;
