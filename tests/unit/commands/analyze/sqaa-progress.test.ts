@@ -349,10 +349,18 @@ describe('SqaaProgress — project label', () => {
     expect(countOccurrences(finish, CURSOR_UP)).toBe(1);
   });
 
-  it('shows no project line when no project is given', () => {
-    const start = captureStdout(() => ttyProgress().start());
+  it('shows no project line when no project is given', async () => {
+    const progress = ttyProgress();
+    const start = captureStdout(() => progress.start());
+    captureStdout(() => progress.finish());
 
     expect(start).not.toContain('Project');
     expect(countNewlines(start)).toBe(1);
+
+    // finish() clears the 450ms dot timer; a leaked redraw lands in later stdout spies.
+    const leaked = await captureStdoutAsync(async () => {
+      await Bun.sleep(500);
+    });
+    expect(leaked).toBe('');
   });
 });
