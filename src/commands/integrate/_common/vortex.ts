@@ -114,27 +114,27 @@ export const VORTEX_SERVER_NOT_ENTITLED_MESSAGE = `Vortex is not licensed on thi
 export const VORTEX_OVER_CONSUMPTION_MESSAGE =
   'The Vortex usage limit has been reached. Installing it anyway. Vortex will resume once usage resets.';
 
-export const VORTEX_SCA_CHECK_FAILED_MESSAGE =
-  'Could not verify SCA availability on the connected server. Proceeding with SCA disabled in the generated skill content.';
+export const VORTEX_PACKAGE_CHECK_FAILED_MESSAGE =
+  'Could not verify dependency-check availability on the connected server. Proceeding without dependency-check guidance.';
 
 export interface ResolvedVortexSetup {
   disposition: VortexDisposition;
   scaEnabled?: boolean;
 }
 
-async function resolveScaEnabled(
+async function resolvePackageCheckEnabled(
   { auth, httpClient }: SonarConnection,
   isServer: boolean,
   console: Console,
 ): Promise<boolean> {
   const client = new ScaClient(httpClient);
-  const scaStatus = await client
-    .getScaEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey)
+  const packageCheckStatus = await client
+    .getPackageCheckEnablement(isServer ? 'on-premise' : 'cloud', auth.orgKey)
     .orThrow();
-  if (scaStatus === 'check_failed') {
-    console.warn(VORTEX_SCA_CHECK_FAILED_MESSAGE);
+  if (packageCheckStatus === 'check_failed') {
+    console.warn(VORTEX_PACKAGE_CHECK_FAILED_MESSAGE);
   }
-  return scaStatus === 'enabled';
+  return packageCheckStatus === 'enabled';
 }
 
 /**
@@ -181,10 +181,9 @@ export async function resolveVortexSetup(
     return { ...settled('install'), scaEnabled: false };
   }
 
-  // The rendered context augmentation skill advertises
-  // SCA tools only when SCA is available on the connection.
+  // CAG's legacy scaEnabled flag controls dependency-check guidance.
   return {
     ...settled('install'),
-    scaEnabled: await resolveScaEnabled(connection, isServer, console),
+    scaEnabled: await resolvePackageCheckEnabled(connection, isServer, console),
   };
 }
