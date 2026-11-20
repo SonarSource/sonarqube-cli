@@ -18,14 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type {
-  FailedResult,
-  OnboardCiOptions,
-  OnboardCiResults as SharedOnboardCiResults,
-  OpenedResult,
-  RepoProject,
-  SkippedResult as SharedSkippedResult,
-} from '../types.ts';
+import type { OnboardCiOptions } from '../types.ts';
 
 export const GITLAB_DEFAULT_STAGES = new Set(['.pre', 'build', 'test', 'deploy', '.post']);
 export const GITLAB_IMPLICIT_STAGES = new Set(['.pre', '.post']);
@@ -58,16 +51,3 @@ export interface OnboardCiGitlabOptions extends OnboardCiOptions {
 type GenerationOption = 'sonarTokenVarName' | 'triggerOn' | 'scannerProperty';
 export type OnboardCiGitlabInput = Omit<OnboardCiGitlabOptions, GenerationOption> &
   Partial<Pick<OnboardCiGitlabOptions, GenerationOption>>;
-
-export type SkippedResult = SharedSkippedResult;
-
-export type OnboardCiResults = SharedOnboardCiResults<OpenedResult, SkippedResult>;
-export type DryRunEntry = RepoProject;
-export type DryRunSkippedEntry = SharedSkippedResult;
-export type DryRunFailedEntry = FailedResult;
-
-export interface DryRunResults {
-  wouldOpenMr: DryRunEntry[];
-  wouldSkip: DryRunSkippedEntry[];
-  failed: DryRunFailedEntry[];
-}

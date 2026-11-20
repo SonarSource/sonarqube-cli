@@ -44,8 +44,15 @@ export interface FailedResult {
   error: string;
 }
 
-export interface OnboardCiResults<Opened, Skipped> {
-  opened: Opened[];
-  skipped: Skipped[];
+export type RepoOutcome =
+  | { outcome: 'proceed'; projectKey: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | { outcome: 'skip'; reason: string; prUrl?: string; message?: string }
+  | { outcome: 'failed'; error: string };
+
+export interface RepoRunResults {
+  opened: OpenedResult[];
+  wouldOpen: RepoProject[];
+  skipped: SkippedResult[];
   failed: FailedResult[];
 }
