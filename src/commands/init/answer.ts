@@ -18,10 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError } from '@/core/commands/command-error.ts';
 
 /** Its own type so a loop over several roots can tell a cancellation from a failure of one root. */
-export class OnboardingCancelledError extends CommandFailedError {
+export class OnboardingCancelledError extends CancelledByUserError {
   constructor() {
     super('Onboarding cancelled.');
     this.name = 'OnboardingCancelledError';
