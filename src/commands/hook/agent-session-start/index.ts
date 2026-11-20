@@ -46,6 +46,7 @@ import {
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ScaClient } from '@/core/server/sca.ts';
 import { noteProject } from '@/core/telemetry/project-uuid.ts';
+import { AUTH_LOGIN_HINT } from '@/core/ui/components/agent-prompt-hint.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
@@ -141,7 +142,7 @@ async function loadSessionStartContext(
   if (!connection) {
     return hasSonarConfig
       ? contextWarning(
-          "No usable credentials. Run 'sonar auth status', then 'sonar auth login' if needed.",
+          `No usable credentials. Run 'sonar auth status', then authenticate if needed. ${AUTH_LOGIN_HINT}`,
         )
       : null;
   }
