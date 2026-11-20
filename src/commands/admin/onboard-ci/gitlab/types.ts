@@ -38,16 +38,18 @@ export enum SkipReason {
   NotInSonarQube = 'NOT_IN_SONARQUBE',
 }
 
-export interface OnboardCiGitlabOptions extends OnboardCiOptions {
+export interface OnboardCiGitlabInput extends OnboardCiOptions {
   group: string;
-  sonarTokenVarName: string;
-  triggerOn: TriggerOn;
+  sonarTokenVarName?: string;
+  triggerOn?: TriggerOn;
   stage?: string;
   allowFailure: boolean;
-  scannerProperty: string[];
+  scannerProperty?: string[];
   jobTemplate?: string;
 }
 
-type GenerationOption = 'sonarTokenVarName' | 'triggerOn' | 'scannerProperty';
-export type OnboardCiGitlabInput = Omit<OnboardCiGitlabOptions, GenerationOption> &
-  Partial<Pick<OnboardCiGitlabOptions, GenerationOption>>;
+export interface OnboardCiGitlabOptions extends OnboardCiGitlabInput {
+  sonarTokenVarName: string;
+  triggerOn: TriggerOn;
+  scannerProperty: string[];
+}
