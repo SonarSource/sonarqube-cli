@@ -33,6 +33,7 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_UNAUTHORIZED } from '@/core/server/http-constants.ts';
 import { fetchServerVersion, isAtLeast, isFullYearVersion } from '@/core/server/server-info.ts';
 import { UsersClient } from '@/core/server/users.ts';
+import { measureUserWait } from '@/core/telemetry/user-wait.ts';
 import { blue } from '@/core/ui/colors.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -390,10 +391,10 @@ export async function generateTokenViaBrowser(
   try {
     if (process.env.CI === 'true') {
       // Non-interactive: wait for server token
-      authResult = await tokenPromise;
+      authResult = await measureUserWait(() => tokenPromise);
     } else {
       // Interactive: race between browser delivery and manual paste
-      authResult = await waitForTokenInteractive(tokenPromise, console);
+      authResult = await measureUserWait(() => waitForTokenInteractive(tokenPromise, console));
     }
   } finally {
     await server.close().catch((err: unknown) => {

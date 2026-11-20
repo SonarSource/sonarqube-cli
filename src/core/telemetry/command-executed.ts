@@ -23,6 +23,7 @@ import type { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { DISTRIBUTION, type Distribution } from '@/core/host/distribution.ts';
 
 import { resolveTelemetryTargetProjects } from './project-uuid.ts';
+import { userWaitMs } from './user-wait.ts';
 
 export const CLI_COMMAND_EXECUTED = 'CliCommandExecuted';
 
@@ -37,6 +38,8 @@ export type CommandExecutedPayload = {
   project_uuid: string | null;
   target_project_count: number;
   arguments: string | null;
+  duration_ms: number;
+  user_wait_ms: number;
 };
 
 export type TargetProjectResolvedPayload = {
@@ -54,6 +57,8 @@ export type TargetProjectResolvedPayload = {
  * the `CliAnalysisCompleted` fact on the same invocation tells a secrets block apart from an error.
  * Command/subcommand come from {@link SonarCommand.commandAndSubcommand}.
  * `arguments` comes from {@link SonarCommand.describeInvocationArguments}.
+ * `duration_ms` is the process uptime, startup included; `user_wait_ms` the part spent on prompts
+ * and browser steps.
  */
 export async function buildCommandFacts(command: SonarCommand): Promise<TelemetryFact[]> {
   const { command: commandName, subcommand } = command.commandAndSubcommand();
@@ -66,6 +71,8 @@ export async function buildCommandFacts(command: SonarCommand): Promise<Telemetr
     project_uuid: targetProjects.length === 1 ? targetProjects[0].projectUuid : null,
     target_project_count: targetProjects.length,
     arguments: command.describeInvocationArguments(),
+    duration_ms: Math.round(performance.now()),
+    user_wait_ms: userWaitMs(),
   });
   // A target whose id did not resolve identifies no project; target_project_count still counts it.
   const targetProjectFacts = targetProjects.flatMap(({ auth, projectUuid }) =>
