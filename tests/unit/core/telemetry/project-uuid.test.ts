@@ -148,24 +148,37 @@ describe('resolveProjectUuids() for one project', () => {
     getSafeSpy.mockRestore();
   });
 
-  it('does not cache a 404 (project not created yet) and retries on the next call', async () => {
-    const getSafeSpy = mockProjectUuidGetSafe({
-      component: [
-        { ok: false, status: 404 },
-        { ok: true, id: 'AV-after-provisioning' },
-      ],
+  describe('when the project is not created yet', () => {
+    let dateNowSpy: ReturnType<typeof spyOn<DateConstructor, 'now'>>;
+    let getSafeSpy: ReturnType<typeof spyOn<SonarHttpClient, 'getSafe'>>;
+
+    beforeEach(() => {
+      // The budget is `deadline - Date.now()`. A real clock can tick 1ms between those reads.
+      dateNowSpy = spyOn(Date, 'now').mockReturnValue(1_000_000);
+      getSafeSpy = mockProjectUuidGetSafe({
+        component: [
+          { ok: false, status: 404 },
+          { ok: true, id: 'AV-after-provisioning' },
+        ],
+      });
     });
 
-    const first = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
-    const second = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
+    afterEach(() => {
+      dateNowSpy.mockRestore();
+      getSafeSpy.mockRestore();
+    });
 
-    expect(first).toBeNull();
-    expect(second).toBe('AV-after-provisioning');
-    expect(getSafeSpy).toHaveBeenCalledTimes(2);
-    // RESOLVE_BUDGET_MS, forwarded through ComponentsClient.getComponentId() to getSafe's 3rd
-    // argument, so this call keeps its tight budget instead of the default 30s GET timeout.
-    expect(getSafeSpy.mock.calls[0]?.[2]).toBe(3_000);
-    getSafeSpy.mockRestore();
+    it('does not cache the 404 and retries on the next call', async () => {
+      const first = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
+      const second = await resolveProjectUuid(auth(), 'proj-not-yet-provisioned');
+
+      expect(first).toBeNull();
+      expect(second).toBe('AV-after-provisioning');
+      expect(getSafeSpy).toHaveBeenCalledTimes(2);
+      // RESOLVE_BUDGET_MS, forwarded through ComponentsClient.getComponentId() to getSafe's 3rd
+      // argument, so this call keeps its tight budget instead of the default 30s GET timeout.
+      expect(getSafeSpy.mock.calls[0]?.[2]).toBe(3_000);
+    });
   });
 
   it('does not cache a transient (non-ok) API failure and retries on the next call', async () => {
