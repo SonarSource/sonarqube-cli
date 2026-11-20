@@ -42,6 +42,7 @@ import { requireAnswer } from '../answer.ts';
 import type { InitPath } from '../init-outcome.ts';
 import type { InitIntent } from '../options.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
+import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
 
 export interface DetectDeps {
   auth: ResolvedAuth;
@@ -62,6 +63,7 @@ export interface DetectDeps {
   chooseProject?: (projectRoot: string, items: readonly ConfigItem[]) => Promise<string | null>;
   /** Set only while the user may still be asked which single folder to link. */
   pickLinkFolder?: boolean;
+  telemetry?: InitTelemetryRecorder;
 }
 
 export function resolveProjectRoot(pathOption: string): string {
@@ -219,7 +221,7 @@ function bindingUnavailable(reason: string, allowUnbound: boolean): InvalidOptio
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive, intent, allowUnbound }: DetectDeps,
+  { auth, console, interactive, intent, allowUnbound, telemetry }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
@@ -248,6 +250,7 @@ async function chooseNewProjectPath(
     return { path: 'unbound-new', projectRoot, remote };
   }
   if (intent?.kind === 'bind') {
+    telemetry?.detected('bound_new').record('project_bind', 'success');
     return { path: 'bound-new', projectRoot, remote, repositorySlug };
   }
   if (intent || !interactive) {
@@ -255,9 +258,12 @@ async function chooseNewProjectPath(
     return { path: 'unbound-new', projectRoot, remote, repositorySlug };
   }
 
+  const project = telemetry?.detected('bound_new');
+  project?.begin('project_bind');
   const bind = requireAnswer(
     await console.confirmPrompt('Bind this repository to a new SonarQube project?', true),
   );
+  project?.record('project_bind', bind ? 'success' : 'declined');
   return bind
     ? { path: 'bound-new', projectRoot, remote, repositorySlug }
     : { path: 'unbound-new', projectRoot, remote };
