@@ -40,6 +40,9 @@ export interface OnboardCiGitlabOptions {
   group: string;
   bindingName?: string;
   reposFile?: string;
+  repos?: string;
+  clientSide?: boolean;
+  serverSide?: boolean;
   sonarTokenVarName: string;
   triggerOn: TriggerOn;
   stage?: string;

@@ -23,8 +23,8 @@ import { readFileSync } from 'node:fs';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
-import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
+import { CiConfigurationClient } from '@/core/server/ci-configuration.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -33,7 +33,13 @@ import type { ClassificationEntry } from './dry-run.ts';
 import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
 import { classifyRepo, executeRepo } from './processor.ts';
-import { writeReportFile } from './report.ts';
+import { buildOutroMessage, repositoriesFailedError, writeReportFile } from './report.ts';
+import {
+  filterReposByEntries,
+  parseReposOption,
+  resolveSelectedRepoEntries,
+} from './repos-filter.ts';
+import { onboardCiGitlabServerSide, translateAccessError } from './server-side.ts';
 import { OnboardCiSqsClient } from './sqs-api.ts';
 import { normalizeJobTemplate } from './templates.ts';
 import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
@@ -74,7 +80,21 @@ function assertNoJobShapeFlagsWithTemplate(options: OnboardCiGitlabOptions): voi
   }
 }
 
+function assertSelectionFlags(options: OnboardCiGitlabOptions): void {
+  if (options.repos !== undefined && options.reposFile !== undefined) {
+    throw new InvalidOptionError('--repos and --repos-file are mutually exclusive.');
+  }
+  if (options.repos !== undefined) {
+    parseReposOption(options.repos);
+  }
+  if (options.clientSide && options.serverSide) {
+    throw new InvalidOptionError('--client-side and --server-side are mutually exclusive.');
+  }
+}
+
 export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions): void {
+  assertSelectionFlags(options);
+
   if (options.jobTemplate !== undefined) {
     assertNoJobShapeFlagsWithTemplate(options);
   }
@@ -173,48 +193,6 @@ async function resolveDopSetting(
   );
 }
 
-function applyReposFileFilter<T extends GitLabRepo>(
-  allRepos: GitLabRepo[],
-  repos: T[],
-  reposFile: string,
-  group: string,
-  console: Console,
-): T[] {
-  let fileContent: string;
-  try {
-    fileContent = readFileSync(reposFile, 'utf8');
-  } catch {
-    throw new CommandFailedError(`--repos-file: file not found or unreadable: ${reposFile}`, {
-      exitCode: 2,
-    });
-  }
-  const entries = new Set(
-    fileContent
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#')),
-  );
-
-  const groupPrefix = `${group}/`;
-  const relativePath = (r: GitLabRepo) =>
-    r.path_with_namespace.startsWith(groupPrefix)
-      ? r.path_with_namespace.slice(groupPrefix.length)
-      : r.path_with_namespace;
-
-  for (const e of entries) {
-    if (repos.some((r) => relativePath(r) === e)) continue;
-    if (allRepos.some((r) => relativePath(r) === e)) {
-      console.warn(
-        `→ '${e}' from --repos-file is not eligible (empty repository or pending deletion), skipped`,
-      );
-    } else {
-      console.warn(`→ '${e}' from --repos-file not found in group, skipped`);
-    }
-  }
-
-  return repos.filter((r) => entries.has(relativePath(r)));
-}
-
 function readJobTemplateFile(jobTemplate: string): string {
   let content: string;
   try {
@@ -243,6 +221,17 @@ export function assertOnPremiseConnection(auth: ResolvedAuth): void {
   }
 }
 
+function assertServerConnection(auth: ResolvedAuth): void {
+  if (/[\r\n]/.test(auth.serverUrl)) {
+    throw new CommandFailedError('The configured SonarQube server URL must be a single line.', {
+      exitCode: 2,
+      remediationHint: "Re-authenticate with 'sonar auth login' or fix SONARQUBE_CLI_SERVER.",
+    });
+  }
+
+  assertOnPremiseConnection(auth);
+}
+
 async function preflight(
   connection: SonarConnection,
   gitlabToken: string,
@@ -254,16 +243,7 @@ async function preflight(
   dopSettingKey: string;
   gitlabUrl: string;
 }> {
-  const { auth, httpClient } = connection;
-  if (/[\r\n]/.test(auth.serverUrl)) {
-    throw new CommandFailedError('The configured SonarQube server URL must be a single line.', {
-      exitCode: 2,
-      remediationHint: "Re-authenticate with 'sonar auth login' or fix SONARQUBE_CLI_SERVER.",
-    });
-  }
-
-  assertOnPremiseConnection(auth);
-
+  const { httpClient } = connection;
   const sqsClient = new OnboardCiSqsClient(httpClient);
   if (!(await sqsClient.users.hasProvisionProjectsPermission().orThrow())) {
     throw new CommandFailedError(
@@ -298,8 +278,16 @@ async function fetchGroupData(
     (r): r is RepoWithBranch => r.default_branch != null && r.marked_for_deletion_at == null,
   );
 
-  if (options.reposFile) {
-    repos = applyReposFileFilter(allRepos, repos, options.reposFile, options.group, console);
+  const selected = resolveSelectedRepoEntries(options);
+  if (selected) {
+    repos = filterReposByEntries(
+      allRepos,
+      repos,
+      selected.entries,
+      selected.source,
+      options.group,
+      console,
+    );
   }
 
   return { repos, bindingMap };
@@ -410,8 +398,35 @@ async function runLive(
   return results;
 }
 
-function buildOutroMessage(opened: number, skipped: number, failed: number): string {
-  return `Opened ${opened.toLocaleString()} MRs · ${skipped.toLocaleString()} skipped · ${failed.toLocaleString()} failed`;
+async function shouldRunServerSide(
+  connection: SonarConnection,
+  options: OnboardCiGitlabOptions,
+  console: Console,
+): Promise<boolean> {
+  if (options.clientSide) {
+    console.info('Running CI configuration client-side (--client-side).');
+    return false;
+  }
+  const supported = await new CiConfigurationClient(connection.httpClient)
+    .probeSupport()
+    .orThrow()
+    .catch((error: unknown) => {
+      throw translateAccessError(error);
+    });
+  if (supported) {
+    console.info('Running CI configuration server-side on SonarQube Server.');
+    return true;
+  }
+  if (options.serverSide) {
+    throw new CommandFailedError(
+      'Server-side CI configuration is not enabled on this SonarQube instance.',
+      { remediationHint: 'Use --client-side, or enable server-side CI configuration.' },
+    );
+  }
+  console.info(
+    'Running CI configuration client-side (server-side CI configuration is not available on this SonarQube Server).',
+  );
+  return false;
 }
 
 export async function onboardCiGitlab(
@@ -422,6 +437,14 @@ export async function onboardCiGitlab(
 ): Promise<void> {
   const jobTemplateContent =
     options.jobTemplate !== undefined ? readJobTemplateFile(options.jobTemplate) : undefined;
+
+  assertServerConnection(connection.auth);
+
+  if (await shouldRunServerSide(connection, options, console)) {
+    return onboardCiGitlabServerSide(connection, gitlabToken, options, console, {
+      jobTemplateContent,
+    });
+  }
 
   const { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl } = await preflight(
     connection,
@@ -463,11 +486,7 @@ export async function onboardCiGitlab(
       'No changes were made',
     );
     writeReportFile(dryRunResults, 'sonar-onboard-ci-report-dry.json', console);
-    if (failed.length > 0) {
-      throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-        remediationHint: 'See the per-repository errors above and the report file for details.',
-      });
-    }
+    if (failed.length > 0) throw repositoriesFailedError(failed.length);
     return;
   }
 
@@ -478,9 +497,5 @@ export async function onboardCiGitlab(
     failed.length > 0 ? 'error' : 'success',
   );
   writeReportFile(results, 'sonar-onboard-ci-report.json', console);
-  if (failed.length > 0) {
-    throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
-      remediationHint: 'See the per-repository errors above and the report file for details.',
-    });
-  }
+  if (failed.length > 0) throw repositoriesFailedError(failed.length);
 }
