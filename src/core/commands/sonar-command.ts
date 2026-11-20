@@ -238,7 +238,7 @@ export class SonarCommand extends Command {
     this.hook('preAction', () => {
       if (this._lifecycle.stage === 'alpha') {
         this._console.info(
-          `'${qualifiedCommandPath(this)}' is in alpha; may change or be removed without notice.`,
+          `'${qualifiedCommandPath(this)}' is experimental in SonarQube CLI and is going through the mandatory first phase of internal testing. It may change or be removed without notice.`,
           'stderr',
         );
       }
@@ -689,13 +689,13 @@ export class SonarCommand extends Command {
       const lifecycle = option.lifecycle;
       if (lifecycle.stage === 'alpha') {
         this._console.info(
-          `'${flag}' is in alpha; may change or be removed without notice.`,
+          `'${flag}' is experimental in SonarQube CLI and is going through the mandatory first phase of internal testing. It may change or be removed without notice.`,
           'stderr',
         );
       } else if (lifecycle.stage === 'beta') {
         this.warnIfBetaOnce(
           `${qualifiedCommandPath(this)} ${flag}`,
-          `'${flag}' is in beta and may change.`,
+          `'${flag}' is in preview in SonarQube CLI. The command flags and output may still change.`,
         );
       } else {
         this._console.warn(deprecationWarning(flag, lifecycle.sinceVersion, lifecycle.replacement));
@@ -723,7 +723,10 @@ export class SonarCommand extends Command {
     }
 
     const commandPath = qualifiedCommandPath(this);
-    this.warnIfBetaOnce(commandPath, `'${commandPath}' is in beta and may change.`);
+    this.warnIfBetaOnce(
+      commandPath,
+      `'${commandPath}' is in preview in SonarQube CLI. The command flags and output may still change.`,
+    );
   }
 
   private warnIfBetaOnce(warningKey: string, message: string): void {

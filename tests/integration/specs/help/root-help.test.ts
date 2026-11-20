@@ -59,7 +59,7 @@ function getExpectedRootHelp(): string {
     '    context [action] [args...]                                                 Augment AI agents with context from your codebase',
     '    architecture|arch <command>                                                Read and set the architecture of a project (SonarQube Cloud only)',
     '',
-    '    import                                                                     Import repositories from a connected DevOps platform into SonarQube [BETA]',
+    '    import                                                                     Import repositories from a connected DevOps platform into SonarQube [PREVIEW]',
     '    integrate <git|claude|copilot|codex|antigravity|cursor|opencode|devin|pi>  Setup SonarQube integration for AI coding agents, git and others',
     '',
     '    auth <login|org|logout|status>                                             Manage authentication tokens and credentials',
