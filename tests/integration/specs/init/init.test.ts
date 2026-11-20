@@ -3336,6 +3336,31 @@ describe('sonar init', () => {
     );
 
     it(
+      'ends without claiming no project exists when the user declines the bound project',
+      async () => {
+        const server = await newCloudServer()
+          .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+          .start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        withRemote(GITHUB_REMOTE);
+        harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory to it?');
+        await session.decline('another existing project');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('No project was created.');
+        expect(output).not.toContain('No Sonar project exists');
+        expect(createRequests(server)).toEqual([]);
+      },
+      TIMEOUT,
+    );
+
+    it(
       'reports a monorepo root without a project as failed instead of creating it',
       async () => {
         const server = await startServer();

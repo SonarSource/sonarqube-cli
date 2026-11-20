@@ -38,8 +38,9 @@ import { showAnalysisResults, writeMapping } from './mapping.ts';
  * Asks to link the directory to the project that already exists for the repository: the one the
  * server binds to it, or the one `unbound-new` found under its generated key. When the
  * user declines, they are asked whether to link another existing project, picked with the
- * `sonar link` picker. Declining that continues as `unbound-new`, and leaving the picker asks
- * whether to abandon linking (default no, which reopens the picker) before doing the same. The
+ * `sonar link` picker. Declining that continues as `unbound-new` (without alpha, ends as declined),
+ * and leaving the picker asks whether to abandon linking (default no, which reopens the picker)
+ * before doing the same. The
  * chosen project is mapped in `.sonar-config.json` and its existing results are shown.
  * `--link` answers the first question, and `--link <key>` names the project instead. Only the
  * user's own decision continues as `unbound-new`: `--create` or `--bind`, or no answer to ask,
@@ -72,7 +73,10 @@ export async function runLinkExisting(
     throw missingDecision(situation, ['--link']);
   }
 
-  const unbound: UnboundNewPath = { path: 'unbound-new', projectRoot, remote };
+  // Without alpha nothing follows a declined offer, and `unbound-new` would claim no project exists.
+  const unbound: InitOutcome | UnboundNewPath = deps.allowUnbound
+    ? { path: 'unbound-new', projectRoot, remote }
+    : { kind: 'declined' };
   const link = requireAnswer(
     await console.confirmPrompt(`${situation} Link this directory to it?`, true),
   );
