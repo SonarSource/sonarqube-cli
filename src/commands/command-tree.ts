@@ -875,9 +875,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.command('init')
     .description(
-      'Set up Sonar for this project: login, pick an organization and bind or create a new Sonar project',
+      // Creating a project without repository binding is Alpha.
+      runtime.isAlphaEnabled
+        ? 'Set up Sonar for this project: login, pick an organization and bind or create a new Sonar project'
+        : 'Set up Sonar for this project: login, pick an organization and link an existing Sonar project or create one bound to the repository',
     )
-    .stage(Stage.Alpha)
+    .stage(Stage.Beta())
     .rootHelp({
       category: 'core',
       label: 'init',
@@ -901,21 +904,29 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--bind',
       'Create a project bound to the repository without prompting (SonarQube Cloud, organization linked to your DevOps platform). With --monorepo, a root whose project already exists is offered for linking, and fails when declined or without a terminal',
     )
-    .option(
-      '--create',
-      'Create a project without repository binding and without prompting, optionally configured by --project, --name and --visibility',
+    .addOption(
+      new SonarOption(
+        '--create',
+        'Create a project without repository binding and without prompting, optionally configured by --project, --name and --visibility',
+      ).stage(Stage.Alpha),
     )
-    .option(
-      '--project <key>',
-      'Key of the new project (default: generated); not used with a bound project',
+    .addOption(
+      new SonarOption(
+        '--project <key>',
+        'Key of the new project (default: generated); not used with a bound project',
+      ).stage(Stage.Alpha),
     )
-    .option(
-      '--name <name>',
-      'Name of the new project (default: the repository name); not used with a bound project',
+    .addOption(
+      new SonarOption(
+        '--name <name>',
+        'Name of the new project (default: the repository name); not used with a bound project',
+      ).stage(Stage.Alpha),
     )
-    .option(
-      '--visibility <visibility>',
-      'Visibility of the new project: private or public (default: private); not used with a bound project',
+    .addOption(
+      new SonarOption(
+        '--visibility <visibility>',
+        'Visibility of the new project: private or public (default: private); not used with a bound project',
+      ).stage(Stage.Alpha),
     )
     // Hidden while the CLI ships no SonarScanner: the first-analysis flags still parse, but are not advertised.
     .addOption(
