@@ -1,0 +1,410 @@
+/*
+ * SonarQube CLI
+ * Copyright (C) SonarSource Sàrl
+ * mailto:info AT sonarsource DOT com
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Integration tests for the CliInitExecuted and CliProjectInitCreationAttempted events of `sonar init`
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+
+import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
+
+import {
+  readCommandEvents,
+  readInitExecutedEvents,
+  readProjectInitEvents,
+} from '../../../_common/telemetry-helpers.ts';
+import type { FakeSonarQubeServerBuilder } from '../../harness';
+import { TestHarness } from '../../harness';
+import { git, initGitRepo } from '../hook/git-test-helpers.ts';
+
+const TOKEN = 'init-token';
+const ORG = 'my-org';
+const GITHUB_REMOTE = 'https://github.com/example/repository.git';
+const TIMEOUT = { timeout: 30000 };
+const INTEGRATE_PROMPT = 'Set up your coding agents';
+
+describe('sonar init telemetry', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
+    harness.state().withTelemetryEnabled();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  function newCloudServer() {
+    return harness.newFakeServer().asSonarCloud().withAuthToken(TOKEN);
+  }
+
+  async function signInToCloud(configure: (server: FakeSonarQubeServerBuilder) => void = () => {}) {
+    const builder = newCloudServer();
+    configure(builder);
+    const server = await builder.start();
+    harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+    return server;
+  }
+
+  function withRemote(url: string) {
+    initGitRepo(harness.cwd.path);
+    git(['remote', 'add', 'origin', url], harness.cwd.path);
+  }
+
+  function interactive() {
+    harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+  }
+
+  function runEvent() {
+    const events = readInitExecutedEvents(harness.sonarUserHome.path);
+    expect(events).toHaveLength(1);
+    return events[0].event_payload;
+  }
+
+  function projectEvents(): unknown[] {
+    return readProjectInitEvents(harness.sonarUserHome.path).map((event) => event.event_payload);
+  }
+
+  async function confirmNewProject(session: ReturnType<typeof harness.runInteractive>) {
+    await session.waitText('Project name');
+    session.keyEnter();
+    await session.waitText('Project visibility');
+    session.keyEnter();
+  }
+
+  it(
+    'reports an already set up directory, sharing the invocation id of the command event',
+    async () => {
+      const server = await signInToCloud((s) => s.withProject('mapped'));
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          project: {
+            projectKey: 'mapped',
+            serverUrl: server.recordedAuthServerUrl(),
+            organization: ORG,
+            path: '.',
+          },
+        }),
+      );
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      const run = runEvent();
+      expect(run).toMatchObject({
+        steps: ['login:already_done', 'detect:already_done', 'integrate:skipped'],
+        project_count: 1,
+        is_interactive: false,
+        is_monorepo: false,
+      });
+      expect(run.stopped_at ?? null).toBeNull();
+      expect(run.failure_reason ?? null).toBeNull();
+      expect(run.repo_id).toHaveLength(64);
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'already_done',
+          steps: ['link:already_done'],
+          project_index: 0,
+          project_uuid: 'AYmappedlegacy',
+        }),
+      ]);
+      const [command] = readCommandEvents(harness.sonarUserHome.path);
+      expect(command.event_payload.invocation_id).toBe(run.invocation_id);
+      expect(command.event_payload.duration_ms).toBeGreaterThan(0);
+      expect(command.event_payload.user_wait_ms).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports linking the project bound to the remote, with the time spent on prompts',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+      );
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init');
+      await session.accept('Link this directory');
+      await session.waitText('Choose the folder to link');
+      session.keyEnter();
+      await session.decline(INTEGRATE_PROMPT);
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      const run = runEvent();
+      expect(run).toMatchObject({
+        steps: ['login:already_done', 'detect:success', 'integrate:declined'],
+        is_interactive: true,
+        remote_host: 'github',
+      });
+      expect(run.user_wait_ms).toBeGreaterThan(0);
+      expect(run.duration_ms).toBeGreaterThanOrEqual(run.user_wait_ms as number);
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'link_existing',
+          steps: ['link:success'],
+          project_uuid: 'AYbound_projectlegacy',
+        }),
+      ]);
+      const [command] = readCommandEvents(harness.sonarUserHome.path);
+      expect(command.event_payload.user_wait_ms).toBeGreaterThan(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports creating a project bound to the repository',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s
+          .withOrganizations([
+            { key: ORG, name: ORG, alm: { key: 'github' }, actions: { admin: true } },
+          ])
+          .withDopRepositories(ORG, [
+            { id: 'repo-1', name: 'repository', slug: 'example/repository' },
+          ]),
+      );
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init');
+      await session.accept('Bind this repository');
+      await session.decline(INTEGRATE_PROMPT);
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(runEvent().steps).toEqual([
+        'login:already_done',
+        'detect:success',
+        'org_bind:already_done',
+        'integrate:declined',
+      ]);
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'bound_new',
+          steps: ['project_bind:success', 'create_project:success'],
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports creating a project without binding and skipping its first analysis',
+    async () => {
+      await signInToCloud();
+      initGitRepo(harness.cwd.path);
+
+      const result = await harness.run('init --non-interactive --create --project my-key');
+
+      expect(result.exitCode).toBe(0);
+      const run = runEvent();
+      expect(run.steps).toEqual(['login:already_done', 'detect:success', 'integrate:skipped']);
+      expect(run.remote_host ?? null).toBeNull();
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'unbound_new',
+          steps: ['project_bind:skipped', 'create_project:success', 'first_analysis:skipped'],
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports declining every option as a cancellation at the declined creation',
+    async () => {
+      interactive();
+      await signInToCloud();
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init');
+      await session.decline('Bind this repository');
+      await confirmNewProject(session);
+      await session.decline('Create this project');
+      await session.decline(INTEGRATE_PROMPT);
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(runEvent()).toMatchObject({
+        stopped_at: 'create_project',
+        failure_reason: 'cancelled',
+      });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'unbound_new',
+          steps: ['project_bind:declined', 'create_project:declined'],
+          stopped_at: 'create_project',
+          failure_reason: 'cancelled',
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports a sign-in failure without any project event',
+    async () => {
+      const result = await harness.run('init --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(runEvent()).toMatchObject({
+        steps: ['login:failed'],
+        stopped_at: 'login',
+        failure_reason: 'auth',
+        project_count: 0,
+      });
+      expect(projectEvents()).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports a declined organization creation as no_org, before any project is known',
+    async () => {
+      interactive();
+      const server = await newCloudServer().withOrganizations([]).start();
+      harness.cwd.writeFile(
+        'sonar-project.properties',
+        `sonar.host.url=${server.recordedAuthServerUrl()}\n`,
+      );
+
+      const session = harness.runInteractive('init', { browserToken: TOKEN });
+      await session.decline('Create an organization now?');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(runEvent()).toMatchObject({
+        steps: ['login:success', 'create_org:declined', 'integrate:skipped'],
+        stopped_at: 'create_org',
+        failure_reason: 'no_org',
+        project_count: 0,
+      });
+      expect(projectEvents()).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports a repository of another organization as other_org',
+    async () => {
+      await signInToCloud((s) => s.withGitRemoteBoundInOtherOrg(GITHUB_REMOTE));
+      withRemote(GITHUB_REMOTE);
+
+      const result = await harness.run('init --non-interactive');
+
+      expect(result.exitCode).toBe(1);
+      expect(runEvent()).toMatchObject({
+        steps: ['login:already_done', 'detect:failed'],
+        stopped_at: 'detect',
+        failure_reason: 'other_org',
+      });
+      expect(projectEvents()).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports Ctrl+C at the integrate offer as a cancellation of the run',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
+      );
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init');
+      await session.accept('Link this directory');
+      await session.waitText('Choose the folder to link');
+      session.keyEnter();
+      await session.waitText(INTEGRATE_PROMPT);
+      session.keyCtrlC();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(1);
+      expect(runEvent()).toMatchObject({
+        steps: ['login:already_done', 'detect:success', 'integrate:failed'],
+        stopped_at: 'integrate',
+        failure_reason: 'cancelled',
+      });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({ steps: ['link:success'], failure_reason: null }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports each monorepo root, and a failed one without stopping the run',
+    async () => {
+      await signInToCloud((s) =>
+        s.withProject('api-key').withProjectCreateRejected('{"errors":[{"msg":"rejected"}]}'),
+      );
+      initGitRepo(harness.cwd.path);
+      harness.cwd.writeFile('api/.keep', '');
+      harness.cwd.writeFile('web/.keep', '');
+
+      await harness.run('init --monorepo --non-interactive --root api=api-key --root web=web-key');
+
+      const run = runEvent();
+      expect(run).toMatchObject({ is_monorepo: true, project_count: 2 });
+      expect(run.stopped_at ?? null).toBeNull();
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          project_index: 0,
+          init_path: 'link_existing',
+          steps: ['link:success'],
+          project_uuid: 'AYapi-keylegacy',
+        }),
+        expect.objectContaining({
+          project_index: 1,
+          init_path: 'unbound_new',
+          steps: ['project_bind:skipped', 'create_project:failed'],
+          stopped_at: 'create_project',
+          failure_reason: 'unknown',
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'emits no init event for a dry run',
+    async () => {
+      await signInToCloud();
+      initGitRepo(harness.cwd.path);
+
+      const result = await harness.run(
+        'init --dry-run --non-interactive --create --project my-key',
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(readInitExecutedEvents(harness.sonarUserHome.path)).toEqual([]);
+      expect(projectEvents()).toEqual([]);
+      expect(readCommandEvents(harness.sonarUserHome.path)).toHaveLength(1);
+    },
+    TIMEOUT,
+  );
+});
