@@ -26,8 +26,10 @@ import type { Console } from '@/core/ui/console.ts';
 import { assertGithubComUrl, resolveDopSetting } from '../dop-setting.ts';
 import {
   assertOnPremiseConnection,
+  DRY_RUN_REPORT_FILE,
   readOptionFile,
   readReposFile,
+  REPORT_FILE,
   runWithRepoProgress,
   writeReportFile,
 } from '../shared.ts';
@@ -36,6 +38,7 @@ import type {
   FailedResult,
   OnboardCiOptions,
   OnboardCiResults,
+  OpenedResult,
   RepoProject,
   SkippedResult,
 } from '../types.ts';
@@ -49,15 +52,11 @@ export interface OnboardCiGithubOptions extends OnboardCiOptions, WorkflowOption
   workflowTemplate?: string;
 }
 
-interface GithubSkippedResult extends SkippedResult {
-  prUrl?: string;
-}
-
-type GithubResults = OnboardCiResults<RepoProject & { prUrl: string }, GithubSkippedResult>;
+type GithubResults = OnboardCiResults<OpenedResult, SkippedResult>;
 
 interface DryRunResults {
   wouldOpenPr: RepoProject[];
-  wouldSkip: GithubSkippedResult[];
+  wouldSkip: SkippedResult[];
   failed: FailedResult[];
 }
 
@@ -162,9 +161,9 @@ export async function onboardCiGithub(
   github: GitHubClient,
   options: OnboardCiGithubOptions,
   console: Console,
-  workflowTemplate?: string,
+  workflowTemplateContent?: string,
 ): Promise<void> {
-  assertOnPremiseConnection(connection.auth, 'github');
+  assertOnPremiseConnection(connection.auth, 'GitHub');
   const sqs = new OnboardCiSqsClient(connection.httpClient);
   const setting = await resolveDopSetting(sqs.bindings, 'github', options.bindingName);
   assertGithubComUrl(setting.url);
@@ -190,7 +189,7 @@ export async function onboardCiGithub(
     components: sqs.components,
     serverUrl: connection.auth.serverUrl,
     options,
-    workflowTemplate,
+    workflowTemplate: workflowTemplateContent,
   };
 
   if (options.dryRun) {
@@ -201,7 +200,7 @@ export async function onboardCiGithub(
       failed.length ? 'error' : 'success',
       'No changes were made',
     );
-    writeReportFile(results, 'sonar-onboard-ci-report-dry.json', console);
+    writeReportFile(results, DRY_RUN_REPORT_FILE, console);
     if (failed.length) {
       throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
         remediationHint: 'See the per-repository errors above and the report file for details.',
@@ -216,7 +215,7 @@ export async function onboardCiGithub(
     `Opened ${opened.length.toLocaleString()} PRs · ${skipped.length.toLocaleString()} skipped · ${failed.length.toLocaleString()} failed`,
     failed.length ? 'error' : 'success',
   );
-  writeReportFile(results, 'sonar-onboard-ci-report.json', console);
+  writeReportFile(results, REPORT_FILE, console);
   if (failed.length) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',
