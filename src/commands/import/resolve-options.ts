@@ -479,11 +479,10 @@ async function resolveOnboardingMode(
   // instead of ending the command, so the user can pick a different mode rather than starting
   // `sonar import` over from scratch.
   for (;;) {
-    const choice = await console.selectPrompt('How do you want to import repositories?', options);
-
-    if (choice === null) {
-      throw new CommandFailedError('Repository selection cancelled');
-    }
+    const choice = await console
+      .selectPromptResult('How do you want to import repositories?', options)
+      .onCancellation('Repository selection cancelled')
+      .orThrow();
     if (choice === RECOMMENDED) {
       return { kind: 'streaming', collection, regex: undefined };
     }

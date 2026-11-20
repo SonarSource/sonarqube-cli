@@ -31,6 +31,7 @@ import type {
   SearchPromptOptions,
   SelectOption,
 } from './console.ts';
+import type { PromptResult } from './prompt-result.ts';
 import type { TreePromptOptions } from './tree/tree-source.ts';
 
 /**
@@ -43,6 +44,53 @@ import type { TreePromptOptions } from './tree/tree-source.ts';
  */
 export class QuietConsole implements Console {
   constructor(private readonly delegate: Console) {}
+
+  textPromptResult(message: string): PromptResult<string> {
+    return this.delegate.textPromptResult(message);
+  }
+
+  passwordPromptResult(message: string): PromptResult<string> {
+    return this.delegate.passwordPromptResult(message);
+  }
+
+  confirmPromptResult(message: string, defaultValue: boolean): PromptResult<boolean> {
+    return this.delegate.confirmPromptResult(message, defaultValue);
+  }
+
+  selectPromptResult<T>(message: string, options: SelectOption<T>[]): PromptResult<T> {
+    return this.delegate.selectPromptResult(message, options);
+  }
+
+  searchPromptResult<T>(message: string, options: SearchPromptOptions<T>): PromptResult<T> {
+    return this.delegate.searchPromptResult(message, options);
+  }
+
+  treePromptResult<T>(message: string, options: TreePromptOptions<T>): PromptResult<T> {
+    return this.delegate.treePromptResult(message, options);
+  }
+
+  treeMultiSelectPromptResult<T>(
+    message: string,
+    options: TreePromptOptions<T>,
+  ): PromptResult<T[]> {
+    return this.delegate.treeMultiSelectPromptResult(message, options);
+  }
+
+  multiSelectPromptResult<T>(
+    message: string,
+    options: MultiSelectOption<T>[],
+    loadMoreOpts?: MultiSelectPromptOptions<T>,
+  ): PromptResult<T[]> {
+    return this.delegate.multiSelectPromptResult(message, options, loadMoreOpts);
+  }
+
+  promptUntilValidResult(
+    message: string,
+    isValid: (value: string) => boolean,
+    errorMessage: string,
+  ): PromptResult<string> {
+    return this.delegate.promptUntilValidResult(message, isValid, errorMessage);
+  }
 
   canPrompt(): boolean {
     return this.delegate.canPrompt();
