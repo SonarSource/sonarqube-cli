@@ -25,24 +25,21 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
+import type { DevOpsPlatform } from '@/core/devops/token.ts';
 import type { SonarHttpClient } from '@/core/server/http-client.ts';
 import { UsersClient } from '@/core/server/users.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 const CONCURRENCY_LIMIT = 10;
+export const REPORT_FILE = 'sonar-onboard-ci-report.json';
+export const DRY_RUN_REPORT_FILE = 'sonar-onboard-ci-report-dry.json';
 
 export function addOnboardCiOptions(
   command: SonarCommand,
   options: {
     reposFileDescription: string;
     pullRequestTrigger: 'mr' | 'pr';
-    // Leave unset when templates must distinguish explicit generation flags from defaults.
-    generationDefaults?: {
-      sonarTokenVarName: string;
-      triggerOn: 'both';
-      scannerProperty: string[];
-    };
   },
 ): SonarCommand {
   return command
@@ -54,18 +51,15 @@ export function addOnboardCiOptions(
     .option(
       '--sonar-token-var-name <name>',
       'Name of the existing CI secret or variable holding the SonarQube analysis token; uses SONAR_TOKEN when omitted',
-      options.generationDefaults?.sonarTokenVarName,
     )
     .option(
       '--trigger-on <events>',
       `CI triggers: ${options.pullRequestTrigger} | main | both; uses both when omitted`,
-      options.generationDefaults?.triggerOn,
     )
     .option(
       '--scanner-property <key=value>',
       'Additional scanner property to inject into the CI configuration (repeatable; e.g. --scanner-property sonar.exclusions=**/*.test.ts)',
       collectScannerProperty,
-      options.generationDefaults?.scannerProperty,
     )
     .option('--dry-run', 'Preview what would be processed without making any changes', false);
 }
@@ -74,10 +68,10 @@ export function collectScannerProperty(value: string, previous: string[] = []): 
   return [...previous, value];
 }
 
-export function assertOnPremiseConnection(auth: ResolvedAuth, platform: 'gitlab' | 'github'): void {
+export function assertOnPremiseConnection(auth: ResolvedAuth, platform: DevOpsPlatform): void {
   if (auth.connectionType !== 'on-premise') {
     throw new CommandFailedError(
-      `sonar admin onboard-ci ${platform} requires a SonarQube Server connection.`,
+      `sonar admin onboard-ci ${platform.toLowerCase()} requires a SonarQube Server connection.`,
       {
         remediationHint: "Authenticate against SonarQube Server with 'sonar auth login' and retry.",
       },

@@ -58,9 +58,9 @@ import {
 } from './admin/onboard-ci/github/index.ts';
 import {
   onboardCiGitlab,
-  type OnboardCiGitlabOptions,
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
+import type { OnboardCiGitlabInput } from './admin/onboard-ci/gitlab/types.ts';
 import {
   addOnboardCiOptions,
   assertOnPremiseConnection,
@@ -1362,11 +1362,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     reposFileDescription:
       'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group',
     pullRequestTrigger: 'mr',
-    generationDefaults: {
-      sonarTokenVarName: 'SONAR_TOKEN',
-      triggerOn: 'both',
-      scannerProperty: [],
-    },
   })
     .description('Open CI configuration MRs across GitLab repositories')
     .requiredOption(
@@ -1379,9 +1374,9 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       '--job-template <file>',
       "Path to a YAML file defining the full CI job body (image, tags, stage, script, variables, rules); {{SONAR_PROJECT_KEY}} is substituted with each repository's SonarQube project key. Mutually exclusive with --stage, --allow-failure, --trigger-on, --scanner-property, and --sonar-token-var-name",
     )
-    .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
-      validateOnboardCiGitlabOptions(options);
-      assertOnPremiseConnection(ctx.auth, 'gitlab');
+    .authenticatedAction(async (ctx, input: OnboardCiGitlabInput) => {
+      const options = validateOnboardCiGitlabOptions(input);
+      assertOnPremiseConnection(ctx.auth, 'GitLab');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const gitlabToken = await resolveDevOpsToken(ctx.console, 'GitLab');
       return onboardCiGitlab(ctx.connection, gitlabToken, options, ctx.console);
@@ -1400,7 +1395,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .authenticatedAction(async (ctx, options: OnboardCiGithubOptions) => {
       const workflowTemplate = validateOnboardCiGithubOptions(options);
-      assertOnPremiseConnection(ctx.auth, 'github');
+      assertOnPremiseConnection(ctx.auth, 'GitHub');
       await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const token = await resolveDevOpsToken(ctx.console, 'GitHub');
       const github = new GitHubClient(token, {

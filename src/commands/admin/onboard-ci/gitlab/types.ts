@@ -22,11 +22,10 @@ import type {
   FailedResult,
   OnboardCiOptions,
   OnboardCiResults as SharedOnboardCiResults,
+  OpenedResult,
   RepoProject,
   SkippedResult as SharedSkippedResult,
 } from '../types.ts';
-
-export type { FailedResult } from '../types.ts';
 
 export const GITLAB_DEFAULT_STAGES = new Set(['.pre', 'build', 'test', 'deploy', '.post']);
 export const GITLAB_IMPLICIT_STAGES = new Set(['.pre', '.post']);
@@ -56,17 +55,15 @@ export interface OnboardCiGitlabOptions extends OnboardCiOptions {
   jobTemplate?: string;
 }
 
-export interface OpenedResult extends RepoProject {
-  mrUrl: string;
-}
+type GenerationOption = 'sonarTokenVarName' | 'triggerOn' | 'scannerProperty';
+export type OnboardCiGitlabInput = Omit<OnboardCiGitlabOptions, GenerationOption> &
+  Partial<Pick<OnboardCiGitlabOptions, GenerationOption>>;
 
-export interface SkippedResult extends SharedSkippedResult<SkipReason> {
-  mrUrl?: string;
-}
+export type SkippedResult = SharedSkippedResult;
 
 export type OnboardCiResults = SharedOnboardCiResults<OpenedResult, SkippedResult>;
 export type DryRunEntry = RepoProject;
-export type DryRunSkippedEntry = SharedSkippedResult<SkipReason>;
+export type DryRunSkippedEntry = SharedSkippedResult;
 export type DryRunFailedEntry = FailedResult;
 
 export interface DryRunResults {
