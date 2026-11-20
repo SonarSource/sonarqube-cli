@@ -29,9 +29,14 @@ export interface RepoProject {
   projectKey: string;
 }
 
-export interface SkippedResult<Reason extends string = string> {
+export interface OpenedResult extends RepoProject {
+  prUrl: string;
+}
+
+export interface SkippedResult {
   repo: string;
-  reason: Reason;
+  reason: string;
+  prUrl?: string;
 }
 
 export interface FailedResult {

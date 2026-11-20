@@ -447,6 +447,13 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('MR already open');
       expect(gitlabServer.createdMrs).toHaveLength(0);
+      expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson().skipped).toEqual([
+        {
+          repo: `${GROUP}/open-mr-repo`,
+          reason: 'MR_ALREADY_OPEN',
+          prUrl: 'http://localhost/mr/1',
+        },
+      ]);
     });
 
     it('preserves the branch when an MR opens after assessment', async () => {
@@ -1258,7 +1265,7 @@ describe('sonar admin onboard-ci gitlab', () => {
     });
 
     it('writes a report file', async () => {
-      await startServers(harness, {
+      const { gitlabServer } = await startServers(harness, {
         gitlabProjects: [
           {
             id: 64,
@@ -1279,10 +1286,15 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.stdout).toContain('sonar-onboard-ci-report.json');
       expect(harness.cwd.exists('sonar-onboard-ci-report.json')).toBe(true);
       const report = harness.cwd.file('sonar-onboard-ci-report.json').asJson() as {
-        opened: Array<{ repo: string; projectKey: string; mrUrl: string }>;
+        opened: Array<{ repo: string; projectKey: string; prUrl: string }>;
       };
-      expect(report.opened).toHaveLength(1);
-      expect(report.opened[0].repo).toBe(`${GROUP}/my-repo`);
+      expect(report.opened).toEqual([
+        {
+          repo: `${GROUP}/my-repo`,
+          projectKey: 'mycompany_my-repo',
+          prUrl: gitlabServer.createdMrs[0].webUrl,
+        },
+      ]);
     });
 
     it('injects --scanner-property values into the generated CI script', async () => {

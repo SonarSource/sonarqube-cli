@@ -61,7 +61,7 @@ export interface ProcessRepoContext {
 }
 
 export type RepoClassification =
-  | { outcome: 'skip'; reason: SkipReason; message: string; mrUrl?: string }
+  | { outcome: 'skip'; reason: SkipReason; message: string; prUrl?: string }
   | {
       outcome: 'proceed';
       ciFilePath: string;
@@ -70,7 +70,7 @@ export type RepoClassification =
     };
 
 export type ExecuteResult =
-  | { outcome: 'opened'; projectKey: string; mrUrl: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
   | Extract<RepoClassification, { outcome: 'skip' }>;
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
@@ -210,7 +210,7 @@ export async function classifyRepo(
       outcome: 'skip',
       reason: SkipReason.MrAlreadyOpen,
       message: 'skipped (MR already open)',
-      mrUrl: openMrs[0].web_url,
+      prUrl: openMrs[0].web_url,
     };
   }
 
@@ -228,19 +228,19 @@ export async function executeRepo(
     await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
   } catch (err) {
     if (isBranchAlreadyExistsError(err)) {
-      const mrUrl = await deleteBranchUnlessRequestOpen({
+      const prUrl = await deleteBranchUnlessRequestOpen({
         getOpenRequestUrl: async () => {
           const openMrs = await ctx.gitlab.listOpenMergeRequests(repo.id, CI_BRANCH);
           return openMrs[0]?.web_url;
         },
         deleteBranch: () => ctx.gitlab.deleteBranch(repo.id, CI_BRANCH),
       });
-      if (mrUrl) {
+      if (prUrl) {
         return {
           outcome: 'skip',
           reason: SkipReason.MrAlreadyOpen,
           message: 'skipped (MR already open)',
-          mrUrl,
+          prUrl,
         };
       }
       await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
@@ -281,7 +281,7 @@ export async function executeRepo(
         ctx.options.triggerOn,
       );
 
-  const mrUrl = await ctx.gitlab.createMergeRequest(
+  const prUrl = await ctx.gitlab.createMergeRequest(
     repo.id,
     CI_BRANCH,
     repo.default_branch,
@@ -289,5 +289,5 @@ export async function executeRepo(
     mrDescription,
   );
 
-  return { outcome: 'opened', projectKey, mrUrl };
+  return { outcome: 'opened', projectKey, prUrl };
 }
