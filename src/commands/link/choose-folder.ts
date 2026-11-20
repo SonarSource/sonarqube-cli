@@ -20,7 +20,7 @@
 
 // Picks the directory for `sonar link` when neither a project key nor --path is given.
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError, type CommandFailedError } from '@/core/commands/command-error.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import {
   type ConfigItem,
@@ -52,7 +52,7 @@ function linkedDetail(linked: readonly ConfigItem[], dir: string): string | unde
 }
 
 /** Thrown when the user leaves a folder prompt; `sonar init` catches it to step back to the previous choice. */
-export class FolderSelectionCancelledError extends CommandFailedError {
+export class FolderSelectionCancelledError extends CancelledByUserError {
   constructor() {
     super('Folder selection cancelled');
     this.name = 'FolderSelectionCancelledError';
