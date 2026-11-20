@@ -30,18 +30,11 @@ import {
   readOptionFile,
   readReposFile,
   REPORT_FILE,
-  runWithRepoProgress,
+  runRepos,
   writeReportFile,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
-import type {
-  FailedResult,
-  OnboardCiOptions,
-  OnboardCiResults,
-  OpenedResult,
-  RepoProject,
-  SkippedResult,
-} from '../types.ts';
+import type { OnboardCiOptions } from '../types.ts';
 import type { ProcessRepoContext } from './processor.ts';
 import { assessRepo, executeRepo } from './processor.ts';
 import type { WorkflowOptions } from './templates.ts';
@@ -50,14 +43,6 @@ import { validateWorkflowOptions } from './templates.ts';
 export interface OnboardCiGithubOptions extends OnboardCiOptions, WorkflowOptions {
   org: string;
   workflowTemplate?: string;
-}
-
-type GithubResults = OnboardCiResults<OpenedResult, SkippedResult>;
-
-interface DryRunResults {
-  wouldOpenPr: RepoProject[];
-  wouldSkip: SkippedResult[];
-  failed: FailedResult[];
 }
 
 export function validateOnboardCiGithubOptions(
@@ -82,78 +67,6 @@ function filterRepos(repos: GitHubRepo[], path: string, console: Console): GitHu
     }
   }
   return repos.filter((repo) => entries.has(repo.name) || entries.has(repo.full_name));
-}
-
-async function runDryRun(
-  ctx: ProcessRepoContext,
-  repos: GitHubRepo[],
-  bindings: ReadonlyMap<string, string>,
-  console: Console,
-): Promise<DryRunResults> {
-  const results: DryRunResults = { wouldOpenPr: [], wouldSkip: [], failed: [] };
-  await runWithRepoProgress(
-    repos,
-    (repo) => repo.full_name,
-    async (repo, progress) => {
-      const name = repo.full_name;
-      const github = ctx.github.withRetryHandler((message) => {
-        progress.warn(`${name}: ${message}`);
-      });
-      const result = await assessRepo({ ...ctx, github }, repo, bindings);
-      switch (result.outcome) {
-        case 'proceed':
-          results.wouldOpenPr.push({ repo: name, projectKey: result.projectKey });
-          progress.update(name, 'done', 'would open PR');
-          break;
-        case 'skip':
-          results.wouldSkip.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
-          progress.update(name, 'done', result.reason);
-          break;
-        case 'failed':
-          results.failed.push({ repo: name, error: result.error });
-          progress.update(name, 'failed', result.error);
-          break;
-      }
-    },
-    console,
-  );
-  return results;
-}
-
-async function runLive(
-  ctx: ProcessRepoContext,
-  repos: GitHubRepo[],
-  bindings: ReadonlyMap<string, string>,
-  console: Console,
-): Promise<GithubResults> {
-  const results: GithubResults = { opened: [], skipped: [], failed: [] };
-  await runWithRepoProgress(
-    repos,
-    (repo) => repo.full_name,
-    async (repo, progress) => {
-      const name = repo.full_name;
-      const github = ctx.github.withRetryHandler((message) => {
-        progress.warn(`${name}: ${message}`);
-      });
-      const result = await executeRepo({ ...ctx, github }, repo, bindings);
-      switch (result.outcome) {
-        case 'opened':
-          results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
-          progress.update(name, 'done', 'PR opened');
-          break;
-        case 'skip':
-          results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
-          progress.update(name, 'done', result.reason);
-          break;
-        case 'failed':
-          results.failed.push({ repo: name, error: result.error });
-          progress.update(name, 'failed', result.error);
-          break;
-      }
-    },
-    console,
-  );
-  return results;
 }
 
 export async function onboardCiGithub(
@@ -192,15 +105,33 @@ export async function onboardCiGithub(
     workflowTemplate: workflowTemplateContent,
   };
 
+  const processRepo = options.dryRun ? assessRepo : executeRepo;
+  const results = await runRepos(
+    repos,
+    (repo) => repo.full_name,
+    (repo, progress) => {
+      const github = ctx.github.withRetryHandler((message) => {
+        progress.warn(`${repo.full_name}: ${message}`);
+      });
+      return processRepo({ ...ctx, github }, repo, bindings);
+    },
+    'PR',
+    console,
+  );
+
   if (options.dryRun) {
-    const results = await runDryRun(ctx, repos, bindings, console);
-    const { wouldOpenPr, wouldSkip, failed } = results;
+    const dryRunResults = {
+      wouldOpenPr: results.wouldOpen,
+      wouldSkip: results.skipped,
+      failed: results.failed,
+    };
+    const { wouldOpenPr, wouldSkip, failed } = dryRunResults;
     console.outro(
       `Would open ${wouldOpenPr.length.toLocaleString()} PRs · ${wouldSkip.length.toLocaleString()} skipped · ${failed.length.toLocaleString()} failed`,
       failed.length ? 'error' : 'success',
       'No changes were made',
     );
-    writeReportFile(results, DRY_RUN_REPORT_FILE, console);
+    writeReportFile(dryRunResults, DRY_RUN_REPORT_FILE, console);
     if (failed.length) {
       throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
         remediationHint: 'See the per-repository errors above and the report file for details.',
@@ -209,13 +140,12 @@ export async function onboardCiGithub(
     return;
   }
 
-  const results = await runLive(ctx, repos, bindings, console);
   const { opened, skipped, failed } = results;
   console.outro(
     `Opened ${opened.length.toLocaleString()} PRs · ${skipped.length.toLocaleString()} skipped · ${failed.length.toLocaleString()} failed`,
     failed.length ? 'error' : 'success',
   );
-  writeReportFile(results, REPORT_FILE, console);
+  writeReportFile({ opened, skipped, failed }, REPORT_FILE, console);
   if (failed.length) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',
