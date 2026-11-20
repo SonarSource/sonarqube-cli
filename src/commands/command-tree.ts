@@ -44,7 +44,7 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
-import { SilentConsole } from '@/core/ui/silent-console.ts';
+import { QuietConsole } from '@/core/ui/quiet-console.ts';
 import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
@@ -1465,7 +1465,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     const isHook = (actionCommand as SonarCommand).commandAndSubcommand().command === 'hook';
     await runPostUpdateActionsSafely({
       ...postUpdateDeps,
-      console: isHook ? new SilentConsole() : console,
+      console: isHook ? new QuietConsole(console, { silent: true }) : console,
     });
   });
 
