@@ -22,7 +22,7 @@
 // discovery first, then a live server-side search the user narrows by typing.
 
 import { authMatchesRecordedConnection } from '@/core/auth/recorded-connection.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import { canonicalizePath, isAncestorOrSelf } from '@/core/io/fs-utils.ts';
 import logger from '@/core/observability/logger.ts';
@@ -48,7 +48,7 @@ export function assertCanChooseProject(
 }
 
 /** Thrown when the user leaves a picker prompt; `sonar init` catches it to carry on without a link. */
-export class ProjectSelectionCancelledError extends CommandFailedError {
+export class ProjectSelectionCancelledError extends CancelledByUserError {
   constructor() {
     super('Project selection cancelled');
     this.name = 'ProjectSelectionCancelledError';

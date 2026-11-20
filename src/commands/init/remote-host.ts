@@ -20,6 +20,8 @@
 
 import { parseGitRemote } from '@/core/host/git/remote-parse.ts';
 
+import type { InitRemoteHost } from './telemetry/init-telemetry.ts';
+
 // Public hosts of the platforms `sonar import` binds today: GitHub and Azure DevOps.
 const GITHUB_HOST = 'github.com';
 const AZURE_HOSTS = new Set(['dev.azure.com', 'ssh.dev.azure.com']);
@@ -30,6 +32,8 @@ const AZURE_HTTPS_PATH = /^\/[^/]+\/([^/]+)\/_git\/([^/]+)$/;
 const AZURE_LEGACY_PATH = /^\/(?:[^/]+\/)?([^/]+)\/_git\/([^/]+)$/;
 const LEGACY_DEFAULT_COLLECTION = 'defaultcollection';
 const AZURE_SSH_PATH = /^\/v3\/[^/]+\/([^/]+)\/([^/]+)$/;
+const GITLAB_HOST = 'gitlab.com';
+const BITBUCKET_HOST = 'bitbucket.org';
 
 function isAzureHost(host: string): boolean {
   return AZURE_HOSTS.has(host) || host.endsWith(AZURE_LEGACY_HOST_SUFFIX);
@@ -43,6 +47,19 @@ function isBindableHost(host: string): boolean {
 export function isBindableRemote(remote: string): boolean {
   const host = parseGitRemote(remote)?.host;
   return host !== undefined && isBindableHost(host);
+}
+
+/** The platform hosting the remote, for telemetry; null without a remote. Self-hosted instances are `other`. */
+export function classifyRemoteHost(remote: string | undefined): InitRemoteHost | null {
+  if (!remote) {
+    return null;
+  }
+  const host = parseGitRemote(remote)?.host;
+  if (host === GITHUB_HOST) return 'github';
+  if (host === GITLAB_HOST) return 'gitlab';
+  if (host !== undefined && isAzureHost(host)) return 'azure_devops';
+  if (host === BITBUCKET_HOST) return 'bitbucket';
+  return 'other';
 }
 
 /**
