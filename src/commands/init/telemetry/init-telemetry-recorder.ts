@@ -72,6 +72,10 @@ class StepLog<S extends InitStepId> {
     return this.pending;
   }
 
+  has(step: S): boolean {
+    return this.steps.some((entry) => entry.step === step);
+  }
+
   /** Marks the step in progress, if any, as failed; the first stop recorded wins. */
   fail(error: unknown): Stop<S> {
     if (this.stop) {
@@ -110,7 +114,12 @@ export class ProjectInitRecorder {
   constructor(
     readonly index: number,
     private path: InitPathId,
+    readonly label?: string,
   ) {}
+
+  initPath(): InitPathId {
+    return this.path;
+  }
 
   setPath(path: InitPathId): void {
     this.path = path;
@@ -134,6 +143,10 @@ export class ProjectInitRecorder {
 
   inProgress(): ProjectStepId | undefined {
     return this.log.inProgress();
+  }
+
+  has(step: ProjectStepId): boolean {
+    return this.log.has(step);
   }
 
   fail(error: unknown): Stop<ProjectStepId> {
@@ -196,15 +209,39 @@ export class InitTelemetryRecorder {
     this.log.record(step, outcome);
   }
 
-  /** The roots are known: the run reports one project event per path, in this order. */
-  setProjects(paths: readonly InitPathId[]): ProjectInitRecorder[] {
-    this.projects = paths.map((path, index) => new ProjectInitRecorder(index, path));
+  has(step: RunStepId): boolean {
+    return this.log.has(step);
+  }
+
+  /**
+   * The roots are known: the run reports one project event per path, in this order. `labels`
+   * name the roots, so a step that handles several of them can find each one.
+   */
+  setProjects(paths: readonly InitPathId[], labels?: readonly string[]): ProjectInitRecorder[] {
+    this.projects = paths.map(
+      (path, index) => new ProjectInitRecorder(index, path, labels?.[index]),
+    );
     this.active = this.projects.length === 1 ? this.projects[0] : undefined;
     return this.projects;
   }
 
+  /** A single-project run knows its directory's path once detection settles; later calls update it. */
+  detected(path: InitPathId): ProjectInitRecorder {
+    if (!this.projects) {
+      this.log.record('detect', path === 'already_done' ? 'already_done' : 'success');
+      this.setProjects([path]);
+    }
+    const [project] = this.projects ?? [];
+    project.setPath(path);
+    return project;
+  }
+
   project(index: number): ProjectInitRecorder | undefined {
     return this.projects?.[index];
+  }
+
+  projectLabelled(label: string): ProjectInitRecorder | undefined {
+    return this.projects?.find((project) => project.label === label);
   }
 
   /** The root a thrown error is attributed to while it is being onboarded. */
