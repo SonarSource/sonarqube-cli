@@ -436,9 +436,14 @@ export class TerminalConsole implements Console {
     return result ?? null;
   }
 
-  async confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
+  async confirmPrompt(
+    message: string,
+    defaultValue: boolean,
+    channel: OutputChannel = 'stdout',
+  ): Promise<boolean | null> {
     const cancellation = promptCancellation();
     const prompt = new ConfirmPrompt({
+      output: channel === 'stderr' ? process.stderr : process.stdout,
       signal: cancellation.signal,
       active: 'Yes',
       inactive: 'No',

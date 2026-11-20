@@ -58,6 +58,7 @@ export interface RunOptions {
 
 /** Options for `harness.runInteractive()`. Stdin is driven by the session. */
 export type RunInteractiveOptions = RunOptions & {
+  promptChannel?: 'stdout' | 'stderr';
   /** Per-`waitText` timeout. Defaults to `timeoutMs`. */
   waitTimeoutMs?: number;
 };

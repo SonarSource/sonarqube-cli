@@ -20,6 +20,8 @@
 
 // Interactive CLI session — wait for prompt text, type, then waitFinish or kill
 
+import type { OutputChannel } from '@/core/ui/console.ts';
+
 import { DEFAULT_CLI_TIMEOUT_MS, spawnCliProcess, tryDeliverToken } from './cli-runner.js';
 import type { CliResult, InteractiveProcessHandle, SessionStdin } from './types.js';
 
@@ -37,6 +39,7 @@ const TAB = '\t';
 export type PromptText = string | RegExp;
 
 export type InteractiveSessionOptions = {
+  promptChannel?: OutputChannel;
   timeoutMs?: number;
   waitTimeoutMs?: number;
   startedAt?: number;
@@ -118,6 +121,7 @@ export function startInteractiveSession(
   env: Record<string, string>,
   options: {
     cwd: string;
+    promptChannel?: OutputChannel;
     timeoutMs?: number;
     waitTimeoutMs?: number;
     binaryPath?: string;
@@ -134,6 +138,7 @@ export function startInteractiveSession(
   return InteractiveSession.fromProcess(spawned.proc, {
     timeoutMs: spawned.timeoutMs,
     startedAt: spawned.startedAt,
+    promptChannel: options.promptChannel,
     waitTimeoutMs: options.waitTimeoutMs,
     browserToken: options.browserToken,
     browserTokenName: options.browserTokenName,
@@ -142,6 +147,7 @@ export function startInteractiveSession(
 
 export class InteractiveSession {
   private readonly proc: InteractiveProcessHandle;
+  private readonly promptChannel: OutputChannel;
   private readonly timeoutMs: number;
   private readonly waitTimeoutMs: number;
   private readonly startedAt: number;
@@ -154,9 +160,9 @@ export class InteractiveSession {
 
   private rawStdout = '';
   private rawStderr = '';
-  /** Byte offset into `rawStdout` (monotonic — that buffer only grows). */
+  /** Byte offset into the prompt stream (monotonic — that buffer only grows). */
   private consumed = 0;
-  /** Raw-stdout offset at the last write; next waitText ignores output already on screen. */
+  /** Prompt-stream offset at the last write; next waitText ignores output already on screen. */
   private barrier = 0;
   private tokenDelivered = false;
   private stdinEnded = false;
@@ -176,6 +182,7 @@ export class InteractiveSession {
 
   private constructor(proc: InteractiveProcessHandle, options: InteractiveSessionOptions) {
     this.proc = proc;
+    this.promptChannel = options.promptChannel ?? 'stdout';
     this.timeoutMs = options.timeoutMs ?? DEFAULT_CLI_TIMEOUT_MS;
     this.waitTimeoutMs = options.waitTimeoutMs ?? this.timeoutMs;
     this.startedAt = options.startedAt ?? Date.now();
@@ -218,10 +225,11 @@ export class InteractiveSession {
     const deadline = Date.now() + timeoutMs;
     while (true) {
       const rawStart = Math.max(this.consumed, this.barrier);
-      const window = stripControlSequences(this.rawStdout.slice(rawStart));
+      const raw = this.promptOutput();
+      const window = stripControlSequences(raw.slice(rawStart));
       const matchEnd = findPromptMatch(window, prompt);
       if (matchEnd !== null) {
-        this.consumed = rawOffsetAfterStripped(this.rawStdout, rawStart, matchEnd);
+        this.consumed = rawOffsetAfterStripped(raw, rawStart, matchEnd);
         return;
       }
       if (this.timedOut) {
@@ -239,7 +247,7 @@ export class InteractiveSession {
 
   write(keys: string): void {
     const stdin = this.assertWritable();
-    this.barrier = this.rawStdout.length;
+    this.barrier = this.promptOutput().length;
     stdin.write(this.encoder.encode(keys));
   }
 
@@ -360,10 +368,14 @@ export class InteractiveSession {
     }
   }
 
+  private promptOutput(): string {
+    return this.promptChannel === 'stderr' ? this.rawStderr : this.rawStdout;
+  }
+
   private waitError(prefix: string, prompt: PromptText, suffix = ''): Error {
     const after = suffix === '' ? '' : ` ${suffix}`;
     return new Error(
-      `${prefix} ${formatPrompt(prompt)}${after} on stdout\n--- stdout ---\n${stripControlSequences(this.rawStdout)}\n--- stderr ---\n${stripControlSequences(this.rawStderr)}`,
+      `${prefix} ${formatPrompt(prompt)}${after} on ${this.promptChannel}\n--- stdout ---\n${stripControlSequences(this.rawStdout)}\n--- stderr ---\n${stripControlSequences(this.rawStderr)}`,
     );
   }
 
