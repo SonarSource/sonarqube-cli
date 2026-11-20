@@ -72,8 +72,6 @@ export const SONARCLOUD_STAGING_URL = REGIONS.eu.stagingWebUrl;
 export const SONARCLOUD_STAGING_API_URL = REGIONS.eu.stagingApiUrl;
 export const SONARCLOUD_US_STAGING_URL = REGIONS.us.stagingWebUrl;
 export const SONARCLOUD_US_STAGING_API_URL = REGIONS.us.stagingApiUrl;
-export const SONARCLOUD_AU_STAGING_URL = REGIONS.au.stagingWebUrl;
-export const SONARCLOUD_AU_STAGING_API_URL = REGIONS.au.stagingApiUrl;
 
 function stagingHost(
   serverUrl: string,
