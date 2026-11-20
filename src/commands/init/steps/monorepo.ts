@@ -215,6 +215,13 @@ async function createRootProject(
       reason: `Project '${mapping.projectKey}' already exists and was not linked, and --bind never creates an unbound project. Name it with --root ${path}=<project key> to map it.`,
     };
   }
+  if (!deps.allowUnbound && outcome.kind === 'declined') {
+    return {
+      path,
+      kind: 'failed',
+      reason: `No project was linked or created: creating one without repository binding is not available yet. Name an existing project with --root ${path}=<project key>, or use --bind.`,
+    };
+  }
   if (outcome.kind === 'linked' || outcome.kind === 'unbound') {
     return { path, kind: outcome.kind, projectKey: outcome.projectKey };
   }

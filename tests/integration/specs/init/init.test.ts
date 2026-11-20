@@ -3253,4 +3253,128 @@ describe('sonar init', () => {
       TIMEOUT,
     );
   });
+
+  describe('without alpha, creating an unbound project is unavailable', () => {
+    beforeEach(() => {
+      harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'false' });
+    });
+
+    function createRequests(server: FakeSonarQubeServer) {
+      return server.getRecordedRequests().filter((r) => r.path === '/api/projects/create');
+    }
+
+    async function startServer() {
+      const server = await newCloudServer().start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+      return server;
+    }
+
+    it(
+      'leaves the creation options out of the help',
+      async () => {
+        const result = await harness.run('init --help');
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toMatch(/link an existing\s+Sonar project/);
+        for (const option of ['--create', '--project', '--name', '--visibility']) {
+          expect(result.stdout).not.toContain(option);
+        }
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'rejects --create as an unknown option',
+      async () => {
+        const result = await harness.run('init --non-interactive --create');
+
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stdout + result.stderr).toContain("unknown option '--create'");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'asks for --link without a terminal, and creates nothing',
+      async () => {
+        const server = await startServer();
+        initGitRepo(harness.cwd.path);
+
+        const result = await harness.run('init --non-interactive');
+
+        expect(result.exitCode).toBe(2);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("Run 'sonar init' again with --link <key>.");
+        expect(output).not.toContain('--create');
+        expect(createRequests(server)).toEqual([]);
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'ends without creating a project when the user declines to bind the repository',
+      async () => {
+        const server = await startServer();
+        withRemote(GITHUB_REMOTE);
+        harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+
+        const session = harness.runInteractive('init');
+        await session.decline('Bind this repository');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout + result.stderr).toContain(
+          'Creating a project without repository binding is not available yet.',
+        );
+        expect(result.stdout).toContain('No project was created.');
+        expect(result.stdout + result.stderr).not.toContain('Project name');
+        expect(createRequests(server)).toEqual([]);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'ends without claiming no project exists when the user declines the bound project',
+      async () => {
+        const server = await newCloudServer()
+          .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+          .start();
+        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+        withRemote(GITHUB_REMOTE);
+        harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
+
+        const session = harness.runInteractive('init');
+        await session.decline('Link this directory to it?');
+        await session.decline('another existing project');
+        await session.decline(INTEGRATE_PROMPT);
+        const result = await session.waitFinish();
+
+        expect(result.exitCode).toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain('No project was created.');
+        expect(output).not.toContain('No Sonar project exists');
+        expect(createRequests(server)).toEqual([]);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      'reports a monorepo root without a project as failed instead of creating it',
+      async () => {
+        const server = await startServer();
+        initGitRepo(harness.cwd.path);
+        harness.cwd.writeFile('web/.keep', '');
+
+        const result = await harness.run('init --monorepo --non-interactive --root web=web-key');
+
+        expect(result.stdout + result.stderr).toContain(
+          'creating one without repository binding is not available yet',
+        );
+        expect(createRequests(server)).toEqual([]);
+      },
+      TIMEOUT,
+    );
+  });
 });
