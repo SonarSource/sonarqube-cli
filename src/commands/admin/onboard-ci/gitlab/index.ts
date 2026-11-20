@@ -174,6 +174,7 @@ async function preflight(
   connection: SonarConnection,
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
+  console: Console,
 ): Promise<{
   sqsClient: OnboardCiSqsClient;
   gitlabClient: GitLabClient;
@@ -197,7 +198,11 @@ async function preflight(
     key: dopSettingKey,
     url: gitlabUrl,
   } = await resolveDopSetting(sqsClient.bindings, 'gitlab', options.bindingName);
-  const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken);
+  const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken, {
+    onRetry: (message) => {
+      console.warn(message);
+    },
+  });
 
   return { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl };
 }
@@ -244,6 +249,7 @@ export async function onboardCiGitlab(
     connection,
     gitlabToken,
     options,
+    console,
   );
 
   console.intro('Onboard CI configuration', 'GitLab');
@@ -275,7 +281,12 @@ export async function onboardCiGitlab(
   const results = await runRepos(
     repos,
     (repo) => repo.path_with_namespace,
-    (repo) => processRepo(ctx, repo, bindingMap),
+    (repo, progress) => {
+      const gitlab = ctx.gitlab.withRetryHandler((message) => {
+        progress.warn(`${repo.path_with_namespace}: ${message}`);
+      });
+      return processRepo({ ...ctx, gitlab }, repo, bindingMap);
+    },
     'MR',
     console,
   );
