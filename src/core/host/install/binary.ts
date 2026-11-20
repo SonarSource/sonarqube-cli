@@ -178,7 +178,7 @@ async function downloadAndInstall(
   return { skipped: false, binaryPath };
 }
 
-function cleanupStagingDirectory(stagingDir: string): void {
+export function cleanupStagingDirectory(stagingDir: string): void {
   try {
     rmSync(stagingDir, { recursive: true, force: true });
   } catch (err) {
@@ -186,7 +186,7 @@ function cleanupStagingDirectory(stagingDir: string): void {
   }
 }
 
-function publishBinary(stagedPath: string, binaryPath: string, force: boolean): boolean {
+export function publishBinary(stagedPath: string, binaryPath: string, force: boolean): boolean {
   if (force) {
     // Never unlink the destination: a failed Windows replacement must preserve it.
     renameSync(stagedPath, binaryPath);
