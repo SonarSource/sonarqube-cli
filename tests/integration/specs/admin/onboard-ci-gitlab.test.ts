@@ -23,6 +23,7 @@ import * as yaml from 'js-yaml';
 
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
+import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
 import type { FakeGitLabProject, FakeGitLabServer } from '../../harness/fake-gitlab-server.js';
 import type { FakeSonarQubeServer } from '../../harness/fake-sonarqube-server.js';
 import { TestHarness } from '../../harness/index.js';
@@ -487,9 +488,21 @@ describe('sonar admin onboard-ci gitlab', () => {
         ],
       });
 
+      harness.state().withTelemetryEnabled();
       const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
 
       expect(result.exitCode).toBe(0);
+      const events = readTelemetryEvents(
+        harness.sonarUserHome.path,
+        'Analytics.Cli.CliCiOnboarding',
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0].event_payload).toMatchObject({
+        platform: 'GitLab',
+        created_count: 0,
+        existing_count: 1,
+        failed_count: 0,
+      });
       expect(result.stdout).toContain('MR already open');
       expect(gitlabServer.createdMrs).toHaveLength(0);
       expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson().skipped).toEqual([
@@ -816,9 +829,15 @@ describe('sonar admin onboard-ci gitlab', () => {
         ],
       });
 
+      harness.state().withTelemetryEnabled();
       const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP} --dry-run`);
 
       expect(result.exitCode).toBe(0);
+      const events = readTelemetryEvents(
+        harness.sonarUserHome.path,
+        'Analytics.Cli.CliCiOnboarding',
+      );
+      expect(events).toHaveLength(0);
       expect(result.stdout).toContain('DRY RUN');
       expect(result.stdout).toContain('would open MR');
       expect(result.stdout).toContain('Would open 1 MRs · skip 1 · fail 0');
@@ -1253,9 +1272,21 @@ describe('sonar admin onboard-ci gitlab', () => {
         ],
       });
 
+      harness.state().withTelemetryEnabled();
       const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
 
       expect(result.exitCode).toBe(0);
+      const events = readTelemetryEvents(
+        harness.sonarUserHome.path,
+        'Analytics.Cli.CliCiOnboarding',
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0].event_payload).toMatchObject({
+        platform: 'GitLab',
+        created_count: 1,
+        existing_count: 0,
+        failed_count: 0,
+      });
       expect(result.stdout).toContain('Opened 1 MRs');
       expect(gitlabServer.createdMrs).toHaveLength(1);
       expect(gitlabServer.createdMrs[0].projectId).toBe(60);
@@ -1500,9 +1531,21 @@ describe('sonar admin onboard-ci gitlab', () => {
         branchFailureProjectIds: [93],
       });
 
+      harness.state().withTelemetryEnabled();
       const result = await harness.run(`admin onboard-ci gitlab --group ${GROUP}`);
 
       expect(result.exitCode).toBe(1);
+      const events = readTelemetryEvents(
+        harness.sonarUserHome.path,
+        'Analytics.Cli.CliCiOnboarding',
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0].event_payload).toMatchObject({
+        platform: 'GitLab',
+        created_count: 1,
+        existing_count: 0,
+        failed_count: 1,
+      });
       expect(result.stdout).toContain('Opened 1 MRs');
       expect(result.stderr).toContain('1 repositories failed to process');
       expect(gitlabServer.createdMrs).toHaveLength(1);

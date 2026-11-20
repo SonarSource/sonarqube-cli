@@ -33,6 +33,7 @@ import {
   runRepos,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
+import type { OnboardingTelemetry } from '../telemetry.ts';
 import type { ProcessRepoContext, RepoWithBranch } from './processor.ts';
 import { assessRepo, executeRepo } from './processor.ts';
 import { normalizeJobTemplate } from './templates.ts';
@@ -235,6 +236,7 @@ export async function onboardCiGitlab(
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
   console: Console,
+  telemetry: OnboardingTelemetry | null = null,
 ): Promise<void> {
   const jobTemplateContent =
     options.jobTemplate !== undefined ? readJobTemplateFile(options.jobTemplate) : undefined;
@@ -283,6 +285,7 @@ export async function onboardCiGitlab(
     },
     'MR',
     console,
+    telemetry,
   );
 
   if (options.dryRun) {

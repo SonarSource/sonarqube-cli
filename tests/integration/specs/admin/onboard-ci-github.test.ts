@@ -20,7 +20,7 @@
 
 import { mkdirSync } from 'node:fs';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import {
   onboardCiGithub,
@@ -29,6 +29,7 @@ import {
 } from '@/commands/admin/onboard-ci/github/index.ts';
 import { CI_BRANCH } from '@/commands/admin/onboard-ci/github/processor.ts';
 import { WORKFLOW_PATH } from '@/commands/admin/onboard-ci/github/templates.ts';
+import { OnboardingTelemetry } from '@/commands/admin/onboard-ci/telemetry.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
@@ -40,6 +41,7 @@ import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
 import { isolateNetworkEnv } from '../../../_common/network-env.ts';
+import { readTelemetryEvents } from '../../../_common/telemetry-helpers.ts';
 import type { FakeGitHubRepository } from '../../harness/fake-github-server.ts';
 import { TestHarness } from '../../harness/index.js';
 
@@ -127,12 +129,20 @@ describe('GitHub bulk CI onboarding', () => {
       httpClient: new SonarHttpClient(server.baseUrl(), 'server-token'),
     };
     const client = new GitHubClient('github-token', { baseUrl: github.baseUrl() });
+    const facts: OnboardingTelemetry[] = [];
     return {
       github,
       server,
       client,
-      run: (options = OPTIONS, workflowTemplate = validateOnboardCiGithubOptions(options)) =>
-        onboardCiGithub(connection, client, options, console, workflowTemplate),
+      facts,
+      run: (options = OPTIONS, workflowTemplate = validateOnboardCiGithubOptions(options)) => {
+        let fact: OnboardingTelemetry | null = null;
+        if (!options.dryRun) {
+          fact = new OnboardingTelemetry('GitHub');
+          facts.push(fact);
+        }
+        return onboardCiGithub(connection, client, options, console, workflowTemplate, fact);
+      },
     };
   }
 
@@ -176,7 +186,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('reports opened, skipped and failed repositories, finishing the batch before failing', async () => {
-    const { run, server } = await setup(
+    const { run, server, facts } = await setup(
       [
         { name: 'sample' },
         {
@@ -190,6 +200,12 @@ describe('GitHub bulk CI onboarding', () => {
 
     const error = await run().catch((error: unknown) => error);
     expect(error).toMatchObject({ message: '1 repositories failed to process.' });
+    expect(facts[0].payload).toEqual({
+      platform: 'GitHub',
+      created_count: 1,
+      existing_count: 0,
+      failed_count: 1,
+    });
 
     expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson()).toEqual({
       opened: [
@@ -212,7 +228,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('previews rendered workflows without any GitHub or SonarQube writes', async () => {
-    const { run, github, server } = await setup([
+    const { run, github, server, facts } = await setup([
       { name: 'sample' },
       {
         name: 'configured',
@@ -221,6 +237,7 @@ describe('GitHub bulk CI onboarding', () => {
     ]);
 
     await run({ ...OPTIONS, dryRun: true });
+    expect(facts).toHaveLength(0);
 
     expect(harness.cwd.file('sonar-onboard-ci-report-dry.json').asJson()).toEqual({
       wouldOpenPr: [{ repo: `${ORG}/sample`, projectKey: 'sample-key' }],
@@ -258,10 +275,24 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('does not open a second PR on a subsequent run', async () => {
-    const { run, github } = await setup();
+    const { run, github, facts } = await setup();
 
     await run();
     await run();
+    expect(facts.map(({ payload }) => payload)).toEqual([
+      {
+        platform: 'GitHub',
+        created_count: 1,
+        existing_count: 0,
+        failed_count: 0,
+      },
+      {
+        platform: 'GitHub',
+        created_count: 0,
+        existing_count: 1,
+        failed_count: 0,
+      },
+    ]);
 
     expect(harness.cwd.file('sonar-onboard-ci-report.json').asJson()).toEqual({
       opened: [],
@@ -279,10 +310,34 @@ describe('GitHub bulk CI onboarding', () => {
         .getRecordedRequests()
         .filter((request) => request.method === 'POST' && request.path.endsWith('/pulls')),
     ).toHaveLength(1);
+    await run({ ...OPTIONS, dryRun: true });
+    expect(facts).toHaveLength(2);
+  });
+
+  it('does not count a recovered PR as created when the creation response is lost', async () => {
+    const { run, client, facts } = await setup();
+    const createPr = client.createPullRequest.bind(client);
+    const spy = spyOn(GitHubClient.prototype, 'createPullRequest').mockImplementationOnce(
+      async (...args) => {
+        await createPr(...args);
+        throw new Error('Response lost');
+      },
+    );
+    try {
+      await run();
+      expect(facts[0].payload).toEqual({
+        platform: 'GitHub',
+        created_count: 0,
+        existing_count: 0,
+        failed_count: 0,
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('uses the validated workflow template even if its file changes', async () => {
-    const { run, client } = await setup();
+    const { run, client, facts } = await setup();
     harness.cwd.writeFile('workflow.yml', TEMPLATE);
     const path = harness.cwd.file('workflow.yml').path;
 
@@ -291,6 +346,7 @@ describe('GitHub bulk CI onboarding', () => {
     harness.cwd.writeFile('workflow.yml', 'changed after validation');
 
     await run(options, workflowTemplate);
+    expect(facts[0].payload.created_count).toBe(1);
 
     expect(await client.getFileContent(`${ORG}/sample`, WORKFLOW_PATH, CI_BRANCH)).toBe(
       TEMPLATE.replaceAll('{{SONAR_PROJECT_KEY}}', 'sample-key'),
@@ -334,16 +390,42 @@ describe('GitHub bulk CI onboarding', () => {
       .start();
     harness.withAuth(server.baseUrl(), 'server-token');
 
+    harness.state().withTelemetryEnabled();
     const result = await harness.run(`admin onboard-ci github --org ${ORG}`, {
       extraEnv: { GITHUB_TOKEN: '', SONARQUBE_CLI_MOCK_TTY: '1' },
     });
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain('Provision Projects');
+    const events = readTelemetryEvents(harness.sonarUserHome.path, 'Analytics.Cli.CliCiOnboarding');
+    expect(events).toHaveLength(1);
+    expect(events[0].event_payload).toMatchObject({
+      platform: 'GitHub',
+      created_count: 0,
+      existing_count: 0,
+      failed_count: 0,
+    });
+    await harness.run(`admin onboard-ci github --org ${ORG} --dry-run`);
+    expect(
+      readTelemetryEvents(harness.sonarUserHome.path, 'Analytics.Cli.CliCiOnboarding'),
+    ).toHaveLength(1);
     expect(result.stdout).not.toContain('GitHub personal access token');
     expect(
       server.getRecordedRequests().some((request) => request.path.includes('dop-translation')),
     ).toBe(false);
+  });
+
+  it('does not queue onboarding telemetry when telemetry is disabled', async () => {
+    const { server } = await setup();
+    harness.withAuth(server.baseUrl(), 'server-token');
+    const result = await harness.run(`admin onboard-ci github --org ${ORG}`, {
+      extraEnv: { GITHUB_TOKEN: '' },
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('GitHub token required');
+    expect(
+      readTelemetryEvents(harness.sonarUserHome.path, 'Analytics.Cli.CliCiOnboarding'),
+    ).toEqual([]);
   });
 
   it('rejects Cloud before prompting for a GitHub token', async () => {
