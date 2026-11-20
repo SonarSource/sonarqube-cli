@@ -31,6 +31,8 @@ import { UsersClient } from '@/core/server/users.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import type { RepoOutcome, RepoRunResults } from './types.ts';
+
 const CONCURRENCY_LIMIT = 10;
 export const REPORT_FILE = 'sonar-onboard-ci-report.json';
 export const DRY_RUN_REPORT_FILE = 'sonar-onboard-ci-report-dry.json';
@@ -104,12 +106,14 @@ export function readReposFile(path: string): Set<string> {
   );
 }
 
-export async function runWithRepoProgress<Repo>(
+export async function runRepos<Repo>(
   repos: Repo[],
   repoName: (repo: Repo) => string,
-  processRepo: (repo: Repo, progress: ConcurrentProgress) => Promise<void>,
+  processRepo: (repo: Repo, progress: ConcurrentProgress) => Promise<RepoOutcome>,
+  requestLabel: 'PR' | 'MR',
   console: Console,
-): Promise<void> {
+): Promise<RepoRunResults> {
+  const results: RepoRunResults = { opened: [], wouldOpen: [], skipped: [], failed: [] };
   const progress = new ConcurrentProgress({
     console,
     maxVisible: CONCURRENCY_LIMIT,
@@ -119,10 +123,30 @@ export async function runWithRepoProgress<Repo>(
   progress.addItems(repos.map(repoName));
   progress.start();
   await runWithConcurrencyLimit(repos, CONCURRENCY_LIMIT, async (repo) => {
-    progress.update(repoName(repo), 'running');
-    await processRepo(repo, progress);
+    const name = repoName(repo);
+    progress.update(name, 'running');
+    const result = await processRepo(repo, progress);
+    switch (result.outcome) {
+      case 'proceed':
+        results.wouldOpen.push({ repo: name, projectKey: result.projectKey });
+        progress.update(name, 'done', `would open ${requestLabel}`);
+        break;
+      case 'opened':
+        results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
+        progress.update(name, 'done', `${requestLabel} opened`);
+        break;
+      case 'skip':
+        results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
+        progress.update(name, 'done', result.message ?? result.reason);
+        break;
+      case 'failed':
+        results.failed.push({ repo: name, error: result.error });
+        progress.update(name, 'failed', result.error);
+        break;
+    }
   });
   progress.finish();
+  return results;
 }
 
 export function writeReportFile(results: object, filename: string, console: Console): void {

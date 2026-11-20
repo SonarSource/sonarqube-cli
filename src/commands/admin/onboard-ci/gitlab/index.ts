@@ -31,21 +31,14 @@ import {
   readOptionFile,
   readReposFile,
   REPORT_FILE,
-  runWithRepoProgress,
+  runRepos,
   writeReportFile,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
-import type { ClassificationEntry } from './dry-run.ts';
-import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoWithBranch } from './processor.ts';
 import { assessRepo, executeRepo } from './processor.ts';
 import { normalizeJobTemplate } from './templates.ts';
-import type {
-  DryRunResults,
-  OnboardCiGitlabInput,
-  OnboardCiGitlabOptions,
-  OnboardCiResults,
-} from './types.ts';
+import type { OnboardCiGitlabInput, OnboardCiGitlabOptions } from './types.ts';
 import { TriggerOn } from './types.ts';
 
 // GitLab CI variable names: letters, digits, underscores only, no leading digit.
@@ -234,73 +227,6 @@ async function fetchGroupData(
   return { repos, bindingMap };
 }
 
-async function runDryRun(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  console: Console,
-): Promise<DryRunResults> {
-  const classifications: ClassificationEntry[] = [];
-  const failedRepos: { repo: string; error: string }[] = [];
-  await runWithRepoProgress(
-    repos,
-    (repo) => repo.path_with_namespace,
-    async (repo, progress) => {
-      const name = repo.path_with_namespace;
-      const result = await assessRepo(ctx, repo, bindingMap);
-      switch (result.outcome) {
-        case 'proceed':
-          classifications.push({ repo, classification: result });
-          progress.update(name, 'done', 'would open MR');
-          break;
-        case 'skip':
-          classifications.push({ repo, classification: result });
-          progress.update(name, 'done', result.message);
-          break;
-        case 'failed':
-          failedRepos.push({ repo: name, error: result.error });
-          progress.update(name, 'failed', result.error);
-          break;
-      }
-    },
-    console,
-  );
-  return computeDryRunResults(classifications, failedRepos);
-}
-
-async function runLive(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  console: Console,
-): Promise<OnboardCiResults> {
-  const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
-  await runWithRepoProgress(
-    repos,
-    (repo) => repo.path_with_namespace,
-    async (repo, progress) => {
-      const name = repo.path_with_namespace;
-      const result = await executeRepo(ctx, repo, bindingMap);
-      switch (result.outcome) {
-        case 'opened':
-          results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
-          progress.update(name, 'done', 'MR opened');
-          break;
-        case 'skip':
-          results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
-          progress.update(name, 'done', result.message);
-          break;
-        case 'failed':
-          results.failed.push({ repo: name, error: result.error });
-          progress.update(name, 'failed', result.error);
-          break;
-      }
-    },
-    console,
-  );
-  return results;
-}
-
 function buildOutroMessage(opened: number, skipped: number, failed: number): string {
   return `Opened ${opened.toLocaleString()} MRs · ${skipped.toLocaleString()} skipped · ${failed.toLocaleString()} failed`;
 }
@@ -345,8 +271,21 @@ export async function onboardCiGitlab(
     jobTemplateContent,
   };
 
+  const processRepo = options.dryRun ? assessRepo : executeRepo;
+  const results = await runRepos(
+    repos,
+    (repo) => repo.path_with_namespace,
+    (repo) => processRepo(ctx, repo, bindingMap),
+    'MR',
+    console,
+  );
+
   if (options.dryRun) {
-    const dryRunResults = await runDryRun(ctx, repos, bindingMap, console);
+    const dryRunResults = {
+      wouldOpenMr: results.wouldOpen,
+      wouldSkip: results.skipped.map(({ repo, reason }) => ({ repo, reason })),
+      failed: results.failed,
+    };
     const { wouldOpenMr, wouldSkip, failed } = dryRunResults;
     console.outro(
       buildOutroMessage(wouldOpenMr.length, wouldSkip.length, failed.length),
@@ -362,7 +301,6 @@ export async function onboardCiGitlab(
     return;
   }
 
-  const results = await runLive(ctx, repos, bindingMap, console);
   const { opened, skipped, failed } = results;
   console.outro(
     buildOutroMessage(opened.length, skipped.length, failed.length),
