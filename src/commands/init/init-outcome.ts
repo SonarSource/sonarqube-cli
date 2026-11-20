@@ -19,6 +19,7 @@
  */
 
 import type { LinkedProjectIssue, LinkedProjectProblem } from './steps/linked-projects.ts';
+import type { InitFailureReason } from './telemetry/init-telemetry.ts';
 
 /**
  * The onboarding path `sonar init` selected, before anything ran.
@@ -91,7 +92,8 @@ export type MonorepoRootResult =
   | { path: string; kind: 'conflict'; projectKey: string; recordedKey: string }
   /** The user left the root out, or declined the confirmation for it. */
   | { path: string; kind: 'skipped' }
-  | { path: string; kind: 'failed'; reason: string };
+  /** `failure` classifies the error for telemetry, which never sees `reason`. */
+  | { path: string; kind: 'failed'; reason: string; failure?: InitFailureReason };
 
 /** What a `--dry-run` found it would do on the selected path. */
 export type DryRunAction =
