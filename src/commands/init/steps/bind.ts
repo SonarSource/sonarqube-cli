@@ -91,6 +91,25 @@ export async function authorizeOrganization(
   );
 }
 
+/** Records the run-level `org_bind` step around the authorization it may take. */
+export async function authorizeUnlessLinked(
+  linkedAlmKey: string | undefined,
+  api: ImportApiClient,
+  auth: ResolvedAuth,
+  orgKey: string,
+  deps: Pick<DetectDeps, 'console' | 'interactive' | 'telemetry'>,
+): Promise<string | undefined> {
+  const { telemetry } = deps;
+  if (linkedAlmKey) {
+    telemetry?.record('org_bind', 'already_done');
+    return linkedAlmKey;
+  }
+  telemetry?.begin('org_bind');
+  const almKey = await authorizeOrganization(api, auth, orgKey, deps);
+  telemetry?.record('org_bind', almKey ? 'success' : 'declined');
+  return almKey;
+}
+
 /** Each check starts only after the previous one answered and the interval has passed. */
 async function waitForAlmKey(
   api: ImportApiClient,
@@ -145,7 +164,9 @@ export async function runBoundNew(
   { projectRoot, remote, repositorySlug }: BoundNewPath,
   deps: DetectDeps,
 ): Promise<InitOutcome | UnboundNewPath> {
-  const { auth, http, console, intent } = deps;
+  const { auth, http, console, intent, telemetry } = deps;
+  const project = telemetry?.project(0);
+  project?.begin('create_project');
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
@@ -165,7 +186,7 @@ export async function runBoundNew(
       },
     };
   }
-  const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
+  const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
   if (!almKey) {
     return intent?.kind === 'bind'
       ? { kind: 'declined' }
@@ -178,6 +199,8 @@ export async function runBoundNew(
   );
 
   await writeMapping(auth, projectKey, projectRoot, console, 'created');
+  project?.record('create_project', 'success');
+  project?.setProjectKey(projectKey);
   reportProjectCreated(console, projectKey);
   await showAnalysisResults(
     http,
