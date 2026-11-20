@@ -48,6 +48,10 @@ export class QuietConsole implements Console {
     return this.delegate.canPrompt();
   }
 
+  unmeasured(): Console {
+    return new QuietConsole(this.delegate.unmeasured());
+  }
+
   private suppress(method: string, ...args: unknown[]): void {
     logger.debug(`[quiet] ${method}`, ...args.filter((arg) => arg != null && arg !== ''));
   }
