@@ -23,7 +23,7 @@ import {
   isSonarQubeCloud,
   isValidServerUrl,
 } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { discoverServerFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -46,7 +46,7 @@ export async function confirmServerTrust(
   const fromFile = configFile ? ` from ${configFile}` : '';
   const confirmed = await console.confirmPrompt(`Connect to: ${server}${fromFile}?`, false);
   if (!confirmed) {
-    throw new CommandFailedError('Login cancelled');
+    throw new CancelledByUserError('Login cancelled');
   }
 }
 
@@ -79,34 +79,34 @@ export async function resolveServer(
   return { server };
 }
 
-async function selectServerFromPrompt(console: Console): Promise<string> {
-  const serverType = await console.selectPrompt('Where would you like to connect?', [
-    { value: 'cloud', label: 'SonarQube Cloud' },
-    { value: 'server', label: 'SonarQube Server (self-hosted)' },
-  ]);
+const SERVER_SELECTION_CANCELLED = 'Server selection cancelled';
 
-  if (serverType === null) {
-    throw new CommandFailedError('Server selection cancelled');
-  }
+async function selectServerFromPrompt(console: Console): Promise<string> {
+  const serverType = await console
+    .selectPromptResult('Where would you like to connect?', [
+      { value: 'cloud', label: 'SonarQube Cloud' },
+      { value: 'server', label: 'SonarQube Server (self-hosted)' },
+    ])
+    .onCancellation(SERVER_SELECTION_CANCELLED)
+    .orThrow();
 
   if (serverType === 'cloud') {
-    const region = await console.selectPrompt('Which SonarQube Cloud region?', [
-      { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
-      { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
-    ]);
-    if (region === null) {
-      throw new CommandFailedError('Server selection cancelled');
-    }
-    return region;
+    return console
+      .selectPromptResult('Which SonarQube Cloud region?', [
+        { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
+        { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
+      ])
+      .onCancellation(SERVER_SELECTION_CANCELLED)
+      .orThrow();
   }
 
-  const url = await console.promptUntilValid(
-    'Enter server URL',
-    (v) => !!v.trim() && isValidServerUrl(v.trim()),
-    'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
-  );
-  if (url === null) {
-    throw new CommandFailedError('Server selection cancelled');
-  }
+  const url = await console
+    .promptUntilValidResult(
+      'Enter server URL',
+      (v) => !!v.trim() && isValidServerUrl(v.trim()),
+      'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
+    )
+    .onCancellation(SERVER_SELECTION_CANCELLED)
+    .orThrow();
   return url.trim();
 }

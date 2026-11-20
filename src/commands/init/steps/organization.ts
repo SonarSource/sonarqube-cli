@@ -71,8 +71,9 @@ export class OrganizationCreationDeclined extends Error {
   }
 }
 
-function creationUnavailable(): CommandFailedError {
+function creationUnavailable(cause: Error): CommandFailedError {
   return new CommandFailedError('Organization creation is not available for this account.', {
+    cause,
     remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
   });
 }
@@ -151,9 +152,11 @@ async function createWithAvailableKey(
       (error instanceof UnexpectedApiError && error.status === HTTP_NOT_FOUND)
     ) {
       logger.debug(`Organization creation unavailable: ${error.name}: ${error.message}`);
-      throw creationUnavailable();
+      throw creationUnavailable(error);
     }
-    throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`);
+    throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`, {
+      cause: error,
+    });
   }
   throw new CommandFailedError(`Could not find a free organization key for '${name}'.`, {
     remediationHint: 'Try again with a different organization name.',

@@ -20,7 +20,35 @@
 
 import { describe, expect, it } from 'bun:test';
 
-import { isBindableRemote, remoteRepositorySlug } from '@/commands/init/remote-host.ts';
+import {
+  classifyRemoteHost,
+  isBindableRemote,
+  remoteRepositorySlug,
+} from '@/commands/init/remote-host.ts';
+
+describe('classifyRemoteHost', () => {
+  it.each([
+    ['https://github.com/example/repository.git', 'github'],
+    ['git@github.com:example/repository.git', 'github'],
+    ['https://gitlab.com/example/repository.git', 'gitlab'],
+    ['git@gitlab.com:example/repository.git', 'gitlab'],
+    ['https://dev.azure.com/org/project/_git/repository', 'azure_devops'],
+    ['git@ssh.dev.azure.com:v3/org/project/repository', 'azure_devops'],
+    ['https://org.visualstudio.com/project/_git/repository', 'azure_devops'],
+    ['https://bitbucket.org/example/repository.git', 'bitbucket'],
+    ['git@bitbucket.org:example/repository.git', 'bitbucket'],
+    ['https://github.example.com/example/repository.git', 'other'],
+    ['https://gitlab.example.com/example/repository.git', 'other'],
+    ['/local/path/to/repository', 'other'],
+  ])('classifies %s as %s', (remote, host) => {
+    expect<string | null>(classifyRemoteHost(remote)).toBe(host);
+  });
+
+  it('is null without a remote', () => {
+    expect(classifyRemoteHost(undefined)).toBeNull();
+    expect(classifyRemoteHost('')).toBeNull();
+  });
+});
 
 describe('isBindableRemote', () => {
   it.each([

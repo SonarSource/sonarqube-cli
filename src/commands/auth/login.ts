@@ -39,7 +39,11 @@ import {
   generateTokenViaBrowser,
   readTokenFromStdin,
 } from '@/core/auth/token.ts';
-import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
+import {
+  CancelledByUserError,
+  CommandFailedError,
+  InvalidOptionError,
+} from '@/core/commands/command-error.ts';
 import { type CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { getToken as getKeystoreToken, normalizeServerUrl } from '@/core/host/keychain.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
@@ -410,7 +414,7 @@ async function warnIfEnvAuthPresent(
     false,
   );
   if (!proceed) {
-    throw new CommandFailedError('Login cancelled');
+    throw new CancelledByUserError('Login cancelled');
   }
 }
 
