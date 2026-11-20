@@ -124,15 +124,22 @@ describe('integrate claude — Context Augmentation', () => {
     await harness.dispose();
   });
 
-  it(
-    'installs the CAG session-start hook globally when project key + org are present',
-    async () => {
+  it.each([
+    { scaEnabled: false, packageCheckEnabled: true, expected: true },
+    { scaEnabled: true, packageCheckEnabled: true, expected: true },
+    { scaEnabled: false, packageCheckEnabled: false, expected: false },
+    { scaEnabled: true, packageCheckEnabled: false, expected: false },
+    { scaEnabled: true, packageCheckEnabled: undefined, expected: true },
+    { scaEnabled: false, packageCheckEnabled: undefined, expected: false },
+  ])(
+    'installs the CAG session-start hook globally with enabled=$scaEnabled, packageCheckEnabled=$packageCheckEnabled',
+    async ({ scaEnabled, packageCheckEnabled, expected }) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken(TOKEN)
         .withProject(PROJECT_KEY)
         .withVortexEntitlement(ORG_KEY, ORG_UUID)
-        .withScaEnabled(true)
+        .withScaEnabled(scaEnabled, { packageCheckEnabled })
         .start();
       const serverUrl = server.baseUrl();
       harness.withAuth(serverUrl, TOKEN, ORG_KEY);
@@ -166,7 +173,7 @@ describe('integrate claude — Context Augmentation', () => {
       expectRecordedCagFeature(state, {
         integrationId: CLAUDE_INTEGRATION_ID,
         targetRoot: harness.userHome.path,
-        scaEnabled: true,
+        scaEnabled: expected,
         serverUrl,
       });
     },
@@ -174,7 +181,7 @@ describe('integrate claude — Context Augmentation', () => {
   );
 
   it(
-    'records scaEnabled=false and warns when the SCA enablement check fails',
+    'records scaEnabled=false and warns when the package-check enablement check fails',
     async () => {
       // No .withScaEnabled() call → fake server returns 404 for the SCA endpoint.
       const server = await harness
@@ -203,7 +210,7 @@ describe('integrate claude — Context Augmentation', () => {
       });
 
       expect(result.exitCode).toBe(0);
-      expect(result.stderr).toContain('Could not verify SCA availability');
+      expect(result.stderr).toContain('Could not verify dependency-check availability');
       expectVortexHookInstalled(harness.userHome, 'claude', 'global');
       const state = loadState(harness);
       expectRecordedCagFeature(state, {

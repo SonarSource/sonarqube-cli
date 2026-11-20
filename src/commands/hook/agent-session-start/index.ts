@@ -161,9 +161,9 @@ async function loadSessionStartContext(
     return null;
   }
 
-  const [vortexEntitlement, scaEnabled] = await Promise.all([
+  const [vortexEntitlement, packageCheckEnabled] = await Promise.all([
     resolveVortexEntitlement(connection),
-    isScaEnabled(connection),
+    isPackageCheckEnabled(connection),
   ]);
   if (vortexEntitlement.status !== 'enabled') {
     logSkip(`Vortex entitlement is '${vortexEntitlement.status}'`);
@@ -181,7 +181,7 @@ async function loadSessionStartContext(
 
   const result = await printSessionStartContext({
     binaryPath,
-    scaEnabled,
+    scaEnabled: packageCheckEnabled,
     context: {
       workspaceDir: target.workspaceDir,
       projectKey: target.projectKey,
@@ -260,9 +260,12 @@ function contextWarning(reason: string): SessionStartOutput {
   return { userMessage, additionalContext: `Tell the user: ${userMessage}` };
 }
 
-function isScaEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
+function isPackageCheckEnabled({ auth, httpClient }: SonarConnection): Promise<boolean> {
   const client = new ScaClient(httpClient);
-  return client.checkScaEnabled(auth.connectionType, auth.orgKey).orThrow();
+  return client
+    .getPackageCheckEnablement(auth.connectionType, auth.orgKey)
+    .map((enablement) => enablement === 'enabled')
+    .orThrow();
 }
 
 function logSkip(reason: string): void {

@@ -71,8 +71,8 @@ describe('integrateCommand', () => {
   let installIntegrationSpy: Mock<
     Extract<(typeof registry)['installIntegration'], (...args: any[]) => any>
   >;
-  let getScaEnablementSpy: Mock<
-    Extract<(typeof ScaClient.prototype)['getScaEnablement'], (...args: any[]) => any>
+  let getPackageCheckEnablementSpy: Mock<
+    Extract<(typeof ScaClient.prototype)['getPackageCheckEnablement'], (...args: any[]) => any>
   >;
 
   beforeEach(() => {
@@ -82,9 +82,10 @@ describe('integrateCommand', () => {
 
     hasVortexEntitlementSpy = spyOn(VortexEntitlementClient.prototype, 'hasVortexEntitlement');
     hasVortexEntitlementSpy.mockResolvedValue({ status: 'not_entitled' });
-    getScaEnablementSpy = spyOn(ScaClient.prototype, 'getScaEnablement').mockReturnValue(
-      okAsync('not_enabled'),
-    );
+    getPackageCheckEnablementSpy = spyOn(
+      ScaClient.prototype,
+      'getPackageCheckEnablement',
+    ).mockReturnValue(okAsync('not_enabled'));
 
     loadStateSpy = spyOn(stateRepository, 'loadState').mockReturnValue(getDefaultState('test'));
     updateStateSpy = spyOn(stateRepository, 'updateState').mockImplementation((update) =>
@@ -101,7 +102,7 @@ describe('integrateCommand', () => {
     hasVortexEntitlementSpy.mockRestore();
     checkTokenStatusSpy.mockRestore();
     installIntegrationSpy.mockRestore();
-    getScaEnablementSpy.mockRestore();
+    getPackageCheckEnablementSpy.mockRestore();
   });
 
   it('shows intro message', async () => {
@@ -163,7 +164,7 @@ describe('integrateCommand', () => {
 
   it('installs Vortex through the declarative installer in a single call', async () => {
     mockVortexEntitlement(true);
-    getScaEnablementSpy.mockReturnValue(okAsync('enabled'));
+    getPackageCheckEnablementSpy.mockReturnValue(okAsync('enabled'));
 
     await integrateClaude({}, CLOUD_CTX);
 

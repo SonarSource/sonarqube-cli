@@ -40,6 +40,7 @@ const TEST_TIMEOUT = { timeout: 15000 };
 interface SetupOptions {
   isVortexEntitled?: boolean;
   isScaEnabled?: boolean;
+  isPackageCheckEnabled?: boolean;
   isAuthenticated?: boolean;
   isProjectDiscoverable?: boolean;
   hasPartialProjectConfig?: boolean;
@@ -56,7 +57,8 @@ describe('sonar hook agent-session-start', () => {
 
   async function setup({
     isVortexEntitled = true,
-    isScaEnabled = false,
+    isScaEnabled,
+    isPackageCheckEnabled,
     isAuthenticated = true,
     isProjectDiscoverable = true,
     hasPartialProjectConfig = false,
@@ -75,8 +77,10 @@ describe('sonar hook agent-session-start', () => {
         allowed: isVortexEntitled,
         hasEntitlement: isVortexEntitled,
       });
-    if (isScaEnabled) {
-      builder.withScaEnabled(true);
+    if (isScaEnabled !== undefined || isPackageCheckEnabled !== undefined) {
+      builder.withScaEnabled(isScaEnabled ?? false, {
+        packageCheckEnabled: isPackageCheckEnabled,
+      });
     }
     const server = await builder.start();
     serverUrl = server.baseUrl();
@@ -297,6 +301,35 @@ describe('sonar hook agent-session-start', () => {
       const invocations = cagSessionStartInvocations();
       expect(invocations).toHaveLength(1);
       expect(invocations[0].env.SONAR_CONTEXT_PROJECT).toBe(TEST_PROJECT);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it.each([
+    { isScaEnabled: false, isPackageCheckEnabled: true, expected: true },
+    { isScaEnabled: true, isPackageCheckEnabled: true, expected: true },
+    { isScaEnabled: false, isPackageCheckEnabled: false, expected: false },
+    { isScaEnabled: true, isPackageCheckEnabled: false, expected: false },
+    { isScaEnabled: true, isPackageCheckEnabled: undefined, expected: true },
+    { isScaEnabled: false, isPackageCheckEnabled: undefined, expected: false },
+  ])(
+    'passes --sca-enabled=$expected for enabled=$isScaEnabled, packageCheckEnabled=$isPackageCheckEnabled',
+    async ({ isScaEnabled, isPackageCheckEnabled, expected }) => {
+      await setup({ isScaEnabled, isPackageCheckEnabled });
+
+      const result = await runHook('claude', {
+        session_id: 'sess-1',
+        cwd: harness.cwd.path,
+        hook_event_name: 'SessionStart',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout.trim()).hookSpecificOutput.additionalContext).toBe(
+        EXPECTED_CONTEXT,
+      );
+      const invocations = cagSessionStartInvocations();
+      expect(invocations).toHaveLength(1);
+      expect(invocations[0].argv).toContain(`--sca-enabled=${expected}`);
     },
     TEST_TIMEOUT,
   );

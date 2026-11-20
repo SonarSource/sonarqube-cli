@@ -51,6 +51,90 @@ const SAMPLE_RESPONSE: ScaIssuesReleasesResponse = {
   page: { pageIndex: 1, pageSize: 10, total: 1 },
 };
 
+describe.each([
+  { connectionType: 'cloud', serverUrl: SONARCLOUD_URL, endpoint: '/sca/feature-enabled' },
+  {
+    connectionType: 'on-premise',
+    serverUrl: SERVER_URL,
+    endpoint: '/api/v2/sca/feature-enabled',
+  },
+] as const)('ScaClient enablement ($connectionType)', ({ connectionType, serverUrl, endpoint }) => {
+  let client: ScaClient;
+  let fetchSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    client = new ScaClient(new SonarHttpClient(serverUrl, TOKEN));
+  });
+
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+  });
+
+  it.each([
+    {
+      response: { enabled: false, packageCheckEnabled: true },
+      sca: 'not_enabled',
+      packageCheck: 'enabled',
+    },
+    {
+      response: { enabled: true, packageCheckEnabled: true },
+      sca: 'enabled',
+      packageCheck: 'enabled',
+    },
+    {
+      response: { enabled: false, packageCheckEnabled: false },
+      sca: 'not_enabled',
+      packageCheck: 'not_enabled',
+    },
+    {
+      response: { enabled: true, packageCheckEnabled: false },
+      sca: 'enabled',
+      packageCheck: 'not_enabled',
+    },
+    { response: { enabled: true }, sca: 'enabled', packageCheck: 'enabled' },
+    { response: { enabled: false }, sca: 'not_enabled', packageCheck: 'not_enabled' },
+  ])(
+    'resolves $response to SCA=$sca and package checks=$packageCheck',
+    async ({ response, sca, packageCheck }) => {
+      fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse(response));
+
+      const [scaEnablement, packageCheckEnablement] = await Promise.all([
+        client.getScaEnablement(connectionType, 'my-org').orThrow(),
+        client.getPackageCheckEnablement(connectionType, 'my-org').orThrow(),
+      ]);
+
+      expect(scaEnablement).toBe(sca);
+      expect(packageCheckEnablement).toBe(packageCheck);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      for (const [requestUrl] of fetchSpy.mock.calls) {
+        const url = new URL(String(requestUrl));
+        expect(url.pathname).toBe(endpoint);
+        expect(url.searchParams.get('organization')).toBe(
+          connectionType === 'cloud' ? 'my-org' : null,
+        );
+      }
+    },
+  );
+
+  it.each([401, 404, 500])('returns check_failed for HTTP %i', async (status) => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status }));
+
+    expect(await client.getPackageCheckEnablement(connectionType, 'my-org').orThrow()).toBe(
+      'check_failed',
+    );
+    expect(await client.getScaEnablement(connectionType, 'my-org').orThrow()).toBe('check_failed');
+  });
+
+  it('returns check_failed on a network failure', async () => {
+    fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('unreachable'));
+
+    expect(await client.getPackageCheckEnablement(connectionType, 'my-org').orThrow()).toBe(
+      'check_failed',
+    );
+    expect(await client.getScaEnablement(connectionType, 'my-org').orThrow()).toBe('check_failed');
+  });
+});
+
 describe('ScaClient.getWorstIssuesReleases', () => {
   let client: ScaClient;
   let fetchSpy: ReturnType<typeof spyOn>;

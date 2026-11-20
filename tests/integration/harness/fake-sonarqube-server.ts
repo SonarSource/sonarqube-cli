@@ -617,6 +617,7 @@ export class FakeSonarQubeServerBuilder {
   private sqaaStatusBody?: string;
   private sqaaPayloadLimit?: { maxRequestSize?: number; maxFiles?: number };
   private scaEnabled?: boolean;
+  private packageCheckEnabled?: boolean;
   private cagEntitlementStatusCode?: number;
   private cagEntitlementStatusBody?: string;
   private sqaaEntitlementStatusCode?: number;
@@ -1032,8 +1033,9 @@ export class FakeSonarQubeServerBuilder {
    * When unset (default), both endpoints return 404 to simulate a server
    * without Sonar Advanced Security installed.
    */
-  withScaEnabled(enabled: boolean): this {
+  withScaEnabled(enabled: boolean, options: { packageCheckEnabled?: boolean } = {}): this {
     this.scaEnabled = enabled;
+    this.packageCheckEnabled = options.packageCheckEnabled;
     return this;
   }
 
@@ -1198,6 +1200,7 @@ export class FakeSonarQubeServerBuilder {
       cagEntitlementOrgs,
       privateProjectsEntitlements,
       scaEnabled,
+      packageCheckEnabled,
       cagEntitlementStatusCode,
       cagEntitlementStatusBody,
       sqaaEntitlementStatusCode,
@@ -2320,7 +2323,7 @@ export class FakeSonarQubeServerBuilder {
               headers: { 'Content-Type': 'application/json' },
             });
           }
-          return new Response(JSON.stringify({ enabled: scaEnabled }), {
+          return new Response(JSON.stringify({ enabled: scaEnabled, packageCheckEnabled }), {
             headers: { 'Content-Type': 'application/json' },
           });
         }
