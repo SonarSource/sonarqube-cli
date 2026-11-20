@@ -255,4 +255,50 @@ describe('InitTelemetryRecorder', () => {
 
     expect(ctx.telemetryFacts()).toHaveLength(1);
   });
+
+  it('records detection once for a single-project run and follows its path changes', async () => {
+    const recorder = new InitTelemetryRecorder(false);
+    recorder.begin('detect');
+    recorder.detected('bound_new').record('project_bind', 'declined');
+    recorder.detected('unbound_new').record('create_project', 'success');
+
+    const { run, projects } = await emit(recorder);
+
+    expect(run.steps).toEqual(['detect:success']);
+    expect(projects).toHaveLength(1);
+    expect(projects[0]).toMatchObject({
+      init_path: 'unbound_new',
+      steps: ['project_bind:declined', 'create_project:success'],
+    });
+  });
+
+  it('records an already set up directory as an already done detection', async () => {
+    const recorder = new InitTelemetryRecorder(false);
+    recorder.detected('already_done');
+
+    const { run } = await emit(recorder);
+
+    expect(run.steps).toEqual(['detect:already_done']);
+  });
+
+  it('finds monorepo roots by their label', () => {
+    const recorder = new InitTelemetryRecorder(true);
+    const [api, web] = recorder.setProjects(['link_existing', 'unbound_new'], ['api', 'web']);
+
+    expect(recorder.projectLabelled('web')).toBe(web);
+    expect(recorder.projectLabelled('api')).toBe(api);
+    expect(recorder.projectLabelled('docs')).toBeUndefined();
+  });
+
+  it('tells which steps were reached', () => {
+    const recorder = new InitTelemetryRecorder(false);
+    recorder.record('login', 'success');
+    const [project] = recorder.setProjects(['unbound_new']);
+    project.record('project_bind', 'skipped');
+
+    expect(recorder.has('login')).toBe(true);
+    expect(recorder.has('create_org')).toBe(false);
+    expect(project.has('project_bind')).toBe(true);
+    expect(project.has('link')).toBe(false);
+  });
 });
