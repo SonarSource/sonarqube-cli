@@ -24,7 +24,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as readline from 'node:readline';
 
 import { isSonarQubeCloud } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
 import { openBrowser } from '@/core/host/browser.ts';
 import { startLoopbackServer } from '@/core/host/loopback-server.ts';
 import logger from '@/core/observability/logger.ts';
@@ -311,7 +311,7 @@ export async function waitForTokenInteractive(
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
     rl.on('close', () => {
-      if (!settled) settle(undefined, new Error('Authentication cancelled'));
+      if (!settled) settle(undefined, new CancelledByUserError('Authentication cancelled'));
     });
 
     serverTokenPromise
