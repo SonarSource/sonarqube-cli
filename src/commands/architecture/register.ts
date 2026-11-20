@@ -100,7 +100,7 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
       `Current architecture or finding counts with --summary; graphs show at most ${DEFAULT_MAX_NODES} nodes, 20 dependencies and 5 feedback pairs across languages`,
     )
     .option('-p, --project <project>', 'Project key')
-    .option('--summary', 'Finding counts per language by category and type, instead of the graph')
+    .option('--summary', 'Finding counts and available coverage per language, instead of the graph')
     .option('--component <key>', 'Node key to start below, from a previous current get')
     .option('--depth <n>', 'Levels below the start node (default 1)', parseInteger)
     .option('--from <key>', 'Dependency source key, including descendants; requires --to')

@@ -27,7 +27,8 @@ import type { CurrentReadOptions } from '../../_common/dependency-query.ts';
 import { toArchitectureError } from '../../_common/errors.ts';
 import { resolveProject } from '../../_common/project.ts';
 import { defaultTextFormat, printPayload, TEXT_FORMATS } from '../../_common/read-options.ts';
-import { SUMMARY_CATEGORIES } from '../../_common/summary.ts';
+import type { Coverage, ProjectSummary } from '../../_common/summary.ts';
+import { aggregateCoverage, SUMMARY_CATEGORIES } from '../../_common/summary.ts';
 
 export async function getSummary(
   options: CurrentReadOptions,
@@ -50,6 +51,7 @@ export async function getSummary(
     throw toArchitectureError(error, project, ctx.connection.httpClient.isCloud);
   });
   const { summaries, skippedSummaries } = result;
+  const overallCoverage = aggregateCoverage(summaries, skippedSummaries);
   if (format !== 'text') {
     let message: string | undefined;
     if (skippedSummaries)
@@ -59,17 +61,33 @@ export async function getSummary(
     printPayload(ctx, format, {
       project,
       summaries,
+      ...(overallCoverage ? { overallCoverage } : {}),
       ...(skippedSummaries ? { skippedSummaries } : {}),
       ...(message ? { message } : {}),
     });
     return;
   }
+  printSummaryText(ctx, summaries, skippedSummaries, overallCoverage);
+}
+
+function formatCoverage(data: Coverage): string {
+  const percentage = data.coverage == null ? 'unavailable' : String(data.coverage) + '%';
+  return `${percentage} (${data.coveredArtifacts ?? '?'}/${data.totalArtifacts ?? '?'} artifacts)`;
+}
+
+function printSummaryText(
+  ctx: CommandAuthenticatedInvocationContext,
+  summaries: ProjectSummary[],
+  skippedSummaries: number | undefined,
+  overallCoverage: Coverage | undefined,
+): void {
   if (skippedSummaries)
     ctx.console.warn(`Skipped ${skippedSummaries} summary result(s) with unsupported languages.`);
   if (!summaries.length && !skippedSummaries)
     ctx.console.info('No architecture summaries are visible. Check project access and analysis.');
   for (const summary of summaries) {
     ctx.console.info(`${summary.language}:`);
+    if (summary.coverage) ctx.console.info(`  coverage: ${formatCoverage(summary.coverage)}`);
     for (const category of ['deviations', 'flaws', 'smells'] as const) {
       const types = SUMMARY_CATEGORIES[category];
       const counts = summary[category];
@@ -77,4 +95,5 @@ export async function getSummary(
       ctx.console.info(`  ${category}: ${counts.total} (${details})`);
     }
   }
+  if (overallCoverage) ctx.console.info(`Overall coverage: ${formatCoverage(overallCoverage)}`);
 }

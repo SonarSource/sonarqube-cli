@@ -163,7 +163,7 @@ never repeat a write or roll back automatically.
 
 The CLI architecture commands require a SonarQube Cloud connection. Check the installed MCP
 tool descriptions for their supported environments.
-Architecture coverage is not exposed by these adapters in this iteration. Do not call
+Architecture coverage is available through the summary when supported by the public API. Do not call
 unavailable operations, claim their results or substitute other analysis tools.
 
 ## Findings summary
@@ -172,7 +172,7 @@ Use \`sonar architecture current get --summary\` to read per-language counts of 
 and smells from the analyzed main branch. Use MCP \`architecture_get\` with \`target=summary\` only if
 the installed tool definition lists that target; otherwise use the CLI. Zero counts are measured; an
 empty summary means no visible summary, not a clean architecture. Unsupported languages are skipped
-and counted in the response. Numeric architecture coverage is not included.
+and counted in the response. Numeric coverage and artifact counts are included when the public API provides them.
 
 ## Findings
 
