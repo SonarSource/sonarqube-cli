@@ -22,7 +22,9 @@
     "command": "auth",
     "subcommand": "login",
     "result": "success",
-    "distribution": "standalone"
+    "distribution": "standalone",
+    "duration_ms": 18342,
+    "user_wait_ms": 15120
   }
 }
 ```
@@ -99,4 +101,3 @@
   }
 }
 ```
-

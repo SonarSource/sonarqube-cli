@@ -308,6 +308,10 @@ export class SonarCommand extends Command {
     return this._runtime;
   }
 
+  get console(): Console {
+    return this._console;
+  }
+
   /**
    * Context for the action that just ran. Set when `anonymousAction` /
    * `authenticatedAction` invoke the handler; `postAction` reads recorded

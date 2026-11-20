@@ -87,6 +87,21 @@ export class FakeConsole implements Console {
     return this.promptable;
   }
 
+  unmeasured(): Console {
+    return this;
+  }
+
+  /** What `userWaitMs()` reports; tests set it instead of waiting. */
+  waitedMs = 0;
+
+  userWaitMs(): number {
+    return this.waitedMs;
+  }
+
+  measureWait<T>(wait: () => Promise<T>): Promise<T> {
+    return wait();
+  }
+
   /** Record a call under an arbitrary method name (progress widgets, etc.). */
   record(method: string, ...args: unknown[]): void {
     this.calls.push({ method, args });

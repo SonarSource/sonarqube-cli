@@ -54,16 +54,9 @@ mock.module('node:readline', () => ({
 }));
 
 const mockOpenBrowser = mock((_url: string) => Promise.resolve());
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
-mock.module('@/core/host/browser.ts', () => ({
-  openBrowser: mockOpenBrowser,
-}));
 
-import {
-  type BrowserAuthResult,
-  openBrowserWithFallback,
-  waitForTokenInteractive,
-} from '@/core/auth/token.ts';
+import { type BrowserAuthResult, waitForTokenInteractive } from '@/core/auth/token.ts';
+import { openBrowserWithFallback } from '@/core/host/browser.ts';
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 
 function makeSharedSpies() {
@@ -242,7 +235,11 @@ describe('openBrowserWithFallback', () => {
   });
 
   it('calls openBrowser with the auth URL', async () => {
-    await openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole());
+    await openBrowserWithFallback(
+      'https://sonarcloud.io/test',
+      new TerminalConsole(),
+      mockOpenBrowser,
+    );
     expect(mockOpenBrowser).toHaveBeenCalledWith('https://sonarcloud.io/test');
   });
 
@@ -250,14 +247,18 @@ describe('openBrowserWithFallback', () => {
     mockOpenBrowser.mockImplementationOnce(() => Promise.reject(new Error('No browser found')));
     // eslint-disable-next-line @typescript-eslint/await-thenable
     await expect(
-      openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole()),
+      openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole(), mockOpenBrowser),
     ).resolves.toBeUndefined();
   });
 
   it('skips browser when CI=true', async () => {
     process.env['CI'] = 'true';
     try {
-      await openBrowserWithFallback('https://sonarcloud.io/test', new TerminalConsole());
+      await openBrowserWithFallback(
+        'https://sonarcloud.io/test',
+        new TerminalConsole(),
+        mockOpenBrowser,
+      );
       expect(mockOpenBrowser).not.toHaveBeenCalled();
     } finally {
       delete process.env['CI'];

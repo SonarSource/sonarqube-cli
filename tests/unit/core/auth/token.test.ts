@@ -22,13 +22,10 @@ import { createServer } from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import {
-  assertTokenCheckSucceeded,
-  generateTokenViaBrowser,
-  openBrowserWithFallback,
-} from '@/core/auth/token.ts';
+import { assertTokenCheckSucceeded, generateTokenViaBrowser } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL } from '@/core/config-constants.ts';
+import { openBrowserWithFallback } from '@/core/host/browser.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 
