@@ -154,7 +154,7 @@
     "smol-toml": "1.9.1"
   },
   "devDependencies": {
-    "@ninoseki/eslint-plugin-neverthrow": "0.3.2",
+    "@ninoseki/eslint-plugin-neverthrow": "0.4.0",
     "@sentry/cli": "3.8.2",
     "@sonar/scan": "5.1.0",
     "@types/istanbul-lib-coverage": "2.0.6",
