@@ -54,7 +54,7 @@ type EligibleResult = {
 };
 export type RepoAssessment = EligibleResult | SkippedResult;
 export type ExecuteResult =
-  { outcome: 'opened'; projectKey: string; prUrl: string } | SkippedResult;
+  { outcome: 'opened'; projectKey: string; prUrl: string; created: boolean } | SkippedResult;
 
 async function retrieveOpenPrUrl(
   ctx: ProcessRepoContext,
@@ -212,6 +212,7 @@ export async function executeRepo(
     }
   }
   let prUrl: string;
+  let created = true;
   try {
     prUrl = await ctx.github.createPullRequest(
       repo.full_name,
@@ -226,6 +227,7 @@ export async function executeRepo(
       throw error;
     }
     prUrl = existing;
+    created = false;
   }
-  return { outcome: 'opened', projectKey, prUrl };
+  return { outcome: 'opened', projectKey, prUrl, created };
 }

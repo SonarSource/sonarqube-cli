@@ -46,7 +46,7 @@ export interface FailedResult {
 
 export type RepoOutcome =
   | { outcome: 'proceed'; projectKey: string }
-  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string; created: boolean }
   | { outcome: 'skip'; reason: string; prUrl?: string; message?: string };
 
 export interface RepoRunResults {
