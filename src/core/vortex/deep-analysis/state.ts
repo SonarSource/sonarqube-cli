@@ -49,7 +49,7 @@ export interface AcquireAnalysisLockOptions extends AnalysisSession {
   analysisLimit: number;
 }
 
-export type AnalysisLockResult = { lock: LockRow; analysisCount: number } | null;
+export type AnalysisLockResult = { lock: LockRow } | null;
 
 type AnalysisOutcome = 'continue' | 'stop' | 'failed';
 
@@ -101,7 +101,7 @@ export function acquireAnalysisLock(options: AcquireAnalysisLockOptions): Analys
     };
     insertAnalysisLock(db, lock);
     writeAnalysisCounter(db, options, count + 1, now);
-    return { lock, analysisCount: count + 1 };
+    return { lock };
   });
 }
 
