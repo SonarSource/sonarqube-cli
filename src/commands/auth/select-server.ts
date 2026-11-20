@@ -23,7 +23,7 @@ import {
   isSonarQubeCloud,
   isValidServerUrl,
 } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError } from '@/core/commands/command-error.ts';
 import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { discoverServerFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
@@ -46,7 +46,7 @@ export async function confirmServerTrust(
   const fromFile = configFile ? ` from ${configFile}` : '';
   const confirmed = await console.confirmPrompt(`Connect to: ${server}${fromFile}?`, false);
   if (!confirmed) {
-    throw new CommandFailedError('Login cancelled');
+    throw new CancelledByUserError('Login cancelled');
   }
 }
 
@@ -86,7 +86,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
   ]);
 
   if (serverType === null) {
-    throw new CommandFailedError('Server selection cancelled');
+    throw new CancelledByUserError('Server selection cancelled');
   }
 
   if (serverType === 'cloud') {
@@ -95,7 +95,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
       { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
     ]);
     if (region === null) {
-      throw new CommandFailedError('Server selection cancelled');
+      throw new CancelledByUserError('Server selection cancelled');
     }
     return region;
   }
@@ -106,7 +106,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
     'Please enter a valid URL (for example https://sonarqube.mycompany.com/sonarqube).',
   );
   if (url === null) {
-    throw new CommandFailedError('Server selection cancelled');
+    throw new CancelledByUserError('Server selection cancelled');
   }
   return url.trim();
 }
