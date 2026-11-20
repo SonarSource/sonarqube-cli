@@ -27,14 +27,16 @@ import { AccessDeniedError, type HttpClientError } from '@/core/server/errors.ts
 import type { QueryParams, SonarHttpClient } from '@/core/server/http-client.ts';
 import { HTTP_STATUS_NOT_FOUND } from '@/core/server/http-constants.ts';
 import { hasNextPage, type Paging } from '@/core/server/paging.ts';
+import {
+  type DopPlatform,
+  type DopSetting,
+  ProjectBindingsClient,
+} from '@/core/server/project-bindings.ts';
 import { fetchServerVersion, isAtLeast } from '@/core/server/server-info.ts';
 
 import { type PatStatus, patStatusFromError } from './pat-status.ts';
 
-/** DevOps platform kinds as `dop-settings` reports them (`bitbucket` is Bitbucket Server). */
-const DOP_PLATFORMS = ['github', 'gitlab', 'azure', 'bitbucket', 'bitbucketcloud'] as const;
-
-export type DopPlatform = (typeof DOP_PLATFORMS)[number];
+export type { DopPlatform, DopSetting } from '@/core/server/project-bindings.ts';
 
 export const DOP_PLATFORM_LABELS: Record<DopPlatform, string> = {
   github: 'GitHub',
@@ -44,13 +46,6 @@ export const DOP_PLATFORM_LABELS: Record<DopPlatform, string> = {
   bitbucketcloud: 'Bitbucket Cloud',
 };
 
-export interface DopSetting {
-  id: string;
-  key: string;
-  type: DopPlatform;
-  url?: string;
-}
-
 /**
  * Outcome of a token probe. `organizationCount` is only set by the GitHub probe, from the
  * listing a `valid` token returned; it is absent when the response carried no listing to count.
@@ -58,14 +53,6 @@ export interface DopSetting {
 export interface PatProbe {
   status: PatStatus;
   organizationCount?: number;
-}
-
-interface DopSettingsResponse {
-  dopSettings: Array<{ id: string; key: string; type: string; url?: string | null }>;
-}
-
-function isDopPlatform(type: string): type is DopPlatform {
-  return (DOP_PLATFORMS as readonly string[]).includes(type);
 }
 
 /** A GitLab project as `search_gitlab_repos` returns it; `sqProjectKey` is set once it is bound. */
@@ -160,12 +147,14 @@ export class ServerImportApiClient {
   static readonly SEARCH_MAX_PAGE_SIZE = 100;
 
   private readonly client: Pick<SonarHttpClient, 'get' | 'post'>;
+  private readonly bindings: ProjectBindingsClient;
   private serverVersion: Promise<string | undefined> | undefined;
 
   constructor(
     client: SonarHttpClient,
     private readonly serverUrl: string,
   ) {
+    this.bindings = new ProjectBindingsClient(client);
     this.client = {
       get: (endpoint, params) => client.get(withPercentEncodedQuery(endpoint, params)),
       post: (endpoint, body) => client.post(endpoint, body),
@@ -174,12 +163,7 @@ export class ServerImportApiClient {
 
   /** The configured DevOps platform settings; kinds this CLI does not know are left out. */
   async listDopSettings(): Promise<DopSetting[]> {
-    const response = await this.client
-      .get<DopSettingsResponse>('/api/v2/dop-translation/dop-settings')
-      .orThrow();
-    return response.dopSettings.flatMap(({ id, key, type, url }) =>
-      isDopPlatform(type) ? [{ id, key, type, ...(url ? { url } : {}) }] : [],
-    );
+    return this.bindings.listDopSettings().orThrow();
   }
 
   /** PAT status through `check_pat`, which every platform supports except GitHub. */
