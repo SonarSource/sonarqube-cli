@@ -44,6 +44,7 @@ import { resolveAgentSessionId } from '@/core/telemetry/agent-session.ts';
 import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { resolveInvocationAuthForTelemetry } from '@/core/telemetry/identity.ts';
 import type { Console } from '@/core/ui/console.ts';
+import { QuietConsole } from '@/core/ui/quiet-console.ts';
 import { migrateAgentIntegrationsToGlobalScopeSafely } from '@/core/update/global-integrations-migration.ts';
 import type { UpdateNotificationCondition } from '@/core/update/notification.ts';
 import type { PostUpdateDependencies } from '@/core/update/post-update.ts';
@@ -1458,10 +1459,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
-  COMMAND_TREE.hook('preAction', async () => {
+  COMMAND_TREE.hook('preAction', async (_thisCommand, actionCommand) => {
     // Safely: a throw from a Commander hook would abort the user's command.
     // Before Sentry init, which reads the telemetry opt-out this migrates.
-    await runPostUpdateActionsSafely(postUpdateDeps);
+    const isHook = (actionCommand as SonarCommand).commandAndSubcommand().command === 'hook';
+    await runPostUpdateActionsSafely({
+      ...postUpdateDeps,
+      console: isHook ? new QuietConsole(console, { silent: true }) : console,
+    });
   });
 
   // Defer Sentry initialization until a command action is about to run, so that
