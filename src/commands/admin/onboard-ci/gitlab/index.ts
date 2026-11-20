@@ -238,7 +238,7 @@ async function fetchGroupData(
 type SkipClassification = Extract<RepoClassification, { outcome: 'skip' }>;
 type ProceedClassification = Extract<RepoClassification, { outcome: 'proceed' }>;
 
-async function runConcurrent(
+async function runClassifiedRepos(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
   bindingMap: Map<string, string>,
@@ -283,7 +283,7 @@ async function runDryRun(
   const classifications: ClassificationEntry[] = [];
   const failedRepos: { repo: string; error: string }[] = [];
 
-  await runConcurrent(
+  await runClassifiedRepos(
     ctx,
     repos,
     bindingMap,
@@ -308,7 +308,7 @@ async function runLive(
 ): Promise<OnboardCiResults> {
   const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
 
-  await runConcurrent(
+  await runClassifiedRepos(
     ctx,
     repos,
     bindingMap,
