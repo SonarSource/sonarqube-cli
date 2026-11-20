@@ -451,7 +451,7 @@ describe('sonar admin onboard-ci gitlab', () => {
         {
           repo: `${GROUP}/open-mr-repo`,
           reason: 'MR_ALREADY_OPEN',
-          prUrl: 'http://localhost/mr/1',
+          mrUrl: 'http://localhost/mr/1',
         },
       ]);
     });
@@ -1286,13 +1286,13 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(result.stdout).toContain('sonar-onboard-ci-report.json');
       expect(harness.cwd.exists('sonar-onboard-ci-report.json')).toBe(true);
       const report = harness.cwd.file('sonar-onboard-ci-report.json').asJson() as {
-        opened: Array<{ repo: string; projectKey: string; prUrl: string }>;
+        opened: Array<{ repo: string; projectKey: string; mrUrl: string }>;
       };
       expect(report.opened).toEqual([
         {
           repo: `${GROUP}/my-repo`,
           projectKey: 'mycompany_my-repo',
-          prUrl: gitlabServer.createdMrs[0].webUrl,
+          mrUrl: gitlabServer.createdMrs[0].webUrl,
         },
       ]);
     });

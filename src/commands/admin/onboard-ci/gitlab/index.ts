@@ -402,7 +402,16 @@ export async function onboardCiGitlab(
     buildOutroMessage(opened.length, skipped.length, failed.length),
     failed.length > 0 ? 'error' : 'success',
   );
-  writeReportFile(results, REPORT_FILE, console);
+  // Preserve GitLab's published report keys while sharing prUrl internally.
+  writeReportFile(
+    {
+      opened: opened.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+      skipped: skipped.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+      failed,
+    },
+    REPORT_FILE,
+    console,
+  );
   if (failed.length > 0) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',
