@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { OnboardCiOptions } from '../types.ts';
+
 export const GITLAB_DEFAULT_STAGES = new Set(['.pre', 'build', 'test', 'deploy', '.post']);
 export const GITLAB_IMPLICIT_STAGES = new Set(['.pre', '.post']);
 
@@ -36,59 +38,18 @@ export enum SkipReason {
   NotInSonarQube = 'NOT_IN_SONARQUBE',
 }
 
-export interface OnboardCiGitlabOptions {
+export interface OnboardCiGitlabInput extends OnboardCiOptions {
   group: string;
-  bindingName?: string;
-  reposFile?: string;
-  sonarTokenVarName: string;
-  triggerOn: TriggerOn;
+  sonarTokenVarName?: string;
+  triggerOn?: TriggerOn;
   stage?: string;
   allowFailure: boolean;
-  dryRun: boolean;
-  scannerProperty: string[];
+  scannerProperty?: string[];
   jobTemplate?: string;
 }
 
-export interface OpenedResult {
-  repo: string;
-  projectKey: string;
-  mrUrl: string;
-}
-
-export interface SkippedResult {
-  repo: string;
-  reason: SkipReason;
-  mrUrl?: string;
-}
-
-export interface FailedResult {
-  repo: string;
-  error: string;
-}
-
-export interface OnboardCiResults {
-  opened: OpenedResult[];
-  skipped: SkippedResult[];
-  failed: FailedResult[];
-}
-
-export interface DryRunEntry {
-  repo: string;
-  projectKey: string;
-}
-
-export interface DryRunSkippedEntry {
-  repo: string;
-  reason: SkipReason;
-}
-
-export interface DryRunFailedEntry {
-  repo: string;
-  error: string;
-}
-
-export interface DryRunResults {
-  wouldOpenMr: DryRunEntry[];
-  wouldSkip: DryRunSkippedEntry[];
-  failed: DryRunFailedEntry[];
+export interface OnboardCiGitlabOptions extends OnboardCiGitlabInput {
+  sonarTokenVarName: string;
+  triggerOn: TriggerOn;
+  scannerProperty: string[];
 }

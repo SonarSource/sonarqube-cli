@@ -21,10 +21,14 @@
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { DopSetting, ProjectBindingsClient } from '@/core/server/project-bindings.ts';
 
+interface ResolvedDopSetting extends DopSetting {
+  url: string;
+}
+
 export async function resolveGitlabDopSetting(
   bindings: ProjectBindingsClient,
   bindingName?: string,
-): Promise<DopSetting & { url: string }> {
+): Promise<ResolvedDopSetting> {
   const settings = await bindings.listDopSettings('gitlab').orThrow();
   if (settings.length === 0) {
     throw new CommandFailedError(
@@ -38,7 +42,7 @@ export async function resolveGitlabDopSetting(
 export async function resolveGithubDopSetting(
   bindings: ProjectBindingsClient,
   bindingName?: string,
-): Promise<DopSetting & { url: string }> {
+): Promise<ResolvedDopSetting> {
   const configured = await bindings.listDopSettings('github').orThrow();
   const settings = configured.filter(
     (setting) => setting.url?.replace(/\/$/, '').toLowerCase() === 'https://api.github.com',
@@ -57,7 +61,7 @@ function selectDopSetting(
   settings: DopSetting[],
   label: string,
   bindingName?: string,
-): DopSetting & { url: string } {
+): ResolvedDopSetting {
   const available = settings.map((setting) => `  ${setting.key}  (${setting.url})`).join('\n');
   const setting = bindingName
     ? settings.find((setting) => setting.key === bindingName)
