@@ -120,6 +120,7 @@ describe('GitHub onboarding repository lifecycle', () => {
     const result = await executeRepo(ctx, { ...repo, default_branch: 'stale-branch' }, BINDINGS);
     expect(result).toEqual({
       outcome: 'opened',
+      created: true,
       projectKey: PROJECT,
       prUrl: `https://github.com/${REPO}/pull/1`,
     });
@@ -318,6 +319,7 @@ describe('GitHub onboarding repository lifecycle', () => {
 
     expect(await executeRepo(ctx, repo, BINDINGS)).toMatchObject({
       outcome: 'opened',
+      created: false,
       prUrl: `https://github.com/${REPO}/pull/1`,
     });
     expect(await ctx.github.listOpenPullRequests(REPO, CI_BRANCH)).toHaveLength(1);

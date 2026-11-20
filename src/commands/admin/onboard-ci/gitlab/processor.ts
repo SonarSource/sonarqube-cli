@@ -71,7 +71,7 @@ export type RepoClassification =
     };
 
 export type ExecuteResult =
-  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | { outcome: 'opened'; projectKey: string; prUrl: string; created: boolean }
   | Extract<RepoClassification, { outcome: 'skip' }>;
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
@@ -302,5 +302,5 @@ export async function executeRepo(
     mrDescription,
   );
 
-  return { outcome: 'opened', projectKey, prUrl };
+  return { outcome: 'opened', projectKey, prUrl, created: true };
 }
