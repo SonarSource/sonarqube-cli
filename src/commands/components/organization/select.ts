@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { toOrganizationSummary } from '@/core/domain/organization.ts';
 import { discoverOrganizationFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -123,6 +123,7 @@ function organizationRequiredError(): CommandFailedError {
  * terminal — or a test that runs out of queued answers — into a hang instead of an error.
  */
 const MAX_ORGANIZATION_ATTEMPTS = 5;
+const ORGANIZATION_SELECTION_CANCELLED = 'Organization selection cancelled';
 
 /**
  * Prompt for an organization key until the token has membership.
@@ -138,10 +139,10 @@ async function promptForOrganizationKey(
   let lastError = organizationRequiredError();
 
   for (let attempt = 0; attempt < MAX_ORGANIZATION_ATTEMPTS; attempt++) {
-    const manualOrg = await console.textPrompt('Enter organization key');
-    if (manualOrg === null) {
-      throw new CancelledByUserError('Organization selection cancelled');
-    }
+    const manualOrg = await console
+      .textPromptResult('Enter organization key')
+      .onCancellation(ORGANIZATION_SELECTION_CANCELLED)
+      .orThrow();
     const org = manualOrg.trim();
     if (!org) {
       lastError = organizationRequiredError();
@@ -222,10 +223,10 @@ export async function getUserSelectedOrganization(
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 
-  const choice = await console.selectPrompt<string>('Select an organization', orgOptions);
-  if (choice === null) {
-    throw new CancelledByUserError('Organization selection cancelled');
-  }
+  const choice = await console
+    .selectPromptResult<string>('Select an organization', orgOptions)
+    .onCancellation(ORGANIZATION_SELECTION_CANCELLED)
+    .orThrow();
 
   if (choice === MANUAL_ENTRY) {
     return promptForOrganizationKey(client, console);
