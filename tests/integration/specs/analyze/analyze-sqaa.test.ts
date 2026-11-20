@@ -1589,6 +1589,52 @@ describe('analyze agentic — change-set mode (no --file)', () => {
   );
 
   it(
+    'bare analyze exits with code 2 when --staged and --base are combined, before any scan',
+    async () => {
+      const binaries = await harness.newFakeBinariesServer().start();
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('app.ts', 'const a = 1;');
+
+      const result = await harness.run('analyze --staged --base main');
+
+      expect(binaries.getRecordedRequests()).toHaveLength(0);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        '--staged and --base cannot be used together',
+      );
+      expect(
+        server.getRecordedRequests().filter((r) => /secrets|a3s|analysis|analyses/.test(r.path)),
+      ).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'bare analyze --format json exits with code 2 when --staged and --base are combined',
+    async () => {
+      const binaries = await harness.newFakeBinariesServer().start();
+      const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
+      harness.withAuth(server.baseUrl(), VALID_TOKEN, TEST_ORG);
+      commitFile(harness.cwd.path, 'README.md', 'hello');
+      harness.cwd.writeFile('app.ts', 'const a = 1;');
+
+      const result = await harness.run('analyze --staged --base main --format json');
+
+      expect(binaries.getRecordedRequests()).toHaveLength(0);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout + result.stderr).toContain(
+        '--staged and --base cannot be used together',
+      );
+      expect(
+        server.getRecordedRequests().filter((r) => /secrets|a3s|analysis|analyses/.test(r.path)),
+      ).toHaveLength(0);
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'exits with code 2 when --staged and --base are combined',
     async () => {
       const server = await harness.newFakeServer().withAuthToken(VALID_TOKEN).start();
