@@ -18,7 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CancelledByUserError, CommandFailedError } from '@/core/commands/command-error.ts';
 import { toOrganizationSummary } from '@/core/domain/organization.ts';
 import { discoverOrganizationFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { HttpClientError } from '@/core/server/errors.ts';
@@ -140,7 +140,7 @@ async function promptForOrganizationKey(
   for (let attempt = 0; attempt < MAX_ORGANIZATION_ATTEMPTS; attempt++) {
     const manualOrg = await console.textPrompt('Enter organization key');
     if (manualOrg === null) {
-      throw new CommandFailedError('Organization selection cancelled');
+      throw new CancelledByUserError('Organization selection cancelled');
     }
     const org = manualOrg.trim();
     if (!org) {
@@ -224,7 +224,7 @@ export async function getUserSelectedOrganization(
 
   const choice = await console.selectPrompt<string>('Select an organization', orgOptions);
   if (choice === null) {
-    throw new CommandFailedError('Organization selection cancelled');
+    throw new CancelledByUserError('Organization selection cancelled');
   }
 
   if (choice === MANUAL_ENTRY) {

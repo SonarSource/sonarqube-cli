@@ -88,3 +88,11 @@ export class CommandFailedError extends CliError {
     this.exitCode = options?.exitCode ?? 1;
   }
 }
+
+/** The user backed out of a prompt or browser step; telemetry reports it as a cancellation. */
+export class CancelledByUserError extends CommandFailedError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CancelledByUserError';
+  }
+}
