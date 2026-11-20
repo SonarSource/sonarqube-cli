@@ -25,6 +25,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { SECRETS_INACTIVE_UNAUTHENTICATED } from '@/commands/hook/hook-dependencies.ts';
 import { COMPLETION_ANALYSIS_HOOK_FEATURE_ID } from '@/commands/integrate/_common/features/completion-analysis-hook-feature.ts';
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.ts';
 import { MCP_CONFIG_RESOURCE_ID } from '@/commands/integrate/_common/features/mcp-server-feature.ts';
@@ -150,6 +151,39 @@ describe('post-update migration', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.each([false, true])(
+    'outputs only the hook JSON when the hook triggers post-update migrations (migration fails: %j)',
+    async (migrationFails) => {
+      seedPreUnificationFeatures('claude-code', [CONTEXT_AUGMENTATION_FEATURE_ID]);
+      harness.state().withContextAugmentationBinaryInstalled();
+      if (migrationFails) {
+        harness.cwd.writeFile('.claude', 'prevents migration from creating the settings directory');
+      }
+
+      harness.cwd.writeFile('source.ts', 'const value = 1;');
+      const result = await harness.runWithStdin(
+        'hook claude-pre-tool-use',
+        JSON.stringify({
+          tool_name: 'Read',
+          tool_input: { file_path: harness.cwd.file('source.ts').path },
+        }),
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: SECRETS_INACTIVE_UNAUTHENTICATED,
+        },
+      });
+      expect(result.stderr).toBe('');
+      expect((harness.stateJsonFile.asJson() as CliState).config.cliVersion).toBe(CURRENT_VERSION);
+      if (!migrationFails) expectVortexHookInstalled(harness.cwd, 'claude');
+    },
+    { timeout: 30000 },
+  );
 
   it.each([{ managed: true }, { managed: false }])(
     'removes legacy Antigravity project rules only when Sonar-managed (%j)',
