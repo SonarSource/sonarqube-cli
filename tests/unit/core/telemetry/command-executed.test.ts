@@ -29,6 +29,7 @@ import { SonarCommand } from '@/core/commands/sonar-command.ts';
 import { ENV_SONAR_USER_HOME } from '@/core/config-constants.ts';
 import { buildCommandFacts } from '@/core/telemetry/command-executed.ts';
 import { noteProject, resetProjectUuidContextForTests } from '@/core/telemetry/project-uuid.ts';
+import { measureUserWait, resetUserWaitForTests } from '@/core/telemetry/user-wait.ts';
 
 import { FakeConsole } from '../../../_common/fake-console.ts';
 import { restoreEnv } from '../../../_common/isolated-cli-env.ts';
@@ -55,6 +56,32 @@ describe('buildCommandFacts() command event auth', () => {
     const [executed] = await buildCommandFacts(command);
 
     expect(executed.auth).toBeUndefined();
+  });
+});
+
+describe('buildCommandFacts() timings', () => {
+  beforeEach(() => {
+    resetUserWaitForTests();
+  });
+
+  it('reports the process uptime and the time spent waiting on the user', async () => {
+    await measureUserWait(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('init');
+
+    const [executed] = await buildCommandFacts(command);
+    const payload = executed.payload as { duration_ms: number; user_wait_ms: number };
+
+    expect(payload.user_wait_ms).toBeGreaterThanOrEqual(15);
+    expect(payload.duration_ms).toBeGreaterThanOrEqual(payload.user_wait_ms);
+    expect(Number.isInteger(payload.duration_ms)).toBe(true);
+  });
+
+  it('reports no wait when nothing was asked', async () => {
+    const command = new SonarCommand('sonar', { console: new FakeConsole() }).command('analyze');
+
+    const [executed] = await buildCommandFacts(command);
+
+    expect(executed.payload).toMatchObject({ user_wait_ms: 0 });
   });
 });
 
