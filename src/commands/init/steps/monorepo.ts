@@ -41,6 +41,9 @@ import type { Console } from '@/core/ui/console.ts';
 import type { InitOutcome, MonorepoRootResult } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
+import { classifyInitFailure } from '../telemetry/failure-reason.ts';
+import type { InitFailureReason, InitPathId } from '../telemetry/init-telemetry.ts';
+import type { ProjectInitRecorder } from '../telemetry/init-telemetry-recorder.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   describeFailure,
@@ -68,7 +71,7 @@ type RootStatus =
   /** `--root` names a key, but the file already maps that directory to another project. */
   | { kind: 'conflict'; recordedKey: string }
   /** The lookup failed for this root only. */
-  | { kind: 'unchecked'; reason: string };
+  | { kind: 'unchecked'; reason: string; failure: InitFailureReason };
 
 type OnboardableStatus = Exclude<
   RootStatus,
@@ -169,7 +172,15 @@ async function inspectRoot(
     if (isRunFatal(error)) {
       throw error;
     }
-    return { mapping, path, status: { kind: 'unchecked', reason: describeFailure(error) } };
+    return {
+      mapping,
+      path,
+      status: {
+        kind: 'unchecked',
+        reason: describeFailure(error),
+        failure: classifyInitFailure(error),
+      },
+    };
   }
 }
 
@@ -294,7 +305,7 @@ async function onboardRoot(
     return { path, kind: 'unavailable', projectKey: mapping.projectKey, problem: status.problem };
   }
   if (status.kind === 'unchecked') {
-    return { path, kind: 'failed', reason: status.reason };
+    return { path, kind: 'failed', reason: status.reason, failure: status.failure };
   }
   if (status.kind === 'conflict') {
     return {
@@ -311,7 +322,12 @@ async function onboardRoot(
     if (isRunFatal(error)) {
       throw error;
     }
-    return { path, kind: 'failed', reason: describeFailure(error) };
+    return {
+      path,
+      kind: 'failed',
+      reason: describeFailure(error),
+      failure: classifyInitFailure(error),
+    };
   }
 }
 
@@ -365,6 +381,11 @@ export async function runMonorepo(
     ),
   );
   reportRootProblems(roots, deps);
+  deps.telemetry?.record('detect', 'success');
+  deps.telemetry?.setProjects(
+    roots.map(({ status }) => initPathOf(status)),
+    roots.map(({ path }) => path),
+  );
   // `--link` never creates a project, and binding is a way of creating one.
   const bound = linkOnly ? new Map() : await bindNewRootsTogether(roots, repositoryRoot, deps);
   return { kind: 'monorepo', roots: await onboardInOrder(roots, deps, linkOnly, bound) };
@@ -586,15 +607,82 @@ function warnOnNestedConfig(
 }
 
 /** One root finishes, prompts included, before the next starts. */
-function onboardInOrder(
+async function onboardInOrder(
   roots: readonly MonorepoRoot[],
   deps: DetectDeps,
   linkOnly: boolean,
   bound: ReadonlyMap<string, MonorepoRootResult>,
 ): Promise<MonorepoRootResult[]> {
-  return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
-    const results = await previous;
-    results.push(await onboardRoot(root, deps, linkOnly, bound));
-    return results;
+  const { telemetry } = deps;
+  const results = await roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
+    const done = await previous;
+    const project = telemetry?.projectLabelled(root.path);
+    telemetry?.setActiveProject(project);
+    project?.begin(root.status.kind === 'new' ? 'create_project' : 'link');
+    const result = await onboardRoot(root, deps, linkOnly, bound);
+    if (project) {
+      recordRootResult(project, result);
+    }
+    done.push(result);
+    return done;
   }, Promise.resolve([]));
+  telemetry?.setActiveProject(undefined);
+  return results;
+}
+
+/** The path a root is expected to take, before it runs; `recordRootResult` settles it. */
+function initPathOf(status: RootStatus): InitPathId {
+  switch (status.kind) {
+    case 'configured':
+    case 'unavailable':
+    case 'conflict':
+      return 'already_done';
+    case 'existing':
+    case 'other-org':
+      return 'link_existing';
+    case 'new':
+    case 'unchecked':
+      return 'unbound_new';
+  }
+}
+
+function recordRootResult(project: ProjectInitRecorder, result: MonorepoRootResult): void {
+  const step = project.inProgress() ?? 'link';
+  switch (result.kind) {
+    case 'configured':
+      project.record('link', 'already_done');
+      project.setProjectKey(result.projectKey);
+      return;
+    case 'linked':
+      if (step === 'create_project') {
+        project.record('create_project', 'skipped');
+      }
+      project.setPath('link_existing');
+      project.record('link', 'success');
+      project.setProjectKey(result.projectKey);
+      return;
+    case 'bound':
+    case 'unbound':
+      project.setPath(result.kind === 'bound' ? 'bound_new' : 'unbound_new');
+      project.record('create_project', 'success');
+      project.setProjectKey(result.projectKey);
+      return;
+    case 'unavailable':
+    case 'conflict':
+      project.record('link', 'failed');
+      project.stopAt('link', 'unknown');
+      return;
+    case 'skipped':
+      project.record(step, 'declined');
+      return;
+    case 'failed':
+      project.record(step, 'failed');
+      project.stopAt(step, result.failure ?? 'unknown');
+      return;
+    case 'would-link':
+    case 'would-create':
+    case 'would-bind':
+      // Dry runs report no init events.
+      return;
+  }
 }
