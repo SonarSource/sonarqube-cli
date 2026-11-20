@@ -19,7 +19,7 @@
         "smol-toml": "1.9.1",
       },
       "devDependencies": {
-        "@ninoseki/eslint-plugin-neverthrow": "0.3.2",
+        "@ninoseki/eslint-plugin-neverthrow": "0.4.0",
         "@sentry/cli": "3.8.2",
         "@sonar/scan": "5.1.0",
         "@types/istanbul-lib-coverage": "2.0.6",
@@ -131,7 +131,7 @@
 
     "@keyv/serialize": ["@keyv/serialize@1.1.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@keyv/serialize/-/serialize-1.1.1.tgz", {}, "sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA=="],
 
-    "@ninoseki/eslint-plugin-neverthrow": ["@ninoseki/eslint-plugin-neverthrow@0.3.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@ninoseki/eslint-plugin-neverthrow/-/eslint-plugin-neverthrow-0.3.2.tgz", { "dependencies": { "@typescript-eslint/utils": "^8.67.0" }, "peerDependencies": { "@typescript-eslint/parser": ">=8.0.0", "eslint": ">=10.0.3", "typescript": ">=4.8.4" } }, "sha512-CtN6Ys/03EEkREOtcdRsCMWLuSUAqvUQ1NvriMgec3pWN+M0UEAq3z3Yjrv1xv7/BcMEsjXvHy0mPdHzvNVBLA=="],
+    "@ninoseki/eslint-plugin-neverthrow": ["@ninoseki/eslint-plugin-neverthrow@0.4.0", "https://repox.jfrog.io/artifactory/api/npm/npm/@ninoseki/eslint-plugin-neverthrow/-/eslint-plugin-neverthrow-0.4.0.tgz", { "dependencies": { "@typescript-eslint/utils": "^8.67.0" }, "peerDependencies": { "@typescript-eslint/parser": ">=8.0.0", "eslint": ">=10.0.3", "typescript": ">=4.8.4" } }, "sha512-2RoeIpC6NGr4YSAjD2Qn/8s1v27Y6bNQ9IGVmtnQv7LlGEgaxxam/RozDSjQCoEa1eVNQ4x9mK+LJBht445m3A=="],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@opentelemetry/api/-/api-1.9.1.tgz", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
@@ -245,17 +245,17 @@
 
     "@typescript-eslint/project-service": ["@typescript-eslint/project-service@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/project-service/-/project-service-8.72.2.tgz", { "dependencies": { "@typescript-eslint/tsconfig-utils": "^8.72.2", "@typescript-eslint/types": "^8.72.2", "debug": "^4.4.3" }, "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-6y5dLTZdHhI8Eh3yIQ/bfQhRKwn5e+TpJj64o18Cngc0iW/BCrVvrr6zGYqXPnYH31u6YXAYiFh0+qxX5mybJw=="],
 
-    "@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.70.1.tgz", { "dependencies": { "@typescript-eslint/types": "8.70.1", "@typescript-eslint/visitor-keys": "8.70.1" } }, "sha512-Pa0EeSeAusQc1WbjQMac+YfenewYTBu0KjgYvkUKwhXaHUKbFog23Dm/rp0DX/6tyYOQ3Xl1a+3EcFNZynGHCw=="],
+    "@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2" } }, "sha512-iIoMJ6/8c1/QpFNyFjU0d1YzPco4MsZjQw0k3V+vfzNWAFmUmvhlyMoYEoYYDQZXc+J6Gi1X5XcxlzW2taIIGQ=="],
 
     "@typescript-eslint/tsconfig-utils": ["@typescript-eslint/tsconfig-utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.72.2.tgz", { "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-+h3iCgZXuTNtoLXcnnjP12ZUHLMqoUcIHPfQrFEXTUqvb9dF8QK9b5nv5VtSo5fLkdHuks8ehbTzZj3rImAm9w=="],
 
     "@typescript-eslint/type-utils": ["@typescript-eslint/type-utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/type-utils/-/type-utils-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/typescript-estree": "8.72.2", "@typescript-eslint/utils": "8.72.2", "debug": "^4.4.3", "ts-api-utils": "^2.5.0" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-STfkR38qIdhfkLpgtXnUjAzsNy4xouqiBO0lrVc/Wpk9Kem5/aHXUx1J8dGC16zpdYN1+yc2ILQ28er1kXX7ag=="],
 
-    "@typescript-eslint/types": ["@typescript-eslint/types@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.70.1.tgz", {}, "sha512-Dm1ypdhhrGCTyyehxElhgJ6kgk8MVCv5qXdoOVqPr1uqk42jX8KjrZqhROvdShczA8qrDoYiOWn1ykWlx2k81Q=="],
+    "@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
 
     "@typescript-eslint/typescript-estree": ["@typescript-eslint/typescript-estree@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/typescript-estree/-/typescript-estree-8.72.2.tgz", { "dependencies": { "@typescript-eslint/project-service": "8.72.2", "@typescript-eslint/tsconfig-utils": "8.72.2", "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2", "debug": "^4.4.3", "minimatch": "^10.2.2", "semver": "^7.7.3", "tinyglobby": "^0.2.15", "ts-api-utils": "^2.5.0" }, "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-pQEGqIK/cqEvKivVWaFLYpe7XYejFxfuAOi4mu1oAWFvIo36aRHI9esRFTUxcIy/z8N482RJyH+LpZB0ZIU7Ow=="],
 
-    "@typescript-eslint/utils": ["@typescript-eslint/utils@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/utils/-/utils-8.70.1.tgz", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/scope-manager": "8.70.1", "@typescript-eslint/types": "8.70.1", "@typescript-eslint/typescript-estree": "8.70.1" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-Esgul8MsnKnRLdYU2Eb2cRV9bS5HJYtKj1ByJnOzzG2M58DGdSUQ1jUuILxipqcpB2h9WLrbD5GijIWUjX/Tqw=="],
+    "@typescript-eslint/utils": ["@typescript-eslint/utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/utils/-/utils-8.72.2.tgz", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/scope-manager": "8.72.2", "@typescript-eslint/types": "8.72.2", "@typescript-eslint/typescript-estree": "8.72.2" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-hv3eRYbpPbbpezuax1EfGrzpa3C4ySgNZkPUkLOWOAjU8HsOKowEDAr8C7nsNl1C+SBSKDpvno6VKHnlhvp9iA=="],
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/visitor-keys/-/visitor-keys-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "eslint-visitor-keys": "^5.0.0" } }, "sha512-NAGrjn0Pitjqzq/GkgMC4kBYm233PQ8GffyQ9+kTA3AlNQYEzOf25EIM02BAHZv5FRJSpHpJk+OGUxVkOB93GQ=="],
 
@@ -651,29 +651,7 @@
 
     "@sonar/scan/proxy-from-env": ["proxy-from-env@2.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/proxy-from-env/-/proxy-from-env-2.1.0.tgz", {}, "sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA=="],
 
-    "@typescript-eslint/eslint-plugin/@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2" } }, "sha512-iIoMJ6/8c1/QpFNyFjU0d1YzPco4MsZjQw0k3V+vfzNWAFmUmvhlyMoYEoYYDQZXc+J6Gi1X5XcxlzW2taIIGQ=="],
-
-    "@typescript-eslint/eslint-plugin/@typescript-eslint/utils": ["@typescript-eslint/utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/utils/-/utils-8.72.2.tgz", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/scope-manager": "8.72.2", "@typescript-eslint/types": "8.72.2", "@typescript-eslint/typescript-estree": "8.72.2" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-hv3eRYbpPbbpezuax1EfGrzpa3C4ySgNZkPUkLOWOAjU8HsOKowEDAr8C7nsNl1C+SBSKDpvno6VKHnlhvp9iA=="],
-
     "@typescript-eslint/eslint-plugin/ignore": ["ignore@7.0.5", "https://repox.jfrog.io/artifactory/api/npm/npm/ignore/-/ignore-7.0.5.tgz", {}, "sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg=="],
-
-    "@typescript-eslint/parser/@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2" } }, "sha512-iIoMJ6/8c1/QpFNyFjU0d1YzPco4MsZjQw0k3V+vfzNWAFmUmvhlyMoYEoYYDQZXc+J6Gi1X5XcxlzW2taIIGQ=="],
-
-    "@typescript-eslint/parser/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/project-service/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/scope-manager/@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/visitor-keys/-/visitor-keys-8.70.1.tgz", { "dependencies": { "@typescript-eslint/types": "8.70.1", "eslint-visitor-keys": "^5.0.0" } }, "sha512-Vwj9lUIW5Xq3wQ9w6gv3R86g1hMK8f2zNOdGTAgeXUMMXFK78G9ruCjjqutHMNJc0+CH7LYRnHeUB9IT8wFmcw=="],
-
-    "@typescript-eslint/type-utils/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/type-utils/@typescript-eslint/utils": ["@typescript-eslint/utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/utils/-/utils-8.72.2.tgz", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/scope-manager": "8.72.2", "@typescript-eslint/types": "8.72.2", "@typescript-eslint/typescript-estree": "8.72.2" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-hv3eRYbpPbbpezuax1EfGrzpa3C4ySgNZkPUkLOWOAjU8HsOKowEDAr8C7nsNl1C+SBSKDpvno6VKHnlhvp9iA=="],
-
-    "@typescript-eslint/typescript-estree/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/utils/@typescript-eslint/typescript-estree": ["@typescript-eslint/typescript-estree@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/typescript-estree/-/typescript-estree-8.70.1.tgz", { "dependencies": { "@typescript-eslint/project-service": "8.70.1", "@typescript-eslint/tsconfig-utils": "8.70.1", "@typescript-eslint/types": "8.70.1", "@typescript-eslint/visitor-keys": "8.70.1", "debug": "^4.4.3", "minimatch": "^10.2.2", "semver": "^7.7.3", "tinyglobby": "^0.2.15", "ts-api-utils": "^2.5.0" }, "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-TU8PwyGN0PQJUcE96mw8eCQ44SmxGdQlJmlWakHaHQ15eIuuvye5yNtmh/i6oS88jzXVQB71xdNkbkB/fMwL0g=="],
-
-    "@typescript-eslint/visitor-keys/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
 
     "axios/proxy-from-env": ["proxy-from-env@2.1.0", "https://repox.jfrog.io/artifactory/api/npm/npm/proxy-from-env/-/proxy-from-env-2.1.0.tgz", {}, "sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA=="],
 
@@ -701,26 +679,6 @@
 
     "text-decoder/b4a": ["b4a@1.7.5", "https://repox.jfrog.io/artifactory/api/npm/npm/b4a/-/b4a-1.7.5.tgz", { "peerDependencies": { "react-native-b4a": "*" }, "optionalPeers": ["react-native-b4a"] }, "sha512-iEsKNwDh1wiWTps1/hdkNdmBgDlDVZP5U57ZVOlt+dNFqpc/lpPouCIxZw+DYBgc4P9NDfIZMPNR4CHNhzwLIA=="],
 
-    "typescript-eslint/@typescript-eslint/utils": ["@typescript-eslint/utils@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/utils/-/utils-8.72.2.tgz", { "dependencies": { "@eslint-community/eslint-utils": "^4.9.1", "@typescript-eslint/scope-manager": "8.72.2", "@typescript-eslint/types": "8.72.2", "@typescript-eslint/typescript-estree": "8.72.2" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-hv3eRYbpPbbpezuax1EfGrzpa3C4ySgNZkPUkLOWOAjU8HsOKowEDAr8C7nsNl1C+SBSKDpvno6VKHnlhvp9iA=="],
-
     "wrap-ansi/string-width": ["string-width@7.2.0", "https://repox.jfrog.io/artifactory/api/npm/npm/string-width/-/string-width-7.2.0.tgz", { "dependencies": { "emoji-regex": "^10.3.0", "get-east-asian-width": "^1.0.0", "strip-ansi": "^7.1.0" } }, "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ=="],
-
-    "@typescript-eslint/eslint-plugin/@typescript-eslint/scope-manager/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/eslint-plugin/@typescript-eslint/utils/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
-
-    "@typescript-eslint/type-utils/@typescript-eslint/utils/@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2" } }, "sha512-iIoMJ6/8c1/QpFNyFjU0d1YzPco4MsZjQw0k3V+vfzNWAFmUmvhlyMoYEoYYDQZXc+J6Gi1X5XcxlzW2taIIGQ=="],
-
-    "@typescript-eslint/utils/@typescript-eslint/typescript-estree/@typescript-eslint/project-service": ["@typescript-eslint/project-service@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/project-service/-/project-service-8.70.1.tgz", { "dependencies": { "@typescript-eslint/tsconfig-utils": "^8.70.1", "@typescript-eslint/types": "^8.70.1", "debug": "^4.4.3" }, "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-62xOgboPfwc3/IgPSX/W6oQR3ZbF04194FPGUGH8HL8iLFHbt/456/8Ph1wLNUgVF+s94FlHoipBsz+v7+LMnA=="],
-
-    "@typescript-eslint/utils/@typescript-eslint/typescript-estree/@typescript-eslint/tsconfig-utils": ["@typescript-eslint/tsconfig-utils@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/tsconfig-utils/-/tsconfig-utils-8.70.1.tgz", { "peerDependencies": { "typescript": ">=4.8.4 <6.1.0" } }, "sha512-jumze1fPI+sDOaM2TWGQdn39PDxTr7TZGeuyLkAbNyx2vtMT3uRnVKChN0hfht5V2TugphJzF6bYXvBcE09qqg=="],
-
-    "@typescript-eslint/utils/@typescript-eslint/typescript-estree/@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.70.1", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/visitor-keys/-/visitor-keys-8.70.1.tgz", { "dependencies": { "@typescript-eslint/types": "8.70.1", "eslint-visitor-keys": "^5.0.0" } }, "sha512-Vwj9lUIW5Xq3wQ9w6gv3R86g1hMK8f2zNOdGTAgeXUMMXFK78G9ruCjjqutHMNJc0+CH7LYRnHeUB9IT8wFmcw=="],
-
-    "@typescript-eslint/utils/@typescript-eslint/typescript-estree/semver": ["semver@7.8.5", "https://repox.jfrog.io/artifactory/api/npm/npm/semver/-/semver-7.8.5.tgz", { "bin": { "semver": "bin/semver.js" } }, "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA=="],
-
-    "typescript-eslint/@typescript-eslint/utils/@typescript-eslint/scope-manager": ["@typescript-eslint/scope-manager@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/scope-manager/-/scope-manager-8.72.2.tgz", { "dependencies": { "@typescript-eslint/types": "8.72.2", "@typescript-eslint/visitor-keys": "8.72.2" } }, "sha512-iIoMJ6/8c1/QpFNyFjU0d1YzPco4MsZjQw0k3V+vfzNWAFmUmvhlyMoYEoYYDQZXc+J6Gi1X5XcxlzW2taIIGQ=="],
-
-    "typescript-eslint/@typescript-eslint/utils/@typescript-eslint/types": ["@typescript-eslint/types@8.72.2", "https://repox.jfrog.io/artifactory/api/npm/npm/@typescript-eslint/types/-/types-8.72.2.tgz", {}, "sha512-Xfn37OLZx03+PCU7qWx9DTv2FCRh1E6fk2+wONeNY15HXIwtcwuveaSwVpGAUptkNmPQegRxW5JyRel9T7wrog=="],
   }
 }
