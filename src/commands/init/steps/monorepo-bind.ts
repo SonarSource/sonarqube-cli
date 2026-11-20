@@ -29,7 +29,9 @@ import { QuietConsole } from '@/core/ui/quiet-console.ts';
 import { requireAnswer } from '../answer.ts';
 import type { MonorepoRootResult } from '../init-outcome.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
-import { authorizeOrganization } from './bind.ts';
+import { classifyInitFailure } from '../telemetry/failure-reason.ts';
+import type { InitFailureReason, InitStepOutcome } from '../telemetry/init-telemetry.ts';
+import { authorizeUnlessLinked } from './bind.ts';
 import type { DetectDeps } from './detect.ts';
 import { describeFailure, isRunFatal } from './linked-projects.ts';
 import { writeMapping } from './mapping.ts';
@@ -64,8 +66,22 @@ function bindableSlug(
   return remoteRepositorySlug(remote);
 }
 
-function allFailed(roots: readonly BindableRoot[], reason: string): MonorepoRootResult[] {
-  return roots.map(({ path }) => ({ path, kind: 'failed', reason }));
+function allFailed(
+  roots: readonly BindableRoot[],
+  reason: string,
+  failure?: InitFailureReason,
+): MonorepoRootResult[] {
+  return roots.map(({ path }) => ({ path, kind: 'failed', reason, failure }));
+}
+
+function recordBindDecision(
+  roots: readonly BindableRoot[],
+  { telemetry }: DetectDeps,
+  outcome: InitStepOutcome,
+): void {
+  for (const { path } of roots) {
+    telemetry?.projectLabelled(path)?.record('project_bind', outcome);
+  }
 }
 
 /**
@@ -85,6 +101,7 @@ export async function bindNewRoots(
   const required = deps.intent?.kind === 'bind';
   const slug = bindableSlug(remote, deps);
   if (slug === null) {
+    recordBindDecision(roots, deps, required ? 'failed' : 'skipped');
     return required
       ? allFailed(
           roots,
@@ -102,6 +119,7 @@ export async function bindNewRoots(
         true,
       ),
     );
+  recordBindDecision(roots, deps, consent ? 'success' : 'declined');
   if (!consent) {
     return undefined;
   }
@@ -119,7 +137,7 @@ export async function bindNewRoots(
     return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
   }
   // One authorization serves every root: the batch below reuses the key it returns.
-  const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
+  const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
   if (!almKey) {
     return required
       ? allFailed(roots, 'The organization authorization was declined. Nothing was created.')
@@ -149,7 +167,7 @@ async function importBatch(
       throw error;
     }
     // The repository cannot be imported at all, which every root shares; the summary says so per root.
-    return allFailed(roots, describeFailure(error));
+    return allFailed(roots, describeFailure(error), classifyInitFailure(error));
   }
   const { selection } = plan;
   if (selection.kind !== 'batch' || selection.repos.length !== 1) {
