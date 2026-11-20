@@ -28,6 +28,8 @@ import {
   TextPrompt,
 } from '@clack/core';
 
+import { measureUserWait } from '@/core/telemetry/user-wait.ts';
+
 import {
   bold,
   type ColorFn,
@@ -215,7 +217,7 @@ function promptCancellation(): PromptCancellation {
     signal: controller.signal,
     async run(prompt) {
       try {
-        return await prompt.prompt();
+        return await measureUserWait(() => prompt.prompt());
       } finally {
         process.stdin.off('end', abort);
       }
@@ -664,32 +666,35 @@ export class TerminalConsole implements Console {
 
     process.stdout.write(`  ${dim('›')}  ${message}`);
 
-    return new Promise<void>((resolve) => {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
+    return measureUserWait(
+      () =>
+        new Promise<void>((resolve) => {
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
 
-      const onData = (chunk: Buffer): void => {
-        const byte = chunk[0];
-        if (byte === CTRL_C) {
-          cleanup();
-          process.stdout.write('\n');
-          process.exit(EXIT_CODE_SIGINT);
-        }
-        if (byte === ENTER_CR || byte === ENTER_LF) {
-          cleanup();
-          process.stdout.write('\n');
-          resolve();
-        }
-      };
+          const onData = (chunk: Buffer): void => {
+            const byte = chunk[0];
+            if (byte === CTRL_C) {
+              cleanup();
+              process.stdout.write('\n');
+              process.exit(EXIT_CODE_SIGINT);
+            }
+            if (byte === ENTER_CR || byte === ENTER_LF) {
+              cleanup();
+              process.stdout.write('\n');
+              resolve();
+            }
+          };
 
-      function cleanup(): void {
-        process.stdin.removeListener('data', onData);
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-      }
+          function cleanup(): void {
+            process.stdin.removeListener('data', onData);
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+          }
 
-      process.stdin.on('data', onData);
-    });
+          process.stdin.on('data', onData);
+        }),
+    );
   }
 
   canPrompt(): boolean {

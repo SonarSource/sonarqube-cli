@@ -24,6 +24,7 @@ import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/r
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { openBrowserWithFallback } from '@/core/auth/token.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { measureUserWait } from '@/core/telemetry/user-wait.ts';
 import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
@@ -84,11 +85,12 @@ export async function authorizeOrganization(
 
   const url = devOpsBindingUrl(auth, orgKey);
   console.print(`Link the organization to your DevOps platform: ${url}`);
-  await openBrowserWithFallback(url, console);
-
-  return console.withSpinner('Waiting for the authorization', () =>
-    waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
-  );
+  return measureUserWait(async () => {
+    await openBrowserWithFallback(url, console);
+    return console.withSpinner('Waiting for the authorization', () =>
+      waitForAlmKey(api, orgKey, Date.now() + AUTHORIZATION_TIMEOUT_MS),
+    );
+  });
 }
 
 /** Each check starts only after the previous one answered and the interval has passed. */
