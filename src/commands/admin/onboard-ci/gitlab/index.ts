@@ -22,7 +22,6 @@ import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import type { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { resolveDopSetting } from '../dop-setting.ts';
@@ -38,8 +37,8 @@ import {
 import { OnboardCiSqsClient } from '../sqs-api.ts';
 import type { ClassificationEntry } from './dry-run.ts';
 import { computeDryRunResults } from './dry-run.ts';
-import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
-import { classifyRepo, executeRepo } from './processor.ts';
+import type { ProcessRepoContext, RepoWithBranch } from './processor.ts';
+import { assessRepo, executeRepo } from './processor.ts';
 import { normalizeJobTemplate } from './templates.ts';
 import type {
   DryRunResults,
@@ -235,45 +234,6 @@ async function fetchGroupData(
   return { repos, bindingMap };
 }
 
-type SkipClassification = Extract<RepoClassification, { outcome: 'skip' }>;
-type ProceedClassification = Extract<RepoClassification, { outcome: 'proceed' }>;
-
-async function runClassifiedRepos(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  onSkip: (repo: RepoWithBranch, classification: SkipClassification) => void,
-  onProceed: (
-    repo: RepoWithBranch,
-    classification: ProceedClassification,
-    slug: string,
-    progress: ConcurrentProgress,
-  ) => Promise<void>,
-  failed: { repo: string; error: string }[],
-  console: Console,
-): Promise<void> {
-  await runWithRepoProgress(
-    repos,
-    (repo) => repo.path_with_namespace,
-    async (repo, progress) => {
-      const slug = repo.path_with_namespace;
-      try {
-        const classification = await classifyRepo(ctx, repo, bindingMap);
-        if (classification.outcome === 'skip') {
-          onSkip(repo, classification);
-          progress.update(slug, 'done', classification.message);
-        } else {
-          await onProceed(repo, classification, slug, progress);
-        }
-      } catch (err) {
-        failed.push({ repo: slug, error: String(err) });
-        progress.update(slug, 'failed', err instanceof Error ? err.message : String(err));
-      }
-    },
-    console,
-  );
-}
-
 async function runDryRun(
   ctx: ProcessRepoContext,
   repos: RepoWithBranch[],
@@ -282,21 +242,29 @@ async function runDryRun(
 ): Promise<DryRunResults> {
   const classifications: ClassificationEntry[] = [];
   const failedRepos: { repo: string; error: string }[] = [];
-
-  await runClassifiedRepos(
-    ctx,
+  await runWithRepoProgress(
     repos,
-    bindingMap,
-    (repo, classification) => classifications.push({ repo, classification }),
-    (repo, classification, slug, progress) => {
-      classifications.push({ repo, classification });
-      progress.update(slug, 'done', 'would open MR');
-      return Promise.resolve();
+    (repo) => repo.path_with_namespace,
+    async (repo, progress) => {
+      const name = repo.path_with_namespace;
+      const result = await assessRepo(ctx, repo, bindingMap);
+      switch (result.outcome) {
+        case 'proceed':
+          classifications.push({ repo, classification: result });
+          progress.update(name, 'done', 'would open MR');
+          break;
+        case 'skip':
+          classifications.push({ repo, classification: result });
+          progress.update(name, 'done', result.message);
+          break;
+        case 'failed':
+          failedRepos.push({ repo: name, error: result.error });
+          progress.update(name, 'failed', result.error);
+          break;
+      }
     },
-    failedRepos,
     console,
   );
-
   return computeDryRunResults(classifications, failedRepos);
 }
 
@@ -307,31 +275,29 @@ async function runLive(
   console: Console,
 ): Promise<OnboardCiResults> {
   const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
-
-  await runClassifiedRepos(
-    ctx,
+  await runWithRepoProgress(
     repos,
-    bindingMap,
-    (repo, classification) =>
-      results.skipped.push({
-        repo: repo.path_with_namespace,
-        reason: classification.reason,
-        prUrl: classification.prUrl,
-      }),
-    async (repo, classification, slug, progress) => {
-      const result = await executeRepo(ctx, repo, classification);
-      if (result.outcome === 'skip') {
-        results.skipped.push({ repo: slug, reason: result.reason, prUrl: result.prUrl });
-        progress.update(slug, 'done', result.message);
-        return;
+    (repo) => repo.path_with_namespace,
+    async (repo, progress) => {
+      const name = repo.path_with_namespace;
+      const result = await executeRepo(ctx, repo, bindingMap);
+      switch (result.outcome) {
+        case 'opened':
+          results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
+          progress.update(name, 'done', 'MR opened');
+          break;
+        case 'skip':
+          results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
+          progress.update(name, 'done', result.message);
+          break;
+        case 'failed':
+          results.failed.push({ repo: name, error: result.error });
+          progress.update(name, 'failed', result.error);
+          break;
       }
-      results.opened.push({ repo: slug, projectKey: result.projectKey, prUrl: result.prUrl });
-      progress.update(slug, 'done', 'MR opened');
     },
-    results.failed,
     console,
   );
-
   return results;
 }
 
