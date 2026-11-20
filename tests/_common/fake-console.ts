@@ -87,6 +87,10 @@ export class FakeConsole implements Console {
     return this.promptable;
   }
 
+  unmeasured(): Console {
+    return this;
+  }
+
   /** Record a call under an arbitrary method name (progress widgets, etc.). */
   record(method: string, ...args: unknown[]): void {
     this.calls.push({ method, args });

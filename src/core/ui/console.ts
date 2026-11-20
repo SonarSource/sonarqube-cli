@@ -122,6 +122,12 @@ export interface Console {
   canPrompt(): boolean;
 
   /**
+   * The same console, but its prompts do not count as time spent waiting on the user. For code
+   * that already measures the wait it prompts during, so the time is not counted twice.
+   */
+  unmeasured(): Console;
+
+  /**
    * Informational line with a cyan `ℹ` prefix.
    * Defaults to stdout. On stdout, participates in formatted-output buffering
    * (`setFormattedOutputMode`); stderr always writes through.

@@ -28,6 +28,8 @@ import {
   TextPrompt,
 } from '@clack/core';
 
+import { measureUserWait } from '@/core/telemetry/user-wait.ts';
+
 import {
   bold,
   type ColorFn,
@@ -203,8 +205,11 @@ interface PromptCancellation {
   run<TValue>(prompt: Prompt<TValue>): ReturnType<Prompt<TValue>['prompt']>;
 }
 
-/** Cancels the prompt when stdin reaches EOF, since clack would otherwise wait forever. */
-function promptCancellation(): PromptCancellation {
+/**
+ * Cancels the prompt when stdin reaches EOF, since clack would otherwise wait forever.
+ * `measureWait` counts the prompt as time spent waiting on the user.
+ */
+function promptCancellation(measureWait: boolean): PromptCancellation {
   const controller = new AbortController();
   const abort = (): void => {
     controller.abort();
@@ -215,7 +220,7 @@ function promptCancellation(): PromptCancellation {
     signal: controller.signal,
     async run(prompt) {
       try {
-        return await prompt.prompt();
+        return await (measureWait ? measureUserWait(() => prompt.prompt()) : prompt.prompt());
       } finally {
         process.stdin.off('end', abort);
       }
@@ -225,9 +230,10 @@ function promptCancellation(): PromptCancellation {
 
 /** Runs a prompt whose async loading can fail: the failure stops the prompt and is rethrown. */
 async function runFailablePrompt<T>(
+  measureWait: boolean,
   create: (signal: AbortSignal, onFailure: (error: unknown) => void) => Prompt<T>,
 ): Promise<T | null> {
-  const cancellation = promptCancellation();
+  const cancellation = promptCancellation(measureWait);
   const failure = new AbortController();
   let failed: { error: unknown } | undefined;
   const prompt = create(AbortSignal.any([cancellation.signal, failure.signal]), (error) => {
@@ -242,9 +248,24 @@ async function runFailablePrompt<T>(
 }
 
 /** Production {@link Console}: writes to stdout/stderr. */
+/** Shared by a console and its `unmeasured()` view, so both write to the same output. */
+interface TerminalOutputState {
+  formattedOutputMode: boolean;
+  readonly collectedMessages: string[];
+}
+
 export class TerminalConsole implements Console {
-  private formattedOutputMode = false;
-  private readonly collectedMessages: string[] = [];
+  constructor(
+    private readonly output: TerminalOutputState = {
+      formattedOutputMode: false,
+      collectedMessages: [],
+    },
+    private readonly measureWaits = true,
+  ) {}
+
+  unmeasured(): Console {
+    return new TerminalConsole(this.output, false);
+  }
 
   private channelStream(channel: OutputChannel): NodeJS.WriteStream {
     return channel === 'stderr' ? process.stderr : process.stdout;
@@ -255,24 +276,24 @@ export class TerminalConsole implements Console {
   }
 
   info(message: string, channel: OutputChannel = 'stdout'): void {
-    if (channel === 'stdout' && this.formattedOutputMode) {
-      this.collectedMessages.push(`  ℹ  ${message}`);
+    if (channel === 'stdout' && this.output.formattedOutputMode) {
+      this.output.collectedMessages.push(`  ℹ  ${message}`);
       return;
     }
     this.write(this.channelStream(channel), `  ${cyan('ℹ')}  ${message}`);
   }
 
   success(message: string): void {
-    if (this.formattedOutputMode) {
-      this.collectedMessages.push(`✅ ${message}`);
+    if (this.output.formattedOutputMode) {
+      this.output.collectedMessages.push(`✅ ${message}`);
       return;
     }
     this.write(process.stdout, `✅ ${green(message)}`);
   }
 
   discreetSuccess(message: string, channel: OutputChannel = 'stdout'): void {
-    if (channel === 'stdout' && this.formattedOutputMode) {
-      this.collectedMessages.push(`  ✓  ${message}`);
+    if (channel === 'stdout' && this.output.formattedOutputMode) {
+      this.output.collectedMessages.push(`  ✓  ${message}`);
       return;
     }
     this.write(this.channelStream(channel), `  ${green('✓')}  ${message}`);
@@ -287,8 +308,8 @@ export class TerminalConsole implements Console {
   }
 
   text(message: string, color?: ColorFn, channel: OutputChannel = 'stdout'): void {
-    if (channel === 'stdout' && this.formattedOutputMode) {
-      this.collectedMessages.push(message);
+    if (channel === 'stdout' && this.output.formattedOutputMode) {
+      this.output.collectedMessages.push(message);
       return;
     }
     const formatted = color ? color(message) : message;
@@ -300,7 +321,7 @@ export class TerminalConsole implements Console {
   }
 
   blank(): void {
-    if (this.formattedOutputMode) {
+    if (this.output.formattedOutputMode) {
       return;
     }
     if (isTTY) {
@@ -401,7 +422,7 @@ export class TerminalConsole implements Console {
   }
 
   async textPrompt(message: string): Promise<string | null> {
-    const cancellation = promptCancellation();
+    const cancellation = promptCancellation(this.measureWaits);
     const prompt = new TextPrompt({
       signal: cancellation.signal,
       render() {
@@ -419,7 +440,7 @@ export class TerminalConsole implements Console {
   }
 
   async passwordPrompt(message: string): Promise<string | null> {
-    const cancellation = promptCancellation();
+    const cancellation = promptCancellation(this.measureWaits);
     const prompt = new PasswordPrompt({
       signal: cancellation.signal,
       render() {
@@ -437,7 +458,7 @@ export class TerminalConsole implements Console {
   }
 
   async confirmPrompt(message: string, defaultValue: boolean): Promise<boolean | null> {
-    const cancellation = promptCancellation();
+    const cancellation = promptCancellation(this.measureWaits);
     const prompt = new ConfirmPrompt({
       signal: cancellation.signal,
       active: 'Yes',
@@ -459,7 +480,7 @@ export class TerminalConsole implements Console {
   }
 
   async selectPrompt<T>(message: string, options: SelectOption<T>[]): Promise<T | null> {
-    const cancellation = promptCancellation();
+    const cancellation = promptCancellation(this.measureWaits);
     const prompt = new SelectPrompt({
       signal: cancellation.signal,
       options,
@@ -485,19 +506,19 @@ export class TerminalConsole implements Console {
   }
 
   searchPrompt<T>(message: string, options: SearchPromptOptions<T>): Promise<T | null> {
-    return runFailablePrompt((signal, onFailure) =>
+    return runFailablePrompt(this.measureWaits, (signal, onFailure) =>
       createSearchPrompt<T>(message, options, signal, onFailure),
     );
   }
 
   treePrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T | null> {
-    return runFailablePrompt((signal, onFailure) =>
+    return runFailablePrompt(this.measureWaits, (signal, onFailure) =>
       createTreePrompt<T>(message, options, signal, onFailure),
     );
   }
 
   treeMultiSelectPrompt<T>(message: string, options: TreePromptOptions<T>): Promise<T[] | null> {
-    return runFailablePrompt((signal, onFailure) =>
+    return runFailablePrompt(this.measureWaits, (signal, onFailure) =>
       createTreeMultiSelectPrompt<T>(message, options, signal, onFailure),
     );
   }
@@ -536,7 +557,7 @@ export class TerminalConsole implements Console {
       }
     }
 
-    const cancellation = promptCancellation();
+    const cancellation = promptCancellation(this.measureWaits);
     const prompt = new MultiSelectLoadMorePrompt(
       {
         signal: cancellation.signal,
@@ -664,32 +685,34 @@ export class TerminalConsole implements Console {
 
     process.stdout.write(`  ${dim('›')}  ${message}`);
 
-    return new Promise<void>((resolve) => {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
+    const keypress = (): Promise<void> =>
+      new Promise<void>((resolve) => {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
 
-      const onData = (chunk: Buffer): void => {
-        const byte = chunk[0];
-        if (byte === CTRL_C) {
-          cleanup();
-          process.stdout.write('\n');
-          process.exit(EXIT_CODE_SIGINT);
+        const onData = (chunk: Buffer): void => {
+          const byte = chunk[0];
+          if (byte === CTRL_C) {
+            cleanup();
+            process.stdout.write('\n');
+            process.exit(EXIT_CODE_SIGINT);
+          }
+          if (byte === ENTER_CR || byte === ENTER_LF) {
+            cleanup();
+            process.stdout.write('\n');
+            resolve();
+          }
+        };
+
+        function cleanup(): void {
+          process.stdin.removeListener('data', onData);
+          process.stdin.setRawMode(false);
+          process.stdin.pause();
         }
-        if (byte === ENTER_CR || byte === ENTER_LF) {
-          cleanup();
-          process.stdout.write('\n');
-          resolve();
-        }
-      };
 
-      function cleanup(): void {
-        process.stdin.removeListener('data', onData);
-        process.stdin.setRawMode(false);
-        process.stdin.pause();
-      }
-
-      process.stdin.on('data', onData);
-    });
+        process.stdin.on('data', onData);
+      });
+    return this.measureWaits ? measureUserWait(keypress) : keypress();
   }
 
   canPrompt(): boolean {
@@ -697,17 +720,17 @@ export class TerminalConsole implements Console {
   }
 
   setFormattedOutputMode(active: boolean): void {
-    this.formattedOutputMode = active;
+    this.output.formattedOutputMode = active;
     if (!active) {
-      this.collectedMessages.length = 0;
+      this.output.collectedMessages.length = 0;
     }
   }
 
   isFormattedOutputMode(): boolean {
-    return this.formattedOutputMode;
+    return this.output.formattedOutputMode;
   }
 
   getMessagesForFormattedOutput(): string[] {
-    return [...this.collectedMessages];
+    return [...this.output.collectedMessages];
   }
 }
