@@ -103,11 +103,33 @@ async function confirmCreation(
   );
 }
 
-/** The options that resolve a run that found no project; `--bind` only when binding is possible. */
-function newProjectOptions(path: UnboundNewPath): string[] {
-  return [path.repositorySlug ? '--bind' : null, '--create', '--link <key>'].filter(
-    (option) => option !== null,
+/**
+ * The options that resolve a run that found no project: `--bind` only when binding is possible,
+ * `--create` only when alpha allows it.
+ */
+function newProjectOptions(path: UnboundNewPath, allowUnbound: boolean): string[] {
+  return [
+    path.repositorySlug ? '--bind' : null,
+    allowUnbound ? '--create' : null,
+    '--link <key>',
+  ].filter((option) => option !== null);
+}
+
+/** Without alpha, a directory that has no project and is not bound ends here: nothing is created. */
+function unboundUnavailable(
+  path: UnboundNewPath,
+  { console, interactive }: DetectDeps,
+): InitOutcome {
+  const situation = 'No Sonar project exists for this directory yet.';
+  if (!interactive) {
+    throw missingDecision(situation, newProjectOptions(path, false));
+  }
+  console.info(
+    `${situation} Creating a project without repository binding is not available yet.`,
+    'stderr',
   );
+  console.info("Run 'sonar init --link <key>' to link an existing project.", 'stderr');
+  return { kind: 'declined' };
 }
 
 async function createProject(
@@ -167,6 +189,61 @@ async function askProjectKey(
   }
 }
 
+/** The key is taken: offers that project for linking, and resolves to the outcome or the key to create instead. */
+async function resolveTakenKey(
+  { projectRoot, remote }: UnboundNewPath,
+  existingKey: string,
+  options: UnboundNewOptions,
+  deps: DetectDeps,
+  projects: ProjectsClient,
+  bindRequired: boolean,
+): Promise<InitOutcome | string> {
+  if (options.projectKey !== undefined) {
+    rejectTakenKey(existingKey);
+  }
+  if (deps.intent?.kind === 'create') {
+    throw new InvalidOptionError(
+      `Project '${existingKey}', the key generated for this directory, already exists.`,
+      `Run 'sonar init' again with --link to link it, or add --project <key> to create another project.`,
+    );
+  }
+  const linked = await runLinkExisting(
+    { path: 'link-existing', projectRoot, remote, projectKey: existingKey },
+    deps,
+  );
+  if ('kind' in linked) {
+    return linked;
+  }
+  // Asking for another key would create an unbound project.
+  if (bindRequired || !deps.allowUnbound) {
+    return { kind: 'declined' };
+  }
+  return askProjectKey(deps.console, projects, deps.auth.orgKey, existingKey);
+}
+
+/** No project exists yet: the outcome when nothing may be created, or undefined to go on creating. */
+function stopBeforeCreating(path: UnboundNewPath, deps: DetectDeps): InitOutcome | undefined {
+  const { interactive, intent, allowUnbound } = deps;
+  if (intent?.kind === 'link') {
+    throw new InvalidOptionError(
+      '--link found no Sonar project for this directory.',
+      allowUnbound
+        ? "Name the project with --link <key>, or run 'sonar init' again with --create."
+        : 'Name the project with --link <key>.',
+    );
+  }
+  if (!allowUnbound) {
+    return unboundUnavailable(path, deps);
+  }
+  if (!interactive && intent?.kind !== 'create') {
+    throw missingDecision(
+      'No Sonar project exists for this directory yet.',
+      newProjectOptions(path, true),
+    );
+  }
+  return undefined;
+}
+
 /**
  * Creates a project that is not bound to the repository and maps it in `.sonar-config.json`.
  * When the generated key is already taken (an earlier run created it), nothing is mapped without
@@ -183,43 +260,37 @@ export async function runUnboundNew(
   bindRequired = false,
 ): Promise<InitOutcome> {
   const { projectRoot, remote } = path;
-  const { auth, http, console, interactive, intent } = deps;
+  const { auth, http, console } = deps;
+  // Without alpha, only a non-interactive monorepo root injects `--create`; its caller reports it.
+  if (!deps.allowUnbound && deps.intent?.kind === 'create') {
+    return { kind: 'declined' };
+  }
   const generated = generateProjectProposal(projectRoot, remote, auth.orgKey);
   const projects = new ProjectsClient(http);
 
   let projectKey = options.projectKey ?? generated.projectKey;
   const existing = await projects.findProject(projectKey, auth.orgKey).orThrow();
   if (existing) {
-    if (options.projectKey !== undefined) {
-      rejectTakenKey(existing.key);
-    }
-    if (intent?.kind === 'create') {
-      throw new InvalidOptionError(
-        `Project '${existing.key}', the key generated for this directory, already exists.`,
-        `Run 'sonar init' again with --link to link it, or add --project <key> to create another project.`,
-      );
-    }
-    const linked = await runLinkExisting(
-      { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
+    const resolved = await resolveTakenKey(
+      path,
+      existing.key,
+      options,
       deps,
+      projects,
+      bindRequired,
     );
-    if ('kind' in linked) {
-      return linked;
+    if (typeof resolved !== 'string') {
+      return resolved;
     }
-    if (bindRequired) {
-      return { kind: 'declined' };
+    projectKey = resolved;
+  } else {
+    const stopped =
+      monorepo && !deps.allowUnbound
+        ? ({ kind: 'declined' } as const)
+        : stopBeforeCreating(path, deps);
+    if (stopped) {
+      return stopped;
     }
-    projectKey = await askProjectKey(console, projects, auth.orgKey, existing.key);
-  } else if (intent?.kind === 'link') {
-    throw new InvalidOptionError(
-      '--link found no Sonar project for this directory.',
-      "Name the project with --link <key>, or run 'sonar init' again with --create.",
-    );
-  } else if (!interactive && intent?.kind !== 'create') {
-    throw missingDecision(
-      'No Sonar project exists for this directory yet.',
-      newProjectOptions(path),
-    );
   }
 
   const newProject = await chooseNewProject(

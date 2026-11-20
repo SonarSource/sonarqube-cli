@@ -53,6 +53,8 @@ export interface DetectDeps {
   dryRun?: boolean;
   /** The path the caller consented to with `--link`, `--bind` or `--create`. */
   intent?: InitIntent;
+  /** Creating a project without repository binding is Alpha: only offered when alpha is enabled. */
+  allowUnbound: boolean;
   /**
    * `--monorepo --link`: picks the existing project for a root named without a key, as
    * `sonar link --monorepo` does. Resolves to `null` when the root keeps its link.
@@ -138,7 +140,7 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   }
   if (!remote) {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable('this directory has no git remote.');
+      throw bindingUnavailable('this directory has no git remote.', deps.allowUnbound);
     }
     return { path: 'unbound-new', projectRoot };
   }
@@ -197,29 +199,37 @@ function otherOrganizationError(
   );
 }
 
-function bindingUnavailable(reason: string): InvalidOptionError {
+function bindingUnavailable(reason: string, allowUnbound: boolean): InvalidOptionError {
   return new InvalidOptionError(
     `--bind is unavailable: ${reason}`,
-    "Run 'sonar init' again with --create, or with --link <key> to link an existing project.",
+    allowUnbound
+      ? "Run 'sonar init' again with --create, or with --link <key> to link an existing project."
+      : "Run 'sonar init' again with --link <key> to link an existing project.",
   );
 }
 
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive, intent }: DetectDeps,
+  { auth, console, interactive, intent, allowUnbound }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
+      throw bindingUnavailable(
+        'the git remote is not a GitHub or Azure DevOps repository.',
+        allowUnbound,
+      );
     }
     return { path: 'unbound-new', projectRoot, remote };
   }
   if (auth.connectionType !== 'cloud') {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable('creating a bound project is only available on SonarQube Cloud.');
+      throw bindingUnavailable(
+        'creating a bound project is only available on SonarQube Cloud.',
+        allowUnbound,
+      );
     }
     if (!intent) {
       console.info(
