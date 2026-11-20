@@ -116,6 +116,7 @@ async function resolveOrgByKey(client: ImportApiClient, orgKey: string): Promise
     (err) => {
       throw new CommandFailedError(`Failed to look up organization '${orgKey}': ${err.message}`, {
         remediationHint: 'Check your network connection and authentication, then retry.',
+        cause: err,
       });
     },
   );
@@ -160,7 +161,10 @@ export async function resolveAlmKey(
     (err) => {
       throw new CommandFailedError(
         `Failed to look up the DevOps platform for organization '${orgKey}': ${err.message}`,
-        { remediationHint: 'Check your network connection and authentication, then retry.' },
+        {
+          remediationHint: 'Check your network connection and authentication, then retry.',
+          cause: err,
+        },
       );
     },
   );
