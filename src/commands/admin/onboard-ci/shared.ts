@@ -31,6 +31,7 @@ import { UsersClient } from '@/core/server/users.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import type { OnboardingTelemetry } from './telemetry.ts';
 import type { RepoOutcome, RepoRunResults } from './types.ts';
 
 const CONCURRENCY_LIMIT = 10;
@@ -112,6 +113,7 @@ export async function runRepos<Repo>(
   processRepo: (repo: Repo, progress: ConcurrentProgress) => Promise<RepoOutcome>,
   requestLabel: 'PR' | 'MR',
   console: Console,
+  telemetry: OnboardingTelemetry | null = null,
 ): Promise<RepoRunResults> {
   const results: RepoRunResults = { opened: [], wouldOpen: [], skipped: [], failed: [] };
   const progress = new ConcurrentProgress({
@@ -133,6 +135,9 @@ export async function runRepos<Repo>(
           progress.update(name, 'done', `would open ${requestLabel}`);
           break;
         case 'opened':
+          if (result.created) {
+            telemetry?.addCreated();
+          }
           results.opened.push({ repo: name, projectKey: result.projectKey, prUrl: result.prUrl });
           progress.update(name, 'done', `${requestLabel} opened`);
           break;
@@ -142,6 +147,7 @@ export async function runRepos<Repo>(
           break;
       }
     } catch (error) {
+      telemetry?.addFailed();
       const message = error instanceof Error ? error.message : String(error);
       results.failed.push({ repo: name, error: message });
       progress.update(name, 'failed', message);
