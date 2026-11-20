@@ -42,15 +42,20 @@ const BLOCKING_STOP_PROTOCOL = {
 const CLAUDE_CODEX_PROTOCOL = {
   ...BLOCKING_STOP_PROTOCOL,
   sessionIdField: 'session_id',
-  expectedLimitOutput: {
-    systemMessage: expect.stringMatching(
-      /Vortex analysis reached its limit of 3 attempts\.[\s\S]*Use Number\.isNaN\./,
-    ),
-  },
+  expectedLimitOutput: {},
 };
 const AGENTS = [
   { name: 'claude', ...CLAUDE_CODEX_PROTOCOL },
   { name: 'codex', ...CLAUDE_CODEX_PROTOCOL },
+  {
+    name: 'devin',
+    ...CLAUDE_CODEX_PROTOCOL,
+    payloadFields: () => ({
+      hook_event_name: 'Stop',
+      prompt_id: 'prompt',
+      stop_hook_active: false,
+    }),
+  },
   {
     name: 'copilot',
     ...BLOCKING_STOP_PROTOCOL,
@@ -86,6 +91,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
   let server: FakeSonarQubeServer;
   beforeEach(async () => {
     harness = await TestHarness.create();
+    harness.withExtraEnv({ DEVIN_PROJECT_DIR: agent.name === 'devin' ? harness.cwd.path : '' });
     initGitRepo(harness.cwd.path);
     harness.cwd.writeFile('sonar-project.properties', 'sonar.projectKey=project\n');
     harness.cwd.writeFile('src/tracked.ts', BAD);
@@ -832,7 +838,7 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
   });
 
   describe('payloads and skipped analysis', () => {
-    it('uses the payload working directory for Git and project discovery', async () => {
+    it('uses the agent working directory for Git and project discovery', async () => {
       harness.cwd.writeFile('src/new.ts', BAD);
       const result = await harness.runWithStdin(COMMAND, JSON.stringify(payload()), {
         cwd: harness.userHome.path,
@@ -891,7 +897,11 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       harness.cwd.writeFile('src/new.ts', BAD);
       expectContinuation(await invoke());
       expect(queryState().count).toBe(1);
-      const result = await invoke({ cwd: harness.userHome.path });
+      const result = await harness.runWithStdin(
+        COMMAND,
+        JSON.stringify(payload({ cwd: harness.userHome.path })),
+        { extraEnv: { DEVIN_PROJECT_DIR: harness.userHome.path } },
+      );
       expectSilentStop(result);
       expect(analyses()).toHaveLength(1);
       expect(queryState()).toEqual({ count: 0, locks: 0, successful: 1 });
@@ -948,17 +958,32 @@ describe.each(AGENTS)('$name stop hook', (agent) => {
       15000,
     );
 
-    it.each([
-      null,
-      {},
-      { [agent.sessionIdField]: 'session', cwd: 42 },
-      { [agent.sessionIdField]: 'session', cwd: '' },
-      { [agent.sessionIdField]: 'session', cwd: '   ' },
-    ])(
+    it.each([null, {}])(
       'allows stopping with an invalid adapter payload: %j',
       async (payload) => {
         harness.cwd.writeFile('src/new.ts', BAD);
         expectSilentStop(await harness.runWithStdin(COMMAND, JSON.stringify(payload)));
+        expect(analyses()).toHaveLength(0);
+      },
+      15000,
+    );
+
+    it.each([42, '', '   '])(
+      'allows stopping with an invalid working directory: %j',
+      async (cwd) => {
+        harness.cwd.writeFile('src/new.ts', BAD);
+        let result: CliResult;
+        if (agent.name === 'devin') {
+          result = await harness.runWithStdin(COMMAND, JSON.stringify(payload()), {
+            extraEnv: { DEVIN_PROJECT_DIR: String(cwd) },
+          });
+        } else {
+          result = await harness.runWithStdin(
+            COMMAND,
+            JSON.stringify({ [agent.sessionIdField]: 'session', cwd }),
+          );
+        }
+        expectSilentStop(result);
         expect(analyses()).toHaveLength(0);
       },
       15000,
