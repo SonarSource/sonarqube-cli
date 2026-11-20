@@ -29,6 +29,7 @@ interface DriverInput {
   cwd: string;
   sessionId: string;
   sessionIdThrows?: boolean;
+  hasUI?: boolean;
   entries?: unknown[];
   steps: Step[];
 }
@@ -50,6 +51,7 @@ loaded.default({
 
 const ctx = {
   cwd: input.cwd,
+  hasUI: input.hasUI,
   sessionManager: {
     getSessionId: () => {
       if (input.sessionIdThrows) throw new Error('no session');
