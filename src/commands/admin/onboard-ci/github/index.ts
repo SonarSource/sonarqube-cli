@@ -32,6 +32,7 @@ import {
   runRepos,
 } from '../shared.ts';
 import { OnboardCiSqsClient } from '../sqs-api.ts';
+import type { OnboardingTelemetry } from '../telemetry.ts';
 import type { OnboardCiOptions } from '../types.ts';
 import type { ProcessRepoContext } from './processor.ts';
 import { assessRepo, executeRepo } from './processor.ts';
@@ -73,6 +74,7 @@ export async function onboardCiGithub(
   options: OnboardCiGithubOptions,
   console: Console,
   workflowTemplateContent?: string,
+  telemetry: OnboardingTelemetry | null = null,
 ): Promise<void> {
   assertOnPremiseConnection(connection.auth, 'GitHub');
   const sqs = new OnboardCiSqsClient(connection.httpClient);
@@ -115,6 +117,7 @@ export async function onboardCiGithub(
     },
     'PR',
     console,
+    telemetry,
   );
 
   if (options.dryRun) {
