@@ -30,6 +30,7 @@ import type {
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
+import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -39,9 +40,9 @@ import { createMcpServerFeature } from '../_common/features/mcp-server-feature.t
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
 import { createSonarSecretsHooksResources } from '../_common/features/sonar-secrets-hooks-feature.ts';
 import {
-  createSqaaInstructionsSnippet,
-  createSqaaInstructionsSubfeature,
+  createSqaaInstructionsRemover,
   SQAA_HOOK_FEATURE_ID,
+  SQAA_INSTRUCTIONS_SUBFEATURE_ID,
 } from '../_common/features/sqaa-instructions-feature.ts';
 import {
   buildUnixHookScript,
@@ -219,9 +220,14 @@ function createCagHookConfigResource(): ResourceDeclaration {
 }
 
 function createDevinVortexFeature(): FeatureContainer<DevinIntegrationOptions> {
-  return createVortexFeature<DevinIntegrationOptions>([
+  const feature = createVortexFeature<DevinIntegrationOptions>([
     createSqaaHookSubfeature(),
-    createSqaaInstructionsSubfeature([createSqaaInstructionsSnippet(resolveDevinAgentsMdPath)]),
+    createCompletionAnalysisHookSubfeature<DevinIntegrationOptions>({
+      agent: 'devin',
+      configDir: '',
+      settingsPath: resolveDevinConfigPath,
+      resolveContext: devinHookContext,
+    }),
     createContextAugmentationSubfeature<DevinIntegrationOptions>({
       agent: 'devin',
       scriptPath: (context) =>
@@ -230,6 +236,14 @@ function createDevinVortexFeature(): FeatureContainer<DevinIntegrationOptions> {
       additionalResources: [createCagSubagentScriptResource()],
     }),
   ]);
+  return {
+    ...feature,
+    replacedIds: [...(feature.replacedIds ?? []), SQAA_INSTRUCTIONS_SUBFEATURE_ID],
+    legacyCleanups: [
+      ...(feature.legacyCleanups ?? []),
+      createSqaaInstructionsRemover(resolveDevinAgentsMdPath),
+    ],
+  };
 }
 
 export const devinIntegration: IntegrationDeclaration<DevinIntegrationOptions> = {

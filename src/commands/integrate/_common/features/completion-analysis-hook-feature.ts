@@ -45,6 +45,8 @@ interface CompletionAnalysisHookConfig {
   configDir: string;
   settingsPath: (context: IntegrationContext) => string;
   hookConfigResource?: ResourceDeclaration;
+  // Devin's OS-specific config directory may live outside the home directory used as targetRoot.
+  resolveContext?: (context: IntegrationContext) => IntegrationContext;
 }
 
 export function createCompletionAnalysisHookSubfeature<TOptions extends IntegrateAgentOptions>({
@@ -52,6 +54,7 @@ export function createCompletionAnalysisHookSubfeature<TOptions extends Integrat
   configDir,
   settingsPath,
   hookConfigResource,
+  resolveContext = (context) => context,
 }: CompletionAnalysisHookConfig): SubfeatureDeclaration<TOptions> {
   return {
     id: COMPLETION_ANALYSIS_HOOK_FEATURE_ID,
@@ -61,7 +64,8 @@ export function createCompletionAnalysisHookSubfeature<TOptions extends Integrat
       wholeFile({
         id: 'completion-analysis-hook-script',
         displayName: 'Completion analysis hook script',
-        targetPath: (context) => resolveAgentHookScriptPath(context, configDir, STOP_SCRIPT_REL),
+        targetPath: (context) =>
+          resolveAgentHookScriptPath(resolveContext(context), configDir, STOP_SCRIPT_REL),
         content: {
           unix: buildUnixHookScript(`agent-stop --agent ${agent}`),
           windows: buildWindowsHookScript(`agent-stop --agent ${agent}`),
@@ -77,7 +81,7 @@ export function createCompletionAnalysisHookSubfeature<TOptions extends Integrat
           patch: (document, context) =>
             upsertAgentHooks(document, [
               createAgentHookEntry(
-                context,
+                resolveContext(context),
                 configDir,
                 'Stop',
                 undefined,
