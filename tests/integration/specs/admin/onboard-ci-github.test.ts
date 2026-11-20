@@ -203,7 +203,6 @@ describe('GitHub bulk CI onboarding', () => {
     expect(facts[0].payload).toEqual({
       platform: 'GitHub',
       created_count: 1,
-      existing_count: 0,
       failed_count: 1,
     });
 
@@ -283,13 +282,11 @@ describe('GitHub bulk CI onboarding', () => {
       {
         platform: 'GitHub',
         created_count: 1,
-        existing_count: 0,
         failed_count: 0,
       },
       {
         platform: 'GitHub',
         created_count: 0,
-        existing_count: 1,
         failed_count: 0,
       },
     ]);
@@ -328,7 +325,6 @@ describe('GitHub bulk CI onboarding', () => {
       expect(facts[0].payload).toEqual({
         platform: 'GitHub',
         created_count: 0,
-        existing_count: 0,
         failed_count: 0,
       });
     } finally {
@@ -402,7 +398,6 @@ describe('GitHub bulk CI onboarding', () => {
     expect(events[0].event_payload).toMatchObject({
       platform: 'GitHub',
       created_count: 0,
-      existing_count: 0,
       failed_count: 0,
     });
     await harness.run(`admin onboard-ci github --org ${ORG} --dry-run`);

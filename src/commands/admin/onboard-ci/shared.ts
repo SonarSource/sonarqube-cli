@@ -156,7 +156,6 @@ export async function runRepos<Repo>(
           progress.update(name, 'done', `${requestLabel} opened`);
           break;
         case 'skip':
-          telemetry?.addSkipped(result.reason);
           results.skipped.push({ repo: name, reason: result.reason, prUrl: result.prUrl });
           progress.update(
             name,

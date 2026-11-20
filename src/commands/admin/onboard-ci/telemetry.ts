@@ -25,7 +25,6 @@ interface OnboardingTelemetryPayload {
   platform: DevOpsPlatform;
   // Count only successful creation responses; recovered requests have uncertain attribution.
   created_count: number;
-  existing_count: number;
   // Repository failures; command-level failures remain in CliCommandExecuted.
   failed_count: number;
 }
@@ -35,19 +34,12 @@ export class OnboardingTelemetry extends TelemetryFact<OnboardingTelemetryPayloa
     super('CliCiOnboarding', {
       platform,
       created_count: 0,
-      existing_count: 0,
       failed_count: 0,
     });
   }
 
   addCreated(): void {
     this.payload.created_count++;
-  }
-
-  addSkipped(reason: string): void {
-    if (['PR_ALREADY_OPEN', 'MR_ALREADY_OPEN'].includes(reason)) {
-      this.payload.existing_count++;
-    }
   }
 
   addFailed(): void {

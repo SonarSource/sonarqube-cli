@@ -500,7 +500,6 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(events[0].event_payload).toMatchObject({
         platform: 'GitLab',
         created_count: 0,
-        existing_count: 1,
         failed_count: 0,
       });
       expect(result.stdout).toContain('MR already open');
@@ -1284,7 +1283,6 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(events[0].event_payload).toMatchObject({
         platform: 'GitLab',
         created_count: 1,
-        existing_count: 0,
         failed_count: 0,
       });
       expect(result.stdout).toContain('Opened 1 MRs');
@@ -1543,7 +1541,6 @@ describe('sonar admin onboard-ci gitlab', () => {
       expect(events[0].event_payload).toMatchObject({
         platform: 'GitLab',
         created_count: 1,
-        existing_count: 0,
         failed_count: 1,
       });
       expect(result.stdout).toContain('Opened 1 MRs');
