@@ -103,7 +103,6 @@ jobs:
           TASK: ${{ matrix.task }}
           HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
           HB_SONAR_PROJECT: SonarSource_sonarqube-cli
-          SONAR_RUN_TOKEN_FILE: ${{ runner.temp }}/sonar-run-token
           SONAR_RUN_TOKEN_ID_FILE: ${{ runner.temp }}/sonar-run-token-id
           HB_SONAR_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
           HB_SONAR_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}

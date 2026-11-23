@@ -160,7 +160,6 @@ mint_sonar_run_token() {
   HB_SONAR_TOKEN="$(jq -r .token <<<"${created}")"
   export HB_SONAR_TOKEN
   (umask 077 && printf '%s' "${SONAR_RUN_TOKEN_ID}" >"${SONAR_RUN_TOKEN_ID_FILE}")
-  (umask 077 && printf '%s' "${HB_SONAR_TOKEN}" >"${SONAR_RUN_TOKEN_FILE}")
 }
 
 revoke_sonar_run_token() {
@@ -174,7 +173,6 @@ stop_and_collect() {
 }
 
 main() {
-  : "${SONAR_RUN_TOKEN_FILE:?SONAR_RUN_TOKEN_FILE must be set}"
   : "${SONAR_RUN_TOKEN_ID_FILE:?SONAR_RUN_TOKEN_ID_FILE must be set}"
   export HARBOR_HOST_ENVIRONMENT_ALLOW=1
   prepare
