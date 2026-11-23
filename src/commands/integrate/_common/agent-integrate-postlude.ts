@@ -35,7 +35,6 @@ import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import { recordIntegrationConfigured } from './integrate-telemetry.ts';
 import { warnIfMcpRuntimeUnavailable } from './mcp-runtime-warning.ts';
-import { setupMatches } from './pending-agent-setup.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -106,13 +105,9 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
           const onboarding = state.integrations.onboarding;
           const pending = onboarding?.[params.integrationId];
           if (!onboarding || !pending || pending.status === 'skipped') return;
-          if (options.fromBulkSetup || (!auth.comesFromEnv() && setupMatches(auth, pending))) {
-            state.integrations.onboarding = Object.fromEntries(
-              Object.entries(onboarding).filter(([id]) => id !== params.integrationId),
-            );
-          } else if (pending.status === 'retry_setup') {
-            pending.status = 'waiting_for_sign_in';
-          }
+          state.integrations.onboarding = Object.fromEntries(
+            Object.entries(onboarding).filter(([id]) => id !== params.integrationId),
+          );
         });
       }
       recordIntegrationConfigured(params.ctx, {

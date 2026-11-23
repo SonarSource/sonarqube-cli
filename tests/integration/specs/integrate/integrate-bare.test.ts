@@ -192,6 +192,24 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
+  it('rejects a conflicting explicit target without activating the pending target', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    const bulk = 'integrate --all --non-interactive --server ';
+    expect((await harness.run(bulk + server.baseUrl())).exitCode).toBe(0);
+
+    harness.state().withAuth(server.baseUrl(), 'test-token');
+    const state = harness.state().build();
+    state.integrations.onboarding = {
+      'claude-code': { status: 'waiting_for_sign_in', server: server.baseUrl() },
+    };
+    harness.state().withRawState(JSON.stringify(state));
+    const conflicting = await harness.run(bulk + 'https://sonar.example.test');
+    expect(conflicting.exitCode).toBe(1);
+    expect(conflicting.stderr).toContain('Pending setup targets a different SonarQube connection.');
+    expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+  });
+
   it('keeps a prepared integration pending on a different connection', async () => {
     const server = await harness.newFakeServer().withAuthToken('test-token').start();
     harness.withAuth(server.baseUrl(), 'test-token');

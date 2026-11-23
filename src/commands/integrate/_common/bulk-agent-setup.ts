@@ -154,6 +154,7 @@ export async function integrateAllAgents(
   auth: ResolvedAuth | null,
   agents = detectInstalledAgents(),
   target: SetupTarget = {},
+  pendingOnly = false,
 ): Promise<void> {
   if (!agents.length) {
     ctx.console.info('No supported coding agents detected.');
@@ -163,7 +164,9 @@ export async function integrateAllAgents(
   const failed = await agents.reduce(async (previous, agent) => {
     const alreadyFailed = await previous;
     try {
-      const outcome = await withAgentInstallLock(() => configureAgent(ctx, agent, auth, target));
+      const outcome = await withAgentInstallLock(() =>
+        configureAgent(ctx, agent, auth, target, pendingOnly),
+      );
       ctx.console.print(agentDisplayName(agent) + ': ' + outcome);
       return alreadyFailed;
     } catch (error) {
@@ -183,6 +186,7 @@ async function configureAgent(
   agent: DetectedAgentId,
   auth: ResolvedAuth | null,
   target: SetupTarget,
+  pendingOnly: boolean,
 ): Promise<string> {
   const state = loadState();
   const status = await agentSetupStatus(agent, state);
@@ -190,13 +194,18 @@ async function configureAgent(
 
   const id = AGENT_INTEGRATION_IDS[agent];
   const pending = state.integrations.onboarding?.[id];
-  const requested = pending ?? target;
+  if (pendingOnly && (!pending || !auth || !setupMatches(auth, pending))) {
+    return 'Setup no longer pending for this connection';
+  }
+  const requested = combineSetupTargets(pending, target);
   const usesSavedLogin =
     pending?.status === 'waiting_for_sign_in' ||
     target.server !== undefined ||
     pending?.server !== undefined;
   if (!auth || !setupMatches(auth, requested) || (usesSavedLogin && auth.comesFromEnv())) {
-    if (!pending) saveAgentOnboarding(id, { ...target, status: 'waiting_for_sign_in' });
+    if (!pending || pending.server !== requested.server || pending.org !== requested.org) {
+      saveAgentOnboarding(id, { ...requested, status: pending?.status ?? 'waiting_for_sign_in' });
+    }
     return 'Waiting for sign-in';
   }
 
@@ -212,6 +221,17 @@ async function configureAgent(
     for (const fact of installContext.statsFacts()) ctx.recordStats(() => fact);
   }
   return 'Configured';
+}
+
+function combineSetupTargets(pending: SetupTarget | undefined, target: SetupTarget): SetupTarget {
+  const conflicts = (['server', 'org'] as const).some(
+    (key) =>
+      pending?.[key] !== undefined && target[key] !== undefined && pending[key] !== target[key],
+  );
+  if (conflicts) {
+    throw new CommandFailedError('Pending setup targets a different SonarQube connection.');
+  }
+  return { server: target.server ?? pending?.server, org: target.org ?? pending?.org };
 }
 
 function saveAgentOnboarding(id: string, pending: AgentOnboardingState): void {
@@ -231,7 +251,7 @@ export async function resumePendingAgentSetups(
     .map((pending) => pending.agent);
   if (!agents.length) return false;
   try {
-    await integrateAllAgents(ctx, auth, agents);
+    await integrateAllAgents(ctx, auth, agents, {}, true);
   } catch {
     ctx.console.warn(
       "Sign-in succeeded. Retry pending setup with 'sonar integrate --all --non-interactive'.",
