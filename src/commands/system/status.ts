@@ -77,6 +77,7 @@ import {
 
 import { version as VERSION } from '../../../package.json';
 import { supportedIntegrations } from '../integrate';
+import { AGENT_ONBOARDING_FEATURE_ID } from '../integrate/_common/features/agent-onboarding.ts';
 import { MCP_CONFIG_RESOURCE_ID } from '../integrate/_common/features/mcp-server-feature.ts';
 import {
   LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID,
@@ -351,11 +352,13 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   for (const i of state.integrations.installed) {
     const name = supportedIntegrations.get(i.integrationId)?.displayName ?? i.integrationId;
 
-    // Collect all unique targetRoots across all features (project and global)
-    const allRoots = [...new Set(i.features.map((f) => f.targetRoot))];
+    const configured = i.features.filter(
+      (feature) => feature.featureId !== AGENT_ONBOARDING_FEATURE_ID,
+    );
+    const allRoots = [...new Set(configured.map((feature) => feature.targetRoot))];
 
     for (const root of allRoots) {
-      const features = i.features.filter((f) => f.targetRoot === root);
+      const features = configured.filter((feature) => feature.targetRoot === root);
       result.push({
         id: i.integrationId,
         name,
@@ -370,7 +373,7 @@ function getInstalledIntegrations(state: CliState): IntegrationInfo[] {
   }
 
   // Legacy agents not already covered by declarative state.
-  const declarativeIds = new Set(state.integrations.installed.map((i) => i.integrationId));
+  const declarativeIds = new Set(result.map((integration) => integration.id));
   const legacyAgents = (state as Partial<CliState>).agents;
   for (const [agentId, config] of Object.entries(legacyAgents ?? {})) {
     if (config.configured && !declarativeIds.has(agentId)) {

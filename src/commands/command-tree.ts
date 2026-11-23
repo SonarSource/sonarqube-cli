@@ -111,6 +111,7 @@ import {
 import { setConfig } from './config/set.ts';
 import { unsetConfig } from './config/unset.ts';
 import { derivePassthroughSubcommand, runContextPassthrough } from './context';
+import { AGENT_ONBOARDING_HOOK, agentOnboarding } from './hook/agent-onboarding.ts';
 import { agentPostToolUse } from './hook/agent-post-tool-use.ts';
 import { agentPromptSubmit } from './hook/agent-prompt-submit.ts';
 import { agentSecretsMasking } from './hook/agent-secrets-masking/index.ts';
@@ -547,6 +548,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .option('--all', 'Set up all detected coding agents')
+    .option('--dismiss-agent <agent>', 'Skip SonarQube onboarding for this coding agent')
     .option('--server <url>', 'Company SonarQube server for bulk setup')
     .option('--org <key>', 'SonarQube Cloud organization for bulk setup')
     .option(
@@ -559,7 +561,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     // parsed onto this command, not the subcommand it dispatches to; forward it explicitly so
     // placement doesn't silently fall back to interactive mode.
     .hook('preSubcommand', (thisCommand, subCommand) => {
-      if (thisCommand.opts().all || thisCommand.opts().server || thisCommand.opts().org) {
+      if (
+        thisCommand.opts().all ||
+        thisCommand.opts().server ||
+        thisCommand.opts().org ||
+        thisCommand.opts().dismissAgent
+      ) {
         throw new InvalidOptionError(
           'Bulk setup options cannot be combined with an explicit tool.',
         );
@@ -1327,6 +1334,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .anonymousAction((ctx) => claudePostToolUseFailure(ctx));
 
   hookCommand
+    .command(AGENT_ONBOARDING_HOOK)
+    .description('Show pending SonarQube setup guidance at agent startup')
+    .requiredOption('--agent <agent>', 'Coding agent protocol')
+    .anonymousAction((ctx, options: { agent: string }) => agentOnboarding(ctx, options.agent));
+
+  hookCommand
     .command('agent-session-start')
     .description('SessionStart/SubagentStart handler: inject Vortex context at agent session start')
     .requiredOption(
@@ -1477,7 +1490,11 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     );
   }
 
-  COMMAND_TREE.hook('preAction', async () => {
+  const isOnboardingHook = (command: Command) =>
+    command.name() === AGENT_ONBOARDING_HOOK && command.parent?.name() === 'hook';
+
+  COMMAND_TREE.hook('preAction', async (_tree, actionCommand) => {
+    if (isOnboardingHook(actionCommand)) return;
     // Safely: a throw from a Commander hook would abort the user's command.
     // Before Sentry init, which reads the telemetry opt-out this migrates.
     await runPostUpdateActionsSafely(postUpdateDeps);
@@ -1487,13 +1504,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   // --help and --version don't pay for it (unknown commands do reach the root
   // action). The guard avoids re-initializing on nested commands.
   let sentryInitialized = false;
-  COMMAND_TREE.hook('preAction', () => {
-    if (sentryInitialized) return;
+  COMMAND_TREE.hook('preAction', (_tree, actionCommand) => {
+    if (sentryInitialized || isOnboardingHook(actionCommand)) return;
     sentryInitialized = true;
     initSentry();
   });
 
   COMMAND_TREE.hook('postAction', async (_thisCommand, actionCommand) => {
+    if (isOnboardingHook(actionCommand)) return;
     const command = actionCommand as SonarCommand;
     commitStatsFacts(command.invocationContext?.statsFacts() ?? []);
     const handlerFacts = command.invocationContext?.telemetryFacts() ?? [];

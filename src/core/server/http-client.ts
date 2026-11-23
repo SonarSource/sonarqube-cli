@@ -308,7 +308,7 @@ export class SonarHttpClient {
     timeoutMs: number = GET_REQUEST_TIMEOUT_MS,
   ): ResultAsync<SafeGetResult<TValue>, HttpClientError> {
     return ResultAsync.fromPromise(
-      (async (): Promise<Response> => {
+      Promise.resolve().then((): Promise<Response> => {
         const url = new URL(`${this.apiHostFor(endpoint)}${endpoint}`);
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
@@ -320,7 +320,7 @@ export class SonarHttpClient {
           request.signal = AbortSignal.any([this.signal, request.signal]);
         }
         return fetchAuthenticated(url.toString(), request);
-      })(),
+      }),
       toError,
     ).andThen((response) =>
       ResultAsync.fromPromise(
