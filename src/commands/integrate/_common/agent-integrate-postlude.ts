@@ -116,6 +116,7 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
         scope: installScope,
         nonInteractive: options.nonInteractive ?? false,
         isFromRouter: options.isFromRouter ?? false,
+        setupSource: options.setupSource,
         ...facts,
       });
     },

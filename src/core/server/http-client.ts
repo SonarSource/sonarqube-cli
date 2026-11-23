@@ -79,7 +79,11 @@ export class SonarHttpClient {
   public readonly isCloud: boolean;
   private readonly token: string;
 
-  constructor(serverURL: string, token: string) {
+  constructor(
+    serverURL: string,
+    token: string,
+    private readonly signal?: AbortSignal,
+  ) {
     this.serverURL = serverURL.replace(/\/$/, ''); // Remove trailing slash
     this.token = token;
     this.isCloud = isSonarQubeCloud(serverURL);
@@ -311,10 +315,11 @@ export class SonarHttpClient {
             url.searchParams.append(key, String(value));
           });
         }
-        return fetchAuthenticated(
-          url.toString(),
-          buildRequest('GET', this.commonHeaders(), timeoutMs, undefined),
-        );
+        const request = buildRequest('GET', this.commonHeaders(), timeoutMs, undefined);
+        if (this.signal && request.signal) {
+          request.signal = AbortSignal.any([this.signal, request.signal]);
+        }
+        return fetchAuthenticated(url.toString(), request);
       })(),
       toError,
     ).andThen((response) =>

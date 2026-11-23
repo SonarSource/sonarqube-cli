@@ -212,7 +212,7 @@ print_completion() {
       echo ""
       ;;
   esac
-  echo "Once ready, run 'sonar --help' to get started."
+  echo "Once ready, run 'sonar integrate' to set up your coding agents, or 'sonar --help' to explore other commands."
 }
 
 main() {

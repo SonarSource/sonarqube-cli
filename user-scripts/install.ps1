@@ -67,7 +67,7 @@ function Show-Completion {
         Write-Host '      (This only applies to this window - you won''t need to run it again.)'
         Write-Host ''
     }
-    Write-Host "Once ready, run 'sonar --help' to get started."
+    Write-Host "Once ready, run 'sonar integrate' to set up your coding agents, or 'sonar --help' to explore other commands."
 }
 
 # --- Main ---
