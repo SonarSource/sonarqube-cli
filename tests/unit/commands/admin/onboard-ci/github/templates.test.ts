@@ -76,8 +76,11 @@ describe('generated GitHub workflow', () => {
     },
   );
 
-  it('sets Server attribution, action versions, full checkout and a secret reference', () => {
+  it('sets Server attribution, pinned actions, full checkout and a secret reference', () => {
     const job = workflow().jobs.sonarqube;
+    for (const step of job.steps) {
+      expect(step.uses).toMatch(/@[a-f0-9]{40}$/);
+    }
     expect(job['runs-on']).toBe('ubuntu-latest');
     expect(job.steps[0]).toEqual({ uses: CHECKOUT_ACTION, with: { 'fetch-depth': 0 } });
     expect(job.steps[1]).toEqual({
