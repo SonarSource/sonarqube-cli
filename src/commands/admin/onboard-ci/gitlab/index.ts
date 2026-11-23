@@ -29,6 +29,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { resolveGitlabDopSetting } from '../dop-setting.ts';
 import type { ClassificationEntry } from './dry-run.ts';
 import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
@@ -133,46 +134,6 @@ export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions):
   }
 }
 
-async function resolveDopSetting(
-  sqs: OnboardCiSqsClient,
-  bindingName?: string,
-): Promise<{ dopSettingId: string; dopSettingKey: string; gitlabUrl: string }> {
-  const settings = await sqs.bindings.listGitlabDopSettings().orThrow();
-
-  if (settings.length === 0) {
-    throw new CommandFailedError(
-      'No GitLab configuration found in SonarQube.\n' +
-        '  → Configure one at Administration > DevOps Platform Integrations > GitLab.',
-    );
-  }
-
-  if (bindingName) {
-    const setting = settings.find((s) => s.key === bindingName);
-    if (!setting) {
-      const available = settings.map((s) => `  ${s.key}  (${s.url})`).join('\n');
-      throw new CommandFailedError(
-        `GitLab configuration '${bindingName}' not found. Available configurations:\n${available}`,
-        { exitCode: 2 },
-      );
-    }
-    return { dopSettingId: setting.id, dopSettingKey: setting.key, gitlabUrl: setting.url };
-  }
-
-  if (settings.length === 1) {
-    return {
-      dopSettingId: settings[0].id,
-      dopSettingKey: settings[0].key,
-      gitlabUrl: settings[0].url,
-    };
-  }
-
-  const list = settings.map((s) => `  ${s.key}  (${s.url})`).join('\n');
-  throw new CommandFailedError(
-    `Multiple GitLab configurations found. Specify one with --binding-name:\n${list}`,
-    { exitCode: 2 },
-  );
-}
-
 function applyReposFileFilter<T extends GitLabRepo>(
   allRepos: GitLabRepo[],
   repos: T[],
@@ -271,10 +232,11 @@ async function preflight(
     );
   }
 
-  const { dopSettingId, dopSettingKey, gitlabUrl } = await resolveDopSetting(
-    sqsClient,
-    options.bindingName,
-  );
+  const {
+    id: dopSettingId,
+    key: dopSettingKey,
+    url: gitlabUrl,
+  } = await resolveGitlabDopSetting(sqsClient.bindings, options.bindingName);
   const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken);
 
   return { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl };
