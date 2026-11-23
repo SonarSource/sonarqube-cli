@@ -155,6 +155,9 @@ describe('sonar architecture install-skill', () => {
         const content = readFileSync(join(harness.cwd.path, file), 'utf8');
         expect(content).toContain('<!-- sonar:begin:sonarqube-architecture-coding -->');
         expect(content).toContain(ARCHITECTURE_CODING_INSTRUCTIONS.trimEnd());
+        expect(content).toContain('This repository may have an intended architecture');
+        expect(content).toContain('If the project manages its intended architecture in a file');
+        expect(content).not.toContain('If it reports that a file manages');
         expect(content).toContain('<!-- sonar:end:sonarqube-architecture-coding -->');
         expect(first.stdout).toContain(`Updated ${join(harness.cwd.path, file)}`);
       }
