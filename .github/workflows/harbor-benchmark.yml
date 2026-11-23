@@ -182,6 +182,12 @@ jobs:
           path: harbor-jobs
           merge-multiple: true
 
+      - name: Install the SonarQube CLI to read its version
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
+          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
+
       - name: Build the trajectory page
         if: ${{ !cancelled() && hashFiles('harbor-jobs/**/result.json') != '' }}
         run: |
