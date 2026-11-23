@@ -102,6 +102,19 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
+  it('recognizes a custom Codex MCP table with whitespace in the key', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    const config = '[mcp_servers . sonarqube]\ncommand = "custom-sonar"\n';
+    harness.userHome.writeFile('.codex/config.toml', config);
+
+    const setup = await harness.run('integrate --all --non-interactive');
+
+    expect(setup.exitCode).toBe(0);
+    expect(setup.stdout).toContain('Codex: Needs review');
+    expect(harness.userHome.file('.codex', 'config.toml').asText()).toBe(config);
+  });
+
   it(
     'continues past a partial install and finishes it on retry',
     async () => {

@@ -22,6 +22,8 @@ import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { parse } from 'smol-toml';
+
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
@@ -82,12 +84,25 @@ function configFiles(agent: DetectedAgentId): string[] {
 async function hasExistingConfig(agent: DetectedAgentId): Promise<boolean> {
   for (const file of configFiles(agent)) {
     try {
-      if (SONAR_CONFIGURATION.test(await readFile(file, 'utf8'))) return true;
+      const content = await readFile(file, 'utf8');
+      if (SONAR_CONFIGURATION.test(content) || (file.endsWith('.toml') && hasSonarToml(content))) {
+        return true;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return true;
     }
   }
   return false;
+}
+
+function hasSonarToml(content: string): boolean {
+  try {
+    const servers = parse(content).mcp_servers;
+    return typeof servers === 'object' && Object.hasOwn(servers, 'sonarqube');
+  } catch {
+    // The integration writer rejects malformed TOML before changing this file.
+    return false;
+  }
 }
 
 export async function agentSetupStatus(
