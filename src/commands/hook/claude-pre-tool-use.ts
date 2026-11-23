@@ -23,7 +23,6 @@
 
 import { existsSync } from 'node:fs';
 
-import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
@@ -65,9 +64,7 @@ export async function claudePreToolUse(ctx: CommandInvocationContext): Promise<H
 
   const agentSessionId = payload.session_id ?? null;
 
-  if (payload.tool_name !== 'Read' || (await hasDevinNativeHook('PreToolUse'))) {
-    return { agentSessionId };
-  }
+  if (payload.tool_name !== 'Read') return { agentSessionId };
 
   const filePath = payload.tool_input?.file_path;
   if (!filePath || !existsSync(filePath)) return { agentSessionId };

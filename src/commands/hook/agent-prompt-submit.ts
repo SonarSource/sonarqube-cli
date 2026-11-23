@@ -21,7 +21,6 @@
 // UserPromptSubmit callback handler — scans prompt text for secrets before it is sent.
 // Replaces the bash/PowerShell logic that was previously embedded in the hook script.
 
-import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { EXIT_CODE_SECRETS_FOUND, SECRETS_CALLER_COMMANDS } from '@/core/config-constants.ts';
 import logger from '@/core/observability/logger.ts';
@@ -45,13 +44,6 @@ function denyPrompt(reason: string): void {
 }
 
 export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
-  return scanPrompt(ctx, 'claude');
-}
-
-export async function scanPrompt(
-  ctx: CommandInvocationContext,
-  agent: 'claude' | 'devin',
-): Promise<HookCommandResult> {
   let payload: PromptSubmitPayload;
   try {
     payload = await readStdinJson<PromptSubmitPayload>();
@@ -63,9 +55,7 @@ export async function scanPrompt(
   const agentSessionId = payload.session_id ?? null;
 
   const prompt = payload.prompt;
-  if (!prompt || (agent === 'claude' && (await hasDevinNativeHook('UserPromptSubmit')))) {
-    return { agentSessionId };
-  }
+  if (!prompt) return { agentSessionId };
 
   let deps: HookDependencies;
   try {

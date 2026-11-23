@@ -29,12 +29,16 @@ import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/fe
 import {
   CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
   isVortexFeature,
+  VORTEX_FEATURE_ID,
   VORTEX_PROMOTION_MESSAGE,
 } from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
-import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
+import { CODEX_INTEGRATION_ID, codexIntegration } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
-import { CURSOR_INTEGRATION_ID } from '@/commands/integrate/cursor/declaration.js';
+import {
+  CURSOR_INTEGRATION_ID,
+  cursorIntegration,
+} from '@/commands/integrate/cursor/declaration.js';
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalCagBinaryName } from '@/core/host/install/context-augmentation.js';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
@@ -117,7 +121,27 @@ const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
 
 describe('shared legacy Context Augmentation skill', () => {
+  const relativePath = join('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md');
+  const legacyContent = '# Legacy shared skill\n';
   let harness: TestHarness;
+
+  function recordLegacyOwner(state: CliState, ownerId: string) {
+    const subfeature = findRecordedCagFeature(state, ownerId)?.feature.subfeatures?.find(
+      (record) => record.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+    );
+    if (!subfeature) throw new Error('Expected the owner to have Vortex Context configured.');
+
+    subfeature.resources = [
+      ...(subfeature.resources ?? []),
+      {
+        id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+        resourceType: 'whole-file',
+        path: harness.userHome.file(relativePath).path,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        updatedByCliVersion: '1.0.0',
+      },
+    ];
+  }
 
   beforeEach(async () => {
     harness = await TestHarness.create();
@@ -151,25 +175,9 @@ describe('shared legacy Context Augmentation skill', () => {
 
       expect((await integrate(owner)).exitCode).toBe(0);
       const state = loadState(harness);
-      const subfeature = findRecordedCagFeature(state, ownerId)?.feature.subfeatures?.find(
-        (record) => record.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
-      );
-      if (!subfeature) throw new Error('Expected the owner to have Vortex Context configured.');
-
-      const relativePath = join('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md');
       const skill = harness.userHome.file(relativePath);
-      const legacyContent = '# Legacy shared skill\n';
       harness.userHome.writeFile(relativePath, legacyContent);
-      subfeature.resources = [
-        ...(subfeature.resources ?? []),
-        {
-          id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-          resourceType: 'whole-file',
-          path: skill.path,
-          updatedAt: '2026-01-01T00:00:00.000Z',
-          updatedByCliVersion: '1.0.0',
-        },
-      ];
+      recordLegacyOwner(state, ownerId);
       harness.state().withRawState(JSON.stringify(state));
 
       expect((await integrate(agent)).exitCode).toBe(0);
@@ -183,6 +191,23 @@ describe('shared legacy Context Augmentation skill', () => {
     },
     { timeout: 30000 },
   );
+  it('removes the skill when a full reset removes both recorded owners', async () => {
+    const home = harness.userHome.path;
+    const state = harness
+      .state()
+      .withInstalledIntegrationFeature(codexIntegration, VORTEX_FEATURE_ID, 'global', home)
+      .withInstalledIntegrationFeature(cursorIntegration, VORTEX_FEATURE_ID, 'global', home)
+      .build();
+    recordLegacyOwner(state, CODEX_INTEGRATION_ID);
+    recordLegacyOwner(state, CURSOR_INTEGRATION_ID);
+    harness.state().withRawState(JSON.stringify(state));
+    harness.userHome.writeFile(relativePath, legacyContent);
+
+    const result = await harness.run('system reset --force');
+
+    expect(result.exitCode).toBe(0);
+    expect(harness.userHome.file(relativePath).exists()).toBe(false);
+  });
 });
 
 describe('integrate claude — Context Augmentation', () => {

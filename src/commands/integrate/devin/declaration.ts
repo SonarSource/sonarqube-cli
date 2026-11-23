@@ -85,16 +85,6 @@ const READ_HOOK_MATCHER = '^read$';
 const SECRETS_ON_READ_MARKER = 'devin-secrets-on-read';
 
 const DEVIN_NATIVE_HOOKS = {
-  PreToolUse: {
-    path: PRETOOL_SECRETS_SCRIPT_REL,
-    matcher: READ_HOOK_MATCHER,
-    subcommand: 'devin-pre-tool-use',
-  },
-  UserPromptSubmit: {
-    path: PROMPT_SECRETS_SCRIPT_REL,
-    matcher: '',
-    subcommand: 'devin-prompt-submit',
-  },
   PostToolUse: {
     path: POSTTOOL_SQAA_SCRIPT_REL,
     matcher: SQAA_HOOK_MATCHER,

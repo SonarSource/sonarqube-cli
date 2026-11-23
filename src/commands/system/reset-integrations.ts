@@ -24,6 +24,7 @@ import {
   type IntegrationRegistry,
   makeContext,
 } from '@/core/framework/features';
+import { removeInstalledFeature } from '@/core/framework/features/installation-recorder.ts';
 import type {
   CliState,
   InstalledIntegration,
@@ -68,34 +69,39 @@ async function removeDeclarativeIntegrations(
   const failed: string[] = [];
   let removedFeatures = 0;
 
-  for (const installed of state.integrations.installed) {
-    const declaration = supportedIntegrations.get(installed.integrationId);
-    if (!declaration) {
-      failed.push(`${installed.integrationId}: unknown integration`);
-      continue;
-    }
-
-    for (const installedFeature of installed.features) {
-      const outcome = await tryRemoveInstalledFeature(
-        state,
-        installed,
-        installedFeature,
-        declaration,
-        console,
-      );
-      if (outcome.status === 'removed') {
-        integrationFeatures.push({
-          integrationStateId: outcome.integrationStateId,
-          featureId: outcome.featureId,
-        });
-        removedFeatures += 1;
-      } else {
-        failed.push(outcome.message);
-      }
+  const removals = removeFeaturesSequentially(state, supportedIntegrations, console);
+  for await (const outcome of removals) {
+    if (outcome.status === 'removed') {
+      integrationFeatures.push({
+        integrationStateId: outcome.integrationStateId,
+        featureId: outcome.featureId,
+      });
+      removedFeatures += 1;
+    } else {
+      failed.push(outcome.message);
     }
   }
 
   return { integrationFeatures, failed, removedFeatures };
+}
+
+function* removeFeaturesSequentially(
+  state: CliState,
+  supportedIntegrations: IntegrationRegistry,
+  console: Console,
+): Generator<FeatureRemoveOutcome | Promise<FeatureRemoveOutcome>> {
+  const remaining = structuredClone(state);
+  for (const installed of state.integrations.installed) {
+    const declaration = supportedIntegrations.get(installed.integrationId);
+    if (!declaration) {
+      yield { status: 'failed', message: installed.integrationId + ': unknown integration' };
+      continue;
+    }
+
+    for (const installedFeature of installed.features) {
+      yield tryRemoveInstalledFeature(remaining, installed, installedFeature, declaration, console);
+    }
+  }
 }
 
 async function tryRemoveInstalledFeature(
@@ -132,6 +138,8 @@ async function tryRemoveInstalledFeature(
 
   try {
     await integrationInstaller.removeFeature(context, featureDeclaration);
+    // Later removals only need to preserve the owners still present.
+    removeInstalledFeature(state, context, declaration, featureDeclaration);
     return {
       status: 'removed',
       integrationStateId: installed.id,
