@@ -67,6 +67,7 @@ export function setupMatches(
 export function pendingAgentSetups(state: CliState) {
   return SUPPORTED_AGENT_IDS.flatMap((agent) => {
     const pending = state.integrations.onboarding?.[AGENT_INTEGRATION_IDS[agent]];
-    return pending && pending.status !== 'skipped' ? [{ agent, ...pending }] : [];
+    if (!pending || pending.status === 'skipped') return [];
+    return [{ agent, status: pending.status, server: pending.server, org: pending.org }];
   });
 }

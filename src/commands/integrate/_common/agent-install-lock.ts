@@ -26,7 +26,7 @@ import { Database } from 'bun:sqlite';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getCliDir } from '@/core/config-constants.ts';
 
-export async function withAgentInstallLock<T>(install: () => Promise<T>): Promise<T> {
+export async function withAgentInstallLock<T>(install: () => Promise<T> | T): Promise<T> {
   const dir = getCliDir();
   mkdirSync(dir, { recursive: true });
   const db = new Database(join(dir, 'agent-install.lock.sqlite'), { create: true });

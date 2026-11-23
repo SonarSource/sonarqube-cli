@@ -286,6 +286,6 @@ const ADAPTERS: Record<SessionStartAgent, SessionStartAgentAdapter> = {
   pi: piAdapter,
 };
 
-function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {
+export function resolveAdapter(agent: string): SessionStartAgentAdapter | undefined {
   return ADAPTERS[agent as SessionStartAgent];
 }

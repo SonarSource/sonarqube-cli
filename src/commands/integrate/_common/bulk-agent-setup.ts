@@ -25,32 +25,38 @@ import { join } from 'node:path';
 import { parse } from 'smol-toml';
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
   CURSOR_CONFIG_DIR,
 } from '@/core/config-constants.ts';
+import { installIntegration } from '@/core/framework/features';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 import {
   agentDisplayName,
   type DetectedAgentId,
   detectInstalledAgents,
+  SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
 import { normalizeServerUrl } from '@/core/host/keychain.ts';
 import type { AgentOnboardingState, CliState } from '@/core/state/state.ts';
 import { loadState, updateState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
 
+import { resolveAntigravityInstallTarget } from '../antigravity/install-target.ts';
+import { supportedIntegrations } from '../index.ts';
 import {
   AGENT_INTEGRATION_HANDLERS,
   AGENT_INTEGRATION_IDS,
   BULK_SETUP_OPTIONS,
 } from '../integration-handlers.ts';
 import { withAgentInstallLock } from './agent-install-lock.ts';
+import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
+import { AGENT_ONBOARDING_FEATURE_ID } from './features/agent-onboarding.ts';
 import { pendingAgentSetups, setupMatches, type SetupTarget } from './pending-agent-setup.ts';
-import type { SetupSource } from './types.ts';
+import type { IntegrateAgentOptions, SetupSource } from './types.ts';
 
 type AgentSetupStatus = 'Ready to configure' | 'Already configured' | 'Skipped' | 'Needs review';
 
@@ -127,7 +133,9 @@ export async function agentSetupStatus(
   if (onboarding?.status === 'retry_setup') return 'Ready to configure';
   if (
     state.integrations.installed.some(
-      (integration) => integration.integrationId === id && integration.features.length > 0,
+      (integration) =>
+        integration.integrationId === id &&
+        integration.features.some((feature) => feature.featureId !== AGENT_ONBOARDING_FEATURE_ID),
     ) ||
     (Object.hasOwn(state.agents, id) && state.agents[id].configured) ||
     state.agentExtensions.some((extension) => extension.agentId === id)
@@ -205,8 +213,13 @@ async function configureAgent(
     pending?.server !== undefined;
   if (!auth || !setupMatches(auth, requested) || (usesSavedLogin && auth.comesFromEnv())) {
     if (!pending || pending.server !== requested.server || pending.org !== requested.org) {
-      saveAgentOnboarding(id, { ...requested, status: pending?.status ?? 'waiting_for_sign_in' });
+      saveAgentOnboarding(id, {
+        ...requested,
+        status: pending?.status ?? 'waiting_for_sign_in',
+        invitationShown: pending?.invitationShown,
+      });
     }
+    if (pending?.status !== 'retry_setup') await prepareSignInGuidance(ctx, agent, id);
     return 'Waiting for sign-in';
   }
 
@@ -225,6 +238,30 @@ async function configureAgent(
     for (const fact of installContext.statsFacts()) ctx.recordStats(() => fact);
   }
   return 'Configured';
+}
+
+async function prepareSignInGuidance(
+  ctx: CommandInvocationContext,
+  agent: DetectedAgentId,
+  integrationId: string,
+): Promise<void> {
+  const integration = supportedIntegrations.get(integrationId);
+  if (!integration) throw new CommandFailedError('Agent integration is unavailable.');
+  const target =
+    agent === 'antigravity' ? resolveAntigravityInstallTarget() : resolveIntegrateInstallTarget();
+  const installed = await installIntegration<IntegrateAgentOptions>({
+    registry: supportedIntegrations,
+    integrationId,
+    options: { prepareOnboarding: true },
+    targetRoot: target.installRoot,
+    scope: target.installScope,
+    console: ctx.console,
+    nonInteractive: true,
+    excludedFeatureIds: integration.features
+      .filter((feature) => feature.id !== AGENT_ONBOARDING_FEATURE_ID)
+      .map((feature) => feature.id),
+  });
+  if (!installed.length) throw new CommandFailedError('Could not save pending sign-in guidance.');
 }
 
 function combineSetupTargets(pending: SetupTarget | undefined, target: SetupTarget): SetupTarget {
@@ -262,4 +299,16 @@ export async function resumePendingAgentSetups(
     );
   }
   return true;
+}
+
+export async function dismissAgentSetup(
+  ctx: CommandInvocationContext,
+  name: string,
+): Promise<void> {
+  const agent = SUPPORTED_AGENT_IDS.find((candidate) => candidate === name);
+  if (!agent) throw new InvalidOptionError('Unknown coding agent: ' + name);
+  await withAgentInstallLock(() => {
+    saveAgentOnboarding(AGENT_INTEGRATION_IDS[agent], { status: 'skipped' });
+  });
+  ctx.console.info(agentDisplayName(agent) + ': Skipped');
 }
