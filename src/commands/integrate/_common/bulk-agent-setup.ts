@@ -50,6 +50,7 @@ import {
 } from '../integration-handlers.ts';
 import { withAgentInstallLock } from './agent-install-lock.ts';
 import { pendingAgentSetups, setupMatches, type SetupTarget } from './pending-agent-setup.ts';
+import type { SetupSource } from './types.ts';
 
 type AgentSetupStatus = 'Ready to configure' | 'Already configured' | 'Skipped' | 'Needs review';
 
@@ -156,7 +157,7 @@ export async function integrateAllAgents(
   auth: ResolvedAuth | null,
   agents = detectInstalledAgents(),
   target: SetupTarget = {},
-  pendingOnly = false,
+  source: SetupSource = 'bulk',
 ): Promise<void> {
   if (!agents.length) {
     ctx.console.info('No supported coding agents detected.');
@@ -167,7 +168,7 @@ export async function integrateAllAgents(
     const alreadyFailed = await previous;
     try {
       const outcome = await withAgentInstallLock(() =>
-        configureAgent(ctx, agent, auth, target, pendingOnly),
+        configureAgent(ctx, agent, auth, target, source),
       );
       ctx.console.print(agentDisplayName(agent) + ': ' + outcome);
       return alreadyFailed;
@@ -188,7 +189,7 @@ async function configureAgent(
   agent: DetectedAgentId,
   auth: ResolvedAuth | null,
   target: SetupTarget,
-  pendingOnly: boolean,
+  source: SetupSource,
 ): Promise<string> {
   const state = loadState();
   const status = await agentSetupStatus(agent, state);
@@ -196,7 +197,7 @@ async function configureAgent(
 
   const id = AGENT_INTEGRATION_IDS[agent];
   const pending = state.integrations.onboarding?.[id];
-  if (pendingOnly && (!pending || !auth || !setupMatches(auth, pending))) {
+  if (source === 'deferred' && (!pending || !auth || !setupMatches(auth, pending))) {
     return 'Setup no longer pending for this connection';
   }
   const requested = combineSetupTargets(pending, target);
@@ -217,7 +218,10 @@ async function configureAgent(
   saveAgentOnboarding(id, { ...boundTarget, status: 'retry_setup' });
   const installContext = ctx.withAuth(auth);
   try {
-    await AGENT_INTEGRATION_HANDLERS[id](BULK_SETUP_OPTIONS, installContext);
+    await AGENT_INTEGRATION_HANDLERS[id](
+      { ...BULK_SETUP_OPTIONS, setupSource: source },
+      installContext,
+    );
   } finally {
     ctx.recordTelemetry(...installContext.telemetryFacts());
     for (const fact of installContext.statsFacts()) ctx.recordStats(() => fact);
@@ -253,7 +257,7 @@ export async function resumePendingAgentSetups(
     .map((pending) => pending.agent);
   if (!agents.length) return false;
   try {
-    await integrateAllAgents(ctx, auth, agents, {}, true);
+    await integrateAllAgents(ctx, auth, agents, {}, 'deferred');
   } catch {
     ctx.console.warn(
       "Sign-in succeeded. Retry pending setup with 'sonar integrate --all --non-interactive'.",
