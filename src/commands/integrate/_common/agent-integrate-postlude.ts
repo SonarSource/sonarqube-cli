@@ -72,6 +72,11 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
 ): Promise<void> {
   const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
+  if (options.fromBulkSetup && vortex.disposition.action === 'preserve') {
+    throw new CommandFailedError(
+      'Could not check Vortex entitlement. Retry setup once the connection is available.',
+    );
+  }
   const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
     serverUrl: auth.serverUrl,
@@ -97,7 +102,12 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
       completion.saved = true;
       if (loadState().integrations.onboarding?.[params.integrationId]) {
         updateState((state) => {
-          delete state.integrations.onboarding?.[params.integrationId];
+          const onboarding = state.integrations.onboarding;
+          const pending = onboarding?.[params.integrationId];
+          if (!onboarding || !pending || pending.status === 'skipped') return;
+          state.integrations.onboarding = Object.fromEntries(
+            Object.entries(onboarding).filter(([id]) => id !== params.integrationId),
+          );
         });
       }
       recordIntegrationConfigured(params.ctx, {

@@ -416,6 +416,12 @@ export interface InstalledIntegration {
   features: InstalledIntegrationFeature[];
 }
 
+export interface AgentOnboardingState {
+  status: 'waiting_for_sign_in' | 'retry_setup' | 'skipped';
+  server?: string;
+  org?: string;
+}
+
 /**
  * Registry of declarative integrations installed by the CLI.
  */
@@ -423,7 +429,7 @@ export interface IntegrationsState {
   /** Installed declarative integrations */
   installed: InstalledIntegration[];
   /** Per-agent setup initiated through onboarding. */
-  onboarding?: Record<string, { status: 'retry_setup' | 'skipped' }>;
+  onboarding?: Partial<Record<string, AgentOnboardingState>>;
 }
 
 /**
