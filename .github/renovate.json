@@ -27,7 +27,7 @@
         "/^src/commands/admin/onboard-ci/github/templates\\.ts$/"
       ],
       "matchStrings": [
-        "const (?:CHECKOUT|SCAN)_ACTION = '(?<depName>[^'@]+)@(?<currentValue>[^']+)'"
+        "const (?:CHECKOUT|SCAN)_ACTION\\s*=\\s*'(?<depName>[^'@]+)@(?<currentDigest>[a-f0-9]{40})'; // (?<currentValue>v[0-9.]+)"
       ],
       "datasourceTemplate": "github-tags"
     }

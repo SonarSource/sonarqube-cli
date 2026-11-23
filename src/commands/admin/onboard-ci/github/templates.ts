@@ -25,8 +25,9 @@ import { PROJECT_KEY_SAFE_PATTERN } from '@/core/project-key.ts';
 
 export const WORKFLOW_PATH = '.github/workflows/sonarqube.yml';
 const DEFAULT_SONAR_TOKEN_VAR_NAME = 'SONAR_TOKEN';
-export const CHECKOUT_ACTION = 'actions/checkout@v7.0.1';
-export const SCAN_ACTION = 'SonarSource/sonarqube-scan-action@v8.5.0';
+export const CHECKOUT_ACTION = 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'; // v7.0.1
+export const SCAN_ACTION =
+  'SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4'; // v8.5.0
 const PROJECT_KEY_PLACEHOLDER = '{{SONAR_PROJECT_KEY}}';
 
 export interface WorkflowOptions {
