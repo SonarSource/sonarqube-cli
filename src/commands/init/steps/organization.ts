@@ -20,7 +20,10 @@
 
 import { randomBytes } from 'node:crypto';
 
-import type { OnNoMemberships } from '@/commands/components/organization/select.ts';
+import type {
+  OnCreateOrganization,
+  OnNoMemberships,
+} from '@/commands/components/organization/select.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { trimChars } from '@/core/io/strings.ts';
 import logger from '@/core/observability/logger.ts';
@@ -71,11 +74,15 @@ export class OrganizationCreationDeclined extends Error {
   }
 }
 
-function creationUnavailable(cause: Error): CommandFailedError {
-  return new CommandFailedError('Organization creation is not available for this account.', {
-    cause,
-    remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
-  });
+/** The account may not create organizations (403/404 from the create call). */
+class OrganizationCreationUnavailableError extends CommandFailedError {
+  constructor(cause: Error) {
+    super('Organization creation is not available for this account.', {
+      cause,
+      remediationHint: `Ask an administrator to add you to an organization, then run 'sonar init' again. ${INTEGRATE_FALLBACK}`,
+    });
+    this.name = 'OrganizationCreationUnavailableError';
+  }
 }
 
 /** A key SonarQube Cloud accepts, derived from the display name. */
@@ -152,7 +159,7 @@ async function createWithAvailableKey(
       (error instanceof UnexpectedApiError && error.status === HTTP_NOT_FOUND)
     ) {
       logger.debug(`Organization creation unavailable: ${error.name}: ${error.message}`);
-      throw creationUnavailable(error);
+      throw new OrganizationCreationUnavailableError(error);
     }
     throw new CommandFailedError(`Could not create organization '${key}': ${error.message}`, {
       cause: error,
@@ -371,16 +378,44 @@ export function createOrganizationHook(console: Console): OnNoMemberships {
     if (!accepted) {
       throw new OrganizationCreationDeclined();
     }
-
-    const name = await askOrganizationName(console);
-    const organization = await console.withSpinner('Creating the organization', () =>
-      createWithAvailableKey(client, name),
-    );
-    await ensureFreeSubscription(client, organization, console);
-    console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
-    console.info(
-      `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
-    );
-    return organization.key;
+    return createFreeOrganization(client, console);
   };
+}
+
+/**
+ * The `authLogin` hook behind "Create a new organization" in the selection list, for an account
+ * that already has organizations. Picking the option is the explicit choice, so it asks only for a
+ * name. When the account may not create one, it warns and returns `undefined`, which brings the
+ * list back; any other failure ends the login like the no-membership hook.
+ */
+export function createAdditionalOrganizationHook(console: Console): OnCreateOrganization {
+  return async (client) => {
+    try {
+      return await createFreeOrganization(client, console);
+    } catch (error) {
+      if (!(error instanceof OrganizationCreationUnavailableError)) {
+        throw error;
+      }
+      logger.debug(`Falling back to the organization list: ${error.message}`);
+      console.warn(`${error.message} Choose one of your organizations instead.`);
+      return undefined;
+    }
+  };
+}
+
+/** Asks for a name, creates the organization, subscribes it to Free, and returns its key. */
+async function createFreeOrganization(
+  client: OrganizationsClient,
+  console: Console,
+): Promise<string> {
+  const name = await askOrganizationName(console);
+  const organization = await console.withSpinner('Creating the organization', () =>
+    createWithAvailableKey(client, name),
+  );
+  await ensureFreeSubscription(client, organization, console);
+  console.success(`Created organization '${organization.name}' (key: ${organization.key}).`);
+  console.info(
+    `It's on the Free plan: up to 50,000 lines of private code, main branch only.\n     → What's included: ${billingUrl(client.baseUrl, organization.key)}`,
+  );
+  return organization.key;
 }
