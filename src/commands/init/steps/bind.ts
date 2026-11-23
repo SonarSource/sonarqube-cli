@@ -29,6 +29,7 @@ import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
 import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
+import { classifyInitFailure } from '../telemetry/failure-reason.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   reportProjectCreated,
@@ -186,11 +187,22 @@ export async function runBoundNew(
       },
     };
   }
-  const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
+  let almKey: string | undefined;
+  try {
+    almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
+  } catch (error) {
+    project?.record('create_project', 'failed');
+    project?.stopAt('create_project', classifyInitFailure(error));
+    throw error;
+  }
   if (!almKey) {
-    return intent?.kind === 'bind'
-      ? { kind: 'declined' }
-      : { path: 'unbound-new', projectRoot, remote };
+    if (intent?.kind === 'bind') {
+      // `--bind` never falls back to an unbound project, so declining ends the attempt.
+      project?.record('create_project', 'declined');
+      project?.stopAt('create_project', 'cancelled');
+      return { kind: 'declined' };
+    }
+    return { path: 'unbound-new', projectRoot, remote };
   }
 
   console.info(`Organization: ${org.key}`);

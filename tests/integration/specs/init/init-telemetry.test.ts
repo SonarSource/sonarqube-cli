@@ -391,6 +391,60 @@ describe('sonar init telemetry', () => {
   );
 
   it(
+    'ends a --bind attempt whose authorization is declined at its project creation',
+    async () => {
+      interactive();
+      await signInToCloud((s) =>
+        s.withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]),
+      );
+      withRemote(GITHUB_REMOTE);
+
+      const session = harness.runInteractive('init --bind');
+      await session.decline('Authorize it in the browser');
+      await session.decline(INTEGRATE_PROMPT);
+      await session.waitFinish();
+
+      expect(runEvent()).toMatchObject({
+        stopped_at: 'create_project',
+        failure_reason: 'cancelled',
+      });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'bound_new',
+          steps: ['project_bind:success', 'create_project:declined'],
+          stopped_at: 'create_project',
+          failure_reason: 'cancelled',
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'does not count a run without alpha as cancelled when there was nothing to decline',
+    async () => {
+      interactive();
+      harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'false' });
+      await signInToCloud();
+      initGitRepo(harness.cwd.path);
+
+      const session = harness.runInteractive('init');
+      await session.decline(INTEGRATE_PROMPT);
+      await session.waitFinish();
+
+      const run = runEvent();
+      expect(run.stopped_at ?? null).toBeNull();
+      expect(run.failure_reason ?? null).toBeNull();
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          steps: ['project_bind:skipped', 'create_project:skipped'],
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
     'emits no init event for a dry run',
     async () => {
       await signInToCloud();

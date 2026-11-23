@@ -460,7 +460,8 @@ async function createUnbound(
     project.record('link', 'success');
     project.setProjectKey(outcome.projectKey);
   } else if (outcome.kind === 'declined') {
-    project.record('create_project', 'declined');
+    // Without alpha nothing is asked: creating the project is not available, which no one declined.
+    project.record('create_project', deps.allowUnbound ? 'declined' : 'skipped');
   }
   return outcome;
 }

@@ -279,7 +279,11 @@ export class InitTelemetryRecorder {
       this.runStop ??= { step: projectStep, reason: 'cancelled' };
       return;
     }
-    this.runStop ??= { step: this.log.lastDeclined() ?? null, reason: 'cancelled' };
+    const runStep = this.log.lastDeclined();
+    // A run that ends with nothing created, but where nothing was declined, was not cancelled.
+    if (runStep) {
+      this.runStop ??= { step: runStep, reason: 'cancelled' };
+    }
   }
 
   /** Records the run's facts on `ctx`, once the run has ended. */

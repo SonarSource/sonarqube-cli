@@ -223,6 +223,21 @@ describe('InitTelemetryRecorder', () => {
     });
   });
 
+  it('does not report a run as cancelled when nothing was declined', async () => {
+    const recorder = new InitTelemetryRecorder(false);
+    recorder.record('detect', 'success');
+    const [project] = recorder.setProjects(['unbound_new']);
+    project.record('project_bind', 'skipped');
+    project.record('create_project', 'skipped');
+    recorder.stopAtDeclined();
+
+    const { run, projects } = await emit(recorder);
+
+    expect(run.stopped_at).toBeNull();
+    expect(run.failure_reason).toBeNull();
+    expect(projects[0].stopped_at).toBeNull();
+  });
+
   it('keeps the first stop when a later error reaches it', async () => {
     const recorder = new InitTelemetryRecorder(false);
     recorder.record('login', 'already_done');
