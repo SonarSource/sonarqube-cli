@@ -269,6 +269,27 @@ describe('integrate (bare command)', () => {
     expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
   });
 
+  it('can sign in and finish bulk setup from the same command', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    const session = harness.runInteractive('integrate --all --server ' + server.baseUrl(), {
+      browserToken: 'test-token',
+      extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+    });
+    await session.waitText('Set up the new coding agents listed above?');
+    session.write('y');
+    await session.accept('When would you like to sign in?');
+    await session.waitText('Connect to:');
+    session.write('y');
+    const result = await session.waitFinish();
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Claude Code: Waiting for sign-in');
+    expect(result.stdout).toContain('Claude Code: Configured');
+    expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
+    expect(harness.stateJsonFile.asJson().integrations.onboarding['claude-code']).toBeUndefined();
+  });
+
   it(
     'signs in without activating prepared agents when setup is disabled',
     async () => {
@@ -304,6 +325,12 @@ describe('integrate (bare command)', () => {
     );
     expect(login.exitCode).toBe(0);
     expect(JSON.parse(login.stdout)).toEqual({ status: 'connected', server: server.baseUrl() });
+  });
+
+  it('requires token login for JSON output', async () => {
+    const login = await harness.run('auth login --format json');
+    expect(login.exitCode).toBe(2);
+    expect(login.stderr).toContain('--format json requires --with-token.');
   });
 
   it('reports machine-readable setup guidance after a token login', async () => {
@@ -356,9 +383,9 @@ describe('integrate (bare command)', () => {
     expect(JSON.parse(login.stdout).nextCommand).toBeUndefined();
   });
 
-  it(
-    'offers one setup prompt after an entitled interactive login',
-    async () => {
+  it.each([false, true])(
+    'offers setup after an entitled interactive login (accepted: %s)',
+    async (acceptSetup) => {
       const server = await harness
         .newFakeServer()
         .withAuthToken('test-token')
@@ -373,12 +400,14 @@ describe('integrate (bare command)', () => {
       await session.waitText('Connect to:');
       session.write('y');
       await session.waitText('Set up SonarQube for your detected coding agents now?');
-      session.write('n');
+      session.write(acceptSetup ? 'y' : 'n');
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('You can set up your coding agents later');
-      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+      expect(result.stdout).toContain(
+        acceptSetup ? 'Claude Code: Configured' : 'You can set up your coding agents later',
+      );
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(acceptSetup);
     },
     { timeout: 30000 },
   );

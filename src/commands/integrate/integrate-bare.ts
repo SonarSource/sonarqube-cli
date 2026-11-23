@@ -226,6 +226,27 @@ async function prepareWithSignInChoice(
   if (completed) await resumePendingAgentSetups(ctx, completed);
 }
 
+async function prepareSignedOutIntegration(
+  ctx: CommandInvocationContext,
+  options: IntegrateBareOptions,
+): Promise<void> {
+  if (options.nonInteractive || !ctx.console.canPrompt()) {
+    throw new CommandFailedError('Not authenticated.', {
+      remediationHint: "Run 'sonar auth login' to authenticate.",
+    });
+  }
+
+  const detected = detectInstalledAgents();
+  const selected = await selectIntegration(ctx.console, detected);
+  if (!selected) throw new CommandFailedError('No integration selected');
+  if (selected === 'all') return prepareWithSignInChoice(ctx, null, detected, {});
+  if (selected.agent) return prepareWithSignInChoice(ctx, null, [selected.agent], {});
+
+  throw new CommandFailedError('Not authenticated.', {
+    remediationHint: "Run 'sonar auth login' to authenticate before setting up Git hooks.",
+  });
+}
+
 export async function dispatchIntegration(
   ctx: CommandInvocationContext,
   options: IntegrateBareOptions,
@@ -246,21 +267,7 @@ export async function dispatchIntegration(
   if (options.server !== undefined || options.org !== undefined) {
     throw new InvalidOptionError('--server and --org require --all.');
   }
-  if (!auth.value) {
-    if (options.nonInteractive || !ctx.console.canPrompt()) {
-      throw new CommandFailedError('Not authenticated.', {
-        remediationHint: "Run 'sonar auth login' to authenticate.",
-      });
-    }
-    const detected = detectInstalledAgents();
-    const selected = await selectIntegration(ctx.console, detected);
-    if (!selected) throw new CommandFailedError('No integration selected');
-    if (selected === 'all') return prepareWithSignInChoice(ctx, null, detected, {});
-    if (selected.agent) return prepareWithSignInChoice(ctx, null, [selected.agent], {});
-    throw new CommandFailedError('Not authenticated.', {
-      remediationHint: "Run 'sonar auth login' to authenticate before setting up Git hooks.",
-    });
-  }
+  if (!auth.value) return prepareSignedOutIntegration(ctx, options);
   const child = ctx.withAuth(auth.value);
   try {
     await integrateBare(child, options);
