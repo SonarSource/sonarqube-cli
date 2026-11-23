@@ -91,7 +91,6 @@ jobs:
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
             development/kv/data/devex-harbor-claude API_KEY | HB_CLAUDE_API_KEY;
             development/kv/data/devex-harbor-codex API_KEY | HB_CODEX_API_KEY;
-            development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
             development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
             development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
             development/team/sonarlint/kv/data/sonarcloud-it token | HB_SONAR_ADMIN_TOKEN;
@@ -105,6 +104,7 @@ jobs:
           HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
           HB_SONAR_PROJECT: SonarSource_sonarqube-cli
           SONAR_RUN_TOKEN_FILE: ${{ runner.temp }}/sonar-run-token
+          SONAR_RUN_TOKEN_ID_FILE: ${{ runner.temp }}/sonar-run-token-id
           HB_SONAR_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
           HB_SONAR_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           HB_SONAR_API_URL: https://api.sc-staging.io
@@ -113,39 +113,43 @@ jobs:
           PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && fromJSON(steps.secrets.outputs.vault).HB_CODEX_API_KEY || matrix.agent.name != 'codex' && fromJSON(steps.secrets.outputs.vault).HB_CLAUDE_API_KEY || '' }}
         run: bash benchmarks/harbor/scripts/run-isolated.sh
 
-      - name: Install the SonarQube CLI for the secrets scan
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
-          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
-
-      - name: Scan Harbor jobs for secrets and redact them
-        if: ${{ !cancelled() }}
+      - name: Revoke the run token
+        id: revoke
+        if: ${{ always() }}
         shell: bash
         env:
-          DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
-          PORTKEY_API_KEY: ${{ matrix.agent.name == 'codex' && fromJSON(steps.secrets.outputs.vault).HB_CODEX_API_KEY || matrix.agent.name != 'codex' && fromJSON(steps.secrets.outputs.vault).HB_CLAUDE_API_KEY || '' }}
-          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
-          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
           HB_SONAR_ADMIN_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SONAR_ADMIN_TOKEN }}
-          SONAR_RUN_TOKEN_FILE: ${{ runner.temp }}/sonar-run-token
-          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: |
-          if [[ -f "${SONAR_RUN_TOKEN_FILE}" ]]; then
-            SONAR_RUN_TOKEN="$(cat "${SONAR_RUN_TOKEN_FILE}")"
-            export SONAR_RUN_TOKEN
-          fi
-          python3 -I benchmarks/harbor/ci/scan-secrets.py harbor-jobs
+          HB_SONAR_API_URL: https://api.sc-staging.io
+          SONAR_RUN_TOKEN_ID_FILE: ${{ runner.temp }}/sonar-run-token-id
+        run: bash benchmarks/harbor/scripts/run-isolated.sh revoke
 
       - name: Upload Harbor jobs
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.revoke.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
           path: harbor-jobs
+
+      - name: Record the missing trial
+        if: ${{ !cancelled() && steps.revoke.outcome != 'success' }}
+        shell: bash
+        env:
+          OS: ${{ matrix.os }}
+          TASK: ${{ matrix.task }}
+          AGENT: ${{ matrix.agent.name }}
+          MODEL: ${{ matrix.agent.model }}
+          ATTEMPT: ${{ matrix.attempt }}
+        run: |
+          trial="missing-jobs/${OS}/${TASK}__missing-${ATTEMPT}"
+          mkdir -p "${trial}"
+          jq -n --arg name "${AGENT}" --arg model "${MODEL}" '{agent: {name: $name, model_name: $model}}' > "${trial}/config.json"
+
+      - name: Upload the missing trial record
+        if: ${{ !cancelled() && steps.revoke.outcome != 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: harbor-jobs-${{ matrix.os }}-${{ matrix.task }}-${{ matrix.agent.name }}-${{ matrix.agent.model }}-${{ matrix.attempt }}
+          path: missing-jobs
 
   report:
     name: Report
@@ -153,7 +157,7 @@ jobs:
     needs: [plan, benchmark]
     if: ${{ !cancelled() && needs.plan.result == 'success' }}
     outputs:
-      release-report: ${{ steps.release-report-scan.outcome == 'success' && steps.release-report-upload.outcome == 'success' }}
+      release-report: ${{ steps.release-report-upload.outcome == 'success' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -165,9 +169,6 @@ jobs:
             development/kv/data/repox url | ARTIFACTORY_URL;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
-            development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
-            development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -181,8 +182,7 @@ jobs:
           path: harbor-jobs
           merge-multiple: true
 
-      - name: Install the SonarQube CLI for the secrets scan
-        if: ${{ !cancelled() }}
+      - name: Install the SonarQube CLI to read its version
         shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
@@ -193,18 +193,6 @@ jobs:
         run: |
           bun benchmarks/harbor/report/trajectory-report.ts harbor-jobs/*/ > report.html.tmp
           mv report.html.tmp report.html
-
-      - name: Scan the trajectory page for secrets and redact them
-        if: ${{ !cancelled() && hashFiles('report.html') != '' }}
-        shell: bash
-        env:
-          DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
-          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
-          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: python3 -I benchmarks/harbor/ci/scan-secrets.py report.html
 
       - name: Upload the trajectory page
         id: trajectories
@@ -230,18 +218,6 @@ jobs:
           bun benchmarks/harbor/report/summarize-job.ts "${targets[@]}" > report.txt || status=$?
           echo "status=${status}" >> "$GITHUB_OUTPUT"
 
-      - name: Scan the report for secrets and redact them
-        if: ${{ !cancelled() }}
-        shell: bash
-        env:
-          DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
-          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
-          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: python3 -I benchmarks/harbor/ci/scan-secrets.py report.txt
-
       - name: Publish the report
         if: ${{ !cancelled() && hashFiles('report.txt') != '' }}
         run: tee -a "$GITHUB_STEP_SUMMARY" < report.txt
@@ -256,19 +232,6 @@ jobs:
             --cli-version "$(sonar --version)" --run-id "${GITHUB_RUN_ID}" --commit "${GITHUB_SHA}" \
             --date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             harbor-jobs > "release-report/${GITHUB_RUN_ID}.json"
-
-      - name: Scan the release report for secrets and redact it
-        id: release-report-scan
-        if: ${{ !cancelled() && steps.release-report.outcome == 'success' }}
-        shell: bash
-        env:
-          DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
-          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
-          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: python3 -I benchmarks/harbor/ci/scan-secrets.py release-report
 
       - name: Upload the release report
         id: release-report-upload
@@ -313,9 +276,6 @@ jobs:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader access_token | ARTIFACTORY_ACCESS_TOKEN;
-            development/kv/data/devex-harbor-sqc token | HB_SQC_TOKEN;
-            development/kv/data/devex-harbor-sqc organization | HB_SQC_ORGANIZATION;
-            development/kv/data/devex-harbor-sqc url | HB_SQC_URL;
 
       - uses: ./.github/actions/setup-bun
         with:
@@ -328,12 +288,6 @@ jobs:
           name: release-report
           path: release-report
 
-      - name: Install the SonarQube CLI for the secrets scan
-        shell: bash
-        run: |
-          curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/SonarSource/sonarqube-cli/master/user-scripts/install.sh | bash
-          echo "${HOME}/.local/share/sonarqube-cli/bin" >> "$GITHUB_PATH"
-
       - name: Build the page from the published releases and this one
         shell: bash
         env:
@@ -344,17 +298,6 @@ jobs:
           jq --slurpfile new "release-report/${GITHUB_RUN_ID}.json" \
             '[.[] | select(.release.runId != $new[0].release.runId)] + $new' published.json > sip-page/data.json
           bun benchmarks/harbor/report/dashboard.ts sip-page/data.json > sip-page/index.html
-
-      - name: Scan the page for secrets and redact them
-        shell: bash
-        env:
-          DO_NOT_TRACK: "1"
-          SONARQUBE_CLI_TOKEN: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_TOKEN }}
-          SONARQUBE_CLI_ORG: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_ORGANIZATION }}
-          SONARQUBE_CLI_SERVER: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_URL: ${{ fromJSON(steps.secrets.outputs.vault).HB_SQC_URL }}
-          SONARQUBE_CLI_SONARCLOUD_API_URL: https://api.sc-staging.io
-        run: python3 -I benchmarks/harbor/ci/scan-secrets.py sip-page
 
       - name: Publish the page on SIP
         shell: bash
