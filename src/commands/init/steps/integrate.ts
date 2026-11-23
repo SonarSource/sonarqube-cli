@@ -23,6 +23,7 @@ import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { requireAnswer } from '../answer.ts';
+import type { InitStepOutcome } from '../telemetry/init-telemetry.ts';
 
 /**
  * Asks whether to set up coding agents now and runs `sonar integrate` when accepted. Onboarding has already succeeded by then, so a failure or an abort
@@ -31,23 +32,25 @@ import { requireAnswer } from '../answer.ts';
 export async function offerIntegrate(
   ctx: CommandInvocationContext,
   auth: ResolvedAuth,
-): Promise<void> {
+): Promise<Extract<InitStepOutcome, 'success' | 'declined' | 'failed'>> {
   const { console } = ctx;
   const accepted = requireAnswer(
     await console.confirmPrompt("Set up your coding agents with 'sonar integrate' now?", true),
   );
   if (!accepted) {
-    return;
+    return 'declined';
   }
 
   const integrateCtx = ctx.withAuth(auth);
   try {
     await integrateBare(integrateCtx, {});
+    return 'success';
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.warn(
       `Could not set up your coding agents: ${reason}\nThe project setup is complete. Run 'sonar integrate' to try again.`,
     );
+    return 'failed';
   } finally {
     integrateCtx.telemetryFacts().forEach((fact) => {
       ctx.recordTelemetry(fact);
