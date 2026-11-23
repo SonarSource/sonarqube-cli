@@ -293,6 +293,36 @@ describe('integrate (bare command)', () => {
     });
   });
 
+  it.each(['', '--format json'])(
+    'guides a fresh token login %s to a detected agent',
+    async (format) => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.userHome.writeFile('.claude.json', '{}');
+      const login = await harness.runWithStdin(
+        'auth login --with-token --server ' + server.baseUrl() + ' ' + format,
+        'test-token\n',
+      );
+      expect(login.exitCode).toBe(0);
+      const command = 'sonar integrate claude --non-interactive';
+      if (format) expect(JSON.parse(login.stdout).nextCommand).toBe(command);
+      else expect(login.stderr).toContain(command);
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+    },
+  );
+
+  it('does not suggest retrying prepared setup after sign-in to another target', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    await harness.run('integrate --all --non-interactive --server https://another.example.test');
+    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+    const login = await harness.runWithStdin(
+      'auth login --with-token --format json --server ' + server.baseUrl(),
+      'test-token\n',
+    );
+    expect(login.exitCode).toBe(0);
+    expect(JSON.parse(login.stdout).nextCommand).toBeUndefined();
+  });
+
   it(
     'offers one setup prompt after an entitled interactive login',
     async () => {

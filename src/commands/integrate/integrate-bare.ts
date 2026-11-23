@@ -41,6 +41,7 @@ import {
 } from './_common/bulk-agent-setup.ts';
 import { findInstalledIntegrationIds } from './_common/installed-integrations.ts';
 import {
+  formatSetupLoginCommand,
   pendingAgentSetups,
   resolveSetupTarget,
   type SetupTarget,
@@ -214,7 +215,9 @@ async function prepareWithSignInChoice(
     { value: 'later', label: 'Sign in later' },
   ]);
   if (choice !== 'now') {
-    ctx.console.info("Run 'sonar auth login' when you are ready to finish agent setup.");
+    ctx.console.info(
+      'When you are ready to finish agent setup, run ' + formatSetupLoginCommand(pending) + '.',
+    );
     return;
   }
 

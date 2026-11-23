@@ -35,7 +35,7 @@ import {
   integrateAllAgents,
   resumePendingAgentSetups,
 } from '../integrate/_common/bulk-agent-setup.ts';
-import { pendingAgentSetups } from '../integrate/_common/pending-agent-setup.ts';
+import { pendingAgentSetups, setupMatches } from '../integrate/_common/pending-agent-setup.ts';
 import { authLogin, type AuthLoginOptions, type LoginTarget } from './login.ts';
 
 const RESUME_SETUP = 'sonar integrate --all --non-interactive';
@@ -63,50 +63,97 @@ export async function loginAndResumeOnboarding(
   const loginContext = json ? new CommandInvocationContext(new QuietConsole(ctx.console)) : ctx;
   const target = await authLogin(opts, loginContext);
   try {
-    const state = loadState();
-    const pending = pendingAgentSetups(state);
-    if (json) {
-      ctx.console.print(
-        JSON.stringify({
-          status: 'connected',
-          ...target,
-          ...(pending.length ? { nextCommand: RESUME_SETUP } : {}),
-        }),
-      );
-      return;
+    if (needsUnattendedGuidance(opts, ctx)) {
+      await reportSetupNextStep(target, json, ctx);
+    } else {
+      await continueInteractiveSetup(target, ctx);
     }
-    if (opts.withToken || !ctx.console.canPrompt() || detectCallerAgent()) {
-      if (pending.length) ctx.console.warn("Finish pending setup with '" + RESUME_SETUP + "'.");
-      return;
-    }
-    if (!pending.length && !detectInstalledAgents().length) return;
-    const auth = await resolveCompletedLogin(target);
-    if (!auth || (await resumePendingAgentSetups(ctx, auth))) return;
-    await offerPostLoginSetup(ctx, auth, state);
   } catch {
     if (json) ctx.console.print(JSON.stringify({ status: 'connected', ...target }));
     else ctx.console.warn("Sign-in succeeded. Continue agent setup with 'sonar integrate'.");
   }
 }
 
+function needsUnattendedGuidance(opts: AuthLoginOptions, ctx: CommandInvocationContext): boolean {
+  return (
+    opts.format === 'json' || !!opts.withToken || !ctx.console.canPrompt() || !!detectCallerAgent()
+  );
+}
+
+async function reportSetupNextStep(
+  target: LoginTarget,
+  json: boolean,
+  ctx: CommandInvocationContext,
+) {
+  const nextCommand = await findSetupCommand(target, loadState());
+  if (json) {
+    ctx.console.print(
+      JSON.stringify({ status: 'connected', ...target, ...(nextCommand ? { nextCommand } : {}) }),
+    );
+  } else if (nextCommand) {
+    ctx.console.warn('Finish agent setup with ' + nextCommand + '.');
+  }
+}
+
+async function continueInteractiveSetup(target: LoginTarget, ctx: CommandInvocationContext) {
+  const state = loadState();
+  if (pendingAgentSetups(state).some((pending) => matchesLogin(target, pending))) {
+    const auth = await resolveCompletedLogin(target);
+    if (auth && (await resumePendingAgentSetups(ctx, auth))) return;
+  }
+  await offerPostLoginSetup(ctx, target, state);
+}
+
+function matchesLogin(target: LoginTarget, pending: { server?: string; org?: string }): boolean {
+  return setupMatches({ serverUrl: target.server, orgKey: target.org }, pending);
+}
+
+async function unconfiguredAgents(state: CliState) {
+  const pending = new Set(pendingAgentSetups(state).map(({ agent }) => agent));
+  const detected = detectInstalledAgents().filter((agent) => !pending.has(agent));
+  const readiness = await Promise.all(detected.map((agent) => agentSetupStatus(agent, state)));
+  return detected.filter((_agent, index) => readiness[index] === 'Ready to configure');
+}
+
+async function findSetupCommand(target: LoginTarget, state: CliState) {
+  if (pendingAgentSetups(state).some((pending) => matchesLogin(target, pending)))
+    return RESUME_SETUP;
+  const agent = (await unconfiguredAgents(state)).at(0);
+  return agent ? 'sonar integrate ' + agent + ' --non-interactive' : undefined;
+}
+
+async function lookupSetupOffer(target: LoginTarget, state: CliState, signal: AbortSignal) {
+  const agents = await unconfiguredAgents(state);
+  if (!agents.length || signal.aborted) return;
+  const auth = await resolveCompletedLogin(target);
+  if (!auth) return;
+  const httpClient = new SonarHttpClient(auth.serverUrl, auth.token, signal);
+  const entitlement = await resolveVortexEntitlement({ auth, httpClient });
+  return { auth, agents, status: entitlement.status };
+}
+
 async function offerPostLoginSetup(
   ctx: CommandInvocationContext,
-  auth: ResolvedAuth,
+  target: LoginTarget,
   state: CliState,
 ): Promise<void> {
   const signal = AbortSignal.timeout(POST_LOGIN_BUDGET_MS);
-  const detected = detectInstalledAgents();
-  const readiness = await Promise.all(detected.map((agent) => agentSetupStatus(agent, state)));
-  const agents = detected.filter((_agent, index) => readiness[index] === 'Ready to configure');
-  if (!agents.length) return;
-
-  const httpClient = new SonarHttpClient(auth.serverUrl, auth.token, signal);
-  const entitlement = await resolveVortexEntitlement({ auth, httpClient });
-  if (entitlement.status === 'check_failed') {
+  const fallback = new Promise<null>((resolve) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        resolve(null);
+      },
+      { once: true },
+    );
+  });
+  const offer = await Promise.race([lookupSetupOffer(target, state, signal), fallback]);
+  if (offer === null || offer?.status === 'check_failed') {
     ctx.console.info("Continue agent setup with 'sonar integrate'.");
     return;
   }
-  if (entitlement.status !== 'enabled' && entitlement.status !== 'over_consumption') return;
+  if (!offer || (offer.status !== 'enabled' && offer.status !== 'over_consumption')) return;
+  const { auth, agents } = offer;
 
   ctx.recordTelemetry(new TelemetryFact('CliPostLoginSetupOffered', { agents }, { auth }));
   if (
