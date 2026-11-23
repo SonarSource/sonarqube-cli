@@ -122,14 +122,17 @@ export function hookScriptExtension(): string {
 
 /** Absolute path to the platform-specific hook script under `<targetRoot>/<configDir>/hooks/`. */
 export function resolveAgentHookScriptPath(
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'targetRoot'>,
   configDir: string,
   scriptPath: string,
 ): string {
   return join(context.targetRoot, configDir, HOOKS_DIR, `${scriptPath}${hookScriptExtension()}`);
 }
 
-function resolveHookCommandPath(context: IntegrationContext, relativePath: string): string {
+function resolveHookCommandPath(
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
+  relativePath: string,
+): string {
   if (context.scope === 'global') {
     return join(context.targetRoot, relativePath);
   }
@@ -145,7 +148,7 @@ function resolveHookCommandPath(context: IntegrationContext, relativePath: strin
  * scope; cwd-relative path for legacy project scope.
  */
 export function resolveAgentHookCommand(
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
   configDir: string,
   scriptPath: string,
 ): string {

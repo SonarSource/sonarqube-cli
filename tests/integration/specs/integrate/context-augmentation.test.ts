@@ -26,7 +26,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { CONTEXT_AUGMENTATION_FEATURE_ID } from '@/commands/integrate/_common/features/context-augmentation-feature.js';
-import { isVortexFeature, VORTEX_PROMOTION_MESSAGE } from '@/commands/integrate/_common/vortex.js';
+import {
+  CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+  isVortexFeature,
+  VORTEX_PROMOTION_MESSAGE,
+} from '@/commands/integrate/_common/vortex.js';
 import { CLAUDE_INTEGRATION_ID } from '@/commands/integrate/claude/declaration.js';
 import { CODEX_INTEGRATION_ID } from '@/commands/integrate/codex/declaration.js';
 import { COPILOT_INTEGRATION_ID } from '@/commands/integrate/copilot/declaration.js';
@@ -111,6 +115,75 @@ const PROJECT_KEY = 'my-project';
 const ORG_KEY = 'my-org';
 const ORG_UUID = `${ORG_KEY}-uuid-v4`;
 const TOKEN = 'cloud-token';
+
+describe('shared legacy Context Augmentation skill', () => {
+  let harness: TestHarness;
+
+  beforeEach(async () => {
+    harness = await TestHarness.create();
+    await harness.newFakeBinariesServer().start();
+  });
+
+  afterEach(async () => {
+    await harness.dispose();
+  });
+
+  it.each([
+    ['codex', 'cursor', CURSOR_INTEGRATION_ID],
+    ['cursor', 'codex', CODEX_INTEGRATION_ID],
+  ])(
+    'preserves the skill when installing %s while %s still owns it',
+    async (agent, owner, ownerId) => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(TOKEN)
+        .withVortexEntitlement(ORG_KEY, ORG_UUID)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, TOKEN, ORG_KEY);
+      harness.state().withContextAugmentationBinaryInstalled();
+      const extraEnv = {
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+      };
+      const integrate = (name: string) =>
+        harness.run('integrate ' + name + ' --non-interactive', { extraEnv });
+
+      expect((await integrate(owner)).exitCode).toBe(0);
+      const state = loadState(harness);
+      const subfeature = findRecordedCagFeature(state, ownerId)?.feature.subfeatures?.find(
+        (record) => record.featureId === CONTEXT_AUGMENTATION_FEATURE_ID,
+      );
+      if (!subfeature) throw new Error('Expected the owner to have Vortex Context configured.');
+
+      const relativePath = join('.agents', 'skills', 'sonar-context-augmentation', 'SKILL.md');
+      const skill = harness.userHome.file(relativePath);
+      const legacyContent = '# Legacy shared skill\n';
+      harness.userHome.writeFile(relativePath, legacyContent);
+      subfeature.resources = [
+        ...(subfeature.resources ?? []),
+        {
+          id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+          resourceType: 'whole-file',
+          path: skill.path,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          updatedByCliVersion: '1.0.0',
+        },
+      ];
+      harness.state().withRawState(JSON.stringify(state));
+
+      expect((await integrate(agent)).exitCode).toBe(0);
+      expect(skill.asText()).toBe(legacyContent);
+      harness.state().withRawState(JSON.stringify(loadState(harness)));
+
+      expect((await integrate(owner)).exitCode).toBe(0);
+      expect(skill.exists()).toBe(false);
+      expectVortexHookInstalled(harness.userHome, 'codex', 'global');
+      expectVortexHookInstalled(harness.userHome, 'cursor', 'global');
+    },
+    { timeout: 30000 },
+  );
+});
 
 describe('integrate claude — Context Augmentation', () => {
   let harness: TestHarness;

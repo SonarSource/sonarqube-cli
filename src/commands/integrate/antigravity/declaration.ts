@@ -87,7 +87,7 @@ const antigravityVortexFeature = createVortexFeature<AntigravityIntegrationOptio
       'global',
     ),
   ],
-  resolveAntigravitySkillPath,
+  { integrationId: ANTIGRAVITY_INTEGRATION_ID, path: resolveAntigravitySkillPath },
 );
 
 export const antigravityIntegration: IntegrationDeclaration<AntigravityIntegrationOptions> = {

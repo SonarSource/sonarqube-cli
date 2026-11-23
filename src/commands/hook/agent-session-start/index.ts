@@ -28,6 +28,7 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
+import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -86,6 +87,13 @@ export async function agentSessionStart(
       return { agentSessionId: null };
     }
     sessionId = input.sessionId;
+    if (
+      agent === 'claude' &&
+      input.eventName === 'SessionStart' &&
+      (await hasDevinNativeHook('SessionStart'))
+    ) {
+      return { agentSessionId: sessionId ?? null };
+    }
 
     // Suppress failure warnings on SubagentStart by passing reportFailures=false.
     const output = await resolveSessionStartContext(

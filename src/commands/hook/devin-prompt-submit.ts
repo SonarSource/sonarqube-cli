@@ -20,9 +20,9 @@
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
-import { agentPromptSubmit } from './agent-prompt-submit.ts';
+import { scanPrompt } from './agent-prompt-submit.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
 
 export function devinPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
-  return agentPromptSubmit(ctx);
+  return scanPrompt(ctx, 'devin');
 }

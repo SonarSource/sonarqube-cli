@@ -145,7 +145,7 @@ function createCursorVortexFeature() {
         hookConfigResource: createSessionStartHookConfigResource(),
       }),
     ],
-    resolveCursorCagSkillPath,
+    { integrationId: CURSOR_INTEGRATION_ID, path: resolveCursorCagSkillPath },
   );
   return {
     ...feature,

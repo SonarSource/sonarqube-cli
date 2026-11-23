@@ -18,15 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { SQAA_DEVIN_POST_TOOL_USE_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { VORTEX_PRODUCT_URL } from '@/core/config-constants.ts';
+import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
 import { readAnalysisEvents, readCommandEvents } from '../../../_common/telemetry-helpers';
 import { TestHarness } from '../../harness';
+import { buildHomeEnv, hookScriptName } from '../../harness/platform';
 import { parseSqaaRequestBody, sqaaRequestFileCount } from '../analyze/sqaa-request-helpers';
 import { commitFile, initGitRepo } from './git-test-helpers';
 
@@ -103,6 +106,74 @@ describe('sonar hook devin-post-tool-use', () => {
       expect(parseSqaaRequestBody(calls[0].body).projectKey).toBe(TEST_PROJECT);
     },
     { timeout: 15000 },
+  );
+
+  it(
+    'uses the native Devin analysis once and keeps Claude fallback when its script is invalid',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken(VALID_TOKEN)
+        .withVortexEntitlement(TEST_ORG, TEST_ORG_UUID)
+        .withSqaaResponse({ issues: [] })
+        .withProject(TEST_PROJECT)
+        .start();
+      const serverUrl = server.baseUrl();
+      harness.withAuth(serverUrl, VALID_TOKEN, TEST_ORG);
+      harness.state().withSecretsBinaryInstalled();
+
+      const extraEnv = {
+        DEVIN_PROJECT_DIR: harness.cwd.path,
+        SONARQUBE_CLI_SONARCLOUD_URL: serverUrl,
+        SONARQUBE_CLI_SONARCLOUD_API_URL: serverUrl,
+        __SQCLI_DEV_SKIP_CAG: '1',
+      };
+      const installed = await harness.run('integrate devin --non-interactive', { extraEnv });
+      expect(installed.exitCode).toBe(0);
+
+      const inherited = () =>
+        harness.runWithStdin('hook claude-post-tool-use', toolPayload(editedFilePath, 'Edit'), {
+          extraEnv,
+        });
+      const duplicate = await inherited();
+      expect(duplicate.exitCode).toBe(0);
+      expect(duplicate.stdout).toBe('');
+      expect(sqaaCalls(server)).toHaveLength(0);
+
+      const native = await harness.runWithStdin(
+        'hook devin-post-tool-use',
+        toolPayload(editedFilePath),
+        { extraEnv },
+      );
+      expect(native.exitCode).toBe(0);
+      expect(sqaaCalls(server)).toHaveLength(1);
+
+      const claude = await harness.runWithStdin(
+        'hook claude-post-tool-use',
+        toolPayload(editedFilePath, 'Edit'),
+        { extraEnv: { ...extraEnv, DEVIN_PROJECT_DIR: '' } },
+      );
+      expect(claude.exitCode).toBe(0);
+      expect(claude.stdout).toContain('No issues found');
+      expect(sqaaCalls(server)).toHaveLength(2);
+
+      const home = harness.userHome.path;
+      const devinConfig = resolveDevinConfigDir(home, buildHomeEnv(home));
+      const script = join(
+        devinConfig,
+        'hooks',
+        'sonar-sqaa',
+        'build-scripts',
+        hookScriptName('posttool-sqaa'),
+      );
+      writeFileSync(script, '');
+
+      const fallback = await inherited();
+      expect(fallback.exitCode).toBe(0);
+      expect(fallback.stdout).toContain('No issues found');
+      expect(sqaaCalls(server)).toHaveLength(3);
+    },
+    { timeout: 30000 },
   );
 
   it.each(['read', 'exec', 'apply_patch', 'Edit', 'Write'])(

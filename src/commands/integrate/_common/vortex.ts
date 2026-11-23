@@ -27,7 +27,9 @@ import type {
   IntegrationInvocation,
   SubfeatureDeclaration,
 } from '@/core/framework/features';
+import { recordedFeatureResources } from '@/core/framework/features';
 import { wholeFileRemover } from '@/core/framework/resources';
+import { pathComparisonKey } from '@/core/io/fs-utils.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ScaClient } from '@/core/server/sca.ts';
@@ -71,7 +73,10 @@ export function isVortexFeature(feature: InstalledIntegrationFeature): boolean {
  */
 export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
   subfeatures: SubfeatureDeclaration<TOptions>[],
-  legacyCagSkillPath?: (context: IntegrationContext) => string,
+  legacyCagSkill?: {
+    integrationId: string;
+    path: (context: IntegrationContext) => string;
+  },
 ): FeatureContainer<TOptions> {
   const subfeatureIds = subfeatures.map((subfeature) => subfeature.id);
 
@@ -82,15 +87,35 @@ export function createVortexFeature<TOptions extends IntegrateAgentOptions>(
     isAvailable: vortexAvailability,
     replacedIds: subfeatureIds,
     defaultInstallSubfeatureIds: subfeatureIds,
-    legacyCleanups: legacyCagSkillPath
-      ? [
-          wholeFileRemover({
-            id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
-            targetPath: legacyCagSkillPath,
-          }),
-        ]
+    legacyCleanups: legacyCagSkill
+      ? [removeLegacyCagSkill(legacyCagSkill.integrationId, legacyCagSkill.path)]
       : [],
     subfeatures,
+  };
+}
+
+function removeLegacyCagSkill(
+  integrationId: string,
+  path: (context: IntegrationContext) => string,
+) {
+  const remover = wholeFileRemover({
+    id: CONTEXT_AUGMENTATION_SKILL_RESOURCE_ID,
+    targetPath: path,
+  });
+  return {
+    ...remover,
+    async remove(context: IntegrationContext): Promise<void> {
+      const target = pathComparisonKey(path(context));
+      // Older Codex and Cursor installations could both record this skill.
+      const hasOtherOwner = context.state.integrations.installed
+        .filter((integration) => integration.integrationId !== integrationId)
+        .flatMap((integration) => integration.features)
+        .flatMap(recordedFeatureResources)
+        .some(
+          (resource) => resource.path !== undefined && pathComparisonKey(resource.path) === target,
+        );
+      if (!hasOtherOwner) await remover.remove(context);
+    },
   };
 }
 

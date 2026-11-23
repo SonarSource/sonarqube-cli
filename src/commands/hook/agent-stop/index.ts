@@ -21,6 +21,7 @@
 import { SQAA_AGENT_STOP_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { fingerprintGitChangeSet } from '@/commands/analyze/sqaa-fingerprint.ts';
 import { buildSqaaRunReport, runSqaaAnalysis } from '@/commands/analyze/sqaa-run.ts';
+import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import type { AnalysisSession } from '@/core/vortex/deep-analysis/state.ts';
@@ -60,10 +61,17 @@ export async function agentStop(
   try {
     if (!Object.hasOwn(ADAPTERS, agent)) return { agentSessionId: null };
     const adapter = ADAPTERS[agent as StopAgent];
-    const input = adapter.parse(await readStdinJson<unknown>());
+    const payload = await readStdinJson<{ hook_event_name?: string }>();
+    const input = adapter.parse(payload);
     sessionId = input.sessionId;
-    const output = await resolveStopAnalysis(ctx, agent, input);
-    if (output) process.stdout.write(JSON.stringify(adapter.emit(output)) + '\n');
+    const inherited =
+      agent === 'claude' &&
+      payload.hook_event_name === 'Stop' &&
+      (await hasDevinNativeHook('Stop'));
+    if (!inherited) {
+      const output = await resolveStopAnalysis(ctx, agent, input);
+      if (output) process.stdout.write(JSON.stringify(adapter.emit(output)) + '\n');
+    }
   } catch (error) {
     logger.debug('Stop analysis skipped', error);
     if (sessionId) {
