@@ -72,6 +72,61 @@ describe('integrate (bare command)', () => {
     { timeout: 15000 },
   );
 
+  it('succeeds when bulk setup finds no coding agents', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+
+    const result = await harness.run('integrate --all --non-interactive');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('No supported coding agents detected.');
+  });
+
+  it(
+    'configures new agents and protects unrecorded Sonar settings',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      const existing = '{"mcpServers":{"sonarqube":{"command":"custom-sonar"}}}';
+      harness.userHome.writeFile('.claude.json', existing);
+      harness.userHome.writeFile('.codex/config.toml', '');
+
+      const result = await harness.run('integrate --all --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Claude Code: Needs review');
+      expect(result.stdout).toContain('Codex: Configured');
+      expect(harness.userHome.file('.claude.json').asText()).toBe(existing);
+      expect(harness.userHome.exists('.codex', 'hooks.json')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'continues past a partial install and finishes it on retry',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.userHome.writeFile('.codex/config.toml', 'invalid TOML');
+      harness.userHome.writeFile('.claude.json', '{}');
+
+      const first = await harness.run('integrate --all --non-interactive');
+
+      expect(first.exitCode).toBe(1);
+      expect(first.stderr + first.stdout).toContain('Codex: Retry setup');
+      expect(first.stdout).toContain('Claude Code: Configured');
+      expect(harness.userHome.exists('.codex', 'hooks.json')).toBe(true);
+
+      harness.userHome.writeFile('.codex/config.toml', '');
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      const retry = await harness.run('integrate --all --non-interactive');
+      expect(retry.exitCode).toBe(0);
+      expect(retry.stdout).toContain('Codex: Configured');
+      expect(retry.stdout).toContain('Claude Code: Already configured');
+    },
+    { timeout: 30000 },
+  );
+
   it(
     'honors --non-interactive placed before the agent name',
     async () => {

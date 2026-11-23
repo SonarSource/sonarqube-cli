@@ -22,7 +22,7 @@ import { Argument, type Command, Help, InvalidArgumentError } from 'commander';
 
 import type { CliRuntime } from '@/core/commands/cli-runtime.ts';
 import { createCliRuntime } from '@/core/commands/cli-runtime.ts';
-import { CommandFailedError } from '@/core/commands/command-error.ts';
+import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { parseInteger } from '@/core/commands/params.ts';
 import { getBanner, getCustomRootHelp } from '@/core/commands/root-help.ts';
@@ -538,13 +538,20 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       category: 'integrate',
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
-    .option('--non-interactive', 'Non-interactive mode (no prompts); requires an explicit agent')
+    .option('--all', 'Set up all detected coding agents')
+    .option(
+      '--non-interactive',
+      'Non-interactive mode (no prompts); requires --all or an explicit agent',
+    )
     .enablePositionalOptions()
     .rejectUnknownSubcommands()
     // `--non-interactive` before the agent name (e.g. `integrate --non-interactive claude`) is
     // parsed onto this command, not the subcommand it dispatches to; forward it explicitly so
     // placement doesn't silently fall back to interactive mode.
     .hook('preSubcommand', (thisCommand, subCommand) => {
+      if (thisCommand.opts().all) {
+        throw new InvalidOptionError('--all cannot be combined with an explicit tool.');
+      }
       if (thisCommand.opts().nonInteractive) {
         subCommand.setOptionValueWithSource('nonInteractive', true, 'cli');
       }
