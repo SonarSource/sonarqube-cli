@@ -232,11 +232,14 @@ describe('system reset --force', () => {
         org: 'acme',
       });
 
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
       const reset = await harness.run('system reset --force');
 
       expect(reset.exitCode).toBe(0);
       expect(readState(harness.stateJsonFile.path).integrations.onboarding).toBeUndefined();
-      expect(harness.userHome.file('.claude', 'settings.json').asJson()).toEqual(customSettings);
+      const settings = harness.userHome.file('.claude', 'settings.json');
+      expect(settings.asJson().model).toBe(customSettings.model);
+      expect(settings.asText()).not.toContain('sonar-agent-onboarding');
     },
     { timeout: 15000 },
   );

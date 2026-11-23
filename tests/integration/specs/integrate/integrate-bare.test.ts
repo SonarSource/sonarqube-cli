@@ -203,6 +203,35 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
+  it(
+    'activates prepared agents after browser authentication without a second setup command',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.userHome.writeFile('.claude.json', '{}');
+      const prepared = await harness.run(
+        'integrate --all --non-interactive --server ' + server.baseUrl(),
+      );
+      expect(prepared.exitCode).toBe(0);
+      expect(hasActiveClaudeHook()).toBe(false);
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const session = harness.runInteractive('auth login --server ' + server.baseUrl(), {
+        browserToken: 'test-token',
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+      await session.waitText('Connect to:');
+      session.write('y');
+      const login = await session.waitFinish();
+
+      expect(login.exitCode).toBe(0);
+      expect(login.stdout).toContain('Authentication successful');
+      expect(login.stdout).toContain('Claude Code: Configured');
+      expect(hasActiveClaudeHook()).toBe(true);
+      expect(harness.stateJsonFile.asJson().integrations.onboarding['claude-code']).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
   it('keeps a prepared integration pending on a different connection', async () => {
     const server = await harness.newFakeServer().withAuthToken('test-token').start();
     harness.withAuth(server.baseUrl(), 'test-token');
