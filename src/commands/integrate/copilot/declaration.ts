@@ -110,7 +110,7 @@ function createCopilotVortexFeature() {
         hookConfigResource: createCagHookConfigResource(),
       }),
     ],
-    resolveCopilotSkillPath,
+    { integrationId: COPILOT_INTEGRATION_ID, path: resolveCopilotSkillPath },
   );
   return {
     ...feature,

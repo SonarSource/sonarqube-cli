@@ -135,7 +135,7 @@ const claudeVortexFeature: FeatureContainer<ClaudeIntegrationOptions> = (() => {
       sqaaPostToolUseSubfeature,
       cagPostToolUseSubfeature,
     ],
-    resolveClaudeSkillPath,
+    { integrationId: CLAUDE_INTEGRATION_ID, path: resolveClaudeSkillPath },
   );
 
   return {
