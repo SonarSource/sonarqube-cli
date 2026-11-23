@@ -255,6 +255,26 @@ sonar analyze --branch feature-xyz          # Set branch context
 
 ## Integrations
 
+### Managed coding-agent rollout
+
+Use the appropriate CLI installation script in [`mdm-scripts`](mdm-scripts/direct-sonar-cdn) for
+macOS, Windows, or Linux. After the shared binary is on `PATH`, run the setup command in
+each developer's OS user session so the CLI can discover that user's coding agents.
+
+```sh
+# SonarQube Cloud
+sonar integrate --all --non-interactive --server https://sonarcloud.io --org acme
+
+# SonarQube Server
+sonar integrate --all --non-interactive --server https://sonarqube.example.com
+```
+
+The same command arguments work in PowerShell. Run this step again at user logon to pick up
+newly detected agents. Developers sign in to the configured server and organization with
+`sonar auth login`. Check pending integrations with `sonar system status --format json`.
+After token-based or other unattended login, run `sonar integrate --all --non-interactive`
+with the saved connection to finish setup.
+
 ### Claude Code Integration
 
 Hooks apply to all Claude Code sessions on this machine:

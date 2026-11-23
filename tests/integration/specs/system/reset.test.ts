@@ -40,6 +40,7 @@ import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
 import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit';
 import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
 import { hookScriptName, TestHarness } from '../../harness';
@@ -104,7 +105,7 @@ interface ResetStateSnapshot {
   telemetry: TelemetrySnapshot;
   dependencies: { installed: Array<{ id: string }> };
   agentExtensions: unknown[];
-  integrations: { installed: unknown[] };
+  integrations: { installed: unknown[] } & Pick<CliState['integrations'], 'onboarding'>;
   knownServerProjectMappings?: unknown[];
 }
 
@@ -210,6 +211,31 @@ describe('system reset --force', () => {
       expect(result.stdout).toContain('Cleaning up SonarQube CLI environment');
       expect(result.stdout).toContain('Authentication: 0 tokens removed from keychain.');
       expect(result.stdout).toContain('CLI has been successfully reset to factory settings.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'clears prepared agent onboarding during a full reset',
+    async () => {
+      harness.userHome.writeFile(join('.claude', 'settings.json'), '{}');
+      const setup = await harness.run(
+        'integrate --all --non-interactive --server https://sonarcloud.io --org acme',
+      );
+      expect(setup.exitCode).toBe(0);
+      expect(
+        readState(harness.stateJsonFile.path).integrations.onboarding?.['claude-code'],
+      ).toEqual({
+        status: 'waiting_for_sign_in',
+        server: 'https://sonarcloud.io',
+        org: 'acme',
+      });
+
+      const reset = await harness.run('system reset --force');
+
+      expect(reset.exitCode).toBe(0);
+      expect(readState(harness.stateJsonFile.path).integrations.onboarding).toBeUndefined();
+      expect(harness.userHome.file('.claude', 'settings.json').asText()).toBe('{}');
     },
     { timeout: 15000 },
   );
