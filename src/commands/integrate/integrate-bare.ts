@@ -19,7 +19,10 @@
  */
 
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type {
+  CommandAuthenticatedInvocationContext,
+  CommandInvocationContext,
+} from '@/core/commands/invocation-context.ts';
 import {
   agentDisplayName,
   type DetectedAgentId,
@@ -29,6 +32,7 @@ import type { Console } from '@/core/ui/console.ts';
 
 import { integrateAllAgents, previewBulkSetup } from './_common/bulk-agent-setup.ts';
 import { findInstalledIntegrationIds } from './_common/installed-integrations.ts';
+import { resolveSetupTarget, type SetupTarget } from './_common/pending-agent-setup.ts';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration.ts';
 import { integrateClaude } from './claude';
@@ -52,7 +56,7 @@ import { openCodeIntegration } from './opencode/declaration.ts';
 import { integratePi } from './pi';
 import { piIntegration } from './pi/declaration.ts';
 
-export interface IntegrateBareOptions {
+export interface IntegrateBareOptions extends SetupTarget {
   nonInteractive?: boolean;
   all?: boolean;
   /** Marks handlers as invoked via the bare router; forwarded to telemetry only. */
@@ -136,18 +140,6 @@ export async function integrateBare(
   const { console } = ctx;
 
   const detected = detectInstalledAgents();
-  if (options.all) {
-    if (
-      options.nonInteractive ||
-      (console.canPrompt() && (await previewBulkSetup(console, detected)))
-    ) {
-      await integrateAllAgents(ctx, detected);
-    } else if (!console.canPrompt()) {
-      throw new InvalidOptionError('Use --non-interactive for unattended setup.');
-    }
-    return;
-  }
-
   if (options.nonInteractive) {
     throw new InvalidOptionError(
       '--non-interactive requires an explicit agent.',
@@ -177,9 +169,44 @@ export async function integrateBare(
   if (!selected) throw new CommandFailedError('No integration selected');
 
   if (selected === 'all') {
-    if (await previewBulkSetup(console, detected)) await integrateAllAgents(ctx, detected);
+    if (await previewBulkSetup(console, detected))
+      await integrateAllAgents(ctx, ctx.auth, detected);
     return;
   }
 
   await selected.handler({ ...options, isFromRouter: true }, ctx);
+}
+
+export async function dispatchIntegration(
+  ctx: CommandInvocationContext,
+  options: IntegrateBareOptions,
+): Promise<void> {
+  const auth = await ctx.resolveAuth();
+  if (auth.isErr()) throw auth.error;
+
+  if (options.all) {
+    const target = resolveSetupTarget(options);
+    const detected = detectInstalledAgents();
+    if (!options.nonInteractive) {
+      if (!ctx.console.canPrompt())
+        throw new InvalidOptionError('Use --non-interactive for unattended setup.');
+      if (!(await previewBulkSetup(ctx.console, detected))) return;
+    }
+    return integrateAllAgents(ctx, auth.value, detected, target);
+  }
+  if (options.server !== undefined || options.org !== undefined) {
+    throw new InvalidOptionError('--server and --org require --all.');
+  }
+  if (!auth.value) {
+    throw new CommandFailedError('Not authenticated.', {
+      remediationHint: "Run 'sonar auth login' to authenticate.",
+    });
+  }
+  const child = ctx.withAuth(auth.value);
+  try {
+    await integrateBare(child, options);
+  } finally {
+    ctx.recordTelemetry(...child.telemetryFacts());
+    for (const fact of child.statsFacts()) ctx.recordStats(() => fact);
+  }
 }

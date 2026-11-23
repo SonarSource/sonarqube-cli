@@ -88,7 +88,8 @@ import { SQAA_DEPTH_CHOICES } from './analyze/sqaa-depth.ts';
 import { collectSqaaFileOption } from './analyze/sqaa-file-arg.ts';
 import { apiCommand, type ApiCommandOptions, apiExtraHelpText } from './api/api.ts';
 import { registerArchitectureCommands } from './architecture/register.ts';
-import { authLogin, type AuthLoginOptions } from './auth/login.ts';
+import type { AuthLoginOptions } from './auth/login.ts';
+import { loginAndResumeOnboarding } from './auth/login-onboarding.ts';
 import { authLogout, type AuthLogoutOptions } from './auth/logout.ts';
 import { authOrg } from './auth/org.ts';
 import {
@@ -152,7 +153,7 @@ import { integrateCopilot } from './integrate/copilot';
 import { integrateCursor } from './integrate/cursor';
 import { integrateDevin } from './integrate/devin';
 import { integrateGit, type IntegrateGitOptions } from './integrate/git';
-import { integrateBare, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
+import { dispatchIntegration, type IntegrateBareOptions } from './integrate/integrate-bare.ts';
 import { AGENT_INTEGRATION_HANDLERS } from './integrate/integration-handlers.ts';
 import { integrateOpenCode } from './integrate/opencode';
 import { integratePi } from './integrate/pi';
@@ -333,7 +334,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
     .option('--with-token', 'Read an existing token from standard input')
-    .anonymousAction((ctx, options: AuthLoginOptions) => authLogin(options, ctx));
+    .anonymousAction((ctx, options: AuthLoginOptions) => loginAndResumeOnboarding(options, ctx));
 
   auth
     .command('org')
@@ -539,6 +540,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     })
     .showUpdateNotification((opts) => !opts.nonInteractive)
     .option('--all', 'Set up all detected coding agents')
+    .option('--server <url>', 'Company SonarQube server for bulk setup')
+    .option('--org <key>', 'SonarQube Cloud organization for bulk setup')
     .option(
       '--non-interactive',
       'Non-interactive mode (no prompts); requires --all or an explicit agent',
@@ -549,14 +552,16 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     // parsed onto this command, not the subcommand it dispatches to; forward it explicitly so
     // placement doesn't silently fall back to interactive mode.
     .hook('preSubcommand', (thisCommand, subCommand) => {
-      if (thisCommand.opts().all) {
-        throw new InvalidOptionError('--all cannot be combined with an explicit tool.');
+      if (thisCommand.opts().all || thisCommand.opts().server || thisCommand.opts().org) {
+        throw new InvalidOptionError(
+          'Bulk setup options cannot be combined with an explicit tool.',
+        );
       }
       if (thisCommand.opts().nonInteractive) {
         subCommand.setOptionValueWithSource('nonInteractive', true, 'cli');
       }
     })
-    .authenticatedAction((ctx, options: IntegrateBareOptions) => integrateBare(ctx, options));
+    .anonymousAction((ctx, options: IntegrateBareOptions) => dispatchIntegration(ctx, options));
 
   integrateCommand
     .command('git')
