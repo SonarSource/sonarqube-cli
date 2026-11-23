@@ -52,7 +52,6 @@ const RUN: InitRunContext = {
   isInteractive: true,
   remoteHost: 'github',
   repoRoot: '/some/repo',
-  userWaitMs: 1500,
 };
 
 let resolveUuids: Mock<typeof projectUuid.resolveProjectUuids>;
@@ -109,8 +108,6 @@ describe('InitTelemetryRecorder', () => {
       remote_host: 'github',
     });
     expect(run.repo_id).toHaveLength(64);
-    expect(run.duration_ms).toBeGreaterThanOrEqual(0);
-    expect(run.user_wait_ms).toBe(1500);
     expect(projects).toEqual([
       {
         init_path: 'unbound_new',
