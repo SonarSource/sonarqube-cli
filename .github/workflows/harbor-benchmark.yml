@@ -139,7 +139,7 @@ jobs:
           MODEL: ${{ matrix.agent.model }}
           ATTEMPT: ${{ matrix.attempt }}
         run: |
-          trial="missing-jobs/${OS}/${TASK}__missing-${ATTEMPT}"
+          trial="missing-jobs/${OS}/${TASK}__missing-${AGENT}-${MODEL}-${ATTEMPT}"
           mkdir -p "${trial}"
           jq -n --arg name "${AGENT}" --arg model "${MODEL}" '{agent: {name: $name, model_name: $model}}' > "${trial}/config.json"
 
