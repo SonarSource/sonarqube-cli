@@ -70,8 +70,6 @@ describe('fact builders', () => {
       is_monorepo: false,
       remote_host: 'github',
       repo_id: null,
-      duration_ms: 10,
-      user_wait_ms: 2,
     };
 
     const fact = buildInitExecutedFact(payload, AUTH);

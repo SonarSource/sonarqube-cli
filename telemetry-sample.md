@@ -137,9 +137,7 @@ One per `sonar init` run, dry runs excepted. `steps` lists the run-level steps r
     "is_interactive": true,
     "is_monorepo": false,
     "remote_host": "github",
-    "repo_id": "3e2b4c1d0a9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4938271605f",
-    "duration_ms": 24810,
-    "user_wait_ms": 19342
+    "repo_id": "3e2b4c1d0a9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a4938271605f"
   }
 }
 ```

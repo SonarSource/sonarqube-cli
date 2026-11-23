@@ -52,8 +52,6 @@ export type InitExecutedPayload = {
   is_monorepo: boolean;
   remote_host: InitRemoteHost | null;
   repo_id: string | null;
-  duration_ms: number;
-  user_wait_ms: number;
 };
 
 /** Domain payload for CliProjectInitCreationAttempted: one per project root the run reached. */

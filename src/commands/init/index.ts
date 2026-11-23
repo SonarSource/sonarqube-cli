@@ -114,7 +114,7 @@ export async function init(options: InitOptions, ctx: CommandInvocationContext):
     // A preview changes nothing, so it would only blur what onboarding runs reach.
     if (!dryRun) {
       const repository = await describeRun(options.path, interactive, session.auth);
-      await telemetry.emit(ctx, { ...repository, userWaitMs: ctx.console.userWaitMs() });
+      await telemetry.emit(ctx, repository);
     }
   }
 }
@@ -238,7 +238,7 @@ async function describeRun(
   pathOption: string | undefined,
   isInteractive: boolean,
   auth: ResolvedAuth | undefined,
-): Promise<Omit<InitRunContext, 'userWaitMs'>> {
+): Promise<InitRunContext> {
   try {
     const { gitRoot, isGit } = findGitRoot(resolve(process.cwd(), pathOption ?? '.'));
     if (!isGit) {
