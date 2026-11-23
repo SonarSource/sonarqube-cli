@@ -85,7 +85,10 @@ export async function systemReset(
     }
   }
 
-  await withAgentInstallLock(() => resetEnvironment(console, options));
+  await withAgentInstallLock(
+    () => resetEnvironment(console, options),
+    'Could not start reset. Retry sonar system reset shortly.',
+  );
 }
 
 async function resetEnvironment(console: Console, options: SystemResetOptions): Promise<void> {

@@ -26,7 +26,10 @@ import { Database } from 'bun:sqlite';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getCliDir } from '@/core/config-constants.ts';
 
-export async function withAgentInstallLock<T>(install: () => Promise<T>): Promise<T> {
+export async function withAgentInstallLock<T>(
+  install: () => Promise<T>,
+  unavailableMessage = 'Could not start agent setup. Retry setup shortly.',
+): Promise<T> {
   const dir = getCliDir();
   mkdirSync(dir, { recursive: true });
   const db = new Database(join(dir, 'agent-install.lock.sqlite'), { create: true });
@@ -35,7 +38,7 @@ export async function withAgentInstallLock<T>(install: () => Promise<T>): Promis
       db.run('PRAGMA busy_timeout = 500');
       db.run('BEGIN IMMEDIATE');
     } catch (error) {
-      throw new CommandFailedError('Could not start agent setup. Retry setup shortly.', {
+      throw new CommandFailedError(unavailableMessage, {
         cause: error,
       });
     }
