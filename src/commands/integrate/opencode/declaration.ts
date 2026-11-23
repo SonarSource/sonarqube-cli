@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { wholeFile } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import { createContextAugmentationSkillSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
@@ -127,6 +128,7 @@ export const openCodeIntegration: IntegrationDeclaration<OpenCodeIntegrationOpti
   id: OPENCODE_INTEGRATION_ID,
   displayName: OPENCODE_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('opencode'),
     createSecretsDetectionFeature<OpenCodeIntegrationOptions>({
       resources: createOpenCodeSecretsDetectionResources(),
     }),

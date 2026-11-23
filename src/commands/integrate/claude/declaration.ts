@@ -35,6 +35,7 @@ import type { IntegrationStateAttribute } from '@/core/state/state.ts';
 
 import { isCagHookOrgAllowed } from '../_common/context-augmentation.ts';
 import { contextAugmentationBinaryDependency } from '../_common/context-augmentation-dependency.ts';
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
@@ -159,6 +160,7 @@ export const claudeIntegration: IntegrationDeclaration<ClaudeIntegrationOptions>
   id: CLAUDE_INTEGRATION_ID,
   displayName: CLAUDE_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('claude'),
     createSecretsDetectionFeature<ClaudeIntegrationOptions>({
       resources: createClaudeSecretsDetectionResources(),
     }),

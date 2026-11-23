@@ -418,6 +418,7 @@ export interface InstalledIntegration {
 
 export interface AgentOnboardingState {
   status: 'waiting_for_sign_in' | 'retry_setup' | 'skipped';
+  invitationShown?: boolean;
   server?: string;
   org?: string;
 }

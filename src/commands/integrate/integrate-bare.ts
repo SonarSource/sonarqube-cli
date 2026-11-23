@@ -35,6 +35,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { authLogin } from '../auth/login.ts';
 import { resolveCompletedLogin } from '../auth/login-onboarding.ts';
 import {
+  dismissAgentSetup,
   integrateAllAgents,
   previewBulkSetup,
   resumePendingAgentSetups,
@@ -72,6 +73,7 @@ import { piIntegration } from './pi/declaration.ts';
 export interface IntegrateBareOptions extends SetupTarget {
   nonInteractive?: boolean;
   all?: boolean;
+  dismissAgent?: string;
   /** Marks handlers as invoked via the bare router; forwarded to telemetry only. */
   isFromRouter?: boolean;
 }
@@ -176,9 +178,11 @@ export async function integrateBare(
   await selected.handler({ ...options, isFromRouter: true }, ctx);
 }
 
-async function selectIntegration(console: Console, detected: DetectedAgentId[]) {
+function selectIntegration(console: Console, detected: DetectedAgentId[]) {
   if (detected.length > 0) {
-    console.info(`Detected agents on your machine: ${detected.map(agentDisplayName).join(', ')}`);
+    console.info(
+      `Detected agents on your machine: ${detected.map((agent) => agentDisplayName(agent)).join(', ')}`,
+    );
   }
 
   const alreadyIntegrated = findAlreadyIntegrated();
@@ -230,37 +234,21 @@ export async function dispatchIntegration(
   ctx: CommandInvocationContext,
   options: IntegrateBareOptions,
 ): Promise<void> {
+  if (options.dismissAgent !== undefined) {
+    if (options.all || options.server !== undefined || options.org !== undefined) {
+      throw new InvalidOptionError('--dismiss-agent cannot be combined with bulk setup.');
+    }
+    return dismissAgentSetup(ctx, options.dismissAgent);
+  }
   const auth = await ctx.resolveAuth();
   if (auth.isErr()) throw auth.error;
 
-  if (options.all) {
-    const target = resolveSetupTarget(options);
-    const detected = detectInstalledAgents();
-    if (!options.nonInteractive) {
-      if (!ctx.console.canPrompt())
-        throw new InvalidOptionError('Use --non-interactive for unattended setup.');
-      return prepareWithSignInChoice(ctx, auth.value, detected, target);
-    }
-    return integrateAllAgents(ctx, auth.value, detected, target);
-  }
+  if (options.all) return dispatchBulkSetup(ctx, options, auth.value);
   if (options.server !== undefined || options.org !== undefined) {
     throw new InvalidOptionError('--server and --org require --all.');
   }
-  if (!auth.value) {
-    if (options.nonInteractive || !ctx.console.canPrompt()) {
-      throw new CommandFailedError('Not authenticated.', {
-        remediationHint: "Run 'sonar auth login' to authenticate.",
-      });
-    }
-    const detected = detectInstalledAgents();
-    const selected = await selectIntegration(ctx.console, detected);
-    if (!selected) throw new CommandFailedError('No integration selected');
-    if (selected === 'all') return prepareWithSignInChoice(ctx, null, detected, {});
-    if (selected.agent) return prepareWithSignInChoice(ctx, null, [selected.agent], {});
-    throw new CommandFailedError('Not authenticated.', {
-      remediationHint: "Run 'sonar auth login' to authenticate before setting up Git hooks.",
-    });
-  }
+  if (!auth.value) return dispatchSignedOutSetup(ctx, options);
+
   const child = ctx.withAuth(auth.value);
   try {
     await integrateBare(child, options);
@@ -268,4 +256,37 @@ export async function dispatchIntegration(
     ctx.recordTelemetry(...child.telemetryFacts());
     for (const fact of child.statsFacts()) ctx.recordStats(() => fact);
   }
+}
+
+async function dispatchBulkSetup(
+  ctx: CommandInvocationContext,
+  options: IntegrateBareOptions,
+  auth: ResolvedAuth | null,
+): Promise<void> {
+  const target = resolveSetupTarget(options);
+  const detected = detectInstalledAgents();
+  if (options.nonInteractive) return integrateAllAgents(ctx, auth, detected, target);
+  if (!ctx.console.canPrompt()) {
+    throw new InvalidOptionError('Use --non-interactive for unattended setup.');
+  }
+  return prepareWithSignInChoice(ctx, auth, detected, target);
+}
+
+async function dispatchSignedOutSetup(
+  ctx: CommandInvocationContext,
+  options: IntegrateBareOptions,
+): Promise<void> {
+  if (options.nonInteractive || !ctx.console.canPrompt()) throw signInRequired('authenticate');
+  const detected = detectInstalledAgents();
+  const selected = await selectIntegration(ctx.console, detected);
+  if (!selected) throw new CommandFailedError('No integration selected');
+  if (selected === 'all') return prepareWithSignInChoice(ctx, null, detected, {});
+  if (selected.agent) return prepareWithSignInChoice(ctx, null, [selected.agent], {});
+  throw signInRequired('authenticate before setting up Git hooks');
+}
+
+function signInRequired(action: string): CommandFailedError {
+  return new CommandFailedError('Not authenticated.', {
+    remediationHint: "Run 'sonar auth login' to " + action + '.',
+  });
 }

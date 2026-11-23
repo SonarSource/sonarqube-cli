@@ -20,10 +20,14 @@
 
 import { tryLoadState } from '@/core/state/state-repository.ts';
 
+import { AGENT_ONBOARDING_FEATURE_ID } from './features/agent-onboarding.ts';
+
 /** Ids of the integrations `sonar integrate` has installed, meaning with at least one recorded feature. */
 export function findInstalledIntegrationIds(): string[] {
   const installed = tryLoadState()?.integrations.installed ?? [];
   return installed
-    .filter((integration) => integration.features.length > 0)
+    .filter((integration) =>
+      integration.features.some((feature) => feature.featureId !== AGENT_ONBOARDING_FEATURE_ID),
+    )
     .map((integration) => integration.integrationId);
 }
