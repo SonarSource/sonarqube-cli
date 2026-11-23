@@ -29,6 +29,7 @@ import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
 import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
+import { classifyInitFailure } from '../telemetry/failure-reason.ts';
 import type { DetectDeps } from './detect.ts';
 import {
   reportProjectCreated,
@@ -91,6 +92,25 @@ export async function authorizeOrganization(
   );
 }
 
+/** Records the run-level `org_bind` step around the authorization it may take. */
+export async function authorizeUnlessLinked(
+  linkedAlmKey: string | undefined,
+  api: ImportApiClient,
+  auth: ResolvedAuth,
+  orgKey: string,
+  deps: Pick<DetectDeps, 'console' | 'interactive' | 'telemetry'>,
+): Promise<string | undefined> {
+  const { telemetry } = deps;
+  if (linkedAlmKey) {
+    telemetry?.record('org_bind', 'already_done');
+    return linkedAlmKey;
+  }
+  telemetry?.begin('org_bind');
+  const almKey = await authorizeOrganization(api, auth, orgKey, deps);
+  telemetry?.record('org_bind', almKey ? 'success' : 'declined');
+  return almKey;
+}
+
 /** Each check starts only after the previous one answered and the interval has passed. */
 async function waitForAlmKey(
   api: ImportApiClient,
@@ -145,7 +165,9 @@ export async function runBoundNew(
   { projectRoot, remote, repositorySlug }: BoundNewPath,
   deps: DetectDeps,
 ): Promise<InitOutcome | UnboundNewPath> {
-  const { auth, http, console, intent } = deps;
+  const { auth, http, console, intent, telemetry } = deps;
+  const project = telemetry?.project(0);
+  project?.begin('create_project');
   const api = new ImportApiClient(http);
   const org = await resolveOrg(api, auth.orgKey);
   const linkedAlmKey = await resolveAlmKey(api, org.key, org.almKey);
@@ -165,11 +187,22 @@ export async function runBoundNew(
       },
     };
   }
-  const almKey = linkedAlmKey ?? (await authorizeOrganization(api, auth, org.key, deps));
+  let almKey: string | undefined;
+  try {
+    almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
+  } catch (error) {
+    project?.record('create_project', 'failed');
+    project?.stopAt('create_project', classifyInitFailure(error));
+    throw error;
+  }
   if (!almKey) {
-    return intent?.kind === 'bind'
-      ? { kind: 'declined' }
-      : { path: 'unbound-new', projectRoot, remote };
+    if (intent?.kind === 'bind') {
+      // `--bind` never falls back to an unbound project, so declining ends the attempt.
+      project?.record('create_project', 'declined');
+      project?.stopAt('create_project', 'cancelled');
+      return { kind: 'declined' };
+    }
+    return { path: 'unbound-new', projectRoot, remote };
   }
 
   console.info(`Organization: ${org.key}`);
@@ -178,6 +211,8 @@ export async function runBoundNew(
   );
 
   await writeMapping(auth, projectKey, projectRoot, console, 'created');
+  project?.record('create_project', 'success');
+  project?.setProjectKey(projectKey);
   reportProjectCreated(console, projectKey);
   await showAnalysisResults(
     http,
