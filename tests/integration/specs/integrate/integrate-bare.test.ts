@@ -242,6 +242,43 @@ describe('integrate (bare command)', () => {
     expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
   });
 
+  it(
+    'signs in without activating prepared agents when setup is disabled',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.userHome.writeFile('.claude.json', '{}');
+      await harness.run('integrate --all --non-interactive --server ' + server.baseUrl());
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const session = harness.runInteractive(
+        'auth login --no-agent-setup --server ' + server.baseUrl(),
+        { browserToken: 'test-token', extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' } },
+      );
+      await session.waitText('Connect to:');
+      session.write('y');
+      const login = await session.waitFinish();
+
+      expect(login.exitCode).toBe(0);
+      expect(login.stdout).toContain('Authentication successful');
+      expect(login.stdout).not.toContain('Claude Code: Configured');
+      expect(harness.stateJsonFile.asJson().integrations.onboarding['claude-code']).toMatchObject({
+        status: 'waiting_for_sign_in',
+      });
+    },
+    { timeout: 30000 },
+  );
+
+  it('omits setup guidance from a JSON token login when setup is disabled', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    const login = await harness.runWithStdin(
+      'auth login --no-agent-setup --with-token --format json --server ' + server.baseUrl(),
+      'test-token\n',
+    );
+    expect(login.exitCode).toBe(0);
+    expect(JSON.parse(login.stdout)).toEqual({ status: 'connected', server: server.baseUrl() });
+  });
+
   it('reports machine-readable setup guidance after a token login', async () => {
     const server = await harness.newFakeServer().withAuthToken('test-token').start();
     harness.userHome.writeFile('.claude.json', '{}');

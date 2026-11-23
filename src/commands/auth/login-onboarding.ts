@@ -62,6 +62,10 @@ export async function loginAndResumeOnboarding(
   }
   const loginContext = json ? new CommandInvocationContext(new QuietConsole(ctx.console)) : ctx;
   const target = await authLogin(opts, loginContext);
+  if (opts.agentSetup === false) {
+    if (json) printConnectedLogin(ctx, target);
+    return;
+  }
   try {
     if (needsUnattendedGuidance(opts, ctx)) {
       await reportSetupNextStep(target, json, ctx);
@@ -69,7 +73,7 @@ export async function loginAndResumeOnboarding(
       await continueInteractiveSetup(target, ctx);
     }
   } catch {
-    if (json) ctx.console.print(JSON.stringify({ status: 'connected', ...target }));
+    if (json) printConnectedLogin(ctx, target);
     else ctx.console.warn("Sign-in succeeded. Continue agent setup with 'sonar integrate'.");
   }
 }
@@ -87,12 +91,20 @@ async function reportSetupNextStep(
 ) {
   const nextCommand = await findSetupCommand(target, loadState());
   if (json) {
-    ctx.console.print(
-      JSON.stringify({ status: 'connected', ...target, ...(nextCommand ? { nextCommand } : {}) }),
-    );
+    printConnectedLogin(ctx, target, nextCommand);
   } else if (nextCommand) {
     ctx.console.warn('Finish agent setup with ' + nextCommand + '.');
   }
+}
+
+function printConnectedLogin(
+  ctx: CommandInvocationContext,
+  target: LoginTarget,
+  nextCommand?: string,
+): void {
+  ctx.console.print(
+    JSON.stringify({ status: 'connected', ...target, ...(nextCommand ? { nextCommand } : {}) }),
+  );
 }
 
 async function continueInteractiveSetup(target: LoginTarget, ctx: CommandInvocationContext) {
