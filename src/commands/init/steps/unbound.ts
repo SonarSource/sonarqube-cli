@@ -120,7 +120,7 @@ function unboundUnavailable(
   path: UnboundNewPath,
   { console, interactive }: DetectDeps,
 ): InitOutcome {
-  const situation = 'No Sonar project exists for this directory yet.';
+  const situation = 'No SonarQube project exists for this directory yet.';
   if (!interactive) {
     throw missingDecision(situation, newProjectOptions(path, false));
   }
@@ -226,7 +226,7 @@ function stopBeforeCreating(path: UnboundNewPath, deps: DetectDeps): InitOutcome
   const { interactive, intent, allowUnbound } = deps;
   if (intent?.kind === 'link') {
     throw new InvalidOptionError(
-      '--link found no Sonar project for this directory.',
+      '--link found no SonarQube project for this directory.',
       allowUnbound
         ? "Name the project with --link <key>, or run 'sonar init' again with --create."
         : 'Name the project with --link <key>.',
@@ -237,7 +237,7 @@ function stopBeforeCreating(path: UnboundNewPath, deps: DetectDeps): InitOutcome
   }
   if (!interactive && intent?.kind !== 'create') {
     throw missingDecision(
-      'No Sonar project exists for this directory yet.',
+      'No SonarQube project exists for this directory yet.',
       newProjectOptions(path, true),
     );
   }
