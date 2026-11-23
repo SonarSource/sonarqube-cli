@@ -18,6 +18,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { constants } from 'node:fs';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type {
@@ -28,9 +30,13 @@ import type {
   SubfeatureDeclaration,
 } from '@/core/framework/features';
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
+import { isDevinAgentEnv } from '@/core/host/environment/agent-detector.ts';
 import { resolveDevinConfigDir } from '@/core/host/environment/devin-config-dir.ts';
 
-import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
+import {
+  createCompletionAnalysisHookSubfeature,
+  STOP_SCRIPT_REL,
+} from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
   SESSION_START_SCRIPT_REL,
@@ -49,6 +55,7 @@ import {
   buildWindowsHookScript,
   createAgentHookEntry,
   removeAgentHooks,
+  resolveAgentHookCommand,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
@@ -76,6 +83,51 @@ const PROMPT_SECRETS_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
 const SECRETS_HOOK_MARKER = 'sonar-secrets';
 const READ_HOOK_MATCHER = '^read$';
 const SECRETS_ON_READ_MARKER = 'devin-secrets-on-read';
+
+const DEVIN_NATIVE_HOOKS = {
+  PostToolUse: {
+    path: POSTTOOL_SQAA_SCRIPT_REL,
+    matcher: SQAA_HOOK_MATCHER,
+    subcommand: 'devin-post-tool-use',
+  },
+  SessionStart: {
+    path: SESSION_START_SCRIPT_REL,
+    matcher: SESSION_START_HOOK_MATCHER,
+    subcommand: 'agent-session-start --agent devin',
+  },
+  Stop: { path: STOP_SCRIPT_REL, matcher: undefined, subcommand: 'agent-stop --agent devin' },
+};
+
+/** Devin also loads Claude hooks. Defer only to a native hook with the equivalent active entry. */
+export async function hasDevinNativeHook(event: keyof typeof DEVIN_NATIVE_HOOKS): Promise<boolean> {
+  if (!isDevinAgentEnv()) return false;
+
+  const targetRoot = resolveDevinConfigDir();
+  const context = { targetRoot, scope: 'global' } as const;
+  const { path, matcher, subcommand } = DEVIN_NATIVE_HOOKS[event];
+  const command = resolveAgentHookCommand(context, '', path);
+  try {
+    const document = JSON.parse(await readFile(join(targetRoot, DEVIN_CONFIG_FILE), 'utf8')) as {
+      disableAllHooks?: boolean;
+      hooks?: Record<string, { matcher?: string; hooks: { type: string; command: string }[] }[]>;
+    };
+    if (document.disableAllHooks === true) return false;
+    const registered = document.hooks?.[event]?.some(
+      (entry) =>
+        entry.matcher === matcher &&
+        entry.hooks.some((hook) => hook.type === 'command' && hook.command === command),
+    );
+    if (!registered) return false;
+
+    const script = resolveAgentHookScriptPath(context, '', path);
+    const windows = process.platform === 'win32';
+    await access(script, windows ? constants.R_OK : constants.X_OK);
+    const expected = windows ? buildWindowsHookScript(subcommand) : buildUnixHookScript(subcommand);
+    return (await readFile(script, 'utf8')).replaceAll('\r\n', '\n') === expected;
+  } catch {
+    return false;
+  }
+}
 
 function resolveDevinMcpConfigPath(context: IntegrationContext): string {
   return join(resolveDevinConfigDir(context.targetRoot), DEVIN_MCP_CONFIG_FILE);

@@ -25,6 +25,7 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
+import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import type {
@@ -61,8 +62,12 @@ function createSqaaPostToolUseSubscriber(
   return {
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
-    handle: (payload) =>
-      handleSqaaPostToolUse(payload, ctx, SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND),
+    async handle(payload) {
+      if (await hasDevinNativeHook('PostToolUse')) {
+        return { decision: 'none' };
+      }
+      return handleSqaaPostToolUse(payload, ctx, SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND);
+    },
   };
 }
 

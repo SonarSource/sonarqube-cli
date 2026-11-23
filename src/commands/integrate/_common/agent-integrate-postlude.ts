@@ -24,10 +24,13 @@
 // options and recorded attrs, and run the install.
 
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
+import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { installIntegration } from '@/core/framework/features';
+import { loadState, updateState } from '@/core/state/state-repository.ts';
 
 import { supportedIntegrations } from '../index.ts';
+import { withAgentInstallLock } from './agent-install-lock.ts';
 import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import { recordIntegrationConfigured } from './integrate-telemetry.ts';
@@ -58,6 +61,15 @@ export interface FinalizeAgentInstallParams<TOptions extends IntegrateAgentOptio
 export async function finalizeAgentInstall<TOptions extends IntegrateAgentOptions>(
   params: FinalizeAgentInstallParams<TOptions>,
 ): Promise<void> {
+  if (params.options.fromBulkSetup) {
+    return installAgent(params);
+  }
+  return withAgentInstallLock(() => installAgent(params));
+}
+
+async function installAgent<TOptions extends IntegrateAgentOptions>(
+  params: FinalizeAgentInstallParams<TOptions>,
+): Promise<void> {
   const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
   const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
@@ -66,6 +78,7 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     orgKey: auth.orgKey,
     contextAugmentation: vortex,
   });
+  const completion = { saved: false };
   await installIntegration({
     registry: supportedIntegrations,
     integrationId: params.integrationId,
@@ -81,6 +94,12 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
     nonInteractive: options.nonInteractive,
     attrs,
     onSuccess: (facts) => {
+      completion.saved = true;
+      if (loadState().integrations.onboarding?.[params.integrationId]) {
+        updateState((state) => {
+          delete state.integrations.onboarding?.[params.integrationId];
+        });
+      }
       recordIntegrationConfigured(params.ctx, {
         auth,
         integrationId: params.integrationId,
@@ -91,5 +110,8 @@ export async function finalizeAgentInstall<TOptions extends IntegrateAgentOption
       });
     },
   });
+  if (options.fromBulkSetup && !completion.saved) {
+    throw new CommandFailedError('Could not save completed agent setup.');
+  }
   await warnIfMcpRuntimeUnavailable(params.ctx.console, params.integrationId, installRoot);
 }

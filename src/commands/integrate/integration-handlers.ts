@@ -18,8 +18,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { DetectedAgentId } from '@/core/host/environment/installed-agent-detector.ts';
 import type { AgentIntegrationHandlers } from '@/core/update/post-update.ts';
 
+import type { IntegrateAgentOptions } from './_common/types.ts';
 import { integrateAntigravity } from './antigravity';
 import { ANTIGRAVITY_INTEGRATION_ID } from './antigravity/declaration.ts';
 import { integrateClaude } from './claude';
@@ -42,7 +44,7 @@ import { PI_INTEGRATION_ID } from './pi/declaration.ts';
  * deliberately absent: a global git hook is overridden by any repository that sets its own
  * `core.hooksPath`, so local git integrations are left untouched.
  */
-export const AGENT_INTEGRATION_HANDLERS: AgentIntegrationHandlers = {
+export const AGENT_INTEGRATION_HANDLERS = {
   [CLAUDE_INTEGRATION_ID]: integrateClaude,
   [CODEX_INTEGRATION_ID]: integrateCodex,
   [COPILOT_INTEGRATION_ID]: integrateCopilot,
@@ -51,4 +53,21 @@ export const AGENT_INTEGRATION_HANDLERS: AgentIntegrationHandlers = {
   [OPENCODE_INTEGRATION_ID]: integrateOpenCode,
   [DEVIN_INTEGRATION_ID]: integrateDevin,
   [PI_INTEGRATION_ID]: integratePi,
+} satisfies AgentIntegrationHandlers;
+
+export const AGENT_INTEGRATION_IDS = {
+  antigravity: ANTIGRAVITY_INTEGRATION_ID,
+  claude: CLAUDE_INTEGRATION_ID,
+  codex: CODEX_INTEGRATION_ID,
+  copilot: COPILOT_INTEGRATION_ID,
+  cursor: CURSOR_INTEGRATION_ID,
+  devin: DEVIN_INTEGRATION_ID,
+  opencode: OPENCODE_INTEGRATION_ID,
+  pi: PI_INTEGRATION_ID,
+} satisfies Record<DetectedAgentId, keyof typeof AGENT_INTEGRATION_HANDLERS>;
+
+export const BULK_SETUP_OPTIONS: IntegrateAgentOptions = {
+  nonInteractive: true,
+  isFromRouter: true,
+  fromBulkSetup: true,
 };

@@ -85,7 +85,7 @@ const codexVortexFeature = (() => {
         hookConfigResource: createCagHookConfigResource(),
       }),
     ],
-    resolveCodexSkillPath,
+    { integrationId: CODEX_INTEGRATION_ID, path: resolveCodexSkillPath },
   );
   return {
     ...feature,

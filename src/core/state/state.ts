@@ -422,6 +422,8 @@ export interface InstalledIntegration {
 export interface IntegrationsState {
   /** Installed declarative integrations */
   installed: InstalledIntegration[];
+  /** Per-agent setup initiated through onboarding. */
+  onboarding?: Record<string, { status: 'retry_setup' | 'skipped' }>;
 }
 
 /**
