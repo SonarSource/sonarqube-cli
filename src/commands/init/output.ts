@@ -142,7 +142,9 @@ function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined, dryRun: 
       const keys = outcome.projectKeys.map((key) => `'${key}'`).join(', ');
       return [
         ...(outcome.projectKeys.length > 0
-          ? [`This directory is already linked to the Sonar ${noun} ${keys} in .sonar-config.json.`]
+          ? [
+              `This directory is already linked to the SonarQube ${noun} ${keys} in .sonar-config.json.`,
+            ]
           : []),
         ...(outcome.issues.some(isUnavailable) ? [] : ['Nothing left to set up.']),
       ];
