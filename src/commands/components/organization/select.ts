@@ -72,6 +72,20 @@ export async function assertOrganizationMember(
 export type OnNoMemberships = (client: OrganizationsClient) => Promise<string>;
 
 /**
+ * Creates an organization the user chose from the selection list and returns its key, or
+ * `undefined` when none was created, which brings the list back without the creation option.
+ * It receives the client bound to the token this login is using. It may throw to abort the login.
+ */
+export type OnCreateOrganization = (client: OrganizationsClient) => Promise<string | undefined>;
+
+/** Callbacks a caller such as `sonar init` adds to the organization selection. */
+export interface OrganizationSelectionHooks {
+  onNoMemberships?: OnNoMemberships;
+  /** Offers "Create a new organization" in the list, and asks even when there is one membership. */
+  onCreateOrganization?: OnCreateOrganization;
+}
+
+/**
  * Validate organization or get from list
  */
 export async function validateOrSelectOrganization(
@@ -79,7 +93,7 @@ export async function validateOrSelectOrganization(
   org: string | undefined,
   console: Console,
   activeOrgKey: string | undefined,
-  onNoMemberships?: OnNoMemberships,
+  hooks: OrganizationSelectionHooks = {},
 ): Promise<string> {
   if (org) {
     await assertOrganizationMember(client, org);
@@ -106,7 +120,7 @@ export async function validateOrSelectOrganization(
     console.warn(`You are not a member of organization '${configOrg}' ${source}.`);
   }
 
-  return await getUserSelectedOrganization(client, console, activeOrgKey, onNoMemberships);
+  return await getUserSelectedOrganization(client, console, activeOrgKey, hooks);
 }
 
 function organizationRequiredError(): CommandFailedError {
@@ -184,18 +198,23 @@ function toSelectOption({ key, text }: OrganizationRow): SelectOption<string> {
   return { value: key, label: text };
 }
 
+const MANUAL_ENTRY = '__manual__';
+const CREATE_NEW = '__create__';
+
 export async function getUserSelectedOrganization(
   client: OrganizationsClient,
   console: Console,
   activeOrgKey: string | undefined,
-  onNoMemberships?: OnNoMemberships,
+  { onNoMemberships, onCreateOrganization }: OrganizationSelectionHooks = {},
 ): Promise<string> {
-  // Deduce organization from API: if user is member of exactly one org, use it
   const {
     organizations: memberOrgs,
     paging: { total: orgTotal },
   } = await listMemberOrganizations(client);
-  if (memberOrgs.length === 1 && orgTotal === 1) {
+  // Creation is only ever an explicit choice, so it needs someone to ask.
+  const onCreate = console.canPrompt() ? onCreateOrganization : undefined;
+  // Deduce organization from API: if user is member of exactly one org, use it
+  if (memberOrgs.length === 1 && orgTotal === 1 && !onCreate) {
     const singleOrg = memberOrgs[0].key;
     console.print(`Using organization (only member): ${singleOrg}`);
     return singleOrg;
@@ -216,21 +235,41 @@ export async function getUserSelectedOrganization(
       `Showing first ${memberOrgs.length} of ${orgTotal} organizations. Use manual entry to select a different organization.`,
     );
   }
-  const MANUAL_ENTRY = '__manual__';
   const summaries = memberOrgs.map((org) => toOrganizationSummary(org, activeOrgKey));
   const orgOptions = [
     ...formatOrganizationRows(summaries).map(toSelectOption),
     { value: MANUAL_ENTRY, label: 'Enter organization key manually' },
   ];
 
-  const choice = await console
-    .selectPromptResult<string>('Select an organization', orgOptions)
+  const choice = await selectOrganization(console, orgOptions, onCreate !== undefined);
+  if (choice === CREATE_NEW && onCreate) {
+    const created = await onCreate(client);
+    if (created) {
+      return created;
+    }
+    return resolveChoice(client, console, await selectOrganization(console, orgOptions, false));
+  }
+  return resolveChoice(client, console, choice);
+}
+
+async function selectOrganization(
+  console: Console,
+  orgOptions: SelectOption<string>[],
+  offerCreation: boolean,
+): Promise<string> {
+  const options = offerCreation
+    ? [...orgOptions, { value: CREATE_NEW, label: 'Create a new organization' }]
+    : orgOptions;
+  return console
+    .selectPromptResult<string>('Select an organization', options)
     .onCancellation(ORGANIZATION_SELECTION_CANCELLED)
     .orThrow();
+}
 
-  if (choice === MANUAL_ENTRY) {
-    return promptForOrganizationKey(client, console);
-  }
-
-  return choice;
+function resolveChoice(
+  client: OrganizationsClient,
+  console: Console,
+  choice: string,
+): Promise<string> | string {
+  return choice === MANUAL_ENTRY ? promptForOrganizationKey(client, console) : choice;
 }

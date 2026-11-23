@@ -293,6 +293,94 @@ describe('authLogin organization prompt', () => {
     });
   });
 
+  describe('onCreateOrganization hook', () => {
+    const oneMembership = () =>
+      okAsync({
+        organizations: [{ key: 'only-org', name: 'Only Org' }],
+        paging: { pageIndex: 1, pageSize: 10, total: 1 },
+      });
+
+    /** The option values of every organization list shown, in order. */
+    function shownLists(selectSpy: ReturnType<typeof spyOn>): unknown[][] {
+      const calls = selectSpy.mock.calls as [string, { value: unknown }[]][];
+      return calls.map(([, options]) => options.map((option) => option.value));
+    }
+
+    beforeEach(() => {
+      // The outer setup queues manual entry; these tests pick from the list themselves.
+      fake = new FakeConsole();
+    });
+
+    it('asks with a single membership and persists the key the hook creates', async () => {
+      listOrgsSpy.mockReturnValueOnce(oneMembership());
+      const selectSpy = spyOn(fake, 'selectPrompt');
+      fake.queueResponse('__create__');
+      const hook = mock(() => Promise.resolve('new-org'));
+
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+        onCreateOrganization: hook,
+      });
+
+      expect(shownLists(selectSpy)).toEqual([['only-org', '__manual__', '__create__']]);
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(revokeSpy).not.toHaveBeenCalled();
+      expect(fake.findCall('success', 'new-org')).toBeDefined();
+    });
+
+    it('shows the list again without the option when the hook creates nothing', async () => {
+      const selectSpy = spyOn(fake, 'selectPrompt');
+      fake.queueResponse('__create__');
+      fake.queueResponse('second-org');
+      const hook = mock(() => Promise.resolve(undefined));
+
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+        onCreateOrganization: hook,
+      });
+
+      expect(shownLists(selectSpy)).toEqual([
+        ['first-org', 'second-org', '__manual__', '__create__'],
+        ['first-org', 'second-org', '__manual__'],
+      ]);
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(fake.findCall('success', 'second-org')).toBeDefined();
+    });
+
+    it('revokes the minted token when the hook throws', async () => {
+      fake.queueResponse('__create__');
+
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- Bun expect().rejects is awaitable at runtime; typings omit Thenable
+      await expect(
+        authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+          onCreateOrganization: () => Promise.reject(new CommandFailedError('creation failed')),
+        }),
+      ).rejects.toThrow('creation failed');
+
+      expect(revokeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps auto-selecting a single membership when nobody can be asked', async () => {
+      fake.setCanPrompt(false);
+      listOrgsSpy.mockReturnValueOnce(oneMembership());
+      const hook = mock(() => Promise.resolve('new-org'));
+
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake), {
+        onCreateOrganization: hook,
+      });
+
+      expect(fake.findCall('selectPrompt', 'Select an organization')).toBeUndefined();
+      expect(hook).not.toHaveBeenCalled();
+      expect(fake.findCall('print', 'Using organization (only member): only-org')).toBeDefined();
+    });
+
+    it('is not offered without the hook', async () => {
+      const selectSpy = spyOn(fake, 'selectPrompt');
+
+      await authLogin({ server: SONARCLOUD_URL }, new CommandInvocationContext(fake));
+
+      expect(shownLists(selectSpy)).toEqual([['first-org', 'second-org', '__manual__']]);
+    });
+  });
+
   it('rejects a multiline server discovered from project configuration before token generation', async () => {
     spyOn(projectInfo, 'discoverServerFromConfig').mockResolvedValue({
       value: 'https://example.org\nhttps://other.example',
