@@ -20,14 +20,10 @@
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
-import {
-  type DetectedAgentId,
-  SUPPORTED_AGENT_IDS,
-} from '@/core/host/environment/installed-agent-detector.ts';
+import { SUPPORTED_AGENT_IDS } from '@/core/host/environment/installed-agent-detector.ts';
 import { normalizeServerUrl } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-discovery/project-info.ts';
-import type { IntegrationsState } from '@/core/state/state.ts';
 import { tryLoadState, updateState } from '@/core/state/state-repository.ts';
 
 import { formatSetupLoginCommand } from '../integrate/_common/pending-agent-setup.ts';
@@ -44,6 +40,8 @@ export async function agentOnboarding(
   const agent = SUPPORTED_AGENT_IDS.find((id) => id === rawAgent);
   const adapter = agent ? resolveAdapter(agent) : undefined;
   if (!agent || !adapter) return;
+  // Devin runs inherited Claude hooks and must not consume Claude's invitation.
+  if (agent === 'claude' && detectCallerAgent() === 'devin') return;
 
   try {
     const state = tryLoadState();
@@ -53,7 +51,6 @@ export async function agentOnboarding(
 
     const input = adapter.parse(await readStdinJson<unknown>());
     if (input.eventName === 'SubagentStart' || !input.startDir) return;
-    if (inheritsPendingHook(agent, state?.integrations.onboarding)) return;
 
     const project = await discoverProject(input.startDir, {
       auth: null,
@@ -95,16 +92,4 @@ function claimInvitation(id: string): boolean {
     pending.invitationShown = true;
     return true;
   });
-}
-
-function inheritsPendingHook(
-  agent: DetectedAgentId,
-  onboarding: IntegrationsState['onboarding'],
-): boolean {
-  if (agent !== 'claude') return false;
-  const caller = detectCallerAgent();
-  return (
-    caller === 'devin' &&
-    onboarding?.[AGENT_INTEGRATION_IDS[caller]]?.status === 'waiting_for_sign_in'
-  );
 }

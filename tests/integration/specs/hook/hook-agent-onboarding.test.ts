@@ -111,8 +111,27 @@ describe('sonar hook agent-onboarding', () => {
     expect(unrelated.stdout).toBe('');
   });
 
-  it('remembers a user dismissal without reporting an activated integration', async () => {
-    harness.userHome.writeFile('.claude.json', '{}');
+  it('does not consume the Claude invitation when Devin inherits the hook', async () => {
+    seed('claude');
+    const command = 'hook agent-onboarding --agent claude';
+    const payload = JSON.stringify({
+      cwd: harness.cwd.path,
+      hook_event_name: 'SessionStart',
+    });
+    const devin = await harness.runWithStdin(command, payload, {
+      extraEnv: { DEVIN_PROJECT_DIR: harness.cwd.path },
+    });
+    expect(devin.exitCode).toBe(0);
+    expect(devin.stdout).toBe('');
+
+    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+    const claude = await harness.runWithStdin(command, payload);
+    expect(claude.exitCode).toBe(0);
+    expect(claude.stdout).toContain('Sign in to SonarQube');
+  });
+
+  it('removes dismissed guidance and keeps user settings', async () => {
+    harness.userHome.writeFile('.claude/settings.json', '{"model":"sonnet"}');
     const prepared = await harness.run('integrate --all --non-interactive');
     expect(prepared.exitCode).toBe(0);
     harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
@@ -120,6 +139,9 @@ describe('sonar hook agent-onboarding', () => {
     const result = await harness.run('integrate --dismiss-agent claude');
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Skipped');
+    const settings = harness.userHome.file('.claude', 'settings.json');
+    expect(settings.asText()).not.toContain('sonar-agent-onboarding');
+    expect(settings.asJson().model).toBe('sonnet');
     harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
     const startup = await harness.runWithStdin(
       'hook agent-onboarding --agent claude',
@@ -150,5 +172,12 @@ describe('sonar hook agent-onboarding', () => {
     expect(
       harness.userHome.file('.gemini', 'config', 'skills', 'sonar-sign-in', 'SKILL.md').asText(),
     ).toContain('continue the original request');
+
+    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+    const dismissal = await harness.run('integrate --dismiss-agent opencode');
+    expect(dismissal.exitCode).toBe(0);
+    expect(
+      harness.userHome.file('.config', 'opencode', 'skills', 'sonar-sign-in', 'SKILL.md').exists(),
+    ).toBe(false);
   });
 });

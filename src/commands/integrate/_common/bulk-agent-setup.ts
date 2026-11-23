@@ -152,7 +152,9 @@ export async function previewBulkSetup(
   if (!agents.length) return true;
   const state = loadState();
   const statuses = await Promise.all(agents.map((agent) => agentSetupStatus(agent, state)));
-  agents.forEach((agent, index) => { console.print(agentDisplayName(agent) + ': ' + statuses[index]); });
+  agents.forEach((agent, index) => {
+    console.print(agentDisplayName(agent) + ': ' + statuses[index]);
+  });
   return (
     (await console.confirmPrompt('Set up the new coding agents listed above?', false)) === true
   );
@@ -219,7 +221,7 @@ async function configureAgent(
         invitationShown: pending?.invitationShown,
       });
     }
-    if (pending?.status !== 'retry_setup') await prepareSignInGuidance(ctx, agent, id);
+    if (pending?.status !== 'retry_setup') await configureSignInGuidance(ctx, agent, id, true);
     return 'Waiting for sign-in';
   }
 
@@ -240,19 +242,21 @@ async function configureAgent(
   return 'Configured';
 }
 
-async function prepareSignInGuidance(
+async function configureSignInGuidance(
   ctx: CommandInvocationContext,
   agent: DetectedAgentId,
   integrationId: string,
+  prepareOnboarding: boolean,
 ): Promise<void> {
   const integration = supportedIntegrations.get(integrationId);
   if (!integration) throw new CommandFailedError('Agent integration is unavailable.');
   const target =
     agent === 'antigravity' ? resolveAntigravityInstallTarget() : resolveIntegrateInstallTarget();
-  const installed = await installIntegration<IntegrateAgentOptions>({
+  const completion = { saved: false };
+  await installIntegration<IntegrateAgentOptions>({
     registry: supportedIntegrations,
     integrationId,
-    options: { prepareOnboarding: true },
+    options: { prepareOnboarding },
     targetRoot: target.installRoot,
     scope: target.installScope,
     console: ctx.console,
@@ -260,8 +264,11 @@ async function prepareSignInGuidance(
     excludedFeatureIds: integration.features
       .filter((feature) => feature.id !== AGENT_ONBOARDING_FEATURE_ID)
       .map((feature) => feature.id),
+    onSuccess: () => {
+      completion.saved = true;
+    },
   });
-  if (!installed.length) throw new CommandFailedError('Could not save pending sign-in guidance.');
+  if (!completion.saved) throw new CommandFailedError('Could not save agent sign-in guidance.');
 }
 
 function combineSetupTargets(pending: SetupTarget | undefined, target: SetupTarget): SetupTarget {
@@ -307,8 +314,15 @@ export async function dismissAgentSetup(
 ): Promise<void> {
   const agent = SUPPORTED_AGENT_IDS.find((candidate) => candidate === name);
   if (!agent) throw new InvalidOptionError('Unknown coding agent: ' + name);
-  await withAgentInstallLock(() => {
-    saveAgentOnboarding(AGENT_INTEGRATION_IDS[agent], { status: 'skipped' });
+  const id = AGENT_INTEGRATION_IDS[agent];
+  await withAgentInstallLock(async () => {
+    saveAgentOnboarding(id, { status: 'skipped' });
+    const hasGuidance = loadState().integrations.installed.some(
+      (integration) =>
+        integration.integrationId === id &&
+        integration.features.some((feature) => feature.featureId === AGENT_ONBOARDING_FEATURE_ID),
+    );
+    if (hasGuidance) await configureSignInGuidance(ctx, agent, id, false);
   });
   ctx.console.info(agentDisplayName(agent) + ': Skipped');
 }
