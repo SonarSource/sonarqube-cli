@@ -184,8 +184,6 @@ export interface InitRunContext {
   isInteractive: boolean;
   remoteHost: InitRemoteHost | null;
   repoRoot: string | null;
-  /** Time spent on prompts and browser steps during the run. */
-  userWaitMs: number;
 }
 
 /**
@@ -193,7 +191,6 @@ export interface InitRunContext {
  * CliProjectInitCreationAttempted fact per project root, or none when the roots were never known.
  */
 export class InitTelemetryRecorder {
-  private readonly startedAt = performance.now();
   private readonly log = new StepLog<RunStepId>();
   private projects: ProjectInitRecorder[] | undefined;
   private active: ProjectInitRecorder | undefined;
@@ -301,8 +298,6 @@ export class InitTelemetryRecorder {
           is_monorepo: this.isMonorepo,
           remote_host: run.remoteHost,
           repo_id: hashRepoRoot(run.repoRoot),
-          duration_ms: Math.round(performance.now() - this.startedAt),
-          user_wait_ms: run.userWaitMs,
         },
         run.auth,
       ),
