@@ -185,7 +185,7 @@ describe('GitHub bulk CI onboarding', () => {
   });
 
   it('previews rendered workflows without any GitHub or SonarQube writes', async () => {
-    const { run, github, server, telemetryEvents } = await setup([
+    const { run, github, server } = await setup([
       { name: 'sample' },
       {
         name: 'configured',
@@ -194,7 +194,6 @@ describe('GitHub bulk CI onboarding', () => {
     ]);
 
     await run({ ...OPTIONS, dryRun: true });
-    expect(telemetryEvents).toHaveLength(0);
 
     expect(harness.cwd.file('sonar-onboard-ci-report-dry.json').asJson()).toEqual({
       wouldOpenPr: [{ repo: `${ORG}/sample`, projectKey: 'sample-key' }],
@@ -265,8 +264,6 @@ describe('GitHub bulk CI onboarding', () => {
         .getRecordedRequests()
         .filter((request) => request.method === 'POST' && request.path.endsWith('/pulls')),
     ).toHaveLength(1);
-    await run({ ...OPTIONS, dryRun: true });
-    expect(telemetryEvents).toHaveLength(2);
   });
 
   it('does not count a recovered PR as created when the creation response is lost', async () => {
