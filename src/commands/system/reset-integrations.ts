@@ -85,11 +85,11 @@ async function removeDeclarativeIntegrations(
   return { integrationFeatures, failed, removedFeatures };
 }
 
-function* removeFeaturesSequentially(
+async function* removeFeaturesSequentially(
   state: CliState,
   supportedIntegrations: IntegrationRegistry,
   console: Console,
-): Generator<FeatureRemoveOutcome | Promise<FeatureRemoveOutcome>> {
+): AsyncGenerator<FeatureRemoveOutcome> {
   const remaining = structuredClone(state);
   for (const installed of state.integrations.installed) {
     const declaration = supportedIntegrations.get(installed.integrationId);
