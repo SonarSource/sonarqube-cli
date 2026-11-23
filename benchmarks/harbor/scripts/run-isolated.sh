@@ -159,21 +159,21 @@ mint_sonar_run_token() {
   SONAR_RUN_TOKEN_ID="$(jq -r .id <<<"${created}")"
   HB_SONAR_TOKEN="$(jq -r .token <<<"${created}")"
   export HB_SONAR_TOKEN
-  (umask 077 && printf '%s' "${HB_SONAR_TOKEN}" >"${SONAR_RUN_TOKEN_FILE}")
+  (umask 077 && printf '%s' "${SONAR_RUN_TOKEN_ID}" >"${SONAR_RUN_TOKEN_ID_FILE}")
+}
+
+revoke_sonar_run_token() {
+  [[ -s "${SONAR_RUN_TOKEN_ID_FILE}" ]] || { echo "No run token id was recorded, so there is no token to revoke" >&2; exit 1; }
+  python3 -I "${SOURCE_ROOT}/scripts/sonar-run-token.py" delete --id "$(cat "${SONAR_RUN_TOKEN_ID_FILE}")"
 }
 
 stop_and_collect() {
-  local status=0
   kill "${PORTKEY_PROXY_PID}" 2>/dev/null || true
-  collect_results || status=$?
-  if [[ -n "${SONAR_RUN_TOKEN_ID:-}" ]]; then
-    python3 -I "${SOURCE_ROOT}/scripts/sonar-run-token.py" delete --id "${SONAR_RUN_TOKEN_ID}" || status=$?
-  fi
-  return "${status}"
+  collect_results
 }
 
 main() {
-  : "${SONAR_RUN_TOKEN_FILE:?SONAR_RUN_TOKEN_FILE must be set}"
+  : "${SONAR_RUN_TOKEN_ID_FILE:?SONAR_RUN_TOKEN_ID_FILE must be set}"
   export HARBOR_HOST_ENVIRONMENT_ALLOW=1
   prepare
   trap stop_and_collect EXIT
@@ -188,6 +188,7 @@ case "${1:-}" in
   install) install_tools ;;
   collect) collect_results ;;
   run) run_benchmark ;;
+  revoke) revoke_sonar_run_token ;;
   "") main ;;
   *)
     echo "Usage: run-isolated.sh" >&2
