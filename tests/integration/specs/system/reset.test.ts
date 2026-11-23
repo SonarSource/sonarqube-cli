@@ -40,6 +40,7 @@ import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
 import { preCommitIntegration } from '@/commands/integrate/git/tools/pre-commit';
 import { CLI_TMP_DIR, SCA_SCANNER_CACHE_DIR } from '@/core/config-constants.ts';
 import { generateKeychainAccount } from '@/core/host/keychain.ts';
+import type { CliState } from '@/core/state/state.ts';
 
 import { version as CLI_VERSION } from '../../../../package.json';
 import { hookScriptName, TestHarness } from '../../harness';
@@ -104,7 +105,7 @@ interface ResetStateSnapshot {
   telemetry: TelemetrySnapshot;
   dependencies: { installed: Array<{ id: string }> };
   agentExtensions: unknown[];
-  integrations: { installed: unknown[] };
+  integrations: { installed: unknown[] } & Pick<CliState['integrations'], 'onboarding'>;
   knownServerProjectMappings?: unknown[];
 }
 
