@@ -143,7 +143,9 @@ export async function previewBulkSetup(
   if (!agents.length) return true;
   const state = loadState();
   const statuses = await Promise.all(agents.map((agent) => agentSetupStatus(agent, state)));
-  agents.forEach((agent, index) => { console.print(agentDisplayName(agent) + ': ' + statuses[index]); });
+  agents.forEach((agent, index) => {
+    console.print(agentDisplayName(agent) + ': ' + statuses[index]);
+  });
   return (
     (await console.confirmPrompt('Set up the new coding agents listed above?', false)) === true
   );
@@ -209,9 +211,9 @@ async function configureAgent(
     return 'Waiting for sign-in';
   }
 
-  const boundTarget = auth.comesFromEnv()
-    ? {}
-    : { server: normalizeServerUrl(auth.serverUrl), org: auth.orgKey };
+  const boundTarget = usesSavedLogin
+    ? { server: normalizeServerUrl(auth.serverUrl), org: auth.orgKey }
+    : requested;
   saveAgentOnboarding(id, { ...boundTarget, status: 'retry_setup' });
   const installContext = ctx.withAuth(auth);
   try {

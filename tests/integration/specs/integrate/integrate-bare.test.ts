@@ -158,6 +158,33 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'retries untargeted setup after switching to a different server',
+    async () => {
+      const firstServer = await harness.newFakeServer().withAuthToken('first-token').start();
+      const secondServer = await harness.newFakeServer().withAuthToken('second-token').start();
+      harness.withAuth(firstServer.baseUrl(), 'first-token');
+      harness.userHome.writeFile('.codex/config.toml', 'invalid TOML');
+
+      const failed = await harness.run('integrate --all --non-interactive');
+      expect(failed.exitCode).toBe(1);
+      const integrations = harness.stateJsonFile.asJson().integrations;
+      expect(integrations.onboarding.codex).toEqual({ status: 'retry_setup' });
+
+      harness.userHome.writeFile('.codex/config.toml', '');
+      harness.withAuth(secondServer.baseUrl(), 'second-token');
+      const state = harness.state().build();
+      state.integrations = integrations;
+      harness.state().withRawState(JSON.stringify(state));
+
+      const retry = await harness.run('integrate --all --non-interactive');
+      expect(retry.exitCode).toBe(0);
+      expect(retry.stdout).toContain('Codex: Configured');
+      expect(harness.stateJsonFile.asJson().integrations.onboarding.codex).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'prepares signed-out agents and leaves token login non-interactive',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();

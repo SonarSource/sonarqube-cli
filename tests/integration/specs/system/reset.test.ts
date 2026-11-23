@@ -32,8 +32,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
+import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { nativeGitIntegration } from '@/commands/integrate/git/tools/native';
@@ -211,6 +212,24 @@ describe('system reset --force', () => {
       expect(result.stdout).toContain('Cleaning up SonarQube CLI environment');
       expect(result.stdout).toContain('Authentication: 0 tokens removed from keychain.');
       expect(result.stdout).toContain('CLI has been successfully reset to factory settings.');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'reports how to retry reset when setup holds the lock',
+    async () => {
+      const dir = dirname(harness.stateJsonFile.path);
+      mkdirSync(dir, { recursive: true });
+      const db = new Database(join(dir, 'agent-install.lock.sqlite'));
+      try {
+        db.run('BEGIN IMMEDIATE');
+        const result = await harness.run('system reset --force');
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('Could not start reset. Retry sonar system reset shortly.');
+      } finally {
+        db.close();
+      }
     },
     { timeout: 15000 },
   );
