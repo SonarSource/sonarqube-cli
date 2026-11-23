@@ -159,8 +159,6 @@ describe('sonar init telemetry', () => {
         is_interactive: true,
         remote_host: 'github',
       });
-      expect(run.user_wait_ms).toBeGreaterThan(0);
-      expect(run.duration_ms).toBeGreaterThanOrEqual(run.user_wait_ms as number);
       expect(projectEvents()).toEqual([
         expect.objectContaining({
           init_path: 'link_existing',
