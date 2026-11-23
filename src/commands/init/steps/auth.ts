@@ -23,6 +23,7 @@ import { AuthResolver, type ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
+import type { InitTelemetryRecorder } from '../telemetry/init-telemetry-recorder.ts';
 import { createOrganizationHook } from './organization.ts';
 
 /**
@@ -34,12 +35,15 @@ export async function resolveInitAuth(
   ctx: CommandInvocationContext,
   interactive: boolean,
   dryRun = false,
+  telemetry?: InitTelemetryRecorder,
 ): Promise<ResolvedAuth> {
+  telemetry?.begin('login');
   const current = await ctx.resolveAuth({ silent: true });
   if (current.isErr()) {
     throw current.error;
   }
   if (current.value) {
+    telemetry?.record('login', 'already_done');
     return current.value;
   }
 
@@ -62,9 +66,13 @@ export async function resolveInitAuth(
   }
 
   await authLogin({}, ctx, {
-    onNoMemberships: createOrganizationHook(ctx.console),
+    onNoMemberships: createOrganizationHook(ctx.console, telemetry),
   });
-  return resolveFreshAuth();
+  const fresh = await resolveFreshAuth();
+  if (telemetry && !telemetry.has('login')) {
+    telemetry.record('login', 'success');
+  }
+  return fresh;
 }
 
 /** The invocation's resolver memoized the pre-login answer, so read the new login with a new one. */

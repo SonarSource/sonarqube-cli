@@ -66,7 +66,8 @@ for (const variant of ['install', 'install-prerelease']) {
         const output = result.stdout.toString();
         expect(output).toContain('Installation complete!');
         expect(output).toContain(`sonar has been installed to: ${installDir}/sonar`);
-        expect(output).toContain("run 'sonar --help'");
+        expect(output).toContain("run 'sonar integrate' to set up your coding agents");
+        expect(output).toContain("'sonar --help' to explore other commands");
         expect(output.includes('What happens next:')).toBe(showInstructions);
         expect(output.includes('export PATH=')).toBe(showInstructions);
         expect(output.includes('Open a new terminal window')).toBe(showInstructions);
@@ -118,7 +119,8 @@ for (const variant of ['install', 'install-prerelease']) {
         const output = result.stdout.toString();
         expect(output).toContain('Installation complete!');
         expect(output).toContain(`sonar has been installed to: ${installDir}\\sonar.exe`);
-        expect(output).toContain("run 'sonar --help'");
+        expect(output).toContain("run 'sonar integrate' to set up your coding agents");
+        expect(output).toContain("'sonar --help' to explore other commands");
         expect(output.includes('What happens next:')).toBe(showInstructions);
         expect(output.includes('$env:PATH =')).toBe(showInstructions);
         expect(output.includes('Open a new terminal window')).toBe(showInstructions);

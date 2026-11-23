@@ -163,6 +163,33 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'retries untargeted setup after switching to a different server',
+    async () => {
+      const firstServer = await harness.newFakeServer().withAuthToken('first-token').start();
+      const secondServer = await harness.newFakeServer().withAuthToken('second-token').start();
+      harness.withAuth(firstServer.baseUrl(), 'first-token');
+      harness.userHome.writeFile('.codex/config.toml', 'invalid TOML');
+
+      const failed = await harness.run('integrate --all --non-interactive');
+      expect(failed.exitCode).toBe(1);
+      const integrations = harness.stateJsonFile.asJson().integrations;
+      expect(integrations.onboarding.codex).toEqual({ status: 'retry_setup' });
+
+      harness.userHome.writeFile('.codex/config.toml', '');
+      harness.withAuth(secondServer.baseUrl(), 'second-token');
+      const state = harness.state().build();
+      state.integrations = integrations;
+      harness.state().withRawState(JSON.stringify(state));
+
+      const retry = await harness.run('integrate --all --non-interactive');
+      expect(retry.exitCode).toBe(0);
+      expect(retry.stdout).toContain('Codex: Configured');
+      expect(harness.stateJsonFile.asJson().integrations.onboarding.codex).toBeUndefined();
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'prepares signed-out agents and leaves token login non-interactive',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();
@@ -280,6 +307,43 @@ describe('integrate (bare command)', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Claude Code: Waiting for sign-in');
     expect(hasActiveClaudeHook()).toBe(false);
+  });
+
+  it(
+    'signs in without activating prepared agents when setup is disabled',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.userHome.writeFile('.claude.json', '{}');
+      await harness.run('integrate --all --non-interactive --server ' + server.baseUrl());
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const session = harness.runInteractive(
+        'auth login --no-agent-setup --server ' + server.baseUrl(),
+        { browserToken: 'test-token', extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' } },
+      );
+      await session.waitText('Connect to:');
+      session.write('y');
+      const login = await session.waitFinish();
+
+      expect(login.exitCode).toBe(0);
+      expect(login.stdout).toContain('Authentication successful');
+      expect(login.stdout).not.toContain('Claude Code: Configured');
+      expect(harness.stateJsonFile.asJson().integrations.onboarding['claude-code']).toMatchObject({
+        status: 'waiting_for_sign_in',
+      });
+    },
+    { timeout: 30000 },
+  );
+
+  it('omits setup guidance from a JSON token login when setup is disabled', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    const login = await harness.runWithStdin(
+      'auth login --no-agent-setup --with-token --format json --server ' + server.baseUrl(),
+      'test-token\n',
+    );
+    expect(login.exitCode).toBe(0);
+    expect(JSON.parse(login.stdout)).toEqual({ status: 'connected', server: server.baseUrl() });
   });
 
   it('reports machine-readable setup guidance after a token login', async () => {

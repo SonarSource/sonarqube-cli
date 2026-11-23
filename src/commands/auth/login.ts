@@ -540,6 +540,7 @@ export interface AuthLoginHooks {
 }
 
 export interface AuthLoginOptions {
+  agentSetup?: boolean;
   format?: string;
   server?: string;
   org?: string;

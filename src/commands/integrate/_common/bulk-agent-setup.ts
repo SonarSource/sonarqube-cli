@@ -225,9 +225,9 @@ async function configureAgent(
     return 'Waiting for sign-in';
   }
 
-  const boundTarget = auth.comesFromEnv()
-    ? {}
-    : { server: normalizeServerUrl(auth.serverUrl), org: auth.orgKey };
+  const boundTarget = usesSavedLogin
+    ? { server: normalizeServerUrl(auth.serverUrl), org: auth.orgKey }
+    : requested;
   saveAgentOnboarding(id, { ...boundTarget, status: 'retry_setup' });
   const installContext = ctx.withAuth(auth);
   try {
