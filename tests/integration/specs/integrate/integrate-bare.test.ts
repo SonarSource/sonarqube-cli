@@ -224,6 +224,102 @@ describe('integrate (bare command)', () => {
     expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
   });
 
+  it('rejects a conflicting explicit target without activating the pending target', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+    const bulk = 'integrate --all --non-interactive --server ';
+    expect((await harness.run(bulk + server.baseUrl())).exitCode).toBe(0);
+
+    harness.state().withAuth(server.baseUrl(), 'test-token');
+    const state = harness.state().build();
+    state.integrations.onboarding = {
+      'claude-code': { status: 'waiting_for_sign_in', server: server.baseUrl() },
+    };
+    harness.state().withRawState(JSON.stringify(state));
+    const conflicting = await harness.run(bulk + 'https://sonar.example.test');
+    expect(conflicting.exitCode).toBe(1);
+    expect(conflicting.stderr).toContain('Pending setup targets a different SonarQube connection.');
+    expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+  });
+
+  it('recognizes a custom Codex MCP table with whitespace in the key', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    const config = '[mcp_servers . sonarqube]\ncommand = "custom-sonar"\n';
+    harness.userHome.writeFile('.codex/config.toml', config);
+
+    const setup = await harness.run('integrate --all --non-interactive');
+
+    expect(setup.exitCode).toBe(0);
+    expect(setup.stdout).toContain('Codex: Needs review');
+    expect(harness.userHome.file('.codex', 'config.toml').asText()).toBe(config);
+  });
+
+  it('can defer sign-in from the existing agent picker', async () => {
+    harness.userHome.writeFile('.claude.json', '{}');
+    const session = harness.runInteractive('integrate', {
+      extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+    });
+    await session.accept('Select the tool you want to integrate with');
+    await session.waitText('Set up the new coding agents listed above?');
+    session.write('y');
+    await session.waitText('When would you like to sign in?');
+    session.keyDown();
+    session.keyEnter();
+
+    const result = await session.waitFinish();
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Claude Code: Waiting for sign-in');
+    expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+  });
+
+  it('reports machine-readable setup guidance after a token login', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.userHome.writeFile('.claude.json', '{}');
+
+    await harness.run('integrate --all --non-interactive');
+    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+    const login = await harness.runWithStdin(
+      'auth login --with-token --format json --server ' + server.baseUrl(),
+      'test-token\n',
+    );
+
+    expect(login.exitCode).toBe(0);
+    expect(JSON.parse(login.stdout)).toEqual({
+      status: 'connected',
+      server: server.baseUrl(),
+      nextCommand: 'sonar integrate --all --non-interactive',
+    });
+  });
+
+  it(
+    'offers one setup prompt after an entitled interactive login',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('test-token')
+        .withVortexEntitlement('server', '00000000-0000-0000-0000-000000000000')
+        .start();
+      harness.withAuth(server.baseUrl(), 'test-token');
+      harness.userHome.writeFile('.claude.json', '{}');
+      const session = harness.runInteractive('auth login --server ' + server.baseUrl(), {
+        extraEnv: { SONARQUBE_CLI_MOCK_TTY: '1' },
+      });
+
+      await session.waitText('Connect to:');
+      session.write('y');
+      await session.waitText('Set up SonarQube for your detected coding agents now?');
+      session.write('n');
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('You can set up your coding agents later');
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+    },
+    { timeout: 30000 },
+  );
+
   it(
     'honors --non-interactive placed before the agent name',
     async () => {

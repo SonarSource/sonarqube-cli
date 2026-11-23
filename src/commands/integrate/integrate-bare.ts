@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
 import type {
   CommandAuthenticatedInvocationContext,
@@ -28,11 +29,22 @@ import {
   type DetectedAgentId,
   detectInstalledAgents,
 } from '@/core/host/environment/installed-agent-detector.ts';
+import { loadState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { integrateAllAgents, previewBulkSetup } from './_common/bulk-agent-setup.ts';
+import { authLogin } from '../auth/login.ts';
+import { resolveCompletedLogin } from '../auth/login-onboarding.ts';
+import {
+  integrateAllAgents,
+  previewBulkSetup,
+  resumePendingAgentSetups,
+} from './_common/bulk-agent-setup.ts';
 import { findInstalledIntegrationIds } from './_common/installed-integrations.ts';
-import { resolveSetupTarget, type SetupTarget } from './_common/pending-agent-setup.ts';
+import {
+  pendingAgentSetups,
+  resolveSetupTarget,
+  type SetupTarget,
+} from './_common/pending-agent-setup.ts';
 import { integrateAntigravity } from './antigravity';
 import { antigravityIntegration } from './antigravity/declaration.ts';
 import { integrateClaude } from './claude';
@@ -68,15 +80,19 @@ type Handler = (
   ctx: CommandAuthenticatedInvocationContext,
 ) => Promise<void>;
 
-const TOOLS: { label: string; handler: Handler }[] = [
-  { label: claudeIntegration.displayName, handler: integrateClaude },
-  { label: copilotIntegration.displayName, handler: integrateCopilot },
-  { label: codexIntegration.displayName, handler: integrateCodex },
-  { label: cursorIntegration.displayName, handler: integrateCursor },
-  { label: antigravityIntegration.displayName, handler: integrateAntigravity },
-  { label: openCodeIntegration.displayName, handler: integrateOpenCode },
-  { label: devinIntegration.displayName, handler: integrateDevin },
-  { label: piIntegration.displayName, handler: integratePi },
+const TOOLS: { label: string; handler: Handler; agent?: DetectedAgentId }[] = [
+  { label: claudeIntegration.displayName, handler: integrateClaude, agent: 'claude' },
+  { label: copilotIntegration.displayName, handler: integrateCopilot, agent: 'copilot' },
+  { label: codexIntegration.displayName, handler: integrateCodex, agent: 'codex' },
+  { label: cursorIntegration.displayName, handler: integrateCursor, agent: 'cursor' },
+  {
+    label: antigravityIntegration.displayName,
+    handler: integrateAntigravity,
+    agent: 'antigravity',
+  },
+  { label: openCodeIntegration.displayName, handler: integrateOpenCode, agent: 'opencode' },
+  { label: devinIntegration.displayName, handler: integrateDevin, agent: 'devin' },
+  { label: piIntegration.displayName, handler: integratePi, agent: 'pi' },
   // Git has 3 separate tool declarations (native, husky, pre-commit)
   // but a single handler that detects which framework is in use.
   { label: 'Git', handler: integrateGit },
@@ -147,6 +163,19 @@ export async function integrateBare(
     );
   }
 
+  const selected = await selectIntegration(console, detected);
+  if (!selected) throw new CommandFailedError('No integration selected');
+
+  if (selected === 'all') {
+    if (await previewBulkSetup(console, detected))
+      await integrateAllAgents(ctx, ctx.auth, detected);
+    return;
+  }
+
+  await selected.handler({ ...options, isFromRouter: true }, ctx);
+}
+
+async function selectIntegration(console: Console, detected: DetectedAgentId[]) {
   if (detected.length > 0) {
     console.info(`Detected agents on your machine: ${detected.map(agentDisplayName).join(', ')}`);
   }
@@ -158,23 +187,40 @@ export async function integrateBare(
 
   noteConflictingAgents(detected, console);
 
-  const selected = await console.selectPrompt<(typeof TOOLS)[number] | 'all'>(
+  return console.selectPrompt<(typeof TOOLS)[number] | 'all'>(
     'Select the tool you want to integrate with',
     [
       ...TOOLS.map((tool) => ({ value: tool, label: tool.label })),
       ...(detected.length ? [{ value: 'all' as const, label: 'Set up all detected agents' }] : []),
     ],
   );
+}
 
-  if (!selected) throw new CommandFailedError('No integration selected');
+async function prepareWithSignInChoice(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth | null,
+  agents: DetectedAgentId[],
+  target: SetupTarget,
+): Promise<void> {
+  if (!(await previewBulkSetup(ctx.console, agents))) return;
+  await integrateAllAgents(ctx, auth, agents, target);
+  const pending = pendingAgentSetups(loadState()).find(
+    (setup) => setup.status === 'waiting_for_sign_in' && agents.includes(setup.agent),
+  );
+  if (!pending) return;
 
-  if (selected === 'all') {
-    if (await previewBulkSetup(console, detected))
-      await integrateAllAgents(ctx, ctx.auth, detected);
+  const choice = await ctx.console.selectPrompt('When would you like to sign in?', [
+    { value: 'now', label: 'Sign in now' },
+    { value: 'later', label: 'Sign in later' },
+  ]);
+  if (choice !== 'now') {
+    ctx.console.info("Run 'sonar auth login' when you are ready to finish agent setup.");
     return;
   }
 
-  await selected.handler({ ...options, isFromRouter: true }, ctx);
+  const loginTarget = await authLogin({ server: pending.server, org: pending.org }, ctx);
+  const completed = await resolveCompletedLogin(loginTarget);
+  if (completed) await resumePendingAgentSetups(ctx, completed);
 }
 
 export async function dispatchIntegration(
@@ -190,7 +236,7 @@ export async function dispatchIntegration(
     if (!options.nonInteractive) {
       if (!ctx.console.canPrompt())
         throw new InvalidOptionError('Use --non-interactive for unattended setup.');
-      if (!(await previewBulkSetup(ctx.console, detected))) return;
+      return prepareWithSignInChoice(ctx, auth.value, detected, target);
     }
     return integrateAllAgents(ctx, auth.value, detected, target);
   }
@@ -198,8 +244,18 @@ export async function dispatchIntegration(
     throw new InvalidOptionError('--server and --org require --all.');
   }
   if (!auth.value) {
+    if (options.nonInteractive || !ctx.console.canPrompt()) {
+      throw new CommandFailedError('Not authenticated.', {
+        remediationHint: "Run 'sonar auth login' to authenticate.",
+      });
+    }
+    const detected = detectInstalledAgents();
+    const selected = await selectIntegration(ctx.console, detected);
+    if (!selected) throw new CommandFailedError('No integration selected');
+    if (selected === 'all') return prepareWithSignInChoice(ctx, null, detected, {});
+    if (selected.agent) return prepareWithSignInChoice(ctx, null, [selected.agent], {});
     throw new CommandFailedError('Not authenticated.', {
-      remediationHint: "Run 'sonar auth login' to authenticate.",
+      remediationHint: "Run 'sonar auth login' to authenticate before setting up Git hooks.",
     });
   }
   const child = ctx.withAuth(auth.value);

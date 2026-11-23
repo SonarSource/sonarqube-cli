@@ -26,6 +26,8 @@ import {
 import type { InstalledIntegrationFeature, IntegrationScope } from '@/core/state/state.ts';
 import { hashRepoRoot } from '@/core/telemetry/repo-id.ts';
 
+import type { SetupSource } from './types.ts';
+
 export const CLI_INTEGRATION_CONFIGURED = 'CliIntegrationConfigured';
 
 /** Domain payload for CliIntegrationConfigured (identity is filled at drain time). */
@@ -38,6 +40,7 @@ export type IntegrationConfiguredPayload = {
   is_global: boolean;
   is_interactive: boolean;
   is_from_router: boolean;
+  setup_source?: SetupSource;
 };
 
 export interface IntegrationConfiguredTelemetryParams {
@@ -46,6 +49,7 @@ export interface IntegrationConfiguredTelemetryParams {
   scope: IntegrationScope;
   nonInteractive: boolean;
   isFromRouter: boolean;
+  setupSource?: SetupSource;
   /** Features actually installed by this run (including active subfeatures). */
   installedFeatures: InstalledIntegrationFeature[];
   /** Feature ids the user declined (offered via `ask`, never installed). */
@@ -75,6 +79,7 @@ export function recordIntegrationConfigured(
         is_global: params.scope === 'global',
         is_interactive: !params.nonInteractive,
         is_from_router: params.isFromRouter,
+        ...(params.setupSource ? { setup_source: params.setupSource } : {}),
       },
       { auth: params.auth },
     ),

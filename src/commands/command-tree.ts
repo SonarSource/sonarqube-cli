@@ -334,6 +334,12 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     )
     .option('-o, --org <org>', 'SonarQube Cloud organization key (required for SonarQube Cloud)')
     .option('--with-token', 'Read an existing token from standard input')
+    .addOption(
+      new SonarOption('--format <format>', 'Output format (JSON requires --with-token)').choices([
+        'text',
+        'json',
+      ]),
+    )
     .anonymousAction((ctx, options: AuthLoginOptions) => loginAndResumeOnboarding(options, ctx));
 
   auth
