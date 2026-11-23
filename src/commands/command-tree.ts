@@ -340,7 +340,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Manage authentication tokens and credentials')
     .rootHelp({
       category: 'setup',
-      order: 0,
       summary: 'Manage authentication',
     })
     .showUpdateNotification();
@@ -387,7 +386,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('List issues, projects and organizations from SonarQube Cloud or Server')
     .rootHelp({
       category: 'verify',
-      order: 2,
       summary: 'Find issues, projects and orgs',
     });
 
@@ -450,7 +448,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Fetch quality gate status from SonarQube Cloud or Server')
     .rootHelp({
       category: 'verify',
-      order: 1,
       summary: "Check a project's quality gate",
       label: 'quality-gate|qg',
     });
@@ -487,7 +484,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Import repositories from a connected DevOps platform into SonarQube')
     .rootHelp({
       category: 'setup',
-      order: 2,
       summary: 'Import repos from your DevOps platform',
     })
     .stage(Stage.Beta())
@@ -541,7 +537,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   COMMAND_TREE.command('api')
     .rootHelp({
       category: 'verify',
-      order: 3,
       summary: 'Call the SonarQube API',
       label: 'api <method> <endpoint>',
     })
@@ -569,7 +564,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Setup SonarQube integration for AI coding agents, git and others')
     .rootHelp({
       category: 'setup',
-      order: 3,
       summary: 'Set up SonarQube with AI coding agents or Git',
       label: 'integrate [target]',
       targets: true,
@@ -646,7 +640,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Augment AI agents with context from your codebase')
     .rootHelp({
       category: 'guide',
-      order: 0,
       summary: 'Give agents codebase context',
       requiresVortex: true,
       label: 'context [action] [args...]',
@@ -759,7 +752,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Analyze code for quality and security issues')
     .rootHelp({
       category: 'verify',
-      order: 0,
       summary: 'Run secrets scan and Vortex analysis',
       expandSubcommands: true,
     })
@@ -937,7 +929,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   analyze
     .command('dependency-risks')
-    .rootHelp({ summary: 'Find dependency and license risks' })
+    .rootHelp({ summary: 'Find dependency risks and license violations' })
     .description('Analyze project dependencies for security and license risks')
     .option('-p, --project <project>', 'Project key (auto-detected when omitted)')
     .addOption(dependencyRisksFormatOption)
@@ -969,8 +961,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Trigger AI agent remediation for eligible issues (SonarQube Cloud only)')
     .rootHelp({
       category: 'solve',
-      order: 0,
-      summary: 'Send issues to Remediation Agent',
+      summary: 'Send issues to SonarQube Remediation Agent',
       cloudOnly: true,
     })
     .option(
@@ -1024,7 +1015,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Link a project to the active connection in .sonar-config.json')
     .rootHelp({
       category: 'setup',
-      order: 1,
       summary: 'Link this directory to a project',
       label: 'link [project-key]',
     })
@@ -1062,7 +1052,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   const configure = COMMAND_TREE.command('config').description('Configure CLI settings');
   configure.rootHelp({
     category: 'cli',
-    order: 0,
   });
 
   configure
@@ -1116,7 +1105,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('System diagnostics and maintenance commands for the SonarQube CLI installation')
     .rootHelp({
       category: 'cli',
-      order: 1,
       summary: 'Inspect or reset the CLI',
     });
 
@@ -1158,7 +1146,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description('Manage local allowlists for SonarQube analyzers')
     .rootHelp({
       category: 'verify',
-      order: 4,
       summary: 'Mark known-safe secrets as allowed',
     });
 
@@ -1217,7 +1204,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       .description('Update SonarQube CLI to the latest version')
       .rootHelp({
         category: 'cli',
-        order: 2,
         summary: 'Update CLI to latest version',
         label: 'update [status]',
       })

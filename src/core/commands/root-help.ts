@@ -23,7 +23,7 @@ import type { Help, Option } from 'commander';
 import { cyan, gray, purple, softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { COMMAND_CATEGORIES, type SonarCommand } from './sonar-command.ts';
+import { COMMAND_CATEGORIES, type CommandCategory, type SonarCommand } from './sonar-command.ts';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
@@ -37,8 +37,17 @@ const ROW_INDENT = 4;
 const TARGET_INDENT = 6;
 const COLUMN_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 24;
-const ROOT_DOCUMENTATION_URL = 'https://www.sonarsource.com/products/sonarqube/cli/';
+const DOCS_LINK_GAP = 6;
+const ROOT_DOCUMENTATION_URL = 'https://sonarsource.com/sonarqube/cli';
 const ROOT_FEEDBACK_URL = 'https://forms.gle/jrGic3awT5t5vf7V9';
+
+const ROOT_COMMAND_ORDER: Record<CommandCategory, readonly string[]> = {
+  setup: ['auth', 'link', 'import', 'integrate'],
+  guide: ['context', 'architecture'],
+  verify: ['analyze', 'quality-gate', 'list', 'api', 'allowlist'],
+  solve: ['remediate'],
+  cli: ['config', 'system', 'update'],
+};
 
 interface HelpMenuEntry {
   label: string;
@@ -75,7 +84,7 @@ function splitWord(word: string, width: number): string[] {
 
 function wrap(text: string, width: number): string[] {
   // Bracketed badges stay atomic, including multi-word availability badges.
-  const words = text.match(/\[Cloud only\]|\S+/g) ?? [];
+  const words = text.match(/\[SonarQube Cloud only\]|\S+/g) ?? [];
   const lines: string[] = [];
   let line = '';
   for (const word of words) {
@@ -100,8 +109,10 @@ function padToWidth(text: string, width: number): string {
 }
 
 function colorBadges(text: string): string {
-  return text.replace(/\[(BETA|ALPHA|DEPRECATED|Cloud only|Vortex)\]/g, (badge, kind: string) =>
-    ['Cloud only', 'Vortex'].includes(kind) ? cyan(badge) : purple(badge),
+  return text.replace(
+    /\[(BETA|ALPHA|DEPRECATED|SonarQube Cloud only|Vortex)\]/g,
+    (badge, kind: string) =>
+      ['SonarQube Cloud only', 'Vortex'].includes(kind) ? cyan(badge) : purple(badge),
   );
 }
 
@@ -180,7 +191,7 @@ function getSummary(command: SonarCommand): string {
     metadata.summary ?? command.description().replace(/ \[(?:BETA|ALPHA|DEPRECATED)\]$/, '');
   const lifecycle = stage === 'stable' ? '' : `[${stage.toUpperCase()}] `;
   const availability = [
-    metadata.cloudOnly ? ' [Cloud only]' : '',
+    metadata.cloudOnly ? ' [SonarQube Cloud only]' : '',
     metadata.requiresVortex ? ' [Vortex]' : '',
   ].join('');
   return `${lifecycle}${description}${availability}`;
@@ -220,6 +231,13 @@ function getRootOptionEntries(root: SonarCommand, helper: Help): HelpMenuEntry[]
     }));
 }
 
+function getCommandOrder(command: SonarCommand, section: CommandCategory): number {
+  const order = ROOT_COMMAND_ORDER[section];
+  const index = order.indexOf(command.name());
+  // Unlisted commands follow the curated entries in registration order.
+  return index < 0 ? order.length : index;
+}
+
 export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): string {
   const width = terminalWidth();
   const commands = getVisibleChildCommands(rootCommand, helper);
@@ -231,11 +249,7 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
           command.lifecycle.stage !== 'alpha' &&
           (command.rootHelpMetadata.category ?? 'cli') === section,
       )
-      .sort(
-        (a, b) =>
-          (a.rootHelpMetadata.order ?? Number.MAX_SAFE_INTEGER) -
-          (b.rootHelpMetadata.order ?? Number.MAX_SAFE_INTEGER),
-      )
+      .sort((a, b) => getCommandOrder(a, section) - getCommandOrder(b, section))
       .flatMap((command) => getCommandEntries(command, helper)),
   }));
   sections.push({
@@ -290,7 +304,7 @@ export function getCustomRootHelp(rootCommand: SonarCommand, helper: Help): stri
     '',
     ...prose('Run sonar <command> --help for options and examples.'),
     '',
-    ...footerLink('Docs', ROOT_DOCUMENTATION_URL, 6),
+    ...footerLink('Docs', ROOT_DOCUMENTATION_URL, DOCS_LINK_GAP),
     ...footerLink('Feedback', ROOT_FEEDBACK_URL, 2),
     '',
   ].join('\n');

@@ -61,7 +61,7 @@ function getExpectedRootHelp(): string {
     '  VERIFY',
     '    analyze                      Run secrets scan and Vortex analysis',
     '    analyze secrets              Find hardcoded secrets',
-    '    analyze dependency-risks     Find dependency and license risks',
+    '    analyze dependency-risks     Find dependency risks and license violations',
     '    analyze agentic              Run server-side analysis [Vortex]',
     "    quality-gate|qg              Check a project's quality gate",
     '    list (issues|projects|orgs)  Find issues, projects and orgs',
@@ -70,7 +70,8 @@ function getExpectedRootHelp(): string {
     '      show, add, remove, clear',
     '',
     '  SOLVE',
-    '    remediate                    Send issues to Remediation Agent [Cloud only]',
+    '    remediate                    Send issues to SonarQube Remediation Agent',
+    '                                 [SonarQube Cloud only]',
     '',
     '  CLI',
     '    config (get|list|set|unset)  Configure CLI settings',
@@ -83,7 +84,7 @@ function getExpectedRootHelp(): string {
     '',
     '  Run sonar <command> --help for options and examples.',
     '',
-    '  Docs      https://www.sonarsource.com/products/sonarqube/cli/',
+    '  Docs      https://sonarsource.com/sonarqube/cli',
     '  Feedback  https://forms.gle/jrGic3awT5t5vf7V9',
     '',
   ].join('\n');
@@ -134,7 +135,7 @@ describe('root help', () => {
       for (const line of result.stdout.split('\n')) {
         expect(Bun.stringWidth(line)).toBeLessThanOrEqual(Math.min(columns, 100));
       }
-      expect(result.stdout).toContain('[Cloud only]');
+      expect(result.stdout).toContain('[SonarQube Cloud only]');
       expect(result.stdout.match(/\[Vortex\]/g)).toHaveLength(2);
       expect(result.stdout.indexOf('SETUP')).toBeLessThan(result.stdout.indexOf('GUIDE'));
       expect(result.stdout).not.toContain('targets:');
@@ -171,12 +172,10 @@ describe('root help', () => {
       expect(result.stdout).toContain('\x1b[38;5;69msonar integrate\x1b[0m');
       expect(result.stdout).toContain(`\x1b[38;5;69mv${VERSION}\x1b[0m`);
       expect(result.stdout).toContain('\x1b[38;5;135m[BETA]\x1b[0m');
-      expect(result.stdout).toContain('\x1b[36m[Cloud only]\x1b[39m');
+      expect(result.stdout).toContain('\x1b[36m[SonarQube Cloud only]\x1b[39m');
       expect(result.stdout).toContain('\x1b[36m[Vortex]\x1b[39m');
       expect(result.stdout).toContain('\x1b[90mlogin, org, logout, status\x1b[39m');
-      expect(result.stdout).toContain(
-        '\x1b[38;5;69mhttps://www.sonarsource.com/products/sonarqube/cli/\x1b[0m',
-      );
+      expect(result.stdout).toContain('\x1b[38;5;69mhttps://sonarsource.com/sonarqube/cli\x1b[0m');
       expect(stripAnsi(result.stdout).replaceAll('\r\n', '\n')).toBe(getExpectedRootHelp());
     },
     { timeout: 15000 },

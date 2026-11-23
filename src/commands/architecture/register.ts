@@ -79,7 +79,6 @@ export function registerArchitectureCommands(parent: SonarCommand): void {
     .addHelpText('afterAll', '\n(SonarQube Cloud only)')
     .rootHelp({
       category: 'guide',
-      order: 1,
       summary: "Read and set a project's architecture",
     });
 

@@ -489,14 +489,24 @@ describe('SonarCommand', () => {
       expect(help).not.toContain('allowlist <secrets>');
     });
 
-    it('sorts sections and rows by metadata instead of registration order', () => {
+    it('sorts sections by category and rows by the help layout instead of registration order', () => {
       const root = sonarCommand('sonar');
-      root.command('guide').description('Guide summary').rootHelp({ category: 'guide', order: 0 });
-      root.command('later').description('Later summary').rootHelp({ category: 'setup', order: 2 });
-      root.command('first').description('First summary').rootHelp({ category: 'setup', order: 0 });
+      root.command('context').description('Guide summary').rootHelp({ category: 'guide' });
+      root.command('import').description('Later summary').rootHelp({ category: 'setup' });
+      root.command('auth').description('First summary').rootHelp({ category: 'setup' });
       const help = getCustomRootHelp(root, root.createHelp());
       expect(help.indexOf('First summary')).toBeLessThan(help.indexOf('Later summary'));
       expect(help.indexOf('Later summary')).toBeLessThan(help.indexOf('Guide summary'));
+    });
+
+    it('keeps unlisted commands after curated entries in registration order', () => {
+      const root = sonarCommand('sonar');
+      root.command('extra-one').description('First extra').rootHelp({ category: 'setup' });
+      root.command('extra-two').description('Second extra').rootHelp({ category: 'setup' });
+      root.command('integrate').description('Curated entry').rootHelp({ category: 'setup' });
+      const help = getCustomRootHelp(root, root.createHelp());
+      expect(help.indexOf('Curated entry')).toBeLessThan(help.indexOf('First extra'));
+      expect(help.indexOf('First extra')).toBeLessThan(help.indexOf('Second extra'));
     });
   });
 
