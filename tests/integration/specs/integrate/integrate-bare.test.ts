@@ -158,6 +158,55 @@ describe('integrate (bare command)', () => {
   );
 
   it(
+    'prepares signed-out agents and leaves token login non-interactive',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('test-token').start();
+      harness.userHome.writeFile('.claude.json', '{}');
+      const bulk = 'integrate --all --non-interactive';
+
+      const prepared = await harness.run(bulk + ' --server ' + server.baseUrl());
+      expect(prepared.exitCode).toBe(0);
+      expect(prepared.stdout).toContain('Claude Code: Waiting for sign-in');
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const status = await harness.run('system status --format json');
+      expect(JSON.parse(status.stdout).pendingIntegrations).toEqual([
+        { agent: 'claude', status: 'waiting_for_sign_in', server: server.baseUrl() },
+      ]);
+
+      const login = await harness.runWithStdin(
+        'auth login --with-token --server ' + server.baseUrl(),
+        'test-token\n',
+      );
+      expect(login.exitCode).toBe(0);
+      expect(login.stderr).toContain(bulk);
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
+      const activated = await harness.run(bulk);
+      expect(activated.exitCode).toBe(0);
+      expect(activated.stdout).toContain('Claude Code: Configured');
+      expect(harness.userHome.exists('.claude', 'settings.json')).toBe(true);
+    },
+    { timeout: 30000 },
+  );
+
+  it('keeps a prepared integration pending on a different connection', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    harness.userHome.writeFile('.claude.json', '{}');
+
+    const result = await harness.run(
+      'integrate --all --non-interactive --server https://sonar.example.test',
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Claude Code: Waiting for sign-in');
+    expect(harness.userHome.exists('.claude', 'settings.json')).toBe(false);
+  });
+
+  it(
     'honors --non-interactive placed before the agent name',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('test-token').start();

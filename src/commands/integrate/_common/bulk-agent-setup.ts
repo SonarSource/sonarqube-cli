@@ -24,8 +24,9 @@ import { join } from 'node:path';
 
 import { parse } from 'smol-toml';
 
+import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError } from '@/core/commands/command-error.ts';
-import type { CommandAuthenticatedInvocationContext } from '@/core/commands/invocation-context.ts';
+import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import {
   ANTIGRAVITY_GLOBAL_HOOKS_JSON,
   ANTIGRAVITY_GLOBAL_MCP_CONFIG_JSON,
@@ -37,7 +38,8 @@ import {
   type DetectedAgentId,
   detectInstalledAgents,
 } from '@/core/host/environment/installed-agent-detector.ts';
-import type { CliState } from '@/core/state/state.ts';
+import { normalizeServerUrl } from '@/core/host/keychain.ts';
+import type { AgentOnboardingState, CliState } from '@/core/state/state.ts';
 import { loadState, updateState } from '@/core/state/state-repository.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -47,6 +49,7 @@ import {
   BULK_SETUP_OPTIONS,
 } from '../integration-handlers.ts';
 import { withAgentInstallLock } from './agent-install-lock.ts';
+import { pendingAgentSetups, setupMatches, type SetupTarget } from './pending-agent-setup.ts';
 
 type AgentSetupStatus = 'Ready to configure' | 'Already configured' | 'Skipped' | 'Needs review';
 
@@ -147,8 +150,10 @@ export async function previewBulkSetup(
 }
 
 export async function integrateAllAgents(
-  ctx: CommandAuthenticatedInvocationContext,
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth | null,
   agents = detectInstalledAgents(),
+  target: SetupTarget = {},
 ): Promise<void> {
   if (!agents.length) {
     ctx.console.info('No supported coding agents detected.');
@@ -158,18 +163,7 @@ export async function integrateAllAgents(
   const failed = await agents.reduce(async (previous, agent) => {
     const alreadyFailed = await previous;
     try {
-      const outcome = await withAgentInstallLock(async () => {
-        const status = await agentSetupStatus(agent, loadState());
-        if (status !== 'Ready to configure') return status;
-
-        const id = AGENT_INTEGRATION_IDS[agent];
-        updateState((state) => {
-          state.integrations.onboarding ??= {};
-          state.integrations.onboarding[id] = { status: 'retry_setup' };
-        });
-        await AGENT_INTEGRATION_HANDLERS[id](BULK_SETUP_OPTIONS, ctx);
-        return 'Configured';
-      });
+      const outcome = await withAgentInstallLock(() => configureAgent(ctx, agent, auth, target));
       ctx.console.print(agentDisplayName(agent) + ': ' + outcome);
       return alreadyFailed;
     } catch (error) {
@@ -182,4 +176,66 @@ export async function integrateAllAgents(
       remediationHint: "Retry with 'sonar integrate --all --non-interactive'.",
     });
   }
+}
+
+async function configureAgent(
+  ctx: CommandInvocationContext,
+  agent: DetectedAgentId,
+  auth: ResolvedAuth | null,
+  target: SetupTarget,
+): Promise<string> {
+  const state = loadState();
+  const status = await agentSetupStatus(agent, state);
+  if (status !== 'Ready to configure') return status;
+
+  const id = AGENT_INTEGRATION_IDS[agent];
+  const pending = state.integrations.onboarding?.[id];
+  const requested = pending ?? target;
+  const usesSavedLogin =
+    pending?.status === 'waiting_for_sign_in' ||
+    target.server !== undefined ||
+    pending?.server !== undefined;
+  if (!auth || !setupMatches(auth, requested) || (usesSavedLogin && auth.comesFromEnv())) {
+    if (!pending) saveAgentOnboarding(id, { ...target, status: 'waiting_for_sign_in' });
+    return 'Waiting for sign-in';
+  }
+
+  const boundTarget = auth.comesFromEnv()
+    ? {}
+    : { server: normalizeServerUrl(auth.serverUrl), org: auth.orgKey };
+  saveAgentOnboarding(id, { ...boundTarget, status: 'retry_setup' });
+  const installContext = ctx.withAuth(auth);
+  try {
+    await AGENT_INTEGRATION_HANDLERS[id](BULK_SETUP_OPTIONS, installContext);
+  } finally {
+    ctx.recordTelemetry(...installContext.telemetryFacts());
+    for (const fact of installContext.statsFacts()) ctx.recordStats(() => fact);
+  }
+  return 'Configured';
+}
+
+function saveAgentOnboarding(id: string, pending: AgentOnboardingState): void {
+  updateState((state) => {
+    state.integrations.onboarding ??= {};
+    state.integrations.onboarding[id] = pending;
+  });
+}
+
+export async function resumePendingAgentSetups(
+  ctx: CommandInvocationContext,
+  auth: ResolvedAuth,
+): Promise<boolean> {
+  if (auth.comesFromEnv()) return false;
+  const agents = pendingAgentSetups(loadState())
+    .filter((pending) => setupMatches(auth, pending))
+    .map((pending) => pending.agent);
+  if (!agents.length) return false;
+  try {
+    await integrateAllAgents(ctx, auth, agents);
+  } catch {
+    ctx.console.warn(
+      "Sign-in succeeded. Retry pending setup with 'sonar integrate --all --non-interactive'.",
+    );
+  }
+  return true;
 }

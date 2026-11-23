@@ -35,6 +35,7 @@ import { resolveIntegrateInstallTarget } from './agent-integrate-prelude.ts';
 import { buildRecordedIntegrationAttrs } from './context-augmentation.ts';
 import { recordIntegrationConfigured } from './integrate-telemetry.ts';
 import { warnIfMcpRuntimeUnavailable } from './mcp-runtime-warning.ts';
+import { setupMatches } from './pending-agent-setup.ts';
 import type { IntegrateAgentOptions } from './types.ts';
 import { resolveVortexSetup } from './vortex.ts';
 
@@ -72,6 +73,11 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
 ): Promise<void> {
   const { options, auth } = params;
   const vortex = await resolveVortexSetup(auth, params.ctx.console);
+  if (options.fromBulkSetup && vortex.disposition.action === 'preserve') {
+    throw new CommandFailedError(
+      'Could not check Vortex entitlement. Retry setup once the connection is available.',
+    );
+  }
   const { installRoot, installScope } = params.installTarget ?? resolveIntegrateInstallTarget();
   const attrs = buildRecordedIntegrationAttrs({
     serverUrl: auth.serverUrl,
@@ -97,7 +103,16 @@ async function installAgent<TOptions extends IntegrateAgentOptions>(
       completion.saved = true;
       if (loadState().integrations.onboarding?.[params.integrationId]) {
         updateState((state) => {
-          delete state.integrations.onboarding?.[params.integrationId];
+          const onboarding = state.integrations.onboarding;
+          const pending = onboarding?.[params.integrationId];
+          if (!onboarding || !pending || pending.status === 'skipped') return;
+          if (options.fromBulkSetup || (!auth.comesFromEnv() && setupMatches(auth, pending))) {
+            state.integrations.onboarding = Object.fromEntries(
+              Object.entries(onboarding).filter(([id]) => id !== params.integrationId),
+            );
+          } else if (pending.status === 'retry_setup') {
+            pending.status = 'waiting_for_sign_in';
+          }
         });
       }
       recordIntegrationConfigured(params.ctx, {

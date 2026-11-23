@@ -82,6 +82,7 @@ import {
   LEGACY_SONAR_SECRETS_HOOKS_FEATURE_ID,
   SECRETS_DETECTION_FEATURE_ID,
 } from '../integrate/_common/features/secrets-detection-feature.ts';
+import { pendingAgentSetups } from '../integrate/_common/pending-agent-setup.ts';
 import { isVortexFeature } from '../integrate/_common/vortex.ts';
 import { checkAntigravitySecretsHookFile } from '../integrate/antigravity/health.ts';
 import { resolveAntigravityHooksJsonPathForScope } from '../integrate/antigravity/hooks.ts';
@@ -458,6 +459,7 @@ export async function systemStatus(
   const format = resolveFormatOption(options.json ? 'json' : options.format, VALID_FORMATS, 'text');
   const state = loadState();
   const integrations = getInstalledIntegrations(state);
+  const pendingIntegrations = pendingAgentSetups(state);
   const vortexInstalled = state.integrations.installed.some((integration) =>
     integration.features.some(isVortexFeature),
   );
@@ -551,6 +553,7 @@ export async function systemStatus(
     binaries,
     cache,
     integrations,
+    pendingIntegrations,
     runtime,
     network,
     vortex,
@@ -581,6 +584,7 @@ interface StatusData {
   binaries: BinaryInfo[];
   cache: CacheInfo[];
   integrations: IntegrationInfo[];
+  pendingIntegrations: ReturnType<typeof pendingAgentSetups>;
   runtime: ContainerRuntimeHealth | null;
   network: ResolvedNetworkConfig;
   vortex: VortexEntitlementResult;
@@ -735,6 +739,7 @@ function printJsonStatus(version: string, data: StatusData, console: Console): v
               }
             : {}),
         })),
+        pendingIntegrations: data.pendingIntegrations,
         mcpRuntime: runtime,
         vortex: buildVortexJson(vortex),
         network: {
@@ -939,6 +944,10 @@ function renderTextStatus(version: string, data: StatusData, console: Console): 
   renderBinariesSection(binaries, console);
   renderCacheSection(cache, console);
   renderIntegrationsSection(integrations, runtime, console);
+  for (const pending of data.pendingIntegrations) {
+    const status = pending.status === 'retry_setup' ? 'Retry setup' : 'Waiting for sign-in';
+    console.print(`${pending.agent}: ${status}`);
+  }
   renderVortexSection(vortex, console);
   renderRecommendationsSection(recommendations, console);
 }
