@@ -5,6 +5,10 @@ import headersPlugin from 'eslint-plugin-headers';
 import neverthrowPlugin from '@ninoseki/eslint-plugin-neverthrow';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
+const SONAR_PRODUCT_NAME_PATTERN = '/\\bSonar projects?\\b|\\bSet up Sonar\\b|\\bSonar CLI\\b/';
+const SONAR_PRODUCT_NAME_MESSAGE =
+  'Sonar is the company name: call the product SonarQube (e.g. "SonarQube project").';
+
 const NO_DIRECT_FETCH_MESSAGE =
   "Don't call fetch() directly — use fetchAuthenticated() (credentialed requests) or " +
   'fetchAnonymous() (credential-free requests) from @/core/server/fetch.ts, ' +
@@ -186,6 +190,12 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='fetch']",
           message: NO_DIRECT_FETCH_MESSAGE,
+        },
+        // User-facing text names the product, never the company.
+        { selector: `Literal[value=${SONAR_PRODUCT_NAME_PATTERN}]`, message: SONAR_PRODUCT_NAME_MESSAGE },
+        {
+          selector: `TemplateElement[value.raw=${SONAR_PRODUCT_NAME_PATTERN}]`,
+          message: SONAR_PRODUCT_NAME_MESSAGE,
         },
       ],
     },
