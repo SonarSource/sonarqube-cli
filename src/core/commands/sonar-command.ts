@@ -70,7 +70,7 @@ export {
 
 const betaWarningsShownWithoutState = new Set<string>();
 
-export const COMMAND_CATEGORIES = ['setup', 'guide', 'verify', 'solve', 'cli'] as const;
+export const COMMAND_CATEGORIES = ['setup', 'guide', 'verify', 'data', 'solve', 'cli'] as const;
 export type CommandCategory = (typeof COMMAND_CATEGORIES)[number];
 
 function isPrivateBetaGated(lifecycle: LifecycleState): boolean {

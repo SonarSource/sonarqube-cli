@@ -508,6 +508,14 @@ describe('SonarCommand', () => {
       expect(help.indexOf('Curated entry')).toBeLessThan(help.indexOf('First extra'));
       expect(help.indexOf('First extra')).toBeLessThan(help.indexOf('Second extra'));
     });
+
+    it('renders commands in the data category in root help', () => {
+      const root = sonarCommand('sonar');
+      root.command('badge').description('Print status badges').rootHelp({ category: 'data' });
+      const help = getCustomRootHelp(root, root.createHelp());
+      expect(help.indexOf('DATA')).toBeLessThan(help.indexOf('Print status badges'));
+      expect(help.indexOf('Print status badges')).toBeLessThan(help.indexOf('SOLVE'));
+    });
   });
 
   describe('requiresAuth', () => {

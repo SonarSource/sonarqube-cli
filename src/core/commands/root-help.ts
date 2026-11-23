@@ -23,7 +23,12 @@ import type { Help, Option } from 'commander';
 import { cyan, gray, purple, softBlue, underline } from '@/core/ui/colors.ts';
 
 import { version as VERSION } from '../../../package.json';
-import { COMMAND_CATEGORIES, type CommandCategory, type SonarCommand } from './sonar-command.ts';
+import {
+  COMMAND_CATEGORIES,
+  type CommandCategory,
+  type SonarCommand,
+  stageHelpTag,
+} from './sonar-command.ts';
 
 const BANNER_ART = [
   '  █▀ █▀█ █▄ █ ▄▀█ █▀█ █▀█ █ █ █▄▄ █▀▀   ▄█▀ █   █',
@@ -45,6 +50,7 @@ const ROOT_COMMAND_ORDER: Record<CommandCategory, readonly string[]> = {
   setup: ['auth', 'link', 'import', 'integrate'],
   guide: ['context', 'architecture'],
   verify: ['analyze', 'quality-gate', 'list', 'api', 'allowlist'],
+  data: ['badge'],
   solve: ['remediate'],
   cli: ['config', 'system', 'update'],
 };
@@ -185,11 +191,12 @@ function getLabel(
 }
 
 function getSummary(command: SonarCommand): string {
-  const stage = command.lifecycle.stage;
+  const tag = stageHelpTag(command.lifecycle.stage);
+  const raw = command.description();
   const metadata = command.rootHelpMetadata;
   const description =
-    metadata.summary ?? command.description().replace(/ \[(?:BETA|ALPHA|DEPRECATED)\]$/, '');
-  const lifecycle = stage === 'stable' ? '' : `[${stage.toUpperCase()}] `;
+    metadata.summary ?? (tag && raw.endsWith(` ${tag}`) ? raw.slice(0, -(tag.length + 1)) : raw);
+  const lifecycle = tag ? `${tag} ` : '';
   const availability = [
     metadata.cloudOnly ? ' [SonarQube Cloud only]' : '',
     metadata.requiresVortex ? ' [Vortex]' : '',
