@@ -215,6 +215,31 @@ describe('system reset --force', () => {
   );
 
   it(
+    'clears prepared agent onboarding during a full reset',
+    async () => {
+      harness.userHome.writeFile(join('.claude', 'settings.json'), '{}');
+      const setup = await harness.run(
+        'integrate --all --non-interactive --server https://sonarcloud.io --org acme',
+      );
+      expect(setup.exitCode).toBe(0);
+      expect(
+        readState(harness.stateJsonFile.path).integrations.onboarding?.['claude-code'],
+      ).toEqual({
+        status: 'waiting_for_sign_in',
+        server: 'https://sonarcloud.io',
+        org: 'acme',
+      });
+
+      const reset = await harness.run('system reset --force');
+
+      expect(reset.exitCode).toBe(0);
+      expect(readState(harness.stateJsonFile.path).integrations.onboarding).toBeUndefined();
+      expect(harness.userHome.file('.claude', 'settings.json').asText()).toBe('{}');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
     'purges seeded auth tokens from keychain and state',
     async () => {
       const server = await harness.newFakeServer().start();
