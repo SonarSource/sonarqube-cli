@@ -63,7 +63,10 @@ function configFiles(agent: DetectedAgentId): string[] {
     ],
     claude: [join(home, '.claude.json'), join(home, '.claude', 'settings.json')],
     codex: [join(home, '.codex', 'hooks.json'), join(home, '.codex', 'config.toml')],
-    copilot: [join(home, '.copilot', 'hooks.json'), join(home, '.copilot', 'mcp-config.json')],
+    copilot: [
+      join(home, '.copilot', 'hooks', 'hooks.json'),
+      join(home, '.copilot', 'mcp-config.json'),
+    ],
     cursor: [
       join(home, CURSOR_CONFIG_DIR, 'hooks.json'),
       join(home, CURSOR_CONFIG_DIR, 'mcp.json'),
@@ -85,7 +88,7 @@ async function hasExistingConfig(agent: DetectedAgentId): Promise<boolean> {
   for (const file of configFiles(agent)) {
     try {
       const content = await readFile(file, 'utf8');
-      if (SONAR_CONFIGURATION.test(content) || (file.endsWith('.toml') && hasSonarToml(content))) {
+      if (SONAR_CONFIGURATION.test(content) || hasSonarMcpEntry(file, content)) {
         return true;
       }
     } catch (error) {
@@ -95,12 +98,17 @@ async function hasExistingConfig(agent: DetectedAgentId): Promise<boolean> {
   return false;
 }
 
-function hasSonarToml(content: string): boolean {
+function hasSonarMcpEntry(file: string, content: string): boolean {
   try {
-    const servers = parse(content).mcp_servers;
-    return typeof servers === 'object' && Object.hasOwn(servers, 'sonarqube');
+    if (!file.endsWith('.json') && !file.endsWith('.toml')) return false;
+    const config = (file.endsWith('.toml') ? parse(content) : JSON.parse(content)) as unknown;
+    if (!config || typeof config !== 'object') return false;
+    const settings = config as Record<string, unknown>;
+    return ['mcp_servers', 'mcpServers', 'mcp'].some((key) => {
+      const servers = settings[key];
+      return typeof servers === 'object' && servers !== null && Object.hasOwn(servers, 'sonarqube');
+    });
   } catch {
-    // The integration writer rejects malformed TOML before changing this file.
     return false;
   }
 }
@@ -131,9 +139,8 @@ export async function previewBulkSetup(
 ): Promise<boolean> {
   if (!agents.length) return true;
   const state = loadState();
-  for (const agent of agents) {
-    console.print(agentDisplayName(agent) + ': ' + (await agentSetupStatus(agent, state)));
-  }
+  const statuses = await Promise.all(agents.map((agent) => agentSetupStatus(agent, state)));
+  agents.forEach((agent, index) => { console.print(agentDisplayName(agent) + ': ' + statuses[index]); });
   return (
     (await console.confirmPrompt('Set up the new coding agents listed above?', false)) === true
   );
@@ -148,8 +155,8 @@ export async function integrateAllAgents(
     return;
   }
 
-  let failed = false;
-  for (const agent of agents) {
+  const failed = await agents.reduce(async (previous, agent) => {
+    const alreadyFailed = await previous;
     try {
       const outcome = await withAgentInstallLock(async () => {
         const status = await agentSetupStatus(agent, loadState());
@@ -157,17 +164,19 @@ export async function integrateAllAgents(
 
         const id = AGENT_INTEGRATION_IDS[agent];
         updateState((state) => {
-          (state.integrations.onboarding ??= {})[id] = { status: 'retry_setup' };
+          state.integrations.onboarding ??= {};
+          state.integrations.onboarding[id] = { status: 'retry_setup' };
         });
         await AGENT_INTEGRATION_HANDLERS[id](BULK_SETUP_OPTIONS, ctx);
         return 'Configured';
       });
       ctx.console.print(agentDisplayName(agent) + ': ' + outcome);
+      return alreadyFailed;
     } catch (error) {
-      failed = true;
       ctx.console.warn(agentDisplayName(agent) + ': Retry setup. ' + (error as Error).message);
+      return true;
     }
-  }
+  }, Promise.resolve(false));
   if (failed) {
     throw new CommandFailedError('Some agents could not be configured.', {
       remediationHint: "Retry with 'sonar integrate --all --non-interactive'.",

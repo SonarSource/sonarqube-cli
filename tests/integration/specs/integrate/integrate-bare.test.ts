@@ -102,6 +102,23 @@ describe('integrate (bare command)', () => {
     { timeout: 30000 },
   );
 
+  it('protects escaped MCP names and the Copilot global hook configuration', async () => {
+    const server = await harness.newFakeServer().withAuthToken('test-token').start();
+    harness.withAuth(server.baseUrl(), 'test-token');
+    const mcp = '{"mcpServers":{"\\u0073onarqube":{"command":"custom-sonar"}}}';
+    const copilot = '{"hooks":{"sessionStart":[{"bash":"sonar-vortex/custom-hook"}]}}';
+    harness.userHome.writeFile('.claude.json', mcp);
+    harness.userHome.writeFile('.copilot/hooks/hooks.json', copilot);
+
+    const result = await harness.run('integrate --all --non-interactive');
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Claude Code: Needs review');
+    expect(result.stdout).toContain('Copilot: Needs review');
+    expect(harness.userHome.file('.claude.json').asText()).toBe(mcp);
+    expect(harness.userHome.file('.copilot', 'hooks', 'hooks.json').asText()).toBe(copilot);
+  });
+
   it('recognizes a custom Codex MCP table with whitespace in the key', async () => {
     const server = await harness.newFakeServer().withAuthToken('test-token').start();
     harness.withAuth(server.baseUrl(), 'test-token');
