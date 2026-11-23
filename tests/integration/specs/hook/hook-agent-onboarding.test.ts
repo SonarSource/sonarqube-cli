@@ -111,8 +111,12 @@ describe('sonar hook agent-onboarding', () => {
     expect(unrelated.stdout).toBe('');
   });
 
-  it('remembers a user dismissal without activating any integration', async () => {
-    seed('claude');
+  it('remembers a user dismissal without reporting an activated integration', async () => {
+    harness.userHome.writeFile('.claude.json', '{}');
+    const prepared = await harness.run('integrate --all --non-interactive');
+    expect(prepared.exitCode).toBe(0);
+    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+
     const result = await harness.run('integrate --dismiss-agent claude');
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Skipped');
@@ -125,6 +129,12 @@ describe('sonar hook agent-onboarding', () => {
       }),
     );
     expect(startup.stdout).toBe('');
+
+    const status = await harness.run('system status --format json');
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      pendingIntegrations: [],
+      integrations: [],
+    });
   });
 
   it('installs on-demand sign-in skills for OpenCode and Antigravity', async () => {
