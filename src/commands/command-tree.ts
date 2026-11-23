@@ -34,6 +34,7 @@ import {
 } from '@/core/commands/sonar-command.ts';
 import { CONFIG_KEY_NAMES, type ConfigKey } from '@/core/config/config-schema.ts';
 import { resolveDevOpsToken } from '@/core/devops/token.ts';
+import { GitHubClient } from '@/core/github/client.ts';
 import { CURRENT_DISTRIBUTION } from '@/core/host/distribution.ts';
 import { initSentry } from '@/core/observability/sentry.ts';
 import { GENERIC_HTTP_METHODS } from '@/core/server/http-client.ts';
@@ -51,12 +52,21 @@ import { runPostUpdateActionsSafely } from '@/core/update/post-update.ts';
 
 import { version as VERSION } from '../../package.json';
 import {
-  assertOnPremiseConnection,
-  collectScannerProperty,
+  onboardCiGithub,
+  type OnboardCiGithubOptions,
+  validateOnboardCiGithubOptions,
+} from './admin/onboard-ci/github/index.ts';
+import {
   onboardCiGitlab,
-  type OnboardCiGitlabOptions,
   validateOnboardCiGitlabOptions,
 } from './admin/onboard-ci/gitlab/index.ts';
+import type { OnboardCiGitlabInput } from './admin/onboard-ci/gitlab/types.ts';
+import {
+  addOnboardCiOptions,
+  assertOnPremiseConnection,
+  assertProvisionProjectsPermission,
+  collectScannerProperty,
+} from './admin/onboard-ci/shared.ts';
 import { allowlistSecretsAdd } from './allowlist/secrets/add.ts';
 import {
   allowlistSecretsClear,
@@ -1406,49 +1416,58 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       gitPrePush(options, files ?? [], ctx),
     );
 
-  COMMAND_TREE.command('admin')
+  const onboardCi = COMMAND_TREE.command('admin')
     .stage(Stage.Alpha)
     .description('Administrative operations for platform engineers')
     .command('onboard-ci')
-    .description('Open CI configuration MRs across repositories')
-    .command('gitlab')
+    .description('Open CI configuration pull/merge requests across repositories');
+
+  addOnboardCiOptions(onboardCi.command('gitlab'), {
+    reposFileDescription:
+      'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group',
+    pullRequestTrigger: 'mr',
+  })
     .description('Open CI configuration MRs across GitLab repositories')
     .requiredOption(
       '--group <group>',
       'GitLab group or subgroup path to process (all nested subgroups included)',
     )
-    .option(
-      '--binding-name <name>',
-      'Name of the GitLab configuration in SonarQube (auto-detected if only one exists)',
-    )
-    .option(
-      '--repos-file <file>',
-      'Path to a file listing repositories to process, one per line, relative to --group (e.g. subgroup/my-repo); omit to process all repositories in the group',
-    )
-    .option(
-      '--sonar-token-var-name <name>',
-      'Name of the GitLab CI/CD variable that holds the SonarQube analysis token',
-      'SONAR_TOKEN',
-    )
-    .option('--trigger-on <events>', 'Pipeline triggers: mr | main | both', 'both')
     .option('--stage <name>', 'GitLab CI stage for the generated job (omit to use no stage)')
     .option('--allow-failure', 'Add allow_failure: true to the generated job', false)
-    .option(
-      '--scanner-property <key=value>',
-      'Additional scanner property to inject into the CI script (repeatable; e.g. --scanner-property sonar.scanner.engineJarPath=/path/to/jar)',
-      collectScannerProperty,
-      [] as string[],
-    )
     .option(
       '--job-template <file>',
       "Path to a YAML file defining the full CI job body (image, tags, stage, script, variables, rules); {{SONAR_PROJECT_KEY}} is substituted with each repository's SonarQube project key. Mutually exclusive with --stage, --allow-failure, --trigger-on, --scanner-property, and --sonar-token-var-name",
     )
-    .option('--dry-run', 'Preview what would be processed without making any changes', false)
-    .authenticatedAction(async (ctx, options: OnboardCiGitlabOptions) => {
-      validateOnboardCiGitlabOptions(options);
-      assertOnPremiseConnection(ctx.auth);
+    .authenticatedAction(async (ctx, input: OnboardCiGitlabInput) => {
+      const options = validateOnboardCiGitlabOptions(input);
+      assertOnPremiseConnection(ctx.auth, 'GitLab');
+      await assertProvisionProjectsPermission(ctx.connection.httpClient);
       const gitlabToken = await resolveDevOpsToken(ctx.console, 'GitLab');
       return onboardCiGitlab(ctx.connection, gitlabToken, options, ctx.console);
+    });
+
+  addOnboardCiOptions(onboardCi.command('github'), {
+    reposFileDescription:
+      'Path to a file listing repositories to process, one name or owner/repo per line; omit to process all repositories in the organization',
+    pullRequestTrigger: 'pr',
+  })
+    .description('Open CI configuration PRs across GitHub.com repositories')
+    .requiredOption('--org <org>', 'GitHub organization to process')
+    .option(
+      '--workflow-template <file>',
+      'Complete workflow YAML with {{SONAR_PROJECT_KEY}} placeholders; cannot be combined with --trigger-on, --scanner-property or --sonar-token-var-name',
+    )
+    .authenticatedAction(async (ctx, options: OnboardCiGithubOptions) => {
+      const workflowTemplate = validateOnboardCiGithubOptions(options);
+      assertOnPremiseConnection(ctx.auth, 'GitHub');
+      await assertProvisionProjectsPermission(ctx.connection.httpClient);
+      const token = await resolveDevOpsToken(ctx.console, 'GitHub');
+      const github = new GitHubClient(token, {
+        onRetry: (message) => {
+          ctx.console.warn(message);
+        },
+      });
+      return onboardCiGithub(ctx.connection, github, options, ctx.console, workflowTemplate);
     });
 
   // Hidden flush command — only registered when running as a telemetry worker.
