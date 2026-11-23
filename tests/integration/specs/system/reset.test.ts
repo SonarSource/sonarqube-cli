@@ -218,7 +218,8 @@ describe('system reset --force', () => {
   it(
     'clears prepared agent onboarding during a full reset',
     async () => {
-      harness.userHome.writeFile(join('.claude', 'settings.json'), '{}');
+      const customSettings = { model: 'sonnet' };
+      harness.userHome.writeFile(join('.claude', 'settings.json'), JSON.stringify(customSettings));
       const setup = await harness.run(
         'integrate --all --non-interactive --server https://sonarcloud.io --org acme',
       );
@@ -235,7 +236,7 @@ describe('system reset --force', () => {
 
       expect(reset.exitCode).toBe(0);
       expect(readState(harness.stateJsonFile.path).integrations.onboarding).toBeUndefined();
-      expect(harness.userHome.file('.claude', 'settings.json').asText()).toBe('{}');
+      expect(harness.userHome.file('.claude', 'settings.json').asJson()).toEqual(customSettings);
     },
     { timeout: 15000 },
   );

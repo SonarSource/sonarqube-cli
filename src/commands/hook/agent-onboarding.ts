@@ -25,12 +25,12 @@ import {
   SUPPORTED_AGENT_IDS,
 } from '@/core/host/environment/installed-agent-detector.ts';
 import { normalizeServerUrl } from '@/core/host/keychain.ts';
-import { shellQuote } from '@/core/host/shell-quote.ts';
 import logger from '@/core/observability/logger.ts';
 import { discoverProject } from '@/core/project-discovery/project-info.ts';
 import type { IntegrationsState } from '@/core/state/state.ts';
 import { tryLoadState, updateState } from '@/core/state/state-repository.ts';
 
+import { formatSetupLoginCommand } from '../integrate/_common/pending-agent-setup.ts';
 import { AGENT_INTEGRATION_IDS } from '../integrate/integration-handlers.ts';
 import { resolveAdapter } from './agent-session-start/index.ts';
 import { readStdinJson } from './stdin.ts';
@@ -71,11 +71,7 @@ export async function agentOnboarding(
     if (pending.org && project.organization && pending.org !== project.organization) return;
     if (!claimInvitation(id)) return;
 
-    const loginCommand = [
-      'sonar auth login',
-      ...(pending.server ? ['--server', shellQuote(pending.server)] : []),
-      ...(pending.org ? ['--org', shellQuote(pending.org)] : []),
-    ].join(' ');
+    const loginCommand = formatSetupLoginCommand(pending);
     const userMessage =
       'Sign in to SonarQube to check the changes you make here. Run ' +
       loginCommand +
