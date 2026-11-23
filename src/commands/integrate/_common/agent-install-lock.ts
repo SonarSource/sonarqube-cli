@@ -27,7 +27,7 @@ import { CommandFailedError } from '@/core/commands/command-error.ts';
 import { getCliDir } from '@/core/config-constants.ts';
 
 export async function withAgentInstallLock<T>(
-  install: () => Promise<T>,
+  install: () => Promise<T> | T,
   unavailableMessage = 'Could not start agent setup. Retry setup shortly.',
 ): Promise<T> {
   const dir = getCliDir();

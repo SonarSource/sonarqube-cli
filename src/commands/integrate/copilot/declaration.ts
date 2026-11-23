@@ -27,6 +27,7 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import {
   createCompletionAnalysisHookSubfeature,
   STOP_SCRIPT_REL,
@@ -76,6 +77,7 @@ export const copilotIntegration: IntegrationDeclaration<CopilotIntegrationOption
   id: COPILOT_INTEGRATION_ID,
   displayName: COPILOT_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('copilot'),
     createSecretsDetectionFeature<CopilotIntegrationOptions>({
       resources: createCopilotSecretsDetectionResources(),
       replacedIds: ['pre-tool-use-hook', 'prompt-secrets-hook', 'prompt-secrets-instructions'],

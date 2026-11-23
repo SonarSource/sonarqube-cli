@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, textSnippetRemover, wholeFile } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import { createCompletionAnalysisHookSubfeature } from '../_common/features/completion-analysis-hook-feature.ts';
 import {
   createContextAugmentationSubfeature,
@@ -101,6 +102,7 @@ export const codexIntegration: IntegrationDeclaration<CodexIntegrationOptions> =
   id: CODEX_INTEGRATION_ID,
   displayName: CODEX_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('codex'),
     createSecretsDetectionFeature<CodexIntegrationOptions>({
       resources: createCodexSecretsDetectionResources(),
       replacedIds: ['secrets-instructions'],

@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { jsonPatch, wholeFileRemover } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import {
   createCompletionAnalysisHookSubfeature,
   STOP_SCRIPT_REL,
@@ -119,6 +120,7 @@ export const cursorIntegration: IntegrationDeclaration<CursorIntegrationOptions>
   id: CURSOR_INTEGRATION_ID,
   displayName: 'Cursor',
   features: [
+    createAgentOnboardingFeature('cursor'),
     createSecretsDetectionFeature<CursorIntegrationOptions>({
       resources: createCursorSecretsDetectionResources(),
     }),

@@ -28,6 +28,7 @@ import type {
 } from '@/core/framework/features';
 import { wholeFile } from '@/core/framework/features';
 
+import { createAgentOnboardingFeature } from '../_common/features/agent-onboarding.ts';
 import { createContextAugmentationExtensionSubfeature } from '../_common/features/context-augmentation-feature.ts';
 import { createMcpServerFeature } from '../_common/features/mcp-server-feature.ts';
 import { createSecretsDetectionFeature } from '../_common/features/secrets-detection-feature.ts';
@@ -107,6 +108,7 @@ export const piIntegration: IntegrationDeclaration<IntegrateAgentOptions> = {
   id: PI_INTEGRATION_ID,
   displayName: PI_DISPLAY_NAME,
   features: [
+    createAgentOnboardingFeature('pi'),
     createSecretsDetectionFeature<IntegrateAgentOptions>({
       resources: createPiSecretsDetectionResources(),
     }),
