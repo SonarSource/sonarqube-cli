@@ -24,7 +24,7 @@ import {
   isValidServerUrl,
 } from '@/core/auth/auth-resolver.ts';
 import { CancelledByUserError } from '@/core/commands/command-error.ts';
-import { SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
+import { SONARCLOUD_AU_URL, SONARCLOUD_URL, SONARCLOUD_US_URL } from '@/core/config-constants.ts';
 import { discoverServerFromConfig } from '@/core/project-discovery/project-info.ts';
 import type { Console } from '@/core/ui/console.ts';
 
@@ -95,6 +95,7 @@ async function selectServerFromPrompt(console: Console): Promise<string> {
       .selectPromptResult('Which SonarQube Cloud region?', [
         { value: SONARCLOUD_URL, label: 'EU (sonarcloud.io)' },
         { value: SONARCLOUD_US_URL, label: 'US (sonarqube.us)' },
+        { value: SONARCLOUD_AU_URL, label: 'AU (sonarqube.au)' },
       ])
       .onCancellation(SERVER_SELECTION_CANCELLED)
       .orThrow();

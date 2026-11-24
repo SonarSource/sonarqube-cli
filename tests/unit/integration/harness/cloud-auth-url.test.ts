@@ -22,7 +22,9 @@ import { describe, expect, it } from 'bun:test';
 
 import {
   applyLoopbackSonarCloudEnvOverrides,
+  inferRecordedCloudRegion,
   isLoopbackTestServerUrl,
+  recordedCloudAuthServerUrl,
 } from '../../../integration/harness/cloud-auth-url.js';
 
 describe('cloud-auth-url harness helpers', () => {
@@ -44,5 +46,17 @@ describe('cloud-auth-url harness helpers', () => {
     applyLoopbackSonarCloudEnvOverrides(env, 'http://127.0.0.1:9000', 'us');
     expect(env.SONARQUBE_CLI_SONARCLOUD_US_URL).toBe('http://127.0.0.1:9000');
     expect(env.SONARQUBE_CLI_SONARCLOUD_US_API_URL).toBe('http://127.0.0.1:9000');
+  });
+
+  it('injects SonarCloud env overrides for loopback AU cloud auth', () => {
+    const env: Record<string, string> = {};
+    applyLoopbackSonarCloudEnvOverrides(env, 'http://127.0.0.1:9000', 'au');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_AU_URL).toBe('http://127.0.0.1:9000');
+    expect(env.SONARQUBE_CLI_SONARCLOUD_AU_API_URL).toBe('http://127.0.0.1:9000');
+  });
+
+  it('infers and records the AU region', () => {
+    expect(inferRecordedCloudRegion({ SONARQUBE_CLI_SONARCLOUD_AU_URL: 'http://x' })).toBe('au');
+    expect(recordedCloudAuthServerUrl('au')).toBe('https://sonarqube.au');
   });
 });

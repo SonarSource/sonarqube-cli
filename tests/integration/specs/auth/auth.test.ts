@@ -1013,16 +1013,13 @@ describe('auth login --with-token', () => {
     await harness.dispose();
   });
 
-  const cloudEnv = (baseUrl: string, region: 'eu' | 'us' = 'eu'): Record<string, string> =>
-    region === 'eu'
-      ? {
-          SONARQUBE_CLI_SONARCLOUD_URL: baseUrl,
-          SONARQUBE_CLI_SONARCLOUD_API_URL: baseUrl,
-        }
-      : {
-          SONARQUBE_CLI_SONARCLOUD_US_URL: baseUrl,
-          SONARQUBE_CLI_SONARCLOUD_US_API_URL: baseUrl,
-        };
+  const cloudEnv = (baseUrl: string, region: 'eu' | 'us' | 'au' = 'eu'): Record<string, string> => {
+    const prefix = region === 'eu' ? '' : `${region.toUpperCase()}_`;
+    return {
+      [`SONARQUBE_CLI_SONARCLOUD_${prefix}URL`]: baseUrl,
+      [`SONARQUBE_CLI_SONARCLOUD_${prefix}API_URL`]: baseUrl,
+    };
+  };
 
   it('imports a SonarQube Server token without starting the browser flow', async () => {
     const server = await harness.newFakeServer().withAuthToken('imported-token').start();
@@ -1045,6 +1042,7 @@ describe('auth login --with-token', () => {
   it.each([
     ['eu' as const, 'eu-org'],
     ['us' as const, 'us-org'],
+    ['au' as const, 'au-org'],
   ])('imports a SonarQube Cloud %s token for an explicit organization', async (region, org) => {
     const server = await harness
       .newFakeServer()
@@ -1066,6 +1064,31 @@ describe('auth login --with-token', () => {
     };
     expect(connection.orgKey).toBe(org);
     expect(connection.region).toBe(region);
+  });
+
+  it('stores an AU connection for --server https://sonarqube.au --with-token', async () => {
+    const server = await harness
+      .newFakeServer()
+      .withAuthToken('cloud-token')
+      .withOrganizations([{ key: 'au-org', name: 'AU Org' }])
+      .start();
+
+    const result = await harness.runWithStdin(
+      'auth login --with-token --server https://sonarqube.au --org au-org',
+      'cloud-token\n',
+      { extraEnv: cloudEnv(server.baseUrl(), 'au') },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Authentication successful for: https://sonarqube.au (au-org)');
+    const connection = harness.stateJsonFile.asJson().auth.connections[0] as {
+      serverUrl?: string;
+      orgKey?: string;
+      region?: string;
+    };
+    expect(connection.serverUrl).toBe('https://sonarqube.au');
+    expect(connection.orgKey).toBe('au-org');
+    expect(connection.region).toBe('au');
   });
 
   it('rejects a public organization without membership for --with-token', async () => {
@@ -1841,6 +1864,40 @@ describe('auth login — server selection', () => {
         auth: { connections: Array<{ region: string }> };
       };
       expect(state.auth.connections[0].region).toBe('us');
+    },
+    { timeout: 15000 },
+  );
+
+  it(
+    'prompts for server and logs in to SonarQube Cloud AU',
+    async () => {
+      const server = await harness
+        .newFakeServer()
+        .withAuthToken('my-token')
+        .withOrganizations([{ key: 'au-org', name: 'AU Org' }])
+        .start();
+
+      const session = harness.runInteractive('auth login', {
+        extraEnv: {
+          SONARQUBE_CLI_SONARCLOUD_AU_URL: server.baseUrl(),
+          SONARQUBE_CLI_SONARCLOUD_AU_API_URL: server.baseUrl(),
+        },
+        browserToken: 'my-token',
+      });
+      await session.accept('Where would you like to connect?');
+      await session.waitText('AU (sonarqube.au)');
+      session.keyDown();
+      session.keyDown();
+      session.keyEnter();
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Authentication successful');
+      const state = harness.stateJsonFile.asJson() as {
+        auth: { connections: Array<{ region: string; orgKey: string }> };
+      };
+      expect(state.auth.connections[0].region).toBe('au');
+      expect(state.auth.connections[0].orgKey).toBe('au-org');
     },
     { timeout: 15000 },
   );
