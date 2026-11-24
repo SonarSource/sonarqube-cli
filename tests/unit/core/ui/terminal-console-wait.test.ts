@@ -63,10 +63,11 @@ describe('TerminalConsole user wait', () => {
     const view = console.unmeasured();
 
     await view.measureWait(() => sleep(20));
+    expect(console.userWaitMs()).toBe(0);
+
     await console.measureWait(() => sleep(20));
 
     expect(console.userWaitMs()).toBeGreaterThanOrEqual(15);
-    expect(console.userWaitMs()).toBeLessThan(35);
     expect(view.userWaitMs()).toBe(console.userWaitMs());
   });
 
