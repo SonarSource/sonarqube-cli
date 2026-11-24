@@ -875,10 +875,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
 
   COMMAND_TREE.command('init')
     .description(
-      // Creating a project without repository binding is Alpha.
-      runtime.isAlphaEnabled
-        ? 'Set up Sonar for this project: login, pick an organization and bind or create a new Sonar project'
-        : 'Set up Sonar for this project: login, pick an organization and link an existing Sonar project or create one bound to the repository',
+      'Set up SonarQube for this project: login, pick an organization and link an existing SonarQube project or create one bound to the repository',
     )
     .stage(Stage.Beta())
     .rootHelp({
@@ -903,57 +900,6 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .option(
       '--bind',
       'Create a project bound to the repository without prompting (SonarQube Cloud, organization linked to your DevOps platform). With --monorepo, a root whose project already exists is offered for linking, and fails when declined or without a terminal',
-    )
-    .addOption(
-      new SonarOption(
-        '--create',
-        'Create a project without repository binding and without prompting, optionally configured by --project, --name and --visibility',
-      ).stage(Stage.Alpha),
-    )
-    .addOption(
-      new SonarOption(
-        '--project <key>',
-        'Key of the new project (default: generated); not used with a bound project',
-      ).stage(Stage.Alpha),
-    )
-    .addOption(
-      new SonarOption(
-        '--name <name>',
-        'Name of the new project (default: the repository name); not used with a bound project',
-      ).stage(Stage.Alpha),
-    )
-    .addOption(
-      new SonarOption(
-        '--visibility <visibility>',
-        'Visibility of the new project: private or public (default: private); not used with a bound project',
-      ).stage(Stage.Alpha),
-    )
-    // Hidden while the CLI ships no SonarScanner: the first-analysis flags still parse, but are not advertised.
-    .addOption(
-      new SonarOption(
-        '--scan',
-        'Run the first analysis of a newly created unbound project without asking',
-      ).hideHelp(),
-    )
-    .addOption(
-      new SonarOption(
-        '--scanner-property <key=value>',
-        'Extra scanner property for the first analysis, e.g. sonar.exclusions=**/*.test.ts (repeatable)',
-      )
-        .argParser(collectScannerProperty)
-        .hideHelp(),
-    )
-    .addOption(
-      new SonarOption(
-        '--verbose',
-        'Stream the scanner logs while the first analysis runs',
-      ).hideHelp(),
-    )
-    .addOption(
-      new SonarOption(
-        '--detach',
-        'Run the first analysis in the background without waiting for the results',
-      ).hideHelp(),
     )
     .option(
       '--dry-run',

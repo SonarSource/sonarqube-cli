@@ -54,13 +54,7 @@ function bindableSlug(
   remote: string | undefined,
   { auth, interactive, intent }: DetectDeps,
 ): string | null {
-  // `--create` is the consent to create without binding, so it never asks.
-  if (
-    !remote ||
-    intent?.kind === 'create' ||
-    (!interactive && intent?.kind !== 'bind') ||
-    auth.connectionType !== 'cloud'
-  ) {
+  if (!remote || (!interactive && intent?.kind !== 'bind') || auth.connectionType !== 'cloud') {
     return null;
   }
   return remoteRepositorySlug(remote);
@@ -86,8 +80,8 @@ function recordBindDecision(
 
 /**
  * Provisions every root through one batched import. A repository takes its monorepo binding once,
- * so this never runs per root. Resolves to each root's result, or to undefined when the roots
- * should be created without binding instead: the user declined, or the repository cannot be bound.
+ * so this never runs per root. Resolves to each root's result, or to undefined when the roots are
+ * not bound: the user declined, or the repository cannot be bound.
  */
 export async function bindNewRoots(
   roots: readonly BindableRoot[],
@@ -97,7 +91,7 @@ export async function bindNewRoots(
   if (roots.length === 0) {
     return undefined;
   }
-  // `--bind` is the consent to bind, so what it cannot do is reported, never replaced by an unbound project.
+  // `--bind` is the consent to bind, so what it cannot do is reported as a failure.
   const required = deps.intent?.kind === 'bind';
   const slug = bindableSlug(remote, deps);
   if (slug === null) {

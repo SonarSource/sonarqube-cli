@@ -40,10 +40,8 @@ const MONOREPO_RESUME =
 /** In display order; a root belongs to the section of its outcome, so a line does not repeat it. */
 const MONOREPO_SECTIONS: { title: string; kinds: MonorepoRootResult['kind'][] }[] = [
   { title: 'Created and bound to the repository', kinds: ['bound'] },
-  { title: 'Created', kinds: ['unbound'] },
   { title: 'Mapped to the existing project', kinds: ['linked'] },
   { title: 'Would be created and bound to the repository', kinds: ['would-bind'] },
-  { title: 'Would be created', kinds: ['would-create'] },
   { title: 'Would be mapped to the existing project', kinds: ['would-link'] },
   { title: 'Already configured', kinds: ['configured'] },
   // The warnings printed while checking the roots say why a root was left as it is.
@@ -87,8 +85,7 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
   switch (root.kind) {
     case 'configured':
     case 'linked':
-    case 'bound':
-    case 'unbound': {
+    case 'bound': {
       const line = `${root.path}: ${root.projectKey}`;
       // A configured root may be recorded for another server than the active one.
       if (root.serverUrl) {
@@ -97,7 +94,6 @@ function describeMonorepoRoot(root: MonorepoRootResult, auth: ResolvedAuth | und
       return auth ? `${line} - ${projectDashboardUrl(auth, root.projectKey)}` : line;
     }
     case 'would-link':
-    case 'would-create':
     case 'would-bind':
       return `${root.path}: ${root.projectKey}`;
     case 'skipped':
@@ -116,10 +112,6 @@ function describeDryRun(action: DryRunAction): string[] {
     case 'link':
       return [
         `Would link this directory to the existing project '${action.projectKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
-      ];
-    case 'create':
-      return [
-        `Would create the project '${action.projectName}' (key '${action.projectKey}', ${action.visibility}) without repository binding, and save it in ${SHARED_PROJECT_CONFIG_FILE_NAME}.`,
       ];
     case 'bind':
       return [
@@ -149,7 +141,6 @@ function describe(outcome: InitOutcome, auth: ResolvedAuth | undefined, dryRun: 
     }
     case 'linked':
     case 'bound':
-    case 'unbound':
       return [];
     case 'declined':
       return ['No project was created.'];
@@ -189,7 +180,6 @@ function mappedProjectKeys(outcome: InitOutcome): readonly string[] {
       return outcome.projectKeys;
     case 'linked':
     case 'bound':
-    case 'unbound':
       return [outcome.projectKey];
     case 'dry-run': // Nothing was mapped, so there is no dashboard to link.
     case 'monorepo': // Each root's link is already on its summary line.

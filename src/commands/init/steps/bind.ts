@@ -28,7 +28,7 @@ import type { Console } from '@/core/ui/console.ts';
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { BoundNewPath, InitOutcome, UnboundNewPath } from '../init-outcome.ts';
+import type { BoundNewPath, InitOutcome, NoProjectPath } from '../init-outcome.ts';
 import { classifyInitFailure } from '../telemetry/failure-reason.ts';
 import type { DetectDeps } from './detect.ts';
 import {
@@ -158,13 +158,13 @@ async function importRepository(
 
 /**
  * Creates the project bound to the repository with the `sonar import --repo` logic and maps it in
- * `.sonar-config.json`. When the user declines the DevOps platform authorization, it falls back
- * to the unbound path, unless `--bind` asked for binding: then nothing is created.
+ * `.sonar-config.json`. When the user declines the DevOps platform authorization, nothing is
+ * created: `--bind` ends as declined, and otherwise the no-project step says how to go on.
  */
 export async function runBoundNew(
   { projectRoot, remote, repositorySlug }: BoundNewPath,
   deps: DetectDeps,
-): Promise<InitOutcome | UnboundNewPath> {
+): Promise<InitOutcome | NoProjectPath> {
   const { auth, http, console, intent, telemetry } = deps;
   const project = telemetry?.project(0);
   project?.begin('create_project');
@@ -197,12 +197,12 @@ export async function runBoundNew(
   }
   if (!almKey) {
     if (intent?.kind === 'bind') {
-      // `--bind` never falls back to an unbound project, so declining ends the attempt.
+      // `--bind` asked for this project only, so declining ends the attempt.
       project?.record('create_project', 'declined');
       project?.stopAt('create_project', 'cancelled');
       return { kind: 'declined' };
     }
-    return { path: 'unbound-new', projectRoot, remote };
+    return { path: 'no-project', projectRoot, remote };
   }
 
   console.info(`Organization: ${org.key}`);
