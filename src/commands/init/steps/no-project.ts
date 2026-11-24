@@ -45,22 +45,19 @@ export async function runNoProject(path: NoProjectPath, deps: DetectDeps): Promi
       deps,
     );
   }
-  return reportNoProject(path, deps);
+  return reportNoProject(deps);
 }
 
-function reportNoProject(
-  { repositorySlug }: NoProjectPath,
-  { console, interactive, intent }: DetectDeps,
-): InitOutcome {
+function reportNoProject({ console, interactive, intent }: DetectDeps): InitOutcome {
   if (intent?.kind === 'link') {
     throw new InvalidOptionError(
       '--link found no Sonar project for this directory.',
       'Name the project with --link <key>.',
     );
   }
+  // A run without a terminal binds whenever it can, so only linking a named project is left.
   if (!interactive) {
-    const options = repositorySlug ? ['--bind', '--link <key>'] : ['--link <key>'];
-    throw missingDecision(NO_PROJECT, options);
+    throw missingDecision(NO_PROJECT, ['--link <key>']);
   }
   console.info(
     `${NO_PROJECT} Creating a project without repository binding is not supported.`,
