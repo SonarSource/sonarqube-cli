@@ -19,7 +19,7 @@
  */
 
 /**
- * Downloads the sonar-secrets and sca-scanner-cli binaries (plus PGP signatures)
+ * Downloads scanner binaries (plus PGP signatures)
  * for the current platform from binaries.sonarsource.com and places them in
  * tests/integration/resources/dependency-artifacts/ using the original versioned
  * filenames (e.g. sonar-secrets-2.41.0.10709-linux-x86-64.exe). The fake binaries
@@ -35,13 +35,13 @@ import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
-import { type BinarySpec, resolveDownloadExtension } from '@/core/host/install/binary.ts';
+import { type BinarySpec, resolveBinaryArtifact } from '@/core/host/install/binary.ts';
+import { CONTAINER_SCANNER_SPEC } from '@/core/host/install/container-scanner.ts';
 import { SCA_SCANNER_SPEC } from '@/core/host/install/sca-scanner.ts';
 import { SECRETS_SPEC } from '@/core/host/install/secrets.ts';
 import { SONAR_CONTEXT_AUGMENTATION_VERSION } from '@/core/host/install/signatures.ts';
 import {
   buildCagDownloadUrl,
-  buildDownloadUrl,
   downloadBinary,
   verifyBinarySignature,
 } from '@/core/host/install/sonarsource-releases.ts';
@@ -51,7 +51,7 @@ import { DEPENDENCY_ARTIFACTS_DIR } from './dependency-artifacts-path.js';
 const RESOURCES_DIR = join(import.meta.dir, '..', 'tests', 'integration', 'resources');
 const platform = detectPlatform();
 
-const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC];
+const FIXTURES: BinarySpec[] = [SECRETS_SPEC, SCA_SCANNER_SPEC, CONTAINER_SCANNER_SPEC];
 
 mkdirSync(RESOURCES_DIR, { recursive: true });
 mkdirSync(DEPENDENCY_ARTIFACTS_DIR, { recursive: true });
@@ -61,14 +61,7 @@ for (const fixture of FIXTURES) {
 }
 
 async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
-  const extension = resolveDownloadExtension(fixture, platform);
-  const downloadUrl = buildDownloadUrl(
-    fixture.name,
-    fixture.version,
-    fixture.distPrefix,
-    platform,
-    extension,
-  );
+  const { platform: artifactPlatform, url: downloadUrl } = resolveBinaryArtifact(fixture, platform);
   const signatureUrl = `${downloadUrl}.asc`;
   // Keep the original versioned filename so the fake binaries server can match requests exactly
   const downloadFilename = downloadUrl.split('/').at(-1)!;
@@ -95,7 +88,7 @@ async function prepareBinaryFixture(fixture: BinarySpec): Promise<void> {
     await verifyBinarySignature(
       fixture.name,
       destPath,
-      platform,
+      artifactPlatform,
       fixture.signatures,
       fixture.publicKey,
     );
