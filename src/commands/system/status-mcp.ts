@@ -18,7 +18,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import type { TokenCheckResult } from '@/core/auth/token.ts';
 import { CliError } from '@/core/commands/command-error.ts';
 import { getNetworkConfigOrThrow } from '@/core/host/connectivity/network-config.ts';
 import { runtimeStatusLine } from '@/core/host/environment/runtime-health-messages.ts';
@@ -45,7 +44,6 @@ export interface McpEndpointStatus {
 
 export async function checkMcpEndpoint(
   connection: SonarConnection | null,
-  tokenStatus: TokenCheckResult | null,
 ): Promise<McpEndpointStatus> {
   const status: McpEndpointStatus = {
     connectionMode: null,
@@ -59,13 +57,8 @@ export async function checkMcpEndpoint(
       status.startupError = "Not authenticated. Run 'sonar auth login' to authenticate.";
       return status;
     }
-    if (tokenStatus?.status === 'invalid') {
-      status.startupError = "Invalid token. Run 'sonar auth login' to reauthenticate.";
-      return status;
-    }
     await getNetworkConfigOrThrow();
     const hosted = new HostedMcpClient(connection);
-
     const availability = await hosted.checkHealth();
     if (availability.available) {
       status.connectionMode = 'hosted';
