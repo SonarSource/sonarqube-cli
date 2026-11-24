@@ -45,6 +45,7 @@ import { classifyInitFailure } from '../telemetry/failure-reason.ts';
 import type { InitFailureReason, InitPathId } from '../telemetry/init-telemetry.ts';
 import type { ProjectInitRecorder } from '../telemetry/init-telemetry-recorder.ts';
 import type { DetectDeps } from './detect.ts';
+import { runLinkExisting } from './link-existing.ts';
 import {
   describeFailure,
   findLinkedProjectIssues,
@@ -55,7 +56,6 @@ import {
 } from './linked-projects.ts';
 import { linkCommand, writeMapping } from './mapping.ts';
 import { type BindableRoot, bindNewRoots } from './monorepo-bind.ts';
-import { runUnboundNew } from './unbound.ts';
 
 /** Where a mapped root stands against the active connection, before anything runs for it. */
 type RootStatus =
@@ -196,52 +196,46 @@ async function mapExistingRoot(
   return { path, kind: 'linked', projectKey: mapping.projectKey };
 }
 
+/** Nothing creates a project without binding, so a root left without one fails with how to map one. */
+function noProjectForRoot(path: string): MonorepoRootResult {
+  return {
+    path,
+    kind: 'failed',
+    reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>, or use --bind.`,
+  };
+}
+
 /**
- * Runs the single-project creation flow for a root. A generated key is left to that flow, so a
- * project already under it is offered for linking, as for one directory, instead of being rejected
- * as a taken key; the flow then runs without `--bind`/`--create`, which refuse to touch it.
+ * The key generated for a root names an existing project: it is offered for linking, as for one
+ * directory, without `--bind`, which refuses to touch a project that already exists.
  */
-async function createRootProject(
-  { mapping, path, remote, generated }: MonorepoRoot,
+async function offerGeneratedProject(
+  { mapping, path, remote }: MonorepoRoot,
   deps: DetectDeps,
-  takenGenerated = false,
 ): Promise<MonorepoRootResult> {
-  // Without a terminal, naming the root with --root is the consent to create its project.
-  const flowDeps: DetectDeps = deps.interactive
-    ? { ...deps, intent: takenGenerated ? undefined : deps.intent }
-    : { ...deps, intent: { kind: 'create' } };
-  // --bind is the consent to bind, so a declined link offer is reported, never replaced by an unbound project.
-  const bindRequired = takenGenerated && deps.interactive && deps.intent?.kind === 'bind';
-  const outcome = await runUnboundNew(
-    { path: 'unbound-new', projectRoot: mapping.projectRoot, remote },
-    flowDeps,
-    generated ? {} : { projectKey: mapping.projectKey },
-    true,
-    bindRequired,
+  const outcome = await runLinkExisting(
+    {
+      path: 'link-existing',
+      projectRoot: mapping.projectRoot,
+      remote,
+      projectKey: mapping.projectKey,
+    },
+    { ...deps, intent: undefined },
   );
-  if (bindRequired && outcome.kind === 'declined') {
-    return {
-      path,
-      kind: 'failed',
-      reason: `Project '${mapping.projectKey}' already exists and was not linked, and --bind never creates an unbound project. Name it with --root ${path}=<project key> to map it.`,
-    };
-  }
-  if (!deps.allowUnbound && outcome.kind === 'declined') {
-    return {
-      path,
-      kind: 'failed',
-      reason: `No project was linked or created: creating one without repository binding is not available yet. Name an existing project with --root ${path}=<project key>, or use --bind.`,
-    };
-  }
-  if (outcome.kind === 'linked' || outcome.kind === 'unbound') {
-    return { path, kind: outcome.kind, projectKey: outcome.projectKey };
+  if (outcome.kind === 'linked') {
+    return { path, kind: 'linked', projectKey: outcome.projectKey };
   }
   if (outcome.kind === 'dry-run') {
-    const { action } = outcome;
-    const projectKey = action.type === 'bind' ? mapping.projectKey : action.projectKey;
-    return { path, kind: action.type === 'link' ? 'would-link' : 'would-create', projectKey };
+    return { path, kind: 'would-link', projectKey: mapping.projectKey };
   }
-  return { path, kind: 'skipped' };
+  if (deps.intent?.kind === 'bind') {
+    return {
+      path,
+      kind: 'failed',
+      reason: `Project '${mapping.projectKey}' already exists and was not linked. Name it with --root ${path}=<project key> to map it.`,
+    };
+  }
+  return noProjectForRoot(path);
 }
 
 function onboardSelectedRoot(
@@ -256,8 +250,9 @@ function onboardSelectedRoot(
       if (!root.generated || linkOnly) {
         return mapExistingRoot(root, deps);
       }
-      return deps.interactive
-        ? createRootProject(root, deps, true)
+      // `--bind` refuses to touch an existing project, and without a terminal it cannot be asked.
+      return deps.interactive || deps.intent?.kind !== 'bind'
+        ? offerGeneratedProject(root, deps)
         : Promise.resolve({
             path: root.path,
             kind: 'failed',
@@ -270,7 +265,7 @@ function onboardSelectedRoot(
             kind: 'failed',
             reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
           })
-        : createRootProject(root, deps);
+        : Promise.resolve(noProjectForRoot(root.path));
     case 'other-org': {
       const active = deps.auth.orgKey ?? 'the active one';
       return Promise.resolve({
@@ -393,8 +388,8 @@ export async function runMonorepo(
 
 /**
  * The roots that need a new project are bound to the repository in one call, asked once, before
- * any root runs. A root left out of it (the user declined, or the repository cannot be bound) is
- * created without binding by its own path afterwards.
+ * any root runs. A root left out of it (the user declined, or the repository cannot be bound) fails
+ * afterwards with how to map an existing project instead.
  */
 async function bindNewRootsTogether(
   roots: readonly MonorepoRoot[],
@@ -662,8 +657,7 @@ function recordRootResult(project: ProjectInitRecorder, result: MonorepoRootResu
       project.setProjectKey(result.projectKey);
       return;
     case 'bound':
-    case 'unbound':
-      project.setPath(result.kind === 'bound' ? 'bound_new' : 'unbound_new');
+      project.setPath('bound_new');
       project.record('create_project', 'success');
       project.setProjectKey(result.projectKey);
       return;
@@ -680,7 +674,6 @@ function recordRootResult(project: ProjectInitRecorder, result: MonorepoRootResu
       project.stopAt(step, result.failure ?? 'unknown');
       return;
     case 'would-link':
-    case 'would-create':
     case 'would-bind':
       // Dry runs report no init events.
       return;

@@ -47,20 +47,10 @@ export interface BindableRoot {
 
 /**
  * The repository slug the new roots can be bound through, or null when they cannot be: binding
- * needs SonarQube Cloud, a GitHub or Azure DevOps remote, and a terminal to ask on, unless
- * `--bind` already gave the consent.
+ * needs SonarQube Cloud and a GitHub or Azure DevOps remote.
  */
-function bindableSlug(
-  remote: string | undefined,
-  { auth, interactive, intent }: DetectDeps,
-): string | null {
-  // `--create` is the consent to create without binding, so it never asks.
-  if (
-    !remote ||
-    intent?.kind === 'create' ||
-    (!interactive && intent?.kind !== 'bind') ||
-    auth.connectionType !== 'cloud'
-  ) {
+function bindableSlug(remote: string | undefined, { auth }: DetectDeps): string | null {
+  if (!remote || auth.connectionType !== 'cloud') {
     return null;
   }
   return remoteRepositorySlug(remote);
@@ -86,8 +76,8 @@ function recordBindDecision(
 
 /**
  * Provisions every root through one batched import. A repository takes its monorepo binding once,
- * so this never runs per root. Resolves to each root's result, or to undefined when the roots
- * should be created without binding instead: the user declined, or the repository cannot be bound.
+ * so this never runs per root. Resolves to each root's result, or to undefined when the roots are
+ * not bound: the user declined, or the repository cannot be bound.
  */
 export async function bindNewRoots(
   roots: readonly BindableRoot[],
@@ -97,7 +87,7 @@ export async function bindNewRoots(
   if (roots.length === 0) {
     return undefined;
   }
-  // `--bind` is the consent to bind, so what it cannot do is reported, never replaced by an unbound project.
+  // `--bind` is the consent to bind, so what it cannot do is reported as a failure.
   const required = deps.intent?.kind === 'bind';
   const slug = bindableSlug(remote, deps);
   if (slug === null) {
@@ -111,8 +101,10 @@ export async function bindNewRoots(
   }
   const { auth, http, console, dryRun } = deps;
   const noun = roots.length === 1 ? 'project' : 'projects';
+  // Without a terminal, binding is the default: nobody is there to decline it.
   const consent =
     required ||
+    !deps.interactive ||
     requireAnswer(
       await console.confirmPrompt(
         `Bind the ${roots.length} new ${noun} to the repository '${slug}'?`,

@@ -58,11 +58,11 @@ export type InitPath =
       repositorySlug: string;
     }
   /**
-   * No project exists yet and it will not be bound to the repository: there is no git remote
-   * (`remote` absent), the platform cannot be bound, or the user declined or could not be asked.
+   * No project was found and none is bound to the repository: there is no git remote (`remote`
+   * absent), the platform cannot be bound, or the user declined or could not be asked.
    * `repositorySlug` is set when binding was possible but not chosen, so it can still be offered.
    */
-  | { path: 'unbound-new'; projectRoot: string; remote?: string; repositorySlug?: string };
+  | { path: 'no-project'; projectRoot: string; remote?: string; repositorySlug?: string };
 
 /**
  * What happened to one mapped root of a monorepo. `path` is relative to the repository root. The
@@ -73,17 +73,15 @@ export type MonorepoRootResult =
       path: string;
       /**
        * `configured`: nothing to do; `linked`: an existing project was mapped; `bound`: a project
-       * bound to the repository was created and mapped; `unbound`: one without binding was.
+       * bound to the repository was created and mapped.
        */
-      kind: 'configured' | 'linked' | 'bound' | 'unbound';
+      kind: 'configured' | 'linked' | 'bound';
       projectKey: string;
       /** Only for `configured`: the server the file records, which may not be the active one. */
       serverUrl?: string;
     }
   /** `--dry-run`: the root would be mapped to the existing project; nothing was written. */
   | { path: string; kind: 'would-link'; projectKey: string }
-  /** `--dry-run`: the project would be created and mapped; nothing was created. */
-  | { path: string; kind: 'would-create'; projectKey: string }
   /** `--dry-run`: the project would be created bound to the repository and mapped; nothing was created. */
   | { path: string; kind: 'would-bind'; projectKey: string }
   /** The file links the root, but the remote cannot confirm the project; nothing was created. */
@@ -98,7 +96,6 @@ export type MonorepoRootResult =
 /** What a `--dry-run` found it would do on the selected path. */
 export type DryRunAction =
   | { type: 'link'; projectKey: string }
-  | { type: 'create'; projectKey: string; projectName: string; visibility: string }
   /** The project key is only known once the import creates it. */
   | {
       type: 'bind';
@@ -121,9 +118,7 @@ export type InitOutcome =
   | { kind: 'linked'; projectKey: string }
   /** A project bound to the repository was created and mapped. */
   | { kind: 'bound'; projectKey: string }
-  /** A project without repository binding was created and mapped. */
-  | { kind: 'unbound'; projectKey: string }
-  /** The user declined the creation: nothing was created. */
+  /** Nothing was linked or created: the user declined, or no project could be found or created. */
   | { kind: 'declined' }
   /** The account has no organization and the user declined to create one: nothing was created. */
   | { kind: 'no-organization' }
@@ -134,4 +129,4 @@ export type InitOutcome =
 
 export type LinkExistingPath = Extract<InitPath, { path: 'link-existing' }>;
 export type BoundNewPath = Extract<InitPath, { path: 'bound-new' }>;
-export type UnboundNewPath = Extract<InitPath, { path: 'unbound-new' }>;
+export type NoProjectPath = Extract<InitPath, { path: 'no-project' }>;

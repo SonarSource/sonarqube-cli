@@ -93,7 +93,6 @@ describe('InitTelemetryRecorder', () => {
     project.record('project_bind', 'skipped');
     project.record('create_project', 'success');
     project.setProjectKey('my-project');
-    project.record('first_analysis', 'skipped');
     recorder.record('integrate', 'declined');
 
     const { run, projects } = await emit(recorder);
@@ -111,12 +110,11 @@ describe('InitTelemetryRecorder', () => {
     expect(projects).toEqual([
       {
         init_path: 'unbound_new',
-        steps: ['project_bind:skipped', 'create_project:success', 'first_analysis:skipped'],
+        steps: ['project_bind:skipped', 'create_project:success'],
         stopped_at: null,
         failure_reason: null,
         project_index: 0,
         project_uuid: 'uuid-of-my-project',
-        first_analysis_duration_ms: null,
       },
     ]);
   });
@@ -245,17 +243,6 @@ describe('InitTelemetryRecorder', () => {
 
     expect(run.stopped_at).toBe('create_org');
     expect(run.failure_reason).toBe('no_org');
-  });
-
-  it('records the first analysis duration in whole milliseconds', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.record('first_analysis', 'success');
-    project.setFirstAnalysisDuration(1234.6);
-
-    const { projects } = await emit(recorder);
-
-    expect(projects[0].first_analysis_duration_ms).toBe(1235);
   });
 
   it('records detection once for a single-project run and follows its path changes', async () => {

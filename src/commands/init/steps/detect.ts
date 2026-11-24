@@ -52,10 +52,8 @@ export interface DetectDeps {
   interactive: boolean;
   /** `--dry-run`: every step stops before its first write and reports what it would do. */
   dryRun?: boolean;
-  /** The path the caller consented to with `--link`, `--bind` or `--create`. */
+  /** The path the caller consented to with `--link` or `--bind`. */
   intent?: InitIntent;
-  /** Creating a project without repository binding is Alpha: only offered when alpha is enabled. */
-  allowUnbound: boolean;
   /**
    * `--monorepo --link`: picks the existing project for a root named without a key, as
    * `sonar link --monorepo` does. Resolves to `null` when the root keeps its link.
@@ -142,9 +140,9 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
   }
   if (!remote) {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable('this directory has no git remote.', deps.allowUnbound);
+      throw bindingUnavailable('this directory has no git remote.');
     }
-    return { path: 'unbound-new', projectRoot };
+    return { path: 'no-project', projectRoot };
   }
 
   // Only the server binding proves the project exists; a key in local config may name none.
@@ -209,37 +207,29 @@ function otherOrganizationError(
   );
 }
 
-function bindingUnavailable(reason: string, allowUnbound: boolean): InvalidOptionError {
+function bindingUnavailable(reason: string): InvalidOptionError {
   return new InvalidOptionError(
     `--bind is unavailable: ${reason}`,
-    allowUnbound
-      ? "Run 'sonar init' again with --create, or with --link <key> to link an existing project."
-      : "Run 'sonar init' again with --link <key> to link an existing project.",
+    "Run 'sonar init' again with --link <key> to link an existing project.",
   );
 }
 
 async function chooseNewProjectPath(
   projectRoot: string,
   remote: string,
-  { auth, console, interactive, intent, allowUnbound, telemetry }: DetectDeps,
+  { auth, console, interactive, intent, telemetry }: DetectDeps,
 ): Promise<InitPath> {
   // The import needs the repository slug, so a remote without one is never offered for binding.
   const repositorySlug = remoteRepositorySlug(remote);
   if (repositorySlug === null) {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable(
-        'the git remote is not a GitHub or Azure DevOps repository.',
-        allowUnbound,
-      );
+      throw bindingUnavailable('the git remote is not a GitHub or Azure DevOps repository.');
     }
-    return { path: 'unbound-new', projectRoot, remote };
+    return { path: 'no-project', projectRoot, remote };
   }
   if (auth.connectionType !== 'cloud') {
     if (intent?.kind === 'bind') {
-      throw bindingUnavailable(
-        'creating a bound project is only available on SonarQube Cloud.',
-        allowUnbound,
-      );
+      throw bindingUnavailable('creating a bound project is only available on SonarQube Cloud.');
     }
     if (!intent) {
       console.info(
@@ -247,15 +237,15 @@ async function chooseNewProjectPath(
         'stderr',
       );
     }
-    return { path: 'unbound-new', projectRoot, remote };
+    return { path: 'no-project', projectRoot, remote };
   }
-  if (intent?.kind === 'bind') {
+  // Without a terminal, binding is the default: nobody is there to decline it.
+  if (intent?.kind === 'bind' || (!intent && !interactive)) {
     telemetry?.detected('bound_new').record('project_bind', 'success');
     return { path: 'bound-new', projectRoot, remote, repositorySlug };
   }
-  if (intent || !interactive) {
-    // Without an intent, the unbound step asks for one once it knows no project exists.
-    return { path: 'unbound-new', projectRoot, remote, repositorySlug };
+  if (intent) {
+    return { path: 'no-project', projectRoot, remote, repositorySlug };
   }
 
   const project = telemetry?.detected('bound_new');
@@ -266,5 +256,5 @@ async function chooseNewProjectPath(
   project?.record('project_bind', bind ? 'success' : 'declined');
   return bind
     ? { path: 'bound-new', projectRoot, remote, repositorySlug }
-    : { path: 'unbound-new', projectRoot, remote };
+    : { path: 'no-project', projectRoot, remote };
 }

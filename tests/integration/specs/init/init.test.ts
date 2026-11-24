@@ -25,7 +25,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
 
 import type { FakeSonarQubeServer, FakeSonarQubeServerBuilder } from '../../harness';
 import { TestHarness } from '../../harness';
@@ -38,14 +37,12 @@ const AZURE_REMOTE = 'https://dev.azure.com/example/project/_git/repository';
 const GITLAB_REMOTE = 'https://gitlab.com/example/repository.git';
 const TIMEOUT = { timeout: 30000 };
 const INTEGRATE_PROMPT = 'Set up your coding agents';
-const SCAN_PROMPT = 'Run the first analysis with sonar-scanner now';
 
 describe('sonar init', () => {
   let harness: TestHarness;
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
   });
 
   afterEach(async () => {
@@ -76,7 +73,7 @@ describe('sonar init', () => {
     git(['remote', 'add', 'origin', url], harness.cwd.path);
   }
 
-  const UNBOUND = 'Created project';
+  const NO_PROJECT = 'No Sonar project exists for this directory yet.';
 
   function withImportableRepo(alm: string, slug: string) {
     return (server: ReturnType<typeof newCloudServer>) =>
@@ -101,19 +98,6 @@ describe('sonar init', () => {
   async function chooseRepositoryRoot(session: ReturnType<typeof harness.runInteractive>) {
     await session.waitText('Choose the folder to link');
     session.keyEnter();
-  }
-
-  /** The prompts every created project goes through, up to confirming its creation. */
-  async function confirmNewProject(session: ReturnType<typeof harness.runInteractive>) {
-    await session.waitText('Project name');
-    session.keyEnter();
-    await session.waitText('Project visibility');
-    session.keyEnter();
-    await session.accept('Create this project');
-  }
-
-  async function createProject(session: ReturnType<typeof harness.runInteractive>) {
-    await confirmNewProject(session);
   }
 
   it(
@@ -175,7 +159,7 @@ describe('sonar init', () => {
       expect(result.stderr).toContain("or delete .sonar-config.json, then run 'sonar init' again");
       expect(result.stdout).not.toContain('Nothing left to set up');
       expect(result.stdout).not.toContain("linked to the Sonar project 'mapped'");
-      expect(result.stdout).not.toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Created project');
       expect(result.stdout).not.toContain('Project dashboard:');
     },
     TIMEOUT,
@@ -197,7 +181,7 @@ describe('sonar init', () => {
         "links 'mapped', which belongs to another organization or is not accessible with this token",
       );
       expect(result.stderr).not.toContain('no such project exists');
-      expect(result.stdout).not.toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Created project');
     },
     TIMEOUT,
   );
@@ -226,10 +210,10 @@ describe('sonar init', () => {
       initGitRepo(harness.cwd.path);
       writeSonarConfig('https://sq.example.com');
 
-      const result = await harness.run('init --create');
+      const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
     },
     TIMEOUT,
   );
@@ -243,10 +227,10 @@ describe('sonar init', () => {
       harness.cwd.writeFile('frontend/.keep', '');
       writeSonarConfig(serverUrl, 'backend');
 
-      const result = await harness.run('init --path frontend --create');
+      const result = await harness.run('init --path frontend');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
     },
     TIMEOUT,
   );
@@ -259,10 +243,10 @@ describe('sonar init', () => {
       harness.cwd.writeFile('backend/.keep', '');
       writeSonarConfig(serverUrl, 'backend');
 
-      const result = await harness.run('init --create');
+      const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
       expect(result.stdout).not.toContain('Nothing left to set up');
     },
     TIMEOUT,
@@ -292,7 +276,7 @@ describe('sonar init', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("'api-key'");
       expect(result.stdout).toContain("'web-key'");
-      expect(result.stdout).not.toContain(UNBOUND);
+      expect(result.stdout).not.toContain('Created project');
       expect(result.stderr).not.toContain(
         'Could not check whether this repository is already bound',
       );
@@ -331,10 +315,10 @@ describe('sonar init', () => {
         `sonar.projectKey=local-key\nsonar.organization=${ORG}\n`,
       );
 
-      const result = await harness.run('init --create');
+      const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
       expect(result.stdout).not.toContain('Nothing left to set up');
     },
     TIMEOUT,
@@ -343,14 +327,16 @@ describe('sonar init', () => {
   it(
     'continues with a note when the binding lookup cannot tell',
     async () => {
-      await signInToCloud((server) => server.withProjectBindingsStatus(500));
+      await signInToCloud((server) =>
+        withImportableRepo('github', 'example/repository')(server.withProjectBindingsStatus(500)),
+      );
       withRemote(GITHUB_REMOTE);
 
-      const result = await harness.run('init --create');
+      const result = await harness.run('init');
 
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain('Could not check whether this repository is already bound');
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.stdout).toContain('Created project');
     },
     TIMEOUT,
   );
@@ -358,18 +344,16 @@ describe('sonar init', () => {
   it(
     'resolves the repository remote from a subdirectory given with --path',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      await signInToCloud((server) =>
+        server.withProject('bound_project').withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+      );
       withRemote(GITHUB_REMOTE);
       harness.cwd.writeFile('packages/app/.keep', '');
 
       const result = await harness.run('init --path packages/app');
 
-      // Linking needs an answer, so the non-interactive run stops and asks for --link.
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
-      );
-      expect(result.stderr).toContain("Run 'sonar init' again with --link.");
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
     },
     TIMEOUT,
   );
@@ -377,12 +361,14 @@ describe('sonar init', () => {
   it(
     'finds the bound project for a remote that embeds credentials, without printing them',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      await signInToCloud((server) =>
+        server.withProject('bound_project').withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
+      );
       withRemote('https://user:secret-token@github.com/example/repository.git');
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(2);
+      expect(result.exitCode).toBe(0);
       expect(result.stdout + result.stderr).toContain('bound_project');
       expect(result.stdout + result.stderr).not.toContain('secret-token');
     },
@@ -399,72 +385,85 @@ describe('sonar init', () => {
         `sonar.projectKey=local_only\nsonar.organization=${ORG}\n`,
       );
 
-      const result = await harness.run('init --create');
+      const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
+      expect(result.stderr).not.toContain('local_only');
     },
     TIMEOUT,
   );
 
   it(
-    'asks for --link instead of creating a second project when it cannot ask',
+    'links the project bound to the repository when it cannot ask, creating no second one',
     async () => {
-      await signInToCloud((server) => server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'));
+      const server = await newCloudServer()
+        .withProject('bound_project')
+        .withGitRemoteBinding(GITHUB_REMOTE, 'bound_project')
+        .start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
-      );
-      expect(result.stderr).toContain("Run 'sonar init' again with --link.");
-      expect(result.stdout).not.toContain(UNBOUND);
-      expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
-    },
-    TIMEOUT,
-  );
-
-  it(
-    'selects the unbound path without a prompt when there is no git remote',
-    async () => {
-      await signInToCloud(() => {});
-
-      const result = await harness.run('init --create');
-
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
+      expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
+      expect(harness.cwd.file('.sonar-config.json').asText()).toContain('bound_project');
+      expect(
+        server.getRecordedRequests().some((r) => r.path.startsWith('/api/alm_integration/')),
+      ).toBe(false);
     },
     TIMEOUT,
   );
 
   it(
-    'selects the unbound path without a prompt when the remote is on another host',
-    async () => {
-      await signInToCloud(() => {});
-      withRemote(GITLAB_REMOTE);
-
-      const result = await harness.run('init --create');
-
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain(UNBOUND);
-    },
-    TIMEOUT,
-  );
-
-  it(
-    'lists the options that pick a path when no project exists and nothing can be asked',
+    'asks for an existing project without a git remote, creating nothing',
     async () => {
       const server = await newCloudServer().start();
+      harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain(NO_PROJECT);
+      expect(result.stderr).toContain("Run 'sonar init' again with --link <key>.");
+      expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(
+        false,
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'creates a bound project when no project exists and nothing can be asked',
+    async () => {
+      await signInToCloud(withImportableRepo('github', 'example/repository'));
+      withRemote(GITHUB_REMOTE);
+
+      const result = await harness.run('init --non-interactive');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Created project');
+      expect(harness.cwd.file('.sonar-config.json').asText()).toContain('"projectKey"');
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'fails with the authorization link when binding without a terminal needs the organization linked first',
+    async () => {
+      const server = await newCloudServer()
+        .withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }])
+        .start();
       harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
       withRemote(GITHUB_REMOTE);
 
       const result = await harness.run('init --non-interactive');
 
-      expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('No Sonar project exists for this directory yet.');
-      expect(result.stderr).toContain('one of --bind, --create, --link <key>');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Organization '${ORG}' is not linked to your DevOps platform`,
+      );
       expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(
         false,
       );
@@ -482,7 +481,7 @@ describe('sonar init', () => {
       const result = await harness.run('init --non-interactive');
 
       expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('one of --create, --link <key>');
+      expect(result.stderr).toContain("Run 'sonar init' again with --link <key>.");
       expect(result.stderr).not.toContain('--bind');
     },
     TIMEOUT,
@@ -620,7 +619,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -639,8 +637,10 @@ describe('sonar init', () => {
           email: 'fake-user@example.com',
         });
         expect(subscription.timestamp).toBeGreaterThanOrEqual(creation.timestamp);
-        const [project] = calls(server, 'POST', '/api/projects/create');
-        expect(new URLSearchParams(project.body).get('organization')).toBe(NEW_ORG);
+        const connection = harness.stateJsonFile.asJson().auth.connections[0] as { orgKey: string };
+        expect(connection.orgKey).toBe(NEW_ORG);
+        expect(result.stderr).toContain(NO_PROJECT);
+        expect(calls(server, 'POST', '/api/projects/create')).toHaveLength(0);
       },
       TIMEOUT,
     );
@@ -657,7 +657,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -680,7 +679,6 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init', { browserToken: TOKEN });
         await session.accept(CREATE_PROMPT);
         await nameTheOrganization(session);
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -748,7 +746,6 @@ describe('sonar init', () => {
         initGitRepo(harness.cwd.path);
 
         const session = harness.runInteractive('init', { browserToken: TOKEN });
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -862,7 +859,7 @@ describe('sonar init', () => {
     );
   });
 
-  describe('unbound project creation', () => {
+  describe('no project found', () => {
     async function startServer(
       configure: (s: ReturnType<typeof newCloudServer>) => void = () => {},
     ) {
@@ -877,45 +874,21 @@ describe('sonar init', () => {
       return server.getRecordedRequests().filter((r) => r.path === '/api/projects/create');
     }
 
-    it(
-      'creates a private project with the given key and name, and maps it without a token',
-      async () => {
-        const server = await startServer();
-        initGitRepo(harness.cwd.path);
+    it.each([
+      '--create',
+      '--project my-key',
+      '--name Foo',
+      '--visibility public',
+      '--scan',
+      '--scanner-property sonar.verbose=true',
+      '--verbose',
+      '--detach',
+    ])('rejects the removed option %s as unknown', async (option) => {
+      const result = await harness.run(`init --non-interactive ${option}`);
 
-        const result = await harness.run(
-          'init --non-interactive --create --project my-key --name "My Project"',
-        );
-
-        expect(result.exitCode).toBe(0);
-        const body = new URLSearchParams(created(server)[0].body);
-        expect(body.get('project')).toBe('my-key');
-        expect(body.get('name')).toBe('My Project');
-        expect(body.get('visibility')).toBe('private');
-        expect(body.get('organization')).toBe(ORG);
-        const config = harness.cwd.file('.sonar-config.json').asText();
-        expect(config).toContain('my-key');
-        expect(config).not.toContain(TOKEN);
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'creates a public project with --visibility public and a generated key',
-      async () => {
-        const server = await startServer();
-        withRemote(GITLAB_REMOTE);
-
-        const result = await harness.run('init --non-interactive --create --visibility public');
-
-        expect(result.exitCode).toBe(0);
-        const body = new URLSearchParams(created(server)[0].body);
-        expect(body.get('visibility')).toBe('public');
-        expect(body.get('project')).toMatch(/^my-org_repository-[0-9a-f]{12}$/);
-        expect(body.get('name')).toBe('repository');
-      },
-      TIMEOUT,
-    );
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain(`unknown option '${option.split(' ')[0]}'`);
+    });
 
     describe('when the generated key already exists', () => {
       async function startWithExistingProject() {
@@ -930,36 +903,17 @@ describe('sonar init', () => {
         return { projectKey, server };
       }
 
-      /** Declines linking the project, and linking another one, which leads to the key prompt. */
-      async function declineLinking(session: ReturnType<typeof harness.runInteractive>) {
-        await session.decline('Link this directory');
-        await session.decline('another existing project');
-      }
-
-      async function finishCreation(session: ReturnType<typeof harness.runInteractive>) {
-        await session.waitText('Project name');
-        session.keyEnter();
-        await session.waitText('Project visibility');
-        session.keyEnter();
-        await session.accept('Create this project');
-        await session.decline(INTEGRATE_PROMPT);
-        return session.waitFinish();
-      }
-
       it(
-        'asks for --link instead of mapping it when nothing can be asked',
+        'maps it without asking when nothing can be asked',
         async () => {
           const { projectKey, server } = await startWithExistingProject();
 
           const result = await harness.run('init --non-interactive');
 
-          expect(result.exitCode).toBe(2);
-          expect(result.stderr).toContain(
-            `A Sonar project already exists for this repository: '${projectKey}'`,
-          );
-          expect(result.stderr).toContain("Run 'sonar init' again with --link.");
+          expect(result.exitCode).toBe(0);
+          expect(result.stdout).toContain(`Linked this directory to project '${projectKey}'`);
           expect(created(server)).toHaveLength(0);
-          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
+          expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
         },
         TIMEOUT,
       );
@@ -980,27 +934,11 @@ describe('sonar init', () => {
       );
 
       it(
-        'refuses --create rather than adopting or duplicating it',
+        'maps it only when the user accepts',
         async () => {
           const { projectKey, server } = await startWithExistingProject();
 
-          const result = await harness.run('init --non-interactive --create');
-
-          expect(result.exitCode).toBe(2);
-          expect(result.stderr).toContain(`Project '${projectKey}', the key generated`);
-          expect(result.stderr).toContain('--project <key>');
-          expect(created(server)).toHaveLength(0);
-          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
-        },
-        TIMEOUT,
-      );
-
-      it(
-        'maps it only when the user accepts, without offering a first analysis',
-        async () => {
-          const { projectKey, server } = await startWithExistingProject();
-
-          const session = harness.runInteractive('init --name Foo --visibility public');
+          const session = harness.runInteractive('init');
           await session.accept('Link this directory');
           await chooseRepositoryRoot(session);
           await session.decline(INTEGRATE_PROMPT);
@@ -1008,10 +946,8 @@ describe('sonar init', () => {
 
           expect(result.exitCode).toBe(0);
           expect(result.stdout).toContain(`Linked this directory to project '${projectKey}'`);
-          expect(result.stdout).not.toContain(SCAN_PROMPT);
           expect(result.stdout).not.toContain('Created project');
           expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
-          expect(result.stderr).toContain('--name, --visibility ignored');
           expect(created(server)).toHaveLength(0);
           expect(harness.cwd.file('.sonar-config.json').asText()).toContain(projectKey);
         },
@@ -1019,116 +955,41 @@ describe('sonar init', () => {
       );
 
       it(
-        'creates a project under the key the user chooses when linking is declined',
+        'creates nothing when the user declines it and every other project',
         async () => {
-          const { projectKey, server } = await startWithExistingProject();
+          const { server } = await startWithExistingProject();
 
           const session = harness.runInteractive('init');
-          await declineLinking(session);
-          await session.waitText('Project key');
-          session.write(projectKey);
-          session.keyEnter();
-          await session.waitText(`default: ${projectKey}-3`);
-          session.write('my-chosen-key');
-          session.keyEnter();
-          const result = await finishCreation(session);
+          await session.decline('Link this directory');
+          await session.decline('another existing project');
+          await session.decline(INTEGRATE_PROMPT);
+          const result = await session.waitFinish();
 
           expect(result.exitCode).toBe(0);
-          expect(result.stdout).toContain('Project key: my-chosen-key');
-          expect(result.stderr).toContain(`Project '${projectKey}' already exists.`);
-          const [request] = created(server);
-          expect(new URLSearchParams(request.body).get('project')).toBe('my-chosen-key');
-          const config = harness.cwd.file('.sonar-config.json').asText();
-          expect(config).toContain('my-chosen-key');
-          expect(config).not.toContain(`"${projectKey}"`);
-        },
-        TIMEOUT,
-      );
-
-      it(
-        'suggests the generated key with a numeric suffix as the default',
-        async () => {
-          const { projectKey, server } = await startWithExistingProject();
-
-          const session = harness.runInteractive('init');
-          await declineLinking(session);
-          await session.waitText(`default: ${projectKey}-2`);
-          session.keyEnter();
-          const result = await finishCreation(session);
-
-          expect(result.exitCode).toBe(0);
-          const [request] = created(server);
-          expect(new URLSearchParams(request.body).get('project')).toBe(`${projectKey}-2`);
+          expect(result.stdout + result.stderr).not.toContain('Project key');
+          expect(created(server)).toHaveLength(0);
+          expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
         },
         TIMEOUT,
       );
     });
 
     it(
-      'refuses an explicit --project that is already taken',
-      async () => {
-        const server = await startServer((s) => s.withProject('taken'));
-        initGitRepo(harness.cwd.path);
-
-        const result = await harness.run('init --non-interactive --project taken');
-
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout + result.stderr).toContain("Project 'taken' already exists");
-        expect(created(server)).toHaveLength(0);
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'points to --project when the server rejects the key it cannot see (taken elsewhere)',
-      async () => {
-        await startServer((s) =>
-          s.withProjectCreateRejected(
-            JSON.stringify({
-              errors: [{ msg: "Could not create Project, key already exists: 'elsewhere'" }],
-            }),
-          ),
-        );
-        initGitRepo(harness.cwd.path);
-
-        const result = await harness.run('init --non-interactive --create --project elsewhere');
-
-        expect(result.exitCode).toBe(1);
-        const output = result.stdout + result.stderr;
-        expect(output).toContain("Could not create project 'elsewhere'");
-        expect(output).toContain('choose another key');
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'rejects an invalid --visibility before signing in',
-      async () => {
-        const result = await harness.run('init --non-interactive --visibility internal');
-
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--visibility must be private or public');
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'creates nothing and offers sonar integrate when the user declines',
+      'says no project can be created, and still offers sonar integrate',
       async () => {
         harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
         const server = await startServer();
         initGitRepo(harness.cwd.path);
 
         const session = harness.runInteractive('init');
-        await session.waitText('Project name');
-        session.keyEnter();
-        await session.waitText('Project visibility');
-        session.keyEnter();
-        await session.decline('Create this project');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(
+          `${NO_PROJECT} Creating a project without repository binding is not supported.`,
+        );
+        expect(result.stderr).toContain("Run 'sonar init --link <key>'");
         expect(created(server)).toHaveLength(0);
         expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
         expect(result.stdout).not.toContain("Next, run 'sonar integrate'");
@@ -1137,39 +998,19 @@ describe('sonar init', () => {
     );
 
     it(
-      'does not offer sonar integrate on a declined creation once anything is integrated',
+      'does not offer sonar integrate when nothing was created once anything is integrated',
       async () => {
         harness.withExtraEnv({ SONARQUBE_CLI_MOCK_TTY: 'true' });
         const server = await startServer();
         initGitRepo(harness.cwd.path);
         harness.state().withSqaaFeature(harness.cwd.path, 'integrated_project');
 
-        const session = harness.runInteractive('init');
-        await session.waitText('Project name');
-        session.keyEnter();
-        await session.waitText('Project visibility');
-        session.keyEnter();
-        await session.decline('Create this project');
-        const result = await session.waitFinish();
+        const result = await harness.runInteractive('init').waitFinish();
 
         expect(result.exitCode).toBe(0);
+        expect(result.stderr).toContain(NO_PROJECT);
         expect(created(server)).toHaveLength(0);
         expect(result.stdout).not.toContain("'sonar integrate'");
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'warns that the project flags are ignored when another path runs',
-      async () => {
-        const serverUrl = await signInToCloud(() => {});
-        initGitRepo(harness.cwd.path);
-        writeSonarConfig(serverUrl);
-
-        const result = await harness.run('init --non-interactive --name Foo --visibility public');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('--name, --visibility ignored');
       },
       TIMEOUT,
     );
@@ -1181,29 +1022,6 @@ describe('sonar init', () => {
     ) {
       return server.getRecordedRequests().filter((r) => r.path === '/api/projects/create');
     }
-
-    it(
-      'previews the project it would create without creating or saving anything',
-      async () => {
-        const server = await newCloudServer().start();
-        harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
-        initGitRepo(harness.cwd.path);
-
-        const result = await harness.run(
-          'init --non-interactive --create --project my-key --name "My Project" --dry-run',
-        );
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('DRY RUN: no changes will be made');
-        expect(result.stdout).toContain("Would create the project 'My Project' (key 'my-key'");
-        expect(result.stdout).toContain('Dry run: nothing was written');
-        expect(result.stdout).not.toContain('Project dashboard:');
-        expect(result.stderr).not.toContain('ignored');
-        expect(createRequests(server)).toHaveLength(0);
-        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
-      },
-      TIMEOUT,
-    );
 
     it(
       'previews binding the repository without importing it',
@@ -1219,16 +1037,16 @@ describe('sonar init', () => {
         harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
         withRemote(GITHUB_REMOTE);
 
-        const result = await harness.run(
-          'init --non-interactive --bind --project unused-key --dry-run',
-        );
+        const result = await harness.run('init --non-interactive --bind --dry-run');
 
         expect(result.exitCode).toBe(0);
-        // A bound project takes its key from the import, so the real run ignores --project too.
-        expect(result.stderr).toContain('--project ignored');
+        expect(result.stdout).toContain('DRY RUN: no changes will be made');
         expect(result.stdout).toContain(
           "Would create a project bound to the repository 'example/repository'",
         );
+        expect(result.stdout).toContain('Dry run: nothing was written');
+        expect(result.stdout).not.toContain('Project dashboard:');
+        expect(createRequests(server)).toHaveLength(0);
         expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
       },
       TIMEOUT,
@@ -1265,7 +1083,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --non-interactive --dry-run');
 
         expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('No Sonar project exists for this directory yet.');
+        expect(result.stderr).toContain(NO_PROJECT);
       },
       TIMEOUT,
     );
@@ -1280,130 +1098,6 @@ describe('sonar init', () => {
       },
       TIMEOUT,
     );
-
-    it(
-      'rejects the options that shape the first analysis',
-      async () => {
-        const result = await harness.run('init --non-interactive --dry-run --scan --detach');
-
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--scan, --detach cannot be combined with --dry-run');
-      },
-      TIMEOUT,
-    );
-  });
-
-  describe('first analysis flags', () => {
-    it(
-      'rejects --detach together with --verbose before signing in',
-      async () => {
-        const result = await harness.run('init --non-interactive --detach --verbose');
-
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--detach cannot be combined with --verbose');
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'rejects a managed scanner property without echoing its value',
-      async () => {
-        const result = await harness.run(
-          'init --non-interactive --scanner-property sonar.token=hunter2-secret',
-        );
-
-        expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain("'sonar.token' is managed by 'sonar init'");
-        expect(result.stderr).not.toContain('hunter2-secret');
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'creates the project but runs no analysis without a terminal or a scan flag',
-      async () => {
-        await signInToCloud(() => {});
-        initGitRepo(harness.cwd.path);
-
-        const result = await harness.run('init --non-interactive --create');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
-        expect(result.stdout).not.toContain('Analysis');
-        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
-        expect(result.stdout).not.toContain("'sonar integrate'");
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'does not advertise the first-analysis flags in the help',
-      async () => {
-        const result = await harness.run('init --help');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain('--dry-run');
-        for (const flag of ['--scan', '--scanner-property', '--verbose', '--detach']) {
-          expect(result.stdout).not.toContain(flag);
-        }
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'creates the project and warns that no SonarScanner is available when --scan is passed',
-      async () => {
-        await signInToCloud(() => {});
-        initGitRepo(harness.cwd.path);
-
-        const result = await harness.run('init --non-interactive --create --scan --detach');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
-        expect(
-          result.stderr.match(/SonarScanner is not available in this version of the CLI\./g),
-        ).toHaveLength(1);
-        expect(result.stderr).not.toContain('ignored');
-        expect(result.stdout).not.toContain('Analysis completed');
-        expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'warns that scan flags are ignored when the directory is already set up',
-      async () => {
-        const serverUrl = await signInToCloud(() => {});
-        initGitRepo(harness.cwd.path);
-        writeSonarConfig(serverUrl);
-
-        const result = await harness.run(
-          'init --non-interactive --detach --scanner-property sonar.exclusions=build/**',
-        );
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stderr).toContain('--scanner-property, --detach ignored');
-        expect(result.stderr).not.toContain('build/**');
-      },
-      TIMEOUT,
-    );
-  });
-
-  describe('sonar integrate offer', () => {
-    it(
-      'is skipped once anything is integrated',
-      async () => {
-        await signInToCloud(() => {});
-        harness.state().withSqaaFeature(harness.cwd.path, 'integrated_project');
-
-        const result = await harness.run('init --create');
-
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
-        expect(result.stdout).not.toContain("'sonar integrate'");
-      },
-      TIMEOUT,
-    );
   });
 
   describe('intent options', () => {
@@ -1414,10 +1108,10 @@ describe('sonar init', () => {
     it(
       'rejects two intent options together before signing in',
       async () => {
-        const result = await harness.run('init --non-interactive --link --create');
+        const result = await harness.run('init --non-interactive --link --bind');
 
         expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--link, --create cannot be combined');
+        expect(result.stderr).toContain('--link, --bind cannot be combined');
       },
       TIMEOUT,
     );
@@ -1451,20 +1145,18 @@ describe('sonar init', () => {
     );
 
     it(
-      'refuses --create and --bind for a repository that already has a project',
+      'refuses --bind for a repository that already has a project',
       async () => {
         await signInToCloud((server) =>
           server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project'),
         );
         withRemote(GITHUB_REMOTE);
 
-        for (const option of ['--create', '--bind']) {
-          const result = await harness.run(`init --non-interactive ${option}`);
+        const result = await harness.run('init --non-interactive --bind');
 
-          expect(result.exitCode).toBe(2);
-          expect(result.stderr).toContain(`${option} would create a second project for it`);
-          expect(result.stderr).toContain("Run 'sonar init' again with --link to link it.");
-        }
+        expect(result.exitCode).toBe(2);
+        expect(result.stderr).toContain('--bind would create a second project for it');
+        expect(result.stderr).toContain("Run 'sonar init' again with --link to link it.");
         expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
       },
       TIMEOUT,
@@ -1517,7 +1209,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'says why --bind is unavailable instead of creating an unbound project',
+      'says why --bind is unavailable, creating nothing',
       async () => {
         const server = await newCloudServer().start();
         harness.withAuth(server.recordedAuthServerUrl(), TOKEN, ORG);
@@ -1529,7 +1221,8 @@ describe('sonar init', () => {
         expect(result.stderr).toContain(
           '--bind is unavailable: the git remote is not a GitHub or Azure DevOps repository.',
         );
-        expect(result.stderr).toContain('--create');
+        expect(result.stderr).toContain("Run 'sonar init' again with --link <key>");
+        expect(result.stderr).not.toContain('--create');
         expect(projectsCreated(server)).toHaveLength(0);
       },
       TIMEOUT,
@@ -1696,13 +1389,13 @@ describe('sonar init', () => {
     );
 
     it(
-      'prints the project dashboard once, before the integrate prompt, without offering an analysis',
+      'prints the project dashboard once, before the integrate prompt',
       async () => {
-        await signInToCloud(() => {});
-        initGitRepo(harness.cwd.path);
+        await signInToCloud(withImportableRepo('github', 'example/repository'));
+        withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await createProject(session);
+        await session.accept('Bind this repository');
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
@@ -1710,7 +1403,6 @@ describe('sonar init', () => {
         expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
         const dashboardAt = result.stdout.indexOf('Project dashboard:');
         const integratePromptAt = result.stdout.indexOf(INTEGRATE_PROMPT);
-        expect(result.stdout).not.toContain(SCAN_PROMPT);
         expect(dashboardAt).toBeGreaterThan(-1);
         expect(integratePromptAt).toBeGreaterThan(dashboardAt);
       },
@@ -1725,12 +1417,11 @@ describe('sonar init', () => {
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stderr).toContain(NO_PROJECT);
         expect(result.stdout).not.toContain('Bind this repository');
         expect(result.stderr).toContain('only available on SonarQube Cloud');
       },
@@ -1793,12 +1484,11 @@ describe('sonar init', () => {
         withRemote('https://github.com/example');
 
         const session = harness.runInteractive('init');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stderr).toContain(NO_PROJECT);
         expect(result.stdout).not.toContain('Bind this repository');
       },
       TIMEOUT,
@@ -1864,7 +1554,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'continues unbound when the user declines to authorize the organization',
+      'creates nothing when the user declines to authorize the organization',
       async () => {
         await signInToCloud((server) =>
           server.withOrganizations([{ key: ORG, name: ORG, actions: { admin: true } }]),
@@ -1874,31 +1564,31 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.accept('Bind this repository');
         await session.decline('Authorize it in the browser');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
-        expect(harness.cwd.exists('.sonar-config.json')).toBe(true);
+        expect(result.stderr).toContain(NO_PROJECT);
+        expect(result.stdout).not.toContain('Created project');
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
       },
       TIMEOUT,
     );
 
     it(
-      'selects the unbound path when the user declines to bind the repository',
+      'creates nothing when the user declines to bind the repository',
       async () => {
         await signInToCloud(() => {});
         withRemote(GITHUB_REMOTE);
 
         const session = harness.runInteractive('init');
         await session.decline('Bind this repository');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stderr).toContain(NO_PROJECT);
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
       },
       TIMEOUT,
     );
@@ -1923,7 +1613,7 @@ describe('sonar init', () => {
         expect(result.stdout).toContain("Linked this directory to project 'bound_project'");
         expect(result.stdout).toContain('Quality gate: passed');
         expectDashboardBefore(result.stdout, 'bound_project', INTEGRATE_PROMPT);
-        expect(result.stdout).not.toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Created project');
         const config = harness.cwd.file('.sonar-config.json').asText();
         expect(config).toContain('"projectKey": "bound_project"');
         expect(config).not.toContain(TOKEN);
@@ -2028,7 +1718,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'continues unbound and creates a project when the user declines every link',
+      'creates nothing when the user declines every link',
       async () => {
         await signInToCloud((server) =>
           server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
@@ -2038,20 +1728,19 @@ describe('sonar init', () => {
         const session = harness.runInteractive('init');
         await session.decline('Link this directory');
         await session.decline('another existing project');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).not.toContain('Choose a project');
-        expect(result.stdout).toContain(UNBOUND);
-        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(true);
+        expect(result.stdout).not.toContain('Created project');
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
       },
       TIMEOUT,
     );
 
     it(
-      'asks to abandon linking when the user leaves the project picker, then continues unbound',
+      'asks to abandon linking when the user leaves the project picker, then creates nothing',
       async () => {
         await signInToCloud((server) =>
           server.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('other_project'),
@@ -2065,14 +1754,13 @@ describe('sonar init', () => {
         session.keyCtrlC();
         await session.waitText('Abandon linking a project');
         session.write('y');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).not.toContain('Project selection cancelled');
-        expect(result.stdout).toContain(UNBOUND);
-        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(true);
+        expect(result.stdout).not.toContain('Created project');
+        expect(harness.cwd.file('.sonar-config.json').exists()).toBe(false);
       },
       TIMEOUT,
     );
@@ -2125,7 +1813,7 @@ describe('sonar init', () => {
         expect(output).toContain('sonar link bound_project');
         expect(output).toContain('Add --monorepo to keep the other links in .sonar-config.json.');
         expect(output).not.toContain('Create this project');
-        expect(output).not.toContain(UNBOUND);
+        expect(output).not.toContain('Created project');
       },
       TIMEOUT,
     );
@@ -2257,7 +1945,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'warns about a missing linked root before it asks anything about the roots it creates',
+      'warns about a missing linked root before it onboards the others',
       async () => {
         const serverUrl = await signInToCloud(() => {});
         writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
@@ -2266,16 +1954,12 @@ describe('sonar init', () => {
         const session = harness.runInteractive(
           'init --monorepo --root api=api-key --root web=web-key',
         );
-        await session.waitText('Project name');
-        const beforeFirstPrompt = session.output();
-        session.keyEnter();
-        await session.waitText('Project visibility');
-        session.keyEnter();
-        await session.accept('Create this project');
+        await session.waitText('Onboarding web');
+        const beforeOnboarding = session.output();
         await session.decline(INTEGRATE_PROMPT);
         await session.waitFinish();
 
-        expect(beforeFirstPrompt).toContain("links 'api-key' (api), but no such project exists");
+        expect(beforeOnboarding).toContain("links 'api-key' (api), but no such project exists");
       },
       TIMEOUT,
     );
@@ -2315,7 +1999,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'leaves an already configured root alone and runs no scan',
+      'leaves an already configured root alone',
       async () => {
         const serverUrl = await signInToCloud((server) => server.withProject('api-key'));
         writeMonorepoConfig(serverUrl, [{ path: 'api', key: 'api-key' }]);
@@ -2329,7 +2013,6 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toContain('Already configured (1):');
         expect(result.stdout).toContain('api: api-key');
-        expect(result.stdout).not.toContain(SCAN_PROMPT);
         expect(harness.cwd.file('.sonar-config.json').asText()).toBe(before);
       },
       TIMEOUT,
@@ -2526,11 +2209,11 @@ describe('sonar init', () => {
         harness.cwd.writeFile('.sonar-config.json', JSON.stringify({ projects: [] }));
 
         const session = harness.runInteractive('init');
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.stdout).not.toContain('No project root is mapped');
+        expect(result.stderr).toContain(NO_PROJECT);
       },
       TIMEOUT,
     );
@@ -2565,7 +2248,7 @@ describe('sonar init', () => {
       }
 
       it(
-        'maps an existing project and creates a missing one without a config file or a prompt',
+        'maps an existing project and fails a missing one it cannot bind, without a prompt',
         async () => {
           const server = await startServer((s) => s.withProject('api-key'));
           makeRepository('api', 'web');
@@ -2574,13 +2257,11 @@ describe('sonar init', () => {
             'init --monorepo --non-interactive --root api=api-key --root web=web-key',
           );
 
-          expect(result.exitCode).toBe(0);
-          expect(createdKeys(server)).toEqual(['web-key']);
-          expect(
-            readConfig()
-              .projects.map(({ projectKey, path }) => `${path}=${projectKey}`)
-              .sort(),
-          ).toEqual(['api=api-key', 'web=web-key']);
+          expect(result.stdout + result.stderr).toContain(
+            'web: No project was linked or created: creating one without repository binding is not supported.',
+          );
+          expect(createdKeys(server)).toEqual([]);
+          expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
         },
         TIMEOUT,
       );
@@ -2618,22 +2299,6 @@ describe('sonar init', () => {
       );
 
       it(
-        'with --create behaves like the default: it creates the missing project without a prompt',
-        async () => {
-          const server = await startServer((s) => s.withProject('api-key'));
-          makeRepository('api', 'web');
-
-          const result = await harness.run(
-            'init --monorepo --create --non-interactive --root api=api-key --root web=web-key',
-          );
-
-          expect(result.exitCode).toBe(0);
-          expect(createdKeys(server)).toEqual(['web-key']);
-        },
-        TIMEOUT,
-      );
-
-      it(
         'previews the roots as a preview, creating and mapping nothing',
         async () => {
           const server = await startServer((s) => s.withProject('api-key'));
@@ -2647,7 +2312,7 @@ describe('sonar init', () => {
           expect(result.stdout).toContain('Previewing web');
           expect(result.stdout).not.toContain('Onboarding web');
           expect(result.stdout).toContain('Monorepo onboarding preview:');
-          expect(result.stdout).toContain('Would be created (1):');
+          expect(result.stdout).toContain('Would fail (1):');
           expect(result.stdout).toContain('Would be mapped to the existing project (1):');
           expect(result.stdout).not.toContain('To resume');
           expect(createdKeys(server)).toEqual([]);
@@ -2687,15 +2352,16 @@ describe('sonar init', () => {
           const output = result.stdout + result.stderr;
           expect(output).toContain("api is already mapped to 'other-key'");
           expect(output).toContain("Remap it with 'sonar link --monorepo api-key --path api'.");
-          expect(output).not.toContain('Failed');
           expect(output).toContain('Skipped (1):');
           expect(output).toContain("api: api-key (already mapped to 'other-key')");
-          expect(output).not.toContain('To resume');
+          // web has no project and cannot be bound, so it is the only failure.
+          expect(output).toContain('Failed (1):');
+          expect(output).toContain('web: No project was linked or created');
           expect(readConfig().projects.find(({ path }) => path === 'api')?.projectKey).toBe(
             'other-key',
           );
           expect(readConfig().projects.some(({ projectKey }) => projectKey === 'web-key')).toBe(
-            true,
+            false,
           );
         },
         TIMEOUT,
@@ -2762,6 +2428,24 @@ describe('sonar init', () => {
 
             const result = await harness.run(
               'init --monorepo --non-interactive --bind --root web=web-key --root docs=docs-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(batches(server)).toHaveLength(1);
+            expect(createdKeys(server)).toEqual([]);
+            expect(result.stdout).toContain('Created and bound to the repository (2):');
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'binds every new root without a terminal even without --bind',
+          async () => {
+            const server = await startServer((s) => bindable(s));
+            makeBindableRepository('web', 'docs');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --root web=web-key --root docs=docs-key',
             );
 
             expect(result.exitCode).toBe(0);
@@ -2859,70 +2543,25 @@ describe('sonar init', () => {
         );
 
         it(
-          'falls back to an unbound project when the user declines binding',
+          'fails the new root, creating nothing, when the user declines binding',
           async () => {
             const server = await startServer((s) => bindable(s));
             makeBindableRepository('web');
 
             const session = harness.runInteractive('init --monorepo --root web=web-key');
             await session.decline('Bind the 1 new project');
-            await confirmNewProject(session);
             await session.decline(INTEGRATE_PROMPT);
             const result = await session.waitFinish();
 
-            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('web: No project was linked or created');
             expect(batches(server)).toHaveLength(0);
-            expect(createdKeys(server)).toEqual(['web-key']);
+            expect(createdKeys(server)).toEqual([]);
           },
           TIMEOUT,
         );
 
         it(
-          'never offers to bind when --create asks for projects without binding',
-          async () => {
-            const server = await startServer((s) => bindable(s));
-            makeBindableRepository('web');
-
-            const session = harness.runInteractive('init --monorepo --create --root web=web-key');
-            // --create is the consent to create, so there is no "Create this project" confirmation.
-            await session.waitText('Project name');
-            session.keyEnter();
-            await session.waitText('Project visibility');
-            session.keyEnter();
-            await session.decline(INTEGRATE_PROMPT);
-            const result = await session.waitFinish();
-
-            expect(result.exitCode).toBe(0);
-            expect(result.stdout + result.stderr).not.toContain('Bind the');
-            expect(batches(server)).toHaveLength(0);
-            expect(createdKeys(server)).toEqual(['web-key']);
-          },
-          TIMEOUT,
-        );
-
-        it(
-          'creates a generated-key project without asking when --create is given',
-          async () => {
-            const server = await startServer((s) => bindable(s));
-            makeBindableRepository('web');
-
-            const session = harness.runInteractive('init --monorepo --create --root web');
-            await session.waitText('Project name');
-            session.keyEnter();
-            await session.waitText('Project visibility');
-            session.keyEnter();
-            await session.decline(INTEGRATE_PROMPT);
-            const result = await session.waitFinish();
-
-            expect(result.exitCode).toBe(0);
-            expect(result.stdout + result.stderr).not.toContain('Create this project');
-            expect(createdKeys(server)).toEqual([generatedKey('web', GITHUB_REMOTE)]);
-          },
-          TIMEOUT,
-        );
-
-        it(
-          'fails a root whose taken generated key is not linked under --bind instead of creating an unbound project',
+          'fails a root whose taken generated key is not linked under --bind, creating nothing',
           async () => {
             makeBindableRepository('web');
             // The key depends on the remote, so the repository must exist before it is generated.
@@ -2936,7 +2575,7 @@ describe('sonar init', () => {
             const result = await session.waitFinish();
 
             expect(result.exitCode).not.toBe(0);
-            expect(result.stdout + result.stderr).toContain('--bind never creates an unbound');
+            expect(result.stdout + result.stderr).toContain('already exists and was not linked');
             expect(createdKeys(server)).toEqual([]);
             expect(batches(server)).toHaveLength(0);
           },
@@ -2963,36 +2602,17 @@ describe('sonar init', () => {
       });
 
       it(
-        'names a created root from the git remote, as it does when generating its key',
-        async () => {
-          const server = await startServer(() => {});
-          withRemote(GITLAB_REMOTE);
-
-          const result = await harness.run('init --monorepo --non-interactive --root .=web-key');
-
-          expect(result.exitCode).toBe(0);
-          const [request] = server
-            .getRecordedRequests()
-            .filter(({ path }) => path === '/api/projects/create');
-          expect(new URLSearchParams(request.body).get('name')).toBe('repository');
-        },
-        TIMEOUT,
-      );
-
-      it(
-        'generates, prints and records the key of a root named without one',
+        'generates and prints the key of a root named without one',
         async () => {
           const server = await startServer(() => {});
           makeRepository('web');
-          const command = 'init --monorepo --non-interactive --root web';
 
-          const first = await harness.run(command);
+          const result = await harness.run('init --monorepo --non-interactive --root web');
 
-          expect(first.exitCode).toBe(0);
-          const [key] = createdKeys(server);
+          const key = generatedKey('web');
           expect(key).toMatch(/^my-org_web-[0-9a-f]{12}$/);
-          expect(first.stdout).toContain(`Generated project key for web: ${key}`);
-          expect(linkedRoots()).toMatchObject([{ path: 'web', projectKey: key }]);
+          expect(result.stdout).toContain(`Generated project key for web: ${key}`);
+          expect(createdKeys(server)).toEqual([]);
         },
         TIMEOUT,
       );
@@ -3016,7 +2636,7 @@ describe('sonar init', () => {
         );
 
         it(
-          'creates another project when the user declines the existing one',
+          'fails the root, creating nothing, when the user declines the existing one',
           async () => {
             const server = await startServer((s) => s.withProject(generatedKey('web')));
             makeRepository('web');
@@ -3024,23 +2644,18 @@ describe('sonar init', () => {
             const session = harness.runInteractive('init --monorepo --root web');
             await session.decline('Link this directory to it?');
             await session.decline('another existing project');
-            await session.waitText('Project key');
-            session.keyEnter();
-            await confirmNewProject(session);
             await session.decline(INTEGRATE_PROMPT);
             const result = await session.waitFinish();
 
-            expect(result.exitCode).toBe(0);
-            expect(createdKeys(server)).toEqual([`${generatedKey('web')}-2`]);
-            expect(linkedRoots()).toMatchObject([
-              { path: 'web', projectKey: `${generatedKey('web')}-2` },
-            ]);
+            expect(result.stdout).toContain('web: No project was linked or created');
+            expect(createdKeys(server)).toEqual([]);
+            expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
           },
           TIMEOUT,
         );
 
         it(
-          'fails that root without a terminal, and still maps a root named with its key',
+          'maps it without a terminal, along with a root named with its key',
           async () => {
             const server = await startServer((s) =>
               s.withProject(generatedKey('web')).withProject('api-key'),
@@ -3049,6 +2664,29 @@ describe('sonar init', () => {
 
             const result = await harness.run(
               'init --monorepo --non-interactive --root web --root api=api-key',
+            );
+
+            expect(result.exitCode).toBe(0);
+            expect(createdKeys(server)).toEqual([]);
+            const roots = linkedRoots() as { path: string; projectKey: string }[];
+            expect(roots.map(({ path, projectKey }) => `${path}=${projectKey}`).sort()).toEqual([
+              'api=api-key',
+              `web=${generatedKey('web')}`,
+            ]);
+          },
+          TIMEOUT,
+        );
+
+        it(
+          'fails that root with --bind without a terminal, and still maps a root named with its key',
+          async () => {
+            const server = await startServer((s) =>
+              s.withProject(generatedKey('web')).withProject('api-key'),
+            );
+            makeRepository('api', 'web');
+
+            const result = await harness.run(
+              'init --monorepo --non-interactive --bind --root web --root api=api-key',
             );
 
             expect(result.stdout + result.stderr).toContain('--root web=<project key>');
@@ -3187,7 +2825,7 @@ describe('sonar init', () => {
     );
 
     it(
-      'continues as a new project when the tree is cancelled after agreeing to link',
+      'creates nothing when the tree is cancelled after agreeing to link',
       async () => {
         await signInToCloud((cloud) =>
           cloud.withGitRemoteBinding(GITHUB_REMOTE, 'bound_project').withProject('bound_project'),
@@ -3198,13 +2836,13 @@ describe('sonar init', () => {
         await session.accept('Link this directory');
         await openTree(session);
         session.keyCtrlC();
-        await createProject(session);
         await session.decline(INTEGRATE_PROMPT);
         const result = await session.waitFinish();
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).not.toContain('Folder selection cancelled');
-        expect(result.stdout).toContain(UNBOUND);
+        expect(result.stdout).not.toContain('Created project');
+        expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
       },
       TIMEOUT,
     );
@@ -3286,11 +2924,7 @@ describe('sonar init', () => {
     );
   });
 
-  describe('without alpha, creating an unbound project is unavailable', () => {
-    beforeEach(() => {
-      harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'false' });
-    });
-
+  describe('creating a project without repository binding is not supported', () => {
     function createRequests(server: FakeSonarQubeServer) {
       return server.getRecordedRequests().filter((r) => r.path === '/api/projects/create');
     }
@@ -3302,26 +2936,25 @@ describe('sonar init', () => {
     }
 
     it(
-      'leaves the creation options out of the help',
+      'leaves the creation and first-analysis options out of the help',
       async () => {
         const result = await harness.run('init --help');
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout).toMatch(/link an existing\s+Sonar project/);
-        for (const option of ['--create', '--project', '--name', '--visibility']) {
+        expect(result.stdout).toContain('--dry-run');
+        for (const option of [
+          '--create',
+          '--project',
+          '--name',
+          '--visibility',
+          '--scan',
+          '--scanner-property',
+          '--verbose',
+          '--detach',
+        ]) {
           expect(result.stdout).not.toContain(option);
         }
-      },
-      TIMEOUT,
-    );
-
-    it(
-      'rejects --create as an unknown option',
-      async () => {
-        const result = await harness.run('init --non-interactive --create');
-
-        expect(result.exitCode).not.toBe(0);
-        expect(result.stdout + result.stderr).toContain("unknown option '--create'");
       },
       TIMEOUT,
     );
@@ -3358,7 +2991,7 @@ describe('sonar init', () => {
 
         expect(result.exitCode).toBe(0);
         expect(result.stdout + result.stderr).toContain(
-          'Creating a project without repository binding is not available yet.',
+          'Creating a project without repository binding is not supported.',
         );
         expect(result.stdout).toContain('No project was created.');
         expect(result.stdout + result.stderr).not.toContain('Project name');
@@ -3402,7 +3035,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --monorepo --non-interactive --root web=web-key');
 
         expect(result.stdout + result.stderr).toContain(
-          'creating one without repository binding is not available yet',
+          'creating one without repository binding is not supported',
         );
         expect(createRequests(server)).toEqual([]);
       },

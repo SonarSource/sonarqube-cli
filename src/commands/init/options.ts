@@ -23,23 +23,10 @@ import { isAbsolute, posix } from 'node:path';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
 import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { isValidProjectKey } from '@/core/project-key.ts';
-import type { ProjectVisibility } from '@/core/server/projects.ts';
 import type { Console } from '@/core/ui/console.ts';
-
-import { parseScannerProperties } from './scan/scanner-property.ts';
-import type { ScanOptions } from './steps/scan.ts';
 
 const MAX_NAME_LENGTH = 255;
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
-/** Make the scanner print its properties, which a detached run's unredacted log would keep. */
-const DETACH_FORBIDDEN_PROPERTIES = ['sonar.verbose', 'sonar.log.level'];
-
-/** The `sonar init` options that only apply when a project is created without repository binding. */
-export interface UnboundNewOptions {
-  projectKey?: string;
-  name?: string;
-  visibility?: ProjectVisibility;
-}
 
 export function validateProjectKey(key: string, label = '--project'): string {
   const trimmed = key.trim();
@@ -61,53 +48,24 @@ export function validateProjectName(name: string, label = '--name'): string {
   return trimmed;
 }
 
-export function validateVisibility(visibility: string): ProjectVisibility {
-  if (visibility === 'private' || visibility === 'public') {
-    return visibility;
-  }
-  throw new InvalidOptionError('--visibility must be private or public.');
-}
-
-export function validateUnboundNewOptions(rawOptions: {
-  project?: string;
-  name?: string;
-  visibility?: string;
-}): UnboundNewOptions {
-  return {
-    projectKey:
-      rawOptions.project === undefined ? undefined : validateProjectKey(rawOptions.project),
-    name: rawOptions.name === undefined ? undefined : validateProjectName(rawOptions.name),
-    visibility:
-      rawOptions.visibility === undefined ? undefined : validateVisibility(rawOptions.visibility),
-  };
-}
-
 /**
- * The onboarding path the caller consented to up front. It answers the matching prompts, and is
- * the only consent a non-interactive run has: without it, nothing is linked, bound or created.
+ * The onboarding path the caller consented to up front. It answers the matching prompts. Without
+ * it, a non-interactive run links the project found for the directory, or else binds a new one.
  */
 export type InitIntent =
   /** Link an existing project: the one found for the directory, or `projectKey`. */
   | { kind: 'link'; projectKey?: string }
   /** Create a project bound to the repository. */
-  | { kind: 'bind' }
-  /** Create a project without repository binding. */
-  | { kind: 'create' };
+  | { kind: 'bind' };
 
 export function validateIntentOptions(rawOptions: {
   link?: string | boolean;
   bind?: boolean;
-  create?: boolean;
   monorepo?: boolean;
 }): InitIntent | undefined {
-  const given = [
-    rawOptions.link === undefined ? null : '--link',
-    rawOptions.bind ? '--bind' : null,
-    rawOptions.create ? '--create' : null,
-  ].filter((option) => option !== null);
-  if (given.length > 1) {
+  if (rawOptions.link !== undefined && rawOptions.bind) {
     throw new InvalidOptionError(
-      `${given.join(', ')} cannot be combined: each picks a different onboarding path.`,
+      '--link, --bind cannot be combined: each picks a different onboarding path.',
     );
   }
   if (rawOptions.monorepo && typeof rawOptions.link === 'string') {
@@ -115,9 +73,6 @@ export function validateIntentOptions(rawOptions: {
   }
   if (rawOptions.bind) {
     return { kind: 'bind' };
-  }
-  if (rawOptions.create) {
-    return { kind: 'create' };
   }
   if (rawOptions.link === undefined) {
     return undefined;
@@ -147,19 +102,6 @@ export function warnIgnoredIntent(intent: InitIntent | undefined, console: Conso
   console.warn(
     `--${intent.kind} ignored: this directory is already linked in ${SHARED_PROJECT_CONFIG_FILE_NAME}.${relink}`,
   );
-}
-
-export function warnIgnoredUnboundNewOptions(options: UnboundNewOptions, console: Console): void {
-  const ignored = [
-    options.projectKey === undefined ? null : '--project',
-    options.name === undefined ? null : '--name',
-    options.visibility === undefined ? null : '--visibility',
-  ].filter((option) => option !== null);
-  if (ignored.length > 0) {
-    console.warn(
-      `${ignored.join(', ')} ignored: only applicable when a new project is created without repository binding.`,
-    );
-  }
 }
 
 /** A project root named on the command line: a directory of the repository, and its project's key unless left to be generated. */
@@ -207,58 +149,4 @@ export function parseMonorepoRoots(raw: readonly string[] | undefined): Monorepo
     }
   }
   return roots;
-}
-
-export function validateScanOptions(options: {
-  scan?: boolean;
-  scannerProperty?: string[];
-  verbose?: boolean;
-  detach?: boolean;
-}): ScanOptions {
-  if (options.detach && options.verbose) {
-    throw new InvalidOptionError(
-      '--detach cannot be combined with --verbose: a background scanner writes to its log file only.',
-    );
-  }
-  const scannerProperties = parseScannerProperties(options.scannerProperty);
-  const verboseProperty = DETACH_FORBIDDEN_PROPERTIES.find((key) => scannerProperties.has(key));
-  if (options.detach && verboseProperty) {
-    throw new InvalidOptionError(
-      `--detach cannot be combined with --scanner-property ${verboseProperty}: a background scanner's log is not redacted.`,
-    );
-  }
-  return {
-    scannerProperties,
-    verbose: options.verbose === true,
-    detach: options.detach === true,
-    scan: options.scan === true,
-  };
-}
-
-/** A dry run never starts the first analysis, so the options that shape it can only be a mistake. */
-export function assertDryRunOptions(flags: ScanOptions): void {
-  const conflicting = [
-    flags.scan ? '--scan' : null,
-    flags.detach ? '--detach' : null,
-    flags.verbose ? '--verbose' : null,
-    flags.scannerProperties.size === 0 ? null : '--scanner-property',
-  ].filter((flag) => flag !== null);
-  if (conflicting.length > 0) {
-    throw new InvalidOptionError(
-      `${conflicting.join(', ')} cannot be combined with --dry-run: a dry run starts no analysis.`,
-    );
-  }
-}
-
-/** Warns when scan-only flags were given but no scan ran. Never names a property value. */
-export function warnIgnoredScanOptions(flags: ScanOptions, console: Console): void {
-  const ignored = [
-    flags.scannerProperties.size === 0 ? null : '--scanner-property',
-    flags.detach ? '--detach' : null,
-    flags.verbose ? '--verbose' : null,
-    flags.scan ? '--scan' : null,
-  ].filter((flag) => flag !== null);
-  if (ignored.length > 0) {
-    console.warn(`${ignored.join(', ')} ignored: only applicable when the first analysis runs.`);
-  }
 }
