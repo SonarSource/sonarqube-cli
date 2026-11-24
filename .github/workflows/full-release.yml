@@ -153,3 +153,27 @@ jobs:
             echo "No draft release '$DRAFT_VERSION' to delete (isDraft=$IS_DRAFT)."
           fi
           echo "Done."
+
+  publish-chocolatey:
+    name: Publish Chocolatey package
+    needs: release
+    runs-on: warp-custom-windows-2022-s
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Vault Secrets
+        id: secrets
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
+        with:
+          secrets: |
+            development/kv/data/chocolatey api-key | CHOCO_API_KEY;
+
+      - name: Pack, smoke-test, and push
+        shell: powershell
+        env:
+          RELEASED_VERSION: ${{ needs.release.outputs.released-version }}
+          CHOCO_API_KEY: ${{ fromJSON(steps.secrets.outputs.vault).CHOCO_API_KEY }}
+        run: .\chocolatey-package\publish.ps1 -Version $env:RELEASED_VERSION -ApiKey $env:CHOCO_API_KEY
