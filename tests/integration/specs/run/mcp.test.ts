@@ -29,7 +29,7 @@ import { SONARQUBE_MCP_DOCKER_IMAGE_NAME } from '@/core/config-constants.ts';
 
 import { IS_WINDOWS, TestHarness } from '../../harness';
 import { spawnCliProcess } from '../../harness/cli-runner.ts';
-import { HostedMcpFixture, TOKEN } from './fixtures/hosted-mcp.ts';
+import { HostedMcpFixture, INITIALIZE, line, messages, TOKEN } from './fixtures/hosted-mcp.ts';
 
 const EXECUTABLE_MODE = 0o755;
 const PATH_SEP = IS_WINDOWS ? ';' : ':';
@@ -598,6 +598,32 @@ describe('run mcp transport selection', () => {
   afterEach(async () => {
     await harness.dispose();
     await fixture.server.stop(true);
+  });
+
+  it('forces the container without checking hosted health', async () => {
+    const result = await harness.run('run mcp --transport stdio');
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe('fallback-container\n');
+    expect(fixture.healthRequests).toBe(0);
+    expect(fixture.requests).toHaveLength(0);
+    expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
+  });
+
+  it('fails without a container when forced HTTP is unavailable', async () => {
+    fixture.healthStatus = 404;
+    const result = await harness.runWithStdin('run mcp --transport http', line(INITIALIZE));
+    expect(result.exitCode).toBe(1);
+    expect(messages(result.stdout)[0]?.error?.message).toContain('returned HTTP 404');
+    expect(result.stdout).toContain('Hosted MCP unavailable');
+    expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
+  });
+
+  it('rejects an invalid transport before starting MCP', async () => {
+    const result = await harness.run('run mcp --transport invalid');
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('Allowed choices are stdio, http, auto');
+    expect(fixture.healthRequests).toBe(0);
+    expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
   });
 
   it.each([404, 503])('falls back on health HTTP %s', async (status) => {
