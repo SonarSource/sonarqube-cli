@@ -5,6 +5,28 @@ import headersPlugin from 'eslint-plugin-headers';
 import neverthrowPlugin from '@ninoseki/eslint-plugin-neverthrow';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 
+// Every src/ file gets these; a narrower block that adds its own restriction must repeat them,
+// since two `no-restricted-imports` entries on the same file overwrite each other in flat config.
+const NEVERTHROW_RESTRICTION = {
+  name: 'neverthrow',
+  message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
+};
+// Matched as a glob against the import string, so every spelling of the path is covered —
+// alias, ./, ../ and deeper.
+const TELEMETRY_DESTINATION_RESTRICTIONS = [
+  {
+    group: ['**/config-constants.ts'],
+    importNames: ['TELEMETRY_ENDPOINT', 'SENTRY_DSN'],
+    message:
+      'Telemetry/Sentry destinations are confined to src/core/telemetry/telemetry-events.ts and src/core/observability/sentry.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+  },
+  {
+    group: ['**/telemetry-ingest-key.ts'],
+    message:
+      'The telemetry ingest key is confined to src/core/telemetry/telemetry-events.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+  },
+];
+
 const NO_DIRECT_FETCH_MESSAGE =
   "Don't call fetch() directly — use fetchAuthenticated() (credentialed requests) or " +
   'fetchAnonymous() (credential-free requests) from @/core/server/fetch.ts, ' +
@@ -21,20 +43,20 @@ export default tseslint.config(
     files: ['src/**/*.ts'],
     plugins: { headers: headersPlugin },
     rules: {
-      'headers/header-format': ['error', {
-        source: 'file',
-        path: 'LICENSE_HEADER',
-        blockPrefix: '\n'
-      }],
+      'headers/header-format': [
+        'error',
+        {
+          source: 'file',
+          path: 'LICENSE_HEADER',
+          blockPrefix: '\n',
+        },
+      ],
     },
   },
   // Base TypeScript config for source files
   {
     files: ['src/**/*.ts'],
-    extends: [
-      ...tseslint.configs.strictTypeChecked,
-      ...tseslint.configs.stylisticTypeChecked,
-    ],
+    extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     plugins: {
       'simple-import-sort': simpleImportSort,
     },
@@ -51,15 +73,24 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
-      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports', fixStyle: 'inline-type-imports' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
       '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/no-non-null-assertion': 'warn',
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
       '@typescript-eslint/prefer-nullish-coalescing': 'off',
       '@typescript-eslint/array-type': 'off',
       // Allow numbers and booleans in template literals — very common in CLI output
-      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowBoolean: true }],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        { allowNumber: true, allowBoolean: true },
+      ],
       // Downgrade unsafe rules to warn — CLI code often interacts with loosely typed APIs
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
@@ -103,26 +134,24 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
+        { paths: [NEVERTHROW_RESTRICTION], patterns: TELEMETRY_DESTINATION_RESTRICTIONS },
+      ],
+    },
+  },
+  // `sonar init` steps report what they did through the step runner, which records it in telemetry.
+  {
+    files: ['src/commands/init/steps/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
         {
-          paths: [
-            {
-              name: 'neverthrow',
-              message: "Import from '@/core/result.ts' instead, so orThrow() is always loaded.",
-            },
-          ],
-          // Matched as a glob against the import string, so every spelling of the path is
-          // covered — alias, ./, ../ and deeper.
+          paths: [NEVERTHROW_RESTRICTION],
           patterns: [
+            ...TELEMETRY_DESTINATION_RESTRICTIONS,
             {
-              group: ['**/config-constants.ts'],
-              importNames: ['TELEMETRY_ENDPOINT', 'SENTRY_DSN'],
+              group: ['../telemetry/*', '**/commands/init/telemetry/*'],
               message:
-                'Telemetry/Sentry destinations are confined to src/core/telemetry/telemetry-events.ts and src/core/observability/sentry.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
-            },
-            {
-              group: ['**/telemetry-ingest-key.ts'],
-              message:
-                'The telemetry ingest key is confined to src/core/telemetry/telemetry-events.ts. Gate new outbound calls on resolveTelemetryEgress() instead.',
+                'Init steps return a StepResult and know nothing about telemetry: the StepRunner reports them to its observers.',
             },
           ],
         },
@@ -218,7 +247,10 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       'no-console': 'off',
     },
   },

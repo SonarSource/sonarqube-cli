@@ -18,323 +18,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { join } from 'node:path';
-
-import { InvalidOptionError } from '@/core/commands/command-error.ts';
-import { SHARED_PROJECT_CONFIG_FILE_NAME } from '@/core/config-constants.ts';
 import { findGitRoot, getGitRemote } from '@/core/host/git/discover.ts';
-import { pathComparisonKey } from '@/core/io/fs-utils.ts';
-import { relativeProjectPath, resolveProjectTarget } from '@/core/project-discovery/link-target.ts';
-import type { CompleteProjectMapping } from '@/core/project-discovery/project-discovery-result.ts';
-import { discoverProjects } from '@/core/project-discovery/project-info.ts';
-import {
-  type ConfigItem,
-  resolveContainedPath,
-  sharedProjectConfigFile,
-  sharedProjectConfigRepository,
-  throwOnInvalidConfig,
-} from '@/core/project-discovery/shared-project-config.ts';
 import { stripGitRemoteUrlUserinfo } from '@/core/server/git-remote-url.ts';
-import { ProjectsClient } from '@/core/server/projects.ts';
-import type { Console } from '@/core/ui/console.ts';
 
 import type { InitOutcome, MonorepoRootResult } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
-import { remoteRepositorySlug } from '../remote-host.ts';
-import { classifyInitFailure } from '../telemetry/failure-reason.ts';
-import type { InitFailureReason, InitPathId } from '../telemetry/init-telemetry.ts';
-import type { ProjectInitRecorder } from '../telemetry/init-telemetry-recorder.ts';
 import type { DetectDeps } from './detect.ts';
-import { runLinkExisting } from './link-existing.ts';
-import {
-  describeFailure,
-  findLinkedProjectIssues,
-  isRunFatal,
-  type LinkedProjectIssue,
-  type LinkedProjectProblem,
-  reportLinkedProjectIssues,
-} from './linked-projects.ts';
-import { linkCommand, writeMapping } from './mapping.ts';
+import { CreateRoot } from './monorepo/create-root.ts';
+import { DetectRootsStep } from './monorepo/detect-roots-step.ts';
+import { IsolatedRootStep } from './monorepo/isolated-root.ts';
+import type { RootOnboarding } from './monorepo/root-onboarding.ts';
 import { type BindableRoot, bindNewRoots } from './monorepo-bind.ts';
-
-/** Where a mapped root stands against the active connection, before anything runs for it. */
-type RootStatus =
-  /** The directory is linked in `.sonar-config.json` and the remote has the project: nothing to do. */
-  | { kind: 'configured' }
-  /** The file links the directory, but the remote cannot confirm the project. Never created. */
-  | { kind: 'unavailable'; problem: LinkedProjectProblem }
-  /** `--root` names a key whose project exists in the active organization, but the file does not map it. */
-  | { kind: 'existing' }
-  /** No project has the mapped key yet. */
-  | { kind: 'new' }
-  | { kind: 'other-org' }
-  /** `--root` names a key, but the file already maps that directory to another project. */
-  | { kind: 'conflict'; recordedKey: string }
-  /** The lookup failed for this root only. */
-  | { kind: 'unchecked'; reason: string; failure: InitFailureReason };
-
-type OnboardableStatus = Exclude<
-  RootStatus,
-  { kind: 'configured' | 'unavailable' | 'unchecked' | 'conflict' }
->;
-
-interface MonorepoRoot {
-  mapping: CompleteProjectMapping;
-  /** Relative to the repository root, for display and the summary. */
-  path: string;
-  status: RootStatus;
-  /** The git remote the keys were generated from, so a created project is named from the same input. */
-  remote?: string;
-  /** The key was guessed, not named by the user, so an existing project under it needs their say. */
-  generated?: boolean;
-}
-
-async function classifyRoot(
-  mapping: CompleteProjectMapping,
-  { auth, http }: DetectDeps,
-): Promise<RootStatus> {
-  const lookup = await new ProjectsClient(http)
-    .lookupProject(mapping.projectKey, auth.orgKey)
-    .orThrow();
-  switch (lookup.kind) {
-    case 'missing':
-      return { kind: 'new' };
-    case 'other-org':
-      return { kind: 'other-org' };
-    case 'in-org':
-      return { kind: 'existing' };
-  }
-}
-
-/** A root the file links is only checked, never created: a project the remote lacks is reported. */
-async function classifyLinkedRoot(
-  mapping: CompleteProjectMapping,
-  path: string,
-  deps: DetectDeps,
-): Promise<RootStatus> {
-  const issue = (
-    await findLinkedProjectIssues([{ projectKey: mapping.projectKey, path }], deps)
-  ).at(0);
-  return issue === undefined
-    ? { kind: 'configured' }
-    : { kind: 'unavailable', problem: issue.problem };
-}
-
-/**
- * A `--root` mapping carries the active connection, so the file, not the mapping, tells whether the
- * directory is already linked. A directory the file links to this key is checked like any other
- * linked root, so naming it again never creates its project.
- */
-async function classifyExplicitRoot(
-  mapping: CompleteProjectMapping,
-  repositoryRoot: string,
-  path: string,
-  deps: DetectDeps,
-  relinked: boolean,
-): Promise<RootStatus> {
-  const recorded = (await sharedProjectConfigRepository.load(repositoryRoot)).find(
-    ({ projectRoot }) => projectRoot === mapping.projectRoot,
-  );
-  // A relink was asked for at the prompt, so the recorded key is replaced, not a conflict.
-  if (recorded === undefined || relinked) {
-    return classifyRoot(mapping, deps);
-  }
-  return recorded.projectKey === mapping.projectKey
-    ? classifyLinkedRoot(mapping, path, deps)
-    : { kind: 'conflict', recordedKey: recorded.projectKey };
-}
-
-/** Roots read from the file are checked on the remote; roots named with `--root` may also be created or mapped. */
-async function inspectRoot(
-  mapping: CompleteProjectMapping,
-  repositoryRoot: string,
-  deps: DetectDeps,
-  explicit: boolean,
-  relinked: ReadonlySet<string>,
-): Promise<MonorepoRoot> {
-  const path = relativeProjectPath(repositoryRoot, mapping.projectRoot);
-  if (!explicit) {
-    return { mapping, path, status: await classifyLinkedRoot(mapping, path, deps) };
-  }
-  try {
-    return {
-      mapping,
-      path,
-      status: await classifyExplicitRoot(
-        mapping,
-        repositoryRoot,
-        path,
-        deps,
-        relinked.has(mapping.projectRoot),
-      ),
-    };
-  } catch (error) {
-    if (isRunFatal(error)) {
-      throw error;
-    }
-    return {
-      mapping,
-      path,
-      status: {
-        kind: 'unchecked',
-        reason: describeFailure(error),
-        failure: classifyInitFailure(error),
-      },
-    };
-  }
-}
-
-async function mapExistingRoot(
-  { mapping, path }: MonorepoRoot,
-  { auth, console, dryRun }: DetectDeps,
-): Promise<MonorepoRootResult> {
-  if (dryRun) {
-    return { path, kind: 'would-link', projectKey: mapping.projectKey };
-  }
-  await writeMapping(auth, mapping.projectKey, mapping.projectRoot, console, 'found', true);
-  console.success(`Mapped ${path} to project '${mapping.projectKey}'.`);
-  return { path, kind: 'linked', projectKey: mapping.projectKey };
-}
-
-/**
- * Nothing creates a project without binding, so a root left without one fails with how to map one.
- * `--bind` is suggested only when it could create the root's project.
- */
-function noProjectForRoot(path: string, bindable: boolean): MonorepoRootResult {
-  const bind = bindable ? ', or use --bind' : '';
-  return {
-    path,
-    kind: 'failed',
-    reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>${bind}.`,
-  };
-}
-
-/** Binding needs SonarQube Cloud and a GitHub or Azure DevOps remote. */
-function canBind({ remote }: MonorepoRoot, { auth }: DetectDeps): boolean {
-  return auth.connectionType === 'cloud' && !!remote && remoteRepositorySlug(remote) !== null;
-}
-
-/**
- * The key generated for a root names an existing project: it is offered for linking, as for one
- * directory, without `--bind`, which refuses to touch a project that already exists.
- */
-async function offerGeneratedProject(
-  { mapping, path, remote }: MonorepoRoot,
-  deps: DetectDeps,
-): Promise<MonorepoRootResult> {
-  const outcome = await runLinkExisting(
-    {
-      path: 'link-existing',
-      projectRoot: mapping.projectRoot,
-      remote,
-      projectKey: mapping.projectKey,
-    },
-    { ...deps, intent: undefined },
-  );
-  if (outcome.kind === 'linked') {
-    return { path, kind: 'linked', projectKey: outcome.projectKey };
-  }
-  if (outcome.kind === 'dry-run') {
-    return { path, kind: 'would-link', projectKey: mapping.projectKey };
-  }
-  if (deps.intent?.kind === 'bind') {
-    return {
-      path,
-      kind: 'failed',
-      reason: `Project '${mapping.projectKey}' already exists and was not linked. Name it with --root ${path}=<project key> to map it.`,
-    };
-  }
-  // The project exists, which `--bind` refuses to touch.
-  return noProjectForRoot(path, false);
-}
-
-function onboardSelectedRoot(
-  root: MonorepoRoot,
-  status: OnboardableStatus,
-  deps: DetectDeps,
-  linkOnly: boolean,
-): Promise<MonorepoRootResult> {
-  switch (status.kind) {
-    case 'existing':
-      // A key the user named is consent to map it; one the CLI guessed is asked about, as for a single project.
-      if (!root.generated || linkOnly) {
-        return mapExistingRoot(root, deps);
-      }
-      return deps.interactive
-        ? offerGeneratedProject(root, deps)
-        : Promise.resolve({
-            path: root.path,
-            kind: 'failed',
-            reason: `Project '${root.mapping.projectKey}' already exists, and nothing says whether ${root.path} belongs to it. Name it with --root ${root.path}=<project key> to map it.`,
-          });
-    case 'new':
-      return linkOnly
-        ? Promise.resolve({
-            path: root.path,
-            kind: 'failed',
-            reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
-          })
-        : Promise.resolve(noProjectForRoot(root.path, canBind(root, deps)));
-    case 'other-org': {
-      const active = deps.auth.orgKey ?? 'the active one';
-      return Promise.resolve({
-        path: root.path,
-        kind: 'failed',
-        reason: `Project '${root.mapping.projectKey}' belongs to another organization than ${active}, or is not accessible with this token.`,
-      });
-    }
-  }
-}
-
-async function onboardRoot(
-  root: MonorepoRoot,
-  deps: DetectDeps,
-  linkOnly: boolean,
-  bound: ReadonlyMap<string, MonorepoRootResult>,
-): Promise<MonorepoRootResult> {
-  const { path, mapping, status } = root;
-  const batched = bound.get(path);
-  if (batched) {
-    return batched;
-  }
-  if (status.kind === 'configured') {
-    return {
-      path,
-      kind: 'configured',
-      projectKey: mapping.projectKey,
-      serverUrl: mapping.serverUrl,
-    };
-  }
-  if (status.kind === 'unavailable') {
-    return { path, kind: 'unavailable', projectKey: mapping.projectKey, problem: status.problem };
-  }
-  if (status.kind === 'unchecked') {
-    return { path, kind: 'failed', reason: status.reason, failure: status.failure };
-  }
-  if (status.kind === 'conflict') {
-    return {
-      path,
-      kind: 'conflict',
-      projectKey: mapping.projectKey,
-      recordedKey: status.recordedKey,
-    };
-  }
-  deps.console.print(`${deps.dryRun ? 'Previewing' : 'Onboarding'} ${path}`);
-  try {
-    return await onboardSelectedRoot(root, status, deps, linkOnly);
-  } catch (error) {
-    if (isRunFatal(error)) {
-      throw error;
-    }
-    return {
-      path,
-      kind: 'failed',
-      reason: describeFailure(error),
-      failure: classifyInitFailure(error),
-    };
-  }
-}
 
 /**
  * Reports the project roots that `.sonar-config.json` maps as configured, and onboards the ones named
@@ -349,51 +44,15 @@ export async function runMonorepo(
   explicitRoots: readonly MonorepoRootOption[] = [],
   linkOnly = false,
 ): Promise<InitOutcome> {
-  const { console } = deps;
-  const named =
-    explicitRoots.length > 0
-      ? await mapExplicitRoots(projectRoot, explicitRoots, deps, linkOnly)
-      : undefined;
-  // Read after the named roots are mapped, so the file's roots include them.
-  const mapped = await discoverMappedRoots(projectRoot, deps);
-  const { repositoryRoot, generatedKeys, relinked, remote, generatedRoots } = named ?? mapped;
-  const configDir = named?.configDir ?? mapped.configDir;
-  const namedRoots = new Set(
-    (named?.mappings ?? []).map(({ projectRoot: root }) => pathComparisonKey(root)),
+  const detected = await deps.steps.run(
+    new DetectRootsStep(projectRoot, deps, explicitRoots, linkOnly),
   );
-  const mappings = [
-    ...(named?.mappings ?? []),
-    ...mapped.mappings.filter(({ projectRoot: root }) => !namedRoots.has(pathComparisonKey(root))),
-  ];
-  if (mappings.length === 0) {
+  if (!detected) {
     return { kind: 'no-monorepo-roots' };
   }
-
-  warnOnNestedConfig(configDir, repositoryRoot, console);
-  generatedKeys?.forEach(({ path, projectKey }) => {
-    console.print(`Generated project key for ${path}: ${projectKey}`);
-  });
-  const roots = await console.withSpinner('Checking the mapped project roots', () =>
-    Promise.all(
-      mappings.map(async (mapping) => {
-        const isNamed = namedRoots.has(pathComparisonKey(mapping.projectRoot));
-        return {
-          ...(await inspectRoot(mapping, repositoryRoot, deps, isNamed, relinked ?? new Set())),
-          remote: isNamed ? remote : undefined,
-          generated: generatedRoots?.has(pathComparisonKey(mapping.projectRoot)) ?? false,
-        };
-      }),
-    ),
-  );
-  reportRootProblems(roots, deps);
-  deps.telemetry?.record('detect', 'success');
-  deps.telemetry?.setProjects(
-    roots.map(({ status }) => initPathOf(status)),
-    roots.map(({ path }) => path),
-  );
-  // `--link` never creates a project, and binding is a way of creating one.
-  const bound = linkOnly ? new Map() : await bindNewRootsTogether(roots, repositoryRoot, deps);
-  return { kind: 'monorepo', roots: await onboardInOrder(roots, deps, linkOnly, bound) };
+  const planned = detected.map(({ target }) => target);
+  const bound = await bindNewRootsTogether(planned, deps);
+  return { kind: 'monorepo', roots: await onboardInOrder(planned, bound, deps) };
 }
 
 /**
@@ -402,18 +61,19 @@ export async function runMonorepo(
  * afterwards with how to map an existing project instead.
  */
 async function bindNewRootsTogether(
-  roots: readonly MonorepoRoot[],
-  repositoryRoot: string,
+  roots: readonly RootOnboarding[],
   deps: DetectDeps,
-): Promise<Map<string, MonorepoRootResult>> {
-  const newRoots = roots.filter(({ status }) => status.kind === 'new');
+): Promise<ReadonlyMap<string, MonorepoRootResult>> {
+  // `--link` never creates a project, and binding is a way of creating one: its roots are never planned for creation.
+  const newRoots = roots.filter((root) => root instanceof CreateRoot).map(({ target }) => target);
   if (newRoots.length === 0) {
     return new Map();
   }
-  const { gitRoot, isGit } = findGitRoot(repositoryRoot);
+  const { gitRoot, isGit } = findGitRoot(newRoots[0].repositoryRoot);
   const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
   const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
-  const bindable = newRoots.map(({ path, mapping }): BindableRoot => ({
+  const bindable = newRoots.map(({ root, path, mapping }): BindableRoot => ({
+    root,
     path,
     projectRoot: mapping.projectRoot,
     projectKey: mapping.projectKey,
@@ -423,269 +83,15 @@ async function bindNewRootsTogether(
   return new Map(results.map((result) => [result.path, result]));
 }
 
-/** Said before any root is onboarded, while the user can still stop: these roots are left as they are. */
-function reportRootProblems(roots: readonly MonorepoRoot[], { auth, console }: DetectDeps): void {
-  const issues: LinkedProjectIssue[] = [];
-  for (const { path, mapping, status } of roots) {
-    if (status.kind === 'conflict') {
-      console.warn(
-        `${path} is already mapped to '${status.recordedKey}' in ${SHARED_PROJECT_CONFIG_FILE_NAME}, not '${mapping.projectKey}', so it was left as it is. Remap it with '${linkCommand(mapping.projectKey, path, undefined, true)}'.`,
-      );
-    } else if (status.kind === 'unavailable') {
-      issues.push({ projectKey: mapping.projectKey, path, problem: status.problem });
-    }
-  }
-  reportLinkedProjectIssues(issues, auth, console);
-}
-
-interface GeneratedKey {
-  path: string;
-  projectKey: string;
-}
-
-interface MappedRoots {
-  mappings: CompleteProjectMapping[];
-  repositoryRoot: string;
-  /** Where the roots were read from, when that is not the repository root. */
-  configDir?: string;
-  /** Roots named without a key, with the one generated for each. */
-  generatedKeys?: GeneratedKey[];
-  /** Credential-free git remote of the repository; only read for `--root` roots. */
-  remote?: string;
-  /** Roots whose key was generated, by `pathComparisonKey`. */
-  generatedRoots?: Set<string>;
-  /** Roots the user pointed at another project than the one recorded, at the project prompt. */
-  relinked?: Set<string>;
-}
-
-async function discoverMappedRoots(projectRoot: string, deps: DetectDeps): Promise<MappedRoots> {
-  const { auth, console } = deps;
-  const discovered = await discoverProjects(projectRoot, {
-    auth,
-    console,
-    silent: true,
-    useKnownMappings: false,
-    useGitRemoteBinding: false,
-  });
-  return {
-    mappings: discovered.fromSharedConfig ? discovered.projects : [],
-    repositoryRoot: discovered.repoRoot ?? projectRoot,
-    configDir: discovered.configDir,
-  };
-}
-
-/**
- * The key of a root named without one: the one `.sonar-config.json` already records for the
- * directory, else the one `init` generates for it, which clones of the repository agree on.
- */
-function keyForUnkeyedRoot(
-  root: string,
-  recorded: readonly CompleteProjectMapping[],
-  remote: string | undefined,
-  auth: DetectDeps['auth'],
-): { projectKey: string; generated: boolean } {
-  const known = recorded.find(({ projectRoot }) => projectRoot === root);
-  return known
-    ? { projectKey: known.projectKey, generated: false }
-    : {
-        projectKey: generateProjectProposal(root, remote, auth.orgKey).projectKey,
-        generated: true,
-      };
-}
-
-/**
- * Exactly 'sonar link --monorepo': a linked root is offered a relink, the others a detected
- * project or a search. One root's prompts finish before the next root's start. A root the user
- * keeps as it is stays out of the result.
- */
-function pickProjects(
-  roots: readonly { path: string; resolved: string }[],
-  { chooseProject, console }: Pick<DetectDeps, 'chooseProject' | 'console'>,
-  items: readonly ConfigItem[],
-): Promise<Map<string, string>> {
-  return roots.reduce(async (previous, { path, resolved }) => {
-    const picked = await previous;
-    console.info(`Choosing the project for ${path}`);
-    const projectKey = await chooseProject?.(resolved, items);
-    if (projectKey) {
-      picked.set(resolved, projectKey);
-    }
-    return picked;
-  }, Promise.resolve(new Map<string, string>()));
-}
-
-/** Turns `--root` values into mappings on the active connection, before any root is touched. */
-async function mapExplicitRoots(
-  projectRoot: string,
-  explicitRoots: readonly MonorepoRootOption[],
-  deps: DetectDeps,
-  linkOnly: boolean,
-): Promise<MappedRoots> {
-  const { auth } = deps;
-  const { targetDir } = await resolveProjectTarget(projectRoot);
-  const needsKey = explicitRoots.some(({ projectKey }) => projectKey === undefined);
-  const recorded = needsKey ? await sharedProjectConfigRepository.load(targetDir) : [];
-  const { gitRoot, isGit } = findGitRoot(targetDir);
-  const rawRemote = isGit ? await getGitRemote(gitRoot) : '';
-  const remote = rawRemote ? stripGitRemoteUrlUserinfo(rawRemote) : undefined;
-
-  const roots = explicitRoots.map((root) => {
-    const resolved = resolveContainedPath(targetDir, root.path);
-    if (resolved === null) {
-      throw new InvalidOptionError(
-        `--root path "${root.path}" must point to an existing directory inside ${targetDir}.`,
-      );
-    }
-    return { ...root, resolved };
-  });
-  const picked =
-    linkOnly && deps.chooseProject
-      ? await pickProjects(
-          roots.filter(({ projectKey }) => projectKey === undefined),
-          deps,
-          await sharedProjectConfigFile.readItems(targetDir, throwOnInvalidConfig),
-        )
-      : new Map<string, string>();
-
-  const generatedKeys: GeneratedKey[] = [];
-  const generatedRoots = new Set<string>();
-  const mappings = roots.map(({ path, projectKey, resolved }) => {
-    const named = projectKey ?? picked.get(resolved);
-    const key =
-      named === undefined
-        ? keyForUnkeyedRoot(resolved, recorded, remote, auth)
-        : { projectKey: named, generated: false };
-    // Scripts get no say in a guessed key, so link-only wants it named.
-    if (linkOnly && key.generated && !deps.interactive) {
-      throw new InvalidOptionError(
-        `--link needs an existing project for ${path}, but no key is recorded for it.`,
-        `Name it with --root ${path}=<project key>.`,
-      );
-    }
-    if (key.generated) {
-      generatedKeys.push({ path, projectKey: key.projectKey });
-      generatedRoots.add(pathComparisonKey(resolved));
-    }
-    return {
-      projectRoot: resolved,
-      projectKey: key.projectKey,
-      serverUrl: auth.serverUrl,
-      organization: auth.orgKey,
-    };
-  });
-  // A key picked at the prompt that differs from the recorded one is a relink, not a conflict.
-  const relinked = new Set(
-    [...picked]
-      .filter(
-        ([root, key]) => recorded.find(({ projectRoot: r }) => r === root)?.projectKey !== key,
-      )
-      .map(([root]) => root),
-  );
-  const repeated = mappings.find(
-    ({ projectKey }, index) =>
-      mappings.findIndex((other) => other.projectKey === projectKey) !== index,
-  );
-  if (repeated) {
-    throw new InvalidOptionError(
-      `--root resolves more than one directory to project '${repeated.projectKey}'.`,
-      'Name a different key for one of them with --root <path>=<project key>.',
-    );
-  }
-  return { mappings, repositoryRoot: targetDir, generatedKeys, remote, relinked, generatedRoots };
-}
-
-/** Mappings are always saved at the repository root, so a nested or main-worktree file stays as it is. */
-function warnOnNestedConfig(
-  configDir: string | undefined,
-  repositoryRoot: string,
-  console: Console,
-): void {
-  if (
-    configDir === undefined ||
-    pathComparisonKey(configDir) === pathComparisonKey(repositoryRoot)
-  ) {
-    return;
-  }
-  console.warn(
-    `The project roots come from ${join(configDir, SHARED_PROJECT_CONFIG_FILE_NAME)}, but their mappings will be saved to the ${SHARED_PROJECT_CONFIG_FILE_NAME} at the repository root (${repositoryRoot}).`,
-  );
-}
-
-/** One root finishes, prompts included, before the next starts. */
-async function onboardInOrder(
-  roots: readonly MonorepoRoot[],
-  deps: DetectDeps,
-  linkOnly: boolean,
+/** One root finishes, prompts included, before the next starts; a root the batch bound has finished already. */
+function onboardInOrder(
+  roots: readonly RootOnboarding[],
   bound: ReadonlyMap<string, MonorepoRootResult>,
+  deps: DetectDeps,
 ): Promise<MonorepoRootResult[]> {
-  const { telemetry } = deps;
-  const results = await roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
+  return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const done = await previous;
-    const project = telemetry?.projectLabelled(root.path);
-    telemetry?.setActiveProject(project);
-    project?.begin(root.status.kind === 'new' ? 'create_project' : 'link');
-    const result = await onboardRoot(root, deps, linkOnly, bound);
-    if (project) {
-      recordRootResult(project, result);
-    }
-    done.push(result);
+    done.push(bound.get(root.target.path) ?? (await deps.steps.run(new IsolatedRootStep(root))));
     return done;
   }, Promise.resolve([]));
-  telemetry?.setActiveProject(undefined);
-  return results;
-}
-
-/** The path a root is expected to take, before it runs; `recordRootResult` settles it. */
-function initPathOf(status: RootStatus): InitPathId {
-  switch (status.kind) {
-    case 'configured':
-    case 'unavailable':
-    case 'conflict':
-      return 'already_done';
-    case 'existing':
-    case 'other-org':
-      return 'link_existing';
-    case 'new':
-    case 'unchecked':
-      return 'unbound_new';
-  }
-}
-
-function recordRootResult(project: ProjectInitRecorder, result: MonorepoRootResult): void {
-  const step = project.inProgress() ?? 'link';
-  switch (result.kind) {
-    case 'configured':
-      project.record('link', 'already_done');
-      project.setProjectKey(result.projectKey);
-      return;
-    case 'linked':
-      if (step === 'create_project') {
-        project.record('create_project', 'skipped');
-      }
-      project.setPath('link_existing');
-      project.record('link', 'success');
-      project.setProjectKey(result.projectKey);
-      return;
-    case 'bound':
-      project.setPath('bound_new');
-      project.record('create_project', 'success');
-      project.setProjectKey(result.projectKey);
-      return;
-    case 'unavailable':
-    case 'conflict':
-      project.record('link', 'failed');
-      project.stopAt('link', 'unknown');
-      return;
-    case 'skipped':
-      project.record(step, 'declined');
-      return;
-    case 'failed':
-      project.record(step, 'failed');
-      project.stopAt(step, result.failure ?? 'unknown');
-      return;
-    case 'would-link':
-    case 'would-bind':
-      // Dry runs report no init events.
-      return;
-  }
 }
