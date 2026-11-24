@@ -99,7 +99,7 @@ describe('cursorPromptSubmit (unit — impractical-via-e2e paths)', () => {
     const written = String((stdoutSpy.mock.calls[0] as unknown[])[0]);
     const payload = JSON.parse(written) as { continue: boolean; user_message: string };
     expect(payload.continue).toBe(false);
-    expect(payload.user_message).toBe('Sonar detected secrets in prompt');
+    expect(payload.user_message).toBe('SonarQube detected secrets in prompt');
   });
 
   it('outputs nothing and does not throw when scan throws an error', async () => {

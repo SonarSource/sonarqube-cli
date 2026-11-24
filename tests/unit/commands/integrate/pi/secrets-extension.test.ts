@@ -158,7 +158,7 @@ describe('Pi secrets extension, loaded and executed', () => {
         reason: string;
       };
 
-      expect(result.reason).toContain('Sonar blocked this file read.');
+      expect(result.reason).toContain('SonarQube blocked this file read.');
     });
 
     it.each([

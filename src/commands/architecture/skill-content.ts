@@ -23,7 +23,7 @@ export const ARCHITECTURE_SKILL_MARKER = '<!-- sonar:architecture-skill -->';
 
 export const ARCHITECTURE_SKILL = `---
 name: sonar-architecture
-description: Read current or intended architecture, project directives, deviations, flaws and smells; apply specified intended edits or create, update and delete specified directives through the Sonar CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
+description: Read current or intended architecture, project directives, deviations, flaws and smells; apply specified intended edits or create, update and delete specified directives through the SonarQube CLI or MCP. The write replaces the complete intended model; omitted content is removed. Not for architecture recommendations, diagnosis or code navigation.
 ---
 ${ARCHITECTURE_SKILL_MARKER}
 

@@ -877,8 +877,8 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
     .description(
       // Creating a project without repository binding is Alpha.
       runtime.isAlphaEnabled
-        ? 'Set up Sonar for this project: login, pick an organization and bind or create a new Sonar project'
-        : 'Set up Sonar for this project: login, pick an organization and link an existing Sonar project or create one bound to the repository',
+        ? 'Set up SonarQube for this project: log in, pick an organization and bind or create a new SonarQube project'
+        : 'Set up SonarQube for this project: log in, pick an organization and link an existing SonarQube project or create one bound to the repository',
     )
     .stage(Stage.Beta())
     .rootHelp({

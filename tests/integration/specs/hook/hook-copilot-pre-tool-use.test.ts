@@ -89,7 +89,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
 
           expect(result.exitCode).toBe(0);
           expect(JSON.parse(result.stdout.trim()).permissionDecision).toBe('deny');
-          expect(result.stdout).toContain('Sonar detected secrets in file');
+          expect(result.stdout).toContain('SonarQube detected secrets in file');
         },
         { timeout: 30000 },
       );
@@ -111,7 +111,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
 
         expect(result.exitCode).toBe(0);
         expect(JSON.parse(result.stdout.trim()).permissionDecision).toBe('deny');
-        expect(result.stdout).toContain('Sonar detected secrets in file');
+        expect(result.stdout).toContain('SonarQube detected secrets in file');
       },
       { timeout: 30000 },
     );
@@ -280,7 +280,7 @@ describe('sonar hook copilot-pre-tool-use', () => {
       expect(result.stdout).toContain('"permissionDecision"');
       expect(result.stdout).toContain('"deny"');
       expect(result.stdout).toContain('"permissionDecisionReason"');
-      expect(result.stdout).toContain('Sonar detected secrets in file');
+      expect(result.stdout).toContain('SonarQube detected secrets in file');
       // No `hookSpecificOutput` wrapper (Copilot uses a flat schema).
       expect(result.stdout).not.toContain('hookSpecificOutput');
     },

@@ -151,7 +151,7 @@ describe('sonar init', () => {
       const result = await harness.run('init');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
+      expect(result.stdout).toContain("linked to the SonarQube project 'mapped'");
       expect(result.stdout).not.toContain("'sonar integrate'");
       expect(result.stdout.match(/Project dashboard:/g)).toHaveLength(1);
     },
@@ -174,7 +174,7 @@ describe('sonar init', () => {
       expect(result.stderr).toContain("Relink with 'sonar link <project key>'");
       expect(result.stderr).toContain("or delete .sonar-config.json, then run 'sonar init' again");
       expect(result.stdout).not.toContain('Nothing left to set up');
-      expect(result.stdout).not.toContain("linked to the Sonar project 'mapped'");
+      expect(result.stdout).not.toContain("linked to the SonarQube project 'mapped'");
       expect(result.stdout).not.toContain(UNBOUND);
       expect(result.stdout).not.toContain('Project dashboard:');
     },
@@ -214,7 +214,7 @@ describe('sonar init', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain("Could not check whether 'mapped' exists on the remote");
       expect(result.stderr).not.toContain('no such project exists');
-      expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
+      expect(result.stdout).toContain("linked to the SonarQube project 'mapped'");
     },
     TIMEOUT,
   );
@@ -316,7 +316,7 @@ describe('sonar init', () => {
       const result = await harness.run('init --path services/api');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("linked to the Sonar project 'mapped'");
+      expect(result.stdout).toContain("linked to the SonarQube project 'mapped'");
     },
     TIMEOUT,
   );
@@ -367,7 +367,7 @@ describe('sonar init', () => {
       // Linking needs an answer, so the non-interactive run stops and asks for --link.
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
+        "A SonarQube project already exists for this repository: 'bound_project'",
       );
       expect(result.stderr).toContain("Run 'sonar init' again with --link.");
     },
@@ -417,7 +417,7 @@ describe('sonar init', () => {
 
       expect(result.exitCode).toBe(2);
       expect(result.stderr).toContain(
-        "A Sonar project already exists for this repository: 'bound_project'",
+        "A SonarQube project already exists for this repository: 'bound_project'",
       );
       expect(result.stderr).toContain("Run 'sonar init' again with --link.");
       expect(result.stdout).not.toContain(UNBOUND);
@@ -463,7 +463,7 @@ describe('sonar init', () => {
       const result = await harness.run('init --non-interactive');
 
       expect(result.exitCode).toBe(2);
-      expect(result.stderr).toContain('No Sonar project exists for this directory yet.');
+      expect(result.stderr).toContain('No SonarQube project exists for this directory yet.');
       expect(result.stderr).toContain('one of --bind, --create, --link <key>');
       expect(server.getRecordedRequests().some((r) => r.path === '/api/projects/create')).toBe(
         false,
@@ -787,7 +787,7 @@ describe('sonar init', () => {
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("linked to the Sonar project 'p'");
+      expect(result.stdout).toContain("linked to the SonarQube project 'p'");
     },
     TIMEOUT,
   );
@@ -955,7 +955,7 @@ describe('sonar init', () => {
 
           expect(result.exitCode).toBe(2);
           expect(result.stderr).toContain(
-            `A Sonar project already exists for this repository: '${projectKey}'`,
+            `A SonarQube project already exists for this repository: '${projectKey}'`,
           );
           expect(result.stderr).toContain("Run 'sonar init' again with --link.");
           expect(created(server)).toHaveLength(0);
@@ -1265,7 +1265,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --non-interactive --dry-run');
 
         expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('No Sonar project exists for this directory yet.');
+        expect(result.stderr).toContain('No SonarQube project exists for this directory yet.');
       },
       TIMEOUT,
     );
@@ -1510,7 +1510,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --non-interactive --link');
 
         expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--link found no Sonar project for this directory');
+        expect(result.stderr).toContain('--link found no SonarQube project for this directory');
         expect(result.stderr).toContain('--link <key>');
       },
       TIMEOUT,
@@ -3307,7 +3307,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --help');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toMatch(/link an existing\s+Sonar project/);
+        expect(result.stdout).toMatch(/link\s+an\s+existing\s+SonarQube\s+project/);
         for (const option of ['--create', '--project', '--name', '--visibility']) {
           expect(result.stdout).not.toContain(option);
         }
@@ -3386,7 +3386,7 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         expect(output).toContain('No project was created.');
-        expect(output).not.toContain('No Sonar project exists');
+        expect(output).not.toContain('No SonarQube project exists');
         expect(createRequests(server)).toEqual([]);
       },
       TIMEOUT,

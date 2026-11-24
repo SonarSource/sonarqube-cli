@@ -121,7 +121,7 @@ describe('upsertSonarHook', () => {
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
       id: 'sonar-pre-commit',
-      name: 'Sonar pre-commit scan',
+      name: 'SonarQube pre-commit scan',
       entry: 'sonar hook git-pre-commit --',
       language: 'system',
       pass_filenames: true,
@@ -135,7 +135,7 @@ describe('upsertSonarHook', () => {
     const hook = config.repos.find((r) => r.repo === 'local')?.hooks[0];
     expect(hook).toEqual({
       id: 'sonar-pre-push',
-      name: 'Sonar pre-push scan',
+      name: 'SonarQube pre-push scan',
       entry: 'sonar hook git-pre-push --',
       language: 'system',
       pass_filenames: true,
