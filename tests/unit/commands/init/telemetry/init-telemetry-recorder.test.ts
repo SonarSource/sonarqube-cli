@@ -21,6 +21,9 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 
 import { OnboardingCancelledError } from '@/commands/init/answer.ts';
+import type { InitPathId, InitStepOutcome } from '@/commands/init/flow/step-ids.ts';
+import { type StepResult, success } from '@/commands/init/flow/step-result.ts';
+import { type InitRoot, StepRunner } from '@/commands/init/flow/step-runner.ts';
 import {
   CLI_INIT_EXECUTED,
   CLI_PROJECT_INIT_CREATION_ATTEMPTED,
@@ -38,6 +41,7 @@ import { ForbiddenApiError, TransportError } from '@/core/server/errors.ts';
 import * as projectUuid from '@/core/telemetry/project-uuid.ts';
 
 import { FakeConsole } from '../../../../_common/fake-console.ts';
+import { ScriptedStep } from '../scripted-step.ts';
 
 const AUTH = new ResolvedAuth({
   connectionType: 'cloud',
@@ -54,6 +58,8 @@ const RUN: InitRunContext = {
   repoRoot: '/some/repo',
 };
 
+const ROOT: InitRoot = { index: 0, path: '/some/repo' };
+
 let resolveUuids: Mock<typeof projectUuid.resolveProjectUuids>;
 
 beforeEach(() => {
@@ -66,14 +72,38 @@ afterEach(() => {
   resolveUuids.mockRestore();
 });
 
+/** A recorder watching a runner, as `sonar init` wires them. */
+function watched(isMonorepo = false): { recorder: InitTelemetryRecorder; steps: StepRunner } {
+  const recorder = new InitTelemetryRecorder(isMonorepo);
+  return { recorder, steps: new StepRunner(recorder) };
+}
+
+function roots(...initPaths: InitPathId[]): { root: InitRoot; initPath: InitPathId }[] {
+  return initPaths.map((initPath, index) => ({ root: { index, path: `root-${index}` }, initPath }));
+}
+
+function done(
+  outcome: InitStepOutcome,
+  value?: unknown,
+  projectKey?: string,
+): () => Promise<StepResult<unknown>> {
+  return () => Promise.resolve({ outcome, value, projectKey });
+}
+
+async function thrownBy(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
 async function emit(
   recorder: InitTelemetryRecorder,
   run: InitRunContext = RUN,
 ): Promise<{ run: InitExecutedPayload; projects: ProjectInitPayload[] }> {
   const ctx = new CommandInvocationContext(new FakeConsole());
   await recorder.emit(ctx, run);
-  const facts = ctx.telemetryFacts();
-  const [runFact, ...projectFacts] = facts;
+  const [runFact, ...projectFacts] = ctx.telemetryFacts();
   expect(runFact.name).toBe(CLI_INIT_EXECUTED);
   for (const fact of projectFacts) {
     expect(fact.name).toBe(CLI_PROJECT_INIT_CREATION_ATTEMPTED);
@@ -86,14 +116,18 @@ async function emit(
 
 describe('InitTelemetryRecorder', () => {
   it('reports a successful single-project run with its project', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('login', 'already_done');
-    recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.record('project_bind', 'skipped');
-    project.record('create_project', 'success');
-    project.setProjectKey('my-project');
-    recorder.record('integrate', 'declined');
+    const { recorder, steps } = watched();
+    await steps.run(new ScriptedStep({ step: 'login' }, done('already_done')));
+    await steps.run(new ScriptedStep({ step: 'detect' }, done('success')));
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('skipped')));
+    await steps.run(
+      new ScriptedStep(
+        { step: 'create_project', root: ROOT },
+        done('success', undefined, 'my-project'),
+      ),
+    );
+    await steps.run(new ScriptedStep({ step: 'integrate' }, done('declined')));
 
     const { run, projects } = await emit(recorder);
 
@@ -120,9 +154,14 @@ describe('InitTelemetryRecorder', () => {
   });
 
   it('emits no project event when the run stops before the roots are known', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.begin('login');
-    recorder.fail(new CommandFailedError('Not signed in.'));
+    const { recorder, steps } = watched();
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'login' }, () =>
+          Promise.reject(new CommandFailedError('Not signed in.')),
+        ),
+      ),
+    );
 
     const { run, projects } = await emit(recorder, { ...RUN, auth: undefined });
 
@@ -136,16 +175,51 @@ describe('InitTelemetryRecorder', () => {
     expect(resolveUuids).not.toHaveBeenCalled();
   });
 
+  it('lists a step nested in another one after it, as they started', async () => {
+    const { recorder, steps } = watched();
+    await steps.run(
+      new ScriptedStep({ step: 'login' }, async () => {
+        await steps.run(new ScriptedStep({ step: 'create_org' }, done('declined')));
+        return success(undefined);
+      }),
+    );
+
+    expect((await emit(recorder)).run.steps).toEqual(['login:success', 'create_org:declined']);
+  });
+
+  it('stops at the inner step when its failure also ends the outer one', async () => {
+    const { recorder, steps } = watched();
+    const failure = new TransportError('offline');
+
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'login' }, () =>
+          steps.run(new ScriptedStep({ step: 'create_org' }, () => Promise.reject(failure))),
+        ),
+      ),
+    );
+
+    expect((await emit(recorder)).run).toMatchObject({
+      steps: ['login:failed', 'create_org:failed'],
+      stopped_at: 'create_org',
+      failure_reason: 'network',
+    });
+  });
+
   it('stops a single-project run at the failed project step', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('login', 'success');
-    recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.begin('create_project');
-    recorder.fail(new ForbiddenApiError('forbidden'));
+    const { recorder, steps } = watched();
+    await steps.run(new ScriptedStep({ step: 'detect' }, done('success')));
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'create_project', root: ROOT }, () =>
+          Promise.reject(new ForbiddenApiError('no')),
+        ),
+      ),
+    );
 
     const { run, projects } = await emit(recorder);
-
     expect(run.stopped_at).toBe('create_project');
     expect(run.failure_reason).toBe('permission');
     expect(projects[0]).toMatchObject({
@@ -156,23 +230,34 @@ describe('InitTelemetryRecorder', () => {
     });
   });
 
-  it('never names a project step at run level on a monorepo run', async () => {
-    const recorder = new InitTelemetryRecorder(true);
-    recorder.record('login', 'already_done');
-    recorder.record('detect', 'success');
-    const [linked, failed] = recorder.setProjects(['link_existing', 'unbound_new']);
-    linked.record('link', 'success');
-    linked.setProjectKey('linked-key');
-    failed.begin('create_project');
-    failed.fail(new TransportError('offline'));
-    recorder.setActiveProject(failed);
-    recorder.begin('integrate');
-    recorder.fail(new OnboardingCancelledError());
+  it('lets a monorepo run carry on past a failed root, and only names its own steps', async () => {
+    const { recorder, steps } = watched(true);
+    recorder.rootsDetected(roots('link_existing', 'unbound_new'));
+    const [linked, failed] = [
+      { index: 0, path: 'root-0' },
+      { index: 1, path: 'root-1' },
+    ];
+    await steps.run(
+      new ScriptedStep({ step: 'link', root: linked }, done('success', undefined, 'linked-key')),
+    );
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'create_project', root: failed }, () =>
+          Promise.reject(new TransportError('offline')),
+        ),
+      ),
+    );
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'integrate' }, () =>
+          Promise.reject(new OnboardingCancelledError()),
+        ),
+      ),
+    );
 
     const { run, projects } = await emit(recorder);
 
-    expect(run.stopped_at).toBe('integrate');
-    expect(run.failure_reason).toBe('cancelled');
+    expect(run).toMatchObject({ stopped_at: 'integrate', failure_reason: 'cancelled' });
     expect(
       projects.map(({ stopped_at, failure_reason, project_uuid }) => ({
         stopped_at,
@@ -186,26 +271,119 @@ describe('InitTelemetryRecorder', () => {
   });
 
   it('leaves the run-level step empty when a monorepo root ends the run', async () => {
-    const recorder = new InitTelemetryRecorder(true);
-    const [root] = recorder.setProjects(['link_existing']);
-    recorder.setActiveProject(root);
-    root.begin('link');
-    recorder.fail(new OnboardingCancelledError());
+    const { recorder, steps } = watched(true);
+    recorder.rootsDetected(roots('link_existing'));
+    const cancel = new OnboardingCancelledError();
+
+    await thrownBy(
+      steps.run(
+        new ScriptedStep({ step: 'link', root: { index: 0, path: 'root-0' } }, () =>
+          Promise.reject(cancel),
+        ),
+      ),
+    );
+    recorder.failRun(cancel);
 
     const { run, projects } = await emit(recorder);
-
     expect(run.stopped_at).toBeNull();
     expect(run.failure_reason).toBe('cancelled');
     expect(projects[0].stopped_at).toBe('link');
   });
 
+  it('carries on past a run-level step that ends failed without an error', async () => {
+    const { recorder, steps } = watched();
+    await steps.run(new ScriptedStep({ step: 'integrate' }, done('failed')));
+
+    const { run } = await emit(recorder);
+
+    expect(run.steps).toEqual(['integrate:failed']);
+    expect(run.stopped_at).toBeNull();
+  });
+
+  it('stops a root at a step that ends failed without an error', async () => {
+    const { recorder, steps } = watched(true);
+    recorder.rootsDetected(roots('link_existing'));
+    await steps.run(
+      new ScriptedStep({ step: 'link', root: { index: 0, path: 'root-0' } }, done('failed')),
+    );
+
+    const [project] = (await emit(recorder)).projects;
+
+    expect(project).toMatchObject({ stopped_at: 'link', failure_reason: 'unknown' });
+  });
+
+  it('classifies the cause a root returns with its failure, and applies the path it ended on', async () => {
+    const { recorder, steps } = watched(true);
+    recorder.rootsDetected(roots('unbound_new'));
+    const root = { index: 0, path: 'root-0' };
+
+    await steps.run(
+      new ScriptedStep({ step: 'create_project', root: root }, () =>
+        Promise.resolve({
+          outcome: 'failed',
+          value: undefined,
+          initPath: 'bound_new',
+          cause: new ForbiddenApiError('no'),
+        }),
+      ),
+    );
+
+    const [project] = (await emit(recorder)).projects;
+
+    expect(project).toMatchObject({
+      init_path: 'bound_new',
+      stopped_at: 'create_project',
+      failure_reason: 'permission',
+    });
+  });
+
+  it('knows the roots a detection reports, with their expected paths', async () => {
+    const { recorder, steps } = watched(true);
+    const found = roots('link_existing', 'unbound_new');
+    await steps.run(
+      new ScriptedStep({ step: 'detect' }, () => Promise.resolve(success(found, { roots: found }))),
+    );
+
+    const { run, projects } = await emit(recorder);
+
+    expect(run.steps).toEqual(['detect:success']);
+    expect(projects.map(({ init_path }) => init_path)).toEqual(['link_existing', 'unbound_new']);
+  });
+
+  it('puts a root on the path its step runs on, registering the root when it was not known', async () => {
+    const { recorder, steps } = watched();
+    await steps.run(
+      new ScriptedStep({ step: 'project_bind', root: ROOT }, done('declined'), 'bound_new'),
+    );
+    await steps.run(
+      new ScriptedStep({ step: 'create_project', root: ROOT }, done('declined'), 'unbound_new'),
+    );
+
+    const [project] = (await emit(recorder)).projects;
+
+    expect(project).toMatchObject({
+      init_path: 'unbound_new',
+      steps: ['project_bind:declined', 'create_project:declined'],
+    });
+  });
+
+  it('updates the path of a root named again by detection', async () => {
+    const { recorder, steps } = watched();
+    recorder.rootsDetected([{ root: ROOT, initPath: 'bound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('declined')));
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+
+    const [project] = (await emit(recorder)).projects;
+
+    expect(project).toMatchObject({ init_path: 'unbound_new', steps: ['project_bind:declined'] });
+  });
+
   it('reports declining every option as cancelled at the last refusal', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('login', 'already_done');
-    recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.record('project_bind', 'declined');
-    project.record('create_project', 'declined');
+    const { recorder, steps } = watched();
+    recorder.rootsDetected([{ root: ROOT, initPath: 'bound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('declined')));
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'create_project', root: ROOT }, done('declined')));
     recorder.stopAtDeclined();
 
     const { run, projects } = await emit(recorder);
@@ -213,17 +391,18 @@ describe('InitTelemetryRecorder', () => {
     expect(run.stopped_at).toBe('create_project');
     expect(run.failure_reason).toBe('cancelled');
     expect(projects[0]).toMatchObject({
+      init_path: 'unbound_new',
+      steps: ['project_bind:declined', 'create_project:declined'],
       stopped_at: 'create_project',
       failure_reason: 'cancelled',
     });
   });
 
   it('does not report a run as cancelled when nothing was declined', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('detect', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.record('project_bind', 'skipped');
-    project.record('create_project', 'skipped');
+    const { recorder, steps } = watched();
+    recorder.rootsDetected([{ root: ROOT, initPath: 'unbound_new' }]);
+    await steps.run(new ScriptedStep({ step: 'project_bind', root: ROOT }, done('skipped')));
+    await steps.run(new ScriptedStep({ step: 'create_project', root: ROOT }, done('skipped')));
     recorder.stopAtDeclined();
 
     const { run, projects } = await emit(recorder);
@@ -233,11 +412,11 @@ describe('InitTelemetryRecorder', () => {
     expect(projects[0].stopped_at).toBeNull();
   });
 
-  it('keeps the first stop when a later error reaches it', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('login', 'already_done');
+  it('keeps the first stop when a later error reaches the run', async () => {
+    const { recorder, steps } = watched();
+    await steps.run(new ScriptedStep({ step: 'login' }, done('already_done')));
     recorder.stopAt('create_org', 'no_org');
-    recorder.fail(new TransportError('offline'));
+    recorder.failRun(new TransportError('offline'));
 
     const { run } = await emit(recorder);
 
@@ -245,49 +424,13 @@ describe('InitTelemetryRecorder', () => {
     expect(run.failure_reason).toBe('no_org');
   });
 
-  it('records detection once for a single-project run and follows its path changes', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.begin('detect');
-    recorder.detected('bound_new').record('project_bind', 'declined');
-    recorder.detected('unbound_new').record('create_project', 'success');
+  it('reports an error no step saw without naming a step', async () => {
+    const { recorder } = watched();
+    recorder.failRun(new ForbiddenApiError('no'));
 
-    const { run, projects } = await emit(recorder);
-
-    expect(run.steps).toEqual(['detect:success']);
-    expect(projects).toHaveLength(1);
-    expect(projects[0]).toMatchObject({
-      init_path: 'unbound_new',
-      steps: ['project_bind:declined', 'create_project:success'],
+    expect((await emit(recorder)).run).toMatchObject({
+      stopped_at: null,
+      failure_reason: 'permission',
     });
-  });
-
-  it('records an already set up directory as an already done detection', async () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.detected('already_done');
-
-    const { run } = await emit(recorder);
-
-    expect(run.steps).toEqual(['detect:already_done']);
-  });
-
-  it('finds monorepo roots by their label', () => {
-    const recorder = new InitTelemetryRecorder(true);
-    const [api, web] = recorder.setProjects(['link_existing', 'unbound_new'], ['api', 'web']);
-
-    expect(recorder.projectLabelled('web')).toBe(web);
-    expect(recorder.projectLabelled('api')).toBe(api);
-    expect(recorder.projectLabelled('docs')).toBeUndefined();
-  });
-
-  it('tells which steps were reached', () => {
-    const recorder = new InitTelemetryRecorder(false);
-    recorder.record('login', 'success');
-    const [project] = recorder.setProjects(['unbound_new']);
-    project.record('project_bind', 'skipped');
-
-    expect(recorder.has('login')).toBe(true);
-    expect(recorder.has('create_org')).toBe(false);
-    expect(project.has('project_bind')).toBe(true);
-    expect(project.has('link')).toBe(false);
   });
 });
