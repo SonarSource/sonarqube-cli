@@ -80,7 +80,7 @@ jobs:
 
       - name: Vault Secrets
         id: secrets
-        uses: SonarSource/vault-action-wrapper@20728776e291b4027acb3618091a31fa15c61a30 # 3.9.0
+        uses: SonarSource/vault-action-wrapper@a7fa5fd4a4e4e0f2593f6137c0812cac196cf4ce # 3.7.0
         with:
           secrets: |
             development/artifactory/token/{REPO_OWNER_NAME_DASH}-private-reader username | ARTIFACTORY_USER;
