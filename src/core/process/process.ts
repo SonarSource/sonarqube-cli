@@ -21,13 +21,10 @@
 // Process management helpers
 
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
 import { win32 } from 'node:path';
 import type { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { StringDecoder } from 'node:string_decoder';
-
-import { OWNER_ONLY_FILE_MODE } from '@/core/config-constants.ts';
 
 export type StdioMode = 'pipe' | 'ignore' | 'inherit';
 
@@ -52,10 +49,6 @@ export interface SpawnOptions {
    * (process group via `detached: true` on Unix; `taskkill /T /F` on Windows).
    */
   killProcessTree?: boolean;
-  /** Receives each decoded stdout chunk as it arrives, in addition to the captured `stdout`. */
-  onStdout?: (text: string) => void;
-  /** Receives each decoded stderr chunk as it arrives, in addition to the captured `stderr`. */
-  onStderr?: (text: string) => void;
 }
 
 type KillFn = (signal?: NodeJS.Signals) => void;
@@ -391,7 +384,6 @@ async function spawnProcess(
       proc.stdout.on('data', (data: Buffer) => {
         const text = stdoutDecoder.write(data);
         stdout += text;
-        options.onStdout?.(text);
       });
     }
 
@@ -399,7 +391,6 @@ async function spawnProcess(
       proc.stderr.on('data', (data: Buffer) => {
         const text = stderrDecoder.write(data);
         stderr += text;
-        options.onStderr?.(text);
       });
     }
 
@@ -515,50 +506,4 @@ async function captureProcessBytes(
       });
     });
   });
-}
-
-const DETACHED_EARLY_EXIT_MS = 1500;
-
-/**
- * Starts a child that outlives this process, with stdout and stderr appended to `logPath`.
- * Resolves to its pid once it has stayed up briefly, so a child that dies at once (bad classpath,
- * missing runtime) is reported instead of being announced as started. Nothing waits for it after.
- */
-export async function spawnDetachedToLog(
-  command: string,
-  args: string[],
-  options: Pick<SpawnOptions, 'cwd' | 'env'> & { logPath: string },
-): Promise<number> {
-  const logFd = openSync(options.logPath, 'a', OWNER_ONLY_FILE_MODE);
-  try {
-    return await new Promise<number>((resolve, reject) => {
-      const proc = spawn(command, args, {
-        cwd: options.cwd,
-        env: childEnv(options),
-        stdio: ['ignore', logFd, logFd],
-        detached: true,
-        windowsHide: true,
-      });
-      proc.once('error', reject);
-      proc.once('spawn', () => {
-        const pid = proc.pid;
-        if (pid === undefined) {
-          reject(new Error('The process has no pid.'));
-          return;
-        }
-        const settle = setTimeout(() => {
-          proc.removeAllListeners('exit');
-          proc.unref();
-          resolve(pid);
-        }, DETACHED_EARLY_EXIT_MS);
-        proc.once('exit', (code, signal) => {
-          clearTimeout(settle);
-          const reason = signal ?? `code ${code}`;
-          reject(new Error(`The process exited at once (${reason}).`));
-        });
-      });
-    });
-  } finally {
-    closeSync(logFd);
-  }
 }
