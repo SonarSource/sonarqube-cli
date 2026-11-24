@@ -116,13 +116,32 @@ describe('system status MCP endpoint', () => {
           "Not authenticated. Run 'sonar auth login' to authenticate.",
         );
       }
-      expect(data.healthy).toBe(false);
+      expect(data.healthy).toBe(failure === 'unauthorized');
       if (failure === 'invalid token') {
-        expect(fixture.healthRequests).toBe(0);
+        expect(fixture.healthRequests).toBe(1);
         expect(data.mcp.startupError).toContain('Invalid token');
+      }
+      if (failure === 'unauthenticated' || failure === 'invalid token') {
+        expect(
+          data.recommendations.filter((message: string) => message.includes('sonar auth login')),
+        ).toHaveLength(1);
       }
       expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
       expect(fixture.requests).toHaveLength(0);
     },
   );
+
+  it('does not require a container runtime when MCP is not configured', async () => {
+    fixture.healthStatus = 404;
+    harness.withExtraEnv({
+      PATH: harness.cwd.dir('empty-bin').path,
+      SONARQUBE_CLI_MCP_WSL: 'never',
+    });
+    const result = await harness.run('system status --format json');
+    expect(result.exitCode).toBe(0);
+    const data = JSON.parse(result.stdout);
+    expect(data.mcp.containerRuntime.status).toBe('not_found');
+    expect(data.healthy).toBe(true);
+    expect(data.recommendations.join('\n')).not.toContain('MCP');
+  });
 });
