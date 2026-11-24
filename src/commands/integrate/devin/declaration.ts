@@ -18,9 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { constants } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import type {
   FeatureContainer,
@@ -55,8 +55,8 @@ import {
   buildUnixHookScript,
   buildWindowsHookScript,
   createAgentHookEntry,
+  matchesAgentHookScript,
   removeAgentHooks,
-  resolveAgentHookCommand,
   resolveAgentHookScriptPath,
   upsertAgentHooks,
 } from '../_common/hooks.ts';
@@ -97,6 +97,11 @@ const DEVIN_NATIVE_HOOKS = {
     subcommand: 'agent-session-start --agent devin',
   },
   Stop: { path: STOP_SCRIPT_REL, matcher: undefined, subcommand: 'agent-stop --agent devin' },
+  UserPromptSubmit: {
+    path: PROMPT_SECRETS_SCRIPT_REL,
+    matcher: '',
+    subcommand: 'devin-prompt-submit',
+  },
 };
 
 /** Devin also loads Claude hooks. Defer only to a native hook with the equivalent active entry. */
@@ -106,25 +111,19 @@ export async function hasDevinNativeHook(event: keyof typeof DEVIN_NATIVE_HOOKS)
   const targetRoot = resolveDevinConfigDir();
   const context = { targetRoot, scope: 'global' } as const;
   const { path, matcher, subcommand } = DEVIN_NATIVE_HOOKS[event];
-  const command = resolveAgentHookCommand(context, '', path);
+  const { hookConfig } = createAgentHookEntry(context, '', event, matcher, '', path);
   try {
     const document = JSON.parse(await readFile(join(targetRoot, DEVIN_CONFIG_FILE), 'utf8')) as {
       disableAllHooks?: boolean;
-      hooks?: Record<string, { matcher?: string; hooks: { type: string; command: string }[] }[]>;
+      hooks?: Record<string, unknown[]>;
     };
     if (document.disableAllHooks === true) return false;
-    const registered = document.hooks?.[event]?.some(
-      (entry) =>
-        entry.matcher === matcher &&
-        entry.hooks.some((hook) => hook.type === 'command' && hook.command === command),
+    const registered = document.hooks?.[event]?.some((entry) =>
+      isDeepStrictEqual(entry, hookConfig),
     );
     if (!registered) return false;
 
-    const script = resolveAgentHookScriptPath(context, '', path);
-    const windows = process.platform === 'win32';
-    await access(script, windows ? constants.R_OK : constants.X_OK);
-    const expected = windows ? buildWindowsHookScript(subcommand) : buildUnixHookScript(subcommand);
-    return (await readFile(script, 'utf8')).replaceAll('\r\n', '\n') === expected;
+    return await matchesAgentHookScript(resolveAgentHookScriptPath(context, '', path), subcommand);
   } catch {
     return false;
   }
@@ -168,8 +167,8 @@ function createDevinSecretsDetectionResources(): ResourceDeclaration[] {
         displayName: 'Devin UserPromptSubmit hook script',
         scriptPath: PROMPT_SECRETS_SCRIPT_REL,
         content: {
-          unix: buildUnixHookScript('devin-prompt-submit'),
-          windows: buildWindowsHookScript('devin-prompt-submit'),
+          unix: buildUnixHookScript(DEVIN_NATIVE_HOOKS.UserPromptSubmit.subcommand),
+          windows: buildWindowsHookScript(DEVIN_NATIVE_HOOKS.UserPromptSubmit.subcommand),
         },
       },
     ],

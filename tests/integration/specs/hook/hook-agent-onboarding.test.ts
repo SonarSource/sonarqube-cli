@@ -111,24 +111,31 @@ describe('sonar hook agent-onboarding', () => {
     expect(unrelated.stdout).toBe('');
   });
 
-  it('does not consume the Claude invitation when Devin inherits the hook', async () => {
-    seed('claude');
-    const command = 'hook agent-onboarding --agent claude';
-    const payload = JSON.stringify({
-      cwd: harness.cwd.path,
-      hook_event_name: 'SessionStart',
-    });
-    const devin = await harness.runWithStdin(command, payload, {
-      extraEnv: { DEVIN_PROJECT_DIR: harness.cwd.path },
-    });
-    expect(devin.exitCode).toBe(0);
-    expect(devin.stdout).toBe('');
+  it.each(['cursor', 'devin'] as const)(
+    'leaves Claude’s invitation available when %s inherits the hook',
+    async (agent) => {
+      seed('claude');
+      const command = 'hook agent-onboarding --agent claude';
+      const payload = JSON.stringify({
+        cwd: harness.cwd.path,
+        hook_event_name: 'SessionStart',
+      });
+      const cwd = harness.cwd.path;
+      const otherAgent = await harness.runWithStdin(command, payload, {
+        extraEnv:
+          agent === 'devin'
+            ? { DEVIN_PROJECT_DIR: cwd }
+            : { CURSOR_PROJECT_DIR: cwd, CURSOR_VERSION: '1.7.2', CLAUDE_PROJECT_DIR: cwd },
+      });
+      expect(otherAgent.exitCode).toBe(0);
+      expect(otherAgent.stdout).toBe('');
 
-    harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
-    const claude = await harness.runWithStdin(command, payload);
-    expect(claude.exitCode).toBe(0);
-    expect(claude.stdout).toContain('Sign in to SonarQube');
-  });
+      harness.state().withRawState(JSON.stringify(harness.stateJsonFile.asJson()));
+      const claude = await harness.runWithStdin(command, payload);
+      expect(claude.exitCode).toBe(0);
+      expect(claude.stdout).toContain('Sign in to SonarQube');
+    },
+  );
 
   it('removes dismissed guidance and keeps user settings', async () => {
     harness.userHome.writeFile('.claude/settings.json', '{"model":"sonnet"}');

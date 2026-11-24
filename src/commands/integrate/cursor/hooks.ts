@@ -69,7 +69,7 @@ export interface CursorHookEntryOptions {
 
 /** Build a managed Cursor hook entry for a given event and script. */
 export function buildCursorHookEntry(
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
   configDir: string,
   eventType: string,
   scriptPath: string,

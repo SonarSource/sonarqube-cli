@@ -19,7 +19,6 @@
  */
 
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
-import { detectCallerAgent } from '@/core/host/environment/agent-detector.ts';
 import { SUPPORTED_AGENT_IDS } from '@/core/host/environment/installed-agent-detector.ts';
 import { normalizeServerUrl } from '@/core/host/keychain.ts';
 import logger from '@/core/observability/logger.ts';
@@ -29,6 +28,7 @@ import { tryLoadState, updateState } from '@/core/state/state-repository.ts';
 import { formatSetupLoginCommand } from '../integrate/_common/pending-agent-setup.ts';
 import { AGENT_INTEGRATION_IDS } from '../integrate/integration-handlers.ts';
 import { resolveAdapter } from './agent-session-start/index.ts';
+import { inheritedClaudeHookHost } from './inherited-claude-hook.ts';
 import { readStdinJson } from './stdin.ts';
 
 export const AGENT_ONBOARDING_HOOK = 'agent-onboarding';
@@ -40,8 +40,6 @@ export async function agentOnboarding(
   const agent = SUPPORTED_AGENT_IDS.find((id) => id === rawAgent);
   const adapter = agent ? resolveAdapter(agent) : undefined;
   if (!agent || !adapter) return;
-  // Devin runs inherited Claude hooks and must not consume Claude's invitation.
-  if (agent === 'claude' && detectCallerAgent() === 'devin') return;
 
   try {
     const state = tryLoadState();
@@ -49,7 +47,9 @@ export async function agentOnboarding(
     const pending = state?.integrations.onboarding?.[id];
     if (pending?.status !== 'waiting_for_sign_in' || pending.invitationShown) return;
 
-    const input = adapter.parse(await readStdinJson<unknown>());
+    const payload = await readStdinJson<unknown>();
+    if (agent === 'claude' && inheritedClaudeHookHost(payload)) return;
+    const input = adapter.parse(payload);
     if (input.eventName === 'SubagentStart' || !input.startDir) return;
 
     const project = await discoverProject(input.startDir, {

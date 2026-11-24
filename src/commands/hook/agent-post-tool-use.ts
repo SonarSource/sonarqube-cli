@@ -25,7 +25,6 @@ import {
   SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND,
   type SqaaTelemetryCallerCommand,
 } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
-import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import type {
@@ -36,6 +35,7 @@ import type {
 import { runClaudePostToolUseDispatch } from './claude-hook-dispatch.ts';
 import { createContextAugmentationPostToolUseSubscriber } from './context-augmentation-hook-subscriber.ts';
 import type { HookCommandResult } from './hook-command-result.ts';
+import { shouldDeferClaudeHook } from './inherited-claude-hook.ts';
 import { analyzeEditedSqaaFile } from './sqaa-edited-file.ts';
 import { readStdinJsonWithRaw } from './stdin.ts';
 import { emitVortexUnavailableHookNotice } from './vortex-unavailable-hook-notice.ts';
@@ -63,7 +63,7 @@ function createSqaaPostToolUseSubscriber(
     id: 'sqaa',
     matches: (toolName) => toolName === 'Edit' || toolName === 'Write',
     async handle(payload) {
-      if (await hasDevinNativeHook('PostToolUse')) {
+      if (await shouldDeferClaudeHook('PostToolUse', payload)) {
         return { decision: 'none' };
       }
       return handleSqaaPostToolUse(payload, ctx, SQAA_CLAUDE_POST_TOOL_USE_CALLER_COMMAND);

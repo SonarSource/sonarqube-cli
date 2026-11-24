@@ -995,6 +995,54 @@ describe('agent stop hook', () => {
   );
 
   describe('Cursor', () => {
+    it(
+      'runs completion analysis once per Cursor action and keeps Claude fallback after removal',
+      async () => {
+        server = await harness
+          .newFakeServer()
+          .asSonarCloud()
+          .withAuthToken('test-token')
+          .withVortexEntitlement('org', 'org-uuid')
+          .withProject('project')
+          .withSqaaResponse(response)
+          .start();
+        harness.withAuth(server.baseUrl(), 'test-token', 'org');
+        harness.state().withSecretsBinaryInstalled().withContextAugmentationBinaryInstalled();
+        expect((await harness.run('integrate cursor --non-interactive')).exitCode).toBe(0);
+        harness.cwd.writeFile('src/new.ts', BAD);
+
+        const inherited = (sessionId: string) =>
+          harness.runWithStdin(
+            'hook agent-stop --agent claude',
+            JSON.stringify(payloadFor(AGENTS.claude, { sessionId })),
+            { extraEnv: { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: harness.cwd.path } },
+          );
+        const [claude, cursor] = await Promise.all([
+          inherited('one'),
+          invokeAgent(AGENTS.cursor, { sessionId: 'one' }),
+        ]);
+        expectSilentStop(claude);
+        expectAgentContinuation(AGENTS.cursor, cursor);
+        expect(analyses()).toHaveLength(1);
+
+        harness.cwd.writeFile('src/new.ts', BAD + '\nexport const secondEdit = 1;\n');
+        expectAgentContinuation(
+          AGENTS.cursor,
+          await invokeAgent(AGENTS.cursor, { sessionId: 'one' }),
+        );
+        expectSilentStop(await inherited('one'));
+        expect(analyses()).toHaveLength(2);
+
+        const config = harness.userHome.file('.cursor', 'hooks.json').asJson();
+        delete config.hooks.stop;
+        harness.userHome.writeFile('.cursor/hooks.json', JSON.stringify(config));
+        harness.cwd.writeFile('src/new.ts', BAD + '\nexport const afterRemoval = 2;\n');
+        expectAgentContinuation(AGENTS.claude, await inherited('two'));
+        expect(analyses()).toHaveLength(3);
+      },
+      { timeout: 30000 },
+    );
+
     it.each(['aborted', 'error', undefined])(
       'skips analysis for Cursor status %j',
       async (status) => {

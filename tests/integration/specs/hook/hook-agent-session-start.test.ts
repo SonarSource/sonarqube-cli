@@ -123,6 +123,36 @@ describe('sonar hook agent-session-start', () => {
   });
 
   it(
+    'only loads the native Cursor session context when the equivalent hook is enabled',
+    async () => {
+      await setup();
+      harness.state().withSecretsBinaryInstalled();
+      expect((await harness.run('integrate cursor --non-interactive')).exitCode).toBe(0);
+      const cwd = harness.cwd.path;
+      const inherited = () =>
+        harness.runWithStdin(
+          'hook agent-session-start --agent claude',
+          JSON.stringify({ cwd, session_id: 'one', hook_event_name: 'SessionStart' }),
+          { extraEnv: { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: cwd } },
+        );
+      const [claude, cursor] = await Promise.all([
+        inherited(),
+        runHook('cursor', { conversation_id: 'one', workspace_roots: [cwd] }),
+      ]);
+      expect(claude.stdout).toBe('');
+      expect(cursor.stdout).toContain(CAG_CONTEXT);
+      expect(cagSessionStartInvocations()).toHaveLength(1);
+
+      const config = harness.userHome.file('.cursor', 'hooks.json').asJson();
+      delete config.hooks.sessionStart;
+      harness.userHome.writeFile('.cursor/hooks.json', JSON.stringify(config));
+      expect((await inherited()).stdout).toContain(CAG_CONTEXT);
+      expect(cagSessionStartInvocations()).toHaveLength(2);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
     'reports missing credentials for a multi-project workspace',
     async () => {
       await setup({ isAuthenticated: false, isProjectDiscoverable: false });

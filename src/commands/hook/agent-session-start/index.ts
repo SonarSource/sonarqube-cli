@@ -28,7 +28,6 @@ import {
   isContextAugmentationSkipped,
   printSessionStartContext,
 } from '@/commands/integrate/_common/context-augmentation.ts';
-import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { authMatchesRecordedServer } from '@/core/auth/recorded-connection.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
@@ -50,6 +49,7 @@ import { noteProject } from '@/core/telemetry/project-uuid.ts';
 import { resolveVortexEntitlement } from '@/core/vortex/entitlement.ts';
 
 import type { HookCommandResult } from '../hook-command-result.ts';
+import { shouldDeferClaudeHook } from '../inherited-claude-hook.ts';
 import { readStdinJson } from '../stdin.ts';
 import {
   claudeCodexAdapter,
@@ -80,8 +80,10 @@ export async function agentSessionStart(
     }
 
     let input: SessionStartInput;
+    let payload: unknown;
     try {
-      input = adapter.parse(await readStdinJson<unknown>());
+      payload = await readStdinJson<unknown>();
+      input = adapter.parse(payload);
     } catch {
       logSkip('unparseable stdin');
       return { agentSessionId: null };
@@ -89,8 +91,8 @@ export async function agentSessionStart(
     sessionId = input.sessionId;
     if (
       agent === 'claude' &&
-      input.eventName === 'SessionStart' &&
-      (await hasDevinNativeHook('SessionStart'))
+      (input.eventName === 'SessionStart' || input.eventName === 'sessionStart') &&
+      (await shouldDeferClaudeHook('SessionStart', payload))
     ) {
       return { agentSessionId: sessionId ?? null };
     }

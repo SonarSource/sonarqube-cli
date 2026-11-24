@@ -37,6 +37,7 @@ import { detectPlatform } from '@/core/host/environment/platform-detector.ts';
 import { buildLocalBinaryName } from '@/core/host/install/secrets.ts';
 
 import { TestHarness } from '../../harness';
+import { readSecretsScanArgvs } from '../../harness/recording-stub.ts';
 
 // Hardcoded test token — intentional fixture for secret detection, not a real credential
 // sonar-ignore-next-line S6769
@@ -62,6 +63,90 @@ describe('sonar hook cursor-prompt-submit', () => {
   afterEach(async () => {
     await harness.dispose();
   });
+
+  it.each(['cursor', 'devin'] as const)(
+    'runs the native %s prompt scanner once per submission and still blocks secrets',
+    async (agent) => {
+      const server = await harness.newFakeServer().withAuthToken('token').start();
+      harness.withAuth(server.baseUrl(), 'token');
+      harness.state().withRecordedSecretsBinaryInstalled();
+      const cwd = harness.cwd.path;
+      const extraEnv: Record<string, string> =
+        agent === 'devin'
+          ? { DEVIN_PROJECT_DIR: cwd }
+          : { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd };
+      const prompt = `my token is ${GITHUB_TEST_TOKEN}`;
+      const inherited = (session_id: string) =>
+        harness.runWithStdin(
+          'hook claude-prompt-submit',
+          JSON.stringify({ prompt, cwd, session_id, hook_event_name: 'UserPromptSubmit' }),
+          { extraEnv },
+        );
+      const native = (sessionId: string) =>
+        harness.runWithStdin(
+          `hook ${agent}-prompt-submit`,
+          JSON.stringify(
+            agent === 'devin'
+              ? { prompt, session_id: sessionId }
+              : { prompt, conversation_id: sessionId, hook_event_name: 'beforeSubmitPrompt' },
+          ),
+          { extraEnv },
+        );
+
+      expect((await inherited('before-install')).stdout).toContain('"decision":"block"');
+      expect(readSecretsScanArgvs(harness)).toHaveLength(1);
+      expect(
+        (await harness.run(`integrate ${agent} --non-interactive`, { extraEnv })).exitCode,
+      ).toBe(0);
+
+      const decision = agent === 'devin' ? '"decision":"block"' : '"continue":false';
+      expect((await inherited('one')).stdout).toBe('');
+      expect((await native('one')).stdout).toContain(decision);
+      expect((await native('one')).stdout).toContain(decision);
+      expect((await inherited('one')).stdout).toBe('');
+      const [foreignResult, nativeResult] = await Promise.all([inherited('two'), native('two')]);
+      expect(foreignResult.stdout).toBe('');
+      expect(nativeResult.stdout).toContain(decision);
+      expect(readSecretsScanArgvs(harness)).toHaveLength(4);
+    },
+    { timeout: 30000 },
+  );
+
+  it(
+    'retains Claude prompt blocking if Cursor registration or caller is uncertain',
+    async () => {
+      const server = await harness.newFakeServer().withAuthToken('token').start();
+      harness.withAuth(server.baseUrl(), 'token');
+      harness.state().withRecordedSecretsBinaryInstalled();
+      const cwd = harness.cwd.path;
+      expect((await harness.run('integrate cursor --non-interactive')).exitCode).toBe(0);
+
+      const extraEnv = { CURSOR_VERSION: '1.7.2', CURSOR_PROJECT_DIR: cwd };
+      const invoke = (env: Record<string, string>) =>
+        harness.runWithStdin(
+          'hook claude-prompt-submit',
+          JSON.stringify({ cwd, prompt: `my token is ${GITHUB_TEST_TOKEN}` }),
+          { extraEnv: env },
+        );
+      expect((await invoke({ ...extraEnv, CLAUDECODE: '1' })).stdout).toContain(
+        '"decision":"block"',
+      );
+      expect((await invoke({ CURSOR_PROJECT_DIR: cwd })).stdout).toContain('"decision":"block"');
+
+      const config = harness.userHome.file('.cursor', 'hooks.json').asJson();
+      harness.userHome.writeFile(
+        '.cursor/hooks.json',
+        JSON.stringify({ ...config, enabled: false }),
+      );
+      expect((await invoke(extraEnv)).stdout).toContain('"decision":"block"');
+      const [entry] = config.hooks.beforeSubmitPrompt;
+      config.hooks.beforeSubmitPrompt = [{ ...entry, matcher: 'DifferentEvent' }];
+      harness.userHome.writeFile('.cursor/hooks.json', JSON.stringify(config));
+      expect((await invoke(extraEnv)).stdout).toContain('"decision":"block"');
+      expect(readSecretsScanArgvs(harness)).toHaveLength(4);
+    },
+    { timeout: 30000 },
+  );
 
   it(
     'exits 0 and outputs Cursor block JSON when prompt contains a secret',
