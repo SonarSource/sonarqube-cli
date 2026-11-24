@@ -254,7 +254,7 @@ jobs:
     needs: [prepare, build-binaries]
     # Release branches only, matching macOS signing. Pull requests keep the unsigned binary.
     # Temporary: also run on the Authenticode pull request. Remove this commit before merge.
-    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || github.head_ref == 'feature/dam/CLI-1670-authenticode-sign-windows-sonar'
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || github.head_ref == 'vn/test-pr-1357-build'
     permissions:
       id-token: write
       contents: read
