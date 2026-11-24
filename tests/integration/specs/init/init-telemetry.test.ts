@@ -22,6 +22,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
+import { generateProjectProposal } from '@/commands/init/key-proposal.ts';
+
 import {
   readCommandEvents,
   readInitExecutedEvents,
@@ -221,6 +223,34 @@ describe('sonar init telemetry', () => {
           init_path: 'unbound_new',
           steps: ['project_bind:declined', 'create_project:skipped'],
           stopped_at: 'project_bind',
+          failure_reason: 'cancelled',
+        }),
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'reports declining the project found under the generated key as a cancelled link',
+    async () => {
+      interactive();
+      initGitRepo(harness.cwd.path);
+      const { projectKey } = generateProjectProposal(harness.cwd.path, undefined, ORG);
+      await signInToCloud((s) => s.withProject(projectKey));
+
+      const session = harness.runInteractive('init');
+      await session.decline('Link this directory to it?');
+      await session.decline('another existing project');
+      await session.decline(INTEGRATE_PROMPT);
+      const result = await session.waitFinish();
+
+      expect(result.exitCode).toBe(0);
+      expect(runEvent()).toMatchObject({ stopped_at: 'link', failure_reason: 'cancelled' });
+      expect(projectEvents()).toEqual([
+        expect.objectContaining({
+          init_path: 'link_existing',
+          steps: ['project_bind:skipped', 'create_project:skipped', 'link:declined'],
+          stopped_at: 'link',
           failure_reason: 'cancelled',
         }),
       ]);

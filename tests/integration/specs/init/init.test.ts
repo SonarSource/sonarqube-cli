@@ -73,7 +73,7 @@ describe('sonar init', () => {
     git(['remote', 'add', 'origin', url], harness.cwd.path);
   }
 
-  const NO_PROJECT = 'No Sonar project exists for this directory yet.';
+  const NO_PROJECT = 'No SonarQube project exists for this directory yet.';
 
   function withImportableRepo(alm: string, slug: string) {
     return (server: ReturnType<typeof newCloudServer>) =>
@@ -1181,7 +1181,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --non-interactive --link');
 
         expect(result.exitCode).toBe(2);
-        expect(result.stderr).toContain('--link found no Sonar project for this directory');
+        expect(result.stderr).toContain('--link found no SonarQube project for this directory');
         expect(result.stderr).toContain('--link <key>');
       },
       TIMEOUT,
@@ -2239,6 +2239,8 @@ describe('sonar init', () => {
           expect(result.stdout + result.stderr).toContain(
             'web: No project was linked or created: creating one without repository binding is not supported.',
           );
+          // Without a git remote, --bind could not create it either.
+          expect(result.stdout + result.stderr).not.toContain('or use --bind');
           expect(createdKeys(server)).toEqual([]);
           expect(linkedRoots()).toMatchObject([{ path: 'api', projectKey: 'api-key' }]);
         },
@@ -2515,6 +2517,7 @@ describe('sonar init', () => {
             const result = await session.waitFinish();
 
             expect(result.stdout).toContain('web: No project was linked or created');
+            expect(result.stdout).toContain('or use --bind.');
             expect(batches(server)).toHaveLength(0);
             expect(createdKeys(server)).toEqual([]);
           },
@@ -2609,6 +2612,8 @@ describe('sonar init', () => {
             const result = await session.waitFinish();
 
             expect(result.stdout).toContain('web: No project was linked or created');
+            // The project exists, which --bind refuses to touch.
+            expect(result.stdout).not.toContain('or use --bind');
             expect(createdKeys(server)).toEqual([]);
             expect(harness.cwd.exists('.sonar-config.json')).toBe(false);
           },
@@ -2879,7 +2884,7 @@ describe('sonar init', () => {
         const result = await harness.run('init --help');
 
         expect(result.exitCode).toBe(0);
-        expect(result.stdout).toMatch(/link an existing\s+Sonar project/);
+        expect(result.stdout).toMatch(/link an\s+existing\s+SonarQube project/);
         expect(result.stdout).toContain('--dry-run');
         for (const option of [
           '--create',
@@ -2957,7 +2962,7 @@ describe('sonar init', () => {
         expect(result.exitCode).toBe(0);
         const output = result.stdout + result.stderr;
         expect(output).toContain('No project was created.');
-        expect(output).not.toContain('No Sonar project exists');
+        expect(output).not.toContain('No SonarQube project exists');
         expect(createRequests(server)).toEqual([]);
       },
       TIMEOUT,

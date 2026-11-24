@@ -41,6 +41,7 @@ import type { Console } from '@/core/ui/console.ts';
 import type { InitOutcome, MonorepoRootResult } from '../init-outcome.ts';
 import { generateProjectProposal } from '../key-proposal.ts';
 import type { MonorepoRootOption } from '../options.ts';
+import { remoteRepositorySlug } from '../remote-host.ts';
 import { classifyInitFailure } from '../telemetry/failure-reason.ts';
 import type { InitFailureReason, InitPathId } from '../telemetry/init-telemetry.ts';
 import type { ProjectInitRecorder } from '../telemetry/init-telemetry-recorder.ts';
@@ -196,13 +197,22 @@ async function mapExistingRoot(
   return { path, kind: 'linked', projectKey: mapping.projectKey };
 }
 
-/** Nothing creates a project without binding, so a root left without one fails with how to map one. */
-function noProjectForRoot(path: string): MonorepoRootResult {
+/**
+ * Nothing creates a project without binding, so a root left without one fails with how to map one.
+ * `--bind` is suggested only when it could create the root's project.
+ */
+function noProjectForRoot(path: string, bindable: boolean): MonorepoRootResult {
+  const bind = bindable ? ', or use --bind' : '';
   return {
     path,
     kind: 'failed',
-    reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>, or use --bind.`,
+    reason: `No project was linked or created: creating one without repository binding is not supported. Name an existing project with --root ${path}=<project key>${bind}.`,
   };
+}
+
+/** Binding needs SonarQube Cloud and a GitHub or Azure DevOps remote. */
+function canBind({ remote }: MonorepoRoot, { auth }: DetectDeps): boolean {
+  return auth.connectionType === 'cloud' && !!remote && remoteRepositorySlug(remote) !== null;
 }
 
 /**
@@ -235,7 +245,8 @@ async function offerGeneratedProject(
       reason: `Project '${mapping.projectKey}' already exists and was not linked. Name it with --root ${path}=<project key> to map it.`,
     };
   }
-  return noProjectForRoot(path);
+  // The project exists, which `--bind` refuses to touch.
+  return noProjectForRoot(path, false);
 }
 
 function onboardSelectedRoot(
@@ -264,7 +275,7 @@ function onboardSelectedRoot(
             kind: 'failed',
             reason: `Project '${root.mapping.projectKey}' does not exist in ${deps.auth.orgKey ?? 'the active organization'}, and --link never creates one.`,
           })
-        : Promise.resolve(noProjectForRoot(root.path));
+        : Promise.resolve(noProjectForRoot(root.path, canBind(root, deps)));
     case 'other-org': {
       const active = deps.auth.orgKey ?? 'the active one';
       return Promise.resolve({

@@ -27,25 +27,35 @@ import { generateProjectProposal } from '../key-proposal.ts';
 import type { DetectDeps } from './detect.ts';
 import { runLinkExisting } from './link-existing.ts';
 
-const NO_PROJECT = 'No Sonar project exists for this directory yet.';
+const NO_PROJECT = 'No SonarQube project exists for this directory yet.';
+
+export interface NoProjectResult {
+  outcome: InitOutcome;
+  /** A project was found under the generated key and offered for linking. */
+  offeredLink: boolean;
+}
 
 /**
  * Nothing binds the repository to a project and no new one is bound to it. A project an earlier
  * run created under the key generated for this directory is offered for linking; otherwise the
  * run ends without creating anything, and says how to link an existing project.
  */
-export async function runNoProject(path: NoProjectPath, deps: DetectDeps): Promise<InitOutcome> {
+export async function runNoProject(
+  path: NoProjectPath,
+  deps: DetectDeps,
+): Promise<NoProjectResult> {
   const { projectRoot, remote } = path;
   const { auth, http } = deps;
   const { projectKey } = generateProjectProposal(projectRoot, remote, auth.orgKey);
   const existing = await new ProjectsClient(http).findProject(projectKey, auth.orgKey).orThrow();
   if (existing) {
-    return runLinkExisting(
+    const outcome = await runLinkExisting(
       { path: 'link-existing', projectRoot, remote, projectKey: existing.key },
       deps,
     );
+    return { outcome, offeredLink: true };
   }
-  return reportNoProject(path, deps);
+  return { outcome: reportNoProject(path, deps), offeredLink: false };
 }
 
 function reportNoProject(
@@ -54,7 +64,7 @@ function reportNoProject(
 ): InitOutcome {
   if (intent?.kind === 'link') {
     throw new InvalidOptionError(
-      '--link found no Sonar project for this directory.',
+      '--link found no SonarQube project for this directory.',
       'Name the project with --link <key>.',
     );
   }

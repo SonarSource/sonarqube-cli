@@ -367,7 +367,7 @@ async function noProject(
 ): Promise<InitOutcome> {
   project.setPath('unbound_new');
   project.begin('create_project');
-  const outcome = await runNoProject(path, deps);
+  const { outcome, offeredLink } = await runNoProject(path, deps);
   if (outcome.kind === 'linked') {
     // The generated key named a project, and the user linked it.
     project.record('create_project', 'skipped');
@@ -376,6 +376,11 @@ async function noProject(
     project.setProjectKey(outcome.projectKey);
   } else if (outcome.kind === 'declined') {
     project.record('create_project', 'skipped');
+    if (offeredLink) {
+      // The generated key named a project, and the user turned the link down.
+      project.setPath('link_existing');
+      project.record('link', 'declined');
+    }
   }
   return outcome;
 }
