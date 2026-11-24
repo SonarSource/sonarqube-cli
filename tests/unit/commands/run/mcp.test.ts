@@ -37,6 +37,7 @@ import * as readline from 'node:readline';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
+import { HostedMcpClient } from '@/commands/run/hosted-mcp-client.ts';
 import { runMcp } from '@/commands/run/mcp.ts';
 import { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -152,9 +153,14 @@ describe('runMcp', () => {
   let cwdSpy: ReturnType<typeof spyOn>;
   let createInterfaceSpy: ReturnType<typeof spyOn>;
   let networkConfigSpy: ReturnType<typeof spyOn>;
+  let healthSpy: ReturnType<typeof spyOn>;
   let stdinIsTtyDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    healthSpy = spyOn(HostedMcpClient.prototype, 'checkHealth').mockResolvedValue({
+      available: false,
+      reason: 'returned HTTP 404',
+    });
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectKey: undefined,
       repoRoot: undefined,
@@ -163,6 +169,7 @@ describe('runMcp', () => {
   });
 
   afterEach(() => {
+    healthSpy.mockRestore();
     detectRuntimeSpy?.mockRestore();
     discoverProjectSpy.mockRestore();
     spawnSpy?.mockRestore();
