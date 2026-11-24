@@ -52,6 +52,9 @@ import {
   discoverProject,
 } from '@/core/project-discovery/project-info.ts';
 
+import { bridgeHostedMcp } from './hosted-mcp-bridge.ts';
+import { HostedMcpClient } from './hosted-mcp-client.ts';
+
 export interface McpRunOptions {
   debug?: boolean;
   readOnly?: boolean;
@@ -94,11 +97,9 @@ export async function runMcp(
 
     const auth = authResult.value;
     const { console } = ctx;
-    const detection = await detectContainerRuntime();
-    if (!detection.runtime) {
-      await failStartup(runtimeDetectionError(detection));
-      return;
-    }
+    const connection = ctx.withAuth(auth).connection;
+    const hosted = new HostedMcpClient(connection);
+    const availability = await hosted.checkHealth();
 
     const cwd = process.cwd();
     const cwdIsHomeDir = canonicalizePath(cwd) === canonicalizePath(homedir());
@@ -121,6 +122,25 @@ export async function runMcp(
     const discoveredRootIsHomeDir =
       discovered && canonicalizePath(discovered.projectRoot) === canonicalizePath(homedir());
     const projectRoot = discoveredRootIsHomeDir ? undefined : discovered?.projectRoot;
+
+    if (availability.available) {
+      process.stderr.write(`[sonarqube-cli] MCP: hosted endpoint ${hosted.url}\n`);
+      await bridgeHostedMcp(hosted, { ...options, project: projectKey });
+      return;
+    }
+
+    process.stderr.write(
+      `[sonarqube-cli] MCP: local container fallback — ${hosted.url}/health ${availability.reason}.` +
+        (auth.connectionType === 'on-premise'
+          ? ' For Server 2026.3+, ask an administrator to configure and enable hosted MCP.'
+          : '') +
+        '\n',
+    );
+    const detection = await detectContainerRuntime();
+    if (!detection.runtime) {
+      await failStartup(runtimeDetectionError(detection));
+      return;
+    }
 
     const context: McpServerContext = projectRoot
       ? { withFsMount: true, projectRoot, projectKey }

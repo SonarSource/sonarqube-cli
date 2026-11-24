@@ -156,9 +156,9 @@ function fromEnv(
 
 // --- Client cert (no generic-env fallback) ---
 
-function readClientCertFile(filePath: string, label: string): Buffer;
-function readClientCertFile(filePath: string, label: string, encoding: BufferEncoding): string;
-function readClientCertFile(
+function readCertificateFile(filePath: string, label: string): Buffer;
+function readCertificateFile(filePath: string, label: string, encoding: BufferEncoding): string;
+function readCertificateFile(
   filePath: string,
   label: string,
   encoding?: BufferEncoding,
@@ -188,7 +188,7 @@ async function resolveClientCert(env: NodeJS.ProcessEnv): Promise<ClientCertConf
   )?.value;
 
   if (isPkcs12Path(certPath)) {
-    const p12Buffer = readClientCertFile(certPath, 'client certificate');
+    const p12Buffer = readCertificateFile(certPath, 'client certificate');
     const { cert: resolvedCertPem, key: resolvedKeyPem } = pkcs12ToPem(p12Buffer, passphrase);
     return {
       source,
@@ -219,8 +219,8 @@ async function resolveClientCert(env: NodeJS.ProcessEnv): Promise<ClientCertConf
     certPath,
     keyPath,
     passphrase,
-    resolvedCertPem: readClientCertFile(certPath, 'client certificate', 'utf-8'),
-    resolvedKeyPem: readClientCertFile(keyPath, 'client certificate key', 'utf-8'),
+    resolvedCertPem: readCertificateFile(certPath, 'client certificate', 'utf-8'),
+    resolvedKeyPem: readCertificateFile(keyPath, 'client certificate key', 'utf-8'),
   };
 }
 
@@ -351,7 +351,10 @@ function buildTlsOption(config: ResolvedNetworkConfig) {
   const tls: TlsConfig = {};
 
   if (config.caCert?.explicit) {
-    tls.ca = [...rootCertificates, Bun.file(config.caCert.path)];
+    tls.ca = [
+      ...rootCertificates,
+      readCertificateFile(config.caCert.path, 'CA certificate', 'utf-8'),
+    ];
   }
 
   if (config.clientCert?.explicit) {
