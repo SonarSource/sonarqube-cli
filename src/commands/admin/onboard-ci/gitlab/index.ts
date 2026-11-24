@@ -29,7 +29,7 @@ import type { SonarConnection } from '@/core/server/connection.ts';
 import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
-import { resolveGitlabDopSetting } from '../dop-setting.ts';
+import { resolveDopSetting } from '../dop-setting.ts';
 import type { ClassificationEntry } from './dry-run.ts';
 import { computeDryRunResults } from './dry-run.ts';
 import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
@@ -236,7 +236,7 @@ async function preflight(
     id: dopSettingId,
     key: dopSettingKey,
     url: gitlabUrl,
-  } = await resolveGitlabDopSetting(sqsClient.bindings, options.bindingName);
+  } = await resolveDopSetting(sqsClient.bindings, 'gitlab', options.bindingName);
   const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken);
 
   return { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl };

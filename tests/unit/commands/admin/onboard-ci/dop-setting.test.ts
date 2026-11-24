@@ -20,10 +20,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 
-import {
-  resolveGithubDopSetting,
-  resolveGitlabDopSetting,
-} from '@/commands/admin/onboard-ci/dop-setting.ts';
+import { assertGithubComUrl, resolveDopSetting } from '@/commands/admin/onboard-ci/dop-setting.ts';
 import { okAsync } from '@/core/result.ts';
 import { SonarHttpClient } from '@/core/server/http-client.ts';
 import { ProjectBindingsClient } from '@/core/server/project-bindings.ts';
@@ -35,24 +32,17 @@ function client() {
 }
 
 describe('onboarding integration selection', () => {
-  it('accepts a GitHub.com URL with mixed case and a trailing slash', async () => {
-    const bindings = client();
-    const setting = { ...GITHUB, url: 'https://API.GITHUB.COM/' };
-    const response = spyOn(bindings, 'listDopSettings').mockReturnValue(okAsync([GITHUB, setting]));
-    try {
-      expect(await resolveGithubDopSetting(bindings)).toEqual(setting);
-    } finally {
-      response.mockRestore();
-    }
+  it('accepts a GitHub.com URL with mixed case and a trailing slash', () => {
+    expect(() => assertGithubComUrl('https://API.GITHUB.COM/')).not.toThrow();
   });
 
   it('rejects GitHub settings without an API URL', async () => {
     const bindings = client();
     const response = spyOn(bindings, 'listDopSettings').mockReturnValue(okAsync([GITHUB]));
     try {
-      const error = await resolveGithubDopSetting(bindings).catch((error: unknown) => error);
+      const error = await resolveDopSetting(bindings, 'github').catch((error: unknown) => error);
       expect(error).toMatchObject({
-        message: expect.stringContaining('No GitHub.com configuration found'),
+        message: expect.stringContaining("GitHub configuration 'github' has no API URL"),
       });
     } finally {
       response.mockRestore();
@@ -65,7 +55,7 @@ describe('onboarding integration selection', () => {
       okAsync([{ id: 'gitlab', key: 'gitlab', type: 'gitlab' }]),
     );
     try {
-      const error = await resolveGitlabDopSetting(bindings, 'gitlab').catch(
+      const error = await resolveDopSetting(bindings, 'gitlab', 'gitlab').catch(
         (error: unknown) => error,
       );
       expect(error).toMatchObject({
