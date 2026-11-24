@@ -106,12 +106,19 @@ jobs:
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
           GPG_SIGNING_PASSPHRASE: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_PASSPHRASE }}
+          # Authenticode signing replaces the Windows bytes on these refs, so that GPG signature is created afterwards.
+          SKIP_WINDOWS_GPG: ${{ github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') }}
         run: |
           set -euo pipefail
 
+          find_args=(dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \))
+          if [[ "${SKIP_WINDOWS_GPG}" == "true" ]]; then
+            find_args+=(! -name '*-windows-x86-64.exe')
+          fi
+
           while IFS= read -r -d '' binary; do
             bun build-scripts/sign.ts "$binary"
-          done < <(find dist -maxdepth 1 -type f \( -name '*.bin' -o -name '*.exe' \) -print0)
+          done < <(find "${find_args[@]}" -print0)
 
       - name: Upload linux-x86-64 binary
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -141,6 +148,15 @@ jobs:
             dist/*-macos-arm64.bin.asc
 
       - name: Upload windows-x86-64 binary
+        if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binary-windows-x86-64
+          if-no-files-found: error
+          path: dist/*-windows-x86-64.exe
+
+      - name: Upload windows-x86-64 binary
+        if: github.ref_name != github.event.repository.default_branch && !startsWith(github.ref_name, 'branch-')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-windows-x86-64
@@ -288,7 +304,7 @@ jobs:
         with:
           files: dist/*-windows-x86-64.exe
 
-      - name: Re-GPG-sign the Windows binary
+      - name: GPG-sign the Windows binary
         shell: bash
         env:
           GPG_SIGNING_KEY: ${{ fromJSON(steps.secrets.outputs.vault).GPG_SIGNING_KEY }}
