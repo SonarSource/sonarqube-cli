@@ -163,9 +163,11 @@ never repeat a write or roll back automatically.
 
 The CLI architecture commands work with SonarQube Cloud and SonarQube Server 2026.6 or later.
 On Server, intended and directive operations also use the public project lookup
-(/api/v2/components/projects). Check the installed MCP tool descriptions for their supported
-environments. Do not call unavailable operations, claim their results or substitute other
-analysis tools.
+(/api/v2/components/projects). Reading architecture data on Server needs Browse and See Source
+Code; without them, intended and directive lists can come back empty instead of refused, so do not
+treat an empty read as proof that nothing exists. Check the installed MCP tool descriptions for
+their supported environments. Do not call unavailable operations, claim their results or
+substitute other analysis tools.
 
 ## Findings summary
 

@@ -437,6 +437,7 @@ export async function applyDirectiveChanges(
     changes: updates.changes,
     toDelete,
     skipped: creations.skipped + updates.skipped,
+    noneVisible: creations.toCreate.length > 0 && existing.count === 0,
     created: [] as ProjectDirective[],
     updated: [] as ProjectDirective[],
     deleted: [] as string[],
