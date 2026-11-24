@@ -249,7 +249,7 @@ describe('integrate devin', () => {
   );
 
   it(
-    'warns about hook-execution conflicts when Claude and Devin are both detected',
+    'lists Claude and Devin together without a speculative hook warning',
     async () => {
       const server = await harness.newFakeServer().withAuthToken('tok').start();
       harness.withAuth(server.baseUrl(), 'tok');
@@ -261,10 +261,8 @@ describe('integrate devin', () => {
       session.keyCtrlC();
       const result = await session.waitFinish();
 
-      expect(result.stdout).toContain('Claude Code and Devin may conflict at the hook level.');
-      expect(result.stdout).toContain(
-        "→ Run 'sonar integrate' again anytime to add, customize or remove an agent.",
-      );
+      expect(result.stdout).toContain('Detected agents on your machine: Claude Code, Devin');
+      expect(result.stdout + result.stderr).not.toContain('may conflict at the hook level');
     },
     { timeout: 15000 },
   );
