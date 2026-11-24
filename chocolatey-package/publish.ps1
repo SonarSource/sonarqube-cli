@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
     [Parameter(Mandatory = $true)]
-    [string]$ApiKey
+    [string]$ApiKey,
+    [Parameter(Mandatory = $true)]
+    [string]$BinaryPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,10 +29,14 @@ if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
     throw 'Chocolatey is not installed on this runner.'
 }
 
-$baseUrl = "https://binaries.sonarsource.com/Distribution/sonarqube-cli/$Version/windows"
-$name = "sonarqube-cli-$Version-windows-x86-64.exe"
-$exeUrl = "$baseUrl/$name"
-$shaUrl = "$exeUrl.sha256"
+# The workflow downloads the CDN binary and its published .sha256 sidecar.
+$checksumPath = "$BinaryPath.sha256"
+if (-not (Test-Path -LiteralPath $BinaryPath)) {
+    throw "Binary not found: $BinaryPath"
+}
+if (-not (Test-Path -LiteralPath $checksumPath)) {
+    throw "Checksum not found: $checksumPath"
+}
 
 $work = Join-Path $PSScriptRoot 'work'
 if (Test-Path $work) {
@@ -43,21 +49,14 @@ Copy-Item (Join-Path $PSScriptRoot 'sonarqube-cli.nuspec') $work
 Copy-Item (Join-Path $PSScriptRoot 'tools\LICENSE.txt') $tools
 Copy-Item (Join-Path $PSScriptRoot 'tools\VERIFICATION.txt') $tools
 
-$exePath = Join-Path $env:TEMP $name
-Write-Host "Downloading $exeUrl"
-Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
-
-$raw = (Invoke-WebRequest -Uri $shaUrl -UseBasicParsing).Content
-if ($raw -is [byte[]]) {
-    $raw = [System.Text.Encoding]::UTF8.GetString($raw)
-}
+$raw = Get-Content -LiteralPath $checksumPath -Raw
 $expected = (($raw.Trim() -split '\s+')[0]).ToLower()
-$actual = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLower()
+$actual = (Get-FileHash -LiteralPath $BinaryPath -Algorithm SHA256).Hash.ToLower()
 if ($actual -ne $expected) {
-    throw "SHA256 mismatch for $exeUrl`n  expected: $expected`n  actual:   $actual"
+    throw "SHA256 mismatch for $BinaryPath`n  expected: $expected`n  actual:   $actual"
 }
 
-Copy-Item $exePath (Join-Path $tools 'sonar.exe')
+Copy-Item -LiteralPath $BinaryPath (Join-Path $tools 'sonar.exe')
 
 $utf8 = New-Object System.Text.UTF8Encoding $false
 foreach ($relative in @('sonarqube-cli.nuspec', 'tools\VERIFICATION.txt')) {
