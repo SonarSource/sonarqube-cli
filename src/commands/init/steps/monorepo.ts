@@ -250,7 +250,8 @@ function onboardSelectedRoot(
       if (!root.generated || linkOnly) {
         return mapExistingRoot(root, deps);
       }
-      return deps.interactive
+      // `--bind` refuses to touch an existing project, and without a terminal it cannot be asked.
+      return deps.interactive || deps.intent?.kind !== 'bind'
         ? offerGeneratedProject(root, deps)
         : Promise.resolve({
             path: root.path,
