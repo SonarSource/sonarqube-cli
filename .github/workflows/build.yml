@@ -253,7 +253,8 @@ jobs:
     runs-on: sonar-xs
     needs: [prepare, build-binaries]
     # Release branches only, matching macOS signing. Pull requests keep the unsigned binary.
-    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-')
+    # Temporary: also run on the Authenticode pull request. Remove this commit before merge.
+    if: github.ref_name == github.event.repository.default_branch || startsWith(github.ref_name, 'branch-') || github.head_ref == 'feature/dam/CLI-1670-authenticode-sign-windows-sonar'
     permissions:
       id-token: write
       contents: read
