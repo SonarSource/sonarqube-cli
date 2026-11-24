@@ -18,31 +18,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { readFileSync } from 'node:fs';
-
-import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import { CommandFailedError, InvalidOptionError } from '@/core/commands/command-error.ts';
-import { runWithConcurrencyLimit } from '@/core/concurrency/concurrency-pool.ts';
 import type { GitLabRepo } from '@/core/gitlab/client.ts';
 import { GitLabClient } from '@/core/gitlab/client.ts';
 import type { SonarConnection } from '@/core/server/connection.ts';
-import { ConcurrentProgress } from '@/core/ui/components/concurrent-progress.ts';
 import type { Console } from '@/core/ui/console.ts';
 
 import { resolveDopSetting } from '../dop-setting.ts';
-import type { ClassificationEntry } from './dry-run.ts';
-import { computeDryRunResults } from './dry-run.ts';
-import type { ProcessRepoContext, RepoClassification, RepoWithBranch } from './processor.ts';
-import { classifyRepo, executeRepo } from './processor.ts';
-import { writeReportFile } from './report.ts';
-import { OnboardCiSqsClient } from './sqs-api.ts';
+import {
+  assertOnPremiseConnection,
+  DRY_RUN_REPORT_FILE,
+  readOptionFile,
+  readReposFile,
+  REPORT_FILE,
+  runRepos,
+  writeReportFile,
+} from '../shared.ts';
+import { OnboardCiSqsClient } from '../sqs-api.ts';
+import type { ProcessRepoContext, RepoWithBranch } from './processor.ts';
+import { assessRepo, executeRepo } from './processor.ts';
 import { normalizeJobTemplate } from './templates.ts';
-import type { DryRunResults, OnboardCiGitlabOptions, OnboardCiResults } from './types.ts';
+import type { OnboardCiGitlabInput, OnboardCiGitlabOptions } from './types.ts';
 import { TriggerOn } from './types.ts';
 
-export type { OnboardCiGitlabOptions } from './types.ts';
-
-const SETUP_CI_CONCURRENCY_LIMIT = 10;
 // GitLab CI variable names: letters, digits, underscores only, no leading digit.
 const GITLAB_VAR_NAME_RE = /^[a-zA-Z_]\w*$/;
 // GitLab group paths: no whitespace, no leading/trailing slashes.
@@ -53,11 +51,6 @@ const GITLAB_STAGE_NAME_RE = /^[a-zA-Z0-9 ._-]+$/;
 const SCANNER_PROPERTY_KEY_RE = /^[a-zA-Z][a-zA-Z0-9._-]*$/;
 // Scanner property value: must not be whitespace-only, contain newlines, ': ' (YAML mapping indicator), or ' #' (YAML comment).
 const SCANNER_PROPERTY_VALUE_UNSAFE_RE = /[\n\r]|: | #/;
-
-/** Commander collector for repeatable --scanner-property options. */
-export function collectScannerProperty(value: string, previous: string[] = []): string[] {
-  return [...previous, value];
-}
 
 /** Flags whose value the job template takes over entirely; conflicting with --job-template. */
 function assertNoJobShapeFlagsWithTemplate(options: OnboardCiGitlabOptions): void {
@@ -75,7 +68,16 @@ function assertNoJobShapeFlagsWithTemplate(options: OnboardCiGitlabOptions): voi
   }
 }
 
-export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions): void {
+export function validateOnboardCiGitlabOptions(
+  input: OnboardCiGitlabInput,
+): OnboardCiGitlabOptions {
+  const options = {
+    ...input,
+    sonarTokenVarName: input.sonarTokenVarName ?? 'SONAR_TOKEN',
+    triggerOn: input.triggerOn ?? TriggerOn.Both,
+    scannerProperty: input.scannerProperty ?? [],
+  };
+
   if (options.jobTemplate !== undefined) {
     assertNoJobShapeFlagsWithTemplate(options);
   }
@@ -132,6 +134,7 @@ export function validateOnboardCiGitlabOptions(options: OnboardCiGitlabOptions):
       );
     }
   }
+  return options;
 }
 
 function applyReposFileFilter<T extends GitLabRepo>(
@@ -141,20 +144,7 @@ function applyReposFileFilter<T extends GitLabRepo>(
   group: string,
   console: Console,
 ): T[] {
-  let fileContent: string;
-  try {
-    fileContent = readFileSync(reposFile, 'utf8');
-  } catch {
-    throw new CommandFailedError(`--repos-file: file not found or unreadable: ${reposFile}`, {
-      exitCode: 2,
-    });
-  }
-  const entries = new Set(
-    fileContent
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#')),
-  );
+  const entries = readReposFile(reposFile);
 
   const groupPrefix = `${group}/`;
   const relativePath = (r: GitLabRepo) =>
@@ -177,37 +167,14 @@ function applyReposFileFilter<T extends GitLabRepo>(
 }
 
 function readJobTemplateFile(jobTemplate: string): string {
-  let content: string;
-  try {
-    content = readFileSync(jobTemplate, 'utf8');
-  } catch {
-    throw new CommandFailedError(`--job-template: file not found or unreadable: ${jobTemplate}`, {
-      exitCode: 2,
-    });
-  }
-  return normalizeJobTemplate(content);
-}
-
-/**
- * Rejects a non-SonarQube-Server connection before any GitLab-specific work (including the
- * token prompt) happens. Exported so the command handler can call it ahead of
- * `resolveDevOpsToken`, without duplicating the error message.
- */
-export function assertOnPremiseConnection(auth: ResolvedAuth): void {
-  if (auth.connectionType !== 'on-premise') {
-    throw new CommandFailedError(
-      'sonar admin onboard-ci gitlab requires a SonarQube Server connection.',
-      {
-        remediationHint: "Authenticate against SonarQube Server with 'sonar auth login' and retry.",
-      },
-    );
-  }
+  return normalizeJobTemplate(readOptionFile(jobTemplate, '--job-template'));
 }
 
 async function preflight(
   connection: SonarConnection,
   gitlabToken: string,
   options: OnboardCiGitlabOptions,
+  console: Console,
 ): Promise<{
   sqsClient: OnboardCiSqsClient;
   gitlabClient: GitLabClient;
@@ -223,21 +190,19 @@ async function preflight(
     });
   }
 
-  assertOnPremiseConnection(auth);
+  assertOnPremiseConnection(auth, 'GitLab');
 
   const sqsClient = new OnboardCiSqsClient(httpClient);
-  if (!(await sqsClient.users.hasProvisionProjectsPermission().orThrow())) {
-    throw new CommandFailedError(
-      'This command requires the "Provision Projects" global permission in SonarQube.',
-    );
-  }
-
   const {
     id: dopSettingId,
     key: dopSettingKey,
     url: gitlabUrl,
   } = await resolveDopSetting(sqsClient.bindings, 'gitlab', options.bindingName);
-  const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken);
+  const gitlabClient = new GitLabClient(gitlabUrl, gitlabToken, {
+    onRetry: (message) => {
+      console.warn(message);
+    },
+  });
 
   return { sqsClient, gitlabClient, dopSettingId, dopSettingKey, gitlabUrl };
 }
@@ -267,111 +232,6 @@ async function fetchGroupData(
   return { repos, bindingMap };
 }
 
-function startRepoProgress(repos: RepoWithBranch[], console: Console): ConcurrentProgress {
-  const progress = new ConcurrentProgress({
-    console,
-    maxVisible: SETUP_CI_CONCURRENCY_LIMIT,
-    showResult: false,
-  });
-  progress.setTotal(repos.length);
-  progress.addItems(repos.map((r) => r.path_with_namespace));
-  progress.start();
-  return progress;
-}
-
-type SkipClassification = Extract<RepoClassification, { outcome: 'skip' }>;
-type ProceedClassification = Extract<RepoClassification, { outcome: 'proceed' }>;
-
-async function runConcurrent(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  onSkip: (repo: RepoWithBranch, classification: SkipClassification) => void,
-  onProceed: (
-    repo: RepoWithBranch,
-    classification: ProceedClassification,
-    slug: string,
-    progress: ConcurrentProgress,
-  ) => Promise<void>,
-  failed: { repo: string; error: string }[],
-  console: Console,
-): Promise<void> {
-  const progress = startRepoProgress(repos, console);
-  await runWithConcurrencyLimit(repos, SETUP_CI_CONCURRENCY_LIMIT, async (repo) => {
-    const slug = repo.path_with_namespace;
-    progress.update(slug, 'running');
-    try {
-      const classification = await classifyRepo(ctx, repo, bindingMap);
-      if (classification.outcome === 'skip') {
-        onSkip(repo, classification);
-        progress.update(slug, 'done', classification.message);
-      } else {
-        await onProceed(repo, classification, slug, progress);
-      }
-    } catch (err) {
-      failed.push({ repo: slug, error: String(err) });
-      progress.update(slug, 'failed', err instanceof Error ? err.message : String(err));
-    }
-  });
-  progress.finish();
-}
-
-async function runDryRun(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  console: Console,
-): Promise<DryRunResults> {
-  const classifications: ClassificationEntry[] = [];
-  const failedRepos: { repo: string; error: string }[] = [];
-
-  await runConcurrent(
-    ctx,
-    repos,
-    bindingMap,
-    (repo, classification) => classifications.push({ repo, classification }),
-    (repo, classification, slug, progress) => {
-      classifications.push({ repo, classification });
-      progress.update(slug, 'done', 'would open MR');
-      return Promise.resolve();
-    },
-    failedRepos,
-    console,
-  );
-
-  return computeDryRunResults(classifications, failedRepos);
-}
-
-async function runLive(
-  ctx: ProcessRepoContext,
-  repos: RepoWithBranch[],
-  bindingMap: Map<string, string>,
-  console: Console,
-): Promise<OnboardCiResults> {
-  const results: OnboardCiResults = { opened: [], skipped: [], failed: [] };
-
-  await runConcurrent(
-    ctx,
-    repos,
-    bindingMap,
-    (repo, classification) =>
-      results.skipped.push({
-        repo: repo.path_with_namespace,
-        reason: classification.reason,
-        mrUrl: classification.mrUrl,
-      }),
-    async (repo, classification, slug, progress) => {
-      const result = await executeRepo(ctx, repo, classification);
-      results.opened.push({ repo: slug, projectKey: result.projectKey, mrUrl: result.mrUrl });
-      progress.update(slug, 'done', 'MR opened');
-    },
-    results.failed,
-    console,
-  );
-
-  return results;
-}
-
 function buildOutroMessage(opened: number, skipped: number, failed: number): string {
   return `Opened ${opened.toLocaleString()} MRs · ${skipped.toLocaleString()} skipped · ${failed.toLocaleString()} failed`;
 }
@@ -389,6 +249,7 @@ export async function onboardCiGitlab(
     connection,
     gitlabToken,
     options,
+    console,
   );
 
   console.intro('Onboard CI configuration', 'GitLab');
@@ -416,15 +277,33 @@ export async function onboardCiGitlab(
     jobTemplateContent,
   };
 
+  const processRepo = options.dryRun ? assessRepo : executeRepo;
+  const results = await runRepos(
+    repos,
+    (repo) => repo.path_with_namespace,
+    (repo, progress) => {
+      const gitlab = ctx.gitlab.withRetryHandler((message) => {
+        progress.warn(`${repo.path_with_namespace}: ${message}`);
+      });
+      return processRepo({ ...ctx, gitlab }, repo, bindingMap);
+    },
+    'MR',
+    console,
+  );
+
   if (options.dryRun) {
-    const dryRunResults = await runDryRun(ctx, repos, bindingMap, console);
+    const dryRunResults = {
+      wouldOpenMr: results.wouldOpen,
+      wouldSkip: results.skipped.map(({ repo, reason }) => ({ repo, reason })),
+      failed: results.failed,
+    };
     const { wouldOpenMr, wouldSkip, failed } = dryRunResults;
     console.outro(
       buildOutroMessage(wouldOpenMr.length, wouldSkip.length, failed.length),
       failed.length > 0 ? 'error' : 'success',
       'No changes were made',
     );
-    writeReportFile(dryRunResults, 'sonar-onboard-ci-report-dry.json', console);
+    writeReportFile(dryRunResults, DRY_RUN_REPORT_FILE, console);
     if (failed.length > 0) {
       throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
         remediationHint: 'See the per-repository errors above and the report file for details.',
@@ -433,13 +312,21 @@ export async function onboardCiGitlab(
     return;
   }
 
-  const results = await runLive(ctx, repos, bindingMap, console);
   const { opened, skipped, failed } = results;
   console.outro(
     buildOutroMessage(opened.length, skipped.length, failed.length),
     failed.length > 0 ? 'error' : 'success',
   );
-  writeReportFile(results, 'sonar-onboard-ci-report.json', console);
+  // Preserve GitLab's published report keys while sharing prUrl internally.
+  writeReportFile(
+    {
+      opened: opened.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+      skipped: skipped.map(({ prUrl, ...entry }) => ({ ...entry, mrUrl: prUrl })),
+      failed,
+    },
+    REPORT_FILE,
+    console,
+  );
   if (failed.length > 0) {
     throw new CommandFailedError(`${failed.length} repositories failed to process.`, {
       remediationHint: 'See the per-repository errors above and the report file for details.',

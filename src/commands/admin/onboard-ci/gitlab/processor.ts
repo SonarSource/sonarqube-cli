@@ -25,7 +25,7 @@ import type { GitLabClient, GitLabRepo, GitLabTreeEntry } from '@/core/gitlab/cl
 import { GitLabApiError } from '@/core/gitlab/client.ts';
 import { HTTP_STATUS_BAD_REQUEST } from '@/core/server/http-constants.ts';
 
-import type { OnboardCiSqsClient } from './sqs-api.ts';
+import type { OnboardCiSqsClient } from '../sqs-api.ts';
 import {
   buildUpdatedCiYml,
   generateCiYml,
@@ -67,7 +67,7 @@ export interface ProcessRepoContext {
 }
 
 export type RepoClassification =
-  | { outcome: 'skip'; reason: SkipReason; message: string; mrUrl?: string }
+  | { outcome: 'skip'; reason: SkipReason; message: string; prUrl?: string }
   | {
       outcome: 'proceed';
       ciFilePath: string;
@@ -75,7 +75,9 @@ export type RepoClassification =
       projectKey: string;
     };
 
-export type ExecuteResult = { outcome: 'opened'; projectKey: string; mrUrl: string };
+export type ExecuteResult =
+  | { outcome: 'opened'; projectKey: string; prUrl: string }
+  | Extract<RepoClassification, { outcome: 'skip' }>;
 
 function isBranchAlreadyExistsError(err: unknown): boolean {
   return (
@@ -165,7 +167,7 @@ async function classifyNewRepo(
   return null;
 }
 
-export async function classifyRepo(
+export async function assessRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
   bindingMap: Map<string, string>,
@@ -214,7 +216,7 @@ export async function classifyRepo(
       outcome: 'skip',
       reason: SkipReason.MrAlreadyOpen,
       message: 'skipped (MR already open)',
-      mrUrl: openMrs[0].web_url,
+      prUrl: openMrs[0].web_url,
     };
   }
 
@@ -224,9 +226,13 @@ export async function classifyRepo(
 export async function executeRepo(
   ctx: ProcessRepoContext,
   repo: RepoWithBranch,
-  classification: Extract<RepoClassification, { outcome: 'proceed' }>,
+  bindingMap: Map<string, string>,
 ): Promise<ExecuteResult> {
-  const { ciFilePath, existingCi, projectKey } = classification;
+  const assessment = await assessRepo(ctx, repo, bindingMap);
+  if (assessment.outcome !== 'proceed') {
+    return assessment;
+  }
+  const { ciFilePath, existingCi, projectKey } = assessment;
 
   try {
     await ctx.gitlab.createBranch(repo.id, CI_BRANCH);
@@ -271,7 +277,7 @@ export async function executeRepo(
         ctx.options.triggerOn,
       );
 
-  const mrUrl = await ctx.gitlab.createMergeRequest(
+  const prUrl = await ctx.gitlab.createMergeRequest(
     repo.id,
     CI_BRANCH,
     repo.default_branch,
@@ -279,5 +285,5 @@ export async function executeRepo(
     mrDescription,
   );
 
-  return { outcome: 'opened', projectKey, mrUrl };
+  return { outcome: 'opened', projectKey, prUrl };
 }

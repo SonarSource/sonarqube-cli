@@ -43,7 +43,6 @@ export interface ProcessRepoContext {
 }
 
 type SkippedResult = { outcome: 'skip'; reason: string; prUrl?: string };
-type FailedResult = { outcome: 'failed'; error: string };
 type EligibleResult = {
   outcome: 'proceed';
   projectKey: string;
@@ -51,13 +50,9 @@ type EligibleResult = {
   title: string;
   body: string;
 };
-export type RepoAssessment = EligibleResult | SkippedResult | FailedResult;
+export type RepoAssessment = EligibleResult | SkippedResult;
 export type ExecuteResult =
-  { outcome: 'opened'; projectKey: string; prUrl: string } | SkippedResult | FailedResult;
-
-function failure(error: unknown): FailedResult {
-  return { outcome: 'failed', error: error instanceof Error ? error.message : String(error) };
-}
+  { outcome: 'opened'; projectKey: string; prUrl: string } | SkippedResult;
 
 async function retrieveOpenPrUrl(
   ctx: ProcessRepoContext,
@@ -109,57 +104,53 @@ export async function assessRepo(
   repo: GitHubRepo,
   bindings: ReadonlyMap<string, string>,
 ): Promise<RepoAssessment> {
-  try {
-    const projectKey = bindings.get(repo.full_name);
-    if (!projectKey) {
-      return { outcome: 'skip', reason: 'NOT_IN_SONARQUBE' };
-    }
-    if (repo.archived || repo.disabled || !repo.default_branch) {
-      return { outcome: 'skip', reason: 'UNSUPPORTED_REPOSITORY' };
-    }
-    if (!(await ctx.components.componentExists(projectKey).orThrow())) {
-      throw new CommandFailedError(
-        `Bound SonarQube project '${projectKey}' is missing or inaccessible.`,
-      );
-    }
-    if (await ctx.components.hasProjectBeenAnalyzed(projectKey).orThrow()) {
-      return { outcome: 'skip', reason: 'ALREADY_ANALYZED' };
-    }
-    const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
-    if (prUrl) {
-      return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
-    }
-    if (
-      (await ctx.github.getFileContent(
-        repo.full_name,
-        'sonar-project.properties',
-        repo.default_branch,
-      )) !== null
-    ) {
-      return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
-    }
-    const workflowAssessment = await assessWorkflows(ctx, repo);
-    if (workflowAssessment) {
-      return workflowAssessment;
-    }
-    validateWorkflowOptions(ctx.options, ctx.workflowTemplate);
-    if (ctx.workflowTemplate !== undefined) {
-      return {
-        outcome: 'proceed',
-        projectKey,
-        workflow: renderWorkflowTemplate(ctx.workflowTemplate, projectKey),
-        ...generateTemplatePrContent(projectKey),
-      };
-    }
+  const projectKey = bindings.get(repo.full_name);
+  if (!projectKey) {
+    return { outcome: 'skip', reason: 'NOT_IN_SONARQUBE' };
+  }
+  if (repo.archived || repo.disabled || !repo.default_branch) {
+    return { outcome: 'skip', reason: 'UNSUPPORTED_REPOSITORY' };
+  }
+  if (!(await ctx.components.componentExists(projectKey).orThrow())) {
+    throw new CommandFailedError(
+      `Bound SonarQube project '${projectKey}' is missing or inaccessible.`,
+    );
+  }
+  if (await ctx.components.hasProjectBeenAnalyzed(projectKey).orThrow()) {
+    return { outcome: 'skip', reason: 'ALREADY_ANALYZED' };
+  }
+  const prUrl = await retrieveOpenPrUrl(ctx, repo.full_name);
+  if (prUrl) {
+    return { outcome: 'skip', reason: 'PR_ALREADY_OPEN', prUrl };
+  }
+  if (
+    (await ctx.github.getFileContent(
+      repo.full_name,
+      'sonar-project.properties',
+      repo.default_branch,
+    )) !== null
+  ) {
+    return { outcome: 'skip', reason: 'ALREADY_CONFIGURED' };
+  }
+  const workflowAssessment = await assessWorkflows(ctx, repo);
+  if (workflowAssessment) {
+    return workflowAssessment;
+  }
+  validateWorkflowOptions(ctx.options, ctx.workflowTemplate);
+  if (ctx.workflowTemplate !== undefined) {
     return {
       outcome: 'proceed',
       projectKey,
-      workflow: generateWorkflow(projectKey, ctx.serverUrl, repo.default_branch, ctx.options),
-      ...generatePrContent(projectKey, ctx.serverUrl, ctx.options),
+      workflow: renderWorkflowTemplate(ctx.workflowTemplate, projectKey),
+      ...generateTemplatePrContent(projectKey),
     };
-  } catch (error) {
-    return failure(error);
   }
+  return {
+    outcome: 'proceed',
+    projectKey,
+    workflow: generateWorkflow(projectKey, ctx.serverUrl, repo.default_branch, ctx.options),
+    ...generatePrContent(projectKey, ctx.serverUrl, ctx.options),
+  };
 }
 
 async function prepareOnboardingBranch(
@@ -197,49 +188,43 @@ export async function executeRepo(
   repo: GitHubRepo,
   bindings: ReadonlyMap<string, string>,
 ): Promise<ExecuteResult> {
-  try {
-    // Refresh eligibility and render against the current default branch before replacing any branch.
-    repo = await ctx.github.getRepository(repo.full_name);
-    const assessment = await assessRepo(ctx, repo, bindings);
-    if (assessment.outcome !== 'proceed') {
-      return assessment;
-    }
-    const { projectKey, workflow, title, body } = assessment;
-    const base = await ctx.github.getBranch(repo.full_name, repo.default_branch);
-    if (!base) {
-      throw new CommandFailedError(`Default branch '${repo.default_branch}' is missing.`);
-    }
-    const branchResult = await prepareOnboardingBranch(ctx, repo, base.object.sha);
-    if (branchResult) {
-      return branchResult;
-    }
-    try {
-      await ctx.github.createFile(repo.full_name, WORKFLOW_PATH, CI_BRANCH, workflow, title);
-    } catch (error) {
-      if (
-        (await ctx.github.getFileContent(repo.full_name, WORKFLOW_PATH, CI_BRANCH)) !== workflow
-      ) {
-        throw error;
-      }
-    }
-    let prUrl: string;
-    try {
-      prUrl = await ctx.github.createPullRequest(
-        repo.full_name,
-        CI_BRANCH,
-        repo.default_branch,
-        title,
-        body,
-      );
-    } catch (error) {
-      const existing = await retrieveOpenPrUrl(ctx, repo.full_name);
-      if (!existing) {
-        throw error;
-      }
-      prUrl = existing;
-    }
-    return { outcome: 'opened', projectKey, prUrl };
-  } catch (error) {
-    return failure(error);
+  // Refresh eligibility and render against the current default branch before replacing any branch.
+  repo = await ctx.github.getRepository(repo.full_name);
+  const assessment = await assessRepo(ctx, repo, bindings);
+  if (assessment.outcome !== 'proceed') {
+    return assessment;
   }
+  const { projectKey, workflow, title, body } = assessment;
+  const base = await ctx.github.getBranch(repo.full_name, repo.default_branch);
+  if (!base) {
+    throw new CommandFailedError(`Default branch '${repo.default_branch}' is missing.`);
+  }
+  const branchResult = await prepareOnboardingBranch(ctx, repo, base.object.sha);
+  if (branchResult) {
+    return branchResult;
+  }
+  try {
+    await ctx.github.createFile(repo.full_name, WORKFLOW_PATH, CI_BRANCH, workflow, title);
+  } catch (error) {
+    if ((await ctx.github.getFileContent(repo.full_name, WORKFLOW_PATH, CI_BRANCH)) !== workflow) {
+      throw error;
+    }
+  }
+  let prUrl: string;
+  try {
+    prUrl = await ctx.github.createPullRequest(
+      repo.full_name,
+      CI_BRANCH,
+      repo.default_branch,
+      title,
+      body,
+    );
+  } catch (error) {
+    const existing = await retrieveOpenPrUrl(ctx, repo.full_name);
+    if (!existing) {
+      throw error;
+    }
+    prUrl = existing;
+  }
+  return { outcome: 'opened', projectKey, prUrl };
 }

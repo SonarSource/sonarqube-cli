@@ -55,7 +55,10 @@ const MAX_RETRIES = 5;
 const DEFAULT_RETRY_AFTER_S = 5;
 
 // Only used for idempotent GET requests — writes are issued once without retry.
-async function callWithRetry(fn: () => Promise<Response>): Promise<Response> {
+async function callWithRetry(
+  fn: () => Promise<Response>,
+  onRetry?: (message: string) => void,
+): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     const response = await fn();
     const retryable =
@@ -70,6 +73,14 @@ async function callWithRetry(fn: () => Promise<Response>): Promise<Response> {
       response.status === HTTP_STATUS_TOO_MANY_REQUESTS
         ? (retryAfterS + 1) * 1000
         : RETRY_5XX_DELAY_MS;
+    const reason =
+      response.status === HTTP_STATUS_TOO_MANY_REQUESTS
+        ? 'GitLab rate limit reached'
+        : `GitLab request failed with HTTP ${response.status}`;
+    const seconds = Math.ceil(delayMs / 1000);
+    onRetry?.(
+      `${reason}.\nRetrying in ${seconds} ${seconds === 1 ? 'second' : 'seconds'} (retry ${attempt + 1} of ${MAX_RETRIES}).`,
+    );
     await new Promise<void>((r) => setTimeout(r, delayMs));
   }
 }
@@ -95,9 +106,17 @@ export class GitLabClient {
   private readonly baseUrl: string;
   private readonly token: string;
 
-  constructor(baseUrl: string, token: string) {
+  constructor(
+    baseUrl: string,
+    token: string,
+    private readonly options: { onRetry?: (message: string) => void } = {},
+  ) {
     this.baseUrl = baseUrl.replace(/\/api\/v4\/?$/, '').replace(/\/$/, '');
     this.token = token;
+  }
+
+  withRetryHandler(onRetry: (message: string) => void): GitLabClient {
+    return new GitLabClient(this.baseUrl, this.token, { ...this.options, onRetry });
   }
 
   private headers(): Record<string, string> {
@@ -113,8 +132,9 @@ export class GitLabClient {
   }
 
   private fetchGet(url: string): Promise<Response> {
-    return callWithRetry(() =>
-      fetchAuthenticated(url, buildRequest('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
+    return callWithRetry(
+      () => fetchAuthenticated(url, buildRequest('GET', this.headers(), GET_TIMEOUT_MS, undefined)),
+      this.options.onRetry,
     );
   }
 
