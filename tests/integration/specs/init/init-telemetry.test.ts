@@ -22,8 +22,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-import { ALPHA_ENV_VAR } from '@/core/commands/stage.ts';
-
 import {
   readCommandEvents,
   readInitExecutedEvents,
@@ -44,7 +42,6 @@ describe('sonar init telemetry', () => {
 
   beforeEach(async () => {
     harness = await TestHarness.create();
-    harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'true' });
     harness.state().withTelemetryEnabled();
   });
 
@@ -81,13 +78,6 @@ describe('sonar init telemetry', () => {
 
   function projectEvents(): unknown[] {
     return readProjectInitEvents(harness.sonarUserHome.path).map((event) => event.event_payload);
-  }
-
-  async function confirmNewProject(session: ReturnType<typeof harness.runInteractive>) {
-    await session.waitText('Project name');
-    session.keyEnter();
-    await session.waitText('Project visibility');
-    session.keyEnter();
   }
 
   it(
@@ -210,29 +200,7 @@ describe('sonar init telemetry', () => {
   );
 
   it(
-    'reports creating a project without binding and skipping its first analysis',
-    async () => {
-      await signInToCloud();
-      initGitRepo(harness.cwd.path);
-
-      const result = await harness.run('init --non-interactive --create --project my-key');
-
-      expect(result.exitCode).toBe(0);
-      const run = runEvent();
-      expect(run.steps).toEqual(['login:already_done', 'detect:success', 'integrate:skipped']);
-      expect(run.remote_host ?? null).toBeNull();
-      expect(projectEvents()).toEqual([
-        expect.objectContaining({
-          init_path: 'unbound_new',
-          steps: ['project_bind:skipped', 'create_project:success', 'first_analysis:skipped'],
-        }),
-      ]);
-    },
-    TIMEOUT,
-  );
-
-  it(
-    'reports declining every option as a cancellation at the declined creation',
+    'reports declining to bind as a cancellation at the binding, since nothing else is created',
     async () => {
       interactive();
       await signInToCloud();
@@ -240,21 +208,19 @@ describe('sonar init telemetry', () => {
 
       const session = harness.runInteractive('init');
       await session.decline('Bind this repository');
-      await confirmNewProject(session);
-      await session.decline('Create this project');
       await session.decline(INTEGRATE_PROMPT);
       const result = await session.waitFinish();
 
       expect(result.exitCode).toBe(0);
       expect(runEvent()).toMatchObject({
-        stopped_at: 'create_project',
+        stopped_at: 'project_bind',
         failure_reason: 'cancelled',
       });
       expect(projectEvents()).toEqual([
         expect.objectContaining({
           init_path: 'unbound_new',
-          steps: ['project_bind:declined', 'create_project:declined'],
-          stopped_at: 'create_project',
+          steps: ['project_bind:declined', 'create_project:skipped'],
+          stopped_at: 'project_bind',
           failure_reason: 'cancelled',
         }),
       ]);
@@ -355,11 +321,9 @@ describe('sonar init telemetry', () => {
   );
 
   it(
-    'reports each monorepo root, and a failed one without stopping the run',
+    'reports each monorepo root, and one without a project as failed without stopping the run',
     async () => {
-      await signInToCloud((s) =>
-        s.withProject('api-key').withProjectCreateRejected('{"errors":[{"msg":"rejected"}]}'),
-      );
+      await signInToCloud((s) => s.withProject('api-key'));
       initGitRepo(harness.cwd.path);
       harness.cwd.writeFile('api/.keep', '');
       harness.cwd.writeFile('web/.keep', '');
@@ -419,10 +383,9 @@ describe('sonar init telemetry', () => {
   );
 
   it(
-    'does not count a run without alpha as cancelled when there was nothing to decline',
+    'does not count a run as cancelled when there was nothing to decline',
     async () => {
       interactive();
-      harness.withExtraEnv({ [ALPHA_ENV_VAR]: 'false' });
       await signInToCloud();
       initGitRepo(harness.cwd.path);
 
@@ -445,12 +408,10 @@ describe('sonar init telemetry', () => {
   it(
     'emits no init event for a dry run',
     async () => {
-      await signInToCloud();
+      await signInToCloud((s) => s.withProject('my-key'));
       initGitRepo(harness.cwd.path);
 
-      const result = await harness.run(
-        'init --dry-run --non-interactive --create --project my-key',
-      );
+      const result = await harness.run('init --dry-run --non-interactive --link my-key');
 
       expect(result.exitCode).toBe(0);
       expect(readInitExecutedEvents(harness.sonarUserHome.path)).toEqual([]);

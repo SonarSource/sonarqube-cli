@@ -21,12 +21,10 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
-  assertDryRunOptions,
   parseMonorepoRoots,
   validateIntentOptions,
   validateProjectKey,
   validateProjectName,
-  validateVisibility,
   warnIgnoredIntent,
 } from '@/commands/init/options.ts';
 import { InvalidOptionError } from '@/core/commands/command-error.ts';
@@ -51,11 +49,6 @@ describe('validation', () => {
     expect(() => validateProjectName('bad\nname')).toThrow(InvalidOptionError);
     expect(() => validateProjectName('bad\nname')).toThrow(/^--name must be/);
     expect(() => validateProjectName('bad\nname', 'Project name')).toThrow(/^Project name must be/);
-  });
-
-  it('accepts only private or public', () => {
-    expect(validateVisibility('public')).toBe('public');
-    expect(() => validateVisibility('internal')).toThrow(InvalidOptionError);
   });
 });
 
@@ -114,7 +107,6 @@ describe('validateIntentOptions', () => {
   it('reads each intent option, and a bare --link as linking the project found', () => {
     expect(validateIntentOptions({})).toBeUndefined();
     expect(validateIntentOptions({ bind: true })).toEqual({ kind: 'bind' });
-    expect(validateIntentOptions({ create: true })).toEqual({ kind: 'create' });
     expect(validateIntentOptions({ link: true })).toEqual({ kind: 'link' });
     expect(validateIntentOptions({ link: ' my-key ' })).toEqual({
       kind: 'link',
@@ -126,9 +118,9 @@ describe('validateIntentOptions', () => {
     expect(() => validateIntentOptions({ link: 'has space' })).toThrow(/^--link must contain/);
   });
 
-  it('rejects more than one intent, naming each', () => {
-    expect(() => validateIntentOptions({ link: true, bind: true, create: true })).toThrow(
-      '--link, --bind, --create cannot be combined',
+  it('rejects --link and --bind together, naming each', () => {
+    expect(() => validateIntentOptions({ link: true, bind: true })).toThrow(
+      '--link, --bind cannot be combined',
     );
   });
 
@@ -139,10 +131,9 @@ describe('validateIntentOptions', () => {
     expect(validateIntentOptions({ monorepo: true })).toBeUndefined();
   });
 
-  it('accepts a bare --link, --bind or --create with --monorepo', () => {
+  it('accepts a bare --link or --bind with --monorepo', () => {
     expect(validateIntentOptions({ bind: true, monorepo: true })).toEqual({ kind: 'bind' });
     expect(validateIntentOptions({ link: true, monorepo: true })).toEqual({ kind: 'link' });
-    expect(validateIntentOptions({ create: true, monorepo: true })).toEqual({ kind: 'create' });
   });
 });
 
@@ -161,38 +152,11 @@ describe('warnIgnoredIntent', () => {
 
   it('names the ignored option, and how to relink to a named key', () => {
     const console = new FakeConsole();
-    warnIgnoredIntent({ kind: 'create' }, console);
+    warnIgnoredIntent({ kind: 'bind' }, console);
     warnIgnoredIntent({ kind: 'link', projectKey: 'other' }, console);
     expect(warnings(console)).toEqual([
-      '--create ignored: this directory is already linked in .sonar-config.json.',
+      '--bind ignored: this directory is already linked in .sonar-config.json.',
       "--link ignored: this directory is already linked in .sonar-config.json. To link it to 'other' instead, run 'sonar link other'.",
     ]);
-  });
-});
-
-describe('assertDryRunOptions', () => {
-  const none = {
-    scannerProperties: new Map<string, string>(),
-    verbose: false,
-    detach: false,
-    scan: false,
-  };
-
-  it('accepts a run without first-analysis options', () => {
-    expect(() => assertDryRunOptions(none)).not.toThrow();
-  });
-
-  it('names each first-analysis option given, never a property value', () => {
-    const flags = {
-      ...none,
-      scan: true,
-      scannerProperties: new Map([['sonar.exclusions', 'secret']]),
-    };
-
-    expect(() => assertDryRunOptions(flags)).toThrow(InvalidOptionError);
-    expect(() => assertDryRunOptions(flags)).toThrow(
-      '--scan, --scanner-property cannot be combined with --dry-run',
-    );
-    expect(() => assertDryRunOptions(flags)).not.toThrow('secret');
   });
 });
