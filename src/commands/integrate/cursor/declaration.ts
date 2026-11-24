@@ -18,7 +18,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 
 import { CURSOR_CONFIG_DIR } from '@/core/config-constants.ts';
 import type {
@@ -48,6 +50,8 @@ import { SQAA_INSTRUCTIONS_SUBFEATURE_ID } from '../_common/features/sqaa-instru
 import {
   buildUnixHookScript,
   buildWindowsHookScript,
+  matchesAgentHookScript,
+  readOrInitJson,
   resolveAgentHookScriptPath,
 } from '../_common/hooks.ts';
 import type { IntegrateAgentOptions } from '../_common/types.ts';
@@ -55,6 +59,7 @@ import { createVortexFeature } from '../_common/vortex.ts';
 import {
   buildCursorHookEntry,
   createCursorHooksWriter,
+  type CursorHooksDocument,
   removeCursorHooks,
   upsertCursorHooks,
 } from './hooks.ts';
@@ -64,6 +69,39 @@ const MCP_JSON = 'mcp.json';
 const PREREAD_SCRIPT_REL = 'sonar-secrets/build-scripts/before-read-file-secrets';
 const PRETOOL_SCRIPT_REL = 'sonar-secrets/build-scripts/pre-tool-use-secrets';
 const PROMPT_SCRIPT_REL = 'sonar-secrets/build-scripts/prompt-secrets';
+
+const CURSOR_NATIVE_HOOKS = {
+  sessionStart: {
+    script: SESSION_START_SCRIPT_REL,
+    subcommand: 'agent-session-start --agent cursor',
+  },
+  stop: { script: STOP_SCRIPT_REL, subcommand: 'agent-stop --agent cursor' },
+  beforeSubmitPrompt: { script: PROMPT_SCRIPT_REL, subcommand: 'cursor-prompt-submit' },
+};
+
+export async function hasCursorNativeHook(
+  event: keyof typeof CURSOR_NATIVE_HOOKS,
+): Promise<boolean> {
+  const context = { targetRoot: homedir(), scope: 'global' } as const;
+  const document = await readOrInitJson<Partial<CursorHooksDocument> | null>(
+    resolveCursorHooksJsonPath(context),
+    null,
+  );
+  if (document?.version !== 1 || document.disableAllHooks === true || document.enabled === false) {
+    return false;
+  }
+  const { script, subcommand } = CURSOR_NATIVE_HOOKS[event];
+  const { entry } = buildCursorHookEntry(context, CURSOR_CONFIG_DIR, event, script);
+  const entries = document.hooks?.[event];
+  return (
+    Array.isArray(entries) &&
+    entries.some((candidate) => isDeepStrictEqual(candidate, entry)) &&
+    (await matchesAgentHookScript(
+      resolveAgentHookScriptPath(context, CURSOR_CONFIG_DIR, script),
+      subcommand,
+    ))
+  );
+}
 
 export const CURSOR_INTEGRATION_ID = 'cursor';
 export const CURSOR_HOOKS_CONFIG_RESOURCE_ID = 'cursor-hooks-config';
@@ -112,7 +150,9 @@ function createSessionStartHookConfigResource(): ResourceDeclaration {
   });
 }
 
-function resolveCursorHooksJsonPath(context: IntegrationContext): string {
+function resolveCursorHooksJsonPath(
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
+): string {
   return resolveAgentHooksConfigPath(context, CURSOR_CONFIG_DIR, HOOKS_JSON);
 }
 
@@ -206,8 +246,8 @@ function createCursorSecretsDetectionResources(): ResourceDeclaration[] {
         displayName: 'Cursor beforeSubmitPrompt hook script',
         scriptPath: PROMPT_SCRIPT_REL,
         content: {
-          unix: buildUnixHookScript('cursor-prompt-submit'),
-          windows: buildWindowsHookScript('cursor-prompt-submit'),
+          unix: buildUnixHookScript(CURSOR_NATIVE_HOOKS.beforeSubmitPrompt.subcommand),
+          windows: buildWindowsHookScript(CURSOR_NATIVE_HOOKS.beforeSubmitPrompt.subcommand),
         },
       },
     ],

@@ -107,7 +107,7 @@ export interface SonarSecretsHooksResourcesConfig {
 }
 
 export function resolveAgentHooksConfigPath(
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'targetRoot'>,
   configDir: string,
   fileName: string,
 ): string {

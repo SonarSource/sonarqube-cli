@@ -22,8 +22,8 @@
 // builders and JSON config read-or-init helper
 // in one place so every integration stays behaviorally aligned.
 
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { constants, existsSync } from 'node:fs';
+import { access, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { IntegrationContext } from '@/core/framework/features';
@@ -47,6 +47,19 @@ export function buildUnixHookScript(subcommand: string): string {
 
 export function buildWindowsHookScript(subcommand: string): string {
   return `${WINDOWS_SONAR_COMMAND_GUARD}\n$stdinData = [Console]::In.ReadToEnd()\n$stdinData | & ${sonarHookCommand(subcommand)}\nexit $LASTEXITCODE\n`;
+}
+
+export async function matchesAgentHookScript(path: string, subcommand: string): Promise<boolean> {
+  const windows = process.platform === 'win32';
+  try {
+    if (!(await stat(path)).isFile()) return false;
+    await access(path, windows ? constants.R_OK : constants.X_OK);
+    const expected = windows ? buildWindowsHookScript(subcommand) : buildUnixHookScript(subcommand);
+    const script = await readFile(path, 'utf8');
+    return (windows ? script.replaceAll('\r\n', '\n') : script) === expected;
+  } catch {
+    return false;
+  }
 }
 
 function sonarHookCommand(subcommand: string): string {
@@ -168,7 +181,7 @@ export interface AgentHookEntryOptions {
 }
 
 export function createAgentHookEntry(
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'scope' | 'targetRoot'>,
   configDir: string,
   eventType: string,
   matcher: string | undefined,

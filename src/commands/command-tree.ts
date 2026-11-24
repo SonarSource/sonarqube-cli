@@ -1266,7 +1266,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   hookCommand
     .command('claude-prompt-submit')
     .description('UserPromptSubmit handler: scan prompts for secrets before sending')
-    .anonymousAction(handleHookInvocation(agentPromptSubmit));
+    .anonymousAction(handleHookInvocation((ctx) => agentPromptSubmit(ctx, 'claude')));
 
   hookCommand
     .command('codex-prompt-submit')

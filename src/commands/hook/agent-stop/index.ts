@@ -21,7 +21,6 @@
 import { SQAA_AGENT_STOP_CALLER_COMMAND } from '@/commands/analyze/sqaa-analysis-telemetry.ts';
 import { fingerprintGitChangeSet } from '@/commands/analyze/sqaa-fingerprint.ts';
 import { buildSqaaRunReport, runSqaaAnalysis } from '@/commands/analyze/sqaa-run.ts';
-import { hasDevinNativeHook } from '@/commands/integrate/devin/declaration.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 import logger from '@/core/observability/logger.ts';
 import type { AnalysisSession } from '@/core/vortex/deep-analysis/state.ts';
@@ -33,6 +32,7 @@ import {
 
 import { formatSqaaJsonReportForHook } from '../format-sqaa-hook-context.ts';
 import type { HookCommandResult } from '../hook-command-result.ts';
+import { shouldDeferClaudeHook } from '../inherited-claude-hook.ts';
 import { readStdinJson } from '../stdin.ts';
 import { claudeCodexAdapter } from './agent-adapters/claude-codex-adapter.ts';
 import { copilotAdapter } from './agent-adapters/copilot-adapter.ts';
@@ -66,8 +66,8 @@ export async function agentStop(
     sessionId = input.sessionId;
     const inherited =
       agent === 'claude' &&
-      payload.hook_event_name === 'Stop' &&
-      (await hasDevinNativeHook('Stop'));
+      (payload.hook_event_name === 'Stop' || payload.hook_event_name === 'stop') &&
+      (await shouldDeferClaudeHook('Stop', payload));
     if (!inherited) {
       const output = await resolveStopAnalysis(ctx, agent, input);
       if (output) process.stdout.write(JSON.stringify(adapter.emit(output)) + '\n');

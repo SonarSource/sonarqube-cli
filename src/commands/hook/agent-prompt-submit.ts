@@ -32,6 +32,7 @@ import {
   resolveAuthAndSecrets,
   runAndEmitTextSecretsScan,
 } from './hook-dependencies.ts';
+import { shouldDeferClaudeHook } from './inherited-claude-hook.ts';
 import { readStdinJson } from './stdin.ts';
 
 interface PromptSubmitPayload {
@@ -43,7 +44,10 @@ function denyPrompt(reason: string): void {
   process.stdout.write(JSON.stringify({ decision: 'block', reason }) + '\n');
 }
 
-export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<HookCommandResult> {
+export async function agentPromptSubmit(
+  ctx: CommandInvocationContext,
+  agent?: 'claude',
+): Promise<HookCommandResult> {
   let payload: PromptSubmitPayload;
   try {
     payload = await readStdinJson<PromptSubmitPayload>();
@@ -56,6 +60,9 @@ export async function agentPromptSubmit(ctx: CommandInvocationContext): Promise<
 
   const prompt = payload.prompt;
   if (!prompt) return { agentSessionId };
+  if (agent === 'claude' && (await shouldDeferClaudeHook('UserPromptSubmit', payload))) {
+    return { agentSessionId };
+  }
 
   let deps: HookDependencies;
   try {
