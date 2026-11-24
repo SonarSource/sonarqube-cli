@@ -48,14 +48,19 @@ export async function setProjectDirectives(
     createDirectivesApi(ctx.connection, projectKey),
     changes,
     options.dryRun === true,
-    (directives) =>
-      warnDirectiveKeys(
+    (directives, noneVisible) => {
+      if (noneVisible)
+        ctx.console.warn(
+          'No existing directives are visible. If project permissions hide them, creation can duplicate them.',
+        );
+      return warnDirectiveKeys(
         createArchitectureApi(ctx.connection, projectKey),
         directives,
         (message) => {
           ctx.console.warn(message);
         },
-      ),
+      );
+    },
   ).catch((error: unknown) => {
     throw toArchitectureError(error, projectKey, ctx.connection.httpClient.isCloud);
   });
