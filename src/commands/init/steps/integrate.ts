@@ -18,45 +18,74 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+import { findInstalledIntegrationIds } from '@/commands/integrate/_common/installed-integrations.ts';
 import { integrateBare } from '@/commands/integrate/integrate-bare.ts';
 import type { ResolvedAuth } from '@/core/auth/auth-resolver.ts';
 import type { CommandInvocationContext } from '@/core/commands/invocation-context.ts';
 
 import { requireAnswer } from '../answer.ts';
-import type { InitStepOutcome } from '../telemetry/init-telemetry.ts';
+import {
+  alreadyDone,
+  declined,
+  failed,
+  skipped,
+  type StepResult,
+  success,
+} from '../flow/step-result.ts';
+import type { InitStep } from '../flow/step-runner.ts';
 
 /**
- * Asks whether to set up coding agents now and runs `sonar integrate` when accepted. Onboarding has already succeeded by then, so a failure or an abort
+ * Asks whether to set up coding agents now and runs `sonar integrate` when accepted. Without a
+ * session (the user declined to create an organization) or a terminal there is nothing to offer. Onboarding has already succeeded by then, so a failure or an abort
  * inside integrate is a warning and never changes the exit code.
  */
-export async function offerIntegrate(
-  ctx: CommandInvocationContext,
-  auth: ResolvedAuth,
-): Promise<Extract<InitStepOutcome, 'success' | 'declined' | 'failed'>> {
-  const { console } = ctx;
-  const accepted = requireAnswer(
-    await console.confirmPrompt("Set up your coding agents with 'sonar integrate' now?", true),
-  );
-  if (!accepted) {
-    return 'declined';
+export class IntegrateStep implements InitStep<undefined> {
+  readonly ref = { step: 'integrate' } as const;
+
+  constructor(
+    private readonly ctx: CommandInvocationContext,
+    private readonly auth: ResolvedAuth | undefined,
+    private readonly interactive: boolean,
+  ) {}
+
+  run(): Promise<StepResult<undefined>> {
+    if (!this.interactive || !this.auth) {
+      return Promise.resolve(skipped(undefined));
+    }
+    if (findInstalledIntegrationIds().length > 0) {
+      return Promise.resolve(alreadyDone(undefined));
+    }
+    return this.offer(this.auth);
   }
 
-  const integrateCtx = ctx.withAuth(auth);
-  try {
-    await integrateBare(integrateCtx, {});
-    return 'success';
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    console.warn(
-      `Could not set up your coding agents: ${reason}\nThe project setup is complete. Run 'sonar integrate' to try again.`,
+  private async offer(auth: ResolvedAuth): Promise<StepResult<undefined>> {
+    const { ctx } = this;
+
+    const { console } = ctx;
+    const accepted = requireAnswer(
+      await console.confirmPrompt("Set up your coding agents with 'sonar integrate' now?", true),
     );
-    return 'failed';
-  } finally {
-    integrateCtx.telemetryFacts().forEach((fact) => {
-      ctx.recordTelemetry(fact);
-    });
-    integrateCtx.statsFacts().forEach((fact) => {
-      ctx.recordStats(() => fact);
-    });
+    if (!accepted) {
+      return declined(undefined);
+    }
+
+    const integrateCtx = ctx.withAuth(auth);
+    try {
+      await integrateBare(integrateCtx, {});
+      return success(undefined);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `Could not set up your coding agents: ${reason}\nThe project setup is complete. Run 'sonar integrate' to try again.`,
+      );
+      return failed(undefined);
+    } finally {
+      integrateCtx.telemetryFacts().forEach((fact) => {
+        ctx.recordTelemetry(fact);
+      });
+      integrateCtx.statsFacts().forEach((fact) => {
+        ctx.recordStats(() => fact);
+      });
+    }
   }
 }

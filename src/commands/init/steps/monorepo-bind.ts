@@ -27,17 +27,20 @@ import { resolveAlmKey, type ResolvedOrg, resolveOrg } from '@/commands/import/r
 import { QuietConsole } from '@/core/ui/quiet-console.ts';
 
 import { requireAnswer } from '../answer.ts';
+import { SettledStep } from '../flow/settled-step.ts';
+import type { InitStepOutcome } from '../flow/step-ids.ts';
+import { failed, skipped, type StepResult, success } from '../flow/step-result.ts';
+import type { InitRoot, InitStep, StepRef } from '../flow/step-runner.ts';
 import type { MonorepoRootResult } from '../init-outcome.ts';
 import { remoteRepositorySlug } from '../remote-host.ts';
-import { classifyInitFailure } from '../telemetry/failure-reason.ts';
-import type { InitFailureReason, InitStepOutcome } from '../telemetry/init-telemetry.ts';
-import { authorizeUnlessLinked } from './bind.ts';
+import { OrgBindStep } from './bind.ts';
 import type { DetectDeps } from './detect.ts';
 import { describeFailure, isRunFatal } from './linked-projects.ts';
 import { writeMapping } from './mapping.ts';
 
 /** A root whose project does not exist yet, with the project to create for it. */
 export interface BindableRoot {
+  root: InitRoot;
   /** Relative to the repository root, for display and the summary. */
   path: string;
   projectRoot: string;
@@ -60,21 +63,40 @@ function bindableSlug(
   return remoteRepositorySlug(remote);
 }
 
-function allFailed(
+/** Nothing runs for these roots, yet their creation ends here: each root's `create_project` records how. */
+function settleCreations(
   roots: readonly BindableRoot[],
-  reason: string,
-  failure?: InitFailureReason,
-): MonorepoRootResult[] {
-  return roots.map(({ path }) => ({ path, kind: 'failed', reason, failure }));
+  { steps }: DetectDeps,
+  resultOf: (root: BindableRoot) => StepResult<MonorepoRootResult>,
+): Promise<MonorepoRootResult[]> {
+  return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
+    const done = await previous;
+    done.push(
+      await steps.run(new SettledStep({ step: 'create_project', root: root.root }, resultOf(root))),
+    );
+    return done;
+  }, Promise.resolve([]));
 }
 
-function recordBindDecision(
+function allFailed(
   roots: readonly BindableRoot[],
-  { telemetry }: DetectDeps,
+  deps: DetectDeps,
+  reason: string,
+  cause?: unknown,
+): Promise<MonorepoRootResult[]> {
+  return settleCreations(roots, deps, ({ path }) =>
+    failed({ path, kind: 'failed', reason }, cause),
+  );
+}
+
+/** One question binds every root, so each root's `project_bind` step ends with its answer. */
+async function settleBindDecision(
+  roots: readonly BindableRoot[],
+  { steps }: DetectDeps,
   outcome: InitStepOutcome,
-): void {
-  for (const { path } of roots) {
-    telemetry?.projectLabelled(path)?.record('project_bind', outcome);
+): Promise<void> {
+  for (const { root } of roots) {
+    await steps.run(new SettledStep({ step: 'project_bind', root }, { outcome, value: undefined }));
   }
 }
 
@@ -95,10 +117,11 @@ export async function bindNewRoots(
   const required = deps.intent?.kind === 'bind';
   const slug = bindableSlug(remote, deps);
   if (slug === null) {
-    recordBindDecision(roots, deps, required ? 'failed' : 'skipped');
+    await settleBindDecision(roots, deps, required ? 'failed' : 'skipped');
     return required
       ? allFailed(
           roots,
+          deps,
           '--bind is unavailable: it needs SonarQube Cloud and a GitHub or Azure DevOps git remote. Nothing was created.',
         )
       : undefined;
@@ -113,7 +136,7 @@ export async function bindNewRoots(
         true,
       ),
     );
-  recordBindDecision(roots, deps, consent ? 'success' : 'declined');
+  await settleBindDecision(roots, deps, consent ? 'success' : 'declined');
   if (!consent) {
     return undefined;
   }
@@ -128,13 +151,15 @@ export async function bindNewRoots(
         `Organization '${org.key}' is not linked to your DevOps platform yet: that would first be authorized in the browser.`,
       );
     }
-    return roots.map(({ path, projectKey }) => ({ path, kind: 'would-bind', projectKey }));
+    return settleCreations(roots, deps, ({ path, projectKey }) =>
+      skipped({ path, kind: 'would-bind', projectKey }),
+    );
   }
   // One authorization serves every root: the batch below reuses the key it returns.
-  const almKey = await authorizeUnlessLinked(linkedAlmKey, api, auth, org.key, deps);
+  const almKey = await deps.steps.run(new OrgBindStep(linkedAlmKey, api, auth, org.key, deps));
   if (!almKey) {
     return required
-      ? allFailed(roots, 'The organization authorization was declined. Nothing was created.')
+      ? allFailed(roots, deps, 'The organization authorization was declined. Nothing was created.')
       : undefined;
   }
   return importBatch(roots, slug, noun, { ...org, almKey }, api, deps);
@@ -161,13 +186,17 @@ async function importBatch(
       throw error;
     }
     // The repository cannot be imported at all, which every root shares; the summary says so per root.
-    return allFailed(roots, describeFailure(error), classifyInitFailure(error));
+    return allFailed(roots, deps, describeFailure(error), error);
   }
   const { selection } = plan;
   if (selection.kind !== 'batch' || selection.repos.length !== 1) {
     const reason = selection.kind === 'batch' ? selection.skipped[0]?.reason : undefined;
     const detail = reason ? `: ${reason}` : '.';
-    return allFailed(roots, `Repository '${slug}' cannot be bound${detail} Nothing was created.`);
+    return allFailed(
+      roots,
+      deps,
+      `Repository '${slug}' cannot be bound${detail} Nothing was created.`,
+    );
   }
 
   const verdicts = new Map<string, { done: boolean; detail?: string }>();
@@ -186,32 +215,47 @@ async function importBatch(
   // Mappings are merged one at a time: each is a read-modify-write of the same file.
   return roots.reduce<Promise<MonorepoRootResult[]>>(async (previous, root) => {
     const results = await previous;
-    results.push(await mapCreatedRoot(root, slug, verdicts.get(root.projectKey), deps));
+    results.push(
+      await deps.steps.run(new MapBoundRootStep(root, slug, verdicts.get(root.projectKey), deps)),
+    );
     return results;
   }, Promise.resolve([]));
 }
 
-async function mapCreatedRoot(
-  { path, projectRoot, projectKey }: BindableRoot,
-  slug: string,
-  verdict: { done: boolean; detail?: string } | undefined,
-  { auth, console }: DetectDeps,
-): Promise<MonorepoRootResult> {
-  if (!verdict?.done) {
-    return {
-      path,
-      kind: 'failed',
-      reason: verdict?.detail ?? `The import did not report project '${projectKey}'.`,
-    };
+/** A root the batched import created: writing its mapping ends its `create_project` step. */
+class MapBoundRootStep implements InitStep<MonorepoRootResult> {
+  readonly ref: StepRef;
+
+  constructor(
+    private readonly target: BindableRoot,
+    private readonly slug: string,
+    private readonly verdict: { done: boolean; detail?: string } | undefined,
+    private readonly deps: DetectDeps,
+  ) {
+    this.ref = { step: 'create_project', root: target.root };
   }
-  try {
-    await writeMapping(auth, projectKey, projectRoot, console, 'created', true);
-    console.success(`Created project '${projectKey}' bound to '${slug}' for ${path}.`);
-    return { path, kind: 'bound', projectKey };
-  } catch (error) {
-    if (isRunFatal(error)) {
-      throw error;
+
+  async run(): Promise<StepResult<MonorepoRootResult>> {
+    const { path, projectRoot, projectKey } = this.target;
+    const { slug, verdict } = this;
+    const { auth, console } = this.deps;
+
+    if (!verdict?.done) {
+      return failed({
+        path,
+        kind: 'failed',
+        reason: verdict?.detail ?? `The import did not report project '${projectKey}'.`,
+      });
     }
-    return { path, kind: 'failed', reason: describeFailure(error) };
+    try {
+      await writeMapping(auth, projectKey, projectRoot, console, 'created', true);
+      console.success(`Created project '${projectKey}' bound to '${slug}' for ${path}.`);
+      return success({ path, kind: 'bound', projectKey }, { projectKey, initPath: 'bound_new' });
+    } catch (error) {
+      if (isRunFatal(error)) {
+        throw error;
+      }
+      return failed({ path, kind: 'failed', reason: describeFailure(error) }, error);
+    }
   }
 }
