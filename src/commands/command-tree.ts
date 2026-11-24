@@ -190,7 +190,7 @@ import {
   VALID_FORMATS as QUALITY_GATE_VALID_FORMATS,
 } from './quality-gate/status';
 import { remediate, type RemediateOptions } from './remediate';
-import { runMcp } from './run/mcp.ts';
+import { type McpRunOptions, runMcp } from './run/mcp.ts';
 import { stats, STATS_SINCE_CHOICES, type StatsOptions } from './stats/index.ts';
 import { systemReset, type SystemResetOptions } from './system/reset.ts';
 import {
@@ -1191,6 +1191,14 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
   runCommand
     .command('mcp')
     .description('Run the SonarQube MCP server (stdio transport, for use in agent MCP configs)')
+    .addOption(
+      new SonarOption(
+        '--transport <transport>',
+        'MCP backend: stdio (container), http (hosted), or auto',
+      )
+        .choices(['stdio', 'http', 'auto'])
+        .default('auto'),
+    )
     .option('--debug', 'Enable debug logging in the MCP server container')
     .option('--read-only', 'Start the MCP server in read-only mode')
     .option(
@@ -1202,12 +1210,7 @@ function buildCommandTree(runtime: CliRuntime, console: Console): SonarCommand {
       `after`,
       `Uses hosted MCP when available, otherwise a local container.\n--project applies only to the container fallback; hosted tools accept project keys per call.\n${projectKeyExtraHelp}\nOn Windows, SONARQUBE_CLI_MCP_WSL=auto (default) tries WSL only when no native container runtime is installed. Set always to use WSL only or never to disable WSL.`,
     )
-    .anonymousAction(
-      (
-        ctx,
-        options: { debug?: boolean; readOnly?: boolean; toolsets?: string; project?: string },
-      ) => runMcp(ctx, options),
-    );
+    .anonymousAction((ctx, options: McpRunOptions) => runMcp(ctx, options));
 
   // Hidden callback command — internal handlers for agent and git hooks.
   // Shell hook scripts call `sonar hook <event>` to delegate all business logic to TypeScript.
