@@ -159,7 +159,7 @@ describe('runMcp', () => {
   beforeEach(() => {
     healthSpy = spyOn(HostedMcpClient.prototype, 'checkHealth').mockResolvedValue({
       available: false,
-      reason: 'returned HTTP 404',
+      reason: 'health check returned HTTP 404',
     });
     discoverProjectSpy = spyOn(projectInfo, 'discoverProject').mockResolvedValue({
       projectKey: undefined,

@@ -517,7 +517,7 @@ describe('run mcp', () => {
           message: "Not authenticated. Run 'sonar auth login' to authenticate.",
         },
       });
-      expect(result.stderr).toBe('');
+      expect(result.stderr).toContain('MCP startup failed: Not authenticated.');
     },
     { timeout: 15000 },
   );
@@ -535,7 +535,7 @@ describe('run mcp', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toBe('');
-      expect(result.stderr).toBe('');
+      expect(result.stderr).toContain('MCP startup failed: Not authenticated.');
     },
     { timeout: 15000 },
   );
@@ -613,7 +613,7 @@ describe('run mcp transport selection', () => {
     fixture.healthStatus = 404;
     const result = await harness.runWithStdin('run mcp --transport http', line(INITIALIZE));
     expect(result.exitCode).toBe(1);
-    expect(messages(result.stdout)[0]?.error?.message).toContain('returned HTTP 404');
+    expect(messages(result.stdout)[0]?.error?.message).toContain('health check returned HTTP 404');
     expect(result.stdout).toContain('Hosted MCP unavailable');
     expect(harness.cwd.file('docker.jsonl').exists()).toBe(false);
   });
@@ -631,7 +631,7 @@ describe('run mcp transport selection', () => {
     const result = await harness.run('run mcp');
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('fallback-container\n');
-    expect(result.stderr).toContain(`returned HTTP ${status}`);
+    expect(result.stderr).toContain(`health check returned HTTP ${status}`);
     expect(result.stderr).toContain('configure and enable hosted MCP');
     expect(harness.cwd.file('docker.jsonl').asText()).toContain('run');
   });
