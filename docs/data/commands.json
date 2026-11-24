@@ -1,5 +1,5 @@
 {
-  "version": "1.12.0",
+  "version": "1.13.0",
   "commands": [
     {
       "id": "sonar",
@@ -26,6 +26,7 @@
         "sonar-context",
         "sonar-analyze",
         "sonar-remediate",
+        "sonar-init",
         "sonar-link",
         "sonar-config",
         "sonar-architecture",
@@ -589,6 +590,28 @@
           "required": false
         },
         {
+          "flags": "--monorepo <slug>",
+          "long": "--monorepo",
+          "description": "Bind several projects to this one repository (e.g. my-org/my-repo) instead of creating a single project. Requires --project and/or --projects-file. Cannot be combined with --repo, --all or --regex.",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--project <key[=name]>",
+          "long": "--project",
+          "description": "With --monorepo: the key of a project to create, optionally followed by =<display name> (defaults to the key). Repeatable and comma-separated (e.g. api=API,web=Web).",
+          "type": "object",
+          "required": false,
+          "defaultValue": []
+        },
+        {
+          "flags": "--projects-file <file>",
+          "long": "--projects-file",
+          "description": "With --monorepo: path to a JSON file listing the projects to create. Can be combined with --project.\n\n                   A JSON array of objects with a \"projectKey\" and an optional \"projectName\" (defaults to the key), the same format as the web UI import. Keys must be unique across the whole organization or server; a key that is already taken fails that project.\n                   Example:\n                       [\n                         { \"projectKey\": \"myorg_mymonorepo_api\", \"projectName\": \"API\" },\n                         { \"projectKey\": \"myorg_mymonorepo_web\", \"projectName\": \"Web app\" }\n                       ]\n",
+          "type": "string",
+          "required": false
+        },
+        {
           "flags": "--non-interactive",
           "long": "--non-interactive",
           "description": "Skip all prompts; require explicit flags",
@@ -596,7 +619,28 @@
           "required": false
         }
       ],
-      "examples": [],
+      "examples": [
+        {
+          "command": "sonar import --repo my-org/my-repo",
+          "description": "Import one repository as a single project"
+        },
+        {
+          "command": "sonar import --monorepo my-org/my-repo --project myorg_mymonorepo_api=API --project myorg_mymonorepo_web=\"Web app\"",
+          "description": "Bind several projects to one monorepo repository, naming each project"
+        },
+        {
+          "command": "sonar import --monorepo my-org/my-repo --project myorg_mymonorepo_api=API,myorg_mymonorepo_web=Web",
+          "description": "Same, with the projects given as one comma-separated list"
+        },
+        {
+          "command": "echo '[{\"projectKey\":\"myorg_mymonorepo_api\",\"projectName\":\"API\"},{\"projectKey\":\"myorg_mymonorepo_web\",\"projectName\":\"Web app\"}]' > projects.json",
+          "description": "Write a projects file (same JSON format as the web UI import)"
+        },
+        {
+          "command": "sonar import --monorepo my-org/my-repo --projects-file projects.json",
+          "description": "Bind every project listed in the file to one monorepo repository"
+        }
+      ],
       "children": []
     },
     {
@@ -1442,6 +1486,74 @@
       "children": []
     },
     {
+      "id": "sonar-init",
+      "name": "init",
+      "fullName": "sonar init",
+      "aliases": [],
+      "description": "Set up Sonar for this project: login, pick an organization and link an existing Sonar project or create one bound to the repository",
+      "isGroup": false,
+      "isRoot": false,
+      "stage": "beta",
+      "requiresAuth": false,
+      "depth": 1,
+      "parentId": "sonar",
+      "arguments": [],
+      "options": [
+        {
+          "flags": "--path <directory>",
+          "long": "--path",
+          "description": "Directory to onboard (default: current directory)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--non-interactive",
+          "long": "--non-interactive",
+          "description": "Never prompt; fail with a hint when an answer is needed",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--monorepo",
+          "long": "--monorepo",
+          "description": "Onboard several project roots: choose the folders in a tree, or name them with --root. Roots already in .sonar-config.json are reported as configured",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--root <path[=key]>",
+          "long": "--root",
+          "description": "With --monorepo: a project root relative to the repository root, optionally with its project key (generated when omitted), e.g. services/api=my_api. Repeatable; skips the folder tree",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--link [key]",
+          "long": "--link",
+          "description": "Link a directory to an existing project: the one found for the repository, or the one named by key. With --monorepo, never creates projects (name each root with --root <path>=<key>)",
+          "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--bind",
+          "long": "--bind",
+          "description": "Create a project bound to the repository without prompting (SonarQube Cloud, organization linked to your DevOps platform). With --monorepo, a root whose project already exists is offered for linking, and fails when declined or without a terminal",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "flags": "--dry-run",
+          "long": "--dry-run",
+          "description": "Preview what init would do without changing anything. Requires being signed in already",
+          "type": "boolean",
+          "required": false,
+          "defaultValue": false
+        }
+      ],
+      "examples": [],
+      "children": []
+    },
+    {
       "id": "sonar-link",
       "name": "link",
       "fullName": "sonar link",
@@ -1465,15 +1577,14 @@
         {
           "flags": "--path <path>",
           "long": "--path",
-          "description": "Path to the project root, relative to the repository root",
+          "description": "Path to the project root, relative to the repository root (default: the root, or picked interactively without a key)",
           "type": "string",
-          "required": false,
-          "defaultValue": "."
+          "required": false
         },
         {
           "flags": "--monorepo",
           "long": "--monorepo",
-          "description": "Add or update this directory in the projects array instead of replacing the single link",
+          "description": "Add or update this directory among the existing links instead of replacing them",
           "type": "boolean",
           "required": false
         }
@@ -1731,7 +1842,7 @@
       "name": "get",
       "fullName": "sonar architecture current get",
       "aliases": [],
-      "description": "Current architecture, at most 150 nodes, 20 dependencies and 5 feedback pairs across languages; drill down with --component and --depth",
+      "description": "Current architecture or finding counts with --summary; graphs show at most 150 nodes, 20 dependencies and 5 feedback pairs across languages",
       "isGroup": false,
       "isRoot": false,
       "stage": "stable",
@@ -1746,6 +1857,13 @@
           "short": "-p",
           "description": "Project key",
           "type": "string",
+          "required": false
+        },
+        {
+          "flags": "--summary",
+          "long": "--summary",
+          "description": "Finding counts and available coverage per language, instead of the graph",
+          "type": "boolean",
           "required": false
         },
         {
@@ -2182,7 +2300,7 @@
       "name": "install-skill",
       "fullName": "sonar architecture install-skill",
       "aliases": [],
-      "description": "Install the architecture skill for Claude Code and Cursor in this repository",
+      "description": "Install the architecture skill for Claude Code and Cursor, and its coding instructions in CLAUDE.md and AGENTS.md",
       "isGroup": false,
       "isRoot": false,
       "stage": "beta",
@@ -2194,7 +2312,7 @@
         {
           "flags": "--global",
           "long": "--global",
-          "description": "Install in the home directory instead of the repository",
+          "description": "Install the skill in the home directory, without coding instructions",
           "type": "boolean",
           "required": false
         },
