@@ -268,9 +268,8 @@ function initPathIdOf(detected: InitPath): InitPathId {
       return 'link_existing';
     case 'bound-new':
       return 'bound_new';
-    // The telemetry id predates the removal of unbound creation, and names the same path.
     case 'no-project':
-      return 'unbound_new';
+      return 'no_project';
   }
 }
 
@@ -359,27 +358,27 @@ function recordLinkResult(result: InitOutcome, project: ProjectInitRecorder): vo
   }
 }
 
-/** Nothing is created here, so the creation step is always skipped, as no one declined it. */
+/** Resolve an existing project without attempting creation. */
 async function noProject(
   path: NoProjectPath,
   deps: DetectDeps,
   project: ProjectInitRecorder,
 ): Promise<InitOutcome> {
-  project.setPath('unbound_new');
-  project.begin('create_project');
+  project.setPath('no_project');
+  project.begin('link');
   const { outcome, offeredLink } = await runNoProject(path, deps);
   if (outcome.kind === 'linked') {
     // The generated key named a project, and the user linked it.
-    project.record('create_project', 'skipped');
     project.setPath('link_existing');
     project.record('link', 'success');
     project.setProjectKey(outcome.projectKey);
   } else if (outcome.kind === 'declined') {
-    project.record('create_project', 'skipped');
     if (offeredLink) {
       // The generated key named a project, and the user turned the link down.
       project.setPath('link_existing');
       project.record('link', 'declined');
+    } else {
+      project.record('link', 'skipped');
     }
   }
   return outcome;

@@ -261,7 +261,8 @@ function onboardSelectedRoot(
       if (!root.generated || linkOnly) {
         return mapExistingRoot(root, deps);
       }
-      return deps.interactive
+      // `--bind` refuses to touch an existing project, and without a terminal it cannot be asked.
+      return deps.interactive || deps.intent?.kind !== 'bind'
         ? offerGeneratedProject(root, deps)
         : Promise.resolve({
             path: root.path,
@@ -623,7 +624,11 @@ async function onboardInOrder(
     const done = await previous;
     const project = telemetry?.projectLabelled(root.path);
     telemetry?.setActiveProject(project);
-    project?.begin(root.status.kind === 'new' ? 'create_project' : 'link');
+    const createsProject = root.status.kind === 'new' && bound.has(root.path);
+    if (createsProject) {
+      project?.setPath('bound_new');
+    }
+    project?.begin(createsProject ? 'create_project' : 'link');
     const result = await onboardRoot(root, deps, linkOnly, bound);
     if (project) {
       recordRootResult(project, result);
@@ -647,7 +652,7 @@ function initPathOf(status: RootStatus): InitPathId {
       return 'link_existing';
     case 'new':
     case 'unchecked':
-      return 'unbound_new';
+      return 'no_project';
   }
 }
 
