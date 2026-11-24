@@ -113,10 +113,10 @@ export async function detectInitPath(projectRoot: string, deps: DetectDeps): Pro
     useGitRemoteBinding: false,
   });
   const onPath = discovered.fromSharedConfig ? discovered.scope(projectRoot) : [];
-  // A project below the root leaves the rest of it unlinked, so only enclosing mappings count.
-  const linked = onPath.filter(
-    (mapping) => mapping.contains && authMatchesRecordedConnection(auth, mapping),
-  );
+  const connected = onPath.filter((mapping) => authMatchesRecordedConnection(auth, mapping));
+  const enclosing = connected.filter((mapping) => mapping.contains);
+  // A lone project below the root leaves the rest of it unlinked, but several of them are a monorepo.
+  const linked = enclosing.length > 0 || connected.length < 2 ? enclosing : connected;
   if (linked.length > 0) {
     return {
       path: 'complete',

@@ -269,6 +269,38 @@ describe('sonar init', () => {
   );
 
   it(
+    'reports setup as complete when .sonar-config.json maps several projects below the root',
+    async () => {
+      const serverUrl = await signInToCloud((server) =>
+        server.withProject('api-key').withProject('web-key'),
+      );
+      withRemote('https://github.com/acme/mono.git');
+      harness.cwd.writeFile('api/.keep', '');
+      harness.cwd.writeFile('web/.keep', '');
+      harness.cwd.writeFile(
+        '.sonar-config.json',
+        JSON.stringify({
+          projects: [
+            { projectKey: 'api-key', serverUrl, organization: ORG, path: 'api' },
+            { projectKey: 'web-key', serverUrl, organization: ORG, path: 'web' },
+          ],
+        }),
+      );
+
+      const result = await harness.run('init');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("'api-key'");
+      expect(result.stdout).toContain("'web-key'");
+      expect(result.stdout).not.toContain(UNBOUND);
+      expect(result.stderr).not.toContain(
+        'Could not check whether this repository is already bound',
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
     'reports setup as complete when .sonar-config.json sits in a directory between --path and the repository root',
     async () => {
       const serverUrl = await signInToCloud((server) => server.withProject('mapped'));

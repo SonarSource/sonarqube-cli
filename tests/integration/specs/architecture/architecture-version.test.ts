@@ -22,9 +22,16 @@ import { describe, expect, it } from 'bun:test';
 import { TestHarness } from '../../harness';
 
 describe('Architecture Server version', () => {
-  it.each(['2025.1', '2026.5.4', '26.11'])(
-    'rejects Architecture operations on Server %s',
-    async (version) => {
+  describe.each(['2025.1', '2026.5.4', '26.11'])('Server %s', (version) => {
+    it.each([
+      'arch current get -p shop',
+      'arch current get --summary -p shop',
+      'arch intended get -p shop',
+      'arch intended set -p shop --file intended.json --dry-run',
+      'arch directives get -p shop',
+      'arch directives set -p shop --file directives.json --dry-run',
+      'arch findings get -p shop',
+    ])('rejects %s', async (command) => {
       const h = await TestHarness.create();
       try {
         const server = await h
@@ -36,22 +43,12 @@ describe('Architecture Server version', () => {
         h.withAuth(server.baseUrl(), 'test-token');
         h.cwd.writeFile('intended.json', JSON.stringify({ models: [] }));
         h.cwd.writeFile('directives.json', JSON.stringify({ create: [] }));
-        for (const command of [
-          'arch current get -p shop',
-          'arch current get --summary -p shop',
-          'arch intended get -p shop',
-          'arch intended set -p shop --file intended.json --dry-run',
-          'arch directives get -p shop',
-          'arch directives set -p shop --file directives.json --dry-run',
-          'arch findings get -p shop',
-        ]) {
-          const result = await h.run(command);
-          expect(result.exitCode).toBe(1);
-          expect(result.stderr).toContain('2026.6 or later is required');
-          if (version === '26.11') {
-            expect(result.stderr).toContain('Community Build 26.11 does not include Architecture');
-            expect(result.stderr).toContain('Use SonarQube Server or SonarQube Cloud');
-          }
+        const result = await h.run(command);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toContain('2026.6 or later is required');
+        if (version === '26.11') {
+          expect(result.stderr).toContain('Community Build 26.11 does not include Architecture');
+          expect(result.stderr).toContain('Use SonarQube Server or SonarQube Cloud');
         }
         expect(
           server.getRecordedRequests().filter((r) => r.path.includes('/architecture/')),
@@ -59,8 +56,8 @@ describe('Architecture Server version', () => {
       } finally {
         await h.dispose();
       }
-    },
-  );
+    });
+  });
 
   it('keeps Cloud available regardless of the Server version', async () => {
     const h = await TestHarness.create();
