@@ -18,12 +18,29 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { TerminalConsole } from '@/core/ui/terminal-console.ts';
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+let restoreClock: (() => void) | undefined;
+
+afterEach(() => {
+  restoreClock?.();
+  restoreClock = undefined;
+});
+
+/** `measureWait` reads `performance.now`, so tests advance this clock instead of sleeping. */
+function installClock(): { advance(ms: number): void } {
+  let now = 0;
+  const spy = spyOn(performance, 'now').mockImplementation(() => now);
+  restoreClock = () => {
+    spy.mockRestore();
+  };
+  return {
+    advance(ms: number): void {
+      now += ms;
+    },
+  };
 }
 
 describe('TerminalConsole user wait', () => {
@@ -32,50 +49,68 @@ describe('TerminalConsole user wait', () => {
   });
 
   it('adds up every measured wait and returns its result', async () => {
+    const clock = installClock();
     const console = new TerminalConsole();
 
-    const result = await console.measureWait(async () => {
-      await sleep(20);
-      return 'answer';
+    const result = await console.measureWait(() => {
+      clock.advance(20.4);
+      return Promise.resolve('answer');
     });
-    await console.measureWait(() => sleep(20));
+    await console.measureWait(() => {
+      clock.advance(20.4);
+      return Promise.resolve();
+    });
 
     expect(result).toBe('answer');
-    expect(console.userWaitMs()).toBeGreaterThanOrEqual(35);
+    expect(console.userWaitMs()).toBe(41);
   });
 
   it('still counts a wait that fails', async () => {
+    const clock = installClock();
     const console = new TerminalConsole();
 
     const error = await console
-      .measureWait(async () => {
-        await sleep(20);
-        throw new Error('cancelled');
+      .measureWait(() => {
+        clock.advance(20.6);
+        return Promise.reject(new Error('cancelled'));
       })
       .catch((thrown: unknown) => thrown);
 
     expect(error).toBeInstanceOf(Error);
-    expect(console.userWaitMs()).toBeGreaterThanOrEqual(15);
+    expect(console.userWaitMs()).toBe(21);
   });
 
   it('counts nothing the unmeasured view waits for, but reports the shared total', async () => {
+    const clock = installClock();
     const console = new TerminalConsole();
     const view = console.unmeasured();
 
-    await view.measureWait(() => sleep(20));
-    await console.measureWait(() => sleep(20));
+    await view.measureWait(() => {
+      clock.advance(50);
+      return Promise.resolve();
+    });
+    expect(console.userWaitMs()).toBe(0);
 
-    expect(console.userWaitMs()).toBeGreaterThanOrEqual(15);
-    expect(console.userWaitMs()).toBeLessThan(35);
-    expect(view.userWaitMs()).toBe(console.userWaitMs());
+    await console.measureWait(() => {
+      clock.advance(12.2);
+      return Promise.resolve();
+    });
+
+    expect(console.userWaitMs()).toBe(12);
+    expect(view.userWaitMs()).toBe(12);
   });
 
   it('keeps the wait of one console apart from another', async () => {
+    const clock = installClock();
     const first = new TerminalConsole();
     const second = new TerminalConsole();
 
-    await first.measureWait(() => sleep(20));
+    await first.measureWait(() => {
+      clock.advance(8);
+      return Promise.resolve();
+    });
 
+    expect(first.userWaitMs()).toBe(8);
     expect(second.userWaitMs()).toBe(0);
   });
 });
